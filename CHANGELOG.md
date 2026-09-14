@@ -49,6 +49,11 @@ Ambos exigem JWT ADMIN. Meta Ads spend fica **inerte** até as env vars serem
 setadas — enquanto isso `adSpend.configured` vem `false` e o custo por cadastro
 vem `null`. Nada disso é consumido pelo app; é pro dashboard de marketing.
 
+Também: `POST /admin/analytics/ad-spend/sync` → `{ "rowsSynced": n }` roda o sync
+do Meta na hora (sem esperar o cron diário). E `subscriptions.payingActive` conta
+só assinaturas de gateway real — promo/grant manual (`provider = "manual"`/null)
+entra em `promoGranted`, pra não inflar "pagantes" com os PRO de promoção.
+
 ---
 
 ## 2026-09-07 — Alerta de nova conta no e-mail do admin

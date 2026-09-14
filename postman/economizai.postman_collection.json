@@ -12442,7 +12442,35 @@
 								"subscriptions"
 							]
 						},
-						"description": "Tier snapshot for the marketing dashboard: totalUsers, byTier {FREE,PRO}, payingActive, promoGranted. ADMIN only."
+						"description": "Tier snapshot for the marketing dashboard: totalUsers, byTier {FREE,PRO}, payingActive, promoGranted. payingActive counts only real payment-provider subscriptions; promo/manual grants (provider 'manual'/null) go under promoGranted. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Trigger Meta ad-spend sync now",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/analytics/ad-spend/sync",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"analytics",
+								"ad-spend",
+								"sync"
+							]
+						},
+						"description": "Runs the Meta ad-spend sync immediately instead of waiting for the daily cron. Returns {rowsSynced}. Returns 0 when Meta is not configured (META_ADS_* env vars unset). ADMIN only."
 					},
 					"response": []
 				},
