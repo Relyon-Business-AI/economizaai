@@ -54,6 +54,11 @@ do Meta na hora (sem esperar o cron diário). E `subscriptions.payingActive` con
 só assinaturas de gateway real — promo/grant manual (`provider = "manual"`/null)
 entra em `promoGranted`, pra não inflar "pagantes" com os PRO de promoção.
 
+Ainda: os dois GETs de analytics aceitam `includeInternal` (default `false`) — que
+exclui admins e contas de teste (`@economizaai.app`) pra os números refletirem
+usuários reais. E o acquisition ganhou `byPlatform` (`WEB/ANDROID/IOS/UNKNOWN`),
+que quebra os cadastros "Desconhecidos" por plataforma de registro.
+
 ---
 
 ## 2026-09-07 — Alerta de nova conta no e-mail do admin

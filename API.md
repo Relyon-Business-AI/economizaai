@@ -1196,8 +1196,8 @@ GET    /api/v1/admin/llm/report                    → LlmReportResponse (LLM la
 POST   /api/v1/admin/llm/disagreements/{id}/resolve?accept=true|false → 204 (accept applies suggestion as source USER)
 PUT    /api/v1/admin/merchants/{cnpj}/support      → SupportOverrideResult — body {"override":"SUPPORTED"|"BLOCKED"|null}; SUPPORTED backfills the price index from the merchant's confirmed receipts
 DELETE /api/v1/admin/products/{id}?force=false     → 200 ProductDeletionResponse (prune test/junk catalog rows)
-GET    /api/v1/admin/analytics/acquisition?days=30 → AcquisitionAnalyticsResponse (signup funnel + timeline by channel + campaign breakdown + Meta ad-spend / cost-per-signup)
-GET    /api/v1/admin/analytics/subscriptions       → SubscriptionAnalyticsResponse (users by tier, paying-active, promo-granted)
+GET    /api/v1/admin/analytics/acquisition?days=30&includeInternal=false → AcquisitionAnalyticsResponse (signup funnel + timeline by channel + byPlatform + campaign breakdown + Meta ad-spend / cost-per-signup)
+GET    /api/v1/admin/analytics/subscriptions?includeInternal=false       → SubscriptionAnalyticsResponse (users by tier, paying-active, promo-granted)
 POST   /api/v1/admin/analytics/ad-spend/sync       → {"rowsSynced": n} — run the Meta ad-spend sync now instead of waiting for the daily cron (0 when Meta is not configured)
 GET    /api/v1/admin/costs?days=30                 → CostReportResponse (paid-API spend: total + by service + by state + today vs budget)
 GET    /api/v1/admin/state-coverage                → StateCoverageResponse (per-UF: VERIFIED/EXPERIMENTAL + per-layer success/failure telemetry from real scans)
@@ -1243,6 +1243,8 @@ POST   /api/v1/admin/dev/seed-discounted-receipt?targetEmail= → ReceiptRespons
   `acquisitionChannel` ∈ `INSTAGRAM_PAID | GOOGLE_PAID | PAID_OTHER | REFERRAL | ORGANIC | DIRECT | UNKNOWN`. Rates are 0..1 fractions. **Meta ad-spend is inert until env vars are set** — when unconfigured `adSpend.configured` is `false`, spend is 0 and the cost-per-* fields are `null` (see DEV_NOTES "Meta Ads spend sync").
 - **Subscription analytics** — `GET /admin/analytics/subscriptions`. `{ totalUsers, byTier: { FREE, PRO }, payingActive, promoGranted, note }` — a quick tier snapshot for the dashboard (paying-active vs promo-granted PRO). `payingActive` counts only real payment-provider subscriptions — promo/admin grants (`provider = "manual"` or null) fall under `promoGranted`.
 - **Trigger ad-spend sync** — `POST /admin/analytics/ad-spend/sync` → `{ "rowsSynced": n }`. Runs the Meta sync on demand (the dashboard otherwise refreshes via the daily cron). Returns `0` when Meta is unconfigured.
+- **`includeInternal` (both analytics GETs, default `false`)** — when false, excludes admins (`role = ADMIN`) and test accounts (`email LIKE %@economizaai.app`) so counts reflect real users. Pass `true` to include everyone.
+- **`byPlatform` (acquisition response)** — `[{ platform: "WEB"|"ANDROID"|"IOS"|"UNKNOWN", signups }]` — where the signup happened (from the immutable `registrationPlatform`); breaks down the `UNKNOWN`-channel signups (`UNKNOWN` = client didn't send a platform).
 
 All require a JWT for a user with `Role.ADMIN`. Regular users hit 403.
 

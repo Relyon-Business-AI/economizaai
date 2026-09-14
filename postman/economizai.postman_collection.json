@@ -12397,7 +12397,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{baseUrl}}/api/v1/admin/analytics/acquisition?days=30",
+							"raw": "{{baseUrl}}/api/v1/admin/analytics/acquisition?days=30&includeInternal=false",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -12430,7 +12430,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{baseUrl}}/api/v1/admin/analytics/subscriptions",
+							"raw": "{{baseUrl}}/api/v1/admin/analytics/subscriptions?includeInternal=false",
 							"host": [
 								"{{baseUrl}}"
 							],
