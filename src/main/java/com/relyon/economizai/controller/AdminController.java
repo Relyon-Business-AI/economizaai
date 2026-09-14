@@ -235,15 +235,18 @@ public class AdminController {
             description = "Signups over the window with the funnel (verified → activated → PRO), derived-channel "
                     + "and campaign breakdowns, and Meta ad-spend + cost-per-signup when the integration is connected.")
     @GetMapping("/analytics/acquisition")
-    public ResponseEntity<AcquisitionReportResponse> acquisition(@RequestParam(defaultValue = "30") int days) {
-        return ResponseEntity.ok(adminAnalyticsService.acquisition(days));
+    public ResponseEntity<AcquisitionReportResponse> acquisition(
+            @RequestParam(defaultValue = "30") int days,
+            @RequestParam(defaultValue = "false") boolean includeInternal) {
+        return ResponseEntity.ok(adminAnalyticsService.acquisition(days, includeInternal));
     }
 
     @Operation(summary = "Subscription mix",
             description = "Tier distribution plus PRO split into genuinely paying vs promo/admin grants.")
     @GetMapping("/analytics/subscriptions")
-    public ResponseEntity<SubscriptionReportResponse> subscriptionAnalytics() {
-        return ResponseEntity.ok(adminAnalyticsService.subscriptions());
+    public ResponseEntity<SubscriptionReportResponse> subscriptionAnalytics(
+            @RequestParam(defaultValue = "false") boolean includeInternal) {
+        return ResponseEntity.ok(adminAnalyticsService.subscriptions(includeInternal));
     }
 
     @Operation(summary = "Sync Meta ad spend now",

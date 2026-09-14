@@ -54,7 +54,7 @@ class SubscriptionRepositoryAnalyticsTest {
         createSubscription("P1", "stripe", SubscriptionStatus.ACTIVE);
         createSubscription("C1", "stripe", SubscriptionStatus.CANCELED);
 
-        assertThat(subscriptionRepository.countPaying(SubscriptionStatus.ACTIVE)).isEqualTo(1);
-        assertThat(subscriptionRepository.countPromoGranted(SubscriptionStatus.ACTIVE)).isEqualTo(2);
+        assertThat(subscriptionRepository.countPaying(SubscriptionStatus.ACTIVE, false)).isEqualTo(1);
+        assertThat(subscriptionRepository.countPromoGranted(SubscriptionStatus.ACTIVE, false)).isEqualTo(2);
     }
 }

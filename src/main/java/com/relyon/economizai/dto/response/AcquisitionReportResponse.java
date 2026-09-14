@@ -18,6 +18,7 @@ public record AcquisitionReportResponse(
         Funnel funnel,
         List<DailySignupLine> timeline,
         List<ChannelLine> byChannel,
+        List<PlatformLine> byPlatform,
         List<CampaignLine> byCampaign,
         AdSpendSummary adSpend) {
 
@@ -31,6 +32,10 @@ public record AcquisitionReportResponse(
     }
 
     public record ChannelLine(String channel, long signups, long verified, long proTier) {
+    }
+
+    /** Where the signup happened: WEB / ANDROID / IOS (or UNKNOWN when the client didn't send a platform). */
+    public record PlatformLine(String platform, long signups) {
     }
 
     /** {@code adSpend}/{@code costPerSignup} are filled only when a Meta campaign name matches this utm_campaign. */

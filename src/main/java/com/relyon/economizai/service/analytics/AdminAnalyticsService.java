@@ -7,6 +7,7 @@ import com.relyon.economizai.dto.response.AcquisitionReportResponse.CampaignSpen
 import com.relyon.economizai.dto.response.AcquisitionReportResponse.ChannelLine;
 import com.relyon.economizai.dto.response.AcquisitionReportResponse.DailySignupLine;
 import com.relyon.economizai.dto.response.AcquisitionReportResponse.Funnel;
+import com.relyon.economizai.dto.response.AcquisitionReportResponse.PlatformLine;
 import com.relyon.economizai.dto.response.SubscriptionReportResponse;
 import com.relyon.economizai.model.enums.AcquisitionChannel;
 import com.relyon.economizai.model.enums.SubscriptionStatus;
@@ -47,56 +48,69 @@ public class AdminAnalyticsService {
     private final MetaAdsProperties metaAdsProperties;
 
     @Transactional(readOnly = true)
-    public AcquisitionReportResponse acquisition(int days) {
+    public AcquisitionReportResponse acquisition(int days, boolean includeInternal) {
         var windowDays = Math.max(1, days);
         var to = LocalDate.now();
         var from = to.minusDays(windowDays - 1L);
         var since = from.atStartOfDay();
 
-        var funnel = buildFunnel(since);
-        var timeline = buildTimeline(since, from, to);
-        var byChannel = buildChannelLines(since);
-        var adSpend = buildAdSpend(from, to, byChannel);
-        var byCampaign = buildCampaignLines(since, adSpend);
+        var funnel = buildFunnel(since, includeInternal);
+        var timeline = buildTimeline(since, from, to, includeInternal);
+        var byChannel = buildChannelLines(since, includeInternal);
+        var byPlatform = buildPlatformLines(since, includeInternal);
+        var adSpend = buildAdSpend(from, to, byChannel, includeInternal);
+        var byCampaign = buildCampaignLines(since, adSpend, includeInternal);
 
-        log.info("analytics.acquisition days={} signups={} paidSignups={} spend={}",
-                windowDays, funnel.signups(), adSpend.paidSignups(), adSpend.totalSpend());
-        return new AcquisitionReportResponse(windowDays, from, to, funnel, timeline, byChannel, byCampaign, adSpend);
+        log.info("analytics.acquisition days={} includeInternal={} signups={} paidSignups={} spend={}",
+                windowDays, includeInternal, funnel.signups(), adSpend.paidSignups(), adSpend.totalSpend());
+        return new AcquisitionReportResponse(windowDays, from, to, funnel, timeline,
+                byChannel, byPlatform, byCampaign, adSpend);
     }
 
     @Transactional(readOnly = true)
-    public SubscriptionReportResponse subscriptions() {
+    public SubscriptionReportResponse subscriptions(boolean includeInternal) {
         var byTier = new LinkedHashMap<String, Long>();
         var total = 0L;
-        for (var row : userRepository.tierDistribution()) {
+        for (var row : userRepository.tierDistribution(includeInternal)) {
             var tier = String.valueOf(row[0]);
             var count = ((Number) row[1]).longValue();
             byTier.put(tier, count);
             total += count;
         }
-        var paying = subscriptionRepository.countPaying(SubscriptionStatus.ACTIVE);
-        var promo = subscriptionRepository.countPromoGranted(SubscriptionStatus.ACTIVE);
+        var paying = subscriptionRepository.countPaying(SubscriptionStatus.ACTIVE, includeInternal);
+        var promo = subscriptionRepository.countPromoGranted(SubscriptionStatus.ACTIVE, includeInternal);
         var note = paying == 0 && promo > 0
                 ? "No paying subscriptions yet — all PRO users are promo/admin grants (signup promo)."
                 : null;
         return new SubscriptionReportResponse(total, byTier, paying, promo, note);
     }
 
-    private Funnel buildFunnel(LocalDateTime since) {
-        var signups = userRepository.countByCreatedAtGreaterThanEqual(since);
-        var verified = userRepository.countVerifiedSince(since);
-        var activated = userRepository.countActivatedSince(since);
-        var proTier = userRepository.countProTierSince(since);
+    private Funnel buildFunnel(LocalDateTime since, boolean includeInternal) {
+        var signups = userRepository.countSignupsSince(since, includeInternal);
+        var verified = userRepository.countVerifiedSince(since, includeInternal);
+        var activated = userRepository.countActivatedSince(since, includeInternal);
+        var proTier = userRepository.countProTierSince(since, includeInternal);
         return new Funnel(signups, verified, activated, proTier,
                 rate(verified, signups), rate(activated, signups), rate(proTier, signups));
     }
 
-    private List<DailySignupLine> buildTimeline(LocalDateTime since, LocalDate from, LocalDate to) {
+    private List<PlatformLine> buildPlatformLines(LocalDateTime since, boolean includeInternal) {
+        var lines = new ArrayList<PlatformLine>();
+        for (var row : userRepository.platformBreakdownSince(since, includeInternal)) {
+            var platform = row[0] == null ? "UNKNOWN" : row[0].toString();
+            lines.add(new PlatformLine(platform, ((Number) row[1]).longValue()));
+        }
+        lines.sort((left, right) -> Long.compare(right.signups(), left.signups()));
+        return lines;
+    }
+
+    private List<DailySignupLine> buildTimeline(LocalDateTime since, LocalDate from, LocalDate to,
+                                                boolean includeInternal) {
         var perDay = new TreeMap<LocalDate, Map<String, Long>>();
         for (var day = from; !day.isAfter(to); day = day.plusDays(1)) {
             perDay.put(day, new LinkedHashMap<>());
         }
-        for (var row : userRepository.signupTimelineSince(since)) {
+        for (var row : userRepository.signupTimelineSince(since, includeInternal)) {
             var createdAt = (LocalDateTime) row[0];
             var day = createdAt.toLocalDate();
             var channel = channelName(row[1]);
@@ -111,9 +125,9 @@ public class AdminAnalyticsService {
         return timeline;
     }
 
-    private List<ChannelLine> buildChannelLines(LocalDateTime since) {
+    private List<ChannelLine> buildChannelLines(LocalDateTime since, boolean includeInternal) {
         var lines = new ArrayList<ChannelLine>();
-        for (var row : userRepository.channelBreakdownSince(since)) {
+        for (var row : userRepository.channelBreakdownSince(since, includeInternal)) {
             lines.add(new ChannelLine(channelName(row[0]),
                     ((Number) row[1]).longValue(),
                     toLong(row[2]),
@@ -123,7 +137,8 @@ public class AdminAnalyticsService {
         return lines;
     }
 
-    private List<CampaignLine> buildCampaignLines(LocalDateTime since, AdSpendSummary adSpend) {
+    private List<CampaignLine> buildCampaignLines(LocalDateTime since, AdSpendSummary adSpend,
+                                                  boolean includeInternal) {
         var spendByCampaignName = new LinkedHashMap<String, BigDecimal>();
         for (var line : adSpend.byCampaign()) {
             if (line.campaignName() != null) {
@@ -131,7 +146,7 @@ public class AdminAnalyticsService {
             }
         }
         var lines = new ArrayList<CampaignLine>();
-        for (var row : userRepository.campaignBreakdownSince(since)) {
+        for (var row : userRepository.campaignBreakdownSince(since, includeInternal)) {
             var source = (String) row[0];
             var medium = (String) row[1];
             var campaign = (String) row[2];
@@ -147,7 +162,8 @@ public class AdminAnalyticsService {
         return lines;
     }
 
-    private AdSpendSummary buildAdSpend(LocalDate from, LocalDate to, List<ChannelLine> byChannel) {
+    private AdSpendSummary buildAdSpend(LocalDate from, LocalDate to, List<ChannelLine> byChannel,
+                                        boolean includeInternal) {
         var paidSignups = byChannel.stream()
                 .filter(line -> AcquisitionChannel.INSTAGRAM_PAID.name().equals(line.channel()))
                 .mapToLong(ChannelLine::signups)
@@ -163,16 +179,16 @@ public class AdminAnalyticsService {
         campaignLines.sort((left, right) -> right.spend().compareTo(left.spend()));
 
         var costPerSignup = costPer(totalSpend, paidSignups);
-        var costPerActivated = costPer(totalSpend, activatedPaidSignups(from));
+        var costPerActivated = costPer(totalSpend, activatedPaidSignups(from, includeInternal));
         var note = resolveAdSpendNote(configured, totalSpend);
         return new AdSpendSummary(configured, CURRENCY, totalSpend, paidSignups,
                 costPerSignup, costPerActivated, campaignLines, note);
     }
 
-    private long activatedPaidSignups(LocalDate from) {
+    private long activatedPaidSignups(LocalDate from, boolean includeInternal) {
         // Cheap proxy: activations across the paid channel aren't tracked per-day, so cost-per-activated
         // reuses the window's activated total. Kept simple until per-channel activation lands.
-        return userRepository.countActivatedSince(from.atStartOfDay());
+        return userRepository.countActivatedSince(from.atStartOfDay(), includeInternal);
     }
 
     private String resolveAdSpendNote(boolean configured, BigDecimal totalSpend) {

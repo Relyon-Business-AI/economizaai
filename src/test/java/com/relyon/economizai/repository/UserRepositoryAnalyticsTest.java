@@ -3,6 +3,8 @@ package com.relyon.economizai.repository;
 import com.relyon.economizai.model.Household;
 import com.relyon.economizai.model.User;
 import com.relyon.economizai.model.enums.AcquisitionChannel;
+import com.relyon.economizai.model.enums.Platform;
+import com.relyon.economizai.model.enums.Role;
 import com.relyon.economizai.model.enums.SubscriptionTier;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,13 +56,13 @@ class UserRepositoryAnalyticsTest {
 
         var since = LocalDateTime.now().minusDays(1);
 
-        assertThat(userRepository.countByCreatedAtGreaterThanEqual(since)).isEqualTo(4);
-        assertThat(userRepository.countVerifiedSince(since)).isEqualTo(2);
-        assertThat(userRepository.countProTierSince(since)).isEqualTo(1);
+        assertThat(userRepository.countSignupsSince(since, false)).isEqualTo(4);
+        assertThat(userRepository.countVerifiedSince(since, false)).isEqualTo(2);
+        assertThat(userRepository.countProTierSince(since, false)).isEqualTo(1);
         // exists-subquery must execute and return 0 (no receipts created here).
-        assertThat(userRepository.countActivatedSince(since)).isZero();
+        assertThat(userRepository.countActivatedSince(since, false)).isZero();
 
-        var channelRows = userRepository.channelBreakdownSince(since);
+        var channelRows = userRepository.channelBreakdownSince(since, false);
         var instagramRow = channelRows.stream()
                 .filter(row -> row[0] == AcquisitionChannel.INSTAGRAM_PAID)
                 .findFirst().orElseThrow();
@@ -68,8 +70,45 @@ class UserRepositoryAnalyticsTest {
         assertThat(((Number) instagramRow[2]).longValue()).isEqualTo(1); // verified
         assertThat(((Number) instagramRow[3]).longValue()).isEqualTo(1); // pro
 
-        assertThat(userRepository.signupTimelineSince(since)).hasSize(4);
-        assertThat(userRepository.campaignBreakdownSince(since)).isNotEmpty();
-        assertThat(userRepository.tierDistribution()).isNotEmpty();
+        assertThat(userRepository.signupTimelineSince(since, false)).hasSize(4);
+        assertThat(userRepository.campaignBreakdownSince(since, false)).isNotEmpty();
+        assertThat(userRepository.tierDistribution(false)).isNotEmpty();
+    }
+
+    @Test
+    void internalFilterExcludesAdminAndTestAccounts() {
+        createUser("R1", AcquisitionChannel.ORGANIC, null, true, SubscriptionTier.FREE); // real user@testR1@test.com
+        createInternalUser("AD", "admin1@test.com", Role.ADMIN, Platform.WEB);            // admin -> excluded
+        createInternalUser("QA", "qa123@economizaai.app", Role.USER, Platform.WEB);        // test account -> excluded
+
+        var since = LocalDateTime.now().minusDays(1);
+
+        assertThat(userRepository.countSignupsSince(since, false)).isEqualTo(1);  // only the real user
+        assertThat(userRepository.countSignupsSince(since, true)).isEqualTo(3);   // everyone
+    }
+
+    @Test
+    void platformBreakdownGroupsByRegistrationPlatform() {
+        createInternalUser("P1", "p1@test.com", Role.USER, Platform.WEB);
+        createInternalUser("P2", "p2@test.com", Role.USER, Platform.WEB);
+        createInternalUser("P3", "p3@test.com", Role.USER, Platform.ANDROID);
+
+        var since = LocalDateTime.now().minusDays(1);
+        var rows = userRepository.platformBreakdownSince(since, false);
+        var webRow = rows.stream().filter(row -> row[0] == Platform.WEB).findFirst().orElseThrow();
+        assertThat(((Number) webRow[1]).longValue()).isEqualTo(2);
+    }
+
+    private User createInternalUser(String suffix, String email, Role role, Platform platform) {
+        var household = householdRepository.save(Household.builder().inviteCode("IN" + suffix).build());
+        return userRepository.save(User.builder()
+                .name("User " + suffix).email(email).password("x")
+                .household(household)
+                .acceptedTermsVersion("1.0").acceptedPrivacyVersion("1.0")
+                .acceptedLegalAt(LocalDateTime.of(2026, Month.JANUARY, 1, 0, 0))
+                .role(role)
+                .registrationPlatform(platform)
+                .subscriptionTier(SubscriptionTier.FREE)
+                .build());
     }
 }
