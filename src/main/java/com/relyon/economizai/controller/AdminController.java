@@ -41,6 +41,7 @@ import com.relyon.economizai.service.admin.AdminDevService;
 import com.relyon.economizai.service.admin.AdminReceiptService;
 import com.relyon.economizai.service.admin.AdminUserService;
 import com.relyon.economizai.service.analytics.AdminAnalyticsService;
+import com.relyon.economizai.service.analytics.meta.MetaAdSpendSyncJob;
 import com.relyon.economizai.service.extraction.CategorizationQualityService;
 import com.relyon.economizai.service.geo.MarketLocationService;
 import com.relyon.economizai.service.notifications.RelevanceReportService;
@@ -72,6 +73,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -96,6 +98,7 @@ public class AdminController {
     private final RelevanceReportService relevanceReportService;
     private final CostReportService costReportService;
     private final AdminAnalyticsService adminAnalyticsService;
+    private final MetaAdSpendSyncJob metaAdSpendSyncJob;
     private final StateCoverageService stateCoverageService;
     private final SefazIngestionService sefazIngestionService;
     private final AdminDevService adminDevService;
@@ -241,6 +244,14 @@ public class AdminController {
     @GetMapping("/analytics/subscriptions")
     public ResponseEntity<SubscriptionReportResponse> subscriptionAnalytics() {
         return ResponseEntity.ok(adminAnalyticsService.subscriptions());
+    }
+
+    @Operation(summary = "Sync Meta ad spend now",
+            description = "Triggers the Meta ad-spend sync immediately (instead of waiting for the daily cron). "
+                    + "No-op returning 0 rows when the Meta integration is not configured.")
+    @PostMapping("/analytics/ad-spend/sync")
+    public ResponseEntity<Map<String, Integer>> syncAdSpend() {
+        return ResponseEntity.ok(Map.of("rowsSynced", metaAdSpendSyncJob.syncNow()));
     }
 
     /**

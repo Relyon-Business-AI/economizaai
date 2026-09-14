@@ -42,11 +42,14 @@ public class MetaAdSpendSyncJob {
         syncNow();
     }
 
-    /** Public entry point so the sync can be triggered/tested directly. */
-    public void syncNow() {
+    /**
+     * Public entry point so the sync can be triggered/tested directly. Returns the
+     * number of campaign/day rows upserted (0 when unconfigured or the fetch fails).
+     */
+    public int syncNow() {
         if (!properties.isConfigured()) {
             log.info("meta.sync.skipped reason=not_configured");
-            return;
+            return 0;
         }
 
         var until = LocalDate.now();
@@ -56,7 +59,7 @@ public class MetaAdSpendSyncJob {
             insights = metaAdsClient.fetchDailyCampaignInsights(since, until);
         } catch (MetaAdsApiException | RestClientException ex) {
             log.warn("meta.sync.failed since={} until={} reason={}", since, until, ex.getMessage());
-            return;
+            return 0;
         }
 
         var rows = 0;
@@ -70,6 +73,7 @@ public class MetaAdSpendSyncJob {
             }
         }
         log.info("meta.sync.done days={} rows={}", properties.getSyncDays(), rows);
+        return rows;
     }
 
     /** Upsert one campaign/day row in its own short transaction. */
