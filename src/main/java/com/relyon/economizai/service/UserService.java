@@ -38,6 +38,7 @@ import com.relyon.economizai.exception.InvalidLegalVersionException;
 import com.relyon.economizai.legal.LegalDocuments;
 import com.relyon.economizai.model.HouseholdProductAlias;
 import com.relyon.economizai.model.User;
+import com.relyon.economizai.service.attribution.AttributionResolver;
 import com.relyon.economizai.repository.HouseholdCustomCategoryRepository;
 import com.relyon.economizai.repository.HouseholdMarketAliasRepository;
 import com.relyon.economizai.repository.HouseholdProductCategoryOverrideRepository;
@@ -116,6 +117,7 @@ public class UserService {
     private final LoginActivityRecorder loginActivityRecorder;
     private final SubscriptionService subscriptionService;
     private final SignupAlertService signupAlertService;
+    private final AttributionResolver attributionResolver;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -142,6 +144,7 @@ public class UserService {
                 .acceptedPrivacyVersion(request.acceptedPrivacyVersion())
                 .acceptedLegalAt(LocalDateTime.now())
                 .build();
+        attributionResolver.applyTo(user, request.attribution());
 
         var savedUser = userRepository.save(user);
         notificationRuleService.ensureDefaults(savedUser);

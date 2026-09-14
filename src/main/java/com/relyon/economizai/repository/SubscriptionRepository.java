@@ -29,4 +29,14 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, UUID
     """)
     List<Subscription> findActiveExpiredBefore(@Param("status") SubscriptionStatus status,
                                                @Param("cutoff") LocalDateTime cutoff);
+
+    // --- Subscription analytics (admin dashboard) ---
+
+    /** ACTIVE subscriptions backed by a real payment provider (provider set) — genuinely paying, not promo/admin grants. */
+    @Query("SELECT count(s) FROM Subscription s WHERE s.status = :status AND s.provider IS NOT NULL")
+    long countPaying(@Param("status") SubscriptionStatus status);
+
+    /** ACTIVE subscriptions with no provider — promo / admin manual grants ("até segunda ordem"). */
+    @Query("SELECT count(s) FROM Subscription s WHERE s.status = :status AND s.provider IS NULL")
+    long countPromoGranted(@Param("status") SubscriptionStatus status);
 }

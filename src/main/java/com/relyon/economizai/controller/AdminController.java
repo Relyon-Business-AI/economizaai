@@ -5,8 +5,10 @@ import com.relyon.economizai.dto.request.MerchantSupportOverrideRequest;
 import com.relyon.economizai.dto.request.SendTestNotificationRequest;
 import com.relyon.economizai.dto.request.SetProductBrandRequest;
 import com.relyon.economizai.dto.request.UpdateSubscriptionTierRequest;
+import com.relyon.economizai.dto.response.AcquisitionReportResponse;
 import com.relyon.economizai.dto.response.AdminUserDetailResponse;
 import com.relyon.economizai.dto.response.BrandBackfillResponse;
+import com.relyon.economizai.dto.response.SubscriptionReportResponse;
 import com.relyon.economizai.dto.response.BrandCoverageReportResponse;
 import com.relyon.economizai.dto.response.CostReportResponse;
 import com.relyon.economizai.dto.response.UnmatchedReportResponse;
@@ -38,12 +40,14 @@ import com.relyon.economizai.service.admin.AdminProductService;
 import com.relyon.economizai.service.admin.AdminDevService;
 import com.relyon.economizai.service.admin.AdminReceiptService;
 import com.relyon.economizai.service.admin.AdminUserService;
+import com.relyon.economizai.service.analytics.AdminAnalyticsService;
 import com.relyon.economizai.service.extraction.CategorizationQualityService;
 import com.relyon.economizai.service.geo.MarketLocationService;
 import com.relyon.economizai.service.notifications.RelevanceReportService;
 import com.relyon.economizai.service.paidapi.CostReportService;
 import com.relyon.economizai.service.sefaz.SefazIngestionService;
 import com.relyon.economizai.service.sefaz.StateCoverageService;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -91,6 +95,7 @@ public class AdminController {
     private final MarketLocationService marketLocationService;
     private final RelevanceReportService relevanceReportService;
     private final CostReportService costReportService;
+    private final AdminAnalyticsService adminAnalyticsService;
     private final StateCoverageService stateCoverageService;
     private final SefazIngestionService sefazIngestionService;
     private final AdminDevService adminDevService;
@@ -221,6 +226,21 @@ public class AdminController {
     @GetMapping("/costs")
     public ResponseEntity<CostReportResponse> costReport(@RequestParam(defaultValue = "30") int days) {
         return ResponseEntity.ok(costReportService.report(days));
+    }
+
+    @Operation(summary = "Acquisition dashboard",
+            description = "Signups over the window with the funnel (verified → activated → PRO), derived-channel "
+                    + "and campaign breakdowns, and Meta ad-spend + cost-per-signup when the integration is connected.")
+    @GetMapping("/analytics/acquisition")
+    public ResponseEntity<AcquisitionReportResponse> acquisition(@RequestParam(defaultValue = "30") int days) {
+        return ResponseEntity.ok(adminAnalyticsService.acquisition(days));
+    }
+
+    @Operation(summary = "Subscription mix",
+            description = "Tier distribution plus PRO split into genuinely paying vs promo/admin grants.")
+    @GetMapping("/analytics/subscriptions")
+    public ResponseEntity<SubscriptionReportResponse> subscriptionAnalytics() {
+        return ResponseEntity.ok(adminAnalyticsService.subscriptions());
     }
 
     /**

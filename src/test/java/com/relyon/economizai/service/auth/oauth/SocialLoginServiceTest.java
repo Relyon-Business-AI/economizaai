@@ -11,6 +11,7 @@ import com.relyon.economizai.model.enums.Platform;
 import com.relyon.economizai.repository.UserRepository;
 import com.relyon.economizai.security.JwtService;
 import com.relyon.economizai.service.HouseholdService;
+import com.relyon.economizai.service.attribution.AttributionResolver;
 import com.relyon.economizai.service.auth.LoginActivityRecorder;
 import com.relyon.economizai.service.auth.RefreshTokenService;
 import com.relyon.economizai.service.auth.SignupAlertService;
@@ -69,6 +70,9 @@ class SocialLoginServiceTest {
 
     @Mock
     private SignupAlertService signupAlertService;
+
+    @Mock
+    private AttributionResolver attributionResolver;
 
     @InjectMocks
     private SocialLoginService socialLoginService;

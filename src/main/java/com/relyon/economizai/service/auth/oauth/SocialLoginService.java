@@ -1,6 +1,7 @@
 package com.relyon.economizai.service.auth.oauth;
 
 import com.relyon.economizai.dto.request.AppleLoginRequest;
+import com.relyon.economizai.dto.request.AttributionInfo;
 import com.relyon.economizai.dto.request.GoogleLoginRequest;
 import com.relyon.economizai.dto.response.AuthResponse;
 import com.relyon.economizai.dto.response.UserResponse;
@@ -13,6 +14,7 @@ import com.relyon.economizai.repository.UserRepository;
 import com.relyon.economizai.security.JwtService;
 import com.relyon.economizai.service.HouseholdService;
 import com.relyon.economizai.service.LocalizedMessageService;
+import com.relyon.economizai.service.attribution.AttributionResolver;
 import com.relyon.economizai.service.auth.LoginActivityRecorder;
 import com.relyon.economizai.service.auth.RefreshTokenService;
 import com.relyon.economizai.service.auth.SignupAlertService;
@@ -55,6 +57,7 @@ public class SocialLoginService {
     private final LoginActivityRecorder loginActivityRecorder;
     private final SubscriptionService subscriptionService;
     private final SignupAlertService signupAlertService;
+    private final AttributionResolver attributionResolver;
 
     @Transactional
     public AuthResponse loginWithGoogle(GoogleLoginRequest request) {
@@ -63,7 +66,7 @@ public class SocialLoginService {
             throw new InvalidOAuthTokenException();
         }
         var resolved = resolveOrCreateUser(AuthProvider.GOOGLE, claims.subject(), claims.email(),
-                claims.emailVerified(), claims.name(), request.platform());
+                claims.emailVerified(), claims.name(), request.platform(), request.attribution());
         return issueAuth(resolved.user(), resolved.signupPromoValidUntil());
     }
 
@@ -74,7 +77,7 @@ public class SocialLoginService {
             throw new InvalidOAuthTokenException();
         }
         var resolved = resolveOrCreateUser(AuthProvider.APPLE, claims.subject(), claims.email(),
-                claims.emailVerified(), claims.name(), request.platform());
+                claims.emailVerified(), claims.name(), request.platform(), request.attribution());
         return issueAuth(resolved.user(), resolved.signupPromoValidUntil());
     }
 
@@ -82,7 +85,8 @@ public class SocialLoginService {
     private record ResolvedUser(User user, LocalDateTime signupPromoValidUntil) {}
 
     private ResolvedUser resolveOrCreateUser(AuthProvider provider, String subject, String email,
-                                     boolean emailVerified, String name, Platform platform) {
+                                     boolean emailVerified, String name, Platform platform,
+                                     AttributionInfo attribution) {
         var bySubject = userRepository.findByAuthProviderAndProviderSubject(provider, subject);
         if (bySubject.isPresent()) {
             var user = bySubject.get();
@@ -98,7 +102,7 @@ public class SocialLoginService {
                 return new ResolvedUser(user, null);
             }
         }
-        return createSocialUser(provider, subject, email, emailVerified, name, platform);
+        return createSocialUser(provider, subject, email, emailVerified, name, platform, attribution);
     }
 
     private User linkProvider(User user, AuthProvider provider, String subject, boolean emailVerified) {
@@ -122,7 +126,8 @@ public class SocialLoginService {
     }
 
     private ResolvedUser createSocialUser(AuthProvider provider, String subject, String email,
-                                  boolean emailVerified, String name, Platform platform) {
+                                  boolean emailVerified, String name, Platform platform,
+                                  AttributionInfo attribution) {
         if (email == null || email.isBlank()) {
             log.warn("social.login create_rejected_missing_email provider={}", provider);
             throw new InvalidOAuthTokenException();
@@ -143,6 +148,7 @@ public class SocialLoginService {
                 .acceptedPrivacyVersion(LegalDocuments.CURRENT_PRIVACY_VERSION)
                 .acceptedLegalAt(LocalDateTime.now())
                 .build();
+        attributionResolver.applyTo(user, attribution);
         var savedUser = userRepository.save(user);
         notificationRuleService.ensureDefaults(savedUser);
         var signupPromoValidUntil = subscriptionService.grantSignupPromoIfEnabled(savedUser);
