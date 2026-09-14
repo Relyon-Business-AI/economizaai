@@ -16,6 +16,41 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-14 — Atribuição de marketing no cadastro + dashboard de aquisição (admin)
+
+**Cadastro aceita `attribution` (opcional).** `POST /auth/register`, `/auth/google`
+e `/auth/apple` agora aceitam um objeto `attribution` opcional no corpo, todos os
+campos strings opcionais:
+
+```
+"attribution": {
+  "utmSource": "instagram", "utmMedium": "cpc", "utmCampaign": "black-friday",
+  "utmContent": "video-a", "utmTerm": "mercado barato",
+  "clickId": "<fbclid>", "referrer": "https://...", "landingPath": "/promo"
+}
+```
+
+**Pedido pro FE:** encaminhe o que der da URL de landing — `utm_source`/`utm_medium`/
+`utm_campaign`/`utm_content`/`utm_term` (query params), `fbclid` → `clickId`,
+`document.referrer` → `referrer`, e o path da primeira página → `landingPath`.
+Guarde na primeira visita (antes do cadastro) e mande junto no registro. Tudo
+opcional — não mandar nada não quebra nada, e **não muda o shape do `AuthResponse`**.
+O backend deriva o canal de aquisição (Instagram pago, Google pago, indicação,
+orgânico, direto…) e grava imutável no usuário.
+
+**Dois endpoints novos de analytics (ADMIN):**
+- `GET /admin/analytics/acquisition?days=30` — funil (cadastros→verificados→ativados
+  →PRO com taxas), timeline diária empilhada por canal, breakdown por canal e por
+  campanha, e rollup de gasto de anúncios (Meta) com custo por cadastro.
+- `GET /admin/analytics/subscriptions` — totais por tier (FREE/PRO), pagantes ativos
+  e promos concedidas.
+
+Ambos exigem JWT ADMIN. Meta Ads spend fica **inerte** até as env vars serem
+setadas — enquanto isso `adSpend.configured` vem `false` e o custo por cadastro
+vem `null`. Nada disso é consumido pelo app; é pro dashboard de marketing.
+
+---
+
 ## 2026-09-07 — Alerta de nova conta no e-mail do admin
 
 Toda conta nova (senha ou social login) dispara um e-mail pro destinatário de

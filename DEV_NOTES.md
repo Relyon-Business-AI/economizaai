@@ -21,6 +21,23 @@ mirror entries here.
   (dormant while subscription enforcement is off). Enrichment/auditor are
   global env switches, not per-user.
 
+## Meta Ads spend sync — built but GATED/INERT for dev (2026-09-14)
+- **Now**: signup attribution (`utm_*`/`clickId`/`referrer`/`landingPath` on the auth
+  calls) + the admin acquisition dashboard (`GET /admin/analytics/acquisition`) are live
+  and work with zero external config. The **Meta (Facebook/Instagram) Marketing API daily
+  spend sync** that fills the dashboard's `adSpend` block is wired but **dormant** — it
+  writes nothing until `META_ADS_ENABLED=true`, `META_ADS_TOKEN`, and `META_AD_ACCOUNT_ID`
+  are set (optional tuning: `META_ADS_API_VERSION`=v21.0, `META_ADS_SYNC_DAYS`=30,
+  `META_ADS_GRAPH_BASE_URL`). The token must be a **Meta Business System User token with
+  `ads_read`** for that ad account.
+- **Why OK for dev**: with the vars unset the sync never runs and the `meta_ad_spend` table
+  stays empty — the dashboard degrades cleanly (`adSpend.configured=false`, `costPerSignup`/
+  `costPerActivated` come back `null`). No paid calls, nothing to break.
+- **Before prod**: create the System User + long-lived token in Meta Business Manager, grab
+  the ad account id (`act_<digits>`), set the three env vars, and confirm a first sync pulls
+  spend (dashboard `adSpend.configured` flips to `true`). Until that's wired with real creds
+  the cost-per-signup numbers are all null — the dashboard shows organic/channel funnel only.
+
 ## Merchant support gate — two scale follow-ups (2026-07-16)
 - **Now**: grey-merchant promotion (`PUT /admin/merchants/{cnpj}/support` →
   SUPPORTED) backfills the price index from ALL of the merchant's confirmed
