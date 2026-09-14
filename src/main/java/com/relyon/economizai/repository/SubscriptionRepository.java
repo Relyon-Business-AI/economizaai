@@ -31,12 +31,16 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, UUID
                                                @Param("cutoff") LocalDateTime cutoff);
 
     // --- Subscription analytics (admin dashboard) ---
+    // Promo/admin grants are recorded with provider "manual" (SubscriptionService.grantSignupPromoIfEnabled)
+    // or null; a genuinely paying subscription carries a real payment-provider name (stripe/mercadopago/...).
 
-    /** ACTIVE subscriptions backed by a real payment provider (provider set) — genuinely paying, not promo/admin grants. */
-    @Query("SELECT count(s) FROM Subscription s WHERE s.status = :status AND s.provider IS NOT NULL")
+    /** ACTIVE subscriptions backed by a real payment provider — genuinely paying, NOT promo/manual grants. */
+    @Query("SELECT count(s) FROM Subscription s WHERE s.status = :status "
+            + "AND s.provider IS NOT NULL AND s.provider <> 'manual'")
     long countPaying(@Param("status") SubscriptionStatus status);
 
-    /** ACTIVE subscriptions with no provider — promo / admin manual grants ("até segunda ordem"). */
-    @Query("SELECT count(s) FROM Subscription s WHERE s.status = :status AND s.provider IS NULL")
+    /** ACTIVE subscriptions that are promo / admin manual grants ("até segunda ordem") — provider null or "manual". */
+    @Query("SELECT count(s) FROM Subscription s WHERE s.status = :status "
+            + "AND (s.provider IS NULL OR s.provider = 'manual')")
     long countPromoGranted(@Param("status") SubscriptionStatus status);
 }
