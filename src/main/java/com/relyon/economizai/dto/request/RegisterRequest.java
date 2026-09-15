@@ -22,8 +22,17 @@ public record RegisterRequest(
         @NotBlank String acceptedPrivacyVersion,
         @Schema(description = "Optional client platform (WEB / ANDROID / IOS). Recorded as the registration "
                 + "platform. Unknown/absent values are ignored.", example = "ANDROID")
-        Platform platform
+        Platform platform,
+        @Schema(description = "Optional marketing attribution read off the landing URL — utm params, click id, "
+                + "referrer. Forwarded by the web FE on the first signup; omit on app signups.")
+        AttributionInfo attribution
 ) {
+
+    /** Back-compat: signup without marketing attribution (app clients, tests). */
+    public RegisterRequest(String name, String email, String password,
+                           String acceptedTermsVersion, String acceptedPrivacyVersion, Platform platform) {
+        this(name, email, password, acceptedTermsVersion, acceptedPrivacyVersion, platform, null);
+    }
 
     @AssertTrue(message = "Você deve aceitar a versão atual dos Termos de Uso e da Política de Privacidade")
     public boolean isLegalAcceptanceValid() {

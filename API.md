@@ -96,7 +96,12 @@ POST /api/v1/auth/register
   "password": "atLeast8chars",
   "acceptedTermsVersion": "1.0",
   "acceptedPrivacyVersion": "1.0",
-  "platform": "WEB"                // optional: WEB | ANDROID | IOS
+  "platform": "WEB",               // optional: WEB | ANDROID | IOS
+  "attribution": {                 // optional — marketing attribution, all fields optional strings
+    "utmSource": "instagram", "utmMedium": "cpc", "utmCampaign": "black-friday",
+    "utmContent": "video-a", "utmTerm": "mercado barato",
+    "clickId": "<fbclid>", "referrer": "https://...", "landingPath": "/promo"
+  }
 }
 → 201 {
   "token": "...", "refreshToken": "...", "user": { ... },
@@ -120,6 +125,16 @@ contract change needed on your side.
 ignored (never a 400). The tracked values surface on `UserResponse` as
 `registrationPlatform`, `lastPlatform`, and `lastWebLoginAt` / `lastAndroidLoginAt` /
 `lastIosLoginAt`.
+
+**`attribution` is optional** on all three signup calls (`/register`, `/google`,
+`/apple`) — every field is an optional string. Forward what you can capture from the
+landing URL on first visit: `utm_source`/`utm_medium`/`utm_campaign`/`utm_content`/
+`utm_term` (query params), `fbclid` → `clickId`, `document.referrer` → `referrer`, and
+the first-page path → `landingPath`. The backend derives an immutable
+`acquisitionChannel` from it (`INSTAGRAM_PAID`/`GOOGLE_PAID`/`PAID_OTHER`/`REFERRAL`/
+`ORGANIC`/`DIRECT`/`UNKNOWN`) and stores it on the user; **the `AuthResponse` shape does
+not change**. Omitting the object is fine (→ `UNKNOWN`/`DIRECT`). Feeds the admin
+acquisition dashboard (§10d).
 
 The terms/privacy versions come from `GET /api/v1/legal/terms` and
 `GET /api/v1/legal/privacy-policy`. Show the docs to the user, then send the
@@ -1181,6 +1196,9 @@ GET    /api/v1/admin/llm/report                    → LlmReportResponse (LLM la
 POST   /api/v1/admin/llm/disagreements/{id}/resolve?accept=true|false → 204 (accept applies suggestion as source USER)
 PUT    /api/v1/admin/merchants/{cnpj}/support      → SupportOverrideResult — body {"override":"SUPPORTED"|"BLOCKED"|null}; SUPPORTED backfills the price index from the merchant's confirmed receipts
 DELETE /api/v1/admin/products/{id}?force=false     → 200 ProductDeletionResponse (prune test/junk catalog rows)
+GET    /api/v1/admin/analytics/acquisition?days=30&includeInternal=false → AcquisitionAnalyticsResponse (signup funnel + timeline by channel + byPlatform + campaign breakdown + Meta ad-spend / cost-per-signup)
+GET    /api/v1/admin/analytics/subscriptions?includeInternal=false       → SubscriptionAnalyticsResponse (users by tier, paying-active, promo-granted)
+POST   /api/v1/admin/analytics/ad-spend/sync       → {"rowsSynced": n} — run the Meta ad-spend sync now instead of waiting for the daily cron (0 when Meta is not configured)
 GET    /api/v1/admin/costs?days=30                 → CostReportResponse (paid-API spend: total + by service + by state + today vs budget)
 GET    /api/v1/admin/state-coverage                → StateCoverageResponse (per-UF: VERIFIED/EXPERIMENTAL + per-layer success/failure telemetry from real scans)
 GET    /api/v1/admin/notifications/relevance-report?days=30 → RelevanceReportResponse (deal-suppression shadow-mode KPI before flipping relevance ON)
@@ -1203,6 +1221,31 @@ POST   /api/v1/admin/dev/seed-discounted-receipt?targetEmail= → ReceiptRespons
 - **Products duplicates** — returns groups of products that share an exact `(genericName, brand, packSize, packUnit)` profile and are therefore probable duplicates. Each group: `{ genericName, brand, packSize, packUnit, category, products: [ProductResponse] }`. Only products with all four metadata dimensions populated are eligible. Within a group, the oldest product appears first — a natural default survivor.
 - **Merge product** — body `{ "absorbedId": "<uuid>", "dryRun": false }`. The `{id}` in the path is the **survivor**. Migrates all aliases, receipt items, price observations, manual purchases, shopping-list items, household aliases (drops where survivor already has one for the household), and consumption snoozes (same conflict logic) from `absorbed` to the survivor; deletes `absorbed`. Set `dryRun: true` to get the migration counts without applying any change — the only undo is to **not** apply. Returns `ProductMergeResultResponse` with per-table counts.
 - **Recategorize catalog** — re-runs the extraction cascade over every product's stored description and compares to what's stored. `GET` = dry-run report `{ totalProducts, mismatchCount, applicableFromDictionary, mlSuggestions, skippedUserOverrides, mismatches:[{productId, normalizedName, ean, currentCategory, currentSource, suggestedCategory, suggestedSource, userOverride}] }`. `POST` = apply: by **default applies only trusted dictionary suggestions** (the ML layer is currently unreliable), skipping manual (`source=USER`) categories and null suggestions. Pass `?includeMl=true` to also apply ML suggestions. Use after editing the dictionary to fix already-ingested products (categorization otherwise only runs once per product, at creation).
+
+- **Acquisition analytics** — `GET /admin/analytics/acquisition?days=30` (window default 30). Powers the marketing dashboard from the immutable `acquisitionChannel` derived at signup (see §1 `attribution`) plus the Meta ad-spend rollup. Shape:
+  ```
+  {
+    "windowDays": 30, "from": "...", "to": "...",
+    "funnel": { "signups": N, "verified": N, "activated": N, "proTier": N,
+                "verifiedRate": 0..1, "activatedRate": 0..1, "proRate": 0..1 },
+    "timeline": [ { "date": "2026-09-14", "total": N, "byChannel": { "INSTAGRAM_PAID": N, ... } } ],
+    "byChannel": [ { "channel": "INSTAGRAM_PAID", "signups": N, "verified": N, "proTier": N } ],
+    "byCampaign": [ { "source": "instagram", "medium": "cpc", "campaign": "black-friday",
+                      "signups": N, "verified": N, "proTier": N,
+                      "adSpend": 123.45, "costPerSignup": 4.56 } ],
+    "adSpend": { "configured": false, "currency": "BRL", "totalSpend": 0, "paidSignups": N,
+                 "costPerSignup": null, "costPerActivated": null,
+                 "byCampaign": [ { "campaignId": "...", "campaignName": "...",
+                                   "spend": 0, "clicks": N, "impressions": N } ],
+                 "note": "..." }
+  }
+  ```
+  `acquisitionChannel` ∈ `INSTAGRAM_PAID | GOOGLE_PAID | PAID_OTHER | REFERRAL | ORGANIC | DIRECT | UNKNOWN`. Rates are 0..1 fractions. **Meta ad-spend is inert until env vars are set** — when unconfigured `adSpend.configured` is `false`, spend is 0 and the cost-per-* fields are `null` (see DEV_NOTES "Meta Ads spend sync").
+- **Subscription analytics** — `GET /admin/analytics/subscriptions`. `{ totalUsers, byTier: { FREE, PRO }, payingActive, promoGranted, note }` — a quick tier snapshot for the dashboard (paying-active vs promo-granted PRO). `payingActive` counts only real payment-provider subscriptions — promo/admin grants (`provider = "manual"` or null) fall under `promoGranted`.
+- **Trigger ad-spend sync** — `POST /admin/analytics/ad-spend/sync` → `{ "rowsSynced": n }`. Runs the Meta sync on demand (the dashboard otherwise refreshes via the daily cron). Returns `0` when Meta is unconfigured.
+- **`includeInternal` (both analytics GETs, default `false`)** — when false, excludes admins (`role = ADMIN`) and test accounts (`email LIKE %@economizaai.app`) so counts reflect real users. Pass `true` to include everyone.
+- **`byPlatform` (acquisition response)** — `[{ platform: "WEB"|"ANDROID"|"IOS"|"UNKNOWN", signups }]` — where the signup happened (from the immutable `registrationPlatform`); breaks down the `UNKNOWN`-channel signups (`UNKNOWN` = client didn't send a platform).
+- **`adSpend` budget/status** — `adSpend.budgetRemaining` (aggregate R$) and, per `adSpend.byCampaign[]`: `status` (Meta effective_status), `lifetimeBudget`, `budgetRemaining`, `endsAt` (YYYY-MM-DD), `ended` (bool). Synced from Meta by the ad-spend job; all null until Meta is configured + synced.
 
 All require a JWT for a user with `Role.ADMIN`. Regular users hit 403.
 

@@ -15,5 +15,13 @@ public record AppleLoginRequest(
 
         @Schema(description = "Optional client platform (WEB / ANDROID / IOS). Recorded as the last-login "
                 + "platform. Unknown/absent values are ignored.", example = "IOS")
-        Platform platform
-) {}
+        Platform platform,
+        @Schema(description = "Optional marketing attribution from the landing URL — applied only when THIS call "
+                + "creates the account (first social login). Ignored for returning users.")
+        AttributionInfo attribution
+) {
+    /** Back-compat: social login without marketing attribution. */
+    public AppleLoginRequest(String identityToken, String name, Platform platform) {
+        this(identityToken, name, platform, null);
+    }
+}

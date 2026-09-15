@@ -267,7 +267,7 @@
 						},
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"Demo User\",\n  \"email\": \"alexandre+demo@economizaai.app\",\n  \"password\": \"password123\",\n  \"acceptedTermsVersion\": \"1.0\",\n  \"acceptedPrivacyVersion\": \"1.0\",\n  \"platform\": \"WEB\"\n}"
+							"raw": "{\n  \"name\": \"Demo User\",\n  \"email\": \"alexandre+demo@economizaai.app\",\n  \"password\": \"password123\",\n  \"acceptedTermsVersion\": \"1.0\",\n  \"acceptedPrivacyVersion\": \"1.0\",\n  \"platform\": \"WEB\",\n  \"attribution\": {\n    \"utmSource\": \"instagram\",\n    \"utmMedium\": \"cpc\",\n    \"utmCampaign\": \"black-friday\",\n    \"utmContent\": \"video-a\",\n    \"utmTerm\": \"mercado barato\",\n    \"clickId\": \"fb.1.fbclid-example\",\n    \"referrer\": \"https://www.instagram.com/\",\n    \"landingPath\": \"/promo\"\n  }\n}"
 						}
 					},
 					"response": [],
@@ -5248,7 +5248,7 @@
 						},
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"E2E Test User\",\n  \"email\": \"alexandre+e2e@economizaai.app\",\n  \"password\": \"password123\",\n  \"acceptedTermsVersion\": \"1.0\",\n  \"acceptedPrivacyVersion\": \"1.0\",\n  \"platform\": \"WEB\"\n}"
+							"raw": "{\n  \"name\": \"E2E Test User\",\n  \"email\": \"alexandre+e2e@economizaai.app\",\n  \"password\": \"password123\",\n  \"acceptedTermsVersion\": \"1.0\",\n  \"acceptedPrivacyVersion\": \"1.0\",\n  \"platform\": \"WEB\",\n  \"attribution\": {\n    \"utmSource\": \"instagram\",\n    \"utmMedium\": \"cpc\",\n    \"utmCampaign\": \"black-friday\",\n    \"utmContent\": \"video-a\",\n    \"utmTerm\": \"mercado barato\",\n    \"clickId\": \"fb.1.fbclid-example\",\n    \"referrer\": \"https://www.instagram.com/\",\n    \"landingPath\": \"/promo\"\n  }\n}"
 						}
 					},
 					"response": [],
@@ -12383,6 +12383,94 @@
 							]
 						},
 						"description": "Paid-API spend report (captcha + Infosimples): total cost/calls over the window, plus breakdown byService and byState, and today's spend vs the global daily budget. Reads the paid_api_call ledger. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Acquisition analytics (signup funnel + channels + ad spend)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/analytics/acquisition?days=30&includeInternal=false",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"analytics",
+								"acquisition"
+							],
+							"query": [
+								{
+									"key": "days",
+									"value": "30"
+								}
+							]
+						},
+						"description": "Marketing dashboard: signup funnel (signups->verified->activated->proTier with rates), daily timeline stacked by acquisition channel, per-channel and per-campaign breakdown, and the Meta ad-spend rollup with cost-per-signup. acquisitionChannel is derived immutably at signup from the optional attribution object. Meta ad-spend is inert until META_ADS_* env vars are set (then adSpend.configured=true); otherwise adSpend.configured=false and cost-per-* fields are null. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Subscription analytics (tiers, paying, promo)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/analytics/subscriptions?includeInternal=false",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"analytics",
+								"subscriptions"
+							]
+						},
+						"description": "Tier snapshot for the marketing dashboard: totalUsers, byTier {FREE,PRO}, payingActive, promoGranted. payingActive counts only real payment-provider subscriptions; promo/manual grants (provider 'manual'/null) go under promoGranted. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Trigger Meta ad-spend sync now",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/analytics/ad-spend/sync",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"analytics",
+								"ad-spend",
+								"sync"
+							]
+						},
+						"description": "Runs the Meta ad-spend sync immediately instead of waiting for the daily cron. Returns {rowsSynced}. Returns 0 when Meta is not configured (META_ADS_* env vars unset). ADMIN only."
 					},
 					"response": []
 				},

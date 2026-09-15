@@ -1,5 +1,6 @@
 package com.relyon.economizai.model;
 
+import com.relyon.economizai.model.enums.AcquisitionChannel;
 import com.relyon.economizai.model.enums.AuthProvider;
 import com.relyon.economizai.model.enums.DigestFrequency;
 import com.relyon.economizai.model.enums.Platform;
@@ -154,6 +155,37 @@ public class User extends BaseEntity implements UserDetails {
     @Enumerated(EnumType.STRING)
     @Column(name = "registration_platform", length = 10)
     private Platform registrationPlatform;
+
+    // --- Marketing attribution (immutable, captured once at signup) ---
+    // Raw UTM params + platform click id + referrer the FE read off the landing
+    // URL. acquisitionChannel is the derived bucket the dashboard groups by.
+    @Column(name = "utm_source", length = 120)
+    private String utmSource;
+
+    @Column(name = "utm_medium", length = 120)
+    private String utmMedium;
+
+    @Column(name = "utm_campaign", length = 200)
+    private String utmCampaign;
+
+    @Column(name = "utm_content", length = 200)
+    private String utmContent;
+
+    @Column(name = "utm_term", length = 200)
+    private String utmTerm;
+
+    @Column(name = "attribution_click_id", length = 500)
+    private String attributionClickId;
+
+    @Column(name = "attribution_referrer", length = 500)
+    private String attributionReferrer;
+
+    @Column(name = "attribution_landing_path", length = 500)
+    private String attributionLandingPath;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "acquisition_channel", length = 40)
+    private AcquisitionChannel acquisitionChannel;
 
     // Platform used on the most recent login (overwritten every login).
     @Enumerated(EnumType.STRING)

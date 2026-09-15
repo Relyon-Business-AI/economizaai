@@ -401,6 +401,19 @@ economizai:
       enabled: ${PHOTO_EXTRACTION_ENABLED:true}
       max-items: ${PHOTO_EXTRACTION_MAX_ITEMS:60}
 
+meta:
+  ads:
+    # Meta (Facebook/Instagram) Marketing API ad-spend sync. Inert until
+    # META_ADS_ENABLED=true AND a token + ad account id are set — the sync job
+    # logs meta.sync.skipped and does nothing otherwise. Feeds the acquisition
+    # dashboard's cost-per-signup.
+    enabled: ${META_ADS_ENABLED:false}
+    token: ${META_ADS_TOKEN:}
+    ad-account-id: ${META_AD_ACCOUNT_ID:}
+    api-version: ${META_ADS_API_VERSION:v21.0}
+    sync-days: ${META_ADS_SYNC_DAYS:30}
+    graph-base-url: ${META_ADS_GRAPH_BASE_URL:https://graph.facebook.com}
+
 springdoc:
   swagger-ui:
     path: /swagger-ui

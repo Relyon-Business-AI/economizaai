@@ -29,4 +29,23 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, UUID
     """)
     List<Subscription> findActiveExpiredBefore(@Param("status") SubscriptionStatus status,
                                                @Param("cutoff") LocalDateTime cutoff);
+
+    // --- Subscription analytics (admin dashboard) ---
+    // Promo/admin grants are recorded with provider "manual" (SubscriptionService.grantSignupPromoIfEnabled)
+    // or null; a genuinely paying subscription carries a real payment-provider name (stripe/mercadopago/...).
+
+    // `:includeInternal = false` excludes admins and test accounts (@economizaai.app), matching the acquisition view.
+    String SUB_INTERNAL_FILTER =
+            " AND (:includeInternal = TRUE OR (s.user.role <> 'ADMIN' "
+            + "AND lower(s.user.email) NOT LIKE '%@economizaai.app'))";
+
+    /** ACTIVE subscriptions backed by a real payment provider — genuinely paying, NOT promo/manual grants. */
+    @Query("SELECT count(s) FROM Subscription s WHERE s.status = :status "
+            + "AND s.provider IS NOT NULL AND s.provider <> 'manual'" + SUB_INTERNAL_FILTER)
+    long countPaying(@Param("status") SubscriptionStatus status, boolean includeInternal);
+
+    /** ACTIVE subscriptions that are promo / admin manual grants ("até segunda ordem") — provider null or "manual". */
+    @Query("SELECT count(s) FROM Subscription s WHERE s.status = :status "
+            + "AND (s.provider IS NULL OR s.provider = 'manual')" + SUB_INTERNAL_FILTER)
+    long countPromoGranted(@Param("status") SubscriptionStatus status, boolean includeInternal);
 }

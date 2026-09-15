@@ -10,5 +10,13 @@ public record GoogleLoginRequest(
         @NotBlank String idToken,
         @Schema(description = "Optional client platform (WEB / ANDROID / IOS). Recorded as the last-login "
                 + "platform. Unknown/absent values are ignored.", example = "ANDROID")
-        Platform platform
-) {}
+        Platform platform,
+        @Schema(description = "Optional marketing attribution from the landing URL — applied only when THIS call "
+                + "creates the account (first social login). Ignored for returning users.")
+        AttributionInfo attribution
+) {
+    /** Back-compat: social login without marketing attribution. */
+    public GoogleLoginRequest(String idToken, Platform platform) {
+        this(idToken, platform, null);
+    }
+}

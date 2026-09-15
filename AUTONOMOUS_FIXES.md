@@ -73,6 +73,15 @@ A rollback looks like:
 
 <!-- AUTONOMOUS ENTRIES BELOW - newest first. The watchdog inserts here. -->
 
+### [2026-09-08] FIX 8f06da8 - ReceiptListCategoryFilterIntegrationTest: Table "HOUSEHOLDS" not found
+- **Trigger:** Operator proactive pass; Sonar CI failing on `development` branch (commit a8ff49a).
+- **Error:** `Table "HOUSEHOLDS" not found (this database is empty)` — H2 error 42104 in all 3 tests of `ReceiptListCategoryFilterIntegrationTest`.
+- **Root cause:** `MetricsEndpointSecurityEnabledTest` uses `@TestPropertySource` → gets its own Spring context (not cache-shared with the main `@SpringBootTest` context). Both contexts share `jdbc:h2:mem:testdb`. `ddl-auto: create-drop` in `application-test.yaml` means when `MetricsEndpointSecurityEnabledTest`'s context closes (after `config` package tests), Hibernate DROPs all tables from the shared `testdb`. `ReceiptListCategoryFilterIntegrationTest` (in `service` package, runs later) finds `testdb` empty.
+- **Fix:** Changed `ddl-auto: create-drop` → `ddl-auto: create` in `src/test/resources/application-test.yaml`. `create` builds the schema at context startup but never drops it at close — eliminates cross-context contamination.
+- **Build:** Not locally verified (no Maven in remote session); logic is sound: `create` vs `create-drop` is a well-understood Hibernate setting.
+- **Deploy:** Pushed to `development` — CI will confirm.
+- **Outcome:** RESOLVED (pending CI confirmation)
+
 ### [2026-08-20 11:15:00] FIX - java.lang.ArrayIndexOutOfBoundsException @ EanCatalogService.firstBrand
 - **Trigger:** [NEEDS-HUMAN] entry from 2026-07-08 (CLAUDE-TIMEOUT on first attempt); operator proactive pass picked it up.
 - **Error:** `java.lang.ArrayIndexOutOfBoundsException: Index 0 out of bounds for length 0 at EanCatalogService.firstBrand(EanCatalogService.java:161)`
