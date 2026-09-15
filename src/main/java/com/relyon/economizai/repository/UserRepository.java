@@ -65,12 +65,12 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
             + " GROUP BY user.registrationPlatform")
     List<Object[]> platformBreakdownSince(LocalDateTime since, boolean includeInternal);
 
-    /** Per-campaign counts in the window: (source, medium, campaign, signups, verified, proTier). */
+    /** Per-campaign counts in the window: (source, medium, campaign, signups, verified, proTier, channel). */
     @Query("SELECT user.utmSource, user.utmMedium, user.utmCampaign, count(user), "
             + "sum(case when user.emailVerified = true then 1 else 0 end), "
-            + "sum(case when user.subscriptionTier = 'PRO' then 1 else 0 end) "
+            + "sum(case when user.subscriptionTier = 'PRO' then 1 else 0 end), user.acquisitionChannel "
             + "FROM User user WHERE user.createdAt >= :since" + INTERNAL_FILTER
-            + " GROUP BY user.utmSource, user.utmMedium, user.utmCampaign")
+            + " GROUP BY user.utmSource, user.utmMedium, user.utmCampaign, user.acquisitionChannel")
     List<Object[]> campaignBreakdownSince(LocalDateTime since, boolean includeInternal);
 
     /** Lifetime tier split: (subscriptionTier, count). */

@@ -38,8 +38,12 @@ public record AcquisitionReportResponse(
     public record PlatformLine(String platform, long signups) {
     }
 
-    /** {@code adSpend}/{@code costPerSignup} are filled only when a Meta campaign name matches this utm_campaign. */
-    public record CampaignLine(String source, String medium, String campaign,
+    /**
+     * {@code channel} is the derived AcquisitionChannel this campaign rolls up under
+     * (lets the FE nest campaigns inside each channel). {@code adSpend}/{@code costPerSignup}
+     * are filled only when a Meta campaign name matches this utm_campaign.
+     */
+    public record CampaignLine(String channel, String source, String medium, String campaign,
                                long signups, long verified, long proTier,
                                BigDecimal adSpend, BigDecimal costPerSignup) {
     }

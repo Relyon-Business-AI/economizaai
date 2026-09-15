@@ -156,11 +156,12 @@ public class AdminAnalyticsService {
             var medium = (String) row[1];
             var campaign = (String) row[2];
             var signups = ((Number) row[3]).longValue();
+            var channel = channelName(row[6]);
             var matchedSpend = campaign == null ? null : spendByCampaignName.get(campaign.toLowerCase());
             var costPerSignup = matchedSpend != null && signups > 0
                     ? matchedSpend.divide(BigDecimal.valueOf(signups), 2, RoundingMode.HALF_UP)
                     : null;
-            lines.add(new CampaignLine(source, medium, campaign, signups,
+            lines.add(new CampaignLine(channel, source, medium, campaign, signups,
                     toLong(row[4]), toLong(row[5]), matchedSpend, costPerSignup));
         }
         lines.sort((left, right) -> Long.compare(right.signups(), left.signups()));
