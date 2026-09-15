@@ -1,8 +1,11 @@
 package com.relyon.economizai.service.analytics.meta;
 
 import com.relyon.economizai.model.MetaAdSpend;
+import com.relyon.economizai.model.MetaCampaign;
 import com.relyon.economizai.repository.MetaAdSpendRepository;
+import com.relyon.economizai.repository.MetaCampaignRepository;
 import com.relyon.economizai.service.analytics.meta.MetaAdsClient.MetaAdInsight;
+import com.relyon.economizai.service.analytics.meta.MetaAdsClient.MetaCampaignInfo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -33,6 +36,7 @@ public class MetaAdSpendSyncJob {
 
     private final MetaAdsClient metaAdsClient;
     private final MetaAdSpendRepository metaAdSpendRepository;
+    private final MetaCampaignRepository metaCampaignRepository;
     private final MetaAdsProperties properties;
     private final TransactionTemplate transactionTemplate;
 
@@ -72,8 +76,42 @@ public class MetaAdSpendSyncJob {
                         insight.campaignId(), insight.spendDate(), ex.getMessage());
             }
         }
+        syncCampaigns();
         log.info("meta.sync.done days={} rows={}", properties.getSyncDays(), rows);
         return rows;
+    }
+
+    /** Refreshes each campaign's budget/status snapshot. Failures here never break the spend sync. */
+    private void syncCampaigns() {
+        List<MetaCampaignInfo> campaigns;
+        try {
+            campaigns = metaAdsClient.fetchCampaigns();
+        } catch (MetaAdsApiException | RestClientException ex) {
+            log.warn("meta.sync.campaigns_failed reason={}", ex.getMessage());
+            return;
+        }
+        for (var campaign : campaigns) {
+            try {
+                upsertCampaign(campaign);
+            } catch (RuntimeException ex) {
+                log.warn("meta.sync.campaign_failed campaign={} reason={}", campaign.campaignId(), ex.getMessage());
+            }
+        }
+    }
+
+    private void upsertCampaign(MetaCampaignInfo info) {
+        transactionTemplate.executeWithoutResult(status -> {
+            var existing = metaCampaignRepository.findByCampaignId(info.campaignId())
+                    .orElseGet(MetaCampaign::new);
+            existing.setCampaignId(info.campaignId());
+            existing.setName(info.name());
+            existing.setStatus(info.status());
+            existing.setLifetimeBudget(info.lifetimeBudget());
+            existing.setBudgetRemaining(info.budgetRemaining());
+            existing.setEndsAt(info.endsAt());
+            existing.setSyncedAt(OffsetDateTime.now());
+            metaCampaignRepository.save(existing);
+        });
     }
 
     /** Upsert one campaign/day row in its own short transaction. */

@@ -13,6 +13,8 @@ import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -59,6 +61,74 @@ public class MetaAdsClient {
             long impressions,
             long clicks,
             long reach) {
+    }
+
+    /**
+     * Current budget/status snapshot for one campaign. Budgets are already in
+     * R$ (Meta returns minor units, e.g. cents, which we shift). {@code endsAt}
+     * is Meta's {@code stop_time}; null when the campaign is open-ended.
+     */
+    public record MetaCampaignInfo(
+            String campaignId,
+            String name,
+            String status,
+            BigDecimal lifetimeBudget,
+            BigDecimal budgetRemaining,
+            OffsetDateTime endsAt) {
+    }
+
+    /**
+     * Fetches the current budget/status of every campaign on the ad account.
+     * Single page (accounts have few campaigns); throws {@link MetaAdsApiException}
+     * on failure so the caller can decide whether to swallow it.
+     */
+    public List<MetaCampaignInfo> fetchCampaigns() {
+        var url = properties.getGraphBaseUrl()
+                + "/" + properties.getApiVersion()
+                + "/act_" + properties.getAdAccountId() + "/campaigns"
+                + "?fields=id,name,effective_status,daily_budget,lifetime_budget,budget_remaining,stop_time"
+                + "&limit=200"
+                + "&access_token=" + encode(properties.getToken());
+        var json = fetchPage(url);
+        var data = json.get("data");
+        var campaigns = new ArrayList<MetaCampaignInfo>();
+        if (data != null && data.isArray()) {
+            for (JsonNode node : data) {
+                campaigns.add(toCampaign(node));
+            }
+        }
+        log.info("meta.fetch.campaigns count={}", campaigns.size());
+        return campaigns;
+    }
+
+    private MetaCampaignInfo toCampaign(JsonNode node) {
+        return new MetaCampaignInfo(
+                node.path("id").asText(null),
+                node.path("name").asText(null),
+                node.path("effective_status").asText(null),
+                centsToReais(node.path("lifetime_budget").asText(null)),
+                centsToReais(node.path("budget_remaining").asText(null)),
+                parseOffsetDateTime(node.path("stop_time").asText(null)));
+    }
+
+    /** Meta budgets come in the account's minor unit (e.g. "70000" = R$ 700,00). */
+    private BigDecimal centsToReais(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            return new BigDecimal(raw.trim()).movePointLeft(2);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private OffsetDateTime parseOffsetDateTime(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            // Meta uses "2026-09-21T16:23:07+0000" (offset without a colon).
+            return OffsetDateTime.parse(raw, DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ"));
+        } catch (Exception ex) {
+            return null;
+        }
     }
 
     /**

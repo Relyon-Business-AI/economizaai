@@ -52,10 +52,18 @@ public record AcquisitionReportResponse(
      */
     public record AdSpendSummary(boolean configured, String currency, BigDecimal totalSpend,
                                  long paidSignups, BigDecimal costPerSignup, BigDecimal costPerActivated,
-                                 List<CampaignSpendLine> byCampaign, String note) {
+                                 BigDecimal budgetRemaining, List<CampaignSpendLine> byCampaign, String note) {
     }
 
+    /**
+     * Per-campaign spend plus the current budget/status snapshot (from meta_campaign,
+     * synced from Meta). {@code status} is Meta's effective_status; {@code ended} is
+     * true when the campaign is no longer active; {@code endsAt} is its stop date.
+     * Budget fields are null when Meta isn't configured or hasn't synced yet.
+     */
     public record CampaignSpendLine(String campaignId, String campaignName, BigDecimal spend,
-                                    long clicks, long impressions) {
+                                    long clicks, long impressions,
+                                    String status, BigDecimal lifetimeBudget, BigDecimal budgetRemaining,
+                                    LocalDate endsAt, boolean ended) {
     }
 }

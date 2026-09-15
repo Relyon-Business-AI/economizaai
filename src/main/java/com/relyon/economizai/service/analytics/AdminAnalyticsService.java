@@ -9,9 +9,11 @@ import com.relyon.economizai.dto.response.AcquisitionReportResponse.DailySignupL
 import com.relyon.economizai.dto.response.AcquisitionReportResponse.Funnel;
 import com.relyon.economizai.dto.response.AcquisitionReportResponse.PlatformLine;
 import com.relyon.economizai.dto.response.SubscriptionReportResponse;
+import com.relyon.economizai.model.MetaCampaign;
 import com.relyon.economizai.model.enums.AcquisitionChannel;
 import com.relyon.economizai.model.enums.SubscriptionStatus;
 import com.relyon.economizai.repository.MetaAdSpendRepository;
+import com.relyon.economizai.repository.MetaCampaignRepository;
 import com.relyon.economizai.repository.SubscriptionRepository;
 import com.relyon.economizai.repository.UserRepository;
 import com.relyon.economizai.service.analytics.meta.MetaAdsProperties;
@@ -28,7 +30,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 /**
  * Read-only acquisition & subscription analytics for the admin dashboard. Every
@@ -45,6 +49,7 @@ public class AdminAnalyticsService {
     private final UserRepository userRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final MetaAdSpendRepository metaAdSpendRepository;
+    private final MetaCampaignRepository metaCampaignRepository;
     private final MetaAdsProperties metaAdsProperties;
 
     @Transactional(readOnly = true)
@@ -171,18 +176,41 @@ public class AdminAnalyticsService {
         var configured = metaAdsProperties.isConfigured();
         var totalSpend = scale(metaAdSpendRepository.totalSpendBetween(from, to));
 
+        var campaignsById = metaCampaignRepository.findAll().stream()
+                .collect(Collectors.toMap(MetaCampaign::getCampaignId, campaign -> campaign, (first, second) -> first));
+
         var campaignLines = new ArrayList<CampaignSpendLine>();
         for (var row : metaAdSpendRepository.campaignTotalsBetween(from, to)) {
-            campaignLines.add(new CampaignSpendLine((String) row[0], (String) row[1],
-                    scale((BigDecimal) row[2]), toLong(row[3]), toLong(row[4])));
+            var campaignId = (String) row[0];
+            var meta = campaignsById.get(campaignId);
+            var status = meta == null ? null : meta.getStatus();
+            var endsAt = meta == null || meta.getEndsAt() == null ? null : meta.getEndsAt().toLocalDate();
+            var ended = status != null && !"ACTIVE".equals(status);
+            campaignLines.add(new CampaignSpendLine(campaignId, (String) row[1],
+                    scale((BigDecimal) row[2]), toLong(row[3]), toLong(row[4]),
+                    status,
+                    meta == null ? null : meta.getLifetimeBudget(),
+                    meta == null ? null : meta.getBudgetRemaining(),
+                    endsAt, ended));
         }
         campaignLines.sort((left, right) -> right.spend().compareTo(left.spend()));
+
+        var budgetRemaining = campaignsById.values().stream()
+                .map(MetaCampaign::getBudgetRemaining)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal::add)
+                .map(this::scaleNullable)
+                .orElse(null);
 
         var costPerSignup = costPer(totalSpend, paidSignups);
         var costPerActivated = costPer(totalSpend, activatedPaidSignups(from, includeInternal));
         var note = resolveAdSpendNote(configured, totalSpend);
         return new AdSpendSummary(configured, CURRENCY, totalSpend, paidSignups,
-                costPerSignup, costPerActivated, campaignLines, note);
+                costPerSignup, costPerActivated, budgetRemaining, campaignLines, note);
+    }
+
+    private BigDecimal scaleNullable(BigDecimal value) {
+        return value == null ? null : value.setScale(2, RoundingMode.HALF_UP);
     }
 
     private long activatedPaidSignups(LocalDate from, boolean includeInternal) {

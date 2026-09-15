@@ -1,10 +1,12 @@
 package com.relyon.economizai.service.analytics;
 
+import com.relyon.economizai.model.MetaCampaign;
 import com.relyon.economizai.model.enums.AcquisitionChannel;
 import com.relyon.economizai.model.enums.Platform;
 import com.relyon.economizai.model.enums.SubscriptionStatus;
 import com.relyon.economizai.model.enums.SubscriptionTier;
 import com.relyon.economizai.repository.MetaAdSpendRepository;
+import com.relyon.economizai.repository.MetaCampaignRepository;
 import com.relyon.economizai.repository.SubscriptionRepository;
 import com.relyon.economizai.repository.UserRepository;
 import com.relyon.economizai.service.analytics.meta.MetaAdsProperties;
@@ -18,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,6 +36,7 @@ class AdminAnalyticsServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private SubscriptionRepository subscriptionRepository;
     @Mock private MetaAdSpendRepository metaAdSpendRepository;
+    @Mock private MetaCampaignRepository metaCampaignRepository;
     @Mock private MetaAdsProperties metaAdsProperties;
 
     @InjectMocks private AdminAnalyticsService service;
@@ -44,6 +48,7 @@ class AdminAnalyticsServiceTest {
         lenient().when(userRepository.platformBreakdownSince(any(), anyBoolean())).thenReturn(List.of());
         lenient().when(metaAdSpendRepository.campaignTotalsBetween(any(), any())).thenReturn(List.of());
         lenient().when(metaAdSpendRepository.totalSpendBetween(any(), any())).thenReturn(BigDecimal.ZERO);
+        lenient().when(metaCampaignRepository.findAll()).thenReturn(List.of());
     }
 
     @Test
@@ -108,6 +113,32 @@ class AdminAnalyticsServiceTest {
         assertThat(report.byTier()).containsEntry("PRO", 7L);
         assertThat(report.payingActive()).isZero();
         assertThat(report.note()).contains("promo");
+    }
+
+    @Test
+    void adSpendMergesCampaignBudgetAndStatus() {
+        stubEmptyFunnel();
+        when(userRepository.channelBreakdownSince(any(), anyBoolean())).thenReturn(List.of());
+        when(metaAdsProperties.isConfigured()).thenReturn(true);
+        Object[] spendRow = {"c1", "Instagram Post", new BigDecimal("426.50"), 646L, 18468L};
+        when(metaAdSpendRepository.campaignTotalsBetween(any(), any())).thenReturn(List.<Object[]>of(spendRow));
+        var campaign = MetaCampaign.builder()
+                .campaignId("c1").name("Instagram Post").status("ACTIVE")
+                .lifetimeBudget(new BigDecimal("700.00")).budgetRemaining(new BigDecimal("273.50"))
+                .endsAt(OffsetDateTime.now().plusDays(6)).syncedAt(OffsetDateTime.now())
+                .build();
+        when(metaCampaignRepository.findAll()).thenReturn(List.of(campaign));
+
+        var report = service.acquisition(30, false);
+        var ad = report.adSpend();
+
+        assertThat(ad.budgetRemaining()).isEqualByComparingTo("273.50");
+        assertThat(ad.byCampaign()).hasSize(1);
+        var line = ad.byCampaign().get(0);
+        assertThat(line.status()).isEqualTo("ACTIVE");
+        assertThat(line.ended()).isFalse();
+        assertThat(line.budgetRemaining()).isEqualByComparingTo("273.50");
+        assertThat(line.lifetimeBudget()).isEqualByComparingTo("700.00");
     }
 
     @Test
