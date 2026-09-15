@@ -59,6 +59,11 @@ exclui admins e contas de teste (`@economizaai.app`) pra os números refletirem
 usuários reais. E o acquisition ganhou `byPlatform` (`WEB/ANDROID/IOS/UNKNOWN`),
 que quebra os cadastros "Desconhecidos" por plataforma de registro.
 
+E `adSpend` agora traz **orçamento/status da campanha** (via sync do Meta):
+`budgetRemaining` (agregado) + por campanha `status`, `lifetimeBudget`,
+`budgetRemaining`, `endsAt` e `ended` — pra ver quanto ainda tem de verba e se a
+campanha já acabou. Null enquanto o Meta não estiver configurado/sincronizado.
+
 ---
 
 ## 2026-09-07 — Alerta de nova conta no e-mail do admin

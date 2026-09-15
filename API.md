@@ -1245,6 +1245,7 @@ POST   /api/v1/admin/dev/seed-discounted-receipt?targetEmail= → ReceiptRespons
 - **Trigger ad-spend sync** — `POST /admin/analytics/ad-spend/sync` → `{ "rowsSynced": n }`. Runs the Meta sync on demand (the dashboard otherwise refreshes via the daily cron). Returns `0` when Meta is unconfigured.
 - **`includeInternal` (both analytics GETs, default `false`)** — when false, excludes admins (`role = ADMIN`) and test accounts (`email LIKE %@economizaai.app`) so counts reflect real users. Pass `true` to include everyone.
 - **`byPlatform` (acquisition response)** — `[{ platform: "WEB"|"ANDROID"|"IOS"|"UNKNOWN", signups }]` — where the signup happened (from the immutable `registrationPlatform`); breaks down the `UNKNOWN`-channel signups (`UNKNOWN` = client didn't send a platform).
+- **`adSpend` budget/status** — `adSpend.budgetRemaining` (aggregate R$) and, per `adSpend.byCampaign[]`: `status` (Meta effective_status), `lifetimeBudget`, `budgetRemaining`, `endsAt` (YYYY-MM-DD), `ended` (bool). Synced from Meta by the ad-spend job; all null until Meta is configured + synced.
 
 All require a JWT for a user with `Role.ADMIN`. Regular users hit 403.
 
