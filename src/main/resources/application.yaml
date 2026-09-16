@@ -413,6 +413,17 @@ meta:
     api-version: ${META_ADS_API_VERSION:v21.0}
     sync-days: ${META_ADS_SYNC_DAYS:30}
     graph-base-url: ${META_ADS_GRAPH_BASE_URL:https://graph.facebook.com}
+  capi:
+    # Meta Conversions API (server-side event send). Inert until META_CAPI_ENABLED=true
+    # AND a pixel id + Conversions API token are set (generated per-Pixel in Events
+    # Manager, SEPARATE from the ads token). Reports each signup server-side so the
+    # conversion survives ad-blockers / iOS ITP and attributes to the campaign.
+    enabled: ${META_CAPI_ENABLED:false}
+    pixel-id: ${META_CAPI_PIXEL_ID:}
+    token: ${META_CAPI_TOKEN:}
+    api-version: ${META_CAPI_API_VERSION:v21.0}
+    graph-base-url: ${META_CAPI_GRAPH_BASE_URL:https://graph.facebook.com}
+    test-event-code: ${META_CAPI_TEST_EVENT_CODE:}
 
 springdoc:
   swagger-ui:

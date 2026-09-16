@@ -14,6 +14,7 @@ import com.relyon.economizai.repository.UserRepository;
 import com.relyon.economizai.security.JwtService;
 import com.relyon.economizai.service.HouseholdService;
 import com.relyon.economizai.service.LocalizedMessageService;
+import com.relyon.economizai.service.analytics.meta.MetaConversionsService;
 import com.relyon.economizai.service.attribution.AttributionResolver;
 import com.relyon.economizai.service.auth.LoginActivityRecorder;
 import com.relyon.economizai.service.auth.RefreshTokenService;
@@ -57,6 +58,7 @@ public class SocialLoginService {
     private final LoginActivityRecorder loginActivityRecorder;
     private final SubscriptionService subscriptionService;
     private final SignupAlertService signupAlertService;
+    private final MetaConversionsService metaConversionsService;
     private final AttributionResolver attributionResolver;
 
     @Transactional
@@ -154,6 +156,7 @@ public class SocialLoginService {
         var signupPromoValidUntil = subscriptionService.grantSignupPromoIfEnabled(savedUser);
         loginActivityRecorder.recordRegistration(savedUser, platform);
         signupAlertService.notifyNewAccount(savedUser, "social login " + provider);
+        metaConversionsService.reportCompleteRegistration(savedUser, provider.name().toLowerCase());
         log.info("social.login created provider={} user={} household={}",
                 provider, LogMasker.email(savedUser.getEmail()), household.getId());
         return new ResolvedUser(savedUser, signupPromoValidUntil);
