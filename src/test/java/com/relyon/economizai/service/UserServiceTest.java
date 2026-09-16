@@ -53,6 +53,7 @@ import com.relyon.economizai.service.auth.EmailVerificationService;
 import com.relyon.economizai.service.auth.LoginActivityRecorder;
 import com.relyon.economizai.service.auth.RefreshTokenService;
 import com.relyon.economizai.service.attribution.AttributionResolver;
+import com.relyon.economizai.service.analytics.meta.MetaConversionsService;
 import com.relyon.economizai.service.auth.SignupAlertService;
 import com.relyon.economizai.service.notifications.NotificationRuleService;
 import org.mockito.ArgumentMatchers;
@@ -172,6 +173,9 @@ class UserServiceTest {
 
     @Mock
     private SignupAlertService signupAlertService;
+
+    @Mock
+    private MetaConversionsService metaConversionsService;
 
     @Mock
     private AttributionResolver attributionResolver;

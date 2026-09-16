@@ -38,6 +38,24 @@ mirror entries here.
   spend (dashboard `adSpend.configured` flips to `true`). Until that's wired with real creds
   the cost-per-signup numbers are all null — the dashboard shows organic/channel funnel only.
 
+## Meta Conversions API (server-side signup events) — built but GATED/INERT for dev (2026-09-16)
+- **Now**: every new signup (e-mail + Google/Apple) is reported server-side to the Meta
+  Conversions API — email SHA-256-hashed, the ad-click passed as `fbc`, deduped with the
+  browser Pixel via `event_id`. Survives ad-blockers / iOS ITP and attributes conversions
+  to the campaign. Dispatched async (never blocks or fails a registration).
+- **Dormant until** `META_CAPI_ENABLED=true`, `META_CAPI_PIXEL_ID` (the Pixel/dataset id,
+  `1088687550381259`) and `META_CAPI_TOKEN` are set. The token is a **Conversions API access
+  token generated per-Pixel in Events Manager** (Settings → Conversions API → Generate access
+  token) — SEPARATE from the ads token (`META_ADS_TOKEN`). Optional: `META_CAPI_API_VERSION`
+  (v21.0), `META_CAPI_GRAPH_BASE_URL`, `META_CAPI_TEST_EVENT_CODE` (Events Manager → Test
+  Events, to validate without polluting live data).
+- **Why OK for dev**: with the vars unset `MetaConversionsService.isConfigured()` is false and
+  nothing is sent — zero external calls, nothing to break.
+- **Before prod**: generate the CAPI token in Events Manager for Pixel `1088687550381259`, set
+  the three env vars, and confirm `CompleteRegistration` events arrive in Events Manager → Test
+  Events (use `META_CAPI_TEST_EVENT_CODE` first). Pairs with the landing Pixel (already live)
+  and the app SDK scaffold (frontend `META_APP_EVENTS_SETUP.md`).
+
 ## Merchant support gate — two scale follow-ups (2026-07-16)
 - **Now**: grey-merchant promotion (`PUT /admin/merchants/{cnpj}/support` →
   SUPPORTED) backfills the price index from ALL of the merchant's confirmed

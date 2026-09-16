@@ -14,6 +14,7 @@ import com.relyon.economizai.service.HouseholdService;
 import com.relyon.economizai.service.attribution.AttributionResolver;
 import com.relyon.economizai.service.auth.LoginActivityRecorder;
 import com.relyon.economizai.service.auth.RefreshTokenService;
+import com.relyon.economizai.service.analytics.meta.MetaConversionsService;
 import com.relyon.economizai.service.auth.SignupAlertService;
 import com.relyon.economizai.service.notifications.NotificationRuleService;
 import com.relyon.economizai.service.subscription.SubscriptionService;
@@ -70,6 +71,9 @@ class SocialLoginServiceTest {
 
     @Mock
     private SignupAlertService signupAlertService;
+
+    @Mock
+    private MetaConversionsService metaConversionsService;
 
     @Mock
     private AttributionResolver attributionResolver;

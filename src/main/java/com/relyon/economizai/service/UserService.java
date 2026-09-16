@@ -38,6 +38,7 @@ import com.relyon.economizai.exception.InvalidLegalVersionException;
 import com.relyon.economizai.legal.LegalDocuments;
 import com.relyon.economizai.model.HouseholdProductAlias;
 import com.relyon.economizai.model.User;
+import com.relyon.economizai.service.analytics.meta.MetaConversionsService;
 import com.relyon.economizai.service.attribution.AttributionResolver;
 import com.relyon.economizai.repository.HouseholdCustomCategoryRepository;
 import com.relyon.economizai.repository.HouseholdMarketAliasRepository;
@@ -117,6 +118,7 @@ public class UserService {
     private final LoginActivityRecorder loginActivityRecorder;
     private final SubscriptionService subscriptionService;
     private final SignupAlertService signupAlertService;
+    private final MetaConversionsService metaConversionsService;
     private final AttributionResolver attributionResolver;
 
     @Transactional
@@ -151,6 +153,7 @@ public class UserService {
         var signupPromoValidUntil = subscriptionService.grantSignupPromoIfEnabled(savedUser);
         loginActivityRecorder.recordRegistration(savedUser, request.platform());
         signupAlertService.notifyNewAccount(savedUser, "e-mail/senha");
+        metaConversionsService.reportCompleteRegistration(savedUser, "email");
         emailVerificationService.sendVerificationFor(savedUser);
         var token = jwtService.generateToken(savedUser);
         var refreshToken = refreshTokenService.issue(savedUser);
