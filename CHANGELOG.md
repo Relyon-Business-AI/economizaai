@@ -16,6 +16,15 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-19 — Pernambuco (PE) passa a funcionar
+
+**NFC-e de PE agora é processada normalmente.** Notas de Pernambuco vinham falhando
+com `FAILED_PARSE` (o portal de PE redireciona `http`→`https:444` e responde com o
+XML da NFe, que o parser não seguia/entendia). Agora o backend segue o redirect e
+lê o XML — nenhuma mudança de contrato no FE; recibos de PE que davam erro passam a
+extrair itens normalmente. **Ação sugerida no FE:** peça pra usuária reenviar/rescanear
+as notas de PE que falharam.
+
 ## 2026-09-14 — Atribuição de marketing no cadastro + dashboard de aquisição (admin)
 
 **Cadastro aceita `attribution` (opcional).** `POST /auth/register`, `/auth/google`
