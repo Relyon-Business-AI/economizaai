@@ -9,11 +9,14 @@ import com.relyon.economizai.exception.SefazFetchException;
 import com.relyon.economizai.service.sefaz.captcha.CaptchaSolver;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
@@ -184,5 +187,53 @@ class GenericQrPortalAdapterTest {
 
         assertEquals(chave, parsed.chaveAcesso());
         assertTrue(parsed.items().size() >= 1);
+    }
+
+    private GenericQrPortalAdapter adapterWithExchange(Function<String, ResponseEntity<String>> exchange) {
+        return new GenericQrPortalAdapter(RestClient.builder(), NO_CAPTCHA, 1000, "test", true, 1, 0, "gov.br") {
+            @Override
+            protected ResponseEntity<String> exchange(String url) {
+                return exchange.apply(url);
+            }
+        };
+    }
+
+    /**
+     * PE (real case, carlabarbosatk 2026-09-19): the portal 301-redirects
+     * http:80 -> https:444 — a cross-scheme hop the JDK client won't follow — and
+     * then serves the NFe XML. We follow it ourselves and route XML to the XML parser.
+     */
+    @Test
+    void fetchHtml_followsCrossSchemeRedirectAndParsesXml() throws Exception {
+        var chave = "26260942591651264205650010000777891671062850";
+        var httpQr = "http://nfce.sefaz.pe.gov.br/nfce/consulta?p=" + chave + "|3|1";
+        var httpsTarget = "https://nfce.sefaz.pe.gov.br:444/nfce/consulta?p=" + chave + "|3|1";
+        var xml = new ClassPathResource("fixtures/sefaz/pe/pe-mcdonalds-3items.xml")
+                .getContentAsString(StandardCharsets.UTF_8);
+        var adapter = adapterWithExchange(url -> url.startsWith("http://")
+                ? ResponseEntity.status(HttpStatus.MOVED_PERMANENTLY).header(HttpHeaders.LOCATION, httpsTarget).body("<html>moved</html>")
+                : ResponseEntity.ok(xml));
+
+        var body = adapter.fetchHtml(httpQr);
+        var parsed = adapter.parseHtml(body, chave, httpQr);
+
+        assertEquals(3, parsed.items().size());
+        assertEquals(0, parsed.totalAmount().compareTo(new BigDecimal("31.90")));
+    }
+
+    @Test
+    void httpGet_rejectsRedirectOffGovBr() {
+        var adapter = adapterWithExchange(url ->
+                ResponseEntity.status(HttpStatus.FOUND).header(HttpHeaders.LOCATION, "https://evil.example.com/steal").body("stub"));
+
+        assertThrows(InvalidQrPayloadException.class, () -> adapter.fetchHtml(QR_URL_BA));
+    }
+
+    @Test
+    void httpGet_boundsRedirectLoops() {
+        var adapter = adapterWithExchange(url ->
+                ResponseEntity.status(HttpStatus.FOUND).header(HttpHeaders.LOCATION, "https://nfe.sefaz.ba.gov.br:444/loop").body("stub"));
+
+        assertThrows(ExperimentalPortalFetchException.class, () -> adapter.fetchHtml(QR_URL_BA));
     }
 }
