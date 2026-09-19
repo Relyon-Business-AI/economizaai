@@ -2,6 +2,7 @@ package com.relyon.economizai.service;
 
 import com.relyon.economizai.dto.request.AddReceiptItemRequest;
 import com.relyon.economizai.dto.request.ConfirmReceiptRequest;
+import com.relyon.economizai.dto.request.PrefetchedReceiptRequest;
 import com.relyon.economizai.dto.request.SubmitReceiptRequest;
 import com.relyon.economizai.dto.request.UpdateReceiptItemRequest;
 import com.relyon.economizai.dto.response.ConfirmReceiptResponse;
@@ -104,6 +105,34 @@ public class ReceiptService {
     @Transactional
     public ReceiptResponse submit(User user, SubmitReceiptRequest request) {
         var qrPayload = request.qrPayload();
+        var receipt = validateAndPersistProcessing(user, qrPayload);
+        var receiptId = receipt.getId();
+        dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload));
+        return withFriendlyName(user.getHousehold().getId(), receipt, ReceiptResponse.from(receipt));
+    }
+
+    /**
+     * Submit a receipt whose SEFAZ page the CLIENT already fetched on-device — for
+     * portals that serve phones but block our datacenter server (e.g. Pernambuco).
+     * Same up-front validation as {@link #submit}; the async ingestion parses the
+     * provided content instead of scraping from our IP.
+     */
+    public ReceiptResponse submitPrefetched(User user, PrefetchedReceiptRequest request) {
+        var qrPayload = request.qrPayload();
+        var rawContent = request.rawContent();
+        var receipt = validateAndPersistProcessing(user, qrPayload);
+        var receiptId = receipt.getId();
+        dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingestPrefetched(receiptId, qrPayload, rawContent));
+        return withFriendlyName(user.getHousehold().getId(), receipt, ReceiptResponse.from(receipt));
+    }
+
+    /**
+     * Shared submit path: everything decidable synchronously (unsupported UF,
+     * manual-chave-without-fallback, blocked merchant, monthly cap, stale/dup
+     * replacement) fails fast with a localized 4xx, then the receipt is persisted
+     * PROCESSING for the async ingestion to fill in.
+     */
+    private Receipt validateAndPersistProcessing(User user, String qrPayload) {
         var chave = sefazIngestionService.resolveChave(qrPayload);
         log.info("submit chave={}", LogMasker.chave(chave));
 
@@ -130,30 +159,32 @@ public class ReceiptService {
         replaceStalePriorOrRejectConfirmedDuplicate(user, chave);
 
         var receipt = persistProcessing(user, qrPayload, chave);
-        var receiptId = receipt.getId();
-        MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
+        MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receipt.getId()));
         log.info("submit ok status=PROCESSING (ingestion dispatched)");
+        return receipt;
+    }
 
-        // Dispatch the slow SEFAZ work only AFTER this transaction commits, so the
-        // background thread reads a committed PROCESSING row (no read-before-commit race).
+    /**
+     * Dispatch the slow SEFAZ work only AFTER this transaction commits, so the
+     * background thread reads a committed PROCESSING row (no read-before-commit race).
+     * A pool rejection (TaskRejectedException) fails the already-committed row, or
+     * the FE would poll forever.
+     */
+    private void dispatchAfterCommit(UUID receiptId, Runnable ingestTask) {
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
                     try {
-                        receiptIngestionService.ingest(receiptId, qrPayload);
+                        ingestTask.run();
                     } catch (RuntimeException ex) {
-                        // Ingest pool saturated (TaskRejectedException) — the row is already
-                        // committed as PROCESSING, so fail it or the FE polls forever.
                         receiptIngestionService.markFailed(receiptId, ex);
                     }
                 }
             });
         } else {
-            receiptIngestionService.ingest(receiptId, qrPayload);
+            ingestTask.run();
         }
-
-        return withFriendlyName(user.getHousehold().getId(), receipt, ReceiptResponse.from(receipt));
     }
 
     /**

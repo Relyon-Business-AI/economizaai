@@ -1480,6 +1480,40 @@
 					"response": []
 				},
 				{
+					"name": "Submit NFC-e prefetched (app fetched the SEFAZ page on-device — e.g. PE)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/receipts/prefetched",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"receipts",
+								"prefetched"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"qrPayload\": \"{{qrPayload}}\",\n  \"rawContent\": \"<raw HTML/XML the app fetched from the QR URL on-device>\"\n}"
+						},
+						"description": "For state portals that block our datacenter server (e.g. Pernambuco): the app fetches the nota\u0027s own SEFAZ page on the device (residential/mobile IP is accepted) and posts the raw body here. Same validation and ReceiptResponse (status PROCESSING) as POST /receipts; ingestion parses rawContent instead of scraping. rawContent must contain the chave."
+					},
+					"response": []
+				},
+				{
 					"name": "Submit NFC-e from QR photo (multipart, max 5MB, JPG/PNG)",
 					"request": {
 						"method": "POST",

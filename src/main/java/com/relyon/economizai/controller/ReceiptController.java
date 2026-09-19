@@ -2,6 +2,7 @@ package com.relyon.economizai.controller;
 
 import com.relyon.economizai.dto.request.AddReceiptItemRequest;
 import com.relyon.economizai.dto.request.ConfirmReceiptRequest;
+import com.relyon.economizai.dto.request.PrefetchedReceiptRequest;
 import com.relyon.economizai.dto.request.SubmitReceiptRequest;
 import com.relyon.economizai.dto.request.UpdateItemCategoryRequest;
 import com.relyon.economizai.dto.request.UpdateReceiptItemRequest;
@@ -66,6 +67,19 @@ public class ReceiptController {
     public ResponseEntity<ReceiptResponse> submit(@AuthenticationPrincipal User user,
                                                   @Valid @RequestBody SubmitReceiptRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(receiptService.submit(user, request));
+    }
+
+    /**
+     * Submit a receipt whose SEFAZ page the APP already fetched on the device.
+     * For portals that serve residential/mobile IPs but block our datacenter
+     * server (Pernambuco): the phone reads its own nota and posts the raw content,
+     * which we parse with the same pipeline as a server-side fetch — no scraping
+     * from our IP, no paid fallback.
+     */
+    @PostMapping("/prefetched")
+    public ResponseEntity<ReceiptResponse> submitPrefetched(@AuthenticationPrincipal User user,
+                                                            @Valid @RequestBody PrefetchedReceiptRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(receiptService.submitPrefetched(user, request));
     }
 
     /**

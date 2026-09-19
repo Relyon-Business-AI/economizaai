@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.UUID;
+import java.util.function.Function;
 
 /**
  * Background SEFAZ ingestion for a receipt already persisted as PROCESSING.
@@ -64,6 +65,30 @@ public class ReceiptIngestionService {
      */
     @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
     public void ingest(UUID receiptId, String qrPayload) {
+        // Attribute the paid SEFAZ calls (captcha solve, Infosimples query) to the
+        // owner so the per-user daily cap and cost ledger can meter them.
+        ingestResolved(receiptId, receipt -> sefazIngestionService.fetch(qrPayload, receipt.getUser().getId()));
+    }
+
+    /**
+     * As {@link #ingest} but the SEFAZ page was fetched by the CLIENT on-device
+     * (its own residential IP) — for portals that block our datacenter server
+     * (e.g. Pernambuco). No scraping happens from our IP; we parse the provided
+     * content with the exact same per-UF parser and persist pipeline.
+     */
+    @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
+    public void ingestPrefetched(UUID receiptId, String qrPayload, String rawContent) {
+        ingestResolved(receiptId, receipt -> sefazIngestionService.fromClientContent(
+                rawContent, receipt.getChaveAcesso(), receipt.getUf(), sourceUrlOf(qrPayload)));
+    }
+
+    /**
+     * Shared ingest body: load the PROCESSING row, resolve the document (server
+     * fetch or client-provided), parse, and persist — with the same failure
+     * handling for every path (parse failure keeps the raw for review; transient
+     * DB blips leave the row PROCESSING for the sweeper; anything else fails it).
+     */
+    private void ingestResolved(UUID receiptId, Function<Receipt, SefazIngestionService.FetchedDocument> resolver) {
         MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
         try {
             var receipt = receiptRepository.findById(receiptId).orElse(null);
@@ -71,10 +96,8 @@ public class ReceiptIngestionService {
                 log.warn("ingest skipped: receipt {} missing or no longer PROCESSING", abbrev(receiptId));
                 return;
             }
-            // Attribute the paid SEFAZ calls (captcha solve, Infosimples query) to the
-            // owner so the per-user daily cap and cost ledger can meter them.
             var userId = receipt.getUser().getId();
-            var fetched = sefazIngestionService.fetch(qrPayload, userId);
+            var fetched = resolver.apply(receipt);
             try {
                 var parsed = sefazIngestionService.parse(fetched, userId);
                 if (rejectUnsupportedMerchant(receiptId, parsed)) {
@@ -99,6 +122,11 @@ public class ReceiptIngestionService {
         } finally {
             MDC.remove(MdcContextFilter.RECEIPT_ID);
         }
+    }
+
+    private static String sourceUrlOf(String qrPayload) {
+        var trimmed = qrPayload == null ? null : qrPayload.trim();
+        return trimmed != null && trimmed.toLowerCase().startsWith("http") ? trimmed : null;
     }
 
     /**

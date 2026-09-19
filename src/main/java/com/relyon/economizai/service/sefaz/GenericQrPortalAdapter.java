@@ -8,6 +8,8 @@ import com.relyon.economizai.model.enums.UnidadeFederativa;
 import com.relyon.economizai.service.sefaz.captcha.CaptchaSolver;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
@@ -55,6 +57,10 @@ public class GenericQrPortalAdapter implements SefazAdapter {
     private static final Pattern URL_HOST = Pattern.compile(
             "^(https?)://([^/?#@\\\\]+?)(?::\\d+)?(?=[/?#]|$)", Pattern.CASE_INSENSITIVE);
     private static final int EVIDENCE_SNIPPET_CHARS = 600;
+    // The JDK HttpURLConnection auto-follows same-scheme redirects but NOT
+    // http->https (PE bounces http:80 -> https:444 and answers with the NFe XML).
+    // We follow those hops ourselves, re-checking the SSRF allowlist each time.
+    private static final int MAX_REDIRECTS = 4;
 
     private final RestClient restClient;
     private final CaptchaSolver captchaSolver;
@@ -226,14 +232,39 @@ public class GenericQrPortalAdapter implements SefazAdapter {
                 : sanitized.substring(0, EVIDENCE_SNIPPET_CHARS);
     }
 
-    /** Raw HTTP GET — isolated as a seam so the retry loop is unit-testable. */
+    /**
+     * Raw HTTP GET that follows cross-scheme redirects the JDK client won't (see
+     * {@link #MAX_REDIRECTS}). Isolated as a seam so the retry loop is unit-testable.
+     * Every redirect hop is re-validated against the SSRF allowlist via
+     * {@link #resolveUrl}, so a portal can't bounce the server off {@code gov.br}.
+     */
     protected String httpGet(String url) {
-        return restClient.get().uri(url).retrieve().body(String.class);
+        var current = url;
+        for (var hop = 0; hop <= MAX_REDIRECTS; hop++) {
+            var response = exchange(current);
+            if (!response.getStatusCode().is3xxRedirection()) {
+                return response.getBody();
+            }
+            var location = response.getHeaders().getFirst(HttpHeaders.LOCATION);
+            if (location == null || location.isBlank()) {
+                return response.getBody();
+            }
+            current = resolveUrl(location);
+        }
+        throw new TransientFetchException("too-many-redirects");
+    }
+
+    /** Single HTTP GET returning status + headers + body — the seam the redirect loop (and tests) build on. */
+    protected ResponseEntity<String> exchange(String url) {
+        return restClient.get().uri(url).retrieve().toEntity(String.class);
     }
 
     @Override
-    public ParsedReceipt parseHtml(String html, String chaveAcesso, String sourceUrl) {
-        return ResponsiveDanfeParser.parse(html, chaveAcesso, sourceUrl);
+    public ParsedReceipt parseHtml(String body, String chaveAcesso, String sourceUrl) {
+        if (NfceXmlParser.looksLikeNfeXml(body)) {
+            return NfceXmlParser.parse(body, chaveAcesso, sourceUrl);
+        }
+        return ResponsiveDanfeParser.parse(body, chaveAcesso, sourceUrl);
     }
 
     /**

@@ -15,10 +15,12 @@ import com.relyon.economizai.service.sefaz.SefazIngestionService.FetchedDocument
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -48,6 +50,8 @@ class SefazIngestionServiceTest {
     private static final String CHAVE_SC = "42260650552333000100650080001188891101255904";
     // UF code 35 → SP.
     private static final String CHAVE_SP = "35260412345678000190650010000123451123456780";
+    // UF code 26 → PE (real nota that failed for carlabarbosatk, 2026-09-19).
+    private static final String CHAVE_PE = "26260920534381000287651020001738551001743421";
 
     /** Metering is verified separately in PaidApiGuardServiceTest; here it's a no-op collaborator. */
     private final PaidApiGuardService paidApiGuard = mock(PaidApiGuardService.class);
@@ -94,6 +98,58 @@ class SefazIngestionServiceTest {
                 .rawHtml("<html>raw</html>")
                 .items(List.of())
                 .build();
+    }
+
+    @Test
+    void fromClientContent_acceptsContentCarryingTheChave() {
+        var service = new SefazIngestionService(
+                List.of(new FakeAdapter(Set.of(UnidadeFederativa.PE))), Optional.empty(), paidApiGuard, stateCoverage);
+        var content = "<nfeProc><NFe><infNFe Id=\"NFe" + CHAVE_PE + "\"><det/></infNFe></NFe></nfeProc>";
+
+        var fetched = service.fromClientContent(content, CHAVE_PE, UnidadeFederativa.PE, "http://nfce.sefaz.pe.gov.br/x");
+
+        assertEquals(CHAVE_PE, fetched.chave());
+        assertEquals(UnidadeFederativa.PE, fetched.uf());
+        assertTrue(fetched.html().contains(CHAVE_PE));
+        assertNull(fetched.preParsed(), "client content is parsed by the adapter, not pre-parsed");
+    }
+
+    @Test
+    void fromClientContent_rejectsContentForADifferentNota() {
+        var service = new SefazIngestionService(
+                List.of(new FakeAdapter(Set.of(UnidadeFederativa.PE))), Optional.empty(), paidApiGuard, stateCoverage);
+        // A client must not staple another nota's page onto this chave.
+        var otherNota = "<nfeProc><infNFe Id=\"NFe35260412345678000190650010000123451123456780\"/></nfeProc>";
+
+        assertThrows(ReceiptParseException.class,
+                () -> service.fromClientContent(otherNota, CHAVE_PE, UnidadeFederativa.PE, null));
+    }
+
+    @Test
+    void clientContent_parsesRealPeNotaEndToEnd() throws Exception {
+        // The gap-fill GenericQrPortalAdapter claims PE; client content routes through
+        // the same parseHtml -> NfceXmlParser as a server-side fetch would.
+        var generic = new GenericQrPortalAdapter(RestClient.builder(), mock(CaptchaSolver.class),
+                1000, "test", true, 1, 0, "gov.br");
+        var service = new SefazIngestionService(List.of(generic), Optional.empty(), paidApiGuard, stateCoverage);
+        var xml = new String(new ClassPathResource("fixtures/sefaz/pe/pe-novo-israel-4items.xml")
+                .getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+
+        var fetched = service.fromClientContent(xml, CHAVE_PE, UnidadeFederativa.PE, "http://nfce.sefaz.pe.gov.br/x");
+        var parsed = service.parse(fetched);
+
+        assertEquals(4, parsed.items().size());
+        assertEquals(0, parsed.totalAmount().compareTo(new BigDecimal("24.13")));
+        assertTrue(parsed.marketName().contains("NOVO ISRAEL"));
+    }
+
+    @Test
+    void fromClientContent_rejectsUnsupportedUf() {
+        var service = new SefazIngestionService(
+                List.of(new FakeAdapter(Set.of(UnidadeFederativa.RS))), Optional.empty(), paidApiGuard, stateCoverage);
+
+        assertThrows(UnsupportedStateException.class,
+                () -> service.fromClientContent("body " + CHAVE_PE, CHAVE_PE, UnidadeFederativa.PE, null));
     }
 
     @Test

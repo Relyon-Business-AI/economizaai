@@ -328,6 +328,31 @@ spaces/hyphens on submit, and validates length = 44 digits before sending. A
 grouped input (11 × 4-digit fields with auto-advance) reduces transcription
 errors but is optional — the backend handles both.
 
+### Submit a receipt the app fetched on-device (blocked states, e.g. PE)
+
+```
+POST /api/v1/receipts/prefetched
+{
+  "qrPayload": "<whatever the camera scanned>",
+  "rawContent": "<the raw HTML/XML the app fetched from the QR's URL on the device>"
+}
+→ 201 ReceiptResponse with status="PROCESSING"
+```
+
+Some state portals (Pernambuco today) serve the nota to residential/mobile IPs
+but **block our datacenter server** — so the backend can't scrape it. The **native
+app** fetches the QR's own SEFAZ URL on the device (the phone's IP is accepted,
+following the `http`→`https:444` redirect), and posts the raw page here. The
+backend parses it with the exact same pipeline as `POST /receipts` — no scraping
+from our IP, no paid fallback. Same validation, caps, and `ReceiptResponse`.
+
+- `rawContent` **must contain the chave** of `qrPayload` (integrity guard) — else
+  the receipt goes `FAILED_PARSE`.
+- **Native only.** On web the browser blocks the cross-origin fetch (CORS); use
+  the normal `POST /receipts`. The bundled FE (`receiptService.submitReceipt`)
+  already routes automatically: native + blocked UF (PE) + URL payload → this
+  endpoint; everything else → `POST /receipts`.
+
 ### Submit from a PHOTO of the QR code
 
 For users who can't scan live (web version, or a saved picture in the gallery):
