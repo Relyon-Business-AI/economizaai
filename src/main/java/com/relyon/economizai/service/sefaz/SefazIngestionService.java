@@ -346,6 +346,30 @@ public class SefazIngestionService {
     }
 
     /**
+     * Build a {@link FetchedDocument} from content the CLIENT fetched on-device
+     * (its own residential/mobile IP), for portals that serve the nota to phones
+     * but block our datacenter server — Pernambuco does exactly this (301s
+     * {@code http}→{@code https:444} and then refuses our IP with {@code <erro>100</erro>}).
+     * The app reads its OWN nota's SEFAZ page and posts the body; we sanitize the
+     * CPF and verify the content actually carries the submitted chave — a client
+     * must not be able to staple one nota's data onto another's key. Parsing then
+     * runs through the same per-UF parser ({@link #parse}) as a server-side fetch.
+     */
+    public FetchedDocument fromClientContent(String rawContent, String chave, UnidadeFederativa uf, String sourceUrl) {
+        var adapter = adapters.get(uf);
+        if (adapter == null) {
+            throw new UnsupportedStateException(uf.name());
+        }
+        var sanitized = CpfMasker.strip(rawContent == null ? "" : rawContent);
+        if (chave == null || !sanitized.contains(chave)) {
+            log.warn("sefaz.client_content.chave_absent uf={} chave={}", uf, abbrev(chave));
+            throw new ReceiptParseException("client-content-chave-mismatch");
+        }
+        log.info("sefaz.client_content.accepted uf={} chave={} bytes={}", uf, abbrev(chave), sanitized.length());
+        return new FetchedDocument(adapter, sanitized, chave, uf, sourceUrl);
+    }
+
+    /**
      * Re-runs parsing on already-stored HTML — used by the admin reparse
      * endpoint when a parser fix lands and we want to re-process old
      * receipts without hitting SEFAZ again.

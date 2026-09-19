@@ -16,14 +16,27 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
-## 2026-09-19 — Pernambuco (PE) passa a funcionar
+## 2026-09-19 — Pernambuco (PE) via fetch no aparelho + novo endpoint `POST /receipts/prefetched`
 
-**NFC-e de PE agora é processada normalmente.** Notas de Pernambuco vinham falhando
-com `FAILED_PARSE` (o portal de PE redireciona `http`→`https:444` e responde com o
-XML da NFe, que o parser não seguia/entendia). Agora o backend segue o redirect e
-lê o XML — nenhuma mudança de contrato no FE; recibos de PE que davam erro passam a
-extrair itens normalmente. **Ação sugerida no FE:** peça pra usuária reenviar/rescanear
-as notas de PE que falharam.
+**Contexto:** o portal de PE serve a nota pra IP residencial/móvel (celular), mas
+**bloqueia o IP do nosso servidor** (datacenter) — responde `<erro>100</erro>` sem
+os dados. O parser já foi corrigido (segue o redirect `http`→`https:444` e lê o XML
+da NFe), mas sozinho não vence o bloqueio de IP.
+
+**Solução (precisa do app):** pra esses estados, o **app busca a página da nota no
+próprio aparelho** (IP do celular é aceito) e manda o conteúdo cru pro backend, que
+parseia com o mesmo pipeline — sem raspar do nosso IP, sem custo.
+
+**Novo endpoint:** `POST /api/v1/receipts/prefetched` — corpo
+`{ "qrPayload": "<o que o QR retornou>", "rawContent": "<HTML/XML que o app baixou da URL do QR>" }`.
+Mesmas validações e mesma resposta (`ReceiptResponse`, status `PROCESSING`) do
+`POST /receipts`; a ingestão usa o `rawContent` em vez de buscar na SEFAZ. O
+`rawContent` **precisa conter a chave** da nota (guarda de integridade).
+
+**FE (nativo):** o `receiptService.submitReceipt` já faz isso sozinho — pra UF
+bloqueada (hoje só PE, código `26`) e QR que seja URL `http(s)`, ele busca no
+aparelho e usa `/receipts/prefetched`; se falhar/não se aplicar, cai no `/receipts`
+normal. **Web fica no fluxo antigo** (CORS bloqueia o fetch on-device no navegador).
 
 ## 2026-09-14 — Atribuição de marketing no cadastro + dashboard de aquisição (admin)
 
