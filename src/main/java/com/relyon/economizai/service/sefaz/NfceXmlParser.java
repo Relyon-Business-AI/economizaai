@@ -43,9 +43,10 @@ public final class NfceXmlParser {
         var document = Jsoup.parse(xml, "", Parser.xmlParser());
         var items = parseItems(document);
         if (items.isEmpty()) {
+            var erro = textOf(document.selectFirst("erro"));
             var motivo = textOf(document.selectFirst("xmotivo"));
-            log.warn("NFe XML had no items for chave {}{}", LogMasker.chave(chaveAcesso),
-                    motivo.isBlank() ? "" : " motivo='" + motivo + "'");
+            log.warn("NFe XML had no items for chave {} bytes={} erro='{}' motivo='{}' snippet='{}'",
+                    LogMasker.chave(chaveAcesso), xml.length(), erro, motivo, snippet(xml));
             throw new ReceiptParseException("no-items-found");
         }
         var emit = document.selectFirst("emit");
@@ -135,6 +136,12 @@ public final class NfceXmlParser {
         var code = raw.replaceAll("\\D", "");
         if (code.length() < 8 || code.length() > 14) return null;
         return code;
+    }
+
+    /** First 300 chars, CPF-stripped, newlines flattened — enough to see a portal error/block page. */
+    private static String snippet(String body) {
+        var flat = CpfMasker.strip(body).replaceAll("\\s+", " ").trim();
+        return flat.length() <= 300 ? flat : flat.substring(0, 300);
     }
 
     private static String textOf(Element element) {
