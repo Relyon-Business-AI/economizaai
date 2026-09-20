@@ -23,6 +23,7 @@ import com.relyon.economizai.service.scan.QrCodePhotoDecoder;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -39,6 +40,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -50,6 +52,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/receipts")
 @RequiredArgsConstructor
@@ -65,7 +68,13 @@ public class ReceiptController {
 
     @PostMapping
     public ResponseEntity<ReceiptResponse> submit(@AuthenticationPrincipal User user,
+                                                  @RequestHeader(value = "X-Device-Fetch", required = false) String deviceFetch,
                                                   @Valid @RequestBody SubmitReceiptRequest request) {
+        // Client telemetry: the app reports whether it tried the on-device fetch (and why it
+        // fell back to the server flow) so blocked-state failures are diagnosable end-to-end.
+        if (deviceFetch != null) {
+            log.info("client.device_fetch endpoint=receipts outcome={}", deviceFetch);
+        }
         return ResponseEntity.status(HttpStatus.CREATED).body(receiptService.submit(user, request));
     }
 
@@ -78,7 +87,11 @@ public class ReceiptController {
      */
     @PostMapping("/prefetched")
     public ResponseEntity<ReceiptResponse> submitPrefetched(@AuthenticationPrincipal User user,
+                                                            @RequestHeader(value = "X-Device-Fetch", required = false) String deviceFetch,
                                                             @Valid @RequestBody PrefetchedReceiptRequest request) {
+        if (deviceFetch != null) {
+            log.info("client.device_fetch endpoint=prefetched outcome={}", deviceFetch);
+        }
         return ResponseEntity.status(HttpStatus.CREATED).body(receiptService.submitPrefetched(user, request));
     }
 
