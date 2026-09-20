@@ -35,11 +35,13 @@ class ProcessingReceiptSweeperTest {
 
     @Test
     void sweep_failsStuckProcessingReceipts() {
-        var sweeper = new ProcessingReceiptSweeper(receiptRepository, 10);
+        var sweeper = new ProcessingReceiptSweeper(receiptRepository, 10, 15);
         var first = stuckReceipt();
         var second = stuckReceipt();
         when(receiptRepository.findByStatusAndCreatedAtBefore(eq(ReceiptStatus.PROCESSING), any(LocalDateTime.class)))
                 .thenReturn(List.of(first, second));
+        when(receiptRepository.findByStatusAndCreatedAtBefore(eq(ReceiptStatus.NEEDS_DEVICE_FETCH), any(LocalDateTime.class)))
+                .thenReturn(List.of());
 
         sweeper.sweep();
 
@@ -50,9 +52,25 @@ class ProcessingReceiptSweeperTest {
     }
 
     @Test
-    void sweep_noopWhenNothingStuck() {
-        var sweeper = new ProcessingReceiptSweeper(receiptRepository, 10);
+    void sweep_failsStrandedNeedsDeviceFetchReceipts() {
+        var sweeper = new ProcessingReceiptSweeper(receiptRepository, 10, 15);
+        var stranded = Receipt.builder().id(UUID.randomUUID()).status(ReceiptStatus.NEEDS_DEVICE_FETCH).build();
         when(receiptRepository.findByStatusAndCreatedAtBefore(eq(ReceiptStatus.PROCESSING), any(LocalDateTime.class)))
+                .thenReturn(List.of());
+        when(receiptRepository.findByStatusAndCreatedAtBefore(eq(ReceiptStatus.NEEDS_DEVICE_FETCH), any(LocalDateTime.class)))
+                .thenReturn(List.of(stranded));
+
+        sweeper.sweep();
+
+        assertEquals(ReceiptStatus.FAILED_PARSE, stranded.getStatus());
+        assertEquals("receipt.device_fetch.timeout", stranded.getParseErrorReason());
+        verify(receiptRepository).saveAll(List.of(stranded));
+    }
+
+    @Test
+    void sweep_noopWhenNothingStuck() {
+        var sweeper = new ProcessingReceiptSweeper(receiptRepository, 10, 15);
+        when(receiptRepository.findByStatusAndCreatedAtBefore(any(ReceiptStatus.class), any(LocalDateTime.class)))
                 .thenReturn(List.of());
 
         sweeper.sweep();
@@ -62,9 +80,11 @@ class ProcessingReceiptSweeperTest {
 
     @Test
     void sweep_usesCutoffOlderThanTimeout() {
-        var sweeper = new ProcessingReceiptSweeper(receiptRepository, 10);
+        var sweeper = new ProcessingReceiptSweeper(receiptRepository, 10, 15);
         var cutoffCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
         when(receiptRepository.findByStatusAndCreatedAtBefore(eq(ReceiptStatus.PROCESSING), cutoffCaptor.capture()))
+                .thenReturn(List.of());
+        when(receiptRepository.findByStatusAndCreatedAtBefore(eq(ReceiptStatus.NEEDS_DEVICE_FETCH), any(LocalDateTime.class)))
                 .thenReturn(List.of());
 
         sweeper.sweep();

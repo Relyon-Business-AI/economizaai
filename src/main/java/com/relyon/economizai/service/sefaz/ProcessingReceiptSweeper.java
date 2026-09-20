@@ -29,25 +29,38 @@ public class ProcessingReceiptSweeper {
 
     private final ReceiptRepository receiptRepository;
     private final int timeoutMinutes;
+    private final int deviceFetchTimeoutMinutes;
 
     public ProcessingReceiptSweeper(
             ReceiptRepository receiptRepository,
-            @Value("${economizai.ingestion.processing-timeout-minutes:10}") int timeoutMinutes) {
+            @Value("${economizai.ingestion.processing-timeout-minutes:10}") int timeoutMinutes,
+            @Value("${economizai.ingestion.device-fetch-timeout-minutes:15}") int deviceFetchTimeoutMinutes) {
         this.receiptRepository = receiptRepository;
         this.timeoutMinutes = Math.max(1, timeoutMinutes);
+        this.deviceFetchTimeoutMinutes = Math.max(1, deviceFetchTimeoutMinutes);
     }
 
     @Scheduled(fixedDelayString = "${economizai.ingestion.sweeper-delay-ms:60000}")
     @Transactional
     public void sweep() {
-        var cutoff = LocalDateTime.now().minusMinutes(timeoutMinutes);
-        var stuck = receiptRepository.findByStatusAndCreatedAtBefore(ReceiptStatus.PROCESSING, cutoff);
+        failStale(ReceiptStatus.PROCESSING, timeoutMinutes, "receipt.processing.timeout", "stuck_processing");
+        // A NEEDS_DEVICE_FETCH row waits for the app to re-post the nota it fetched
+        // on-device; a capable app resolves it in seconds. Anything still stranded past
+        // the timeout will never resolve (app closed, or an older app that can't fetch —
+        // and can't even render the status), so fail it so the user gets a terminal state.
+        failStale(ReceiptStatus.NEEDS_DEVICE_FETCH, deviceFetchTimeoutMinutes,
+                "receipt.device_fetch.timeout", "stuck_device_fetch");
+    }
+
+    private void failStale(ReceiptStatus status, int olderThanMinutes, String reasonKey, String event) {
+        var cutoff = LocalDateTime.now().minusMinutes(olderThanMinutes);
+        var stuck = receiptRepository.findByStatusAndCreatedAtBefore(status, cutoff);
         if (stuck.isEmpty()) return;
         stuck.forEach(receipt -> {
-            receipt.setParseErrorReason("receipt.processing.timeout");
+            receipt.setParseErrorReason(reasonKey);
             receipt.setStatus(ReceiptStatus.FAILED_PARSE);
         });
         receiptRepository.saveAll(stuck);
-        log.warn("sweep stuck_processing failed={} olderThanMinutes={}", stuck.size(), timeoutMinutes);
+        log.warn("sweep {} failed={} olderThanMinutes={}", event, stuck.size(), olderThanMinutes);
     }
 }

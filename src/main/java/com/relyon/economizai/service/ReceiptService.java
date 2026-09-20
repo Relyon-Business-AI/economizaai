@@ -114,6 +114,22 @@ public class ReceiptService {
     }
 
     /**
+     * As {@link #submit(User, SubmitReceiptRequest)} but {@code deviceCapable} carries
+     * whether the app can resolve a blocked-state receipt on-device (it sent the
+     * X-Device-Fetch header). Only such clients may be handed the NEEDS_DEVICE_FETCH
+     * status; older apps that don't know it would crash rendering it, so they get
+     * FAILED_PARSE instead.
+     */
+    @Transactional
+    public ReceiptResponse submit(User user, SubmitReceiptRequest request, boolean deviceCapable) {
+        var qrPayload = request.qrPayload();
+        var receipt = validateAndPersistProcessing(user, qrPayload);
+        var receiptId = receipt.getId();
+        dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload, deviceCapable));
+        return withFriendlyName(user.getHousehold().getId(), receipt, ReceiptResponse.from(receipt));
+    }
+
+    /**
      * Submit a receipt whose SEFAZ page the CLIENT already fetched on-device — for
      * portals that serve phones but block our datacenter server (e.g. Pernambuco).
      * Same up-front validation as {@link #submit}; the async ingestion parses the

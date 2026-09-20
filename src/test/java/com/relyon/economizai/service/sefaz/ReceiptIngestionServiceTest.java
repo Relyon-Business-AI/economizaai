@@ -138,18 +138,34 @@ class ReceiptIngestionServiceTest {
     }
 
     @Test
-    void ingest_experimentalStateBlocked_marksNeedsDeviceFetch() {
+    void ingest_experimentalStateBlocked_deviceCapableClient_marksNeedsDeviceFetch() {
         // Server has no adapter for the state and its portal blocks our datacenter IP
-        // (Pernambuco): recoverable — flag for the app to retry the fetch on-device.
+        // (Pernambuco): recoverable — flag for a DEVICE-CAPABLE app to retry on-device.
         var receipt = processingReceipt();
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
         when(sefazIngestionService.parse(eq(fetched), any())).thenThrow(new ExperimentalStateFailedException("PE"));
 
-        service.ingest(receipt.getId(), QR);
+        service.ingest(receipt.getId(), QR, true);
 
         assertEquals(ReceiptStatus.NEEDS_DEVICE_FETCH, receipt.getStatus());
+        verify(receiptRepository).save(receipt);
+    }
+
+    @Test
+    void ingest_experimentalStateBlocked_oldClient_marksFailedParseNotNeedsDeviceFetch() {
+        // An app that didn't send X-Device-Fetch can't resolve NEEDS_DEVICE_FETCH and would
+        // crash rendering the unknown status — it must get a plain FAILED_PARSE instead.
+        var receipt = processingReceipt();
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any())).thenThrow(new ExperimentalStateFailedException("PE"));
+
+        service.ingest(receipt.getId(), QR); // 2-arg = not device-capable
+
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
         verify(receiptRepository).save(receipt);
     }
 
