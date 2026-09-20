@@ -117,6 +117,7 @@ class ReceiptControllerTest {
         return new ReceiptResponse(
                 UUID.randomUUID(),
                 CHAVE_RS,
+                "https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx?p=" + CHAVE_RS + "|3|1",
                 UnidadeFederativa.RS,
                 "12345678000190",
                 "Mercado X",
@@ -148,6 +149,7 @@ class ReceiptControllerTest {
                         new BigDecimal("57.80"),
                         null,
                         null,
+                        false,
                         false,
                         false,
                         false,

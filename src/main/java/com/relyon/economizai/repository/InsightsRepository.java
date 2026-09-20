@@ -21,6 +21,7 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
         WHERE r.household.id = :householdId
           AND r.status = 'CONFIRMED'
           AND ri.excluded = false
+          AND ri.excludedFromPersonal = false
           AND r.issuedAt >= :from
           AND r.issuedAt <= :to
     """)
@@ -38,6 +39,7 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
         WHERE r.household.id = :householdId
           AND r.status = 'CONFIRMED'
           AND ri.excluded = false
+          AND ri.excludedFromPersonal = false
           AND r.issuedAt >= :from
           AND r.issuedAt <= :to
         GROUP BY EXTRACT(YEAR FROM r.issuedAt), EXTRACT(MONTH FROM r.issuedAt)
@@ -118,6 +120,7 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
         WHERE r.household.id = :householdId
           AND r.status = 'CONFIRMED'
           AND ri.excluded = false
+          AND ri.excludedFromPersonal = false
           AND r.issuedAt >= :from
           AND r.issuedAt <= :to
         GROUP BY r.cnpjEmitente
@@ -146,6 +149,7 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
         WHERE r.household.id = :householdId
           AND r.status = 'CONFIRMED'
           AND ri.excluded = false
+          AND ri.excludedFromPersonal = false
           AND r.issuedAt >= :from
           AND r.issuedAt <= :to
         GROUP BY COALESCE(ri.categoryAtConfirmation, p.category, com.relyon.economizai.model.enums.ProductCategory.OTHER)
@@ -171,6 +175,7 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
         WHERE r.household.id = :householdId
           AND r.status = 'CONFIRMED'
           AND ri.excluded = false
+          AND ri.excludedFromPersonal = false
           AND r.issuedAt >= :from
           AND r.issuedAt <= :to
         GROUP BY p.id, COALESCE(ri.categoryAtConfirmation, p.category)
@@ -190,6 +195,7 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
         WHERE r.household.id = :householdId
           AND r.status = 'CONFIRMED'
           AND ri.excluded = false
+          AND ri.excludedFromPersonal = false
           AND ri.product.id = :productId
           AND r.issuedAt >= :from
           AND r.issuedAt <= :to
@@ -210,6 +216,7 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
         WHERE r.household.id = :householdId
           AND r.status = 'CONFIRMED'
           AND ri.excluded = false
+          AND ri.excludedFromPersonal = false
           AND r.issuedAt >= :from
           AND r.issuedAt <= :to
         GROUP BY EXTRACT(YEAR FROM r.issuedAt), EXTRACT(WEEK FROM r.issuedAt)

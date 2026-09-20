@@ -463,6 +463,9 @@ GET    /api/v1/receipts/export?from=&to=&format=&delivery= → CSV (flat) | XLSX
                                                         pt-BR Excel; localized headers; PRO-gated —
                                                         dormant while enforcement is off)
 PATCH  /api/v1/receipts/{id}/items/{itemId}          → fix typos / qty / toggle excluded / set friendlyDescription
+                                                        (nota fields — PENDING_CONFIRMATION only)
+PATCH  /api/v1/receipts/{id}/items/{itemId}/personal  → household "personal layer" — ANY status (incl. CONFIRMED):
+                                                        { excludedFromPersonal, friendlyDescription, paidTotalPrice }
 PUT    /api/v1/receipts/{id}/items/{itemId}/category  → correct the category { "category": "MEAT_DAIRY" }
 POST   /api/v1/receipts/{id}/items                   → add a missing item (PENDING_CONFIRMATION only)
 POST   /api/v1/receipts/items-photo                  → multipart photo of the printed receipt; vision-LLM
@@ -485,6 +488,12 @@ DELETE /api/v1/receipts/{id}                         → hard delete. Frees the 
 **Per-item display name (`friendlyDescription`)** — NFC-e descriptions are noisy ("ARROZ TIO J TP1 5KG"). The user can rename an item for display via `PATCH /receipts/{id}/items/{itemId}` with `{ "friendlyDescription": "Arroz Tio João 5kg" }`. The original `rawDescription` stays untouched (it's the legal audit text from SEFAZ — immutable).
 
 **Per-item manual discount (`paidTotalPrice`)** — the NFC-e only carries a single receipt-level discount (`discountTotal`), never per item. When a line was bought on promotion the user can record what they actually paid via `PATCH /receipts/{id}/items/{itemId}` with `{ "paidTotalPrice": 49.90 }` (optionally `paidUnitPrice`; if omitted it's derived from `paidTotalPrice ÷ quantity`). The original `totalPrice`/`unitPrice` stay as-printed (shelf price, still the price-index baseline); the paid price is stored separately. `paidTotalPrice` must not exceed `totalPrice` (`400` `receipt.item.paid.price.exceeds.original`); send `null` to clear. Only while `PENDING_CONFIRMATION`. Every item response (`GET /receipts/{id}`, `GET /items`) carries `paidUnitPrice`, `paidTotalPrice`, and the derived `promotional` flag (`true` when `paidTotalPrice` is present and below `totalPrice`) — render the discount badge off `promotional` and strike through `totalPrice`.
+
+**Household "personal layer" — editable after confirmation** — once a receipt is `CONFIRMED` the nota is frozen (`PATCH .../items/{itemId}` returns `400` `receipt.not.editable`), but the household can still adjust how it accounts a line via **`PATCH /receipts/{id}/items/{itemId}/personal`** (works at ANY status). All fields optional:
+- **`excludedFromPersonal: true`** — "not mine" (shared purchase / someone else's item): drops the line from the household's personal spend / consumption / savings / reports and from `householdTotalAmount`, **but the price still feeds the collaborative index** (a real price is real). This is DISTINCT from `excluded` (the full-edit PATCH flag), which removes the line from *everything* including the index — use that for junk/non-product lines. New boolean `excludedFromPersonal` on every item response.
+- **`friendlyDescription`** and **`paidTotalPrice`/`paidUnitPrice`** — same semantics as the full PATCH, but allowed **after confirmation** here. Paid price only shifts the household's personal total; the printed `totalPrice`/`unitPrice` (index baseline) stay untouched. `paidTotalPrice` must not exceed `totalPrice` (`400` `receipt.item.paid.price.exceeds.original`).
+
+Returns the updated receipt. The immutable nota fields (quantity, shelf price, EAN, adding items) remain `PENDING_CONFIRMATION`-only via the full PATCH.
 
 **Per-item category correction** — `PUT /receipts/{id}/items/{itemId}/category` with `{ "category": "MEAT_DAIRY" }`. This is **household-scoped "evidence, not truth"**: it changes the category *this household* sees for that product everywhere (`GET /receipts/{id}`, `GET /items`) but does **not** mutate the global product, so other households are unaffected. `400` if the item isn't linked to a canonical product yet. Returns the updated receipt with the override applied. (Aggregates/insights honor this override in the **HOUSEHOLD** category lens, the default — pass `categoryView=GLOBAL` on `/items`, `/insights/query`, and `/insights/categories/top` to ignore overrides and use the global category.)
 

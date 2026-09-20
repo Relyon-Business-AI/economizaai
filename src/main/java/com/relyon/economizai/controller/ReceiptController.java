@@ -2,9 +2,11 @@ package com.relyon.economizai.controller;
 
 import com.relyon.economizai.dto.request.AddReceiptItemRequest;
 import com.relyon.economizai.dto.request.ConfirmReceiptRequest;
+import com.relyon.economizai.dto.request.DeviceContentRequest;
 import com.relyon.economizai.dto.request.PrefetchedReceiptRequest;
 import com.relyon.economizai.dto.request.SubmitReceiptRequest;
 import com.relyon.economizai.dto.request.UpdateItemCategoryRequest;
+import com.relyon.economizai.dto.request.UpdateItemPersonalRequest;
 import com.relyon.economizai.dto.request.UpdateReceiptItemRequest;
 import com.relyon.economizai.dto.response.ChaveExtractionResponse;
 import com.relyon.economizai.exception.InvalidExportFormatException;
@@ -23,6 +25,7 @@ import com.relyon.economizai.service.scan.QrCodePhotoDecoder;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -39,6 +42,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -50,6 +54,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/receipts")
 @RequiredArgsConstructor
@@ -65,7 +70,13 @@ public class ReceiptController {
 
     @PostMapping
     public ResponseEntity<ReceiptResponse> submit(@AuthenticationPrincipal User user,
+                                                  @RequestHeader(value = "X-Device-Fetch", required = false) String deviceFetch,
                                                   @Valid @RequestBody SubmitReceiptRequest request) {
+        // Client telemetry: the app reports whether it tried the on-device fetch (and why it
+        // fell back to the server flow) so blocked-state failures are diagnosable end-to-end.
+        if (deviceFetch != null) {
+            log.info("client.device_fetch endpoint=receipts outcome={}", deviceFetch);
+        }
         return ResponseEntity.status(HttpStatus.CREATED).body(receiptService.submit(user, request));
     }
 
@@ -78,8 +89,26 @@ public class ReceiptController {
      */
     @PostMapping("/prefetched")
     public ResponseEntity<ReceiptResponse> submitPrefetched(@AuthenticationPrincipal User user,
+                                                            @RequestHeader(value = "X-Device-Fetch", required = false) String deviceFetch,
                                                             @Valid @RequestBody PrefetchedReceiptRequest request) {
+        if (deviceFetch != null) {
+            log.info("client.device_fetch endpoint=prefetched outcome={}", deviceFetch);
+        }
         return ResponseEntity.status(HttpStatus.CREATED).body(receiptService.submitPrefetched(user, request));
+    }
+
+    /**
+     * On-device retry for a receipt the server left in {@code NEEDS_DEVICE_FETCH}
+     * (the state's portal blocks our datacenter IP). The app fetched the nota on its
+     * own accepted IP and reposts the raw body; we re-ingest the existing receipt.
+     * This is the generic self-healing path — any blocked state routes here without
+     * a per-state code change.
+     */
+    @PostMapping("/{id}/device-content")
+    public ResponseEntity<ReceiptResponse> submitDeviceContent(@AuthenticationPrincipal User user,
+                                                               @PathVariable UUID id,
+                                                               @Valid @RequestBody DeviceContentRequest request) {
+        return ResponseEntity.ok(receiptService.submitDeviceContent(user, id, request));
     }
 
     /**
@@ -198,6 +227,19 @@ public class ReceiptController {
                                                    @PathVariable UUID id,
                                                    @Valid @RequestBody AddReceiptItemRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(receiptService.addItem(user, id, request));
+    }
+
+    /**
+     * Household "personal layer" edit, allowed at ANY status (incl. after confirm):
+     * mark a line "not mine" (excludedFromPersonal), rename it, or record the paid
+     * promo price. Never touches the immutable nota nor the shared price index.
+     */
+    @PatchMapping("/{id}/items/{itemId}/personal")
+    public ResponseEntity<ReceiptResponse> updatePersonalItem(@AuthenticationPrincipal User user,
+                                                              @PathVariable UUID id,
+                                                              @PathVariable UUID itemId,
+                                                              @Valid @RequestBody UpdateItemPersonalRequest request) {
+        return ResponseEntity.ok(receiptService.updatePersonalItem(user, id, itemId, request));
     }
 
     /**

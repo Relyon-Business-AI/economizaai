@@ -136,6 +136,7 @@ public class ItemQueryService {
         bindings.put("status", ReceiptStatus.CONFIRMED);
 
         clauses.add("ri.excluded = false");
+        clauses.add("ri.excludedFromPersonal = false");
 
         clauses.add("r.issuedAt >= :from");
         bindings.put("from", filters.from());

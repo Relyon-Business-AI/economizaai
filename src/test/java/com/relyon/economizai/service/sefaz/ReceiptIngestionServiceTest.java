@@ -1,5 +1,6 @@
 package com.relyon.economizai.service.sefaz;
 
+import com.relyon.economizai.exception.ExperimentalStateFailedException;
 import com.relyon.economizai.exception.ReceiptParseException;
 import com.relyon.economizai.model.Household;
 import com.relyon.economizai.model.MarketLocation;
@@ -134,6 +135,38 @@ class ReceiptIngestionServiceTest {
 
         assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
         verify(receiptRepository).save(receipt);
+    }
+
+    @Test
+    void ingest_experimentalStateBlocked_marksNeedsDeviceFetch() {
+        // Server has no adapter for the state and its portal blocks our datacenter IP
+        // (Pernambuco): recoverable — flag for the app to retry the fetch on-device.
+        var receipt = processingReceipt();
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any())).thenThrow(new ExperimentalStateFailedException("PE"));
+
+        service.ingest(receipt.getId(), QR);
+
+        assertEquals(ReceiptStatus.NEEDS_DEVICE_FETCH, receipt.getStatus());
+        verify(receiptRepository).save(receipt);
+    }
+
+    @Test
+    void ingestPrefetched_experimentalStateFailed_marksFailedParseNoLoop() {
+        // The DEVICE content also couldn't be parsed — a real dead end, NOT another
+        // NEEDS_DEVICE_FETCH (which would loop the app forever).
+        var receipt = processingReceipt();
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<xml/>", CHAVE_RS, UnidadeFederativa.RS, null);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fromClientContent(any(), eq(CHAVE_RS), eq(UnidadeFederativa.RS), any()))
+                .thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any())).thenThrow(new ExperimentalStateFailedException("PE"));
+
+        service.ingestPrefetched(receipt.getId(), QR, "<xml/>");
+
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
     }
 
     @Test

@@ -61,7 +61,7 @@ public class PurchaseReportAssembler {
         var rows = new ArrayList<ItemRow>();
         for (var receipt : receipts) {
             for (var item : receipt.getItems()) {
-                if (item.isExcluded()) continue;
+                if (item.isExcluded() || item.isExcludedFromPersonal()) continue;
                 rows.add(toRow(receipt, item));
             }
         }

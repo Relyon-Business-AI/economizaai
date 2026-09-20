@@ -3,6 +3,7 @@ package com.relyon.economizai.service.sefaz;
 import com.relyon.economizai.config.AsyncConfig;
 import com.relyon.economizai.config.MdcContextFilter;
 import com.relyon.economizai.exception.DomainException;
+import com.relyon.economizai.exception.ExperimentalStateFailedException;
 import com.relyon.economizai.exception.ReceiptParseException;
 import com.relyon.economizai.exception.UnsupportedMerchantException;
 import com.relyon.economizai.model.Receipt;
@@ -67,7 +68,7 @@ public class ReceiptIngestionService {
     public void ingest(UUID receiptId, String qrPayload) {
         // Attribute the paid SEFAZ calls (captcha solve, Infosimples query) to the
         // owner so the per-user daily cap and cost ledger can meter them.
-        ingestResolved(receiptId, receipt -> sefazIngestionService.fetch(qrPayload, receipt.getUser().getId()));
+        ingestResolved(receiptId, receipt -> sefazIngestionService.fetch(qrPayload, receipt.getUser().getId()), true);
     }
 
     /**
@@ -79,7 +80,7 @@ public class ReceiptIngestionService {
     @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
     public void ingestPrefetched(UUID receiptId, String qrPayload, String rawContent) {
         ingestResolved(receiptId, receipt -> sefazIngestionService.fromClientContent(
-                rawContent, receipt.getChaveAcesso(), receipt.getUf(), sourceUrlOf(qrPayload)));
+                rawContent, receipt.getChaveAcesso(), receipt.getUf(), sourceUrlOf(qrPayload)), false);
     }
 
     /**
@@ -88,7 +89,9 @@ public class ReceiptIngestionService {
      * handling for every path (parse failure keeps the raw for review; transient
      * DB blips leave the row PROCESSING for the sweeper; anything else fails it).
      */
-    private void ingestResolved(UUID receiptId, Function<Receipt, SefazIngestionService.FetchedDocument> resolver) {
+    private void ingestResolved(UUID receiptId,
+                                Function<Receipt, SefazIngestionService.FetchedDocument> resolver,
+                                boolean canDeviceRetry) {
         MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
         try {
             var receipt = receiptRepository.findById(receiptId).orElse(null);
@@ -97,7 +100,13 @@ public class ReceiptIngestionService {
                 return;
             }
             var userId = receipt.getUser().getId();
-            var fetched = resolver.apply(receipt);
+            SefazIngestionService.FetchedDocument fetched;
+            try {
+                fetched = resolver.apply(receipt);
+            } catch (ExperimentalStateFailedException ex) {
+                routeExperimentalFailure(receiptId, ex, canDeviceRetry);
+                return;
+            }
             try {
                 var parsed = sefazIngestionService.parse(fetched, userId);
                 if (rejectUnsupportedMerchant(receiptId, parsed)) {
@@ -105,6 +114,8 @@ public class ReceiptIngestionService {
                 }
                 warmEanCatalog(parsed);
                 persistParsed(receiptId, parsed);
+            } catch (ExperimentalStateFailedException ex) {
+                routeExperimentalFailure(receiptId, ex, canDeviceRetry);
             } catch (ReceiptParseException ex) {
                 persistParseFailure(receiptId, fetched, ex);
             }
@@ -203,6 +214,30 @@ public class ReceiptIngestionService {
             receiptRepository.save(receipt);
             log.warn("ingest parse-failed status=FAILED_PARSE reason={} (raw HTML kept for review)",
                     ex.getMessageKey());
+        });
+    }
+
+    /**
+     * The experimental chain gave up (no verified adapter + our datacenter IP can't
+     * reach the portal). On the SERVER path this is recoverable — flag the receipt so
+     * the app retries the fetch on the user's own (accepted) device. On the DEVICE path
+     * (the app already tried) it's a real dead end → FAILED_PARSE, no retry loop.
+     */
+    private void routeExperimentalFailure(UUID receiptId, ExperimentalStateFailedException ex, boolean canDeviceRetry) {
+        if (canDeviceRetry) {
+            persistNeedsDeviceFetch(receiptId, ex);
+        } else {
+            markFailed(receiptId, ex);
+        }
+    }
+
+    private void persistNeedsDeviceFetch(UUID receiptId, ExperimentalStateFailedException ex) {
+        transactionTemplate.executeWithoutResult(txStatus -> {
+            var receipt = loadIfProcessing(receiptId);
+            if (receipt == null) return;
+            receipt.setStatus(ReceiptStatus.NEEDS_DEVICE_FETCH);
+            receiptRepository.save(receipt);
+            log.info("ingest needs-device-fetch uf={} — server blocked, app will retry on-device", ex.getMessage());
         });
     }
 

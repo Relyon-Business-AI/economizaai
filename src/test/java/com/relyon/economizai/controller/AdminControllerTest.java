@@ -132,14 +132,14 @@ class AdminControllerTest {
 
     private ReceiptResponse sampleReceipt(ReceiptStatus status) {
         return new ReceiptResponse(
-                UUID.randomUUID(), CHAVE_RS, UnidadeFederativa.RS, "12345678000190",
+                UUID.randomUUID(), CHAVE_RS, "https://sefaz/p=" + CHAVE_RS, UnidadeFederativa.RS, "12345678000190",
                 "Mercado X", "Mercado X", "Rua Y, 123", LocalDateTime.now(),
                 new BigDecimal("57.80"), new BigDecimal("57.80"), null, null, null, null,
                 status, null, null, null, LocalDateTime.now(),
                 List.of(new ReceiptItemResponse(
                         UUID.randomUUID(), UUID.randomUUID(), 1, "ARROZ 5KG", null, "ARROZ 5KG",
                         "7891234567890", new BigDecimal("1"), "UN",
-                        new BigDecimal("28.90"), new BigDecimal("28.90"), null, null, false, false, false, null, false)));
+                        new BigDecimal("28.90"), new BigDecimal("28.90"), null, null, false, false, false, false, null, false)));
     }
 
     private ProductResponse sampleProduct() {

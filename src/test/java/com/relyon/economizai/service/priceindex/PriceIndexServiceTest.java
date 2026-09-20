@@ -144,6 +144,27 @@ class PriceIndexServiceTest {
     }
 
     @Test
+    void recordContributions_includesNotMineItemButSkipsFullyExcluded() {
+        var notMine = itemWithProduct(product(), new BigDecimal("10"));
+        notMine.setExcludedFromPersonal(true); // "not mine" → out of personal, but the price is real → index
+        var junk = itemWithProduct(Product.builder().id(UUID.randomUUID()).normalizedName("Leite").build(),
+                new BigDecimal("5"));
+        junk.setExcluded(true); // fully excluded → out of the index
+        var receipt = buildConfirmedReceipt(true, notMine, junk);
+
+        when(observationRepository.save(any(PriceObservation.class))).thenAnswer(inv -> {
+            var obs = inv.<PriceObservation>getArgument(0);
+            obs.setId(UUID.randomUUID());
+            return obs;
+        });
+
+        var written = service.recordContributions(receipt);
+
+        assertEquals(1, written); // only the "not mine" line contributes
+        verify(observationRepository, times(1)).save(any(PriceObservation.class));
+    }
+
+    @Test
     void recordContributions_skipsWhenSameChaveAlreadyContributedByOtherHousehold() {
         var receipt = buildConfirmedReceipt(true, itemWithProduct(product(), new BigDecimal("10")));
         receipt.setChaveAcesso("43260412345678000190650010000123451123456780");

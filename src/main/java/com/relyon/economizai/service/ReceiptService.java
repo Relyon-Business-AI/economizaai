@@ -2,8 +2,10 @@ package com.relyon.economizai.service;
 
 import com.relyon.economizai.dto.request.AddReceiptItemRequest;
 import com.relyon.economizai.dto.request.ConfirmReceiptRequest;
+import com.relyon.economizai.dto.request.DeviceContentRequest;
 import com.relyon.economizai.dto.request.PrefetchedReceiptRequest;
 import com.relyon.economizai.dto.request.SubmitReceiptRequest;
+import com.relyon.economizai.dto.request.UpdateItemPersonalRequest;
 import com.relyon.economizai.dto.request.UpdateReceiptItemRequest;
 import com.relyon.economizai.dto.response.ConfirmReceiptResponse;
 import com.relyon.economizai.dto.response.ReceiptResponse;
@@ -122,6 +124,29 @@ public class ReceiptService {
         var rawContent = request.rawContent();
         var receipt = validateAndPersistProcessing(user, qrPayload);
         var receiptId = receipt.getId();
+        dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingestPrefetched(receiptId, qrPayload, rawContent));
+        return withFriendlyName(user.getHousehold().getId(), receipt, ReceiptResponse.from(receipt));
+    }
+
+    /**
+     * The app's on-device retry for a receipt the server left in NEEDS_DEVICE_FETCH
+     * (state blocks our datacenter IP). The app fetched the nota on its own accepted
+     * IP and reposts the body; we flip the row back to PROCESSING and re-ingest with
+     * it — reusing the stored qrPayload/chave. If the device content also can't be
+     * parsed it becomes a real FAILED_PARSE (no NEEDS_DEVICE_FETCH loop).
+     */
+    @Transactional
+    public ReceiptResponse submitDeviceContent(User user, UUID receiptId, DeviceContentRequest request) {
+        var receipt = loadOwned(user, receiptId);
+        if (receipt.getStatus() != ReceiptStatus.NEEDS_DEVICE_FETCH) {
+            throw new ReceiptNotEditableException(receipt.getStatus().name());
+        }
+        var qrPayload = receipt.getQrPayload();
+        var rawContent = request.rawContent();
+        receipt.setStatus(ReceiptStatus.PROCESSING);
+        receiptRepository.save(receipt);
+        MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
+        log.info("device-content received, re-ingesting on-device fetch");
         dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingestPrefetched(receiptId, qrPayload, rawContent));
         return withFriendlyName(user.getHousehold().getId(), receipt, ReceiptResponse.from(receipt));
     }
@@ -352,9 +377,29 @@ public class ReceiptService {
         log.info("confirm started");
         var receipt = loadOwned(user, receiptId);
         requirePending(receipt);
-
         applyItemExclusions(receipt, request);
+        return doConfirm(user, receipt);
+    }
 
+    /**
+     * Auto-confirm a receipt the user left PENDING too long (the sweeper). No user
+     * session and no exclusions — the parse is authoritative SEFAZ data, contribution
+     * still respects {@code contributionOptIn}, and the user can edit/delete after.
+     * Idempotent: silently skips if the row already left PENDING_CONFIRMATION.
+     */
+    @Transactional
+    public void confirmStale(UUID receiptId) {
+        var receipt = receiptRepository.findById(receiptId).orElse(null);
+        if (receipt == null || receipt.getStatus() != ReceiptStatus.PENDING_CONFIRMATION) {
+            return;
+        }
+        MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
+        log.info("confirm auto-stale started");
+        doConfirm(receipt.getUser(), receipt);
+    }
+
+    /** The confirm fan-out shared by the manual and the auto (sweeper) paths. */
+    private ConfirmReceiptResponse doConfirm(User user, Receipt receipt) {
         receipt.setStatus(ReceiptStatus.CONFIRMED);
         receipt.setConfirmedAt(LocalDateTime.now());
         canonicalizationService.canonicalize(receipt);
@@ -546,6 +591,40 @@ public class ReceiptService {
     }
 
     /**
+     * Household "personal layer" edit — allowed at ANY status (including after
+     * confirmation), unlike {@link #updateItem}. Touches only how this household
+     * sees/accounts the line: "not mine" ({@code excludedFromPersonal}), friendly
+     * name, and manual paid price. The immutable SEFAZ fields (quantity, shelf
+     * price, EAN) and the already-emitted price-index observation are untouched,
+     * so nothing here rewrites the shared index.
+     */
+    @Transactional
+    public ReceiptResponse updatePersonalItem(User user, UUID receiptId, UUID itemId,
+                                              UpdateItemPersonalRequest request) {
+        MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
+        MDC.put(MdcContextFilter.ITEM_ID, abbrev(itemId));
+        var receipt = loadOwned(user, receiptId);
+        var item = receipt.getItems().stream()
+                .filter(candidate -> candidate.getId().equals(itemId))
+                .findFirst()
+                .orElseThrow(ReceiptItemNotFoundException::new);
+        if (request.excludedFromPersonal() != null) {
+            item.setExcludedFromPersonal(request.excludedFromPersonal());
+        }
+        if (request.friendlyDescription() != null) {
+            item.setFriendlyDescription(request.friendlyDescription().isBlank()
+                    ? null : request.friendlyDescription());
+        }
+        applyPaidPrice(item, request.paidTotalPrice(), request.paidUnitPrice());
+        receiptItemRepository.save(item);
+        householdProductAliasService.rememberFromItem(receipt.getHousehold(), item);
+        householdCacheGen.bump(receipt.getHousehold().getId());
+        log.info("item.personal.updated notMine={} promo={}",
+                item.isExcludedFromPersonal(), item.isPromotional());
+        return toResponse(user, receipt);
+    }
+
+    /**
      * Add a missing item to a PENDING_CONFIRMATION receipt. Use case: SVRS
      * parser missed a line. Position appended to the end of the existing
      * items list.
@@ -651,7 +730,7 @@ public class ReceiptService {
             item.setFriendlyDescription(request.friendlyDescription().isBlank()
                     ? null : request.friendlyDescription());
         }
-        applyPaidPrice(item, request);
+        applyPaidPrice(item, request.paidTotalPrice(), request.paidUnitPrice());
     }
 
     /**
@@ -661,8 +740,7 @@ public class ReceiptService {
      * discount. A null paid total clears any previous manual discount. The paid
      * total can never exceed the original — a discount only lowers the price.
      */
-    private void applyPaidPrice(ReceiptItem item, UpdateReceiptItemRequest request) {
-        var paidTotal = request.paidTotalPrice();
+    private void applyPaidPrice(ReceiptItem item, BigDecimal paidTotal, BigDecimal requestedPaidUnit) {
         if (paidTotal == null) {
             item.setPaidUnitPrice(null);
             item.setPaidTotalPrice(null);
@@ -671,7 +749,7 @@ public class ReceiptService {
         if (item.getTotalPrice() != null && paidTotal.compareTo(item.getTotalPrice()) > 0) {
             throw new InvalidItemPriceException();
         }
-        var paidUnit = request.paidUnitPrice();
+        var paidUnit = requestedPaidUnit;
         if (paidUnit == null && item.getQuantity() != null && item.getQuantity().signum() > 0) {
             paidUnit = paidTotal.divide(item.getQuantity(), 4, RoundingMode.HALF_UP);
         }
