@@ -16,6 +16,21 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-20 — hotfix: `NEEDS_DEVICE_FETCH` só para apps capazes (app antigo não quebra)
+
+**Regressão corrigida.** O status novo `NEEDS_DEVICE_FETCH` fazia o app **da loja
+(1.1.1)** quebrar a lista de notas inteira (ele não conhece o status → crash ao
+renderizar o badge). Agora o backend só emite `NEEDS_DEVICE_FETCH` para clientes que
+**provaram** saber resolvê-lo — os que mandam o header **`X-Device-Fetch`** no submit
+(app novo). Apps antigos (sem o header) recebem `FAILED_PARSE` numa falha de estado
+bloqueado, que eles renderizam normal. Notas de PE etc. seguem funcionando no app novo.
+Além disso, um sweeper move para `FAILED_PARSE` qualquer nota presa em
+`NEEDS_DEVICE_FETCH` há mais de ~15 min (destrava as que já ficaram penduradas).
+**FE (defesa em profundidade):** a lista agora faz fallback de status desconhecido em vez
+de quebrar — só chega em quem atualizar o app.
+
+---
+
 ## 2026-09-20 — "Não é meu" + editar nota confirmada (camada pessoal por household)
 
 **Agora dá pra ajustar os seus registros DEPOIS de confirmar, sem mexer na nota.**

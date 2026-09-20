@@ -66,9 +66,24 @@ public class ReceiptIngestionService {
      */
     @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
     public void ingest(UUID receiptId, String qrPayload) {
+        // Safe default: only clients that PROVED they can resolve NEEDS_DEVICE_FETCH
+        // (they sent the X-Device-Fetch header) should ever see that status. Callers
+        // without that signal (older apps, web photo upload) get FAILED_PARSE instead.
+        ingest(receiptId, qrPayload, false);
+    }
+
+    /**
+     * As {@link #ingest(UUID, String)} but {@code canDeviceRetry} says whether the
+     * submitting CLIENT can resolve a blocked-state failure on-device. Only true for
+     * apps new enough to know the {@code NEEDS_DEVICE_FETCH} status and re-post via
+     * {@code /device-content}; older apps must get {@code FAILED_PARSE} (rendering an
+     * unknown status crashes their receipts list).
+     */
+    @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
+    public void ingest(UUID receiptId, String qrPayload, boolean canDeviceRetry) {
         // Attribute the paid SEFAZ calls (captcha solve, Infosimples query) to the
         // owner so the per-user daily cap and cost ledger can meter them.
-        ingestResolved(receiptId, receipt -> sefazIngestionService.fetch(qrPayload, receipt.getUser().getId()), true);
+        ingestResolved(receiptId, receipt -> sefazIngestionService.fetch(qrPayload, receipt.getUser().getId()), canDeviceRetry);
     }
 
     /**

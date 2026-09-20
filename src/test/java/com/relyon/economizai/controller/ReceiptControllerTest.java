@@ -47,6 +47,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
@@ -162,7 +163,7 @@ class ReceiptControllerTest {
     @Test
     void submit_returns201WithParsedReceipt() throws Exception {
         var user = buildUser();
-        when(receiptService.submit(any(User.class), any(SubmitReceiptRequest.class)))
+        when(receiptService.submit(any(User.class), any(SubmitReceiptRequest.class), anyBoolean()))
                 .thenReturn(sampleReceipt(ReceiptStatus.PENDING_CONFIRMATION));
 
         mockMvc.perform(post("/api/v1/receipts")
@@ -176,9 +177,40 @@ class ReceiptControllerTest {
     }
 
     @Test
+    void submit_withDeviceFetchHeader_marksClientDeviceCapable() throws Exception {
+        var user = buildUser();
+        when(receiptService.submit(any(User.class), any(SubmitReceiptRequest.class), anyBoolean()))
+                .thenReturn(sampleReceipt(ReceiptStatus.PENDING_CONFIRMATION));
+
+        mockMvc.perform(post("/api/v1/receipts")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .header("X-Device-Fetch", "df3:skip-uf43")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new SubmitReceiptRequest(CHAVE_RS))))
+                .andExpect(status().isCreated());
+
+        verify(receiptService).submit(any(User.class), any(SubmitReceiptRequest.class), eq(true));
+    }
+
+    @Test
+    void submit_withoutDeviceFetchHeader_marksClientNotDeviceCapable() throws Exception {
+        var user = buildUser();
+        when(receiptService.submit(any(User.class), any(SubmitReceiptRequest.class), anyBoolean()))
+                .thenReturn(sampleReceipt(ReceiptStatus.PENDING_CONFIRMATION));
+
+        mockMvc.perform(post("/api/v1/receipts")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new SubmitReceiptRequest(CHAVE_RS))))
+                .andExpect(status().isCreated());
+
+        verify(receiptService).submit(any(User.class), any(SubmitReceiptRequest.class), eq(false));
+    }
+
+    @Test
     void submit_returns409WhenChaveAlreadyIngested() throws Exception {
         var user = buildUser();
-        when(receiptService.submit(any(User.class), any(SubmitReceiptRequest.class)))
+        when(receiptService.submit(any(User.class), any(SubmitReceiptRequest.class), anyBoolean()))
                 .thenThrow(new ReceiptAlreadyIngestedException(CHAVE_RS));
 
         mockMvc.perform(post("/api/v1/receipts")

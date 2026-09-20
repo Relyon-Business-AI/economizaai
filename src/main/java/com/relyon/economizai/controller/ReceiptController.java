@@ -77,7 +77,11 @@ public class ReceiptController {
         if (deviceFetch != null) {
             log.info("client.device_fetch endpoint=receipts outcome={}", deviceFetch);
         }
-        return ResponseEntity.status(HttpStatus.CREATED).body(receiptService.submit(user, request));
+        // The header's PRESENCE marks an app new enough to resolve a NEEDS_DEVICE_FETCH
+        // receipt on-device. Older apps don't send it and can't render that status, so
+        // they must get FAILED_PARSE on a blocked-state failure instead.
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(receiptService.submit(user, request, deviceFetch != null));
     }
 
     /**
