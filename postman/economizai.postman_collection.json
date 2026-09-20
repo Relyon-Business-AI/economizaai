@@ -1514,6 +1514,41 @@
 					"response": []
 				},
 				{
+					"name": "Submit device-fetched content for a NEEDS_DEVICE_FETCH receipt",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/receipts/{{receiptId}}/device-content",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"receipts",
+								"{{receiptId}}",
+								"device-content"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"rawContent\": \"<raw HTML/XML the app fetched on-device for the NEEDS_DEVICE_FETCH receipt>\"\n}"
+						},
+						"description": "Generic self-healing retry: the server left this receipt in NEEDS_DEVICE_FETCH (its state blocks our datacenter IP). The app fetched the nota on its own accepted IP and reposts the body; we re-ingest the existing receipt (qrPayload/chave already stored). Any blocked state routes here without a per-state code change."
+					},
+					"response": []
+				},
+				{
 					"name": "Submit NFC-e from QR photo (multipart, max 5MB, JPG/PNG)",
 					"request": {
 						"method": "POST",

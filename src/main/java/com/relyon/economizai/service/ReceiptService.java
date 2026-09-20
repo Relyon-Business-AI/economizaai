@@ -2,6 +2,7 @@ package com.relyon.economizai.service;
 
 import com.relyon.economizai.dto.request.AddReceiptItemRequest;
 import com.relyon.economizai.dto.request.ConfirmReceiptRequest;
+import com.relyon.economizai.dto.request.DeviceContentRequest;
 import com.relyon.economizai.dto.request.PrefetchedReceiptRequest;
 import com.relyon.economizai.dto.request.SubmitReceiptRequest;
 import com.relyon.economizai.dto.request.UpdateReceiptItemRequest;
@@ -122,6 +123,29 @@ public class ReceiptService {
         var rawContent = request.rawContent();
         var receipt = validateAndPersistProcessing(user, qrPayload);
         var receiptId = receipt.getId();
+        dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingestPrefetched(receiptId, qrPayload, rawContent));
+        return withFriendlyName(user.getHousehold().getId(), receipt, ReceiptResponse.from(receipt));
+    }
+
+    /**
+     * The app's on-device retry for a receipt the server left in NEEDS_DEVICE_FETCH
+     * (state blocks our datacenter IP). The app fetched the nota on its own accepted
+     * IP and reposts the body; we flip the row back to PROCESSING and re-ingest with
+     * it — reusing the stored qrPayload/chave. If the device content also can't be
+     * parsed it becomes a real FAILED_PARSE (no NEEDS_DEVICE_FETCH loop).
+     */
+    @Transactional
+    public ReceiptResponse submitDeviceContent(User user, UUID receiptId, DeviceContentRequest request) {
+        var receipt = loadOwned(user, receiptId);
+        if (receipt.getStatus() != ReceiptStatus.NEEDS_DEVICE_FETCH) {
+            throw new ReceiptNotEditableException(receipt.getStatus().name());
+        }
+        var qrPayload = receipt.getQrPayload();
+        var rawContent = request.rawContent();
+        receipt.setStatus(ReceiptStatus.PROCESSING);
+        receiptRepository.save(receipt);
+        MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
+        log.info("device-content received, re-ingesting on-device fetch");
         dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingestPrefetched(receiptId, qrPayload, rawContent));
         return withFriendlyName(user.getHousehold().getId(), receipt, ReceiptResponse.from(receipt));
     }
@@ -352,9 +376,29 @@ public class ReceiptService {
         log.info("confirm started");
         var receipt = loadOwned(user, receiptId);
         requirePending(receipt);
-
         applyItemExclusions(receipt, request);
+        return doConfirm(user, receipt);
+    }
 
+    /**
+     * Auto-confirm a receipt the user left PENDING too long (the sweeper). No user
+     * session and no exclusions — the parse is authoritative SEFAZ data, contribution
+     * still respects {@code contributionOptIn}, and the user can edit/delete after.
+     * Idempotent: silently skips if the row already left PENDING_CONFIRMATION.
+     */
+    @Transactional
+    public void confirmStale(UUID receiptId) {
+        var receipt = receiptRepository.findById(receiptId).orElse(null);
+        if (receipt == null || receipt.getStatus() != ReceiptStatus.PENDING_CONFIRMATION) {
+            return;
+        }
+        MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
+        log.info("confirm auto-stale started");
+        doConfirm(receipt.getUser(), receipt);
+    }
+
+    /** The confirm fan-out shared by the manual and the auto (sweeper) paths. */
+    private ConfirmReceiptResponse doConfirm(User user, Receipt receipt) {
         receipt.setStatus(ReceiptStatus.CONFIRMED);
         receipt.setConfirmedAt(LocalDateTime.now());
         canonicalizationService.canonicalize(receipt);

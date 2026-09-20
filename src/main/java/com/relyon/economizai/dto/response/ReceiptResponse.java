@@ -14,6 +14,9 @@ import java.util.UUID;
 public record ReceiptResponse(
         UUID id,
         String chaveAcesso,
+        // The raw scanned QR (SEFAZ URL). Surfaced so the app can re-fetch the nota
+        // on-device when status is NEEDS_DEVICE_FETCH (a state that blocks our IP).
+        String qrPayload,
         UnidadeFederativa uf,
         String cnpjEmitente,
         String marketName,
@@ -58,6 +61,7 @@ public record ReceiptResponse(
         return new ReceiptResponse(
                 receipt.getId(),
                 receipt.getChaveAcesso(),
+                receipt.getQrPayload(),
                 receipt.getUf(),
                 receipt.getCnpjEmitente(),
                 receipt.getMarketName(),
@@ -88,7 +92,7 @@ public record ReceiptResponse(
     /** Copy with the household's custom display name applied; leaves the original {@code marketName} intact. */
     public ReceiptResponse withMarketFriendlyName(String marketFriendlyName) {
         return new ReceiptResponse(
-                id, chaveAcesso, uf, cnpjEmitente, marketName, marketFriendlyName, marketAddress,
+                id, chaveAcesso, qrPayload, uf, cnpjEmitente, marketName, marketFriendlyName, marketAddress,
                 issuedAt, totalAmount, householdTotalAmount, discountTotal, approxTaxFederal, approxTaxEstadual,
                 approxTaxTotal, status, parseErrorReason, parseErrorMessage, confirmedAt, createdAt, items);
     }
@@ -96,7 +100,7 @@ public record ReceiptResponse(
     /** Copy with the localized, user-showable failure message (Accept-Language resolved). */
     public ReceiptResponse withParseErrorMessage(String parseErrorMessage) {
         return new ReceiptResponse(
-                id, chaveAcesso, uf, cnpjEmitente, marketName, marketFriendlyName, marketAddress,
+                id, chaveAcesso, qrPayload, uf, cnpjEmitente, marketName, marketFriendlyName, marketAddress,
                 issuedAt, totalAmount, householdTotalAmount, discountTotal, approxTaxFederal, approxTaxEstadual,
                 approxTaxTotal, status, parseErrorReason, parseErrorMessage, confirmedAt, createdAt, items);
     }

@@ -397,6 +397,31 @@ class ReceiptServiceTest {
     }
 
     @Test
+    void confirmStale_autoConfirmsPendingReceipt() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receiptRepository.save(receipt)).thenReturn(receipt);
+        when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
+
+        receiptService.confirmStale(receipt.getId());
+
+        assertEquals(ReceiptStatus.CONFIRMED, receipt.getStatus());
+        assertNotNull(receipt.getConfirmedAt());
+    }
+
+    @Test
+    void confirmStale_skipsWhenNoLongerPending() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.CONFIRMED);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        receiptService.confirmStale(receipt.getId());
+
+        verify(receiptRepository, never()).save(any());
+    }
+
+    @Test
     void confirm_snapshotsCategoryFromLinkedProduct() {
         var user = buildUser();
         var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);

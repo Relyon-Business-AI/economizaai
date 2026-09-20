@@ -16,6 +16,28 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-20 — Fallback genérico de estado bloqueado (`NEEDS_DEVICE_FETCH`) + auto-confirmação
+
+**Cadeia auto-resolvível pra estados que bloqueiam nosso IP.** Antes o fetch no
+aparelho era hardcoded pra PE. Agora é genérico e self-healing:
+- Estado na lista de exceção (device-first, hoje só PE): o app busca no aparelho e
+  usa `POST /receipts/prefetched` (rápido, sem round-trip condenado).
+- **Qualquer outro estado:** server-first. Se o servidor não conseguir (bloqueio de
+  IP), a nota fica no **novo status `NEEDS_DEVICE_FETCH`** (trate na UI como
+  PROCESSING). O app então busca no aparelho e reposta em
+  **`POST /receipts/{id}/device-content`** `{ "rawContent": "<HTML/XML da SEFAZ>" }`.
+  Se o aparelho também não conseguir → `FAILED_PARSE` (sem loop). **Estado bloqueado
+  novo passa a funcionar sozinho, sem update de app.** (Novo campo `qrPayload` no
+  `ReceiptResponse` — a URL do QR, pro app rebuscar.)
+- **FE (nativo):** o `ReceiptsScreen` já trata `NEEDS_DEVICE_FETCH` no polling
+  (`resolveDeviceFetch`); web fica no fluxo antigo (CORS).
+
+**Auto-confirmação de notas paradas.** Notas em `PENDING_CONFIRMATION` por mais de
+**6h** sem confirmação manual são **confirmadas automaticamente** (a maioria dos
+usuários não sabia que precisava confirmar → notas paradas rendiam zero). O usuário
+ainda pode editar/deletar depois; a contribuição pro índice segue respeitando o
+`contributionOptIn`. Configurável via `ECONOMIZAI_RECEIPTS_AUTO_CONFIRM_*`.
+
 ## 2026-09-19 — Pernambuco (PE) via fetch no aparelho + novo endpoint `POST /receipts/prefetched`
 
 **Contexto:** o portal de PE serve a nota pra IP residencial/móvel (celular), mas

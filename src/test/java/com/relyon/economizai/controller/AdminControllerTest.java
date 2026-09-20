@@ -132,7 +132,7 @@ class AdminControllerTest {
 
     private ReceiptResponse sampleReceipt(ReceiptStatus status) {
         return new ReceiptResponse(
-                UUID.randomUUID(), CHAVE_RS, UnidadeFederativa.RS, "12345678000190",
+                UUID.randomUUID(), CHAVE_RS, "https://sefaz/p=" + CHAVE_RS, UnidadeFederativa.RS, "12345678000190",
                 "Mercado X", "Mercado X", "Rua Y, 123", LocalDateTime.now(),
                 new BigDecimal("57.80"), new BigDecimal("57.80"), null, null, null, null,
                 status, null, null, null, LocalDateTime.now(),

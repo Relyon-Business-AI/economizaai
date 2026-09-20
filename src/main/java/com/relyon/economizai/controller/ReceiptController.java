@@ -2,6 +2,7 @@ package com.relyon.economizai.controller;
 
 import com.relyon.economizai.dto.request.AddReceiptItemRequest;
 import com.relyon.economizai.dto.request.ConfirmReceiptRequest;
+import com.relyon.economizai.dto.request.DeviceContentRequest;
 import com.relyon.economizai.dto.request.PrefetchedReceiptRequest;
 import com.relyon.economizai.dto.request.SubmitReceiptRequest;
 import com.relyon.economizai.dto.request.UpdateItemCategoryRequest;
@@ -93,6 +94,20 @@ public class ReceiptController {
             log.info("client.device_fetch endpoint=prefetched outcome={}", deviceFetch);
         }
         return ResponseEntity.status(HttpStatus.CREATED).body(receiptService.submitPrefetched(user, request));
+    }
+
+    /**
+     * On-device retry for a receipt the server left in {@code NEEDS_DEVICE_FETCH}
+     * (the state's portal blocks our datacenter IP). The app fetched the nota on its
+     * own accepted IP and reposts the raw body; we re-ingest the existing receipt.
+     * This is the generic self-healing path — any blocked state routes here without
+     * a per-state code change.
+     */
+    @PostMapping("/{id}/device-content")
+    public ResponseEntity<ReceiptResponse> submitDeviceContent(@AuthenticationPrincipal User user,
+                                                               @PathVariable UUID id,
+                                                               @Valid @RequestBody DeviceContentRequest request) {
+        return ResponseEntity.ok(receiptService.submitDeviceContent(user, id, request));
     }
 
     /**
