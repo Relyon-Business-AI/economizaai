@@ -1750,6 +1750,43 @@
 					"response": []
 				},
 				{
+					"name": "Edit item — personal layer (any status)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/receipts/{{e2eReceiptId}}/items/{{e2eReceiptItemId}}/personal",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"receipts",
+								"{{e2eReceiptId}}",
+								"items",
+								"{{e2eReceiptItemId}}",
+								"personal"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"excludedFromPersonal\": true,\n  \"friendlyDescription\": \"Cerveja Stella 330ml\",\n  \"paidTotalPrice\": 49.90\n}"
+						},
+						"description": "Household \"personal layer\" — works at ANY status incl. CONFIRMED. excludedFromPersonal=\"não é meu\" drops the line from personal totals but keeps its price in the collaborative index; friendlyDescription/paidTotalPrice editable after confirm too. Immutable nota fields (qty, shelf price, EAN) stay PENDING-only via the full item PATCH."
+					},
+					"response": []
+				},
+				{
 					"name": "Correct item category (household-scoped)",
 					"request": {
 						"method": "PUT",
@@ -5961,6 +5998,42 @@
 									"pm.test('receipt.status is CONFIRMED', function () { pm.expect(d.receipt.status).to.eql('CONFIRMED'); });",
 									"pm.test('confirmedAt is set', function () { pm.expect(d.receipt.confirmedAt).to.not.be.null; });",
 									"pm.test('personalPromos is an array', function () { pm.expect(d.personalPromos).to.be.an('array'); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "13a. Edit confirmed item — personal layer (não é meu)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Accept-Language", "value": "pt" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/receipts/{{e2eReceiptId}}/items/{{e2eReceiptItemId}}/personal",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "v1", "receipts", "{{e2eReceiptId}}", "items", "{{e2eReceiptItemId}}", "personal" ]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"excludedFromPersonal\": true,\n  \"friendlyDescription\": \"COMPARTILHADO\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+								"if (!pm.collectionVariables.get('e2eReceiptItemId')) { pm.test.skip('No item id — skipping'); return; }",
+								"pm.test('Returns 200 — personal edit works AFTER confirm', function () { pm.response.to.have.status(200); });",
+								"var d = pm.response.json();",
+								"var item = d.items.find(function (i) { return i.id === pm.collectionVariables.get('e2eReceiptItemId'); });",
+								"pm.test('marked not-mine (out of personal totals, still in index)', function () { pm.expect(item.excludedFromPersonal).to.eql(true); });",
+								"pm.test('friendly name updated on a CONFIRMED receipt', function () { pm.expect(item.friendlyDescription).to.eql('COMPARTILHADO'); });"
 								]
 							}
 						}

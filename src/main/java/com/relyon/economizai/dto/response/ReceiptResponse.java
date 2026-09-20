@@ -55,8 +55,8 @@ public record ReceiptResponse(
     public static ReceiptResponse from(Receipt receipt, Map<UUID, String> categoryOverrides,
                                        Map<UUID, String> suggestionsByItemId) {
         var householdTotal = receipt.getItems().stream()
-                .filter(i -> !i.isExcluded())
-                .map(i -> i.getTotalPrice())
+                .filter(item -> !item.isExcluded() && !item.isExcludedFromPersonal())
+                .map(ReceiptItem::getTotalPrice)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return new ReceiptResponse(
                 receipt.getId(),

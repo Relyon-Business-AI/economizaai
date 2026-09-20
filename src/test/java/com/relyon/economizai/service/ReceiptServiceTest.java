@@ -1,6 +1,7 @@
 package com.relyon.economizai.service;
 
 import com.relyon.economizai.dto.request.SubmitReceiptRequest;
+import com.relyon.economizai.dto.request.UpdateItemPersonalRequest;
 import com.relyon.economizai.dto.request.UpdateReceiptItemRequest;
 import com.relyon.economizai.exception.InvalidItemPriceException;
 import com.relyon.economizai.exception.ManualChaveUnsupportedException;
@@ -54,6 +55,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -585,6 +587,56 @@ class ReceiptServiceTest {
 
         assertThrows(ReceiptItemNotFoundException.class,
                 () -> receiptService.updateItem(user, receiptId, missingItemId, request));
+    }
+
+    @Test
+    void updatePersonalItem_marksNotMine_onConfirmedReceipt_dropsFromHouseholdTotal() {
+        var user = buildUser();
+        // CONFIRMED — proves the personal layer is editable after confirmation (no requirePending).
+        var receipt = persistedReceipt(user, ReceiptStatus.CONFIRMED);
+        var item = receipt.getItems().get(0);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        var request = new UpdateItemPersonalRequest(true, null, null, null);
+        var response = receiptService.updatePersonalItem(user, receipt.getId(), item.getId(), request);
+
+        assertTrue(response.items().get(0).excludedFromPersonal());
+        assertTrue(item.isExcludedFromPersonal());
+        // Sole item is now "not mine" → household total is zero, but the item is NOT `excluded`
+        // (it still feeds the collaborative index).
+        assertEquals(0, response.householdTotalAmount().compareTo(BigDecimal.ZERO));
+        assertFalse(item.isExcluded());
+    }
+
+    @Test
+    void updatePersonalItem_editsDescriptionAndPaidPrice_onConfirmedReceipt() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.CONFIRMED);
+        var item = receipt.getItems().get(0); // qty 2 × 28.90 = 57.80 as-printed
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        var request = new UpdateItemPersonalRequest(null, "Arroz Tio João 5kg", null, new BigDecimal("50.00"));
+        var response = receiptService.updatePersonalItem(user, receipt.getId(), item.getId(), request);
+
+        var updated = response.items().get(0);
+        assertEquals("Arroz Tio João 5kg", updated.friendlyDescription());
+        assertEquals(new BigDecimal("57.80"), updated.totalPrice()); // printed price untouched
+        assertEquals(0, updated.paidTotalPrice().compareTo(new BigDecimal("50.00")));
+        assertTrue(updated.promotional());
+    }
+
+    @Test
+    void updatePersonalItem_throwsForUnknownItem() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.CONFIRMED);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        var request = new UpdateItemPersonalRequest(true, null, null, null);
+        var receiptId = receipt.getId();
+        var missingItemId = UUID.randomUUID();
+
+        assertThrows(ReceiptItemNotFoundException.class,
+                () -> receiptService.updatePersonalItem(user, receiptId, missingItemId, request));
     }
 
     @Test

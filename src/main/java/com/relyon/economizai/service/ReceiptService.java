@@ -5,6 +5,7 @@ import com.relyon.economizai.dto.request.ConfirmReceiptRequest;
 import com.relyon.economizai.dto.request.DeviceContentRequest;
 import com.relyon.economizai.dto.request.PrefetchedReceiptRequest;
 import com.relyon.economizai.dto.request.SubmitReceiptRequest;
+import com.relyon.economizai.dto.request.UpdateItemPersonalRequest;
 import com.relyon.economizai.dto.request.UpdateReceiptItemRequest;
 import com.relyon.economizai.dto.response.ConfirmReceiptResponse;
 import com.relyon.economizai.dto.response.ReceiptResponse;
@@ -590,6 +591,40 @@ public class ReceiptService {
     }
 
     /**
+     * Household "personal layer" edit — allowed at ANY status (including after
+     * confirmation), unlike {@link #updateItem}. Touches only how this household
+     * sees/accounts the line: "not mine" ({@code excludedFromPersonal}), friendly
+     * name, and manual paid price. The immutable SEFAZ fields (quantity, shelf
+     * price, EAN) and the already-emitted price-index observation are untouched,
+     * so nothing here rewrites the shared index.
+     */
+    @Transactional
+    public ReceiptResponse updatePersonalItem(User user, UUID receiptId, UUID itemId,
+                                              UpdateItemPersonalRequest request) {
+        MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
+        MDC.put(MdcContextFilter.ITEM_ID, abbrev(itemId));
+        var receipt = loadOwned(user, receiptId);
+        var item = receipt.getItems().stream()
+                .filter(candidate -> candidate.getId().equals(itemId))
+                .findFirst()
+                .orElseThrow(ReceiptItemNotFoundException::new);
+        if (request.excludedFromPersonal() != null) {
+            item.setExcludedFromPersonal(request.excludedFromPersonal());
+        }
+        if (request.friendlyDescription() != null) {
+            item.setFriendlyDescription(request.friendlyDescription().isBlank()
+                    ? null : request.friendlyDescription());
+        }
+        applyPaidPrice(item, request.paidTotalPrice(), request.paidUnitPrice());
+        receiptItemRepository.save(item);
+        householdProductAliasService.rememberFromItem(receipt.getHousehold(), item);
+        householdCacheGen.bump(receipt.getHousehold().getId());
+        log.info("item.personal.updated notMine={} promo={}",
+                item.isExcludedFromPersonal(), item.isPromotional());
+        return toResponse(user, receipt);
+    }
+
+    /**
      * Add a missing item to a PENDING_CONFIRMATION receipt. Use case: SVRS
      * parser missed a line. Position appended to the end of the existing
      * items list.
@@ -695,7 +730,7 @@ public class ReceiptService {
             item.setFriendlyDescription(request.friendlyDescription().isBlank()
                     ? null : request.friendlyDescription());
         }
-        applyPaidPrice(item, request);
+        applyPaidPrice(item, request.paidTotalPrice(), request.paidUnitPrice());
     }
 
     /**
@@ -705,8 +740,7 @@ public class ReceiptService {
      * discount. A null paid total clears any previous manual discount. The paid
      * total can never exceed the original — a discount only lowers the price.
      */
-    private void applyPaidPrice(ReceiptItem item, UpdateReceiptItemRequest request) {
-        var paidTotal = request.paidTotalPrice();
+    private void applyPaidPrice(ReceiptItem item, BigDecimal paidTotal, BigDecimal requestedPaidUnit) {
         if (paidTotal == null) {
             item.setPaidUnitPrice(null);
             item.setPaidTotalPrice(null);
@@ -715,7 +749,7 @@ public class ReceiptService {
         if (item.getTotalPrice() != null && paidTotal.compareTo(item.getTotalPrice()) > 0) {
             throw new InvalidItemPriceException();
         }
-        var paidUnit = request.paidUnitPrice();
+        var paidUnit = requestedPaidUnit;
         if (paidUnit == null && item.getQuantity() != null && item.getQuantity().signum() > 0) {
             paidUnit = paidTotal.divide(item.getQuantity(), 4, RoundingMode.HALF_UP);
         }

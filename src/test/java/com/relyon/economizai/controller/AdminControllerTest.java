@@ -139,7 +139,7 @@ class AdminControllerTest {
                 List.of(new ReceiptItemResponse(
                         UUID.randomUUID(), UUID.randomUUID(), 1, "ARROZ 5KG", null, "ARROZ 5KG",
                         "7891234567890", new BigDecimal("1"), "UN",
-                        new BigDecimal("28.90"), new BigDecimal("28.90"), null, null, false, false, false, null, false)));
+                        new BigDecimal("28.90"), new BigDecimal("28.90"), null, null, false, false, false, false, null, false)));
     }
 
     private ProductResponse sampleProduct() {

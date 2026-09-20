@@ -152,6 +152,7 @@ class ReceiptControllerTest {
                         false,
                         false,
                         false,
+                        false,
                         null,
                         false
                 ))

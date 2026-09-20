@@ -27,6 +27,7 @@ public record ReceiptItemResponse(
         BigDecimal paidTotalPrice,
         boolean promotional,
         boolean excluded,
+        boolean excludedFromPersonal,
         boolean nfcePromoFlag,
         String category,
         boolean categorySuggested
@@ -78,6 +79,7 @@ public record ReceiptItemResponse(
                 item.getPaidTotalPrice(),
                 item.isPromotional(),
                 item.isExcluded(),
+                item.isExcludedFromPersonal(),
                 item.isNfcePromoFlag(),
                 category,
                 suggested

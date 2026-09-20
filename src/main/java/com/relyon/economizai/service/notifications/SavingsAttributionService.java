@@ -100,7 +100,7 @@ public class SavingsAttributionService {
     /** Returns the realized savings when this item converted a surfaced deal, else null. */
     private BigDecimal attributeItem(Receipt receipt, ReceiptItem item,
                                      List<UUID> householdUserIds, OffsetDateTime windowStart) {
-        if (item.isExcluded() || item.getProduct() == null
+        if (item.isExcluded() || item.isExcludedFromPersonal() || item.getProduct() == null
                 || item.getUnitPrice() == null || item.getQuantity() == null) {
             return null;
         }

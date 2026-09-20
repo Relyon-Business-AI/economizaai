@@ -64,6 +64,17 @@ public class ReceiptItem extends BaseEntity {
     private boolean excluded = false;
 
     /**
+     * "Not mine" — a shared-purchase line the household attributes to someone
+     * else. Excluded from the household's PERSONAL spend / consumption / savings
+     * / reports, but (unlike {@link #excluded}) STILL contributes to the shared
+     * price index and canonicalization: the price was really paid at that store,
+     * whoever the item belonged to. Editable at any status (personal layer).
+     */
+    @Column(name = "excluded_from_personal", nullable = false)
+    @Builder.Default
+    private boolean excludedFromPersonal = false;
+
+    /**
      * True when the SEFAZ HTML signaled this item was on promo / discount.
      * Surfaces in the user's history ("você pegou uma oferta") and tells
      * the price-index pipeline NOT to use this row as a baseline price.

@@ -42,7 +42,8 @@ public class PromoDetector {
         var promos = new ArrayList<PersonalPromo>();
         var householdId = receipt.getHousehold().getId();
         for (var item : receipt.getItems()) {
-            if (item.isExcluded()) continue;
+            // Personal notification — skip "not mine" lines too (no promo alert for someone else's item).
+            if (item.isExcluded() || item.isExcludedFromPersonal()) continue;
             if (item.getProduct() == null || item.getUnitPrice() == null) continue;
             var historical = receiptItemRepository
                     .findHouseholdHistoryForProduct(item.getProduct().getId(), householdId).stream()

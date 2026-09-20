@@ -40,7 +40,7 @@ public record ReceiptSummaryResponse(
 ) {
     public static ReceiptSummaryResponse from(Receipt receipt) {
         var householdTotal = receipt.getItems().stream()
-                .filter(i -> !i.isExcluded())
+                .filter(item -> !item.isExcluded() && !item.isExcludedFromPersonal())
                 .map(ReceiptItem::getTotalPrice)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return new ReceiptSummaryResponse(

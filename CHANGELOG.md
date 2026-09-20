@@ -16,6 +16,34 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-20 — "Não é meu" + editar nota confirmada (camada pessoal por household)
+
+**Agora dá pra ajustar os seus registros DEPOIS de confirmar, sem mexer na nota.**
+Novo endpoint **`PATCH /receipts/{id}/items/{itemId}/personal`** (funciona em
+QUALQUER status, inclusive `CONFIRMED`). Corpo — todos os campos opcionais:
+```json
+{ "excludedFromPersonal": true, "friendlyDescription": "Cerveja Stella",
+  "paidUnitPrice": null, "paidTotalPrice": 50.00 }
+```
+- **`excludedFromPersonal`** = "não é meu" (compra compartilhada / item de outra
+  pessoa): tira a linha dos SEUS gastos / consumo / savings / relatórios, **mas o
+  preço continua alimentando o índice colaborativo** (foi um preço real). É
+  DIFERENTE do `excluded`, que remove a linha de tudo (linha-lixo).
+- **`friendlyDescription`** e **`paidTotalPrice`/`paidUnitPrice`** agora editáveis
+  **após o confirm** (antes só em `PENDING_CONFIRMATION`). Preço pago só ajusta o
+  seu total pessoal — o preço de lista (baseline do índice) fica intocado.
+
+**Novo campo no item:** `ReceiptItemResponse.excludedFromPersonal` (boolean). O total
+`householdTotalAmount` já desconta itens "não é meu". Os campos imutáveis da nota
+(quantidade, preço de lista, EAN) seguem editáveis só em `PENDING` via
+`PATCH /receipts/{id}/items/{itemId}`.
+
+**Escopo:** "não é meu" filtra gastos/consumo/savings/relatórios/notificações de
+promo. NÃO mexe em: índice colaborativo, canonicalização, matching, nem histórico de
+preço (um preço real segue sendo referência, independente de quem pagou).
+
+---
+
 ## 2026-09-20 — Fallback genérico de estado bloqueado (`NEEDS_DEVICE_FETCH`) + auto-confirmação
 
 **Cadeia auto-resolvível pra estados que bloqueiam nosso IP.** Antes o fetch no

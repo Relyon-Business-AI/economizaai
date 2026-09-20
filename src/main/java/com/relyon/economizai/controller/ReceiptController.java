@@ -6,6 +6,7 @@ import com.relyon.economizai.dto.request.DeviceContentRequest;
 import com.relyon.economizai.dto.request.PrefetchedReceiptRequest;
 import com.relyon.economizai.dto.request.SubmitReceiptRequest;
 import com.relyon.economizai.dto.request.UpdateItemCategoryRequest;
+import com.relyon.economizai.dto.request.UpdateItemPersonalRequest;
 import com.relyon.economizai.dto.request.UpdateReceiptItemRequest;
 import com.relyon.economizai.dto.response.ChaveExtractionResponse;
 import com.relyon.economizai.exception.InvalidExportFormatException;
@@ -226,6 +227,19 @@ public class ReceiptController {
                                                    @PathVariable UUID id,
                                                    @Valid @RequestBody AddReceiptItemRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(receiptService.addItem(user, id, request));
+    }
+
+    /**
+     * Household "personal layer" edit, allowed at ANY status (incl. after confirm):
+     * mark a line "not mine" (excludedFromPersonal), rename it, or record the paid
+     * promo price. Never touches the immutable nota nor the shared price index.
+     */
+    @PatchMapping("/{id}/items/{itemId}/personal")
+    public ResponseEntity<ReceiptResponse> updatePersonalItem(@AuthenticationPrincipal User user,
+                                                              @PathVariable UUID id,
+                                                              @PathVariable UUID itemId,
+                                                              @Valid @RequestBody UpdateItemPersonalRequest request) {
+        return ResponseEntity.ok(receiptService.updatePersonalItem(user, id, itemId, request));
     }
 
     /**
