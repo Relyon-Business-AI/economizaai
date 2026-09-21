@@ -35,6 +35,7 @@ import com.relyon.economizai.model.User;
 import com.relyon.economizai.model.enums.CategorizationQualityTrigger;
 import com.relyon.economizai.model.enums.CategorizationSource;
 import com.relyon.economizai.model.enums.ProductCategory;
+import com.relyon.economizai.model.enums.ReceiptStatus;
 import com.relyon.economizai.model.enums.UnidadeFederativa;
 import com.relyon.economizai.service.ReceiptService;
 import com.relyon.economizai.service.admin.AdminLlmService;
@@ -164,8 +165,9 @@ public class AdminController {
             @RequestParam(required = false) String q,
             @RequestParam(required = false) UUID householdId,
             @RequestParam(required = false) UnidadeFederativa uf,
+            @RequestParam(required = false) ReceiptStatus status,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(adminReceiptService.list(from, to, marketCnpj, category, q, householdId, uf, pageable));
+        return ResponseEntity.ok(adminReceiptService.list(from, to, marketCnpj, category, q, householdId, uf, status, pageable));
     }
 
     @GetMapping("/receipts/{id}")
