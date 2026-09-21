@@ -19,6 +19,7 @@ import org.springframework.web.client.RestClientException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -61,8 +62,10 @@ class GenericQrPortalAdapterTest {
         };
     }
 
+    // A real reCAPTCHA v2 site key is exactly 40 chars (Google's public test key).
+    private static final String VALID_SITE_KEY = "6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI";
     private static final String CAPTCHA_PAGE =
-            "<html><div class=\"g-recaptcha\" data-sitekey=\"site-key-123\"></div></html>";
+            "<html><div class=\"g-recaptcha\" data-sitekey=\"" + VALID_SITE_KEY + "\"></div></html>";
 
     @Test
     void resolveUrl_acceptsGovBrHostsOnly() {
@@ -124,7 +127,7 @@ class GenericQrPortalAdapterTest {
 
         assertTrue(thrown instanceof CaptchaUnavailableException);
         assertTrue(thrown.portalEvidence().contains("RECAPTCHA_V2"));
-        assertTrue(thrown.portalEvidence().contains("site-key-123"));
+        assertTrue(thrown.portalEvidence().contains(VALID_SITE_KEY));
     }
 
     @Test
@@ -133,6 +136,47 @@ class GenericQrPortalAdapterTest {
                 url -> url.contains("g-recaptcha-response=solved-token") ? "<html>danfe</html>" : CAPTCHA_PAGE);
 
         assertEquals("<html>danfe</html>", adapter.fetchHtml(QR_URL_BA));
+    }
+
+    @Test
+    void fetchHtml_captchaWall_malformedSiteKey_skipsSolverAndSignalsWall() {
+        // MG's portal carries a placeholder key whose length != 40. Sending it to the
+        // solver is a guaranteed paid-call rejection, so we must NOT call the solver.
+        var page = "<html><div class=\"g-recaptcha\" data-sitekey=\"site-key-123\"></div></html>";
+        var throwingSolver = new CaptchaSolver() {
+            @Override public boolean isConfigured() { return true; }
+            @Override public String solveRecaptchaV2(String siteKey, String pageUrl) {
+                throw new AssertionError("solver must not be called for a malformed site key");
+            }
+            @Override public String solveCloudflareTurnstile(String siteKey, String pageUrl) {
+                throw new AssertionError("solver must not be called for a malformed site key");
+            }
+        };
+        var adapter = adapter(1, throwingSolver, url -> page);
+
+        var thrown = assertThrows(ExperimentalCaptchaWallException.class, () -> adapter.fetchHtml(QR_URL_BA));
+        assertTrue(thrown instanceof CaptchaUnavailableException);
+    }
+
+    @Test
+    void fetchHtml_captchaWall_picksValidSiteKeyAmongDecoys() {
+        // A decoy short key appears before the real 40-char key — must pick the valid one.
+        var page = "<html><div data-sitekey=\"decoy\"></div>"
+                + "<div class=\"g-recaptcha\" data-sitekey=\"" + VALID_SITE_KEY + "\"></div></html>";
+        var seenKey = new AtomicReference<String>();
+        var capturingSolver = new CaptchaSolver() {
+            @Override public boolean isConfigured() { return true; }
+            @Override public String solveRecaptchaV2(String siteKey, String pageUrl) {
+                seenKey.set(siteKey);
+                return "solved-token";
+            }
+            @Override public String solveCloudflareTurnstile(String siteKey, String pageUrl) { return "solved-token"; }
+        };
+        var adapter = adapter(1, capturingSolver,
+                url -> url.contains("g-recaptcha-response=solved-token") ? "<html>danfe</html>" : page);
+
+        assertEquals("<html>danfe</html>", adapter.fetchHtml(QR_URL_BA));
+        assertEquals(VALID_SITE_KEY, seenKey.get());
     }
 
     @Test

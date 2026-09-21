@@ -94,4 +94,18 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     @Query("SELECT count(user) FROM User user WHERE user.createdAt >= :since "
             + "AND user.subscriptionTier = 'PRO'" + INTERNAL_FILTER)
     long countProTierSince(LocalDateTime since, boolean includeInternal);
+
+    /** Lifetime PRO count (all active PRO tiers) — the base for the MRR proxy. */
+    @Query("SELECT count(user) FROM User user WHERE user.subscriptionTier = 'PRO'" + INTERNAL_FILTER)
+    long countProTier(boolean includeInternal);
+
+    /**
+     * One row per signup in the window: (acquisitionChannel, createdAt, firstReceiptAt).
+     * firstReceiptAt is null when the user never activated. The service buckets these
+     * into per-channel activation + D7/D30 retention cohorts (cheap: bounded by window signups).
+     */
+    @Query("SELECT user.acquisitionChannel, user.createdAt, "
+            + "(SELECT min(receipt.createdAt) FROM Receipt receipt WHERE receipt.user = user) "
+            + "FROM User user WHERE user.createdAt >= :since" + INTERNAL_FILTER)
+    List<Object[]> signupActivationSince(LocalDateTime since, boolean includeInternal);
 }

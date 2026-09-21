@@ -54,6 +54,11 @@ public class GenericQrPortalAdapter implements SefazAdapter {
     private static final Pattern CAPTCHA_MARKER = Pattern.compile(
             "g-recaptcha|recaptcha/api\\.js|hcaptcha|cf-turnstile|challenge-form", Pattern.CASE_INSENSITIVE);
     private static final Pattern SITE_KEY = Pattern.compile("data-sitekey=\"([^\"]+)\"", Pattern.CASE_INSENSITIVE);
+    // A Google reCAPTCHA v2 site key is exactly 40 chars of [A-Za-z0-9_-]. MG's JSF
+    // portal carries a decoy/placeholder data-sitekey before the real one; sending a
+    // malformed key to the solver is a guaranteed paid-call rejection ("invalid
+    // websiteKey, its length should be 40"), so we validate the shape before solving.
+    private static final Pattern RECAPTCHA_SITE_KEY = Pattern.compile("[A-Za-z0-9_-]{40}");
     private static final Pattern URL_HOST = Pattern.compile(
             "^(https?)://([^/?#@\\\\]+?)(?::\\d+)?(?=[/?#]|$)", Pattern.CASE_INSENSITIVE);
     private static final int EVIDENCE_SNIPPET_CHARS = 600;
@@ -164,7 +169,7 @@ public class GenericQrPortalAdapter implements SefazAdapter {
      */
     private String handleCaptchaWall(String captchaPageHtml, String url, UnidadeFederativa uf) {
         var captchaType = detectCaptchaType(captchaPageHtml);
-        var siteKey = extractSiteKey(captchaPageHtml);
+        var siteKey = extractSiteKey(captchaPageHtml, captchaType);
         if (captchaSolver.isConfigured() && siteKey != null && captchaType.solvable()) {
             try {
                 log.info("sefaz.experimental.captcha_solving uf={} type={}", uf, captchaType);
@@ -219,9 +224,32 @@ public class GenericQrPortalAdapter implements SefazAdapter {
         return CaptchaType.UNKNOWN_CHALLENGE;
     }
 
-    private static String extractSiteKey(String html) {
+    /**
+     * Returns the first {@code data-sitekey} on the page that is well-formed for the
+     * detected captcha type. A page may carry a decoy/placeholder key before the real
+     * one (MG's portal does), so we scan every match instead of blindly taking the
+     * first. For reCAPTCHA v2 an unusable key yields {@code null} so the caller skips
+     * the solve entirely — a malformed key is a guaranteed paid-call rejection. For
+     * types we can't validate confidently we fall back to the first key seen.
+     */
+    private static String extractSiteKey(String html, CaptchaType captchaType) {
         var matcher = SITE_KEY.matcher(html);
-        return matcher.find() ? matcher.group(1) : null;
+        String firstSeen = null;
+        while (matcher.find()) {
+            var candidate = matcher.group(1).trim();
+            if (candidate.isBlank()) continue;
+            if (firstSeen == null) firstSeen = candidate;
+            if (isWellFormedSiteKey(candidate, captchaType)) return candidate;
+        }
+        return captchaType == CaptchaType.RECAPTCHA_V2 ? null : firstSeen;
+    }
+
+    private static boolean isWellFormedSiteKey(String candidate, CaptchaType captchaType) {
+        return switch (captchaType) {
+            case RECAPTCHA_V2 -> RECAPTCHA_SITE_KEY.matcher(candidate).matches();
+            case TURNSTILE -> candidate.startsWith("0x");
+            default -> true;
+        };
     }
 
     private static String snippet(String body) {

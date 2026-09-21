@@ -16,6 +16,23 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-21 — receita/ROAS, funil próprio de visitas e retenção por canal
+
+Dashboard de **Aquisição** (`GET /admin/analytics/acquisition`) ganhou 3 blocos novos
+na resposta (aditivo — campos antigos intactos):
+- **`revenue`** — receita **real** (de eventos do RevenueCat, começa ~0 e cresce) +
+  modelagem pelo preço PRO configurável (`PRO_MONTHLY_PRICE` def. 9,90 / `PRO_ASSUMED_LIFETIME_MONTHS` def. 12):
+  `realizedRevenue`, `mrrProxy`, `ltvPerProUser`, `projectedLtv`, `roas`, `projectedRoas`,
+  `ltvToCac`, `byChannel[]`, `note`.
+- **`visits`** — funil PRÓPRIO topo-de-funil: `totalVisits`, `uniqueVisitors`, `signups`,
+  `visitToSignupRate`, `byCampaign[]` (conversão visita→cadastro por campanha, independente do Meta).
+- **`retention`** — por canal: `activationRate` (1ª nota), `retentionD7`/`retentionD30`.
+
+Novo endpoint **público** (beacon anônimo, sem auth): **`POST /api/v1/visits`**
+`{ anonId, platform, attribution:{ utmSource,utmMedium,utmCampaign,utmContent,utmTerm,clickId,referrer,landingPath } }`
+→ **204**. O FE web dispara 1×/sessão na 1ª carga (localStorage `ea_anon_id`). Rate-limit 60/min por IP.
+Sem PII (ip só como hash). RevenueCat webhook agora grava `RevenueEvent` (valor real) nos eventos de compra/renovação.
+
 ## 2026-09-21 — endpoints admin p/ o Centro de Categorização (ADMIN-only)
 
 Base do módulo admin de categorização (FE em seguida). Todos **`ROLE_ADMIN`**:

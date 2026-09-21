@@ -12018,6 +12018,41 @@
 			]
 		},
 		{
+			"name": "Tracking (public)",
+			"description": "Public, unauthenticated first-party tracking fired by the FE web (no JWT).",
+			"item": [
+				{
+					"name": "Visit beacon (anonymous top-of-funnel)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"anonId\": \"postman-{{$guid}}\",\n  \"platform\": \"WEB\",\n  \"attribution\": {\n    \"utmSource\": \"instagram\",\n    \"utmMedium\": \"paid\",\n    \"utmCampaign\": \"setembro-lancamento\",\n    \"clickId\": \"fbclid_demo\",\n    \"landingPath\": \"/promo\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/visits",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"visits"
+							]
+						},
+						"description": "Anonymous visit beacon the web landing fires once per session on first load. Public (no auth), returns 204. Powers acquisition.visits (click→signup conversion per campaign). No PII — client IP kept only as a one-way hash. Rate-limited 60/min per IP. anonId required (missing → silently ignored)."
+					},
+					"response": []
+				}
+			]
+		},
+		{
 			"name": "Webhooks (billing)",
 			"item": [
 				{

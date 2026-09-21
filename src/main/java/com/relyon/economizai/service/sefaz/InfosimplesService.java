@@ -70,11 +70,15 @@ public class InfosimplesService {
 
         if (response == null || response.code() != 200) {
             var code = response == null ? -1 : response.code();
-            log.warn("infosimples.fetch.failed chave={} uf={} code={}", abbrev(chave), ufCode, code);
+            var message = response == null ? null : response.codeMessage();
+            var errors = response == null ? null : response.errors();
+            log.warn("infosimples.fetch.failed chave={} uf={} code={} message='{}' errors={}",
+                    abbrev(chave), ufCode, code, message, errors);
             throw new ReceiptParseException("infosimples.error");
         }
         if (response.data() == null || response.data().isEmpty()) {
-            log.warn("infosimples.fetch.empty chave={} uf={}", abbrev(chave), ufCode);
+            log.warn("infosimples.fetch.empty chave={} uf={} message='{}'",
+                    abbrev(chave), ufCode, response.codeMessage());
             throw new ReceiptParseException("infosimples.empty-response");
         }
         log.info("infosimples.fetch.ok chave={} uf={}", abbrev(chave), ufCode);
@@ -229,6 +233,8 @@ public class InfosimplesService {
     @JsonIgnoreProperties(ignoreUnknown = true)
     record InfosimplesResponse(
             int code,
+            @JsonProperty("code_message") String codeMessage,
+            List<String> errors,
             List<InfosimplesData> data
     ) {}
 

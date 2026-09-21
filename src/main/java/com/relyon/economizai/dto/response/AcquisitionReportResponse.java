@@ -20,7 +20,10 @@ public record AcquisitionReportResponse(
         List<ChannelLine> byChannel,
         List<PlatformLine> byPlatform,
         List<CampaignLine> byCampaign,
-        AdSpendSummary adSpend) {
+        AdSpendSummary adSpend,
+        RevenueSummary revenue,
+        VisitSummary visits,
+        List<RetentionLine> retention) {
 
     /** Signup → verified email → uploaded first receipt (activated) → PRO tier, with conversion rates in [0,1]. */
     public record Funnel(long signups, long verified, long activated, long proTier,
@@ -69,5 +72,51 @@ public record AcquisitionReportResponse(
                                     long clicks, long impressions,
                                     String status, BigDecimal lifetimeBudget, BigDecimal budgetRemaining,
                                     LocalDate endsAt, boolean ended) {
+    }
+
+    /**
+     * Money view. {@code realizedRevenue} is REAL money from provider events in the
+     * window (starts near zero — grows as RevenueCat sends purchases). The rest is
+     * MODELED from the configured PRO price: {@code mrrProxy} = all PRO users ×
+     * monthly price (potential MRR if every PRO paid), {@code ltvPerProUser} =
+     * monthly × assumedLifetimeMonths, {@code projectedLtv} = PRO signups in window
+     * × that. {@code roas} = realized ÷ spend; {@code projectedRoas} = projectedLtv
+     * ÷ spend; {@code ltvToCac} = ltvPerProUser ÷ cost-per-paid-signup. Null ROAS
+     * means no spend in the window.
+     */
+    public record RevenueSummary(String currency, boolean revenueRealized, int assumedLifetimeMonths,
+                                 BigDecimal monthlyPrice, BigDecimal realizedRevenue, BigDecimal mrrProxy,
+                                 BigDecimal ltvPerProUser, BigDecimal projectedLtv,
+                                 BigDecimal roas, BigDecimal projectedRoas, BigDecimal ltvToCac,
+                                 List<ChannelRevenueLine> byChannel, String note) {
+    }
+
+    /** Per-channel money: PRO signups in window, their realized revenue, and modeled LTV. */
+    public record ChannelRevenueLine(String channel, long proUsers,
+                                     BigDecimal realizedRevenue, BigDecimal projectedLtv) {
+    }
+
+    /**
+     * First-party top of funnel: anonymous landing visits vs signups in the window,
+     * so we own the click→signup conversion independent of Meta. {@code note} is set
+     * when no visits have been recorded yet (beacon not live / no traffic).
+     */
+    public record VisitSummary(long totalVisits, long uniqueVisitors, long signups,
+                               double visitToSignupRate, List<VisitCampaignLine> byCampaign, String note) {
+    }
+
+    public record VisitCampaignLine(String channel, String source, String medium, String campaign,
+                                    long uniqueVisitors, long signups, double conversionRate) {
+    }
+
+    /**
+     * Per-channel cohort quality: of the signups in the window, how many activated
+     * (uploaded a receipt), and D7/D30 retention. Retention denominators only count
+     * users old enough to have had the full 7-/30-day window, so a fresh signup
+     * doesn't drag the rate down. Rates are in [0,1].
+     */
+    public record RetentionLine(String channel, long cohort, long activated, double activationRate,
+                                long cohort7, long retainedD7, double retentionD7,
+                                long cohort30, long retainedD30, double retentionD30) {
     }
 }

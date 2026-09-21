@@ -20,6 +20,11 @@ public record RevenueCatWebhookRequest(Event event) {
             /** End of the paid period, epoch millis. Null for some non-renewing/grant events. */
             @JsonProperty("expiration_at_ms") Long expirationAtMs,
             @JsonProperty("product_id") String productId,
+            /** Actual price paid in the store currency (RevenueCat sends this on purchase/renewal events). */
+            @JsonProperty("price") Double price,
+            @JsonProperty("currency") String currency,
+            /** When the purchase happened, epoch millis. Falls back to the event's own timestamp. */
+            @JsonProperty("purchased_at_ms") Long purchasedAtMs,
             String id
     ) {}
 }
