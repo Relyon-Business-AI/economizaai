@@ -61,6 +61,28 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
 
     long countByHouseholdIdAndStatusAndConfirmedAtAfter(UUID householdId, ReceiptStatus status, LocalDateTime since);
 
+    // --- Ingestion health (ops dashboard) ---
+
+    /** (status, count) for receipts submitted since the window start. */
+    @Query("SELECT receipt.status, count(receipt) FROM Receipt receipt "
+            + "WHERE receipt.createdAt >= :since GROUP BY receipt.status")
+    List<Object[]> statusBreakdownSince(@Param("since") LocalDateTime since);
+
+    /** (uf, status, count) since the window start — per-state pipeline outcome. */
+    @Query("SELECT receipt.uf, receipt.status, count(receipt) FROM Receipt receipt "
+            + "WHERE receipt.createdAt >= :since GROUP BY receipt.uf, receipt.status")
+    List<Object[]> ufStatusBreakdownSince(@Param("since") LocalDateTime since);
+
+    /**
+     * (errorKey, count) grouped by the machine key before the ':' in parseErrorReason
+     * (native, so the args after ':' don't fragment the buckets). Most frequent first.
+     */
+    @Query(value = "SELECT split_part(parse_error_reason, ':', 1) AS error_key, count(*) AS hits "
+            + "FROM receipts WHERE created_at >= :since AND parse_error_reason IS NOT NULL "
+            + "GROUP BY split_part(parse_error_reason, ':', 1) ORDER BY hits DESC",
+            nativeQuery = true)
+    List<Object[]> errorReasonBreakdownSince(@Param("since") LocalDateTime since);
+
     // Merchant support gate: scan volume per grey merchant (review queue ranking)
     // and the confirmed receipts to backfill into the index on promotion.
     long countByCnpjEmitente(String cnpjEmitente);

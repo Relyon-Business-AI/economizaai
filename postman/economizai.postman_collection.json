@@ -12670,6 +12670,21 @@
 					"response": []
 				},
 				{
+					"name": "Ingestion health (admin)",
+					"request": {
+						"method": "GET",
+						"header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/ingestion-health?days=30",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "v1", "admin", "ingestion-health" ],
+							"query": [ { "key": "days", "value": "30" } ]
+						},
+						"description": "Pipeline health over the window: receipt status mix, parse success rate, stuck/timeout counts, per-UF outcomes and top failure reasons. ADMIN-only."
+					},
+					"response": []
+				},
+				{
 					"name": "State coverage (multi-state rollout map)",
 					"request": {
 						"method": "GET",

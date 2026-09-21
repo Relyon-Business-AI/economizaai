@@ -16,6 +16,18 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-21 — dashboard de operações (saúde da ingestão + estados + custos)
+
+Novo endpoint admin **`GET /admin/ingestion-health?days=30`** → `IngestionHealthResponse`:
+mix de status das notas, **taxa de sucesso** do parse, contagem de notas **presas**
+(timeout do sweeper), **por estado** (uf → total/parsed/failed/taxa) e **top erros**
+(agrupados pela chave de `parseErrorReason`). Tudo derivado da tabela `receipts`.
+
+Isso alimenta a nova tela admin "Operações" (FE), que junta três fontes já existentes:
+- `/admin/ingestion-health` — saúde do pipeline
+- `/admin/state-coverage` — cobertura/eficácia por estado e por camada (QR_PORTAL / INFOSIMPLES / VERIFIED_ADAPTER)
+- `/admin/costs` — gasto em APIs pagas por serviço e **por estado** (Infosimples/captcha)
+
 ## 2026-09-21 — excluir contas de review/robô das métricas (sem deletar)
 
 Contas de review de loja (Google Firebase Test Lab `@cloudtestlabaccounts.com` +
