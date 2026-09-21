@@ -1,6 +1,8 @@
 package com.relyon.economizai.repository;
 
 import com.relyon.economizai.model.LearnedDictionaryEntry;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Collection;
@@ -13,4 +15,6 @@ public interface LearnedDictionaryRepository extends JpaRepository<LearnedDictio
     Optional<LearnedDictionaryEntry> findByNormalizedToken(String normalizedToken);
 
     List<LearnedDictionaryEntry> findByNormalizedTokenIn(Collection<String> normalizedTokens);
+
+    Page<LearnedDictionaryEntry> findByNormalizedTokenContainingIgnoreCase(String normalizedToken, Pageable pageable);
 }

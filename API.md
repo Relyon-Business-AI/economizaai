@@ -1216,9 +1216,10 @@ GET    /api/v1/admin/receipts?from=&to=&marketCnpj=&category=&q=&householdId=&pa
 GET    /api/v1/admin/receipts/{id}            → ReceiptResponse
 POST   /api/v1/admin/receipts/{id}/reparse    → 200 ReceiptResponse
 POST   /api/v1/admin/notifications/test       → 202 Accepted
-GET    /api/v1/admin/products?page=&size=      → Page<ProductResponse> (full canonical catalog)
+GET    /api/v1/admin/products?page=&size=&q=&category=&source= → Page<ProductResponse> (catalog; optional filters: name/EAN substring, category e.g. OTHER, categorizationSource)
 GET    /api/v1/admin/products/missing-brand    → Page<MissingBrandProductResponse>
 PATCH  /api/v1/admin/products/{id}/brand       → 200 ProductResponse
+PATCH  /api/v1/admin/products/{id}/category    → 200 ProductResponse — body {"category":"PET_SUPPLIES"}; sets GLOBAL category + locks it (source=USER; recategorize/LLM won't override)
 GET    /api/v1/admin/products/duplicates       → List<DuplicateProductGroupResponse>
 POST   /api/v1/admin/products/{id}/merge       → 200 ProductMergeResultResponse
 GET    /api/v1/admin/products/recategorize        → RecategorizeReportResponse (dry-run, read-only)
@@ -1364,6 +1365,10 @@ DELETE /api/v1/categorizer/learned           → clear all auto-promoted learned
 DELETE /api/v1/categorizer/consensus         → revert all CONSENSUS-graduated products to NONE  [ADMIN only]
 POST   /api/v1/categorizer/dictionary/import  → bulk-upsert token mappings into learned dict       [ADMIN only]
 POST   /api/v1/categorizer/dictionary/curated/import → bulk-upsert CURATED entries (highest tier), hot-reloaded [ADMIN only]
+GET    /api/v1/categorizer/dictionary/curated?q=&page=&size= → Page<CuratedEntryResponse> — list/search curated entries [ADMIN only]
+DELETE /api/v1/categorizer/dictionary/curated/{id} → 204 — delete one curated entry + hot-reload  [ADMIN only]
+GET    /api/v1/categorizer/dictionary/learned?q=&page=&size= → Page<LearnedEntryResponse> — list/search learned entries [ADMIN only]
+DELETE /api/v1/categorizer/dictionary/learned/{id} → 204 — delete one learned entry + hot-reload  [ADMIN only]
 POST   /api/v1/categorizer/brands/import      → bulk-upsert brand-registry entries, hot-reloaded   [ADMIN only]
 POST   /api/v1/categorizer/brands/derive-from-catalog?minProducts=2 → grow registry from EAN-catalog brands (no external calls) [ADMIN only]
 POST   /api/v1/categorizer/benchmark/import   → bulk-upsert golden-set rows for the benchmark      [ADMIN only]
