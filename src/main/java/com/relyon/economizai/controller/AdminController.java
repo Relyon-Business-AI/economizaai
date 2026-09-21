@@ -4,6 +4,7 @@ import com.relyon.economizai.dto.request.MergeProductRequest;
 import com.relyon.economizai.dto.request.MerchantSupportOverrideRequest;
 import com.relyon.economizai.dto.request.SendTestNotificationRequest;
 import com.relyon.economizai.dto.request.SetProductBrandRequest;
+import com.relyon.economizai.dto.request.SetMetricsExclusionRequest;
 import com.relyon.economizai.dto.request.SetProductCategoryRequest;
 import com.relyon.economizai.dto.request.UpdateSubscriptionTierRequest;
 import com.relyon.economizai.dto.response.AcquisitionReportResponse;
@@ -12,6 +13,7 @@ import com.relyon.economizai.dto.response.BrandBackfillResponse;
 import com.relyon.economizai.dto.response.SubscriptionReportResponse;
 import com.relyon.economizai.dto.response.BrandCoverageReportResponse;
 import com.relyon.economizai.dto.response.CostReportResponse;
+import com.relyon.economizai.dto.response.IngestionHealthResponse;
 import com.relyon.economizai.dto.response.UnmatchedReportResponse;
 import com.relyon.economizai.dto.response.AdminUserSummaryResponse;
 import com.relyon.economizai.dto.response.DuplicateProductGroupResponse;
@@ -47,6 +49,7 @@ import com.relyon.economizai.service.analytics.meta.MetaAdSpendSyncJob;
 import com.relyon.economizai.service.extraction.CategorizationQualityService;
 import com.relyon.economizai.service.geo.MarketLocationService;
 import com.relyon.economizai.service.notifications.RelevanceReportService;
+import com.relyon.economizai.service.admin.IngestionHealthService;
 import com.relyon.economizai.service.paidapi.CostReportService;
 import com.relyon.economizai.service.sefaz.SefazIngestionService;
 import com.relyon.economizai.service.sefaz.StateCoverageService;
@@ -99,6 +102,7 @@ public class AdminController {
     private final MarketLocationService marketLocationService;
     private final RelevanceReportService relevanceReportService;
     private final CostReportService costReportService;
+    private final IngestionHealthService ingestionHealthService;
     private final AdminAnalyticsService adminAnalyticsService;
     private final MetaAdSpendSyncJob metaAdSpendSyncJob;
     private final StateCoverageService stateCoverageService;
@@ -142,6 +146,13 @@ public class AdminController {
     public ResponseEntity<AdminUserDetailResponse> setSubscriptionTier(
             @PathVariable UUID id, @Valid @RequestBody UpdateSubscriptionTierRequest request) {
         return ResponseEntity.ok(adminUserService.setTier(id, request.tier()));
+    }
+
+    /** Exclude/re-include a user from ALL metrics (hide store-review / robo test accounts) without deleting it. */
+    @PatchMapping("/users/{id}/metrics-exclusion")
+    public ResponseEntity<AdminUserDetailResponse> setMetricsExclusion(
+            @PathVariable UUID id, @Valid @RequestBody SetMetricsExclusionRequest request) {
+        return ResponseEntity.ok(adminUserService.setMetricsExclusion(id, request.excluded()));
     }
 
     @GetMapping("/receipts")
@@ -231,6 +242,14 @@ public class AdminController {
     @GetMapping("/costs")
     public ResponseEntity<CostReportResponse> costReport(@RequestParam(defaultValue = "30") int days) {
         return ResponseEntity.ok(costReportService.report(days));
+    }
+
+    @Operation(summary = "Ingestion pipeline health",
+            description = "Receipt outcomes over the window: status mix, parse success rate, sweeper-timed-out "
+                    + "(stuck) counts, per-UF outcomes, and the top failure reasons — the ops view for what's breaking.")
+    @GetMapping("/ingestion-health")
+    public ResponseEntity<IngestionHealthResponse> ingestionHealth(@RequestParam(defaultValue = "30") int days) {
+        return ResponseEntity.ok(ingestionHealthService.report(days));
     }
 
     @Operation(summary = "Acquisition dashboard",

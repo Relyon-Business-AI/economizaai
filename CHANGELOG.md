@@ -16,6 +16,30 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-21 — dashboard de operações (saúde da ingestão + estados + custos)
+
+Novo endpoint admin **`GET /admin/ingestion-health?days=30`** → `IngestionHealthResponse`:
+mix de status das notas, **taxa de sucesso** do parse, contagem de notas **presas**
+(timeout do sweeper), **por estado** (uf → total/parsed/failed/taxa) e **top erros**
+(agrupados pela chave de `parseErrorReason`). Tudo derivado da tabela `receipts`.
+
+Isso alimenta a nova tela admin "Operações" (FE), que junta três fontes já existentes:
+- `/admin/ingestion-health` — saúde do pipeline
+- `/admin/state-coverage` — cobertura/eficácia por estado e por camada (QR_PORTAL / INFOSIMPLES / VERIFIED_ADAPTER)
+- `/admin/costs` — gasto em APIs pagas por serviço e **por estado** (Infosimples/captcha)
+
+## 2026-09-21 — excluir contas de review/robô das métricas (sem deletar)
+
+Contas de review de loja (Google Firebase Test Lab `@cloudtestlabaccounts.com` +
+personas de revisor) estavam contando no funil/assinaturas. Agora:
+- Todas as métricas admin (`/analytics/*`) já **ignoram por padrão** o domínio
+  `@cloudtestlabaccounts.com` (robôs do Google — surgem a cada build no Play) além de
+  ADMIN + `@economizaai.app`.
+- Flag por conta **`excludedFromMetrics`** (novo, em `AdminUserSummaryResponse` +
+  `AdminUserDetailResponse`) — conta marcada some de **todas** as métricas, sem ser deletada.
+- Novo endpoint admin **`PATCH /admin/users/{id}/metrics-exclusion`** `{ "excluded": true }`
+  → `AdminUserDetailResponse`. Backfill das contas de review conhecidas em V73.
+
 ## 2026-09-21 — receita/ROAS, funil próprio de visitas e retenção por canal
 
 Dashboard de **Aquisição** (`GET /admin/analytics/acquisition`) ganhou 3 blocos novos

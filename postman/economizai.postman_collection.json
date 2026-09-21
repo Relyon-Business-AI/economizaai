@@ -12394,6 +12394,24 @@
 					"response": []
 				},
 				{
+					"name": "Exclude user from metrics (admin)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": { "mode": "raw", "raw": "{\n  \"excluded\": true\n}" },
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users/{{userId}}/metrics-exclusion",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "v1", "admin", "users", "{{userId}}", "metrics-exclusion" ]
+						},
+						"description": "Exclude (or re-include with excluded=false) a user from ALL admin metrics without deleting it. Returns AdminUserDetailResponse. ADMIN-only."
+					},
+					"response": []
+				},
+				{
 					"name": "List receipts cross-household (admin)",
 					"request": {
 						"method": "GET",
@@ -12648,6 +12666,21 @@
 							]
 						},
 						"description": "Runs the Meta ad-spend sync immediately instead of waiting for the daily cron. Returns {rowsSynced}. Returns 0 when Meta is not configured (META_ADS_* env vars unset). ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Ingestion health (admin)",
+					"request": {
+						"method": "GET",
+						"header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/ingestion-health?days=30",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "v1", "admin", "ingestion-health" ],
+							"query": [ { "key": "days", "value": "30" } ]
+						},
+						"description": "Pipeline health over the window: receipt status mix, parse success rate, stuck/timeout counts, per-UF outcomes and top failure reasons. ADMIN-only."
 					},
 					"response": []
 				},

@@ -284,14 +284,24 @@ Plus the **GitHub runner** Windows service (`actions.runner.XandiVieira-economiz
 
 Two Render web services, one repo, branch-per-environment (since 2026-09-01):
 
-| Env | Service | Branch | Deploys when |
-|---|---|---|---|
-| **dev** | `economiz.AI` (`srv-d7odp50k1i2s73ep8o5g`) | `development` | every push (auto-deploy) |
-| **prod** | `economizai-app-prod` (`srv-d9p4nctbedkc73e3veb0`) | `main` | every push to `main` (auto-deploy) |
+| Env | Service | Branch | Public URL | Deploys when |
+|---|---|---|---|---|
+| **dev** | `economiz.AI` (`srv-d7odp50k1i2s73ep8o5g`) | `development` | **`api.economizaai.app`** (+ `economiz-ai.onrender.com`) | every push (auto-deploy) |
+| **prod** | `economizai-app-prod` (`srv-d9p4nctbedkc73e3veb0`) | `main` | `economizai-app-prod.onrender.com` (no custom domain) | every push to `main` (auto-deploy) |
+
+> **⚠️ CURRENT REALITY (verified 2026-09-21):** the custom domain **`api.economizaai.app`**
+> — the URL the mobile app / FE actually calls — is bound to the **`economiz.AI` (dev,
+> `development` branch)** service, so **that service is the de-facto production backend**
+> (all real receipt traffic lands there). `economizai-app-prod` (`main`) is live and
+> healthy but has **no custom domain and no real traffic** — a standby the FE doesn't use
+> yet. Net effect: **pushing `development` deploys the live app users hit.** The `main`/
+> `economizai-app-prod` cutover (repoint the domain) hasn't happened. Deploy to BOTH to
+> keep them in sync until then.
 
 **Releasing to prod** = merge `development` → `main` and push `main`. That push IS the
-prod deploy — it's a GATED action (owner's go), never autonomous. `main` is otherwise
-never committed to directly.
+`economizai-app-prod` deploy — it's a GATED action (owner's go), never autonomous. `main`
+is otherwise never committed to directly. **Note:** until the domain cutover, this alone
+does NOT reach real users — you must also push `development` (see the reality note above).
 
 History: the prod service initially tracked `development` (every dev push hit prod);
 on 2026-08-28 a `production` branch was created to isolate releases; on 2026-09-01 it

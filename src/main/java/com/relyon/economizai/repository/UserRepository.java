@@ -44,7 +44,9 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     // filter clause is repeated per query because JPQL has no shared predicate.
     String INTERNAL_FILTER =
             " AND (:includeInternal = TRUE OR (user.role <> 'ADMIN' "
-            + "AND lower(user.email) NOT LIKE '%@economizaai.app'))";
+            + "AND user.excludedFromMetrics = FALSE "
+            + "AND lower(user.email) NOT LIKE '%@economizaai.app' "
+            + "AND lower(user.email) NOT LIKE '%@cloudtestlabaccounts.com'))";
 
     /** (createdAt, acquisitionChannel) for every signup since the window start; bucketed into a daily series in the service. */
     @Query("SELECT user.createdAt, user.acquisitionChannel FROM User user "
@@ -76,7 +78,9 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     /** Lifetime tier split: (subscriptionTier, count). */
     @Query("SELECT user.subscriptionTier, count(user) FROM User user "
             + "WHERE (:includeInternal = TRUE OR (user.role <> 'ADMIN' "
-            + "AND lower(user.email) NOT LIKE '%@economizaai.app')) GROUP BY user.subscriptionTier")
+            + "AND user.excludedFromMetrics = FALSE "
+            + "AND lower(user.email) NOT LIKE '%@economizaai.app' "
+            + "AND lower(user.email) NOT LIKE '%@cloudtestlabaccounts.com')) GROUP BY user.subscriptionTier")
     List<Object[]> tierDistribution(boolean includeInternal);
 
     @Query("SELECT count(user) FROM User user WHERE user.createdAt >= :since" + INTERNAL_FILTER)

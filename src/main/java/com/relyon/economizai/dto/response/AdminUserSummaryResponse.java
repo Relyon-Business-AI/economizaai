@@ -20,6 +20,7 @@ public record AdminUserSummaryResponse(
         SubscriptionTier subscriptionTier,
         boolean emailVerified,
         boolean active,
+        boolean excludedFromMetrics,
         UUID householdId,
         LocalDateTime createdAt
 ) {
@@ -32,6 +33,7 @@ public record AdminUserSummaryResponse(
                 user.getSubscriptionTier(),
                 user.isEmailVerified(),
                 user.isActive(),
+                user.isExcludedFromMetrics(),
                 user.getHousehold() == null ? null : user.getHousehold().getId(),
                 user.getCreatedAt()
         );

@@ -47,6 +47,7 @@ import com.relyon.economizai.service.geo.MarketLocationService;
 import com.relyon.economizai.service.notifications.RelevanceReportService;
 import com.relyon.economizai.service.analytics.AdminAnalyticsService;
 import com.relyon.economizai.service.analytics.meta.MetaAdSpendSyncJob;
+import com.relyon.economizai.service.admin.IngestionHealthService;
 import com.relyon.economizai.service.paidapi.CostReportService;
 import com.relyon.economizai.service.sefaz.SefazIngestionService;
 import com.relyon.economizai.service.sefaz.StateCoverageService;
@@ -110,6 +111,7 @@ class AdminControllerTest {
     @MockitoBean private MarketLocationService marketLocationService;
     @MockitoBean private RelevanceReportService relevanceReportService;
     @MockitoBean private CostReportService costReportService;
+    @MockitoBean private IngestionHealthService ingestionHealthService;
     @MockitoBean private AdminAnalyticsService adminAnalyticsService;
     @MockitoBean private MetaAdSpendSyncJob metaAdSpendSyncJob;
     @MockitoBean private StateCoverageService stateCoverageService;
@@ -214,7 +216,7 @@ class AdminControllerTest {
     @Test
     void listUsers_returnsPagedSummaries() throws Exception {
         var summary = new AdminUserSummaryResponse(UUID.randomUUID(), "John", "john@test.com",
-                Role.USER, SubscriptionTier.FREE, true, true, UUID.randomUUID(), LocalDateTime.now());
+                Role.USER, SubscriptionTier.FREE, true, true, false, UUID.randomUUID(), LocalDateTime.now());
         Page<AdminUserSummaryResponse> page = new PageImpl<>(List.of(summary));
         when(adminUserService.list(any(), any(Pageable.class))).thenReturn(page);
 
@@ -282,7 +284,7 @@ class AdminControllerTest {
     void getUser_returnsDetail() throws Exception {
         var id = UUID.randomUUID();
         var detail = new AdminUserDetailResponse(id, "John", "john@test.com",
-                Role.USER, SubscriptionTier.FREE, true, true, true, UUID.randomUUID(),
+                Role.USER, SubscriptionTier.FREE, true, true, true, false, UUID.randomUUID(),
                 3L, new ReceiptCounts(1L, 5L, 0L, 2L), new BigDecimal("99.90"), LocalDateTime.now());
         when(adminUserService.get(id)).thenReturn(detail);
 
@@ -323,7 +325,7 @@ class AdminControllerTest {
     void setSubscriptionTier_returnsUpdatedDetail() throws Exception {
         var id = UUID.randomUUID();
         var detail = new AdminUserDetailResponse(id, "John", "john@test.com",
-                Role.USER, SubscriptionTier.PRO, true, true, true, UUID.randomUUID(),
+                Role.USER, SubscriptionTier.PRO, true, true, true, false, UUID.randomUUID(),
                 1L, new ReceiptCounts(0L, 0L, 0L, 0L), BigDecimal.ZERO, LocalDateTime.now());
         when(adminUserService.setTier(id, SubscriptionTier.PRO)).thenReturn(detail);
 
