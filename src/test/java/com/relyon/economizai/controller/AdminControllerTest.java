@@ -49,6 +49,7 @@ import com.relyon.economizai.service.analytics.AdminAnalyticsService;
 import com.relyon.economizai.service.analytics.meta.MetaAdSpendSyncJob;
 import com.relyon.economizai.service.admin.AdminOverviewService;
 import com.relyon.economizai.service.admin.IngestionHealthService;
+import com.relyon.economizai.service.admin.MarketIntelService;
 import com.relyon.economizai.service.paidapi.CostReportService;
 import com.relyon.economizai.service.sefaz.SefazIngestionService;
 import com.relyon.economizai.service.sefaz.StateCoverageService;
@@ -114,6 +115,7 @@ class AdminControllerTest {
     @MockitoBean private CostReportService costReportService;
     @MockitoBean private IngestionHealthService ingestionHealthService;
     @MockitoBean private AdminOverviewService adminOverviewService;
+    @MockitoBean private MarketIntelService marketIntelService;
     @MockitoBean private AdminAnalyticsService adminAnalyticsService;
     @MockitoBean private MetaAdSpendSyncJob metaAdSpendSyncJob;
     @MockitoBean private StateCoverageService stateCoverageService;

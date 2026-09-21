@@ -2,6 +2,7 @@ package com.relyon.economizai.repository;
 
 import com.relyon.economizai.model.Receipt;
 import com.relyon.economizai.model.enums.ReceiptStatus;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
@@ -72,6 +73,19 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
     /** Distinct households that scanned at least one receipt since the cutoff (active users proxy). */
     @Query("SELECT count(distinct receipt.household.id) FROM Receipt receipt WHERE receipt.createdAt >= :since")
     long countActiveHouseholdsSince(@Param("since") LocalDateTime since);
+
+    // --- Market intelligence (admin) ---
+
+    /** Most-scanned markets (confirmed): (cnpj, name, scans, spend). */
+    @Query("SELECT receipt.cnpjEmitente, MIN(receipt.marketName), count(receipt), COALESCE(sum(receipt.totalAmount), 0) "
+            + "FROM Receipt receipt WHERE receipt.status = 'CONFIRMED' AND receipt.cnpjEmitente IS NOT NULL "
+            + "GROUP BY receipt.cnpjEmitente ORDER BY count(receipt) DESC")
+    List<Object[]> topMarketsByScans(Pageable pageable);
+
+    /** Confirmed receipts + spend by UF (region): (uf, count, spend). */
+    @Query("SELECT receipt.uf, count(receipt), COALESCE(sum(receipt.totalAmount), 0) "
+            + "FROM Receipt receipt WHERE receipt.status = 'CONFIRMED' GROUP BY receipt.uf ORDER BY count(receipt) DESC")
+    List<Object[]> confirmedReceiptsByUf();
 
     /** (householdId, receiptCount) for the given households — batch enrichment for the admin user list. */
     @Query("SELECT receipt.household.id, count(receipt) FROM Receipt receipt "

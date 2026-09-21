@@ -2,6 +2,7 @@ package com.relyon.economizai.repository;
 
 import com.relyon.economizai.model.Product;
 import com.relyon.economizai.model.ReceiptItem;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -15,6 +16,22 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
 
     /** Latest real purchase of a product — price-math sanity input for LLM pack-size enrichment. */
     Optional<ReceiptItem> findFirstByProductIdOrderByCreatedAtDesc(UUID productId);
+
+    // --- Market intelligence (admin) ---
+
+    /** Most-scanned products across all households (confirmed, non-excluded items). */
+    @Query("SELECT item.product.id, COALESCE(item.product.genericName, item.product.normalizedName), count(item) "
+            + "FROM ReceiptItem item WHERE item.receipt.status = 'CONFIRMED' AND item.excluded = false "
+            + "AND item.product IS NOT NULL "
+            + "GROUP BY item.product.id, item.product.genericName, item.product.normalizedName "
+            + "ORDER BY count(item) DESC")
+    List<Object[]> topProductsByScans(Pageable pageable);
+
+    /** Global spend by category (confirmed, non-excluded), using the confirmation-time snapshot. */
+    @Query("SELECT item.categoryAtConfirmation, COALESCE(sum(item.totalPrice), 0), count(item) "
+            + "FROM ReceiptItem item WHERE item.receipt.status = 'CONFIRMED' AND item.excluded = false "
+            + "GROUP BY item.categoryAtConfirmation")
+    List<Object[]> categorySpendGlobal();
 
     /**
      * The household's own friendly name for each of the given products, taken from its
