@@ -15,6 +15,7 @@ import com.relyon.economizai.dto.response.BrandCoverageReportResponse;
 import com.relyon.economizai.dto.response.AdminOverviewResponse;
 import com.relyon.economizai.dto.response.CostReportResponse;
 import com.relyon.economizai.dto.response.IngestionHealthResponse;
+import com.relyon.economizai.dto.response.MarketIntelResponse;
 import com.relyon.economizai.dto.response.UnmatchedReportResponse;
 import com.relyon.economizai.dto.response.AdminUserSummaryResponse;
 import com.relyon.economizai.dto.response.DuplicateProductGroupResponse;
@@ -53,6 +54,7 @@ import com.relyon.economizai.service.geo.MarketLocationService;
 import com.relyon.economizai.service.notifications.RelevanceReportService;
 import com.relyon.economizai.service.admin.AdminOverviewService;
 import com.relyon.economizai.service.admin.IngestionHealthService;
+import com.relyon.economizai.service.admin.MarketIntelService;
 import com.relyon.economizai.service.paidapi.CostReportService;
 import com.relyon.economizai.service.sefaz.SefazIngestionService;
 import com.relyon.economizai.service.sefaz.StateCoverageService;
@@ -107,6 +109,7 @@ public class AdminController {
     private final CostReportService costReportService;
     private final IngestionHealthService ingestionHealthService;
     private final AdminOverviewService adminOverviewService;
+    private final MarketIntelService marketIntelService;
     private final AdminAnalyticsService adminAnalyticsService;
     private final MetaAdSpendSyncJob metaAdSpendSyncJob;
     private final StateCoverageService stateCoverageService;
@@ -255,6 +258,14 @@ public class AdminController {
     @GetMapping("/overview")
     public ResponseEntity<AdminOverviewResponse> overview() {
         return ResponseEntity.ok(adminOverviewService.overview());
+    }
+
+    @Operation(summary = "Market intelligence",
+            description = "Collaborative index size + most-scanned products/markets, spend by category and by UF, "
+                    + "aggregated across all households (confirmed, non-excluded data).")
+    @GetMapping("/market-intel")
+    public ResponseEntity<MarketIntelResponse> marketIntel() {
+        return ResponseEntity.ok(marketIntelService.report());
     }
 
     @Operation(summary = "Ingestion pipeline health",
