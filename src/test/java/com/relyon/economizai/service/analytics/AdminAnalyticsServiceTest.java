@@ -180,6 +180,23 @@ class AdminAnalyticsServiceTest {
         assertThat(revenue.projectedLtv()).isEqualByComparingTo("237.60");    // 2 PRO signups × 118.80
         assertThat(revenue.byChannel()).hasSize(1);
         assertThat(revenue.note()).contains("modeled");
+        assertThat(revenue.payingCustomers()).isZero();
+        assertThat(revenue.avgTicket()).isEqualByComparingTo("0.00");         // no paying customers yet
+    }
+
+    @Test
+    void avgTicketIsRealizedRevenueDividedByPayingCustomers() {
+        stubEmptyFunnel();
+        when(userRepository.channelBreakdownSince(any(), anyBoolean())).thenReturn(List.of());
+        when(metaAdsProperties.isConfigured()).thenReturn(false);
+        when(revenueEventRepository.totalRealizedSince(any(), anyBoolean())).thenReturn(new BigDecimal("99.00"));
+        when(subscriptionRepository.countPaying(eq(SubscriptionStatus.ACTIVE), anyBoolean())).thenReturn(10L);
+
+        var revenue = service.acquisition(30, false).revenue();
+
+        assertThat(revenue.revenueRealized()).isTrue();
+        assertThat(revenue.payingCustomers()).isEqualTo(10L);
+        assertThat(revenue.avgTicket()).isEqualByComparingTo("9.90");          // 99.00 ÷ 10
     }
 
     @Test

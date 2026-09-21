@@ -236,6 +236,11 @@ public class AdminAnalyticsService {
         var ltvPerProUser = monetizationProperties.ltvPerProUser();
         var realizedRevenue = scale(revenueEventRepository.totalRealizedSince(since, includeInternal));
 
+        var payingCustomers = subscriptionRepository.countPaying(SubscriptionStatus.ACTIVE, includeInternal);
+        var avgTicket = payingCustomers > 0
+                ? realizedRevenue.divide(BigDecimal.valueOf(payingCustomers), 2, RoundingMode.HALF_UP)
+                : scale(BigDecimal.ZERO);
+
         var realizedByChannel = new LinkedHashMap<String, BigDecimal>();
         for (var row : revenueEventRepository.realizedRevenueByChannelSince(since, includeInternal)) {
             realizedByChannel.put(channelName(row[0]), scale((BigDecimal) row[1]));
@@ -260,7 +265,7 @@ public class AdminAnalyticsService {
         var note = realized ? null
                 : "No real revenue yet — LTV/ROAS are modeled from the configured PRO price (edit PRO_MONTHLY_PRICE / PRO_ASSUMED_LIFETIME_MONTHS).";
         return new RevenueSummary(CURRENCY, realized, monetizationProperties.getAssumedLifetimeMonths(),
-                monthlyPrice, realizedRevenue, mrrProxy, ltvPerProUser, projectedLtv,
+                monthlyPrice, realizedRevenue, payingCustomers, avgTicket, mrrProxy, ltvPerProUser, projectedLtv,
                 roas, projectedRoas, ltvToCac, channelLines, note);
     }
 

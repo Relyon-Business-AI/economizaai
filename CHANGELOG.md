@@ -16,6 +16,22 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-21 — retenção por coorte semanal + ticket médio (ARPU)
+
+- **Novo `GET /admin/analytics/retention-cohorts?weeks=8&includeInternal=false`** →
+  `{ weeks, cohorts:[{ weekStart, size, activeByWeek:[…] }], byChannel:[{ channel, users,
+  retentionByWeek:[…] }] }`. O triângulo de retenção: usuários agrupados pela semana de
+  cadastro e quantos voltaram a escanear 0/1/2… semanas depois. `activeByWeek[k]` = nº
+  distinto ativo na semana k após o cadastro (S0 = semana do cadastro); a lista só cobre
+  as semanas que a coorte já teve tempo de viver (triângulo, sem zeros futuros forjados).
+  `byChannel` é a curva acumulada por canal (denominador só conta coortes maduras o
+  suficiente pra observar cada semana). `weeks` é clampado em 4–16. Alimenta a seção
+  **Retenção por coorte** na tela Aquisição.
+- **`revenue` (acquisition response)** ganhou **`payingCustomers`** (assinaturas ativas
+  pagantes de verdade, exclui cortesia/promo) e **`avgTicket`** (ticket médio = receita
+  real ÷ pagantes). Ambos ficam em 0 até o billing entrar no ar — já cabeados pra
+  popular sozinhos quando os pagamentos reais chegarem.
+
 ## 2026-09-21 — filtro de status na listagem admin de notas
 
 **`GET /admin/receipts`** aceita **`?status=`** (CONFIRMED / PENDING_CONFIRMATION /

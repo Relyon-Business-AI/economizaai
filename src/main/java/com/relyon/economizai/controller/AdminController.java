@@ -10,6 +10,7 @@ import com.relyon.economizai.dto.request.UpdateSubscriptionTierRequest;
 import com.relyon.economizai.dto.response.AcquisitionReportResponse;
 import com.relyon.economizai.dto.response.AdminUserDetailResponse;
 import com.relyon.economizai.dto.response.BrandBackfillResponse;
+import com.relyon.economizai.dto.response.RetentionCohortResponse;
 import com.relyon.economizai.dto.response.SubscriptionReportResponse;
 import com.relyon.economizai.dto.response.BrandCoverageReportResponse;
 import com.relyon.economizai.dto.response.AdminOverviewResponse;
@@ -48,6 +49,7 @@ import com.relyon.economizai.service.admin.AdminDevService;
 import com.relyon.economizai.service.admin.AdminReceiptService;
 import com.relyon.economizai.service.admin.AdminUserService;
 import com.relyon.economizai.service.analytics.AdminAnalyticsService;
+import com.relyon.economizai.service.analytics.RetentionCohortService;
 import com.relyon.economizai.service.analytics.meta.MetaAdSpendSyncJob;
 import com.relyon.economizai.service.extraction.CategorizationQualityService;
 import com.relyon.economizai.service.geo.MarketLocationService;
@@ -111,6 +113,7 @@ public class AdminController {
     private final AdminOverviewService adminOverviewService;
     private final MarketIntelService marketIntelService;
     private final AdminAnalyticsService adminAnalyticsService;
+    private final RetentionCohortService retentionCohortService;
     private final MetaAdSpendSyncJob metaAdSpendSyncJob;
     private final StateCoverageService stateCoverageService;
     private final SefazIngestionService sefazIngestionService;
@@ -292,6 +295,17 @@ public class AdminController {
     public ResponseEntity<SubscriptionReportResponse> subscriptionAnalytics(
             @RequestParam(defaultValue = "false") boolean includeInternal) {
         return ResponseEntity.ok(adminAnalyticsService.subscriptions(includeInternal));
+    }
+
+    @Operation(summary = "Weekly cohort retention",
+            description = "The retention triangle: users grouped by signup week, then how many of that same "
+                    + "group scanned a receipt 0/1/2… weeks later — plus a per-channel pooled curve to see which "
+                    + "acquisition source brings users that stick. weeks = number of cohort weeks (4–16).")
+    @GetMapping("/analytics/retention-cohorts")
+    public ResponseEntity<RetentionCohortResponse> retentionCohorts(
+            @RequestParam(defaultValue = "8") int weeks,
+            @RequestParam(defaultValue = "false") boolean includeInternal) {
+        return ResponseEntity.ok(retentionCohortService.cohorts(weeks, includeInternal));
     }
 
     @Operation(summary = "Sync Meta ad spend now",

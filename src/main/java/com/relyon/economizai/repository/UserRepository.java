@@ -112,4 +112,37 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
             + "(SELECT min(receipt.createdAt) FROM Receipt receipt WHERE receipt.user = user) "
             + "FROM User user WHERE user.createdAt >= :since" + INTERNAL_FILTER)
     List<Object[]> signupActivationSince(LocalDateTime since, boolean includeInternal);
+
+    /** Same exclusion as {@link #INTERNAL_FILTER} but for native SQL (alias {@code u}, column names). */
+    String NATIVE_INTERNAL_FILTER =
+            " AND (:includeInternal = TRUE OR (u.role <> 'ADMIN' "
+            + "AND u.excluded_from_metrics = FALSE "
+            + "AND lower(u.email) NOT LIKE '%@economizaai.app' "
+            + "AND lower(u.email) NOT LIKE '%@cloudtestlabaccounts.com'))";
+
+    /**
+     * Weekly cohort sizes: (cohortWeekStart, acquisitionChannel, size) — signups bucketed
+     * by their ISO week (Monday) since the window start. The service pairs this with
+     * {@link #cohortActivitySince} to build the retention triangle.
+     */
+    @Query(value = "SELECT date_trunc('week', u.created_at)::date AS cohort_week, "
+            + "u.acquisition_channel AS channel, count(*) AS cohort_size "
+            + "FROM users u WHERE u.created_at >= :since" + NATIVE_INTERNAL_FILTER
+            + " GROUP BY cohort_week, channel", nativeQuery = true)
+    List<Object[]> cohortSizesSince(LocalDateTime since, boolean includeInternal);
+
+    /**
+     * Weekly cohort activity grid: (cohortWeekStart, acquisitionChannel, weekOffset,
+     * distinctActiveUsers). {@code weekOffset} is whole weeks between the signup week and
+     * the receipt week (0 = signup week). Counts are distinct users who scanned at least
+     * one receipt in that offset week.
+     */
+    @Query(value = "SELECT date_trunc('week', u.created_at)::date AS cohort_week, "
+            + "u.acquisition_channel AS channel, "
+            + "(date_trunc('week', r.created_at)::date - date_trunc('week', u.created_at)::date) / 7 AS week_offset, "
+            + "count(DISTINCT u.id) AS active_users "
+            + "FROM users u JOIN receipts r ON r.user_id = u.id "
+            + "WHERE u.created_at >= :since" + NATIVE_INTERNAL_FILTER
+            + " GROUP BY cohort_week, channel, week_offset", nativeQuery = true)
+    List<Object[]> cohortActivitySince(LocalDateTime since, boolean includeInternal);
 }
