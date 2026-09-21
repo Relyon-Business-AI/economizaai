@@ -18,12 +18,14 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ## 2026-09-21 — Minas Gerais (MG) NFC-e agora processa
 
-Notas de **MG** passam a ser lidas via Infosimples. O portal do MG é JSF + Cloudflare
-Turnstile (nosso scraper não resolve) e a Infosimples expõe MG num endpoint diferente
-(`.../sefaz/mg/nfce-resumida`, schema `produtos_servicos`/`valores`) — o path genérico
-retornava erro. Corrigido o roteamento + parser. Efeito FE: notas do MG que antes
-ficavam vazias/"em processamento" agora **confirmam com itens e total** (via fallback,
-sem device-fetch). Sem mudança de contrato.
+Notas de **MG** passam a ser lidas de ponta a ponta. O portal do MG é JSF + Cloudflare
+Turnstile: ganhamos um **adapter dedicado** (`MgNfcePortalAdapter`) que resolve o
+Turnstile (captcha solver, ~R$0,03) e replica o POST do formulário JSF pra pegar o
+DANFE — MG entra como estado **verified**. Se esse caminho falhar, cai no **Infosimples**
+como rede de segurança (endpoint `.../sefaz/mg/nfce-resumida`, schema
+`produtos_servicos`/`valores` — o path genérico retornava erro). Efeito FE: notas do MG
+que antes ficavam vazias/"em processamento" agora **confirmam com itens e total**. Sem
+mudança de contrato.
 
 ## 2026-09-21 — dashboard de operações (saúde da ingestão + estados + custos)
 
