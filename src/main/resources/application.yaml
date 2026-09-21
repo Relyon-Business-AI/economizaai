@@ -228,6 +228,14 @@ economizai:
       watched-markets: 3                       # FREE: max pinned markets (PRO unlimited)
       history-days: 90                         # FREE: rolling analytics/history window (PRO unlimited)
       monthly-receipts: 5                      # FREE: max receipt submissions per calendar month (PRO unlimited)
+  monetization:
+    # PRO plan price used to MODEL revenue/LTV/ROAS in the admin acquisition
+    # dashboard while real payment data is still sparse (RevenueCat captures real
+    # amounts going forward — see RevenueEvent). Values mirror MONETIZATION.md.
+    monthly-price: ${PRO_MONTHLY_PRICE:9.90}
+    yearly-price: ${PRO_YEARLY_PRICE:89.00}
+    # Assumed months a PRO user stays, for modeled LTV = monthly-price × this.
+    assumed-lifetime-months: ${PRO_ASSUMED_LIFETIME_MONTHS:12}
   billing:
     # Shared secret the provider-agnostic webhook (/api/v1/webhooks/subscription)
     # verifies via the X-Webhook-Secret header. EMPTY in dev = check skipped.

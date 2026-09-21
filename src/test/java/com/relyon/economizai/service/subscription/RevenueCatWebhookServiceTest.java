@@ -2,20 +2,25 @@ package com.relyon.economizai.service.subscription;
 
 import com.relyon.economizai.dto.request.RevenueCatWebhookRequest.Event;
 import com.relyon.economizai.model.Household;
+import com.relyon.economizai.model.RevenueEvent;
 import com.relyon.economizai.model.User;
+import com.relyon.economizai.repository.RevenueEventRepository;
 import com.relyon.economizai.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -29,6 +34,7 @@ class RevenueCatWebhookServiceTest {
 
     @Mock private SubscriptionService subscriptionService;
     @Mock private UserRepository userRepository;
+    @Mock private RevenueEventRepository revenueEventRepository;
     @InjectMocks private RevenueCatWebhookService service;
 
     private User user() {
@@ -37,7 +43,7 @@ class RevenueCatWebhookServiceTest {
     }
 
     private Event event(String type, String appUserId, Long expMs) {
-        return new Event(type, appUserId, expMs, "pro_monthly", "evt_1");
+        return new Event(type, appUserId, expMs, "pro_monthly", 9.90, "BRL", null, "evt_1");
     }
 
     @Test
@@ -70,6 +76,34 @@ class RevenueCatWebhookServiceTest {
 
         verify(subscriptionService).cancel(user);
         verify(subscriptionService, never()).activatePro(any(), any(), any(), any());
+        verify(revenueEventRepository, never()).save(any());
+    }
+
+    @Test
+    void initialPurchase_recordsRealRevenue() {
+        var user = user();
+        when(userRepository.findByEmail("u@e")).thenReturn(Optional.of(user));
+
+        service.handle(event("INITIAL_PURCHASE", "u@e", EXP_MS));
+
+        var captor = ArgumentCaptor.forClass(RevenueEvent.class);
+        verify(revenueEventRepository).save(captor.capture());
+        var saved = captor.getValue();
+        assertEquals(0, new BigDecimal("9.90").compareTo(saved.getAmount()));
+        assertEquals("BRL", saved.getCurrency());
+        assertEquals("INITIAL_PURCHASE", saved.getEventType());
+        assertEquals("revenuecat", saved.getProvider());
+    }
+
+    @Test
+    void duplicateEventId_isNotRecordedTwice() {
+        var user = user();
+        when(userRepository.findByEmail("u@e")).thenReturn(Optional.of(user));
+        when(revenueEventRepository.existsByProviderAndProviderRef("revenuecat", "evt_1")).thenReturn(true);
+
+        service.handle(event("RENEWAL", "u@e", EXP_MS));
+
+        verify(revenueEventRepository, never()).save(any());
     }
 
     @Test

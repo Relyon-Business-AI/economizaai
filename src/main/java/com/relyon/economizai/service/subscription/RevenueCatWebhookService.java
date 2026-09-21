@@ -1,7 +1,9 @@
 package com.relyon.economizai.service.subscription;
 
 import com.relyon.economizai.dto.request.RevenueCatWebhookRequest.Event;
+import com.relyon.economizai.model.RevenueEvent;
 import com.relyon.economizai.model.User;
+import com.relyon.economizai.repository.RevenueEventRepository;
 import com.relyon.economizai.repository.UserRepository;
 import com.relyon.economizai.service.privacy.LogMasker;
 import lombok.RequiredArgsConstructor;
@@ -9,6 +11,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -42,6 +46,7 @@ public class RevenueCatWebhookService {
 
     private final SubscriptionService subscriptionService;
     private final UserRepository userRepository;
+    private final RevenueEventRepository revenueEventRepository;
 
     @Transactional
     public void handle(Event event) {
@@ -58,6 +63,7 @@ public class RevenueCatWebhookService {
         var type = event.type().toUpperCase();
         if (ACTIVATING.contains(type)) {
             subscriptionService.activatePro(user, PROVIDER, event.productId(), periodEnd(event));
+            recordRevenue(user, event, type);
         } else if (REVOKING.contains(type)) {
             subscriptionService.cancel(user);
         } else {
@@ -81,5 +87,38 @@ public class RevenueCatWebhookService {
     private LocalDateTime periodEnd(Event event) {
         if (event.expirationAtMs() == null) return null;
         return LocalDateTime.ofInstant(Instant.ofEpochMilli(event.expirationAtMs()), ZoneOffset.UTC);
+    }
+
+    /**
+     * Persists the actual money for a paid event so LTV/ROAS can become real over
+     * time. Deduped on the provider's event id (webhook retries). A grant/trial
+     * event with no price still records a zero-amount row (keeps the count honest).
+     */
+    private void recordRevenue(User user, Event event, String type) {
+        if (event.id() != null && revenueEventRepository.existsByProviderAndProviderRef(PROVIDER, event.id())) {
+            return;
+        }
+        var amount = event.price() == null
+                ? BigDecimal.ZERO
+                : BigDecimal.valueOf(event.price()).setScale(2, RoundingMode.HALF_UP);
+        var revenueEvent = RevenueEvent.builder()
+                .user(user)
+                .provider(PROVIDER)
+                .providerRef(event.id())
+                .eventType(type)
+                .productId(event.productId())
+                .amount(amount)
+                .currency(event.currency() == null ? "BRL" : event.currency())
+                .occurredAt(occurredAt(event))
+                .build();
+        revenueEventRepository.save(revenueEvent);
+        log.info("revenue.recorded type={} amount={} currency={} user={}",
+                type, amount, revenueEvent.getCurrency(), LogMasker.email(user.getEmail()));
+    }
+
+    private LocalDateTime occurredAt(Event event) {
+        var epochMs = event.purchasedAtMs();
+        if (epochMs == null) return LocalDateTime.now();
+        return LocalDateTime.ofInstant(Instant.ofEpochMilli(epochMs), ZoneOffset.UTC);
     }
 }

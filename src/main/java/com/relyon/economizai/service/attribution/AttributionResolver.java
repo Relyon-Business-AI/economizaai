@@ -38,10 +38,22 @@ public class AttributionResolver {
         user.setAttributionReferrer(truncate(attribution.referrer(), 500));
         user.setAttributionLandingPath(truncate(attribution.landingPath(), 500));
 
-        var channel = deriveChannel(attribution);
+        var channel = resolveChannel(attribution);
         user.setAcquisitionChannel(channel);
         log.info("attribution.captured channel={} source={} campaign={}",
                 channel, attribution.utmSource(), attribution.utmCampaign());
+    }
+
+    /**
+     * Derives the {@link AcquisitionChannel} from raw attribution — reused by the
+     * anonymous visit beacon so a visit and the signup it produces share a channel.
+     * Null/empty attribution is UNKNOWN.
+     */
+    public AcquisitionChannel resolveChannel(AttributionInfo attribution) {
+        if (attribution == null || attribution.isEmpty()) {
+            return AcquisitionChannel.UNKNOWN;
+        }
+        return deriveChannel(attribution);
     }
 
     private AcquisitionChannel deriveChannel(AttributionInfo attribution) {

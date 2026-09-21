@@ -1281,8 +1281,21 @@ POST   /api/v1/admin/dev/seed-discounted-receipt?targetEmail= → ReceiptRespons
 - **`includeInternal` (both analytics GETs, default `false`)** — when false, excludes admins (`role = ADMIN`) and test accounts (`email LIKE %@economizaai.app`) so counts reflect real users. Pass `true` to include everyone.
 - **`byPlatform` (acquisition response)** — `[{ platform: "WEB"|"ANDROID"|"IOS"|"UNKNOWN", signups }]` — where the signup happened (from the immutable `registrationPlatform`); breaks down the `UNKNOWN`-channel signups (`UNKNOWN` = client didn't send a platform).
 - **`adSpend` budget/status** — `adSpend.budgetRemaining` (aggregate R$) and, per `adSpend.byCampaign[]`: `status` (Meta effective_status), `lifetimeBudget`, `budgetRemaining`, `endsAt` (YYYY-MM-DD), `ended` (bool). Synced from Meta by the ad-spend job; all null until Meta is configured + synced.
+- **`revenue` (acquisition response)** — money view. `realizedRevenue` is **real** provider money in the window (from RevenueCat purchase/renewal events → `RevenueEvent`; starts ~0, grows). Everything else is **modeled** from the configured PRO price until real payments accumulate (`revenueRealized=false` while there's none): `mrrProxy` (all PRO × monthly price), `ltvPerProUser` (monthly × `assumedLifetimeMonths`), `projectedLtv` (PRO signups in window × that), `roas` (realized ÷ spend), `projectedRoas` (projectedLtv ÷ spend), `ltvToCac` (ltvPerProUser ÷ cost-per-paid-signup), `byChannel:[{ channel, proUsers, realizedRevenue, projectedLtv }]`, `note`. Price is configurable via `PRO_MONTHLY_PRICE` (def. 9.90) / `PRO_YEARLY_PRICE` (89.00) / `PRO_ASSUMED_LIFETIME_MONTHS` (12). ROAS fields are `null` when there's no spend.
+- **`visits` (acquisition response)** — first-party top of funnel: `{ totalVisits, uniqueVisitors, signups, visitToSignupRate, byCampaign:[{ channel, source, medium, campaign, uniqueVisitors, signups, conversionRate }], note }`. Fed by the public visit beacon (below), so click→signup conversion is OUR number, independent of Meta. `note` set when no visits recorded yet.
+- **`retention` (acquisition response)** — per channel cohort quality: `[{ channel, cohort, activated, activationRate, cohort7, retainedD7, retentionD7, cohort30, retainedD30, retentionD30 }]`. "Retention" = activation (first receipt) within 7/30 days of signup; D7/D30 denominators only count signups old enough to have had the full window.
 
 All require a JWT for a user with `Role.ADMIN`. Regular users hit 403.
+
+### Visit beacon (public, no auth)
+
+`POST /api/v1/visits` → **204**. Anonymous top-of-funnel beacon the web landing fires once per session on first load (localStorage `ea_anon_id`). Body:
+```
+{ "anonId": "<random client id>", "platform": "WEB",
+  "attribution": { "utmSource", "utmMedium", "utmCampaign", "utmContent", "utmTerm",
+                   "clickId", "referrer", "landingPath" } }
+```
+All fields optional except a non-blank `anonId` (missing → silently ignored). Backend derives the same `acquisitionChannel` as signup, stores no PII (client IP kept only as a one-way hash). Rate-limited 60/min per IP. Powers `acquisition.visits`.
 
 ---
 

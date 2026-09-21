@@ -72,6 +72,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final RateLimitPolicy BETA_POLICY =
             new RateLimitPolicy("beta", 5, Duration.ofHours(1));
 
+    /**
+     * 60 visit beacons per minute per IP. The FE fires once per session, so this is
+     * generous for real traffic while capping a bot from flooding the visits table
+     * (a public, unauthenticated insert). Each IP gets its own bucket.
+     */
+    private static final RateLimitPolicy VISIT_POLICY =
+            new RateLimitPolicy("visit", 60, Duration.ofMinutes(1));
+
     private final RateLimitRegistry registry;
     private final LocalizedMessageService messageService;
     private final ObjectMapper objectMapper;
@@ -101,6 +109,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
             new Rule(
                     BETA_POLICY,
                     req -> "POST".equals(req.getMethod()) && "/api/v1/beta-signup".equals(req.getRequestURI()),
+                    KeyStrategy.IP),
+            new Rule(
+                    VISIT_POLICY,
+                    req -> "POST".equals(req.getMethod()) && "/api/v1/visits".equals(req.getRequestURI()),
                     KeyStrategy.IP)
     );
 

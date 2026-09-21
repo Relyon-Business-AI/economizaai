@@ -5,16 +5,20 @@ import com.relyon.economizai.model.enums.AcquisitionChannel;
 import com.relyon.economizai.model.enums.Platform;
 import com.relyon.economizai.model.enums.SubscriptionStatus;
 import com.relyon.economizai.model.enums.SubscriptionTier;
+import com.relyon.economizai.config.MonetizationProperties;
 import com.relyon.economizai.repository.MetaAdSpendRepository;
 import com.relyon.economizai.repository.MetaCampaignRepository;
+import com.relyon.economizai.repository.RevenueEventRepository;
 import com.relyon.economizai.repository.SubscriptionRepository;
 import com.relyon.economizai.repository.UserRepository;
+import com.relyon.economizai.repository.VisitRepository;
 import com.relyon.economizai.service.analytics.meta.MetaAdsProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
@@ -38,6 +42,9 @@ class AdminAnalyticsServiceTest {
     @Mock private MetaAdSpendRepository metaAdSpendRepository;
     @Mock private MetaCampaignRepository metaCampaignRepository;
     @Mock private MetaAdsProperties metaAdsProperties;
+    @Mock private RevenueEventRepository revenueEventRepository;
+    @Mock private VisitRepository visitRepository;
+    @Spy private MonetizationProperties monetizationProperties = new MonetizationProperties();
 
     @InjectMocks private AdminAnalyticsService service;
 
@@ -154,6 +161,69 @@ class AdminAnalyticsServiceTest {
         var report = service.acquisition(30, false);
 
         assertThat(report.byPlatform()).extracting("platform").containsExactly("WEB", "UNKNOWN");
+    }
+
+    @Test
+    void revenueModeledFromProPriceWhenNoRealPayments() {
+        stubEmptyFunnel();
+        Object[] channelRow = {AcquisitionChannel.INSTAGRAM_PAID, 4L, 3L, 2L};
+        when(userRepository.channelBreakdownSince(any(), anyBoolean())).thenReturn(List.<Object[]>of(channelRow));
+        when(userRepository.countProTier(anyBoolean())).thenReturn(5L);
+        when(metaAdsProperties.isConfigured()).thenReturn(true);
+        when(metaAdSpendRepository.totalSpendBetween(any(), any())).thenReturn(new BigDecimal("200.00"));
+
+        var revenue = service.acquisition(30, false).revenue();
+
+        assertThat(revenue.revenueRealized()).isFalse();
+        assertThat(revenue.ltvPerProUser()).isEqualByComparingTo("118.80");   // 9.90 × 12
+        assertThat(revenue.mrrProxy()).isEqualByComparingTo("49.50");         // 5 PRO × 9.90
+        assertThat(revenue.projectedLtv()).isEqualByComparingTo("237.60");    // 2 PRO signups × 118.80
+        assertThat(revenue.byChannel()).hasSize(1);
+        assertThat(revenue.note()).contains("modeled");
+    }
+
+    @Test
+    void visitsComputeClickToSignupConversionPerCampaign() {
+        stubEmptyFunnel();
+        when(userRepository.channelBreakdownSince(any(), anyBoolean())).thenReturn(List.of());
+        Object[] campaignSignups = {"instagram", "paid", "promo", 2L, 1L, 0L, AcquisitionChannel.INSTAGRAM_PAID};
+        when(userRepository.campaignBreakdownSince(any(), anyBoolean())).thenReturn(List.<Object[]>of(campaignSignups));
+        when(metaAdsProperties.isConfigured()).thenReturn(false);
+        when(visitRepository.countSince(any())).thenReturn(10L);
+        when(visitRepository.countUniqueVisitorsSince(any())).thenReturn(8L);
+        Object[] visitRow = {"promo", "instagram", "paid", AcquisitionChannel.INSTAGRAM_PAID, 8L};
+        when(visitRepository.campaignTotalsSince(any())).thenReturn(List.<Object[]>of(visitRow));
+
+        var visits = service.acquisition(30, false).visits();
+
+        assertThat(visits.totalVisits()).isEqualTo(10L);
+        assertThat(visits.byCampaign()).hasSize(1);
+        var line = visits.byCampaign().get(0);
+        assertThat(line.uniqueVisitors()).isEqualTo(8L);
+        assertThat(line.signups()).isEqualTo(2L);
+        assertThat(line.conversionRate()).isEqualTo(0.25d);
+    }
+
+    @Test
+    void retentionBucketsActivationByChannel() {
+        stubEmptyFunnel();
+        when(userRepository.channelBreakdownSince(any(), anyBoolean())).thenReturn(List.of());
+        when(metaAdsProperties.isConfigured()).thenReturn(false);
+        var signedUp = LocalDateTime.now().minusDays(20);
+        Object[] activatedFast = {AcquisitionChannel.ORGANIC, signedUp, signedUp.plusDays(2)};
+        Object[] neverActivated = {AcquisitionChannel.ORGANIC, signedUp, null};
+        when(userRepository.signupActivationSince(any(), anyBoolean()))
+                .thenReturn(List.<Object[]>of(activatedFast, neverActivated));
+
+        var retention = service.acquisition(30, false).retention();
+
+        assertThat(retention).hasSize(1);
+        var line = retention.get(0);
+        assertThat(line.channel()).isEqualTo("ORGANIC");
+        assertThat(line.cohort()).isEqualTo(2L);
+        assertThat(line.activated()).isEqualTo(1L);
+        assertThat(line.retainedD7()).isEqualTo(1L);
+        assertThat(line.activationRate()).isEqualTo(0.5d);
     }
 
     private void stubEmptyFunnel() {
