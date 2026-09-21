@@ -82,6 +82,16 @@ public class User extends BaseEntity implements UserDetails {
     @Builder.Default
     private boolean active = true;
 
+    /**
+     * When true, this account is excluded from ALL admin metrics by default
+     * (same as admins / @economizaai.app test accounts). Used to hide store-review
+     * and robo test accounts (Google Firebase Test Lab, app reviewers) without
+     * deleting them. Toggled via the admin API.
+     */
+    @Column(name = "excluded_from_metrics", nullable = false)
+    @Builder.Default
+    private boolean excludedFromMetrics = false;
+
     // S1948 is resolved by making BaseEntity (and thus Household) Serializable,
     // NOT by Java `transient`: in a JPA entity, the `transient` keyword is read as
     // @Transient (non-persistent), which drops the household_id mapping and breaks

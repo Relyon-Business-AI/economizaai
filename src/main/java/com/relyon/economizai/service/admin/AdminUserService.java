@@ -87,6 +87,20 @@ public class AdminUserService {
     }
 
     /**
+     * Exclude (or re-include) a user from ALL admin metrics without deleting it.
+     * Used for store-review / robo test accounts that would otherwise pollute the
+     * funnel and subscription counts. Idempotent.
+     */
+    @Transactional
+    public AdminUserDetailResponse setMetricsExclusion(UUID userId, boolean excluded) {
+        var user = userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId.toString()));
+        user.setExcludedFromMetrics(excluded);
+        userRepository.save(user);
+        log.info("admin.user.metrics_exclusion userId={} excluded={}", userId, excluded);
+        return detail(user);
+    }
+
+    /**
      * Delete a user account and its dependents (test/garbage cleanup). Reuses
      * the self-service deletion cascade. Refuses ADMIN accounts — demote first
      * if one really has to go.

@@ -122,6 +122,25 @@ class AdminUserServiceTest {
     }
 
     @Test
+    void setMetricsExclusion_setsFlagSavesAndReflectsInDetail() {
+        var householdId = UUID.randomUUID();
+        var household = Household.builder().id(householdId).inviteCode("ABC123").build();
+        var user = User.builder().id(UUID.randomUUID()).name("Reviewer Test").email("testreviewer123@gmail.com")
+                .household(household).build();
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+        when(receiptRepository.countByHouseholdIdAndStatus(eq(householdId), any(ReceiptStatus.class))).thenReturn(0L);
+        when(insightsRepository.totalSpend(eq(householdId), any(LocalDateTime.class), any(LocalDateTime.class)))
+                .thenReturn(BigDecimal.ZERO);
+        when(userRepository.countByHouseholdId(householdId)).thenReturn(1L);
+
+        var detail = service.setMetricsExclusion(user.getId(), true);
+
+        assertTrue(user.isExcludedFromMetrics());
+        assertTrue(detail.excludedFromMetrics());
+        verify(userRepository).save(user);
+    }
+
+    @Test
     void getBundlesUserWithHouseholdAndSpendStats() {
         var householdId = UUID.randomUUID();
         var household = Household.builder().id(householdId).inviteCode("ABC123").build();

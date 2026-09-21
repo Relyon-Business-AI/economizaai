@@ -16,6 +16,18 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-21 — excluir contas de review/robô das métricas (sem deletar)
+
+Contas de review de loja (Google Firebase Test Lab `@cloudtestlabaccounts.com` +
+personas de revisor) estavam contando no funil/assinaturas. Agora:
+- Todas as métricas admin (`/analytics/*`) já **ignoram por padrão** o domínio
+  `@cloudtestlabaccounts.com` (robôs do Google — surgem a cada build no Play) além de
+  ADMIN + `@economizaai.app`.
+- Flag por conta **`excludedFromMetrics`** (novo, em `AdminUserSummaryResponse` +
+  `AdminUserDetailResponse`) — conta marcada some de **todas** as métricas, sem ser deletada.
+- Novo endpoint admin **`PATCH /admin/users/{id}/metrics-exclusion`** `{ "excluded": true }`
+  → `AdminUserDetailResponse`. Backfill das contas de review conhecidas em V73.
+
 ## 2026-09-21 — receita/ROAS, funil próprio de visitas e retenção por canal
 
 Dashboard de **Aquisição** (`GET /admin/analytics/acquisition`) ganhou 3 blocos novos

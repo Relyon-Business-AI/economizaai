@@ -4,6 +4,7 @@ import com.relyon.economizai.dto.request.MergeProductRequest;
 import com.relyon.economizai.dto.request.MerchantSupportOverrideRequest;
 import com.relyon.economizai.dto.request.SendTestNotificationRequest;
 import com.relyon.economizai.dto.request.SetProductBrandRequest;
+import com.relyon.economizai.dto.request.SetMetricsExclusionRequest;
 import com.relyon.economizai.dto.request.SetProductCategoryRequest;
 import com.relyon.economizai.dto.request.UpdateSubscriptionTierRequest;
 import com.relyon.economizai.dto.response.AcquisitionReportResponse;
@@ -142,6 +143,13 @@ public class AdminController {
     public ResponseEntity<AdminUserDetailResponse> setSubscriptionTier(
             @PathVariable UUID id, @Valid @RequestBody UpdateSubscriptionTierRequest request) {
         return ResponseEntity.ok(adminUserService.setTier(id, request.tier()));
+    }
+
+    /** Exclude/re-include a user from ALL metrics (hide store-review / robo test accounts) without deleting it. */
+    @PatchMapping("/users/{id}/metrics-exclusion")
+    public ResponseEntity<AdminUserDetailResponse> setMetricsExclusion(
+            @PathVariable UUID id, @Valid @RequestBody SetMetricsExclusionRequest request) {
+        return ResponseEntity.ok(adminUserService.setMetricsExclusion(id, request.excluded()));
     }
 
     @GetMapping("/receipts")

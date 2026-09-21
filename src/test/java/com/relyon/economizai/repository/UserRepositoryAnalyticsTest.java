@@ -88,6 +88,20 @@ class UserRepositoryAnalyticsTest {
     }
 
     @Test
+    void internalFilterExcludesFlaggedAndCloudTestLabAccounts() {
+        createUser("REAL", AcquisitionChannel.ORGANIC, null, true, SubscriptionTier.FREE); // counts
+        var flagged = createUser("FLAG", AcquisitionChannel.ORGANIC, null, true, SubscriptionTier.FREE);
+        flagged.setExcludedFromMetrics(true);                                              // manually hidden
+        userRepository.save(flagged);
+        createInternalUser("GTL", "ABC-LVL-01@cloudtestlabaccounts.com", Role.USER, Platform.ANDROID); // Google robo
+
+        var since = LocalDateTime.now().minusDays(1);
+
+        assertThat(userRepository.countSignupsSince(since, false)).isEqualTo(1); // only the real user
+        assertThat(userRepository.countSignupsSince(since, true)).isEqualTo(3);  // everyone
+    }
+
+    @Test
     void platformBreakdownGroupsByRegistrationPlatform() {
         createInternalUser("P1", "p1@test.com", Role.USER, Platform.WEB);
         createInternalUser("P2", "p2@test.com", Role.USER, Platform.WEB);
