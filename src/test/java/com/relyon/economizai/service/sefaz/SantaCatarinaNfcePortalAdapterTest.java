@@ -148,6 +148,21 @@ class SantaCatarinaNfcePortalAdapterTest {
     }
 
     @Test
+    void fetchHtml_whenPortalReturnsNonDanfePage_retriesThenThrowsFetch() {
+        var solver = solver(true);
+        var adapter = new TestScAdapter(solver, 3);
+        adapter.getResponses.put(SECURITY_URL, ResponseEntity.ok(securityHtml()));
+        // Turnstile accepted (redirect to the final page), but that page carries no
+        // items — a flaky error/interstitial that must be re-fetched, not returned as
+        // a doomed 0-item parse.
+        adapter.getResponses.put(FINAL_URL, ResponseEntity.ok("<html><body>Erro ao processar a consulta</body></html>"));
+        adapter.postResponse = ResponseEntity.status(302).header("Location", FINAL_URL).build();
+
+        assertThrows(SefazFetchException.class, () -> adapter.fetchHtml(SECURITY_URL));
+        assertEquals(3, adapter.postCount, "a non-DANFE page should trigger re-fetch up to maxAttempts");
+    }
+
+    @Test
     void fetchHtml_retriesRejectedTurnstileThenSucceedsWithFreshToken() {
         var solver = solver(true);
         var adapter = new TestScAdapter(solver, 3);
