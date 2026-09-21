@@ -12642,6 +12642,43 @@
 					"response": []
 				},
 				{
+					"name": "Retention cohorts (weekly triangle)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/analytics/retention-cohorts?weeks=8&includeInternal=false",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"analytics",
+								"retention-cohorts"
+							],
+							"query": [
+								{
+									"key": "weeks",
+									"value": "8"
+								},
+								{
+									"key": "includeInternal",
+									"value": "false"
+								}
+							]
+						},
+						"description": "Weekly cohort retention triangle: users grouped by signup week, then how many of that same group scanned a receipt 0/1/2... weeks later. Returns { weeks, cohorts:[{ weekStart, size, activeByWeek:[] }], byChannel:[{ channel, users, retentionByWeek:[] }] }. activeByWeek[k] = distinct users active k weeks after signup (0 = signup week); each cohort only spans observable weeks (a triangle). byChannel is the per-channel pooled curve over mature cohorts. weeks clamped 4-16. ADMIN only."
+					},
+					"response": []
+				},
+				{
 					"name": "Trigger Meta ad-spend sync now",
 					"request": {
 						"method": "POST",

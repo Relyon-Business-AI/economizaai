@@ -46,6 +46,7 @@ import com.relyon.economizai.service.extraction.CategorizationQualityService;
 import com.relyon.economizai.service.geo.MarketLocationService;
 import com.relyon.economizai.service.notifications.RelevanceReportService;
 import com.relyon.economizai.service.analytics.AdminAnalyticsService;
+import com.relyon.economizai.service.analytics.RetentionCohortService;
 import com.relyon.economizai.service.analytics.meta.MetaAdSpendSyncJob;
 import com.relyon.economizai.service.admin.AdminOverviewService;
 import com.relyon.economizai.service.admin.IngestionHealthService;
@@ -117,6 +118,7 @@ class AdminControllerTest {
     @MockitoBean private AdminOverviewService adminOverviewService;
     @MockitoBean private MarketIntelService marketIntelService;
     @MockitoBean private AdminAnalyticsService adminAnalyticsService;
+    @MockitoBean private RetentionCohortService retentionCohortService;
     @MockitoBean private MetaAdSpendSyncJob metaAdSpendSyncJob;
     @MockitoBean private StateCoverageService stateCoverageService;
     @MockitoBean private SefazIngestionService sefazIngestionService;
