@@ -216,7 +216,7 @@ class AdminControllerTest {
     @Test
     void listUsers_returnsPagedSummaries() throws Exception {
         var summary = new AdminUserSummaryResponse(UUID.randomUUID(), "John", "john@test.com",
-                Role.USER, SubscriptionTier.FREE, true, true, false, UUID.randomUUID(), LocalDateTime.now());
+                Role.USER, SubscriptionTier.FREE, true, true, false, UUID.randomUUID(), LocalDateTime.now(), 5L);
         Page<AdminUserSummaryResponse> page = new PageImpl<>(List.of(summary));
         when(adminUserService.list(any(), any(Pageable.class))).thenReturn(page);
 

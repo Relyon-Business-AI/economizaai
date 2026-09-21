@@ -61,6 +61,11 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
 
     long countByHouseholdIdAndStatusAndConfirmedAtAfter(UUID householdId, ReceiptStatus status, LocalDateTime since);
 
+    /** (householdId, receiptCount) for the given households — batch enrichment for the admin user list. */
+    @Query("SELECT receipt.household.id, count(receipt) FROM Receipt receipt "
+            + "WHERE receipt.household.id IN :householdIds GROUP BY receipt.household.id")
+    List<Object[]> countByHouseholdIds(List<UUID> householdIds);
+
     // --- Ingestion health (ops dashboard) ---
 
     /** (status, count) for receipts submitted since the window start. */

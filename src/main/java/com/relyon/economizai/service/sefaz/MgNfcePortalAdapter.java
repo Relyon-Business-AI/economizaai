@@ -172,7 +172,9 @@ public class MgNfcePortalAdapter implements SefazAdapter {
             log.warn("mg.url.rejected host not portalsped.fazenda.mg.gov.br");
             throw new InvalidQrPayloadException();
         }
-        return trimmed;
+        // The QR's p= value uses raw '|' separators, which URI.create rejects as an
+        // illegal query character — percent-encode them (the portal decodes back).
+        return trimmed.replace("|", "%7C");
     }
 
     // ── Seams (overridden in tests) ─────────────────────────────────────────────

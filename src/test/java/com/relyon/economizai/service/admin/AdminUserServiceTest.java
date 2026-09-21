@@ -224,6 +224,22 @@ class AdminUserServiceTest {
     }
 
     @Test
+    void listEnrichesReceiptCountPerHousehold() {
+        var householdId = UUID.randomUUID();
+        var household = Household.builder().id(householdId).inviteCode("ABC123").build();
+        var user = User.builder().id(UUID.randomUUID()).name("Ana").email("ana@test.com").household(household).build();
+        user.setCreatedAt(LocalDateTime.now());
+        when(userRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(user)));
+        when(receiptRepository.countByHouseholdIds(List.of(householdId)))
+                .thenReturn(List.<Object[]>of(new Object[]{householdId, 7L}));
+
+        var page = service.list(null, PageRequest.of(0, 20));
+
+        assertEquals(7L, page.getContent().get(0).receiptCount());
+    }
+
+    @Test
     void listPreservesCallerSortWhenAlreadySorted() {
         var requested = PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "email"));
         var sortedPageableCaptor = ArgumentCaptor.forClass(Pageable.class);

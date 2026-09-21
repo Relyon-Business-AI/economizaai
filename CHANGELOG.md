@@ -16,6 +16,14 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-21 — nº de notas por usuário no admin + busca por mercado nas notas
+
+- **`AdminUserSummaryResponse`** ganhou **`receiptCount`** (nº de notas do domicílio do
+  usuário) — enriquecido em lote (1 query por página, sem N+1). `GET /admin/users`
+  aceita `sort` (`createdAt` / `name` / `subscriptionTier`) via Pageable.
+- **`GET /receipts`** (usuário): a lista de Notas do FE agora usa o `q` (busca por
+  mercado / texto) que o backend já suportava. Sem mudança de contrato.
+
 ## 2026-09-21 — Minas Gerais (MG) NFC-e agora processa
 
 Notas de **MG** passam a ser lidas de ponta a ponta. O portal do MG é JSF + Cloudflare

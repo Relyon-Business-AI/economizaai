@@ -10,6 +10,7 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 
 import java.math.BigDecimal;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -143,7 +144,11 @@ class MgNfcePortalAdapterTest {
         assertThrows(InvalidQrPayloadException.class,
                 () -> adapter.resolveUrl("https://evil.example.com/qrcode?p=" + CHAVE));
         assertThrows(InvalidQrPayloadException.class, () -> adapter.resolveUrl(CHAVE));
-        assertEquals(QR_URL, adapter.resolveUrl(QR_URL));
+        // The QR's raw '|' separators must be percent-encoded so URI.create accepts it.
+        var resolved = adapter.resolveUrl(QR_URL);
+        assertTrue(resolved.contains("%7C") && !resolved.contains("|"));
+        assertEquals(QR_URL, resolved.replace("%7C", "|"));
+        URI.create(resolved); // must not throw
     }
 
     @Test

@@ -28,6 +28,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -59,7 +63,28 @@ public class AdminUserService {
         var sortedPageable = pageable.getSort().isUnsorted()
                 ? PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by(Sort.Direction.DESC, "createdAt"))
                 : pageable;
-        return userRepository.findAll(searchSpec(trimmed), sortedPageable).map(AdminUserSummaryResponse::from);
+        var page = userRepository.findAll(searchSpec(trimmed), sortedPageable);
+        var receiptCounts = receiptCountsFor(page.getContent());
+        return page.map(user -> AdminUserSummaryResponse.from(user,
+                receiptCounts.getOrDefault(householdIdOf(user), 0L)));
+    }
+
+    /** One batched count query for the page's households — avoids N+1 while showing "nº de notas" per user. */
+    private Map<UUID, Long> receiptCountsFor(List<User> users) {
+        var householdIds = users.stream()
+                .map(this::householdIdOf).filter(Objects::nonNull).distinct().toList();
+        if (householdIds.isEmpty()) {
+            return Map.of();
+        }
+        var counts = new HashMap<UUID, Long>();
+        for (var row : receiptRepository.countByHouseholdIds(householdIds)) {
+            counts.put((UUID) row[0], ((Number) row[1]).longValue());
+        }
+        return counts;
+    }
+
+    private UUID householdIdOf(User user) {
+        return user.getHousehold() == null ? null : user.getHousehold().getId();
     }
 
     @Transactional(readOnly = true)
