@@ -22,9 +22,14 @@ public record AdminUserSummaryResponse(
         boolean active,
         boolean excludedFromMetrics,
         UUID householdId,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        long receiptCount
 ) {
     public static AdminUserSummaryResponse from(User user) {
+        return from(user, 0L);
+    }
+
+    public static AdminUserSummaryResponse from(User user, long receiptCount) {
         return new AdminUserSummaryResponse(
                 user.getId(),
                 user.getName(),
@@ -35,7 +40,8 @@ public record AdminUserSummaryResponse(
                 user.isActive(),
                 user.isExcludedFromMetrics(),
                 user.getHousehold() == null ? null : user.getHousehold().getId(),
-                user.getCreatedAt()
+                user.getCreatedAt(),
+                receiptCount
         );
     }
 }
