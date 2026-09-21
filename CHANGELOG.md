@@ -16,6 +16,14 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-21 — filtro de status na listagem admin de notas
+
+**`GET /admin/receipts`** aceita **`?status=`** (CONFIRMED / PENDING_CONFIRMATION /
+FAILED_PARSE / PROCESSING / REJECTED / NEEDS_DEVICE_FETCH) — o spec já suportava,
+só foi exposto. Alimenta os chips de status da nova tela **Notas (admin)** no FE,
+que lista TODAS as notas de TODOS os usuários (cross-household) com busca por
+mercado, filtro por UF/período/status e ordenação.
+
 ## 2026-09-21 — nº de notas por usuário no admin + busca por mercado nas notas
 
 - **`AdminUserSummaryResponse`** ganhou **`receiptCount`** (nº de notas do domicílio do
