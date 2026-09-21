@@ -364,7 +364,7 @@ class AdminControllerTest {
         var summary = new ReceiptSummaryResponse(UUID.randomUUID(), "Mercado X", "Mercado X", LocalDateTime.now(),
                 new BigDecimal("57.80"), new BigDecimal("57.80"), null, null, 1, ReceiptStatus.CONFIRMED);
         Page<ReceiptSummaryResponse> page = new PageImpl<>(List.of(summary));
-        when(adminReceiptService.list(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+        when(adminReceiptService.list(any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/v1/admin/receipts")
