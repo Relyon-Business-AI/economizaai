@@ -83,9 +83,16 @@ public record AcquisitionReportResponse(
      * × that. {@code roas} = realized ÷ spend; {@code projectedRoas} = projectedLtv
      * ÷ spend; {@code ltvToCac} = ltvPerProUser ÷ cost-per-paid-signup. Null ROAS
      * means no spend in the window.
+     *
+     * <p>{@code payingCustomers} is the count of genuinely paying (non-promo) ACTIVE
+     * subscriptions; {@code avgTicket} is the average realized revenue per paying
+     * customer in the window (realizedRevenue ÷ payingCustomers). Both are 0 until
+     * billing goes live — wired now so the number populates automatically once real
+     * payments arrive.
      */
     public record RevenueSummary(String currency, boolean revenueRealized, int assumedLifetimeMonths,
-                                 BigDecimal monthlyPrice, BigDecimal realizedRevenue, BigDecimal mrrProxy,
+                                 BigDecimal monthlyPrice, BigDecimal realizedRevenue,
+                                 long payingCustomers, BigDecimal avgTicket, BigDecimal mrrProxy,
                                  BigDecimal ltvPerProUser, BigDecimal projectedLtv,
                                  BigDecimal roas, BigDecimal projectedRoas, BigDecimal ltvToCac,
                                  List<ChannelRevenueLine> byChannel, String note) {
