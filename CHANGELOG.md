@@ -16,6 +16,21 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-21 — endpoints admin p/ o Centro de Categorização (ADMIN-only)
+
+Base do módulo admin de categorização (FE em seguida). Todos **`ROLE_ADMIN`**:
+- **`PATCH /admin/products/{id}/category`** `{ "category": "PET_SUPPLIES" }` — define a
+  categoria **global** do produto e trava como decisão manual (`source=USER`; recategorize/LLM
+  não sobrescrevem). Retorna `ProductResponse`.
+- **`GET /admin/products?q=&category=&source=`** — lista do catálogo agora com filtros opcionais
+  (nome/EAN, categoria [ex.: `OTHER` = fila de revisão], fonte). Paginado.
+- **`GET /categorizer/dictionary/curated?q=&page=&size=`** + **`DELETE .../curated/{id}`** —
+  listar/paginar/buscar e excluir entradas do dicionário curado (antes só bulk import / wipe-all).
+- **`GET /categorizer/dictionary/learned?q=&page=&size=`** + **`DELETE .../learned/{id}`** —
+  idem para o dicionário aprendido. Deletes fazem hot-reload.
+
+---
+
 ## 2026-09-20 — mensagem "atualize o app" para estados bloqueados no app antigo
 
 Quando um **app antigo** (mobile, sem `X-Device-Fetch`) escaneia uma nota de estado

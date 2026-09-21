@@ -496,7 +496,7 @@ class AdminControllerTest {
     @Test
     void listProducts_returnsPagedCatalog() throws Exception {
         Page<ProductResponse> page = new PageImpl<>(List.of(sampleProduct()));
-        when(adminProductService.listAll(any(Pageable.class))).thenReturn(page);
+        when(adminProductService.listAll(any(), any(), any(), any(Pageable.class))).thenReturn(page);
 
         mockMvc.perform(get("/api/v1/admin/products")
                         .with(SecurityMockMvcRequestPostProcessors.user(adminUser())))

@@ -1,5 +1,7 @@
 package com.relyon.economizai.service.extraction;
 
+import com.relyon.economizai.dto.response.CuratedEntryResponse;
+import com.relyon.economizai.dto.response.LearnedEntryResponse;
 import com.relyon.economizai.model.BrandRegistryEntry;
 import com.relyon.economizai.model.CategorizationBenchmarkEntry;
 import com.relyon.economizai.model.CuratedDictionaryEntry;
@@ -15,6 +17,8 @@ import com.relyon.economizai.repository.ProductRepository;
 import com.relyon.economizai.service.canonicalization.DescriptionNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -74,6 +78,38 @@ public class CategorizerAdminService {
         dictionaryClassifier.replaceLearnedEntries(Map.of());
         log.info("categorizer.reset_learned removed={}", count);
         return new ResetLearnedOutcome(count);
+    }
+
+    // ── Dictionary management (list + single delete) for the admin ops center ──
+
+    @Transactional(readOnly = true)
+    public Page<CuratedEntryResponse> listCurated(String query, Pageable pageable) {
+        var page = (query == null || query.isBlank())
+                ? curatedRepository.findAll(pageable)
+                : curatedRepository.findByKeywordContainingIgnoreCase(query.trim().toLowerCase(), pageable);
+        return page.map(CuratedEntryResponse::from);
+    }
+
+    @Transactional
+    public void deleteCurated(UUID id) {
+        curatedRepository.deleteById(id);
+        dictionaryClassifier.reloadCuratedEntries();
+        log.info("categorizer.curated_deleted id={}", id);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<LearnedEntryResponse> listLearned(String query, Pageable pageable) {
+        var page = (query == null || query.isBlank())
+                ? learnedRepository.findAll(pageable)
+                : learnedRepository.findByNormalizedTokenContainingIgnoreCase(query.trim().toLowerCase(), pageable);
+        return page.map(LearnedEntryResponse::from);
+    }
+
+    @Transactional
+    public void deleteLearned(UUID id) {
+        learnedRepository.deleteById(id);
+        reloadLearnedSnapshot();
+        log.info("categorizer.learned_deleted id={}", id);
     }
 
     @Transactional

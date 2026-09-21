@@ -3,6 +3,8 @@ package com.relyon.economizai.controller;
 import com.relyon.economizai.dto.response.CategorizationBenchmarkResponse;
 import com.relyon.economizai.dto.response.CategorizationExplanation;
 import com.relyon.economizai.dto.response.CategorizationQualitySnapshotResponse;
+import com.relyon.economizai.dto.response.CuratedEntryResponse;
+import com.relyon.economizai.dto.response.LearnedEntryResponse;
 import com.relyon.economizai.dto.response.MlClassificationResponse;
 import com.relyon.economizai.model.enums.CategorizationQualityTrigger;
 import com.relyon.economizai.service.extraction.AutoPromotionService;
@@ -15,9 +17,13 @@ import com.relyon.economizai.service.extraction.EanCatalogService;
 import com.relyon.economizai.service.extraction.ml.MlClassifierService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import jakarta.validation.constraints.Size;
 import org.springframework.validation.annotation.Validated;
@@ -29,6 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Operational endpoints for the extraction pipeline. Read/debug endpoints are
@@ -204,6 +211,34 @@ public class CategorizerController {
     public ResponseEntity<CategorizerAdminService.BulkImportOutcome> bulkImportCurated(
             @Size(max = MAX_IMPORT_BATCH) @RequestBody List<CategorizerAdminService.CuratedImportRequest> entries) {
         return ResponseEntity.ok(categorizerAdminService.importCuratedEntries(entries));
+    }
+
+    /** ADMIN. Paginated list of curated dictionary entries; optional {@code q} substring on the keyword. */
+    @GetMapping("/dictionary/curated")
+    public ResponseEntity<Page<CuratedEntryResponse>> listCurated(
+            @RequestParam(required = false) String q, @PageableDefault(size = 50) Pageable pageable) {
+        return ResponseEntity.ok(categorizerAdminService.listCurated(q, pageable));
+    }
+
+    /** ADMIN. Delete a single curated entry (surgical, unlike the wipe-all reset) — hot-reloads. */
+    @DeleteMapping("/dictionary/curated/{id}")
+    public ResponseEntity<Void> deleteCurated(@PathVariable UUID id) {
+        categorizerAdminService.deleteCurated(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** ADMIN. Paginated list of learned (auto-promoted) entries; optional {@code q} substring on the token. */
+    @GetMapping("/dictionary/learned")
+    public ResponseEntity<Page<LearnedEntryResponse>> listLearned(
+            @RequestParam(required = false) String q, @PageableDefault(size = 50) Pageable pageable) {
+        return ResponseEntity.ok(categorizerAdminService.listLearned(q, pageable));
+    }
+
+    /** ADMIN. Delete a single learned entry (surgical) — hot-reloads. */
+    @DeleteMapping("/dictionary/learned/{id}")
+    public ResponseEntity<Void> deleteLearned(@PathVariable UUID id) {
+        categorizerAdminService.deleteLearned(id);
+        return ResponseEntity.noContent().build();
     }
 
     /**

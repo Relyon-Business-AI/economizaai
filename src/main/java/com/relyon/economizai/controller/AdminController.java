@@ -4,6 +4,7 @@ import com.relyon.economizai.dto.request.MergeProductRequest;
 import com.relyon.economizai.dto.request.MerchantSupportOverrideRequest;
 import com.relyon.economizai.dto.request.SendTestNotificationRequest;
 import com.relyon.economizai.dto.request.SetProductBrandRequest;
+import com.relyon.economizai.dto.request.SetProductCategoryRequest;
 import com.relyon.economizai.dto.request.UpdateSubscriptionTierRequest;
 import com.relyon.economizai.dto.response.AcquisitionReportResponse;
 import com.relyon.economizai.dto.response.AdminUserDetailResponse;
@@ -30,6 +31,7 @@ import com.relyon.economizai.dto.response.ReceiptResponse;
 import com.relyon.economizai.dto.response.ReceiptSummaryResponse;
 import com.relyon.economizai.model.User;
 import com.relyon.economizai.model.enums.CategorizationQualityTrigger;
+import com.relyon.economizai.model.enums.CategorizationSource;
 import com.relyon.economizai.model.enums.ProductCategory;
 import com.relyon.economizai.model.enums.UnidadeFederativa;
 import com.relyon.economizai.service.ReceiptService;
@@ -269,10 +271,17 @@ public class AdminController {
                 sefazIngestionService.getVerifiedStates(), sefazIngestionService.experimentalStates()));
     }
 
-    /** Full product catalog (paged) — dev tool for curating dictionary/brands. */
+    /**
+     * Product catalog (paged) for curation. Optional filters: {@code q} (name/EAN
+     * substring), {@code category} (e.g. OTHER — the review queue), {@code source}.
+     */
     @GetMapping("/products")
-    public ResponseEntity<Page<ProductResponse>> listProducts(@PageableDefault(size = 50) Pageable pageable) {
-        return ResponseEntity.ok(adminProductService.listAll(pageable));
+    public ResponseEntity<Page<ProductResponse>> listProducts(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) ProductCategory category,
+            @RequestParam(required = false) CategorizationSource source,
+            @PageableDefault(size = 50) Pageable pageable) {
+        return ResponseEntity.ok(adminProductService.listAll(q, category, source, pageable));
     }
 
     /**
@@ -349,6 +358,13 @@ public class AdminController {
     public ResponseEntity<ProductResponse> setProductBrand(
             @PathVariable UUID id, @Valid @RequestBody SetProductBrandRequest request) {
         return ResponseEntity.ok(adminProductService.setBrand(id, request));
+    }
+
+    /** Set the product's GLOBAL category and lock it as a manual (USER) decision. */
+    @PatchMapping("/products/{id}/category")
+    public ResponseEntity<ProductResponse> setProductCategory(
+            @PathVariable UUID id, @Valid @RequestBody SetProductCategoryRequest request) {
+        return ResponseEntity.ok(adminProductService.setCategory(id, request.category()));
     }
 
     /**

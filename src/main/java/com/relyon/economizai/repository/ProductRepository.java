@@ -2,6 +2,7 @@ package com.relyon.economizai.repository;
 
 import com.relyon.economizai.model.Product;
 import com.relyon.economizai.model.enums.CategorizationSource;
+import com.relyon.economizai.model.enums.ProductCategory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -92,6 +93,19 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
         ORDER BY p.normalizedName ASC
     """)
     Page<Product> search(@Param("query") String query, Pageable pageable);
+
+    /** Admin catalog list with optional filters — any null param is ignored (matches all). */
+    @Query("""
+        SELECT p FROM Product p
+        WHERE (:query IS NULL OR LOWER(p.normalizedName) LIKE LOWER(CONCAT('%', :query, '%')) OR p.ean = :query)
+          AND (:category IS NULL OR p.category = :category)
+          AND (:source IS NULL OR p.categorizationSource = :source)
+        ORDER BY p.normalizedName ASC
+    """)
+    Page<Product> findFiltered(@Param("query") String query,
+                               @Param("category") ProductCategory category,
+                               @Param("source") CategorizationSource source,
+                               Pageable pageable);
 
     @Query("""
         SELECT p FROM Product p

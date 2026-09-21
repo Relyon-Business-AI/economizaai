@@ -18,6 +18,7 @@ import com.relyon.economizai.exception.ProductNotFoundException;
 import com.relyon.economizai.model.Product;
 import com.relyon.economizai.model.ProductAlias;
 import com.relyon.economizai.model.enums.CategorizationSource;
+import com.relyon.economizai.model.enums.ProductCategory;
 import com.relyon.economizai.service.extraction.BrandExtractor;
 import com.relyon.economizai.service.extraction.ProductExtractor;
 import com.relyon.economizai.repository.ConsumptionSnoozeRepository;
@@ -70,7 +71,18 @@ public class AdminProductService {
     /** Full catalog (paged) — for curating the dictionary/brands against real data. */
     @Transactional(readOnly = true)
     public Page<ProductResponse> listAll(Pageable pageable) {
-        return productRepository.findAll(pageable).map(ProductResponse::from);
+        return listAll(null, null, null, pageable);
+    }
+
+    /**
+     * Catalog list with optional filters for the admin ops center: {@code q} (name/EAN
+     * substring), {@code category} (e.g. OTHER, to find the review queue), and
+     * {@code source} (e.g. NONE/ML). Any null filter is ignored.
+     */
+    @Transactional(readOnly = true)
+    public Page<ProductResponse> listAll(String q, ProductCategory category, CategorizationSource source, Pageable pageable) {
+        var query = (q == null || q.isBlank()) ? null : q.trim();
+        return productRepository.findFiltered(query, category, source, pageable).map(ProductResponse::from);
     }
 
     /**
@@ -289,6 +301,23 @@ public class AdminProductService {
         product.setBrand(brand);
         var saved = productRepository.save(product);
         log.info("admin.product.brand_set product={} brand='{}'", productId, brand);
+        return ProductResponse.from(saved);
+    }
+
+    /**
+     * Set a canonical product's GLOBAL category manually and LOCK it (source=USER):
+     * the recategorize cascade and LLM enrichment both skip USER-sourced products,
+     * so a curator's decision sticks. This is the global counterpart to a household
+     * category override — it changes what EVERY household sees for this product.
+     */
+    @Transactional
+    public ProductResponse setCategory(UUID productId, ProductCategory category) {
+        var product = productRepository.findById(productId)
+                .orElseThrow(ProductNotFoundException::new);
+        product.setCategory(category);
+        product.setCategorizationSource(CategorizationSource.USER);
+        var saved = productRepository.save(product);
+        log.info("admin.product.category_set product={} category={} source=USER", productId, category);
         return ProductResponse.from(saved);
     }
 

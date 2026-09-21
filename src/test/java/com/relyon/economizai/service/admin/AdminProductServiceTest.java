@@ -127,7 +127,7 @@ class AdminProductServiceTest {
     @Test
     void listAll_pagesThroughCatalog() {
         var product = product("ARROZ", ProductCategory.GROCERIES, CategorizationSource.DICTIONARY);
-        when(productRepository.findAll(PageRequest.of(0, 50)))
+        when(productRepository.findFiltered(null, null, null, PageRequest.of(0, 50)))
                 .thenReturn(new PageImpl<>(List.of(product)));
 
         var page = service.listAll(PageRequest.of(0, 50));
@@ -246,6 +246,20 @@ class AdminProductServiceTest {
         var request = new SetProductBrandRequest("X");
         assertThrows(ProductNotFoundException.class,
                 () -> service.setBrand(unknownId, request));
+    }
+
+    @Test
+    void setCategory_setsCategoryAndLocksAsUser() {
+        var product = Product.builder().id(UUID.randomUUID()).normalizedName("racao dog chow")
+                .category(ProductCategory.OTHER).categorizationSource(CategorizationSource.DICTIONARY).build();
+        when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
+        when(productRepository.save(any(Product.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        var response = service.setCategory(product.getId(), ProductCategory.PET_SUPPLIES);
+
+        assertEquals(ProductCategory.PET_SUPPLIES, response.category());
+        assertEquals(CategorizationSource.USER, product.getCategorizationSource());
+        verify(productRepository).save(product);
     }
 
     @Test
