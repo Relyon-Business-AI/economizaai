@@ -66,10 +66,10 @@ public class ReceiptIngestionService {
      */
     @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
     public void ingest(UUID receiptId, String qrPayload) {
-        // Safe default: only clients that PROVED they can resolve NEEDS_DEVICE_FETCH
-        // (they sent the X-Device-Fetch header) should ever see that status. Callers
-        // without that signal (older apps, web photo upload) get FAILED_PARSE instead.
-        ingest(receiptId, qrPayload, false);
+        // Web / photo upload: not "the app" and can't fetch on-device, so a blocked state is a
+        // plain FAILED_PARSE (no "update the app" hint, which wouldn't make sense here).
+        ingestResolved(receiptId, receipt -> sefazIngestionService.fetch(qrPayload, receipt.getUser().getId()),
+                false, null);
     }
 
     /**
@@ -81,9 +81,11 @@ public class ReceiptIngestionService {
      */
     @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
     public void ingest(UUID receiptId, String qrPayload, boolean canDeviceRetry) {
-        // Attribute the paid SEFAZ calls (captcha solve, Infosimples query) to the
-        // owner so the per-user daily cap and cost ledger can meter them.
-        ingestResolved(receiptId, receipt -> sefazIngestionService.fetch(qrPayload, receipt.getUser().getId()), canDeviceRetry);
+        // Mobile scan (attribute paid SEFAZ calls to the owner for metering). canDeviceRetry=true
+        // (app knows NEEDS_DEVICE_FETCH) → resolve on-device; false (older app) → FAILED_PARSE
+        // telling the user to update, since this state only works on the newer app.
+        ingestResolved(receiptId, receipt -> sefazIngestionService.fetch(qrPayload, receipt.getUser().getId()),
+                canDeviceRetry, "receipt.state.app_update_required");
     }
 
     /**
@@ -94,8 +96,10 @@ public class ReceiptIngestionService {
      */
     @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
     public void ingestPrefetched(UUID receiptId, String qrPayload, String rawContent) {
+        // The app ALREADY fetched on-device; if this still fails it's a real dead end, not an
+        // "update the app" case — plain FAILED_PARSE and no NEEDS_DEVICE_FETCH loop.
         ingestResolved(receiptId, receipt -> sefazIngestionService.fromClientContent(
-                rawContent, receipt.getChaveAcesso(), receipt.getUf(), sourceUrlOf(qrPayload)), false);
+                rawContent, receipt.getChaveAcesso(), receipt.getUf(), sourceUrlOf(qrPayload)), false, null);
     }
 
     /**
@@ -106,7 +110,8 @@ public class ReceiptIngestionService {
      */
     private void ingestResolved(UUID receiptId,
                                 Function<Receipt, SefazIngestionService.FetchedDocument> resolver,
-                                boolean canDeviceRetry) {
+                                boolean canDeviceRetry,
+                                String blockedStateReasonKey) {
         MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
         try {
             var receipt = receiptRepository.findById(receiptId).orElse(null);
@@ -119,7 +124,7 @@ public class ReceiptIngestionService {
             try {
                 fetched = resolver.apply(receipt);
             } catch (ExperimentalStateFailedException ex) {
-                routeExperimentalFailure(receiptId, ex, canDeviceRetry);
+                routeExperimentalFailure(receiptId, ex, canDeviceRetry, blockedStateReasonKey);
                 return;
             }
             try {
@@ -130,7 +135,7 @@ public class ReceiptIngestionService {
                 warmEanCatalog(parsed);
                 persistParsed(receiptId, parsed);
             } catch (ExperimentalStateFailedException ex) {
-                routeExperimentalFailure(receiptId, ex, canDeviceRetry);
+                routeExperimentalFailure(receiptId, ex, canDeviceRetry, blockedStateReasonKey);
             } catch (ReceiptParseException ex) {
                 persistParseFailure(receiptId, fetched, ex);
             }
@@ -238,12 +243,31 @@ public class ReceiptIngestionService {
      * the app retries the fetch on the user's own (accepted) device. On the DEVICE path
      * (the app already tried) it's a real dead end → FAILED_PARSE, no retry loop.
      */
-    private void routeExperimentalFailure(UUID receiptId, ExperimentalStateFailedException ex, boolean canDeviceRetry) {
+    private void routeExperimentalFailure(UUID receiptId, ExperimentalStateFailedException ex,
+                                          boolean canDeviceRetry, String blockedStateReasonKey) {
         if (canDeviceRetry) {
             persistNeedsDeviceFetch(receiptId, ex);
+        } else if (blockedStateReasonKey != null) {
+            markBlockedState(receiptId, blockedStateReasonKey);
         } else {
             markFailed(receiptId, ex);
         }
+    }
+
+    /**
+     * A blocked state (e.g. Pernambuco) that only the newer app can resolve on-device, hit by a
+     * client that can't — FAILED_PARSE with a localizable "update the app" reason instead of a
+     * generic fetch failure, so the user knows what to do.
+     */
+    private void markBlockedState(UUID receiptId, String reasonKey) {
+        transactionTemplate.executeWithoutResult(txStatus -> {
+            var receipt = loadIfProcessing(receiptId);
+            if (receipt == null) return;
+            receipt.setParseErrorReason(reasonKey);
+            receipt.setStatus(ReceiptStatus.FAILED_PARSE);
+            receiptRepository.save(receipt);
+            log.info("ingest failed_parse reason={} — blocked state, client can't device-fetch", reasonKey);
+        });
     }
 
     private void persistNeedsDeviceFetch(UUID receiptId, ExperimentalStateFailedException ex) {

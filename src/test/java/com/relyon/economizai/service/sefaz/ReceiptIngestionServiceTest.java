@@ -35,6 +35,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -154,18 +155,36 @@ class ReceiptIngestionServiceTest {
     }
 
     @Test
-    void ingest_experimentalStateBlocked_oldClient_marksFailedParseNotNeedsDeviceFetch() {
-        // An app that didn't send X-Device-Fetch can't resolve NEEDS_DEVICE_FETCH and would
-        // crash rendering the unknown status — it must get a plain FAILED_PARSE instead.
+    void ingest_experimentalStateBlocked_oldMobileApp_marksFailedParseWithAppUpdateReason() {
+        // An older mobile app (didn't send X-Device-Fetch) can't resolve NEEDS_DEVICE_FETCH —
+        // it gets FAILED_PARSE with an "update the app" reason, not a generic failure.
         var receipt = processingReceipt();
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
         when(sefazIngestionService.parse(eq(fetched), any())).thenThrow(new ExperimentalStateFailedException("PE"));
 
-        service.ingest(receipt.getId(), QR); // 2-arg = not device-capable
+        service.ingest(receipt.getId(), QR, false); // mobile, not device-capable
 
         assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+        assertEquals("receipt.state.app_update_required", receipt.getParseErrorReason());
+        verify(receiptRepository).save(receipt);
+    }
+
+    @Test
+    void ingest_experimentalStateBlocked_webPhoto_marksFailedParseGenericReason() {
+        // Web / photo upload (2-arg) isn't "the app" — a blocked state is a generic FAILED_PARSE,
+        // NOT an "update the app" message.
+        var receipt = processingReceipt();
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any())).thenThrow(new ExperimentalStateFailedException("PE"));
+
+        service.ingest(receipt.getId(), QR); // 2-arg = web/photo
+
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+        assertNotEquals("receipt.state.app_update_required", receipt.getParseErrorReason());
         verify(receiptRepository).save(receipt);
     }
 
