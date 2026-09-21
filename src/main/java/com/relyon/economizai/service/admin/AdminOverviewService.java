@@ -51,16 +51,20 @@ public class AdminOverviewService {
         var receiptsTotal = receiptRepository.count();
         var receiptsToday = receiptRepository.countByCreatedAtGreaterThanEqual(startOfToday);
         var parseRate30d = parseRateSince(monthAgo);
-        var activeHouseholds7d = receiptRepository.countActiveHouseholdsSince(weekAgo);
+        var dau = receiptRepository.countActiveHouseholdsSince(startOfToday);
+        var wau = receiptRepository.countActiveHouseholdsSince(weekAgo);
+        var mau = receiptRepository.countActiveHouseholdsSince(monthAgo);
+        var stickiness = mau <= 0 ? 0d : BigDecimal.valueOf(dau)
+                .divide(BigDecimal.valueOf(mau), 4, RoundingMode.HALF_UP).doubleValue();
         var totalSpend = scale(receiptRepository.sumConfirmedTotal());
 
         var observations = priceObservationRepository.count();
         var contributingHouseholds = priceObservationAuditRepository.countDistinctContributingHouseholds();
 
-        log.info("admin.overview users={} today={} receipts={} parse30d={} active7d={} spend={} obs={}",
-                usersTotal, usersToday, receiptsTotal, parseRate30d, activeHouseholds7d, totalSpend, observations);
+        log.info("admin.overview users={} today={} receipts={} parse30d={} dau={} wau={} mau={} spend={} obs={}",
+                usersTotal, usersToday, receiptsTotal, parseRate30d, dau, wau, mau, totalSpend, observations);
         return new AdminOverviewResponse(usersTotal, usersToday, usersThisWeek, usersPro, payingActive,
-                receiptsTotal, receiptsToday, parseRate30d, activeHouseholds7d, totalSpend,
+                receiptsTotal, receiptsToday, parseRate30d, dau, wau, mau, stickiness, totalSpend,
                 observations, contributingHouseholds);
     }
 
