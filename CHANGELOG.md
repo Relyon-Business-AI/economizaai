@@ -16,6 +16,17 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-20 — mensagem "atualize o app" para estados bloqueados no app antigo
+
+Quando um **app antigo** (mobile, sem `X-Device-Fetch`) escaneia uma nota de estado
+bloqueado (ex.: PE), o `FAILED_PARSE` agora vem com a mensagem **"Notas deste estado só
+funcionam na versão mais recente do app. Atualize o app e escaneie novamente."**
+(`parseErrorMessage`), em vez de um erro genérico. Web/foto e o app novo (que já busca
+on-device) seguem com a mensagem genérica — só o app mobile desatualizado recebe o aviso
+de atualização.
+
+---
+
 ## 2026-09-20 — hotfix: `NEEDS_DEVICE_FETCH` só para apps capazes (app antigo não quebra)
 
 **Regressão corrigida.** O status novo `NEEDS_DEVICE_FETCH` fazia o app **da loja
