@@ -16,6 +16,15 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-21 — Minas Gerais (MG) NFC-e agora processa
+
+Notas de **MG** passam a ser lidas via Infosimples. O portal do MG é JSF + Cloudflare
+Turnstile (nosso scraper não resolve) e a Infosimples expõe MG num endpoint diferente
+(`.../sefaz/mg/nfce-resumida`, schema `produtos_servicos`/`valores`) — o path genérico
+retornava erro. Corrigido o roteamento + parser. Efeito FE: notas do MG que antes
+ficavam vazias/"em processamento" agora **confirmam com itens e total** (via fallback,
+sem device-fetch). Sem mudança de contrato.
+
 ## 2026-09-21 — dashboard de operações (saúde da ingestão + estados + custos)
 
 Novo endpoint admin **`GET /admin/ingestion-health?days=30`** → `IngestionHealthResponse`:

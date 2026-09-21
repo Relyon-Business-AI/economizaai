@@ -35,7 +35,7 @@ class InfosimplesServiceTest {
     void setUp() {
         var builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
-        service = new InfosimplesService(builder, API_KEY, BASE_URL);
+        service = new InfosimplesService(builder, API_KEY, BASE_URL, "MG");
     }
 
     @Test
@@ -203,6 +203,40 @@ class InfosimplesServiceTest {
         assertEquals(0, BigDecimal.ONE.compareTo(first.quantity()));
         assertEquals("UN", first.unit());
         assertEquals(0, new BigDecimal("9.99").compareTo(first.totalPrice()));
+    }
+
+    @Test
+    void fetchParsed_mapsMgResumidaShape_viaResumidaEndpoint() {
+        // MG lives at the `.../mg/nfce-resumida` slug (the default `/nfce` returns
+        // code 602) and returns a distinct schema: produtos_servicos / valores /
+        // emitente.razao_social / nfce.data_emissao.
+        var mgChave = "31260911614938000118650180003378659268089479";
+        server.expect(requestTo(BASE_URL + "/api/v2/consultas/sefaz/mg/nfce-resumida?token=test-key&nfce=" + mgChave))
+                .andRespond(withSuccess(fixture("mg-nfce-resumida"), MediaType.APPLICATION_JSON));
+
+        var parsed = service.fetchParsed(mgChave, UnidadeFederativa.MG);
+
+        assertEquals("11614938000118", parsed.cnpjEmitente());
+        assertTrue(parsed.marketName().contains("SUPERMERCADO BORGES E MIRANDA"));
+        // total lives under valores.normalizado_valor_total_servico
+        assertEquals(0, new BigDecimal("73.45").compareTo(parsed.totalAmount()));
+        // emission datetime lives under the nfce block
+        assertEquals(LocalDateTime.of(2026, 9, 21, 6, 35, 19), parsed.issuedAt());
+        assertEquals(6, parsed.items().size());
+
+        var first = parsed.items().get(0);
+        assertEquals(1, first.lineNumber());
+        assertTrue(first.rawDescription().contains("GEL KANECHOM"));  // descricao
+        assertNull(first.ean(), "MG resumida carries no GTIN");
+        assertEquals(0, BigDecimal.ONE.compareTo(first.quantity()));  // quantidade
+        assertEquals("UN", first.unit());                             // unidade_comercial
+        assertEquals(0, new BigDecimal("9.99").compareTo(first.unitPrice()));
+        assertEquals(0, new BigDecimal("9.99").compareTo(first.totalPrice())); // normalizado_valor
+
+        var itemSum = parsed.items().stream()
+                .map(item -> item.totalPrice())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertEquals(0, itemSum.compareTo(parsed.totalAmount()));
     }
 
     @Test
