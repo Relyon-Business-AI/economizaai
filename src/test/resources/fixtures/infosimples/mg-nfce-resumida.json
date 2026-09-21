@@ -1,0 +1,127 @@
+{
+  "code": 200,
+  "code_message": "A requisição foi processada com sucesso.",
+  "errors": [],
+  "data": [
+    {
+      "chave_acesso": "31-26/09-11.614.938/0001-18-65-018-000.337.865-926.808.9479",
+      "destinatario": {
+        "cpf": null,
+        "cnpj": null,
+        "normalizado_cpf": null,
+        "normalizado_cnpj": null,
+        "razao_social": null,
+        "nome_razao_social": null,
+        "uf": null,
+        "destino_operacao": "1 - Operação Interna",
+        "consumidor_final": "1 - Sim",
+        "presenca_comprador": "1 - Operação presencial"
+      },
+      "emissao": {
+        "processo": "0 - com aplicativo do Contribuinte",
+        "versao_processo": "8.6.1",
+        "tipo_emissao": "9 - Contingência NFC-e off-line",
+        "finalidade": "1 - Normal",
+        "natureza_operacao": "Venda de mercadoria, adquirida ou recebida de terceiros, su",
+        "tipo_operacao": "1 - Saída",
+        "digest_value_nfce": "i0JyvMhJItNuVqnU/xm4Euc6KO8="
+      },
+      "emitente": {
+        "cnpj": "11614938000118",
+        "normalizado_cnpj": "11614938000118",
+        "razao_social": "SUPERMERCADO BORGES E MIRANDA LTDA",
+        "inscricao_estadual": "0015566020003",
+        "uf": "MG"
+      },
+      "eventos": [
+        {
+          "evento": "Autorização de Uso (Cód.: 110100)",
+          "protocolo": "131262334207094",
+          "data_autorizacao": "21/09/2026 06:40:55",
+          "normalizado_datahora_autorizacao": "21/09/2026 06:40:55",
+          "data_autorizacao_bd": "21/09/2026 06:35:19",
+          "normalizado_datahora_autorizacao_bd": "21/09/2026 06:35:19"
+        }
+      ],
+      "nfce": {
+        "modelo": 65,
+        "serie": 18,
+        "numero": 337865,
+        "data_emissao": "21/09/2026 06:35:19",
+        "normalizado_datahora_emissao": "21/09/2026 06:35:19"
+      },
+      "produtos_servicos": [
+        {
+          "numero": 1,
+          "descricao": "GEL KANECHOM STYLE 230G 2 MEDIA INCOLOR",
+          "quantidade": 1.0,
+          "unidade_comercial": "UN",
+          "valor_unitario": "R$ 9,99",
+          "normalizado_valor_unitario": 9.99,
+          "valor": "R$ 9,99",
+          "normalizado_valor": 9.99
+        },
+        {
+          "numero": 2,
+          "descricao": "PALETA GROSSA KG",
+          "quantidade": 1.0177,
+          "unidade_comercial": "KG",
+          "valor_unitario": "R$ 39,59",
+          "normalizado_valor_unitario": 39.59,
+          "valor": "R$ 40,28",
+          "normalizado_valor": 40.28
+        },
+        {
+          "numero": 3,
+          "descricao": "PAO DE SAL KG",
+          "quantidade": 0.3882,
+          "unidade_comercial": "KG",
+          "valor_unitario": "R$ 19,99",
+          "normalizado_valor_unitario": 19.99,
+          "valor": "R$ 7,76",
+          "normalizado_valor": 7.76
+        },
+        {
+          "numero": 4,
+          "descricao": "PAO DE QUEIJO",
+          "quantidade": 2.0,
+          "unidade_comercial": "UN",
+          "valor_unitario": "R$ 1,99",
+          "normalizado_valor_unitario": 1.99,
+          "valor": "R$ 3,98",
+          "normalizado_valor": 3.98
+        },
+        {
+          "numero": 5,
+          "descricao": "BROA KG",
+          "quantidade": 0.0681,
+          "unidade_comercial": "KG",
+          "valor_unitario": "R$ 35,99",
+          "normalizado_valor_unitario": 35.99,
+          "valor": "R$ 2,45",
+          "normalizado_valor": 2.45
+        },
+        {
+          "numero": 6,
+          "descricao": "OLEO DE SOJA ABC 900ML",
+          "quantidade": 1.0,
+          "unidade_comercial": "UN",
+          "valor_unitario": "R$ 8,99",
+          "normalizado_valor_unitario": 8.99,
+          "valor": "R$ 8,99",
+          "normalizado_valor": 8.99
+        }
+      ],
+      "situacao_atual": "AUTORIZADA",
+      "valores": {
+        "valor_total_servico": "R$ 73,45",
+        "normalizado_valor_total_servico": 73.45,
+        "base_calculo_icms": "R$ 7,76",
+        "normalizado_base_calculo_icms": 7.76,
+        "valor_icms": "R$ 0,54",
+        "normalizado_valor_icms": 0.54
+      },
+      "site_receipt": "https://us-central1-infosimples-data.cloudfunctions.net/infosimples-storage/470p4PaAZFIz1UX57JQESF5WOgi70Ht02BNMg_7qcyI=/1790623706/OFTstf/aHR0cHM6Ly9zdG9yYWdlLmdvb2dsZWFwaXMuY29tL2luZm9zaW1wbGVzLWFwaS10bXAvYXBpL3NlZmF6L21nL25mY2UtcmVzdW1pZGEvMjAyNjA5MjExNjI4MjUvMm8tOFNXS3NYQlpISzFhTWNXcUMtLU5kX25ZXzFQX00vY2Y0NmY3YmQxMzQxNjkxNTc3ZDYxODQ2MDZiYjIxNWZfMF94WGs=.html"
+    }
+  ]
+}

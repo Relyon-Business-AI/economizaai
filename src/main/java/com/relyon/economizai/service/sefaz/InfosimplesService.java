@@ -15,7 +15,10 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Fallback SEFAZ data provider backed by the Infosimples paid API
@@ -27,8 +30,11 @@ import java.util.List;
  * this is intentionally a last resort, called only after the primary scraper
  * exhausts its retries.
  *
- * <p>Covers all UFs via the {@code /api/v2/consultas/sefaz/{uf}/nfce} endpoint —
- * the UF code is lowercased from the chave's IBGE prefix (50→ms, 43→rs, etc.).
+ * <p>Most UFs use the {@code /api/v2/consultas/sefaz/{uf}/nfce} endpoint — the UF
+ * code is lowercased from the chave's IBGE prefix (50→ms, 43→rs, etc.). A few UFs
+ * (MG) are only exposed under {@code .../{uf}/nfce-resumida} and return a different
+ * "resumida" JSON schema (produtos_servicos/valores); those UFs are listed in
+ * {@code economizai.infosimples.resumida-states} and handled by the same mapping.
  */
 @Slf4j
 @Service
@@ -42,14 +48,37 @@ public class InfosimplesService {
 
     private final String apiKey;
     private final RestClient restClient;
+    // UFs whose Infosimples NFC-e consultation lives at the `.../sefaz/{uf}/nfce-resumida`
+    // slug and returns the "resumida" schema (produtos_servicos/valores) rather than the
+    // default `.../sefaz/{uf}/nfce`. MG is the only one verified so far — the default
+    // path returns code 602 "serviço informado na URL não é válido" for it.
+    private final Set<UnidadeFederativa> resumidaStates;
 
     public InfosimplesService(
             RestClient.Builder builder,
             @Value("${economizai.infosimples.api-key}") String apiKey,
-            @Value("${economizai.infosimples.base-url:https://api.infosimples.com}") String baseUrl) {
+            @Value("${economizai.infosimples.base-url:https://api.infosimples.com}") String baseUrl,
+            @Value("${economizai.infosimples.resumida-states:MG}") String resumidaStatesCsv) {
         this.apiKey = apiKey;
         this.restClient = builder.baseUrl(baseUrl).build();
-        log.info("infosimples.service enabled base-url={}", baseUrl);
+        this.resumidaStates = parseStates(resumidaStatesCsv);
+        log.info("infosimples.service enabled base-url={} resumida-states={}", baseUrl, resumidaStates);
+    }
+
+    private static Set<UnidadeFederativa> parseStates(String csv) {
+        var states = EnumSet.noneOf(UnidadeFederativa.class);
+        if (csv == null || csv.isBlank()) return states;
+        Arrays.stream(csv.split(","))
+                .map(String::trim)
+                .filter(token -> !token.isEmpty())
+                .forEach(token -> {
+                    try {
+                        states.add(UnidadeFederativa.valueOf(token.toUpperCase()));
+                    } catch (IllegalArgumentException ignored) {
+                        log.warn("infosimples.resumida-states.ignored token='{}'", token);
+                    }
+                });
+        return states;
     }
 
     /**
@@ -61,10 +90,11 @@ public class InfosimplesService {
      */
     public ParsedReceipt fetchParsed(String chave, UnidadeFederativa uf) {
         var ufCode = uf.name().toLowerCase();
-        log.info("infosimples.fetch chave={} uf={}", abbrev(chave), ufCode);
+        var resource = resumidaStates.contains(uf) ? "nfce-resumida" : "nfce";
+        log.info("infosimples.fetch chave={} uf={} resource={}", abbrev(chave), ufCode, resource);
         var response = restClient.get()
-                .uri("/api/v2/consultas/sefaz/{uf}/nfce?token={token}&nfce={nfce}",
-                        ufCode, apiKey, chave)
+                .uri("/api/v2/consultas/sefaz/{uf}/{resource}?token={token}&nfce={nfce}",
+                        ufCode, resource, apiKey, chave)
                 .retrieve()
                 .body(RESPONSE_TYPE);
 
@@ -90,23 +120,27 @@ public class InfosimplesService {
         var totais = data.totais();
         var nfe = data.nfe();
 
+        var valores = data.valores();
         var cnpj = firstNonBlank(
                 emitente == null ? null : emitente.normalizadoCnpj(),
                 emitente == null || emitente.cnpj() == null ? null : emitente.cnpj().replaceAll("\\D", ""));
-        // Market name: "resumida" shape uses nome_razao_social; "completa" uses nome.
+        // Market name: "resumida" (MG) uses razao_social; other resumida uses
+        // nome_razao_social; "completa" uses nome.
         var marketName = emitente == null ? null
-                : firstNonBlank(emitente.nomeRazaoSocial(), emitente.nome());
+                : firstNonBlank(emitente.nomeRazaoSocial(), emitente.nome(), emitente.razaoSocial());
         var marketAddress = emitente == null ? null : emitente.endereco();
-        var issuedAt = parseIssuedAt(data.informacoesNota(), nfe);
-        // Total: "resumida" carries it top-level; "completa" nests it under totais/nfe.
+        var issuedAt = parseIssuedAt(data.informacoesNota(), nfe, data.nfce());
+        // Total: MG resumida nests it under valores; other resumida carries it
+        // top-level; "completa" nests it under totais/nfe.
         var total = firstNonNull(
                 data.normalizadoValorAPagar(),
+                valores == null ? null : valores.normalizadoValorTotalServico(),
                 totais == null ? null : totais.normalizadoValorNfe(),
                 nfe == null ? null : nfe.normalizadoValorTotal());
         var discount = firstNonNull(
                 data.normalizadoValorDesconto(),
                 totais == null ? null : totais.normalizadoValorDescontos());
-        var items = toItems(data.produtos());
+        var items = toItems(firstNonNull(data.produtos(), data.produtosServicos()));
 
         return ParsedReceipt.builder()
                 .chaveAcesso(chave)
@@ -130,9 +164,15 @@ public class InfosimplesService {
      * "completa" shape carries a single {@code nfe.data_emissao} like
      * {@code "05/07/2026 14:11:14-03:00"} (trailing tz offset stripped).
      */
-    private static LocalDateTime parseIssuedAt(InfosimplesNotaInfo nota, InfosimplesNfe nfe) {
+    private static LocalDateTime parseIssuedAt(InfosimplesNotaInfo nota, InfosimplesNfe nfe,
+                                               InfosimplesNfceBlock nfceBlock) {
         if (nota != null && nota.dataEmissao() != null && nota.horaEmissao() != null) {
             var parsed = tryParse(nota.dataEmissao() + " " + nota.horaEmissao());
+            if (parsed != null) return parsed;
+        }
+        // MG resumida: nfce.data_emissao is a full "dd/MM/yyyy HH:mm:ss".
+        if (nfceBlock != null && nfceBlock.dataEmissao() != null && !nfceBlock.dataEmissao().isBlank()) {
+            var parsed = tryParse(nfceBlock.dataEmissao().trim());
             if (parsed != null) return parsed;
         }
         if (nfe != null && nfe.dataEmissao() != null && !nfe.dataEmissao().isBlank()) {
@@ -157,9 +197,10 @@ public class InfosimplesService {
         var lineNumber = new int[]{1};
         return produtos.stream().map(produto -> {
             // "resumida" uses nome/normalizado_quantidade/normalizado_valor_total_produto;
-            // "completa" uses descricao/qtd/normalizado_valor. quantity/unitPrice/
-            // totalPrice map to NOT NULL columns — default defensively.
-            var rawQty = firstNonNull(produto.normalizadoQuantidade(), produto.qtd());
+            // "completa" uses descricao/qtd/normalizado_valor; MG resumida uses
+            // descricao/quantidade/normalizado_valor. quantity/unitPrice/totalPrice map
+            // to NOT NULL columns — default defensively.
+            var rawQty = firstNonNull(produto.normalizadoQuantidade(), produto.qtd(), produto.quantidade());
             var quantity = rawQty == null ? BigDecimal.ONE : BigDecimal.valueOf(rawQty);
             var totalPrice = firstNonNull(
                     produto.normalizadoValorTotalProduto(), produto.normalizadoValor());
@@ -181,7 +222,7 @@ public class InfosimplesService {
                     // it even when today's catalog has no entry for it.
                     .ean(extractGtin(produto.eanTributavel(), produto.eanComercial()))
                     .quantity(quantity)
-                    .unit(UnitNormalizer.normalize(produto.unidade()))
+                    .unit(UnitNormalizer.normalize(firstNonBlank(produto.unidade(), produto.unidadeComercial())))
                     .unitPrice(unitPrice)
                     .totalPrice(totalPrice)
                     .nfcePromoFlag(false)
@@ -247,7 +288,12 @@ public class InfosimplesService {
             @JsonProperty("normalizado_valor_a_pagar") BigDecimal normalizadoValorAPagar,
             @JsonProperty("normalizado_valor_desconto") BigDecimal normalizadoValorDesconto,
             List<InfosimplesProduto> produtos,
-            @JsonProperty("site_receipt") String siteReceipt
+            @JsonProperty("site_receipt") String siteReceipt,
+            // "resumida" shape (MG /nfce-resumida): items live under produtos_servicos,
+            // totals under valores, emission datetime under the nfce block.
+            @JsonProperty("produtos_servicos") List<InfosimplesProduto> produtosServicos,
+            InfosimplesValores valores,
+            InfosimplesNfceBlock nfce
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -256,7 +302,21 @@ public class InfosimplesService {
             @JsonProperty("normalizado_cnpj") String normalizadoCnpj,
             String endereco,
             String nome,
-            @JsonProperty("nome_razao_social") String nomeRazaoSocial
+            @JsonProperty("nome_razao_social") String nomeRazaoSocial,
+            // "resumida" shape carries the market name under razao_social.
+            @JsonProperty("razao_social") String razaoSocial
+    ) {}
+
+    /** "resumida" shape totals block (MG). */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record InfosimplesValores(
+            @JsonProperty("normalizado_valor_total_servico") BigDecimal normalizadoValorTotalServico
+    ) {}
+
+    /** "resumida" shape nfce block — carries the emission datetime. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record InfosimplesNfceBlock(
+            @JsonProperty("data_emissao") String dataEmissao
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -285,11 +345,14 @@ public class InfosimplesService {
             String descricao,
             @JsonProperty("normalizado_quantidade") Double normalizadoQuantidade,
             Double qtd,
+            // "resumida" shape uses a plain `quantidade` + `unidade_comercial`.
+            Double quantidade,
             @JsonProperty("normalizado_valor_unitario") BigDecimal normalizadoValorUnitario,
             @JsonProperty("normalizado_valor_total_produto") BigDecimal normalizadoValorTotalProduto,
             @JsonProperty("normalizado_valor") BigDecimal normalizadoValor,
             @JsonProperty("ean_comercial") String eanComercial,
             @JsonProperty("ean_tributavel") String eanTributavel,
-            String unidade
+            String unidade,
+            @JsonProperty("unidade_comercial") String unidadeComercial
     ) {}
 }

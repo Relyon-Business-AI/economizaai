@@ -178,6 +178,10 @@ economizai:
     enabled: ${INFOSIMPLES_ENABLED:false}
     api-key: ${INFOSIMPLES_API_KEY:}
     base-url: ${INFOSIMPLES_BASE_URL:https://api.infosimples.com}
+    # UFs whose NFC-e consultation lives at `.../sefaz/{uf}/nfce-resumida` (distinct
+    # "resumida" schema) instead of the default `.../sefaz/{uf}/nfce`. MG only, so far
+    # — the default endpoint returns code 602 "serviço não é válido" for it.
+    resumida-states: ${SEFAZ_INFOSIMPLES_RESUMIDA_STATES:MG}
   # Cost control for paid external calls (captcha solves + Infosimples). Every paid
   # call is always logged to paid_api_call for invoice reconciliation. `enabled`
   # gates enforcement: per-user daily caps (a hard cost/abuse guard, independent of
