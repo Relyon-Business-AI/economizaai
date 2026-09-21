@@ -69,6 +69,16 @@ public final class ScNfceDanfeParser {
                 .build();
     }
 
+    /**
+     * True when the DANFE has at least one parseable item. Lets the SC adapter tell a
+     * real receipt from a flaky non-DANFE page (error/interstitial) before returning
+     * it, so the fetch retry loop can re-fetch instead of hard-failing on 0 items.
+     */
+    public static boolean hasItems(String html) {
+        if (html == null || html.isBlank()) return false;
+        return !parseItems(Jsoup.parse(html)).isEmpty();
+    }
+
     static java.util.Optional<String> extractChave(Document document) {
         var text = document.text();
         var marker = text.toLowerCase().indexOf("chave de acesso");

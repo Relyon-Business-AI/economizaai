@@ -12,6 +12,7 @@ import com.relyon.economizai.dto.response.AdminUserDetailResponse;
 import com.relyon.economizai.dto.response.BrandBackfillResponse;
 import com.relyon.economizai.dto.response.SubscriptionReportResponse;
 import com.relyon.economizai.dto.response.BrandCoverageReportResponse;
+import com.relyon.economizai.dto.response.AdminOverviewResponse;
 import com.relyon.economizai.dto.response.CostReportResponse;
 import com.relyon.economizai.dto.response.IngestionHealthResponse;
 import com.relyon.economizai.dto.response.UnmatchedReportResponse;
@@ -50,6 +51,7 @@ import com.relyon.economizai.service.analytics.meta.MetaAdSpendSyncJob;
 import com.relyon.economizai.service.extraction.CategorizationQualityService;
 import com.relyon.economizai.service.geo.MarketLocationService;
 import com.relyon.economizai.service.notifications.RelevanceReportService;
+import com.relyon.economizai.service.admin.AdminOverviewService;
 import com.relyon.economizai.service.admin.IngestionHealthService;
 import com.relyon.economizai.service.paidapi.CostReportService;
 import com.relyon.economizai.service.sefaz.SefazIngestionService;
@@ -104,6 +106,7 @@ public class AdminController {
     private final RelevanceReportService relevanceReportService;
     private final CostReportService costReportService;
     private final IngestionHealthService ingestionHealthService;
+    private final AdminOverviewService adminOverviewService;
     private final AdminAnalyticsService adminAnalyticsService;
     private final MetaAdSpendSyncJob metaAdSpendSyncJob;
     private final StateCoverageService stateCoverageService;
@@ -244,6 +247,14 @@ public class AdminController {
     @GetMapping("/costs")
     public ResponseEntity<CostReportResponse> costReport(@RequestParam(defaultValue = "30") int days) {
         return ResponseEntity.ok(costReportService.report(days));
+    }
+
+    @Operation(summary = "Admin home overview",
+            description = "Cross-area KPIs in one call: users (total/today/week/PRO), receipts (total/today + "
+                    + "30-day parse rate), 7-day active households, global confirmed spend, and price-index size.")
+    @GetMapping("/overview")
+    public ResponseEntity<AdminOverviewResponse> overview() {
+        return ResponseEntity.ok(adminOverviewService.overview());
     }
 
     @Operation(summary = "Ingestion pipeline health",

@@ -61,6 +61,18 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
 
     long countByHouseholdIdAndStatusAndConfirmedAtAfter(UUID householdId, ReceiptStatus status, LocalDateTime since);
 
+    // --- Admin overview (cross-area KPIs) ---
+
+    long countByCreatedAtGreaterThanEqual(LocalDateTime since);
+
+    /** Global confirmed spend (all households) — the collaborative total. */
+    @Query("SELECT COALESCE(sum(receipt.totalAmount), 0) FROM Receipt receipt WHERE receipt.status = 'CONFIRMED'")
+    BigDecimal sumConfirmedTotal();
+
+    /** Distinct households that scanned at least one receipt since the cutoff (active users proxy). */
+    @Query("SELECT count(distinct receipt.household.id) FROM Receipt receipt WHERE receipt.createdAt >= :since")
+    long countActiveHouseholdsSince(@Param("since") LocalDateTime since);
+
     /** (householdId, receiptCount) for the given households — batch enrichment for the admin user list. */
     @Query("SELECT receipt.household.id, count(receipt) FROM Receipt receipt "
             + "WHERE receipt.household.id IN :householdIds GROUP BY receipt.household.id")

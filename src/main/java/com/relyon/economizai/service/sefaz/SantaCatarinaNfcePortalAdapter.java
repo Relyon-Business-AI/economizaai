@@ -141,10 +141,16 @@ public class SantaCatarinaNfcePortalAdapter implements SefazAdapter {
             // Transient empty body — let the retry loop handle it.
             throw new RestClientException("sc-empty-response-body");
         }
-        if (!ScSecurityChallengeDetector.looksLikeHtml(html)) {
-            return html;
+        var danfe = ScSecurityChallengeDetector.looksLikeHtml(html)
+                ? solveSecurityChallenge(html, url, page.cookieHeader())
+                : html;
+        if (!ScNfceDanfeParser.hasItems(danfe)) {
+            // Neither the challenge nor a valid DANFE — a flaky error/interstitial.
+            // Re-fetch instead of returning a page the parser would reject as 0-item.
+            log.warn("sc.fetch.not_danfe attempt={}/{} — re-fetching", attempt, maxAttempts);
+            throw new RestClientException("sc-not-a-danfe");
         }
-        return solveSecurityChallenge(html, url, page.cookieHeader());
+        return danfe;
     }
 
     private void sleep(long ms) {
