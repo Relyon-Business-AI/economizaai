@@ -27,7 +27,7 @@ jobs:
       - name: Run E2E
         id: run
         env:
-          BASE_URL: https://economizai-app-prod.onrender.com
+          BASE_URL: https://api-dev.economizaai.app   # DEV env (matches SERVICE_ID below) — the onrender slug reads 'prod' but is the dev service
           E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
           E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
           E2E_QR_PAYLOAD: ${{ secrets.E2E_QR_PAYLOAD }}
