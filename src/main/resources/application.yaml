@@ -403,9 +403,9 @@ economizaai:
     # endpoint degrades to a localized 503 — everything else is unaffected.
     tessdata-path: ${OCR_TESSDATA_PATH:}
   oauth:
-    # Expected audiences (aud claim) for social-login ID tokens. Comma-separated;
-    # may be empty in dev (then the aud check is skipped with a WARN log). In prod
-    # set these so a token minted for another app can't be replayed against us.
+    # Expected audiences (aud claim) for social-login ID tokens. Comma-separated.
+    # FAIL-CLOSED: with an empty list every social login is rejected — a token
+    # minted for another app must never be replayable against us.
     google:
       # Web + Android OAuth client IDs (PUBLIC values — safe to commit; the client
       # SECRET is never used by the identity-token flow). Baked as the default so
