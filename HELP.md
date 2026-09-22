@@ -1029,3 +1029,19 @@ classify OTHER (grey) unless they carry a conveniência CNAE.
 - **Full design, current state, and how to continue: [`docs/ECOMMERCE_COMPARISON.md`](docs/ECOMMERCE_COMPARISON.md).**
   Also verified: Mercado Livre has NO official affiliate API (catalog via official API +
   OAuth; affiliate links via manual tag or a third-party link service).
+
+### Session (2026-09-22b) — garimpo de promoções absorvido como módulo (admin API completa)
+
+- **Decisão de arquitetura**: o protótipo standalone `~/Documents/projects/garimpo` (busca ML
+  por termo) foi absorvido pelo backend como módulo — ~80% do motor já existia no subsistema
+  ecommerce (OAuth ML, normalização, SPI de providers, links de afiliado). Repo/serviço
+  separado só quando o runtime de crawling pesar (aí: Render Background Worker, mesmo jar).
+- **Entregue** (`/api/v1/admin/garimpo/**`, ADMIN-only): busca por termo (`searchByTerm` no
+  provider SPI + token OAuth cacheado), histórico de preços append-only (uma linha por
+  MUDANÇA de preço — base do "desconto é real?"), watches com `targetPrice`/`minDiscountPercent`
+  varridos por scheduler (hits NOVOS → webhook `GARIMPO_WEBHOOK_URL`, sem re-spam), run-now.
+  Migration V76. 25 testes novos verdes (fixture real do payload ML).
+- **Bloqueio externo**: Search API pública do ML agora responde **403** (verificado ao vivo) —
+  busca ao vivo exige credenciais `ECOMMERCE_MERCADOLIVRE_*` (App ID/Secret). Sem elas, 503
+  localizado; CRUD de watches/marketplaces/histórico funcionam. Ver DEV_NOTES.
+- Postman: pasta "Garimpo (admin)" + passos 49b3–49b7 no E2E Flow (skip sem admin creds).

@@ -1288,6 +1288,16 @@ PUT    /api/v1/admin/ecommerce/offers/{id}         → CuratedOfferResponse
 DELETE /api/v1/admin/ecommerce/offers/{id}         → 204
 GET    /api/v1/admin/leaderboard/discount-hunters?days=30 → LeaderboardResponse (all households, emails as handles)
 
+# ── Garimpo de promoções (admin deal-hunting; live calls need ML creds — 503 without) ──
+GET    /api/v1/admin/garimpo/search?q=&marketplace=mercadolivre&offset=0&limit=20&minDiscount= → GarimpoSearchResponse (live term search; changed prices land in the history; minDiscount filters the response only)
+GET    /api/v1/admin/garimpo/marketplaces          → List<GarimpoMarketplaceResponse> {key, configured}
+GET    /api/v1/admin/garimpo/products/{marketplace}/{externalId}/history?page=&size= → Page<GarimpoSnapshotResponse> (append-only price change-log, newest first)
+GET    /api/v1/admin/garimpo/watches?page=&size=   → Page<GarimpoWatchResponse> (standing searches, newest first)
+POST   /api/v1/admin/garimpo/watches               → GarimpoWatchResponse — body GarimpoWatchRequest {searchTerm, marketplace?, targetPrice?, minDiscountPercent?, active?}; needs targetPrice AND/OR minDiscountPercent (meeting either = hit)
+PUT    /api/v1/admin/garimpo/watches/{id}          → GarimpoWatchResponse
+DELETE /api/v1/admin/garimpo/watches/{id}          → 204 (hard delete; price history stays)
+POST   /api/v1/admin/garimpo/watches/{id}/run      → GarimpoWatchRunResponse {watch, hits[], webhookNotified} (run now + refresh history; validates webhook wiring)
+
 # ── User-facing e-commerce + leaderboard ──
 GET    /api/v1/receipt-items/{id}/offer?cep=       → EcommerceOfferResponse (best online offer vs what the user paid) | 204 when no offer for the item's EAN
 GET    /api/v1/leaderboard/discount-hunters?days=30 → LeaderboardResponse (public: opted-in households only, + your own `me` standing)

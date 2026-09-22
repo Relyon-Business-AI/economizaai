@@ -54,6 +54,23 @@ mirror entries here.
 - **Extensible**: add a new e-commerce = new `EcommerceProvider` impl + a
   `economizaai.ecommerce.providers.<key>` block. No orchestration changes.
 
+## Garimpo de promoções — built, live search blocked on ML creds (2026-09-22)
+- **Now**: admin deal-hunting on top of the e-commerce providers (`/admin/garimpo/**`):
+  term search → append-only price history (`garimpo_price_snapshots`, one row per price
+  CHANGE) → watches swept hourly (`GARIMPO_WATCH_SWEEP_DELAY_MS`) whose NEW hits POST to
+  `GARIMPO_WEBHOOK_URL` (group bot / n8n; empty = log-only). Absorbs and retires the
+  standalone `~/Documents/projects/garimpo` prototype.
+- **Blocked on the same ML creds as above**: the PUBLIC ML Search API now returns
+  **403 forbidden** (verified live 2026-09-22), so `searchByTerm` always authenticates via
+  OAuth client-credentials — no creds → localized 503 on `/search` and watch runs. Watches
+  CRUD, marketplaces and history work without creds. ⚠️ Confirm when creds land that the
+  client-credentials token is accepted by `/sites/MLB/search?q=<term>` — ML has been
+  tightening scopes; if it 403s too, the fallback is a user-token (authorization-code) flow.
+- **Token caching**: ML tokens are now cached until ~expiry (in-memory, per instance) —
+  relevant for the hourly sweep not to burn a token grant per watch.
+- **No webhook receiver yet**: the group-bot side (Telegram/WhatsApp) doesn't exist; point
+  `GARIMPO_WEBHOOK_URL` at n8n/Zapier or a tiny bot when the ofertas group launches.
+
 ## Discount-hunter leaderboard — opt-in (2026-09-22)
 - Public "caçador de descontos" ranking (`GET /leaderboard/discount-hunters`) shows only
   households that **opted in** via `PATCH /leaderboard/opt-in` (`share_in_leaderboard`,

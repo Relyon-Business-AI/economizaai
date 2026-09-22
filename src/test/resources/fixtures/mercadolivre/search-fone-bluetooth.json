@@ -1,0 +1,30 @@
+{
+  "site_id": "MLB",
+  "query": "fone bluetooth",
+  "paging": { "total": 1234, "offset": 0, "limit": 2 },
+  "results": [
+    {
+      "id": "MLB111",
+      "title": "Fone Bluetooth XYZ com Cancelamento de Ruído",
+      "price": 99.90,
+      "original_price": 149.90,
+      "currency_id": "BRL",
+      "permalink": "https://produto.mercadolivre.com.br/MLB111",
+      "thumbnail": "https://http2.mlstatic.com/MLB111.jpg",
+      "shipping": { "free_shipping": true },
+      "seller": { "nickname": "LOJA X" },
+      "available_quantity": 5
+    },
+    {
+      "id": "MLB222",
+      "title": "Fone Básico com Fio",
+      "price": 39.90,
+      "currency_id": "BRL",
+      "permalink": "https://produto.mercadolivre.com.br/MLB222?pdp_filters=cat",
+      "thumbnail": "https://http2.mlstatic.com/MLB222.jpg",
+      "shipping": { "free_shipping": false },
+      "seller": { "nickname": "LOJA Y" },
+      "available_quantity": 2
+    }
+  ]
+}
