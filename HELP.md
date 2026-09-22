@@ -786,10 +786,12 @@ These came up while structuring the project — open for discussion:
 - **EAN/barcode scan** for shopping-list items, so users can pre-build lists by scanning packages at home before going shopping.
 - **Recipe / meal planning** tied to stock predictions ("you have these items expiring, here are recipes").
 - **Personal inflation index** — IPCA-equivalent computed from the user's own basket. Genuinely interesting and shareable.
-- **E-commerce vs. mercado — onde compensa comprar** — comparar o preço por item no e-commerce (NF-e modelo 55) vs. no mercado físico (NFC-e modelo 65) e sugerir ao usuário quais itens valem mais a pena comprar online. Insumo natural: as NF-e 55 que entram junto no backfill por CPF (ver [`CPF_AUTOIMPORT.md`](./CPF_AUTOIMPORT.md)). Ideia de 2026-07-08.
+- **E-commerce vs. mercado — onde compensa comprar** — comparar o preço por item no e-commerce (NF-e modelo 55) vs. no mercado físico (NFC-e modelo 65) e sugerir ao usuário quais itens valem mais a pena comprar online. Insumo natural: as NF-e 55 que entram via import de XML / backfill por CPF (ver [`docs/ONBOARDING_IMPORT.md`](./docs/ONBOARDING_IMPORT.md)). Ideia de 2026-07-08.
 - **Receipt OCR fallback** for damaged or missing QR codes (post-MVP — Tesseract or a cloud OCR API).
-- **Auto-import de notas por CPF** — "CPF na nota" no caixa → compras aparecem sozinhas, sem scan. Spike feito (2026-07-07): viável só com credencial do titular (senha do portal estadual OU e-CPF), nunca com o CPF sozinho; polling não push; fragmentado por estado. Spec + achados em [`CPF_AUTOIMPORT.md`](./CPF_AUTOIMPORT.md).
-- **Onboarding: importar export do portal estadual (CSV/Excel/PDF)** — *intenção:* usuário entra no programa estadual (Nota Fiscal Gaúcha / Paulista / etc.), exporta a lista das notas do CPF e sobe o arquivo → app extrai as chaves, filtra supermercado por CNAE (`MerchantSegment.SUPERMARKET`, CNPJ vem da chave) e busca os itens pra popular o histórico já no primeiro acesso. **Bloqueio (2026-07-09):** o export é **só cabeçalho** (chave, emitente, total, data — SEM itens), então os itens dependem de reconsulta por chave, que **só funciona nos estados consultáveis** (SP/PR/CE via Infosimples, pago). **RS não é reconsultável por chave** (muro gov.br; Infosimples também não resolve — ver `ReceiptService`), e o export da NFG traz **apenas notas RS** (toda chave começa com "43") → para usuário do RS rende **zero notas com itens**. Não vale a spike sem acesso a uma conta de outro estado. Revisitar quando: (a) tivermos credencial de outro estado pra testar, ou (b) massa de usuários fora do RS. Relacionado a [`CPF_AUTOIMPORT.md`](./CPF_AUTOIMPORT.md).
+- **Onboarding: scan em lote** — *intenção:* usuário enfileira várias notas e passa a câmera continuamente (cada QR decodificado on-device → pipeline atual), ou seleciona várias fotos da galeria de uma vez. Sem custo, funciona em toda UF suportada, 100% sob nosso controle. Design em [`docs/ONBOARDING_IMPORT.md`](./docs/ONBOARDING_IMPORT.md) (item 1).
+- **Onboarding: import de XML (a melhor aposta de import em massa)** — *intenção:* usuário sobe XML (avulso ou lote/zip) e parseamos os itens direto do arquivo, sem SEFAZ/captcha, para qualquer UF. É a ponte natural com e-commerce (NF-e 55 chega por e-mail na compra online); um endereço "email-in" (encaminhe a nota) é o funil de menor atrito. Design em [`docs/ONBOARDING_IMPORT.md`](./docs/ONBOARDING_IMPORT.md) (item 2).
+- **Auto-import de notas por CPF** — "CPF na nota" no caixa → compras aparecem sozinhas, sem scan. Spike feito (2026-07-07): viável só com credencial do titular (senha do portal estadual OU e-CPF), nunca com o CPF sozinho; polling não push; fragmentado por estado. Feature paga/"endgame" — achados e design em [`docs/ONBOARDING_IMPORT.md`](./docs/ONBOARDING_IMPORT.md) (item 4).
+- **Onboarding: importar export do portal estadual (CSV/Excel/PDF)** — *intenção:* usuário entra no programa estadual (Nota Fiscal Gaúcha / Paulista / etc.), exporta a lista das notas do CPF e sobe o arquivo → app extrai as chaves, filtra supermercado por CNAE (`MerchantSegment.SUPERMARKET`, CNPJ vem da chave) e busca os itens pra popular o histórico já no primeiro acesso. **Bloqueio (2026-07-09):** o export é **só cabeçalho** (chave, emitente, total, data — SEM itens), então os itens dependem de reconsulta por chave, que **só funciona nos estados consultáveis** (SP/PR/CE via Infosimples, pago). **RS não é reconsultável por chave** (muro gov.br; Infosimples também não resolve — ver `ReceiptService`), e o export da NFG traz **apenas notas RS** (toda chave começa com "43") → para usuário do RS rende **zero notas com itens**. Não vale a spike sem acesso a uma conta de outro estado. Revisitar quando: (a) tivermos credencial de outro estado pra testar, ou (b) massa de usuários fora do RS. Bônus regional — ver [`docs/ONBOARDING_IMPORT.md`](./docs/ONBOARDING_IMPORT.md) (item 3).
 - **Group/household budget split** — when a household has multiple members, allocate the receipt total across them.
 - **Brand loyalty / cashback awareness** — surface that retailer X has a cashback app the user isn't using.
 - **LGPD compliance plumbing** — data export, account deletion, anonymization audit trail. Non-negotiable for a public Brazilian app handling financial data.
@@ -822,7 +824,7 @@ the Dockerfile when you create a Web Service from the GitHub repo — no
 
 Steps:
 
-1. Push to `main` on `https://github.com/XandiVieira/economiz.AI`.
+1. Push to `main` on `https://github.com/XandiVieira/economizaai`.
 2. In Render, **New → PostgreSQL** with name `economizai-db`.
 3. **New → Web Service** → connect the GitHub repo. Runtime: **Docker**.
 4. Set environment variables (see `.env.example`):
@@ -849,7 +851,7 @@ return Swagger UI.
 - Decided: monetization architected from Day 1 — see MONETIZATION.md.
 - Wrote CLAUDE.md, HELP.md, MONETIZATION.md.
 - Hardened pom.xml and added base scaffolding (i18n, db/migration, postman folders).
-- Initialized git, configured local user (Alexandre Vieira / xandivieira@gmail.com), pushed initial three commits to https://github.com/XandiVieira/economiz.AI.git.
+- Initialized git, configured local user (Alexandre Vieira / xandivieira@gmail.com), pushed initial three commits to https://github.com/XandiVieira/economizaai.git.
 - **Auth foundation implemented (Phase 1, ported from parkhere):**
   - BaseEntity (UUID id, createdAt, updatedAt) + User (extends UserDetails) + Role + SubscriptionTier enums.
   - User has `subscriptionTier` (FREE default) and `contributionOptIn` (true default) — Day-1 hooks for monetization and LGPD-aware collaborative contribution.
