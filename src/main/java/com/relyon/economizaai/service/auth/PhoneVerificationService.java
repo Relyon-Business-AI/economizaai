@@ -40,6 +40,7 @@ public class PhoneVerificationService {
     private static final Pattern E164 = Pattern.compile("^\\+[1-9]\\d{7,14}$");
     private static final int OTP_TTL_MINUTES = 10;
     private static final int OTP_BOUND = 1_000_000;
+    private static final int MAX_VERIFY_ATTEMPTS = 5;
 
     private final UserRepository userRepository;
     private final PhoneVerificationTokenRepository tokenRepository;
@@ -93,8 +94,11 @@ public class PhoneVerificationService {
 
     /**
      * Verifies the most recent unconsumed OTP for the user. Wrong, expired, or
-     * missing → {@link InvalidPhoneVerificationException} (→ 400). On success the
-     * user's phone is marked verified and the OTP consumed.
+     * missing → {@link InvalidPhoneVerificationException} (→ 400). Every wrong
+     * guess counts against the active code; after {@link #MAX_VERIFY_ATTEMPTS}
+     * failures the code is dead even if subsequently guessed right — the user
+     * must request a new one. On success the user's phone is marked verified
+     * and the OTP consumed.
      */
     @Transactional
     public void verify(User user, String code) {
@@ -102,10 +106,16 @@ public class PhoneVerificationService {
                 .findFirstByUserIdAndConsumedAtIsNullOrderByCreatedAtDesc(user.getId())
                 .orElseThrow(InvalidPhoneVerificationException::new);
         if (token.getExpiresAt().isBefore(LocalDateTime.now())
-                || code == null
-                || !passwordEncoder.matches(code, token.getCodeHash())) {
-            log.info("phone_verification.failed user={} reason=invalid_or_expired",
+                || token.getAttempts() >= MAX_VERIFY_ATTEMPTS) {
+            log.info("phone_verification.failed user={} reason=expired_or_locked",
                     LogMasker.email(user.getEmail()));
+            throw new InvalidPhoneVerificationException();
+        }
+        if (code == null || !passwordEncoder.matches(code, token.getCodeHash())) {
+            token.setAttempts(token.getAttempts() + 1);
+            tokenRepository.save(token);
+            log.warn("phone_verification.wrong_code user={} attempts={}/{}",
+                    LogMasker.email(user.getEmail()), token.getAttempts(), MAX_VERIFY_ATTEMPTS);
             throw new InvalidPhoneVerificationException();
         }
         user.setPhoneVerified(true);

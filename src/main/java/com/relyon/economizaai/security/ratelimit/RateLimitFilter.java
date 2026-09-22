@@ -80,6 +80,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final RateLimitPolicy VISIT_POLICY =
             new RateLimitPolicy("visit", 60, Duration.ofMinutes(1));
 
+    /**
+     * 10 phone-OTP operations (set number / verify) per hour per user. The
+     * verify code additionally locks after 5 wrong guesses, so this is a
+     * second fence: it caps bcrypt-compare CPU burn and paid SMS churn from
+     * a stolen token, while a legit flow (set + a resend + a few verify
+     * typos) stays well inside it.
+     */
+    private static final RateLimitPolicy PHONE_OTP_POLICY =
+            new RateLimitPolicy("phone-otp", 10, Duration.ofHours(1));
+
     private final RateLimitRegistry registry;
     private final LocalizedMessageService messageService;
     private final ObjectMapper objectMapper;
@@ -113,7 +123,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
             new Rule(
                     VISIT_POLICY,
                     req -> "POST".equals(req.getMethod()) && "/api/v1/visits".equals(req.getRequestURI()),
-                    KeyStrategy.IP)
+                    KeyStrategy.IP),
+            new Rule(
+                    PHONE_OTP_POLICY,
+                    req -> ("POST".equals(req.getMethod()) || "PATCH".equals(req.getMethod()))
+                            && req.getRequestURI().startsWith("/api/v1/users/me/phone"),
+                    KeyStrategy.USER_OR_IP)
     );
 
     @Override

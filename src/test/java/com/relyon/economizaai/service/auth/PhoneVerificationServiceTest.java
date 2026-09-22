@@ -192,6 +192,43 @@ class PhoneVerificationServiceTest {
     }
 
     @Test
+    void verify_wrongCodeIncrementsAttemptsCounter() {
+        var user = user();
+        var token = PhoneVerificationToken.builder()
+                .user(user)
+                .phoneNumber("+5551999999999")
+                .codeHash(passwordEncoder.encode("123456"))
+                .expiresAt(LocalDateTime.now().plusMinutes(10))
+                .build();
+        when(tokenRepository.findFirstByUserIdAndConsumedAtIsNullOrderByCreatedAtDesc(user.getId()))
+                .thenReturn(Optional.of(token));
+
+        assertThrows(InvalidPhoneVerificationException.class, () -> service.verify(user, "000000"));
+
+        assertEquals(1, token.getAttempts());
+        verify(tokenRepository).save(token);
+    }
+
+    @Test
+    void verify_lockedAfterMaxAttemptsEvenWithCorrectCode() {
+        var user = user();
+        var token = PhoneVerificationToken.builder()
+                .user(user)
+                .phoneNumber("+5551999999999")
+                .codeHash(passwordEncoder.encode("123456"))
+                .expiresAt(LocalDateTime.now().plusMinutes(10))
+                .attempts(5)
+                .build();
+        when(tokenRepository.findFirstByUserIdAndConsumedAtIsNullOrderByCreatedAtDesc(user.getId()))
+                .thenReturn(Optional.of(token));
+
+        assertThrows(InvalidPhoneVerificationException.class, () -> service.verify(user, "123456"));
+
+        assertFalse(user.isPhoneVerified());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
     void verify_withNoPendingTokenThrows() {
         var user = user();
         when(tokenRepository.findFirstByUserIdAndConsumedAtIsNullOrderByCreatedAtDesc(user.getId()))
