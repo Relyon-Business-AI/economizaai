@@ -22,6 +22,15 @@ public class PhotoUploadValidator {
 
     private static final Set<String> ALLOWED_TYPES = Set.of("image/jpeg", "image/jpg", "image/png");
 
+    /**
+     * Cap on DECLARED pixel dimensions, checked from the header before any
+     * decode. The byte cap alone doesn't protect the heap: PNG compresses
+     * ~1000:1, so a few-hundred-KB file declaring 40000x40000 px would decode
+     * to a multi-GB raster and OOM the instance. 25MP comfortably fits any
+     * phone camera.
+     */
+    static final long MAX_PIXELS = 25_000_000L;
+
     private final int maxSizeMb;
 
     public PhotoUploadValidator(@Value("${economizaai.receipt-photo.max-size-mb:5}") int maxSizeMb) {
@@ -41,13 +50,39 @@ public class PhotoUploadValidator {
             throw new InvalidReceiptPhotoException("receipt.photo.too.large", String.valueOf(maxSizeMb));
         }
         try {
-            var image = ImageIO.read(new ByteArrayInputStream(file.getBytes()));
+            var bytes = file.getBytes();
+            assertDeclaredDimensionsSane(bytes);
+            var image = ImageIO.read(new ByteArrayInputStream(bytes));
             if (image == null) {
                 throw new InvalidReceiptPhotoException("receipt.photo.invalid.type");
             }
             return image;
         } catch (IOException ex) {
             throw new InvalidReceiptPhotoException("receipt.photo.invalid.type");
+        }
+    }
+
+    /**
+     * Reads only the header metadata (no pixel decode) and rejects images whose
+     * declared dimensions exceed {@link #MAX_PIXELS}.
+     */
+    private void assertDeclaredDimensionsSane(byte[] bytes) throws IOException {
+        try (var imageInput = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
+            var readers = ImageIO.getImageReaders(imageInput);
+            if (!readers.hasNext()) {
+                throw new InvalidReceiptPhotoException("receipt.photo.invalid.type");
+            }
+            var reader = readers.next();
+            try {
+                reader.setInput(imageInput, true, true);
+                var width = (long) reader.getWidth(0);
+                var height = (long) reader.getHeight(0);
+                if (width * height > MAX_PIXELS) {
+                    throw new InvalidReceiptPhotoException("receipt.photo.dimensions.too.large");
+                }
+            } finally {
+                reader.dispose();
+            }
         }
     }
 }

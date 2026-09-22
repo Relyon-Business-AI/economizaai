@@ -126,6 +126,13 @@ public class ProfilePictureService {
         log.info("profile_picture.deleted user={}", LogMasker.email(user.getEmail()));
     }
 
+    /**
+     * Cap on DECLARED pixel dimensions, checked from the header before decode.
+     * The byte cap alone doesn't protect the heap — a small PNG declaring
+     * 40000x40000 px would decode to a multi-GB raster.
+     */
+    private static final long MAX_PIXELS = 25_000_000L;
+
     private ProcessedImage downscaleIfPossible(byte[] original, String contentType) {
         // ImageIO can't decode webp out of the box. Store as-is and trust the
         // user's source size — webp is already a small format so this is
@@ -133,6 +140,7 @@ public class ProfilePictureService {
         if ("image/webp".equalsIgnoreCase(contentType)) {
             return new ProcessedImage(original, contentType);
         }
+        assertDeclaredDimensionsSane(original);
         try {
             var source = ImageIO.read(new ByteArrayInputStream(original));
             if (source == null) {
@@ -162,6 +170,30 @@ public class ProfilePictureService {
             log.warn("profile_picture.resize failed type={} {}: {} — storing original",
                     contentType, ex.getClass().getSimpleName(), ex.getMessage());
             return new ProcessedImage(original, contentType);
+        }
+    }
+
+    /**
+     * Reads only the header metadata (no pixel decode) and rejects images whose
+     * declared dimensions exceed {@link #MAX_PIXELS}.
+     */
+    private void assertDeclaredDimensionsSane(byte[] bytes) {
+        try (var imageInput = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
+            var readers = ImageIO.getImageReaders(imageInput);
+            if (!readers.hasNext()) return; // undecodable — pass-through branch handles it
+            var reader = readers.next();
+            try {
+                reader.setInput(imageInput, true, true);
+                var width = (long) reader.getWidth(0);
+                var height = (long) reader.getHeight(0);
+                if (width * height > MAX_PIXELS) {
+                    throw new InvalidProfilePictureException("profile.picture.dimensions.too.large");
+                }
+            } finally {
+                reader.dispose();
+            }
+        } catch (IOException headerUnreadable) {
+            // Fall through — the decode path already tolerates unreadable input.
         }
     }
 

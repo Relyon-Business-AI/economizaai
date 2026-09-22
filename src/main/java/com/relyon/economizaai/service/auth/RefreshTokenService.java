@@ -20,6 +20,9 @@ import java.util.Base64;
  * login/register; {@link #rotate} consumes one and issues the next. The old
  * token is marked {@code consumed_at} so reuse is detectable. Explicit
  * logout sets {@code revoked_at}.
+ *
+ * <p>Only the SHA-256 hex of the token is stored — a DB dump must not yield
+ * usable 30-day sessions. A deterministic hash keeps lookup an index hit.
  */
 @Slf4j
 @Service
@@ -39,7 +42,7 @@ public class RefreshTokenService {
         var token = generateToken();
         tokenRepository.save(RefreshToken.builder()
                 .user(user)
-                .token(token)
+                .token(CodeHasher.sha256(token))
                 .expiresAt(LocalDateTime.now().plusNanos(refreshExpirationMs * 1_000_000L))
                 .build());
         log.debug("refresh.issued user={}", LogMasker.email(user.getEmail()));
@@ -54,7 +57,8 @@ public class RefreshTokenService {
      */
     @Transactional
     public User rotate(String presented) {
-        var stored = tokenRepository.findByToken(presented).orElseThrow(InvalidAuthTokenException::new);
+        var stored = tokenRepository.findByToken(CodeHasher.sha256(presented))
+                .orElseThrow(InvalidAuthTokenException::new);
         if (!stored.isUsable(LocalDateTime.now())) {
             throw new InvalidAuthTokenException();
         }
@@ -71,13 +75,23 @@ public class RefreshTokenService {
      */
     @Transactional
     public void revoke(String presented) {
-        tokenRepository.findByToken(presented).ifPresent(stored -> {
+        tokenRepository.findByToken(CodeHasher.sha256(presented)).ifPresent(stored -> {
             if (stored.getRevokedAt() == null && stored.getConsumedAt() == null) {
                 stored.setRevokedAt(LocalDateTime.now());
                 tokenRepository.save(stored);
                 log.info("refresh.revoked user={}", LogMasker.email(stored.getUser().getEmail()));
             }
         });
+    }
+
+    /**
+     * Revokes every active session for the user — the canonical recovery action
+     * ("someone knows my password, I changed it") must evict the attacker too.
+     */
+    @Transactional
+    public void revokeAllForUser(User user) {
+        var revoked = tokenRepository.revokeAllActiveForUser(user);
+        log.info("refresh.revoked_all user={} count={}", LogMasker.email(user.getEmail()), revoked);
     }
 
     private String generateToken() {

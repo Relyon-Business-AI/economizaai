@@ -61,12 +61,12 @@ class GoogleTokenVerifierTest {
     }
 
     @Test
-    void verify_skipsAudienceCheck_whenNoClientIdsConfigured() {
+    void verify_failsClosed_whenNoClientIdsConfigured() {
+        // No expected audience → every social login is rejected; skipping the
+        // check would let a token minted for any other app authenticate.
         var token = tokens.sign(baseClaims().audience("some-other-app").build());
 
-        var claims = verifier("").verify(token);
-
-        assertEquals("google-sub-1", claims.subject());
+        assertThrows(InvalidOAuthTokenException.class, () -> verifier("").verify(token));
     }
 
     @Test

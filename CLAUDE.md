@@ -7,7 +7,7 @@ line item, and the anonymized result powers both personal dashboards and a
 shared price index. Built with Java 21 + Spring Boot 4. See `HELP.md` for
 vision, architecture, and roadmap; `MONETIZATION.md` for revenue strategy.
 
-GitHub repo: `economizaai` (https://github.com/XandiVieira/economizaai.git)
+GitHub repo: `economizaai` (https://github.com/Relyon-Business-AI/economizaai.git)
 
 ## Communication Style
 - Keep responses SHORT and concise. Avoid verbose explanations, code dumps, or excessive context.
@@ -126,9 +126,11 @@ GitHub repo: `economizaai` (https://github.com/XandiVieira/economizaai.git)
 - **Atomic commits** — each commit should represent one logical change (one feature, one fix, one refactor)
 - Do not bundle unrelated changes in the same commit
 - **Never mention Claude, AI, or any co-author in commit messages** — no `Co-Authored-By` lines, no references to AI assistance
-- This is a personal project on a professional (work) MacBook — commit identity MUST be the personal economizai account, never the work (townsq) or wuups account. **Identity is `user.name = Alexandre Vieira`, `user.email = xandivieira@outlook.com`** (backend `XandiVieira/economizaai` AND frontend `Relyon-Business-AI/economiza-ai-front`).
+- This is a personal project on a professional (work) MacBook — commit identity MUST be the personal economizai account, never the work (townsq) or wuups account. **Identity is `user.name = Alexandre Vieira`, `user.email = xandivieira@outlook.com`** (backend `Relyon-Business-AI/economizaai` AND frontend `Relyon-Business-AI/economiza-ai-front`).
 - Routing (set 2026-09-22 with the owner's explicit ok): `~/.gitconfig` has `includeIf gitdir:` blocks pointing the economizai dirs (`~/Downloads/economizai/`, `~/Documents/projects/economiza-ai-front*/`) at `~/.gitconfig-economizai` (the outlook identity); each economizai repo also sets it in local config as a backstop. The machine default is townsq (work) — that's why uncovered economizai clones once leaked 17 townsq-identity commits into the FE. **Do NOT change the global default; add an `includeIf` for any new economizai path instead.**
-- **Never run a plain `git push` here** — the global credential helper serves the gh ACTIVE account (`wuupsuser`, a wuups account). Never use wuups creds for economizai or vice versa. Backend pushes: one-off helper with the `XandiVieira` token. Frontend org repo: the `XandiVieira` PAT 404s (not SSO-authorized for `Relyon-Business-AI`) — the owner pushes it, or authorizes the token for org SSO first.
+- **The gh ACTIVE account is GLOBAL and shared across every terminal/Claude session on this machine** — the owner runs parallel sessions (e.g. a wuups session) and `gh auth switch` there flips it here too. NEVER rely on the active account, and NEVER run `gh auth switch` to "set" it (it races the other session).
+  - **git push/fetch/commit are already safe** — `~/.gitconfig` routes them by directory (`includeIf`) + explicit token (url `insteadOf` embeds `XandiVieira@`, credential block serves `gh auth token -u XandiVieira`), independent of the active account. So plain `git push` works correctly here now (auto-XandiVieira). The XandiVieira PAT is SSO-authorized for `Relyon-Business-AI` (done 2026-09-22), so both org repos push fine.
+  - **`gh` CLI (`gh api`, `gh pr`, `gh repo`…) DOES use the active account** — for economizai ALWAYS prefix `GH_TOKEN=$(gh auth token --user XandiVieira) gh …`. Never a bare `gh` command that writes.
 - Do not edit the global git config without the owner's explicit ok.
 
 ## Git Workflow

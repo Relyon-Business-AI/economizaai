@@ -39,7 +39,7 @@ Open a **new** terminal after installing (PATH refresh), then verify:
 Nothing secret lives in this repo. You need:
 
 1. **GitHub** — your account (`polyf`) already has **write** access to
-   `XandiVieira/economizaai`: you can push to `development` and `main`. Nothing
+   `Relyon-Business-AI/economizaai`: you can push to `development` and `main`. Nothing
    to do.
 2. **Render access** — you'll receive a **Render API key** from Alexandre
    (the workspace is single-member, so no dashboard invite). Store it with:
@@ -73,7 +73,7 @@ emailed).
 ```powershell
 gh auth login                  # log in as YOUR GitHub account (polyf) — browser flow, HTTPS
 gh auth setup-git              # makes git push use that login
-git clone https://github.com/XandiVieira/economizaai.git
+git clone https://github.com/Relyon-Business-AI/economizaai.git
 cd economiz.AI
 git checkout development
 git config user.name "Your Name"             # local to this repo

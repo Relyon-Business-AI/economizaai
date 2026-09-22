@@ -96,8 +96,10 @@ public class AppleTokenVerifier {
 
     private void validateAudience(JWTClaimsSet claims) {
         if (clientIds.isEmpty()) {
-            log.warn("oauth.apple.aud_check_skipped reason=no-client-ids-configured");
-            return;
+            // Fail closed: without an expected audience, a token minted for ANY
+            // OAuth app would authenticate as its email's owner.
+            log.error("oauth.apple.rejected reason=no-client-ids-configured");
+            throw new InvalidOAuthTokenException();
         }
         var audiences = claims.getAudience();
         if (audiences == null || audiences.stream().noneMatch(clientIds::contains)) {

@@ -44,6 +44,7 @@ class PasswordResetServiceTest {
     @Mock private PasswordResetTokenRepository tokenRepository;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private AuthEmailSender emailSender;
+    @Mock private RefreshTokenService refreshTokenService;
 
     @InjectMocks private PasswordResetService passwordResetService;
 
@@ -195,6 +196,9 @@ class PasswordResetServiceTest {
         verify(userRepository).save(user);
         assertNotNull(code.getConsumedAt());
         verify(tokenRepository).save(code);
+        // Recovery must evict every existing session — the attacker who forced
+        // the reset may hold a still-valid refresh token.
+        verify(refreshTokenService).revokeAllForUser(user);
     }
 
     @Test

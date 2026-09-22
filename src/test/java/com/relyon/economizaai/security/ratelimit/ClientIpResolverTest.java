@@ -7,14 +7,66 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ClientIpResolverTest {
 
+    private static final String CLOUDFLARE_EDGE_IP = "104.16.1.1";
+    private static final String CLOUDFLARE_EDGE_IPV6 = "2606:4700:0:0:0:0:0:1";
+
     @Test
-    void prefersCfConnectingIpOverEverything() {
+    void trustsCfConnectingIpWhenPeerIsCloudflareEdge() {
         var request = new MockHttpServletRequest();
         request.setRemoteAddr("10.0.0.1");
         request.addHeader("CF-Connecting-IP", "203.0.113.10");
-        request.addHeader("X-Forwarded-For", "6.6.6.6, 198.51.100.5");
+        request.addHeader("X-Forwarded-For", "6.6.6.6, " + CLOUDFLARE_EDGE_IP);
 
         assertEquals("203.0.113.10", ClientIpResolver.resolve(request));
+    }
+
+    @Test
+    void trustsCfConnectingIpWhenSocketPeerIsCloudflareEdgeWithoutForwardedHeader() {
+        var request = new MockHttpServletRequest();
+        request.setRemoteAddr(CLOUDFLARE_EDGE_IP);
+        request.addHeader("CF-Connecting-IP", "203.0.113.10");
+
+        assertEquals("203.0.113.10", ClientIpResolver.resolve(request));
+    }
+
+    @Test
+    void trustsCfConnectingIpFromCloudflareIpv6Edge() {
+        var request = new MockHttpServletRequest();
+        request.setRemoteAddr(CLOUDFLARE_EDGE_IPV6);
+        request.addHeader("CF-Connecting-IP", "203.0.113.10");
+
+        assertEquals("203.0.113.10", ClientIpResolver.resolve(request));
+    }
+
+    @Test
+    void ignoresSpoofedCfConnectingIpWhenPeerIsNotCloudflare() {
+        // Direct hit on the onrender.com hostname: Cloudflare is not in the
+        // path, so the header is attacker-controlled and must be ignored.
+        var request = new MockHttpServletRequest();
+        request.setRemoteAddr("10.0.0.1");
+        request.addHeader("CF-Connecting-IP", "1.2.3.4");
+        request.addHeader("X-Forwarded-For", "203.0.113.10");
+
+        assertEquals("203.0.113.10", ClientIpResolver.resolve(request));
+    }
+
+    @Test
+    void ignoresSpoofedCfConnectingIpWhenSocketPeerIsNotCloudflare() {
+        var request = new MockHttpServletRequest();
+        request.setRemoteAddr("203.0.113.10");
+        request.addHeader("CF-Connecting-IP", "1.2.3.4");
+
+        assertEquals("203.0.113.10", ClientIpResolver.resolve(request));
+    }
+
+    @Test
+    void ignoresCfConnectingIpWhenPeerIsUnparsable() {
+        var request = new MockHttpServletRequest();
+        request.setRemoteAddr("203.0.113.10");
+        request.addHeader("CF-Connecting-IP", "1.2.3.4");
+        request.addHeader("X-Forwarded-For", "not-an-ip");
+
+        assertEquals("not-an-ip", ClientIpResolver.resolve(request));
     }
 
     @Test

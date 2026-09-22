@@ -1513,7 +1513,7 @@
        "mode": "raw",
        "raw": "{\n  \"qrPayload\": \"{{qrPayload}}\",\n  \"rawContent\": \"<raw HTML/XML the app fetched from the QR URL on-device>\"\n}"
       },
-      "description": "For state portals that block our datacenter server (e.g. Pernambuco): the app fetches the nota's own SEFAZ page on the device (residential/mobile IP is accepted) and posts the raw body here. Same validation and ReceiptResponse (status PROCESSING) as POST /receipts; ingestion parses rawContent instead of scraping. rawContent must contain the chave."
+      "description": "For state portals that block our datacenter server (e.g. Pernambuco): the app fetches the nota's own SEFAZ page on the device (residential/mobile IP is accepted) and posts the raw body here. Same validation and ReceiptResponse (status PROCESSING) as POST /receipts; ingestion parses rawContent instead of scraping. rawContent must contain the chave.\n\nSince the 2026-09-22 security pass this endpoint only accepts UFs whose portal blocks our server (config SEFAZ_PREFETCH_ALLOWED_UFS, default PE). Any other UF gets a localized 400 (receipt.prefetched.unsupported) — use the regular scan flow."
      },
      "response": []
     },
@@ -2401,7 +2401,18 @@
       "body": {
        "mode": "raw",
        "raw": "{\n  \"ean\": \"7891234567890\",\n  \"normalizedName\": \"Arroz Tio Joao Tipo 1 5kg\",\n  \"brand\": \"Tio Joao\",\n  \"category\": \"GROCERIES\",\n  \"unit\": \"UN\"\n}"
-      }
+      },
+      "auth": {
+       "type": "bearer",
+       "bearer": [
+        {
+         "key": "token",
+         "value": "{{adminToken}}",
+         "type": "string"
+        }
+       ]
+      },
+      "description": "ADMIN-only since the 2026-09-22 security pass — canonical products are global (create also relinks receipt items across households by EAN). Regular users get 403."
      },
      "response": []
     },
@@ -6384,7 +6395,7 @@
      ]
     },
     {
-     "name": "17. Create canonical product (uses first unmatched item)",
+     "name": "17. Create canonical product is ADMIN-only (403 for normal user)",
      "request": {
       "method": "POST",
       "header": [
@@ -6432,9 +6443,131 @@
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.test('Returns 201', function () { pm.response.to.have.status(201); });",
-         "var d = pm.response.json();",
-         "pm.collectionVariables.set('e2eProductId', d.id);"
+         "// Canonical products are GLOBAL (create also relinks other households' items by EAN).",
+         "pm.test('Returns 403 for non-admin', function () { pm.response.to.have.status(403); });"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "17b. Admin login (seed adminToken early; skipped without creds)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/auth/login",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "auth",
+        "login"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\": \"{{adminEmail}}\", \"password\": \"{{adminPassword}}\"}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// Admin login must succeed when creds are configured — a bad E2E_ADMIN_* credential fails RED (no silent skip).",
+         "// With NO creds at all (e.g. prod, where E2E_PROD_ADMIN_* is optional) the admin coverage block is skipped.",
+         "var adminEmail = pm.variables.replaceIn('{{adminEmail}}');",
+         "if (!adminEmail) {",
+         "    console.log('adminEmail not configured — skipping admin coverage');",
+         "} else {",
+         "    pm.test('admin login succeeded (200)', function () {",
+         "        pm.expect(pm.response.code, 'admin login must return 200 — check E2E_ADMIN_* secrets').to.eql(200);",
+         "    });",
+         "}",
+         "if (pm.response.code === 200) {",
+         "    pm.collectionVariables.set('adminToken', pm.response.json().token);",
+         "}"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "17c. Create canonical product as admin (uses first unmatched item)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Accept-Language",
+        "value": "pt"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/products",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "products"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"normalizedName\": \"E2E Canonical Product\",\n  \"category\": \"GROCERIES\",\n  \"unit\": \"UN\"\n}"
+      },
+      "auth": {
+       "type": "bearer",
+       "bearer": [
+        {
+         "key": "token",
+         "value": "{{adminToken}}",
+         "type": "string"
+        }
+       ]
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "var ean = pm.collectionVariables.get('e2eUnmatchedEan');",
+         "var body = { normalizedName: 'E2E Canonical Product', category: 'GROCERIES', unit: 'UN' };",
+         "if (ean) body.ean = ean + 'E2E';",
+         "pm.request.body.raw = JSON.stringify(body);"
+        ]
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "var adminEmail = pm.variables.replaceIn('{{adminEmail}}');",
+         "if (!adminEmail) {",
+         "    console.log('adminEmail not configured — skipping admin-only product create');",
+         "} else {",
+         "    pm.test('Returns 201', function () { pm.response.to.have.status(201); });",
+         "    var d = pm.response.json();",
+         "    pm.collectionVariables.set('e2eProductId', d.id);",
+         "}"
         ]
        }
       }

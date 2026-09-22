@@ -95,13 +95,18 @@ public final class ReceiptSpecifications {
                     predicates.add(product.get("category").in(categories));
                 }
                 if (search != null) {
-                    var like = "%" + search.toLowerCase() + "%";
+                    // Escape LIKE wildcards so user input matches literally —
+                    // "%a%b%" would otherwise change semantics and force
+                    // expensive multi-wildcard scans.
+                    var literal = search.toLowerCase()
+                            .replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+                    var like = "%" + literal + "%";
                     var productLeft = items.join("product", JoinType.LEFT);
                     var searchMatches = new ArrayList<Predicate>(List.of(
-                            cb.like(cb.lower(items.get("rawDescription")), like),
-                            cb.like(cb.lower(items.get("friendlyDescription")), like),
-                            cb.like(cb.lower(productLeft.get("normalizedName")), like),
-                            cb.like(cb.lower(root.get("marketName")), like)
+                            cb.like(cb.lower(items.get("rawDescription")), like, '\\'),
+                            cb.like(cb.lower(items.get("friendlyDescription")), like, '\\'),
+                            cb.like(cb.lower(productLeft.get("normalizedName")), like, '\\'),
+                            cb.like(cb.lower(root.get("marketName")), like, '\\')
                     ));
                     // The household's product rename (alias) must also match — a
                     // user who renamed "ARROZ TIO JOAO 5KG" to "arroz" expects
@@ -112,7 +117,7 @@ public final class ReceiptSpecifications {
                         aliasSubquery.select(cb.literal(1)).where(
                                 cb.equal(alias.get("product"), items.get("product")),
                                 cb.equal(alias.get("household"), root.get("household")),
-                                cb.like(cb.lower(alias.get("friendlyName")), like));
+                                cb.like(cb.lower(alias.get("friendlyName")), like, '\\'));
                         searchMatches.add(cb.exists(aliasSubquery));
                     }
                     predicates.add(cb.or(searchMatches.toArray(new Predicate[0])));

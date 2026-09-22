@@ -41,6 +41,10 @@ postman/live.postman_environment.json
 # repo in the machine data dir C:\economizai-data (override: ECONOMIZAI_DATA_ROOT).
 # Kept off the project tree so it's never committed or OneDrive-synced. The
 # entries below are defensive: catch stray legacy files if an old script runs.
+# Personal fiscal data exports (Nota Fiscal Gaúcha CSVs etc) — real purchase
+# history with full chaves de acesso; must never be committed.
+/*.csv
+
 stack-watchdog.log
 cf-quick.log
 tunnel.log

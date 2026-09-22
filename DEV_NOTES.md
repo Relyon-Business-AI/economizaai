@@ -10,6 +10,33 @@ mirror entries here.
 
 ---
 
+## Aliases globais criáveis por qualquer usuário (poisoning residual) (2026-09-22)
+- **Now**: `POST /products/{id}/aliases` (fluxo de mapear item não reconhecido no app) cria
+  um `ProductAlias` **GLOBAL** — a canonicalização de TODAS as households passa a usar o
+  mapeamento. O check de conflito impede REMAPEAR descrições já estabelecidas, então o
+  ataque se limita a reivindicar descrições novas/raras.
+- **OK for dev**: é o design colaborativo (mesmo modelo de confiança das notas alimentando
+  o índice); poucos usuários, dano limitado e reversível via admin.
+- **Before prod (escala)**: mover alias criado por usuário para um tier de menor confiança
+  (household-scoped até ganhar consenso, como o promote-consensus do categorizer) ou exigir
+  N households concordando antes de virar global. Efforts: ~1-2 dias.
+
+## Prefetched (PE) segue sem verificação server-side (2026-09-22)
+- **Now**: `/receipts/prefetched` foi restringido a UFs bloqueadas (só PE), mas para PE o
+  conteúdo continua client-authored — o servidor não consegue verificar (portal bloqueia
+  datacenter). Notas PE forjadas ainda entram no índice colaborativo após confirm.
+- **OK for dev**: superfície reduzida a 1 UF; exige conta + chave PE válida bem-formada.
+- **Before prod (escala)**: dar `ReceiptOrigin` próprio a receipts prefetched e excluí-los
+  do índice colaborativo (precedente: PHOTO), ou verificar a chave via serviço de status
+  NF-e. Effort: ~1 dia.
+
+## Access token de 24h sem denylist (2026-09-22)
+- **Now**: JWT de acesso vale 24h; logout/troca de senha revoga só o refresh — o access
+  token segue válido até expirar (stateless, sem denylist).
+- **OK for dev**: janela conhecida e o refresh já rotaciona single-use.
+- **Before prod (escala)**: encurtar TTL para 15-60 min (exige FE tratando refresh
+  proativo — validar no app antes) ou denylist em cache. Effort: config + teste FE.
+
 ## Import em massa por chave (RS) — reconsulta server-side, sem throttle (2026-09-22)
 - **Now**: `POST /receipts/import[/nfg-csv]` reconsulta cada chave RS direto do nosso IP
   de servidor — NFC-e via `SAT-WEB-NFE-NFC_*.asp`, NF-e 55 via SVRS `ConsultaPublicaDfe`

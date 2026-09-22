@@ -113,10 +113,23 @@ public class GoiasNfcePortalAdapter implements SefazAdapter {
      */
     static String shellUrl(String qrPayload, String chave) {
         var trimmed = qrPayload == null ? "" : qrPayload.trim();
-        if (trimmed.toLowerCase().startsWith("https://") && trimmed.contains(".sefaz.go.gov.br/")) {
+        if (isAllowedGoSefazUrl(trimmed)) {
             return trimmed;
         }
         return SHELL_URL + chave + "|3|1";
+    }
+
+    // Host-anchored allowlist (same shape as SvrsSharedPortalAdapter): a
+    // substring check would match ".sefaz.go.gov.br/" anywhere in an
+    // attacker-crafted query string and hand the server an arbitrary URL.
+    private static final Pattern URL_HOST = Pattern.compile(
+            "^(https)://([^/?#@\\\\]+?)(?::\\d+)?(?=[/?#]|$)", Pattern.CASE_INSENSITIVE);
+
+    private static boolean isAllowedGoSefazUrl(String url) {
+        var hostMatcher = URL_HOST.matcher(url);
+        if (!hostMatcher.find()) return false;
+        var host = hostMatcher.group(2).toLowerCase();
+        return host.equals("sefaz.go.gov.br") || host.endsWith(".sefaz.go.gov.br");
     }
 
     private String fetchOnce(String shellUrl, String chave) {

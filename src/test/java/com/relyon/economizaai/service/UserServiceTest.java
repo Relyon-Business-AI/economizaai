@@ -378,6 +378,8 @@ class UserServiceTest {
 
         assertEquals("newEncoded", user.getPassword());
         verify(userRepository).save(user);
+        // A password change must evict every existing session.
+        verify(refreshTokenService).revokeAllForUser(user);
     }
 
     @Test

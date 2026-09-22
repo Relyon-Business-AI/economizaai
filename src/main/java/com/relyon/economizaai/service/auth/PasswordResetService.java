@@ -37,6 +37,7 @@ public class PasswordResetService {
     private final PasswordResetTokenRepository tokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthEmailSender emailSender;
+    private final RefreshTokenService refreshTokenService;
     private final SecureRandom random = new SecureRandom();
 
     /**
@@ -93,6 +94,9 @@ public class PasswordResetService {
         userRepository.save(user);
         token.setConsumedAt(LocalDateTime.now());
         tokenRepository.save(token);
+        // The reset is the canonical "attacker knows my password" recovery —
+        // evict every existing session along with it.
+        refreshTokenService.revokeAllForUser(user);
         log.info("password_reset.completed user={}", LogMasker.email(user.getEmail()));
     }
 

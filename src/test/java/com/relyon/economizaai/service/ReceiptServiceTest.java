@@ -1,11 +1,13 @@
 package com.relyon.economizaai.service;
 
+import com.relyon.economizaai.dto.request.PrefetchedReceiptRequest;
 import com.relyon.economizaai.dto.request.SubmitReceiptRequest;
 import com.relyon.economizaai.dto.request.UpdateItemPersonalRequest;
 import com.relyon.economizaai.dto.request.UpdateReceiptItemRequest;
 import com.relyon.economizaai.exception.InvalidItemPriceException;
 import com.relyon.economizaai.exception.ManualChaveUnsupportedException;
 import com.relyon.economizaai.exception.PaywallException;
+import com.relyon.economizaai.exception.PrefetchedUnsupportedException;
 import com.relyon.economizaai.exception.ReceiptAlreadyIngestedException;
 import com.relyon.economizaai.exception.ReceiptItemNotFoundException;
 import com.relyon.economizaai.exception.ReceiptNotEditableException;
@@ -35,6 +37,7 @@ import com.relyon.economizaai.service.priceindex.PromoDetector;
 import com.relyon.economizaai.service.sefaz.ChaveAcessoParser;
 import com.relyon.economizaai.service.sefaz.ParsedReceipt;
 import com.relyon.economizaai.service.sefaz.ParsedReceiptItem;
+import com.relyon.economizaai.service.sefaz.PrefetchPolicy;
 import com.relyon.economizaai.service.sefaz.ReceiptIngestionService;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
@@ -94,6 +97,7 @@ class ReceiptServiceTest {
     @Mock private SavingsAttributionService savingsAttributionService;
     @Mock private LocalizedMessageService localizedMessageService;
     @Mock private MerchantSupportGate merchantSupportGate;
+    @Mock private PrefetchPolicy prefetchPolicy;
 
     @InjectMocks private ReceiptService receiptService;
 
@@ -248,6 +252,36 @@ class ReceiptServiceTest {
         verify(sefazIngestionService, never()).fetch(any());
         // the slow ingestion is handed off to the background service
         verify(receiptIngestionService).ingest(eq(response.id()), eq(QR_RS));
+    }
+
+    @Test
+    void submitPrefetched_rejectedUfNeverPersistsAnything() {
+        var user = buildUser();
+        doThrow(new PrefetchedUnsupportedException("RS"))
+                .when(prefetchPolicy).requireAllowed(UnidadeFederativa.RS);
+
+        assertThrows(PrefetchedUnsupportedException.class,
+                () -> receiptService.submitPrefetched(user, new PrefetchedReceiptRequest(QR_RS, "<html>content</html>")));
+
+        verify(receiptRepository, never()).save(any());
+        verify(receiptIngestionService, never()).ingestPrefetched(any(), any(), any());
+    }
+
+    @Test
+    void submitPrefetched_allowedUfPersistsProcessingAndDispatchesIngestion() {
+        var user = buildUser();
+        when(receiptRepository.findByHouseholdIdAndChaveAcesso(any(), eq(CHAVE_RS))).thenReturn(Optional.empty());
+        when(receiptRepository.save(any(Receipt.class))).thenAnswer(inv -> {
+            var receipt = inv.<Receipt>getArgument(0);
+            receipt.setId(UUID.randomUUID());
+            return receipt;
+        });
+
+        var response = receiptService.submitPrefetched(user, new PrefetchedReceiptRequest(QR_RS, "<html>content</html>"));
+
+        assertEquals(ReceiptStatus.PROCESSING, response.status());
+        verify(prefetchPolicy).requireAllowed(UnidadeFederativa.RS);
+        verify(receiptIngestionService).ingestPrefetched(eq(response.id()), eq(QR_RS), eq("<html>content</html>"));
     }
 
     @Test

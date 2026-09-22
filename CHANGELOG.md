@@ -16,6 +16,29 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-22 — passe de segurança (rate limits novos, endpoints restringidos)
+
+Auditoria completa de segurança; quase tudo é interno, mas alguns pontos tocam o FE:
+
+- **`POST /products` agora é ADMIN-only** (403 para usuário comum). O app não usa —
+  produtos canônicos são auto-criados no confirm. `POST /products/{id}/aliases`
+  (fluxo de mapear item não reconhecido) segue aberto, sem mudança.
+- **`POST /receipts/prefetched` agora só aceita UFs bloqueadas** (hoje só **PE**;
+  config `SEFAZ_PREFETCH_ALLOWED_UFS`). Outras UFs recebem 400 localizado
+  (`receipt.prefetched.unsupported`) — usar o fluxo normal de scan.
+- **Rate limits novos** (429 com `Retry-After`): import em massa 5/h,
+  resend de verificação de e-mail 3/h, exports 10/h, endpoints de telefone/OTP 10/h
+  (todos por usuário). `prefetched`, `items-photo` e `device-content` entraram no
+  bucket de submit (30/h compartilhado).
+- **OTP de telefone trava após 5 tentativas erradas** — mesmo comportamento dos
+  códigos de reset/verificação; o app deve tratar o 400 pedindo um novo código.
+- **Troca/reset de senha derruba todas as sessões** — refresh tokens antigos param
+  de funcionar; o app deve voltar ao login quando o refresh falhar (fluxo já previsto).
+- **Fotos acima de 25 megapixels são rejeitadas** com mensagem localizada nova
+  (`receipt.photo.dimensions.too.large` / `profile.picture.dimensions.too.large`).
+- Refresh tokens agora são hasheados no banco (transparente pro FE; tokens
+  existentes continuam válidos).
+
 ## 2026-09-22 — garimpo de promoções (admin): busca em marketplace, histórico de preços e watches com alerta
 
 Subsistema novo, **ADMIN-only** (`/api/v1/admin/garimpo/**`) — o robô que caça promoções no

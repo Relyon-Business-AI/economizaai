@@ -111,6 +111,11 @@ economizaai:
       # the host matches one of these suffixes (e.g. svrs.rs.gov.br admits
       # dfe-portal.svrs.rs.gov.br). Extend when onboarding new state portals.
       allowed-url-hosts: ${SEFAZ_ALLOWED_URL_HOSTS:svrs.rs.gov.br,sefaz.rs.gov.br,fazenda.pr.gov.br,sef.sc.gov.br,fazenda.sp.gov.br}
+      # UFs allowed to POST client-fetched content to /receipts/prefetched.
+      # That content is client-authored (only the embedded chave ties it to
+      # SEFAZ), so the endpoint is restricted to portals that block our
+      # datacenter IP — everywhere else the server fetch is the integrity check.
+      prefetch-allowed-ufs: ${SEFAZ_PREFETCH_ALLOWED_UFS:PE}
       # Experimental catch-all for UFs without a dedicated adapter: fetch the QR's
       # own portal URL (gov.br hosts only) + shared responsive-DANFE parser, then
       # Infosimples when enabled. Attempts are recorded (admin: /state-coverage)
@@ -398,9 +403,9 @@ economizaai:
     # endpoint degrades to a localized 503 — everything else is unaffected.
     tessdata-path: ${OCR_TESSDATA_PATH:}
   oauth:
-    # Expected audiences (aud claim) for social-login ID tokens. Comma-separated;
-    # may be empty in dev (then the aud check is skipped with a WARN log). In prod
-    # set these so a token minted for another app can't be replayed against us.
+    # Expected audiences (aud claim) for social-login ID tokens. Comma-separated.
+    # FAIL-CLOSED: with an empty list every social login is rejected — a token
+    # minted for another app must never be replayable against us.
     google:
       # Web + Android OAuth client IDs (PUBLIC values — safe to commit; the client
       # SECRET is never used by the identity-token flow). Baked as the default so

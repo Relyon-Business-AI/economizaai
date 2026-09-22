@@ -62,7 +62,9 @@ def build_snippet(messages, index):
             continue
         else:
             break
-    return "\n".join(parts)
+    # Snippets land verbatim in GitHub issues — strip the MDC block (it can
+    # carry user identifiers) the same way normalize() does for signatures.
+    return STRIP_MDC.sub("[req=]", "\n".join(parts))
 
 
 def signature_for(snippet, header):
