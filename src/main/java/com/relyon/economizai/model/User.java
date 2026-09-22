@@ -92,6 +92,14 @@ public class User extends BaseEntity implements UserDetails {
     @Builder.Default
     private boolean excludedFromMetrics = false;
 
+    /**
+     * Opt-in: does the user agree to appear in the PUBLIC "caçador de descontos"
+     * leaderboard? Default false — non-opted users are ranked only in the admin view.
+     */
+    @Column(name = "share_in_leaderboard", nullable = false)
+    @Builder.Default
+    private boolean shareInLeaderboard = false;
+
     // S1948 is resolved by making BaseEntity (and thus Household) Serializable,
     // NOT by Java `transient`: in a JPA entity, the `transient` keyword is read as
     // @Transient (non-persistent), which drops the household_id mapping and breaks

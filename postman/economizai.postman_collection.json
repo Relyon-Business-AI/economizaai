@@ -1509,7 +1509,7 @@
 							"mode": "raw",
 							"raw": "{\n  \"qrPayload\": \"{{qrPayload}}\",\n  \"rawContent\": \"<raw HTML/XML the app fetched from the QR URL on-device>\"\n}"
 						},
-						"description": "For state portals that block our datacenter server (e.g. Pernambuco): the app fetches the nota\u0027s own SEFAZ page on the device (residential/mobile IP is accepted) and posts the raw body here. Same validation and ReceiptResponse (status PROCESSING) as POST /receipts; ingestion parses rawContent instead of scraping. rawContent must contain the chave."
+						"description": "For state portals that block our datacenter server (e.g. Pernambuco): the app fetches the nota's own SEFAZ page on the device (residential/mobile IP is accepted) and posts the raw body here. Same validation and ReceiptResponse (status PROCESSING) as POST /receipts; ingestion parses rawContent instead of scraping. rawContent must contain the chave."
 					},
 					"response": []
 				},
@@ -6008,13 +6008,29 @@
 					"request": {
 						"method": "PATCH",
 						"header": [
-							{ "key": "Content-Type", "value": "application/json" },
-							{ "key": "Accept-Language", "value": "pt" }
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
 						],
 						"url": {
 							"raw": "{{baseUrl}}/api/v1/receipts/{{e2eReceiptId}}/items/{{e2eReceiptItemId}}/personal",
-							"host": [ "{{baseUrl}}" ],
-							"path": [ "api", "v1", "receipts", "{{e2eReceiptId}}", "items", "{{e2eReceiptItemId}}", "personal" ]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"receipts",
+								"{{e2eReceiptId}}",
+								"items",
+								"{{e2eReceiptItemId}}",
+								"personal"
+							]
 						},
 						"body": {
 							"mode": "raw",
@@ -6028,12 +6044,12 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-								"if (!pm.collectionVariables.get('e2eReceiptItemId')) { pm.test.skip('No item id — skipping'); return; }",
-								"pm.test('Returns 200 — personal edit works AFTER confirm', function () { pm.response.to.have.status(200); });",
-								"var d = pm.response.json();",
-								"var item = d.items.find(function (i) { return i.id === pm.collectionVariables.get('e2eReceiptItemId'); });",
-								"pm.test('marked not-mine (out of personal totals, still in index)', function () { pm.expect(item.excludedFromPersonal).to.eql(true); });",
-								"pm.test('friendly name updated on a CONFIRMED receipt', function () { pm.expect(item.friendlyDescription).to.eql('COMPARTILHADO'); });"
+									"if (!pm.collectionVariables.get('e2eReceiptItemId')) { pm.test.skip('No item id — skipping'); return; }",
+									"pm.test('Returns 200 — personal edit works AFTER confirm', function () { pm.response.to.have.status(200); });",
+									"var d = pm.response.json();",
+									"var item = d.items.find(function (i) { return i.id === pm.collectionVariables.get('e2eReceiptItemId'); });",
+									"pm.test('marked not-mine (out of personal totals, still in index)', function () { pm.expect(item.excludedFromPersonal).to.eql(true); });",
+									"pm.test('friendly name updated on a CONFIRMED receipt', function () { pm.expect(item.friendlyDescription).to.eql('COMPARTILHADO'); });"
 								]
 							}
 						}
@@ -12398,14 +12414,32 @@
 					"request": {
 						"method": "PATCH",
 						"header": [
-							{ "key": "Authorization", "value": "Bearer {{token}}" },
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
-						"body": { "mode": "raw", "raw": "{\n  \"excluded\": true\n}" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"excluded\": true\n}"
+						},
 						"url": {
 							"raw": "{{baseUrl}}/api/v1/admin/users/{{userId}}/metrics-exclusion",
-							"host": [ "{{baseUrl}}" ],
-							"path": [ "api", "v1", "admin", "users", "{{userId}}", "metrics-exclusion" ]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"users",
+								"{{userId}}",
+								"metrics-exclusion"
+							]
 						},
 						"description": "Exclude (or re-include with excluded=false) a user from ALL admin metrics without deleting it. Returns AdminUserDetailResponse. ADMIN-only."
 					},
@@ -12751,12 +12785,29 @@
 					"name": "Ingestion health (admin)",
 					"request": {
 						"method": "GET",
-						"header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
 						"url": {
 							"raw": "{{baseUrl}}/api/v1/admin/ingestion-health?days=30",
-							"host": [ "{{baseUrl}}" ],
-							"path": [ "api", "v1", "admin", "ingestion-health" ],
-							"query": [ { "key": "days", "value": "30" } ]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"ingestion-health"
+							],
+							"query": [
+								{
+									"key": "days",
+									"value": "30"
+								}
+							]
 						},
 						"description": "Pipeline health over the window: receipt status mix, parse success rate, stuck/timeout counts, per-UF outcomes and top failure reasons. ADMIN-only."
 					},
@@ -13274,6 +13325,288 @@
 								}
 							]
 						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "E-commerce & Leaderboard",
+			"item": [
+				{
+					"name": "User: best online offer for an item",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/receipt-items/{{itemId}}/offer",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"receipt-items",
+								"{{itemId}}",
+								"offer"
+							]
+						},
+						"description": "Best online offer for a scanned item vs what the user paid. 204 when no offer matches the item's EAN. Optional ?cep= for freight. Serves admin-curated offers even with no provider configured."
+					},
+					"response": []
+				},
+				{
+					"name": "User: discount-hunters leaderboard (public)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/leaderboard/discount-hunters?days=30",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"leaderboard",
+								"discount-hunters"
+							],
+							"query": [
+								{
+									"key": "days",
+									"value": "30"
+								}
+							]
+						},
+						"description": "Public discount-hunters ranking: opted-in households only + your own 'me' standing."
+					},
+					"response": []
+				},
+				{
+					"name": "User: opt in/out of public leaderboard",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/leaderboard/opt-in",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"leaderboard",
+								"opt-in"
+							]
+						},
+						"description": "Toggle appearing in the public leaderboard (share_in_leaderboard).",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"optIn\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin: list curated offers",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/ecommerce/offers?page=0&size=25",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"ecommerce",
+								"offers"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "25"
+								}
+							]
+						},
+						"description": "Curated online offers, newest edits first. Optional ?ean= filter. ADMIN."
+					},
+					"response": []
+				},
+				{
+					"name": "Admin: create curated offer",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/ecommerce/offers",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"ecommerce",
+								"offers"
+							]
+						},
+						"description": "Map an EAN to an online product + price + link (precision-first). ADMIN.",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ean\": \"7891234567890\",\n  \"provider\": \"mercadolivre\",\n  \"title\": \"Cafe Pilao 500g\",\n  \"externalUrl\": \"https://mercadolivre.com.br/p/MLB123\",\n  \"affiliateUrl\": \"https://mercadolivre.com.br/p/MLB123?matt_tool=YOUR_TAG\",\n  \"imageUrl\": \"https://http2.mlstatic.com/x.jpg\",\n  \"price\": 15.9,\n  \"freight\": 6.0,\n  \"currency\": \"BRL\",\n  \"inStock\": true,\n  \"active\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin: update curated offer",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/ecommerce/offers/{{offerId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"ecommerce",
+								"offers",
+								"{{offerId}}"
+							]
+						},
+						"description": "ADMIN.",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ean\": \"7891234567890\",\n  \"provider\": \"mercadolivre\",\n  \"title\": \"Cafe Pilao 500g\",\n  \"externalUrl\": \"https://mercadolivre.com.br/p/MLB123\",\n  \"affiliateUrl\": \"https://mercadolivre.com.br/p/MLB123?matt_tool=YOUR_TAG\",\n  \"imageUrl\": \"https://http2.mlstatic.com/x.jpg\",\n  \"price\": 15.9,\n  \"freight\": 6.0,\n  \"currency\": \"BRL\",\n  \"inStock\": true,\n  \"active\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin: delete curated offer",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/ecommerce/offers/{{offerId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"ecommerce",
+								"offers",
+								"{{offerId}}"
+							]
+						},
+						"description": "ADMIN."
+					},
+					"response": []
+				},
+				{
+					"name": "Admin: discount-hunters leaderboard",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/leaderboard/discount-hunters?days=30",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"leaderboard",
+								"discount-hunters"
+							],
+							"query": [
+								{
+									"key": "days",
+									"value": "30"
+								}
+							]
+						},
+						"description": "All households (opted in or not), emails as handles. ADMIN."
 					},
 					"response": []
 				}

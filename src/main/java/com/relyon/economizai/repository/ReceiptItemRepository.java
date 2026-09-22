@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -16,6 +17,36 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
 
     /** Latest real purchase of a product — price-math sanity input for LLM pack-size enrichment. */
     Optional<ReceiptItem> findFirstByProductIdOrderByCreatedAtDesc(UUID productId);
+
+    /**
+     * "Caçador de descontos" ranking: per household, how many confirmed items were bought
+     * BELOW the community average unit price for that product in the window, and the total
+     * R$ under that average. The community average only counts products bought by ≥2
+     * households (so you can't beat your own average). Native (CTE + window). Returns
+     * (householdId, discountFinds, savings). Newest window is applied by the service.
+     */
+    @Query(value = """
+            WITH avg_price AS (
+                SELECT ri.product_id, AVG(ri.paid_unit_price) AS avg_unit
+                FROM receipt_items ri
+                JOIN receipts r ON r.id = ri.receipt_id
+                WHERE r.status = 'CONFIRMED' AND ri.paid_unit_price IS NOT NULL
+                  AND ri.product_id IS NOT NULL AND r.created_at >= :since
+                GROUP BY ri.product_id
+                HAVING count(DISTINCT r.household_id) >= 2
+            )
+            SELECT r.household_id AS household_id,
+                   count(*) AS finds,
+                   COALESCE(SUM(ap.avg_unit - ri.paid_unit_price), 0) AS savings
+            FROM receipt_items ri
+            JOIN receipts r ON r.id = ri.receipt_id
+            JOIN avg_price ap ON ap.product_id = ri.product_id
+            WHERE r.status = 'CONFIRMED' AND ri.paid_unit_price < ap.avg_unit
+              AND r.created_at >= :since
+            GROUP BY r.household_id
+            ORDER BY finds DESC, savings DESC
+            """, nativeQuery = true)
+    List<Object[]> discountHuntersSince(@Param("since") LocalDateTime since);
 
     // --- Market intelligence (admin) ---
 

@@ -10,6 +10,39 @@ mirror entries here.
 
 ---
 
+## E-commerce price comparison — built but INERT for dev (2026-09-22)
+- **Now**: the "vale a pena online?" subsystem is wired end to end but ships **dark**.
+  With no provider configured it serves only **admin-CURATED offers** (precision-first):
+  an admin maps an EAN → an online product + price + link via
+  `POST/PUT/DELETE /admin/ecommerce/offers`, and `GET /receipt-items/{id}/offer` returns
+  the cheapest offer compared to what the user paid.
+- **Why it's OK for dev**: no external calls until credentials land; curated offers alone
+  prove the loop and monetize via affiliate links without needing catalog API access.
+- **Turn on a provider (Mercado Livre) — set these on Render (all empty by default):**
+  - `ECOMMERCE_ENABLED=true` (master switch)
+  - `ECOMMERCE_MERCADOLIVRE_ENABLED=true`
+  - `ECOMMERCE_MERCADOLIVRE_CLIENT_ID` / `ECOMMERCE_MERCADOLIVRE_CLIENT_SECRET` — the ML
+    **App ID + Secret** (developers.mercadolivre.com.br). OAuth2 client-credentials → token.
+  - `ECOMMERCE_MERCADOLIVRE_AFFILIATE_TAG` — your ML affiliate tag (appended to links).
+    ⚠️ ML has **no official affiliate API**; the link/commission format must be confirmed
+    live. Optional third-party link API: `ECOMMERCE_MERCADOLIVRE_AFFILIATE_API_KEY` +
+    `ECOMMERCE_MERCADOLIVRE_AFFILIATE_API_URL` (e.g. Bot do Afiliado's `/convert-links`).
+  - Optional: `ECOMMERCE_MERCADOLIVRE_SITE_ID=MLB`, `ECOMMERCE_MERCADOLIVRE_BASE_URL`,
+    `ECOMMERCE_WORTH_IT_MIN_SAVINGS=0`, `ECOMMERCE_DEFAULT_CEP`.
+- **Verify before trusting a provider**: `MercadoLivreProvider.searchByEan` (OAuth +
+  `/sites/{site}/search?q=EAN`) is written to the documented ML shape but **untested live** —
+  confirm the token grant, the EAN search, freight, and the affiliate link when creds land.
+  It's guarded (returns empty on any error), so a bad config can't break the offer lookup.
+- **Extensible**: add a new e-commerce = new `EcommerceProvider` impl + a
+  `economizai.ecommerce.providers.<key>` block. No orchestration changes.
+
+## Discount-hunter leaderboard — opt-in (2026-09-22)
+- Public "caçador de descontos" ranking (`GET /leaderboard/discount-hunters`) shows only
+  households that **opted in** via `PATCH /leaderboard/opt-in` (`share_in_leaderboard`,
+  default false). Admin view (`GET /admin/leaderboard/discount-hunters`) shows everyone.
+  The metric ("item bought below the community average, product seen by ≥2 households") is a
+  reasonable v1 — revisit the definition/weighting once there's more volume.
+
 ## LLM layers — activation + follow-ups (2026-07-22)
 - **Activation**: the whole LLM stack (enrichment, auditor, photo extraction) is
   dormant until `OPENAI_API_KEY` is set on Render — workers skip silently, the
