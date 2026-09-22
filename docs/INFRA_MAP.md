@@ -13,7 +13,7 @@ _Last updated: 2026-09-22._
 
 | Piece | Repo | Runs on | Deploys via | Cost |
 |---|---|---|---|---|
-| **Backend API (prod)** | `XandiVieira/economizaai` (`main`) | Render `economizai-api-prod` → `api.economizaai.app` | push to `main` (GATED, owner's go) | paid |
+| **Backend API (prod)** | `Relyon-Business-AI/economizaai` (`main`) | Render `economizai-api-prod` → `api.economizaai.app` | push to `main` (GATED, owner's go) | paid |
 | **Backend API (dev)** | same repo (`development`) | Render `economizai-api-dev` → `api-dev.economizaai.app` | push to `development` (auto) | paid |
 | **Postgres ×2** | — | Render managed (basic-256mb, one per env) | — | paid |
 | **Profile pics** | — | Render Disk `/data/profile-pics` | — | paid (disk) |

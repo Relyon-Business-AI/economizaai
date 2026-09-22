@@ -824,7 +824,7 @@ the Dockerfile when you create a Web Service from the GitHub repo — no
 
 Steps:
 
-1. Push to `main` on `https://github.com/XandiVieira/economizaai`.
+1. Push to `main` on `https://github.com/Relyon-Business-AI/economizaai`.
 2. In Render, **New → PostgreSQL** with name `economizai-db`.
 3. **New → Web Service** → connect the GitHub repo. Runtime: **Docker**.
 4. Set environment variables (see `.env.example`):
@@ -851,7 +851,7 @@ return Swagger UI.
 - Decided: monetization architected from Day 1 — see MONETIZATION.md.
 - Wrote CLAUDE.md, HELP.md, MONETIZATION.md.
 - Hardened pom.xml and added base scaffolding (i18n, db/migration, postman folders).
-- Initialized git, configured local user (Alexandre Vieira / xandivieira@gmail.com), pushed initial three commits to https://github.com/XandiVieira/economizaai.git.
+- Initialized git, configured local user (Alexandre Vieira / xandivieira@gmail.com), pushed initial three commits to https://github.com/Relyon-Business-AI/economizaai.git.
 - **Auth foundation implemented (Phase 1, ported from parkhere):**
   - BaseEntity (UUID id, createdAt, updatedAt) + User (extends UserDetails) + Role + SubscriptionTier enums.
   - User has `subscriptionTier` (FREE default) and `contributionOptIn` (true default) — Day-1 hooks for monetization and LGPD-aware collaborative contribution.
