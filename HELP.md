@@ -1012,3 +1012,18 @@ classify OTHER (grey) unless they carry a conveniência CNAE.
   trabalhando nisso"); raw HTML kept on the FAILED_PARSE row when the portal responded.
 - Bare-chave fail-fast generalized: rejected at submit for ANY state that needs the QR
   signature and has no paid fallback enabled (was RS-only).
+
+### Session (2026-09-22) — e-commerce comparison + discount-hunter leaderboard (INERT, no FE)
+- Shipped the backend foundation for the "máquina de economizar" vision: **e-commerce price
+  comparison** ("vale a pena online?") — pluggable `EcommerceProvider` SPI (Mercado Livre,
+  inert until creds), admin-curated offers (precision-first), `EcommerceOfferService`,
+  `GET /receipt-items/{id}/offer`, admin CRUD `/admin/ecommerce/offers`. Generic per-provider
+  config with **empty env vars** ready to fill on Render.
+- Plus an **opt-in discount-hunter leaderboard** (`/leaderboard/discount-hunters` public/admin,
+  `PATCH /leaderboard/opt-in`; `share_in_leaderboard` on User).
+- **Everything inert** (nothing changes until `ECOMMERCE_ENABLED` + creds). **No frontend by
+  choice** — not exposing an unfinished feature. Migrations V74 (ecommerce_offers) + V75
+  (share_in_leaderboard). Suite 1894 green.
+- **Full design, current state, and how to continue: [`docs/ECOMMERCE_COMPARISON.md`](docs/ECOMMERCE_COMPARISON.md).**
+  Also verified: Mercado Livre has NO official affiliate API (catalog via official API +
+  OAuth; affiliate links via manual tag or a third-party link service).
