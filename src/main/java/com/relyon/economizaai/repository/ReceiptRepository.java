@@ -22,6 +22,12 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
     // failure, app restart mid-ingest, or pool rejection) and must be failed.
     List<Receipt> findByStatusAndCreatedAtBefore(ReceiptStatus status, LocalDateTime cutoff);
 
+    // Paced import worker: oldest IMPORT_QUEUED first, a small page at a time, and a
+    // live count of in-flight PROCESSING rows so the worker yields to real scans.
+    List<Receipt> findByStatusOrderByCreatedAtAsc(ReceiptStatus status, Pageable pageable);
+
+    long countByStatus(ReceiptStatus status);
+
     boolean existsByChaveAcesso(String chaveAcesso);
 
     boolean existsByHouseholdIdAndChaveAcesso(UUID householdId, String chaveAcesso);

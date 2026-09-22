@@ -1,6 +1,13 @@
 package com.relyon.economizaai.model.enums;
 
 public enum ReceiptStatus {
+    /**
+     * Bulk-import backlog: created by the chave/CSV import, waiting for the paced
+     * {@link com.relyon.economizaai.service.sefaz.ImportReconsultWorker} to reconsult it a
+     * few at a time. Deliberately NOT {@link #PROCESSING} so the ProcessingReceiptSweeper
+     * (which force-fails long-PROCESSING rows) never times out an import still in the queue.
+     */
+    IMPORT_QUEUED,
     /** Submitted; SEFAZ fetch + parse (incl. captcha solve) running in the background. */
     PROCESSING,
     /**

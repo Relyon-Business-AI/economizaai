@@ -533,6 +533,27 @@ public class ReceiptService {
     }
 
     /**
+     * Delete several of the household's receipts in one call (bulk cleanup on the
+     * import screen). Each is deleted with the same ownership check + cleanup as
+     * {@link #delete}; ids not owned / not found are skipped. Returns how many were
+     * actually deleted.
+     */
+    @Transactional
+    public int deleteBatch(User user, List<UUID> receiptIds) {
+        var deleted = 0;
+        for (var receiptId : receiptIds) {
+            try {
+                delete(user, receiptId);
+                deleted++;
+            } catch (RuntimeException ex) {
+                log.warn("delete-batch skip receipt={} reason={}", abbrev(receiptId), ex.getClass().getSimpleName());
+            }
+        }
+        log.info("delete-batch requested={} deleted={}", receiptIds.size(), deleted);
+        return deleted;
+    }
+
+    /**
      * Admin-only: re-runs parsing on the stored raw HTML, replaces the
      * existing items with the freshly-parsed ones, and resets the receipt
      * to PENDING_CONFIRMATION so the owner can review and re-confirm.
