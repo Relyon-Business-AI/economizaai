@@ -47,7 +47,9 @@ jobs:
           node-version: '20'
 
       - name: Install Claude Code CLI
-        run: npm install -g @anthropic-ai/claude-code
+        # Pinned: this job holds RENDER_API_KEY + the Claude token, so an
+        # unpinned "latest" from npm is a supply-chain risk. Bump deliberately.
+        run: npm install -g @anthropic-ai/claude-code@2.1.280
 
       - name: Configure git
         run: |
