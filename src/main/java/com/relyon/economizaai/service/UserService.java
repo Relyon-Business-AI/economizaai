@@ -206,6 +206,9 @@ public class UserService {
 
         user.setPassword(passwordEncoder.encode(request.newPassword()));
         userRepository.save(user);
+        // Evict every existing session — a password change must not leave a
+        // possibly-stolen refresh token alive for 30 more days.
+        refreshTokenService.revokeAllForUser(user);
         log.info("User {} changed password", LogMasker.email(user.getEmail()));
     }
 

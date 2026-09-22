@@ -53,7 +53,9 @@ class RefreshTokenServiceTest {
         var saved = captor.getValue();
 
         assertNotNull(returnedToken);
-        assertEquals(returnedToken, saved.getToken());
+        // Only the SHA-256 is at rest — a DB dump must not yield usable sessions.
+        assertEquals(CodeHasher.sha256(returnedToken), saved.getToken());
+        assertNotEquals(returnedToken, saved.getToken());
         assertEquals(user, saved.getUser());
         assertTrue(saved.getExpiresAt().isAfter(LocalDateTime.now()), "expiry must be in the future");
         assertNull(saved.getConsumedAt());
@@ -71,7 +73,7 @@ class RefreshTokenServiceTest {
     @Test
     void rotate_consumesUsableTokenAndReturnsUser() {
         var stored = usableToken("presented-token");
-        when(tokenRepository.findByToken("presented-token")).thenReturn(Optional.of(stored));
+        when(tokenRepository.findByToken(CodeHasher.sha256("presented-token"))).thenReturn(Optional.of(stored));
 
         var rotatedUser = service.rotate("presented-token");
 
@@ -82,7 +84,7 @@ class RefreshTokenServiceTest {
 
     @Test
     void rotate_unknownToken_throws() {
-        when(tokenRepository.findByToken("nope")).thenReturn(Optional.empty());
+        when(tokenRepository.findByToken(CodeHasher.sha256("nope"))).thenReturn(Optional.empty());
 
         assertThrows(InvalidAuthTokenException.class, () -> service.rotate("nope"));
         verify(tokenRepository, never()).save(any());
@@ -92,7 +94,7 @@ class RefreshTokenServiceTest {
     void rotate_expiredToken_throws() {
         var stored = usableToken("expired-token");
         stored.setExpiresAt(LocalDateTime.now().minusMinutes(1));
-        when(tokenRepository.findByToken("expired-token")).thenReturn(Optional.of(stored));
+        when(tokenRepository.findByToken(CodeHasher.sha256("expired-token"))).thenReturn(Optional.of(stored));
 
         assertThrows(InvalidAuthTokenException.class, () -> service.rotate("expired-token"));
         verify(tokenRepository, never()).save(any());
@@ -102,7 +104,7 @@ class RefreshTokenServiceTest {
     void rotate_alreadyConsumedToken_throws_singleUse() {
         var stored = usableToken("reused-token");
         stored.setConsumedAt(LocalDateTime.now().minusMinutes(5));
-        when(tokenRepository.findByToken("reused-token")).thenReturn(Optional.of(stored));
+        when(tokenRepository.findByToken(CodeHasher.sha256("reused-token"))).thenReturn(Optional.of(stored));
 
         assertThrows(InvalidAuthTokenException.class, () -> service.rotate("reused-token"));
         verify(tokenRepository, never()).save(any());
@@ -112,7 +114,7 @@ class RefreshTokenServiceTest {
     void rotate_revokedToken_throws() {
         var stored = usableToken("revoked-token");
         stored.setRevokedAt(LocalDateTime.now().minusMinutes(5));
-        when(tokenRepository.findByToken("revoked-token")).thenReturn(Optional.of(stored));
+        when(tokenRepository.findByToken(CodeHasher.sha256("revoked-token"))).thenReturn(Optional.of(stored));
 
         assertThrows(InvalidAuthTokenException.class, () -> service.rotate("revoked-token"));
         verify(tokenRepository, never()).save(any());
@@ -121,7 +123,7 @@ class RefreshTokenServiceTest {
     @Test
     void revoke_marksUsableTokenRevoked() {
         var stored = usableToken("logout-token");
-        when(tokenRepository.findByToken("logout-token")).thenReturn(Optional.of(stored));
+        when(tokenRepository.findByToken(CodeHasher.sha256("logout-token"))).thenReturn(Optional.of(stored));
 
         service.revoke("logout-token");
 
@@ -131,7 +133,7 @@ class RefreshTokenServiceTest {
 
     @Test
     void revoke_unknownToken_isSilentNoOp() {
-        when(tokenRepository.findByToken("unknown")).thenReturn(Optional.empty());
+        when(tokenRepository.findByToken(CodeHasher.sha256("unknown"))).thenReturn(Optional.empty());
 
         service.revoke("unknown");
 
@@ -143,7 +145,7 @@ class RefreshTokenServiceTest {
         var stored = usableToken("twice-revoked");
         var originalRevokedAt = LocalDateTime.now().minusHours(1);
         stored.setRevokedAt(originalRevokedAt);
-        when(tokenRepository.findByToken("twice-revoked")).thenReturn(Optional.of(stored));
+        when(tokenRepository.findByToken(CodeHasher.sha256("twice-revoked"))).thenReturn(Optional.of(stored));
 
         service.revoke("twice-revoked");
 
@@ -155,7 +157,7 @@ class RefreshTokenServiceTest {
     void revoke_consumedToken_isIgnored() {
         var stored = usableToken("consumed-token");
         stored.setConsumedAt(LocalDateTime.now().minusMinutes(10));
-        when(tokenRepository.findByToken("consumed-token")).thenReturn(Optional.of(stored));
+        when(tokenRepository.findByToken(CodeHasher.sha256("consumed-token"))).thenReturn(Optional.of(stored));
 
         service.revoke("consumed-token");
 
@@ -163,10 +165,19 @@ class RefreshTokenServiceTest {
         verify(tokenRepository, never()).save(any());
     }
 
+    @Test
+    void revokeAllForUser_bulkRevokesActiveSessions() {
+        when(tokenRepository.revokeAllActiveForUser(user)).thenReturn(3);
+
+        service.revokeAllForUser(user);
+
+        verify(tokenRepository).revokeAllActiveForUser(user);
+    }
+
     private RefreshToken usableToken(String tokenValue) {
         return RefreshToken.builder()
                 .user(user)
-                .token(tokenValue)
+                .token(CodeHasher.sha256(tokenValue))
                 .expiresAt(LocalDateTime.now().plusDays(30))
                 .build();
     }
