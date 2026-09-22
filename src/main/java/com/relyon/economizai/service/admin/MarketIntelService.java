@@ -57,6 +57,12 @@ public class MarketIntelService {
                     row[1] == null ? "—" : row[1].toString(), toLong(row[2]), scale((BigDecimal) row[3])));
         }
 
+        var topMarketsByChain = new ArrayList<TopMarket>();
+        for (var row : receiptRepository.topMarketsByChainScans(PageRequest.of(0, TOP_N))) {
+            topMarketsByChain.add(new TopMarket((String) row[0],
+                    row[1] == null ? "—" : row[1].toString(), toLong(row[2]), scale((BigDecimal) row[3])));
+        }
+
         var categorySpend = new ArrayList<CategorySpend>();
         for (var row : receiptItemRepository.categorySpendGlobal()) {
             var category = row[0] == null ? "UNCATEGORIZED" : ((ProductCategory) row[0]).name();
@@ -73,7 +79,8 @@ public class MarketIntelService {
         log.info("admin.market_intel observations={} households={} topProducts={} topMarkets={} ufs={}",
                 observations, contributingHouseholds, topProducts.size(), topMarkets.size(), byUf.size());
         return new MarketIntelResponse(observations, contributingHouseholds,
-                List.copyOf(topProducts), List.copyOf(topMarkets), List.copyOf(categorySpend), List.copyOf(byUf));
+                List.copyOf(topProducts), List.copyOf(topMarkets), List.copyOf(topMarketsByChain),
+                List.copyOf(categorySpend), List.copyOf(byUf));
     }
 
     private static long toLong(Object value) {

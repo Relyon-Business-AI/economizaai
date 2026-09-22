@@ -15,6 +15,10 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
 
     Page<Notification> findAllByUserIdOrderByCreatedAtDesc(UUID userId, Pageable pageable);
 
+    /** Cross-user sent notifications since a cutoff — the admin "notificações enviadas" list. */
+    @Query("SELECT n FROM Notification n JOIN FETCH n.user WHERE n.createdAt >= :since ORDER BY n.createdAt DESC")
+    Page<Notification> findSentSince(@Param("since") LocalDateTime since, Pageable pageable);
+
     long countByUserIdAndReadAtIsNull(UUID userId);
 
     @Modifying

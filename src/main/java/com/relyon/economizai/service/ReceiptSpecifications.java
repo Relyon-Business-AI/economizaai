@@ -39,6 +39,24 @@ public final class ReceiptSpecifications {
                                                    String search,
                                                    boolean hideFailedParse,
                                                    UnidadeFederativa uf) {
+        return forSearch(householdId, from, to, cnpj, categories, status, search, hideFailedParse, uf, null);
+    }
+
+    /**
+     * @param parseErrorReason when non-null, restricts to receipts whose
+     *        {@code parseErrorReason} starts with this machine key — lets the ops
+     *        "erros mais comuns" list drill into the receipts behind one error.
+     */
+    public static Specification<Receipt> forSearch(UUID householdId,
+                                                   LocalDateTime from,
+                                                   LocalDateTime to,
+                                                   String cnpj,
+                                                   List<ProductCategory> categories,
+                                                   ReceiptStatus status,
+                                                   String search,
+                                                   boolean hideFailedParse,
+                                                   UnidadeFederativa uf,
+                                                   String parseErrorReason) {
         return (root, query, cb) -> {
             var predicates = new ArrayList<Predicate>();
             if (householdId != null) {
@@ -46,6 +64,13 @@ public final class ReceiptSpecifications {
             }
             if (uf != null) {
                 predicates.add(cb.equal(root.get("uf"), uf));
+            }
+            if (parseErrorReason != null && !parseErrorReason.isBlank()) {
+                // The error breakdown groups by the machine key before ':' — match that exact
+                // key (bare) or "key:details", without over-matching a longer sibling key.
+                predicates.add(cb.or(
+                        cb.equal(root.get("parseErrorReason"), parseErrorReason),
+                        cb.like(root.get("parseErrorReason"), parseErrorReason + ":%")));
             }
             // FAILED_PARSE rows are kept for ops review (PRO-43) but hidden from
             // the user history — the user didn't actually buy anything from a

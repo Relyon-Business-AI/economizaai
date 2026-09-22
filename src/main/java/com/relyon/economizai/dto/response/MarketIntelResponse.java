@@ -13,7 +13,10 @@ public record MarketIntelResponse(
         long priceObservations,
         long contributingHouseholds,
         List<TopProduct> topProducts,
+        /** Most-scanned markets, one row per CNPJ (per store unit). */
         List<TopMarket> topMarkets,
+        /** Same, but grouped by chain (marketName) — unifies multi-unit chains like Zaffari. */
+        List<TopMarket> topMarketsByChain,
         List<CategorySpend> categorySpend,
         List<UfRow> byUf) {
 

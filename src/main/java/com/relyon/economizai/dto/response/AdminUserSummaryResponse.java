@@ -4,6 +4,7 @@ import com.relyon.economizai.model.User;
 import com.relyon.economizai.model.enums.Role;
 import com.relyon.economizai.model.enums.SubscriptionTier;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -23,13 +24,18 @@ public record AdminUserSummaryResponse(
         boolean excludedFromMetrics,
         UUID householdId,
         LocalDateTime createdAt,
-        long receiptCount
+        long receiptCount,
+        BigDecimal totalSpend
 ) {
     public static AdminUserSummaryResponse from(User user) {
-        return from(user, 0L);
+        return from(user, 0L, BigDecimal.ZERO);
     }
 
     public static AdminUserSummaryResponse from(User user, long receiptCount) {
+        return from(user, receiptCount, BigDecimal.ZERO);
+    }
+
+    public static AdminUserSummaryResponse from(User user, long receiptCount, BigDecimal totalSpend) {
         return new AdminUserSummaryResponse(
                 user.getId(),
                 user.getName(),
@@ -41,7 +47,8 @@ public record AdminUserSummaryResponse(
                 user.isExcludedFromMetrics(),
                 user.getHousehold() == null ? null : user.getHousehold().getId(),
                 user.getCreatedAt(),
-                receiptCount
+                receiptCount,
+                totalSpend == null ? BigDecimal.ZERO : totalSpend
         );
     }
 }

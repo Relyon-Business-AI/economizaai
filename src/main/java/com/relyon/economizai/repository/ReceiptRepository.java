@@ -76,11 +76,17 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
 
     // --- Market intelligence (admin) ---
 
-    /** Most-scanned markets (confirmed): (cnpj, name, scans, spend). */
+    /** Most-scanned markets (confirmed): (cnpj, name, scans, spend). One row per CNPJ (per store unit). */
     @Query("SELECT receipt.cnpjEmitente, MIN(receipt.marketName), count(receipt), COALESCE(sum(receipt.totalAmount), 0) "
             + "FROM Receipt receipt WHERE receipt.status = 'CONFIRMED' AND receipt.cnpjEmitente IS NOT NULL "
             + "GROUP BY receipt.cnpjEmitente ORDER BY count(receipt) DESC")
     List<Object[]> topMarketsByScans(Pageable pageable);
+
+    /** Most-scanned markets grouped by CHAIN (marketName) instead of CNPJ — unifies multi-unit chains like Zaffari. */
+    @Query("SELECT MIN(receipt.cnpjEmitente), receipt.marketName, count(receipt), COALESCE(sum(receipt.totalAmount), 0) "
+            + "FROM Receipt receipt WHERE receipt.status = 'CONFIRMED' AND receipt.marketName IS NOT NULL "
+            + "GROUP BY receipt.marketName ORDER BY count(receipt) DESC")
+    List<Object[]> topMarketsByChainScans(Pageable pageable);
 
     /** Confirmed receipts + spend by UF (region): (uf, count, spend). */
     @Query("SELECT receipt.uf, count(receipt), COALESCE(sum(receipt.totalAmount), 0) "
@@ -91,6 +97,12 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
     @Query("SELECT receipt.household.id, count(receipt) FROM Receipt receipt "
             + "WHERE receipt.household.id IN :householdIds GROUP BY receipt.household.id")
     List<Object[]> countByHouseholdIds(List<UUID> householdIds);
+
+    /** (householdId, sum(confirmed totalAmount)) for the given households — batch spend for the admin user ranking. */
+    @Query("SELECT receipt.household.id, COALESCE(sum(receipt.totalAmount), 0) FROM Receipt receipt "
+            + "WHERE receipt.status = 'CONFIRMED' AND receipt.household.id IN :householdIds "
+            + "GROUP BY receipt.household.id")
+    List<Object[]> sumConfirmedTotalByHouseholdIds(List<UUID> householdIds);
 
     // --- Ingestion health (ops dashboard) ---
 
