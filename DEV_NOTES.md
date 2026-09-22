@@ -115,11 +115,6 @@ mirror entries here.
   a `FAILED_PARSE` (reason `receipt.paid_api.quota_exceeded`) instead of a fast 4xx at
   submit. Consider a fail-fast check at `POST /receipts` once we're comfortable predicting
   the paid service from the UF up front.
-- ~~**Before prod**: also cap Twilio SMS/WhatsApp through the same ledger~~ — DONE
-  (2026-07-16): every Twilio send (SMS/WhatsApp notifications + phone OTP) is metered as
-  `TWILIO_MESSAGE` (~R$0.30) with a per-user daily cap (`TWILIO_DAILY_CAP`, default 10)
-  and the global budget. Dispatchers degrade to a `twilio_quota_exceeded` audit row;
-  the OTP endpoint returns a localized 429.
 
 ---
 
@@ -184,17 +179,6 @@ mirror entries here.
   - **Apps:** set `REVENUECAT_WEBHOOK_AUTH`, and the app must set RevenueCat `app_user_id` = our user UUID (or email). That's it — env-var ready.
   - **Web:** NOT built yet — needs a Mercado Pago/Stripe **create-checkout endpoint** + a provider-specific webhook adapter (signature verify + event→activate/cancel mapping). Pending the provider choice (PIX-recurring vs one-off).
 
-## LGPD data-export — COMPLETE (2026-07-09)
-- `UserService.exportData` now returns every table attributable to the user: account
-  (incl. phone, profile-pic metadata, digest prefs, legal acceptances, auth provider,
-  push-token timestamp), household + members, receipts, notification rules + preferences
-  + telemetry events, watched markets, subscription, market/product aliases, custom
-  categories + overrides, brand preferences, manual purchases, consumption snoozes,
-  shopping lists **with items**, recently-viewed products, deal-surface state, and
-  data-share consents (as grantor + requester). `GET /api/v1/users/me/export`.
-- Remaining polish (optional): paginate very large sections (receipts/notifications/
-  recent-views currently capped at 500), and consider a downloadable file format.
-
 ## Relevance filter rollout — first telemetry CONSUMER (2026-06-12, in SHADOW)
 
 The first thing that *reads* `notification_events`: a user's own DISMISSED/MUTED
@@ -255,9 +239,6 @@ The report works identically in SHADOW and ON (computed purely from
 - **Now**: `NotificationRuleEngine.evaluate` (on receipt confirm) fires **only** the user's explicit `PRICE_DROP` alerts. The discovery defaults (`PROMO_PERSONAL` / `PROMO_COMMUNITY` / `CHEAPER_MARKET`) that used to fire in real time were removed from the write path — that function now lives entirely in the daily deals digest (`DealsService` / `DealsDigestScheduler`). The dead repo methods (`findActiveDefaultRuleOwnersWhoBought` both overloads + `ProductRuleOwner`; `findLastPaidHistoryForProductByHouseholds` + `HouseholdProductPrice`) were deleted with them.
 - **Vestigial toggles**: the `PROMO_PERSONAL` / `PROMO_COMMUNITY` / `CHEAPER_MARKET` `NotificationType` values + their auto-seeded default `NotificationRule` toggles still exist (FE still shows them), but **nothing reads those per-type toggles anymore** — the digest computes discovery from `DealsService` and is governed by `digest_frequency`, not by these rules.
 - **Open refinement**: decide whether the digest should **respect** those per-type toggles (e.g. a user who disabled `CHEAPER_MARKET` shouldn't see cheaper-market deals in the digest), or whether to retire the toggles entirely. Until then they're inert UI.
-
-## ~~`bestMarkets` k-anon count is an N+1~~ — RESOLVED (2026-06-09)
-- **Fixed**: `bestMarkets` now batches the distinct-household k-anon counts into one `GROUP BY` query (`countDistinctHouseholdsForProductByMarket` → `Map<cnpj,count>`) instead of one query per market. `referencePrice` still uses the single-market count (one product+market, no N+1).
 
 ---
 
@@ -398,27 +379,7 @@ The report works identically in SHADOW and ON (computed purely from
   2. `AuthEmailSender` (password reset + email verification) — always loaded; if SMTP isn't configured, **logs the link with `[DEV-MODE]` prefix** instead of sending. The reset/verify endpoints still return 204, so the FE flow works in dev — the developer copies the token from server logs.
 - **Why OK for dev**: no SMTP creds, FE end-to-end testing still works (manually grab the link).
 - **Why NOT OK for prod**: real users won't see a `[DEV-MODE]` log line. They get NO password-reset / verification email at all.
-- ~~**⚠️ Security gap**: DEV-MODE logs the reset/verify token in plaintext~~ — CLOSED
-  (2026-07-16): `economizai.auth.dev-code-log-enabled` gates every auth-code log line
-  (password reset, email verify, phone OTP). Default `true` for dev; **hard `false` in
-  `application-prod.yaml`** (no env override) — a misconfigured prod logs the failure,
-  never the code.
 - **Fix before prod**: set SMTP creds in env (`SMTP_HOST/PORT/USERNAME/PASSWORD`) and flip `NOTIFICATIONS_EMAIL_ENABLED=true`. Recommend SES, Mailgun, or Postmark — Gmail SMTP rate-limits hard. ~30 min.
-
----
-
-## Security / secrets
-
-### JWT secret in code default = weak placeholder — SOLVED for prod (2026-06-12)
-- **Now**: the dev fallback only exists on the `dev` profile (default). The `prod`
-  profile (`application-prod.yaml`, activated with `SPRING_PROFILES_ACTIVE=prod`)
-  declares `jwt.secret: ${JWT_SECRET}` with NO default → boot fails if unset.
-- **Why OK for dev**: every dev machine has the same predictable token signing for testing.
-
-### CORS still includes localhost — SOLVED for prod (2026-06-12)
-- **Now**: localhost fallback only on the `dev` profile. The `prod` profile requires
-  `CORS_ORIGINS` (no default) → set only the deployed FE origin(s) at deploy time.
-- **Why OK for dev**: FE devs hit the dev server from localhost.
 
 ---
 
@@ -576,15 +537,6 @@ Helper scripts at repo root (run each in an **Administrator** PowerShell once):
 - **Implementation note**: discount aggregations query `Receipt` directly (no item join) so `discountTotal` is counted once per receipt; `/insights/query` uses a DISTINCT-(receiptId, …) select so the item-join doesn't multiply it.
 - **Why OK for dev**: the price index (what matters most) is honest, spend breakdowns stay internally consistent (gross everywhere), and the FE can show "gastou R$ X · R$ Y em descontos". Still no use of the discount beyond reporting (e.g. a future "markets with the biggest discounts").
 
-### IBGE municipality code — SOLVED (2026-06-12)
-- **Now**: `market_locations.ibge_city_code` + `price_observations.ibge_city_code` (V47). No CSV
-  lookup table needed: the BrasilAPI CNPJ response (already fetched for merchant-segment
-  classification) carries `codigo_municipio_ibge`, so the classification job captures it and the
-  price-index write snapshots it per observation, like city/state. Already-classified markets
-  missing the code are backfilled by the same scheduled scan (attempts-bounded).
-- **Residual**: observations written before a market's code arrives stay null (snapshot design —
-  intentional). Backfill old observation rows only if B2B aggregation ever needs the history.
-
 ---
 
 ## Billing / subscriptions
@@ -620,7 +572,7 @@ Helper scripts at repo root (run each in an **Administrator** PowerShell once):
 
 ---
 
-## Last-checked: 2026-06-06
+## Last-checked: 2026-09-22
 
 When you take care of an item above, **delete it from this file** instead
 of marking it done — keep the file lean so what remains is what's

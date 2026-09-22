@@ -108,6 +108,11 @@ not in any chat session. The brain:
 | `CLAUDE_CODE_OAUTH_TOKEN` | backend Actions | the fixer agent | see AUTOFIX.md |
 | `EXPO_TOKEN` | frontend Actions | `eas update`/`eas build` unattended | ⛔ **owner must add** (EAS access token) |
 | `E2E_ADMIN_EMAIL` / `_PASSWORD` | both | harness/e2e login | optional |
+| `SUBSCRIPTION_ENFORCE` | Render (dev/prod) | flips the paywall ON (default false → gates inert) | ⛔ owner flips when charging |
+| `BILLING_WEBHOOK_SECRET` | Render (prod) | provider-agnostic subscription webhook auth | ⛔ owner sets with the web provider |
+| `REVENUECAT_WEBHOOK_AUTH` | Render (prod) | RevenueCat (iOS/Android) webhook auth | ⛔ owner sets when store billing goes live |
+| `ECOMMERCE_*` (ML client-id/secret/affiliate) | Render | e-commerce comparison provider — inert until set | ⛔ owner sets (see DEV_NOTES / docs/ECOMMERCE_COMPARISON.md) |
+| `META_ADS_*` / `META_CAPI_*` | Render | ad-spend sync + conversions API — inert until set | ⛔ owner sets |
 
 ## Build plan (frontend operator — to add)
 

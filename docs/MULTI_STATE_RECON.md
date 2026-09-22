@@ -5,6 +5,18 @@ probing every state's NFC-e consultation portal directly. Use it to plan
 which adapter to write next, what risks each state carries, and what the
 path-to-coverage looks like.
 
+> **⚠️ Coverage has advanced a lot since this recon (updated 2026-09-22).** The
+> "1 UF verified (RS)" figures below are the ORIGINAL snapshot — outdated. Current
+> reality (from the code/config): **RS, PR, SP verified** via `SvrsSharedPortalAdapter`;
+> **MG** (`MgNfcePortalAdapter`), **SC** (`SantaCatarinaNfcePortalAdapter`) and **GO**
+> (`GoiasNfcePortalAdapter`) have dedicated adapters; **MS/TO** use captcha-gated
+> adapters; **CE** runs via the Infosimples fallback; everything else degrades to the
+> experimental QR-portal + Infosimples chain with per-UF telemetry.
+> **The live source of truth for coverage is `GET /admin/state-coverage`** (VERIFIED vs
+> EXPERIMENTAL + per-layer success/failure). Keep the **tier classification and
+> per-portal risk notes below** — those are still the useful guide for the next state;
+> just treat the "verified count" as historical.
+
 ## TL;DR
 
 - **End-to-end ingestion verified for 1 UF**: **RS**, via the SVRS shared

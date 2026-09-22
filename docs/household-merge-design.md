@@ -1,5 +1,18 @@
 # Household merge / split — data provenance design
 
+> **Status update (2026-09-22): mostly SHIPPED, not a proposal anymore.**
+> - **Phase 0 (stop data loss): DONE** — `Receipt.originHousehold` provenance (V48/V67),
+>   `HouseholdScoped` on all movable entities, deletion guard for empty households owning data.
+> - **Phase 1 (merge + restore): DONE** — `HouseholdMergeService` (generic, transactional,
+>   host-wins collisions) + per-category `MergeCategory` selection. Gated behind
+>   `economizai.households.merge-enabled` (default false).
+> - **Phase 2 (mutual consent): PARTIAL** — `DataShareConsentService` + `data_share_consent`
+>   table exist; the full block/proceed/backfill flow isn't fully wired.
+> - **Known TODOs before enabling in prod:** merge copies the receipt HEADER only (item-level
+>   deep-copy is out of scope in v1 — decide if needed); `LeaveScope` implements
+>   `ORIGINAL_ONLY` but `ORIGINAL_PLUS_SHARED`/`BOTH` need a per-membership `joined_at`.
+> The design below is still accurate as the reference; treat "PROPOSAL" as historical.
+
 Status: PROPOSAL (for review, not yet implemented)
 Context: today `join()` moves the *person* but not their *data*; a joining user's
 receipts keep their old `household_id` and get orphaned/deleted. We want a couple
