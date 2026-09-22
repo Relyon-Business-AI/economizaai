@@ -353,6 +353,47 @@ from our IP, no paid fallback. Same validation, caps, and `ReceiptResponse`.
   already routes automatically: native + blocked UF (PE) + URL payload → this
   endpoint; everything else → `POST /receipts`.
 
+### Bulk import receipts from access keys (chaves) — onboarding (RS only)
+
+Fill a new user's history from the **chaves** they export from the Nota Fiscal
+Gaúcha portal, without scanning each nota. Each eligible **RS** chave (NFC-e 65 /
+NF-e 55) is reconsulted on a public SEFAZ portal and ingested through the normal
+pipeline.
+
+```
+POST /api/v1/receipts/import
+{ "chaves": ["43260593015006005182651200000076311055456577", ...] }   (max 500)
+→ 202 ReceiptImportResponse
+
+POST /api/v1/receipts/import/nfg-csv   (multipart/form-data, field "file")
+  file = the raw CSV exported from Nota Fiscal Gaúcha (chaves extracted server-side)
+→ 202 ReceiptImportResponse
+```
+
+`ReceiptImportResponse`:
+```
+{
+  "received": 12,
+  "queued": 9,
+  "queuedReceiptIds": ["<uuid>", ...],   // poll each via GET /receipts/{id}
+  "rejected": 3,
+  "rejectedChaves": [
+    { "chave": "4326...", "reason": "receipt.import.duplicate", "reasonMessage": "..." }
+  ]
+}
+```
+
+- Each queued id is a `PROCESSING` receipt — **poll `GET /receipts/{id}`** until it
+  reaches `PENDING_CONFIRMATION` (then confirm as usual) or `FAILED_PARSE`. Same
+  monthly cap as `POST /receipts` (over the cap → the rest come back as
+  `receipt.import.cap_reached`).
+- Rejection `reason` keys: `receipt.import.invalid_chave`, `receipt.import.unsupported`
+  (not RS / unsupported model), `receipt.import.duplicate`, `receipt.import.merchant_unsupported`,
+  `receipt.import.cap_reached`. `reasonMessage` is already localized.
+- **RS only** today; other UFs → `receipt.import.unsupported`. E-commerce notas
+  (NF-e 55, e.g. Amazon) land in personal history but stay **out of the collaborative
+  index** (non-grocery segment).
+
 ### Submit from a PHOTO of the QR code
 
 For users who can't scan live (web version, or a saved picture in the gallery):

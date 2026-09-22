@@ -3,6 +3,7 @@ package com.relyon.economizai.controller;
 import com.relyon.economizai.dto.request.AddReceiptItemRequest;
 import com.relyon.economizai.dto.request.ConfirmReceiptRequest;
 import com.relyon.economizai.dto.request.DeviceContentRequest;
+import com.relyon.economizai.dto.request.ImportChavesRequest;
 import com.relyon.economizai.dto.request.PrefetchedReceiptRequest;
 import com.relyon.economizai.dto.request.SubmitReceiptRequest;
 import com.relyon.economizai.dto.request.UpdateItemCategoryRequest;
@@ -11,12 +12,14 @@ import com.relyon.economizai.dto.request.UpdateReceiptItemRequest;
 import com.relyon.economizai.dto.response.ChaveExtractionResponse;
 import com.relyon.economizai.exception.InvalidExportFormatException;
 import com.relyon.economizai.dto.response.ConfirmReceiptResponse;
+import com.relyon.economizai.dto.response.ReceiptImportResponse;
 import com.relyon.economizai.dto.response.ReceiptResponse;
 import com.relyon.economizai.dto.response.ReceiptSummaryResponse;
 import com.relyon.economizai.model.User;
 import com.relyon.economizai.model.enums.ProductCategory;
 import com.relyon.economizai.model.enums.ReceiptStatus;
 import com.relyon.economizai.service.ReceiptExportService;
+import com.relyon.economizai.service.ReceiptImportService;
 import com.relyon.economizai.service.ReceiptService;
 import com.relyon.economizai.service.llm.PhotoReceiptExtractionService;
 import com.relyon.economizai.service.report.ReportEmailService;
@@ -48,6 +51,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -62,6 +66,7 @@ import java.util.UUID;
 public class ReceiptController {
 
     private final ReceiptService receiptService;
+    private final ReceiptImportService receiptImportService;
     private final ReceiptExportService receiptExportService;
     private final ReportEmailService reportEmailService;
     private final PhotoReceiptExtractionService photoReceiptExtractionService;
@@ -99,6 +104,31 @@ public class ReceiptController {
             log.info("client.device_fetch endpoint=prefetched outcome={}", deviceFetch);
         }
         return ResponseEntity.status(HttpStatus.CREATED).body(receiptService.submitPrefetched(user, request));
+    }
+
+    /**
+     * Bulk import receipts from a list of access keys (chaves) — the onboarding
+     * path that fills a new user's history from their Nota Fiscal Gaúcha export
+     * without scanning each nota. Every eligible RS chave (NFC-e 65 / NF-e 55) is
+     * reconsulted on a public SEFAZ portal and ingested; the response lists the
+     * queued receipt ids (poll each via {@code GET /receipts/{id}}) plus every
+     * rejected chave with a localized reason.
+     */
+    @PostMapping("/import")
+    public ResponseEntity<ReceiptImportResponse> importChaves(@AuthenticationPrincipal User user,
+                                                              @Valid @RequestBody ImportChavesRequest request) {
+        return ResponseEntity.accepted().body(receiptImportService.importChaves(user, request.chaves()));
+    }
+
+    /**
+     * As {@link #importChaves} but takes the raw Nota Fiscal Gaúcha CSV export
+     * directly (multipart {@code file}); the chaves are extracted from it server-side.
+     */
+    @PostMapping("/import/nfg-csv")
+    public ResponseEntity<ReceiptImportResponse> importFromNfgCsv(@AuthenticationPrincipal User user,
+                                                                  @RequestParam("file") MultipartFile file) throws IOException {
+        var csv = new String(file.getBytes(), StandardCharsets.UTF_8);
+        return ResponseEntity.accepted().body(receiptImportService.importFromNfgCsv(user, csv));
     }
 
     /**

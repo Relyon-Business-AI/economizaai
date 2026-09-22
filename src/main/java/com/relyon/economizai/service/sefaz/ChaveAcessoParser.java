@@ -96,6 +96,18 @@ public final class ChaveAcessoParser {
     }
 
     /**
+     * The fiscal document model (positions 21-22 of the chave): "65" = NFC-e (the
+     * grocery cupom), "55" = NF-e (e-commerce/B2B). Both encode the same 44-digit
+     * layout, so a single import can carry a mix.
+     */
+    public static String extractModel(String chave) {
+        if (chave == null || !CHAVE_PATTERN.matcher(chave).matches()) {
+            throw new InvalidQrPayloadException();
+        }
+        return chave.substring(20, 22);
+    }
+
+    /**
      * True when the note was NOT issued in normal mode (tpEmis, position 35 of
      * the chave, != 1) — e.g. 9 = NFC-e offline contingency. A contingency note
      * may take up to 24h to reach SEFAZ, so a portal rejection for it means

@@ -58,6 +58,7 @@ public class ReceiptIngestionService {
     private final EanCatalogEnrichmentService eanCatalogEnrichmentService;
     private final MarketLocationService marketLocationService;
     private final MerchantSupportGate merchantSupportGate;
+    private final RsChaveReconsultService rsChaveReconsultService;
 
     /**
      * Fetch + parse the PROCESSING receipt, then transition it. Runs on the
@@ -100,6 +101,18 @@ public class ReceiptIngestionService {
         // "update the app" case — plain FAILED_PARSE and no NEEDS_DEVICE_FETCH loop.
         ingestResolved(receiptId, receipt -> sefazIngestionService.fromClientContent(
                 rawContent, receipt.getChaveAcesso(), receipt.getUf(), sourceUrlOf(qrPayload)), false, null);
+    }
+
+    /**
+     * As {@link #ingest} but the item data is <b>reconsulted from the bare chave</b>
+     * (no QR scan) on a public RS portal — the engine of the CSV/chaves bulk import.
+     * Reuses the whole persist pipeline (merchant gate, EAN warm-up, parse-failure
+     * keeps the raw HTML) via {@link RsChaveReconsultService}. Not device-retryable:
+     * a reconsult dead end is a plain FAILED_PARSE.
+     */
+    @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
+    public void ingestReconsult(UUID receiptId, String chave) {
+        ingestResolved(receiptId, receipt -> rsChaveReconsultService.reconsult(chave), false, null);
     }
 
     /**

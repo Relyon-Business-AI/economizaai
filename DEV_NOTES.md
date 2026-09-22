@@ -10,6 +10,24 @@ mirror entries here.
 
 ---
 
+## Import em massa por chave (RS) — reconsulta server-side, sem throttle (2026-09-22)
+- **Now**: `POST /receipts/import[/nfg-csv]` reconsulta cada chave RS direto do nosso IP
+  de servidor — NFC-e via `SAT-WEB-NFE-NFC_*.asp`, NF-e 55 via SVRS `ConsultaPublicaDfe`
+  (`RsChaveReconsultClient`). Sem backoff/throttle explícito além do limite de concorrência
+  do pool `RECEIPT_INGEST_EXECUTOR`.
+- **OK for dev**: volume baixo; um usuário importando dezenas de chaves passa tranquilo.
+- **Before prod**:
+  1. **Rate-limit / bloqueio de IP**: um lote grande (ou muitos usuários) batendo em
+     `sefaz.rs.gov.br` pode fazer o SEFAZ throttlar/bloquear nosso IP. Adicionar throttle por
+     host + backoff, e/ou mover a reconsulta para **on-device (PE-style, `/receipts/prefetched`)**
+     usando o IP residencial do usuário. Bound do tamanho do lote também.
+  2. **reCAPTCHA da NF-e 55**: o POST do `ConsultaPublicaDfe` hoje **não exige** o captcha, mas
+     ele está na página — se o SEFAZ passar a exigir, o caminho NF-e 55 quebra e precisa de
+     solver (pago) ou on-device.
+  3. **Só RS**: outras UFs voltam `receipt.import.unsupported`. Estender por UF conforme
+     `docs/MULTI_STATE_RECON.md`.
+- **Effort**: throttle+backoff pequeno; on-device fallback médio.
+
 ## E-commerce price comparison — built but INERT for dev (2026-09-22)
 - **Now**: the "vale a pena online?" subsystem is wired end to end but ships **dark**.
   With no provider configured it serves only **admin-CURATED offers** (precision-first):

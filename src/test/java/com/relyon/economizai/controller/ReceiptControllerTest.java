@@ -21,6 +21,7 @@ import com.relyon.economizai.model.enums.UnidadeFederativa;
 import com.relyon.economizai.security.JwtService;
 import com.relyon.economizai.service.LocalizedMessageService;
 import com.relyon.economizai.service.ReceiptExportService;
+import com.relyon.economizai.service.ReceiptImportService;
 import com.relyon.economizai.service.ReceiptService;
 import com.relyon.economizai.service.llm.PhotoReceiptExtractionService;
 import com.relyon.economizai.service.report.ReportEmailService;
@@ -75,6 +76,9 @@ class ReceiptControllerTest {
 
     @MockitoBean
     private ReceiptService receiptService;
+
+    @MockitoBean
+    private ReceiptImportService receiptImportService;
 
     @MockitoBean
     private ReceiptExportService receiptExportService;

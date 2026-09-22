@@ -16,6 +16,24 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-22 — import em massa de notas por chave / CSV da Nota Fiscal Gaúcha (RS)
+
+Onboarding: encher o histórico do usuário a partir das **chaves de acesso** — sem escanear
+uma-a-uma. Só **RS** por enquanto (NFC-e 65 e NF-e 55). Ver `docs/ONBOARDING_IMPORT.md`.
+
+- **Novo `POST /receipts/import`** — body `{ "chaves": ["<44 díg>", ...] }` (máx. 500).
+- **Novo `POST /receipts/import/nfg-csv`** — multipart `file` = o CSV cru exportado da Nota
+  Fiscal Gaúcha; as chaves são extraídas server-side (formato de dois blocos com espaço).
+- Ambos respondem **202** com `ReceiptImportResponse`: `{ received, queued, queuedReceiptIds[],
+  rejected, rejectedChaves[{ chave, reason, reasonMessage }] }`. Cada `receiptId` enfileirado
+  vira uma nota `PROCESSING` — **faça poll em `GET /receipts/{id}`** como no scan normal.
+- Rejeições vêm com motivo **localizado** (`reasonMessage`) e chave (`reason`): `invalid_chave`,
+  `unsupported` (fora do RS / modelo não suportado), `duplicate`, `merchant_unsupported`,
+  `cap_reached` (limite mensal do plano).
+- Notas de **e-commerce (NF-e 55, ex.: Amazon)** entram no histórico pessoal mas ficam **fora do
+  índice colaborativo** (segmento não-mercado). NFC-e de mercado/farmácia entram normalmente.
+- Nada muda no fluxo de scan existente.
+
 ## 2026-09-22 — comparação com e-commerce ("vale a pena online?") + ranking caçador de descontos
 
 **Tudo INERTE por padrão** — nenhum comportamento existente muda até configurar. Ver DEV_NOTES.

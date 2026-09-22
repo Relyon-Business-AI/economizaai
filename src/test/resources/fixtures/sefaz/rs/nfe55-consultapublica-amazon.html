@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Bootstrap core CSS -->
+
+    <link rel="stylesheet" href="/Content/css/bootstrap-matriz.min.css" media="all" />
+    <link rel="stylesheet" href="/Content/css/bootstrap-override.css" media="all" />
+
+    <link href="/Content/bootstrap.css" rel="stylesheet" />
+    <link href="/fonts/font-awesome-4.7.0/css/font-awesome.css" rel="stylesheet" />
+    <link href="/Content/css/SiteSefaz.css" rel="stylesheet" />
+
+    <script src="/Scripts/jquery-3.2.1.min.js"></script>
+    <script type="text/javascript" src="/Scripts/bootstrap.min.js"></script>
+    <script src="/Scripts/jquery.mask.js" asp-append-version="true"></script>
+</head>
+
+<body>
+    <div class="container" id="ContainerRaiz">
+        
+
+
+
+<div class="row">
+
+    <div class="col-sm-offset-1 col-sm-10 coluna-principal">
+
+        <div class="row">
+
+            <article class="col-xs-12 artigo artigo__pagina__simples--padrao">
+
+                    <div class="row">
+                        <div class="col-sm-12 cabecalho-pagina">
+                            Consulta P&#250;blica DFe
+                        </div>
+                    </div>
+
+                <div class="artigo__texto">
+
+                    <div class="row">
+
+                        <div class="XSLT col-md-12">
+
+                                    <div class="form-group col-sm-3">
+                                        <button type="button" class="btn btn-primary" onclick="location.href='/Bpe/ConsultaPublicaDfe'">Nova consulta</button>
+                                    </div>
+                                    <div class="form-group col-sm-3">
+                                        <a class="btn btn-primary" href="/NFESSL/DownloadXMLDFe?OrigemSite=2&amp;Ambiente=1&amp;ChaveAcessoDfe=43260915436940001177550010445204901195759810">Download Arquivo</a>
+                                    </div>
+<form action="/Bpe/Imprimir" autocomplete="off" id="frmImpressao" method="post" target="_blank"><input data-val="true" data-val-required="Sistema não informado" id="sistema" name="sistema" type="hidden" value="Dfe" /><input data-val="true" data-val-required="The EhConsultaPublicaSiteSefaz field is required." id="EhConsultaPublicaSiteSefaz" name="EhConsultaPublicaSiteSefaz" type="hidden" value="True" /><input data-val="true" data-val-range="Ambiente inválido" data-val-range-max="2" data-val-range-min="1" data-val-required="Ambiente não informado" id="Ambiente" name="Ambiente" type="hidden" value="1" /><input id="Autorizador" name="Autorizador" type="hidden" value="rs" /><input data-val="true" data-val-length="Chave de acesso deve ter 44 digitos" data-val-length-max="44" data-val-length-min="44" data-val-required="Chave de Acesso não informada" id="ChaveAcessoDfe" name="ChaveAcessoDfe" type="hidden" value="43260915436940001177550010445204901195759810" /><input Value="true" data-val="true" data-val-required="The EhImpressao field is required." id="EhImpressao" name="EhImpressao" type="hidden" value="False" /><input Value="true" data-val="true" data-val-required="The EhConsultaCompleta field is required." id="EhConsultaCompleta" name="EhConsultaCompleta" type="hidden" value="True" /><input Value="1" id="CaptchaParaValidar" name="CaptchaParaValidar" type="hidden" value="" /><input id="Hash" name="Hash" type="hidden" value="4wrT6hthonnAnIG+lmVLZc09Xa/JOE67mP8sBz18roAfySDD1b/jHUO/EZpr5aNRJQoC4aNd0CTLqZU2rAaMljhflyTnjqot" />                                        <div class="form-group col-sm-3">
+                                            <button type="submit" class="btn btn-primary">Imprimir</button>
+                                        </div>
+</form>                                <br />
+<script language="javascript" src="https://nfe-extranet.sefazrs.rs.gov.br/apl/nfe/programas/Scripts/nfe-vis.js?rand=17955575"></script><link rel="stylesheet" type="text/css" href="https://nfe-extranet.sefazrs.rs.gov.br/apl/nfe/programas/Estilos/xslt.css?rand=141792" /><link href="../Content/css/xslt.css?rand=6735221443022331904" rel="stylesheet" /><style type="text/css">
+          .XSLT {
+            font-family: "Roboto", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 12px;
+            color: rgb(103, 106, 108);
+          }
+
+          .XSLT table {
+            font-size: 12px;
+          }
+
+          .dfe-tab > ul > li {
+            width: 25%;
+            float: left;
+            display: block;
+            padding: 0;
+          }
+
+          .dfe-tab > ul {
+            list-style-type: none;
+          }
+
+          .dfe-tab a,
+            .dfe-tab a:hover,
+            .dfe-tab a:active {
+            display: block;
+            width: auto;
+            margin: 0 0.5em 0.5em;
+            padding: 8px;
+            text-decoration: none;
+            -webkit-border-radius: 5px;
+            -moz-border-radius: 5px;
+            border-radius: 5px;
+            color: inherit;
+            background: white;
+            border: 1px solid #e7eaec;
+            cursor: pointer;
+          }
+
+          .dfe-selected {
+              background-color: #efcb92 !important;
+              color: white !important;
+          }
+
+          .dfe-tab a:hover {
+              background: #eee;
+          }
+          </style><script type="text/javascript" language="javascript">
+
+			var imgExpand = '../Content/img/ico_mais.gif';
+			var imgCollapse = '../Content/img/ico_menos.gif';		  
+		  
+          function dfeMostraAba(item, aba)
+          {
+            var conteudo = document.getElementsByClassName("dfe-conteudo-aba");
+            for (var i = 0; i < conteudo.length; i++) {
+                  conteudo[i].style.display = "none";
+            }
+
+            var titulo = document.getElementsByClassName("dfe-selected");
+            for (var i = 0; i < titulo.length; i++) {
+              titulo[i].className = "";
+            }
+            
+            document.getElementById(aba).style.display = "block";
+            item.className = "dfe-selected";
+          }
+		  
+		  function showArea(id, img) {
+			var oArea = document.getElementById(id);
+			img.src = (oArea.className.indexOf('hide') != -1 ? imgCollapse : imgExpand);
+			oArea.className = (oArea.className.indexOf('hide') != -1 ? 'show dfe-tabela' : 'hide');
+		  }
+		  
+		  function expand(id, img) {
+			var oNode = document.getElementById(id);
+			img.src = (oNode.className == 'hide' ? imgCollapse : imgExpand);
+			oNode.className = (oNode.className == 'hide' ? 'row' : 'hide');
+		  }
+		  
+        </script><div class="dfe-tab"><ul><li><a onclick="javascript:dfeMostraAba(this,'nfe');" class="dfe-selected">NF-e</a></li><li><a onclick="javascript:dfeMostraAba(this,'emitente');">Emitente</a></li><li><a onclick="javascript:dfeMostraAba(this,'destinatario');">Destinatário</a></li><li><a onclick="javascript:dfeMostraAba(this,'produtosServicos');">Produtos e Serviços</a></li><li><a onclick="javascript:dfeMostraAba(this,'totais');">Totais</a></li><li><a onclick="javascript:dfeMostraAba(this,'transporte');">Transporte</a></li><li><a onclick="javascript:dfeMostraAba(this,'cobranca');">Cobrança</a></li><li><a onclick="javascript:dfeMostraAba(this,'informacoes_adicionais');">Informações Adicionais</a></li></ul></div><div style="margin-left:45px;margin-right:20px"><div id="nfe" class="dfe-conteudo-aba"><div id="NFe" class="GeralXslt"><fieldset><legend class="titulo-aba">
+			Dados da NF-e:   
+			43260915436940001177550010445204901195759810</legend><table class="box"><tr><td><label>Modelo</label><span>55</span></td><td><label>Série</label><span>1</span></td><td><label>Número</label><span>44520490</span></td><td><label>Data de Emissão</label><span>21/09/2026 00:26:46-03:00</span></td><td><label>
+                    Data Saída/Entrada
+                  </label><span /></td><td><label>Valor Total da Nota Fiscal  </label><span>125,10</span></td></tr></table></fieldset><fieldset><legend>Emitente</legend><table class="box"><tr><td class="col-5"><label>CNPJ</label><span>15.436.940/0011-77</span></td><td class="col-2"><label>Nome / Razão Social</label><span>AMAZON SERVICOS DE VAREJO DO BRASIL LTDA</span></td><td class="col-5"><label>Inscrição Estadual</label><span>3820025709</span></td><td class="col-10"><label>UF</label><span>RS</span></td></tr></table></fieldset><fieldset><legend>Destinatário</legend><table class="box"><tr><td class="col-5"><label>CPF</label><span>000.000.000-00</span></td><td class="col-2"><label>Nome / Razão Social</label><span>Alexandre Vieira</span></td><td class="col-5"><label>Inscrição Estadual</label><span></span></td><td class="col-10"><label>UF</label><span>RS</span></td></tr><tr><td class="col-5"><label>Destino da operação</label><span>
+                      1 - Operação Interna
+                    </span></td><td class="col-2"><label>Consumidor final</label><span>
+                      1 - Consumidor final
+                    </span></td><td colspan="2" class="col-3"><label>Presença do Comprador</label><span>
+                      2 - Operação pela internet
+                    </span></td></tr></table></fieldset><fieldset><legend>Emissão</legend><table class="box"><tr><td><label>Processo</label><span>
+                      0 - com aplicativo do Contribuinte
+                    </span></td><td><label>Versão do Processo</label><span>1.0</span></td><td colspan="2"><label>
+                Tipo de Emissão</label><span>1 - Normal</span></td></tr><tr><td><label>Finalidade</label><span>
+                      1 - Normal
+                    </span></td><td><label>Tipo de Nota de Débito</label><span></span></td><td colspan="2"><label>Tipo de Nota de Crédito</label><span></span></td></tr><tr><td><label>Natureza da Operação</label><span>Venda de merc adquirida ou recebida de terceiros</span></td><td><label>Indicador de Intermediador/Marketplace</label><span>
+                      0 - Operação sem intermediador
+                    </span></td><td><label>Tipo da Operação</label><span>
+                      1 - Saída
+                    </span></td><td><label><i>Digest</i> Value da NF-e
+              </label><span>1PNp/OZZ2Ia6JGnv6N1uaxokRx4=</span></td></tr><tr><td><label>Data da previsão de entrega</label><span /></td><td><label>Código do Município de Ocorrência do Fato Gerador</label><span>4313375</span></td><td colspan="2"><label>Código do Município de Ocorrência do Fato Gerador do IBS / CBS</label><span /></td></tr></table></fieldset><fieldset><legend>Compra Governamental</legend><table class="box"><tr><td><label>Tipo de ente governamental</label><span></span></td><td><label>Percentual de redução de alíquota em compra governamental</label><span /></td><td><label>Tipo de operação com o ente governamental</label><span></span></td></tr></table></fieldset><fieldset><legend>
+          Situação Atual:
+
+          AUTORIZADA
+
+          (Ambiente de autorização:
+           Produção)
+        </legend><table class="box"><tr><td><label>Eventos da NF-e</label></td><td><label>Protocolo</label></td><td><label>Data Autorização</label></td><td><label>Data Inclusão BD</label></td></tr><tr><td><span>
+                    Autorização de Uso
+                  </span></td><td><span>243260403694284<input type="hidden" id="nProt" value="243260403694284" /></span></td><td><span>21/09/2026 
+        às
+      00:27:52-03:00</span></td><td><span>21/09/2026 às 00:27:52</span></td></tr><tr><td><span>
+                          CT-e Autorizado (Órgão Autor: RS)
+                        </span></td><td><span><a onclick="&#xA;                              showEvento(610600, 'NFe43260915436940001177550010445204901195759810', '591264241606169','0.00')&#xA;                            " href="javascript:;" class="linkCce">591264241606169</a><div style="display:none"><div id="EventoCTeAutorizado591264241606169" class="GeralXslt"><fieldset><legend class="titulo-aba">CT-e Autorizado</legend><table class="box"><tr><td class="col-2" colspan="3"><label>Orgão Recepção do Evento</label><span>91 -
+                  AMBIENTE NACIONAL</span></td><td class="col-4" colspan="3"><label>Ambiente</label><span>1 - Produção</span></td><td class="col-4" colspan="3"><label>Versão</label><span>1.00</span></td></tr></table><br /><table class="box"><tr class="col-2"><td colspan="2"><label>Chave de Acesso</label><span><a onclick="&#xA;                    abreDocumento('43260915436940001177550010445204901195759810');&#xA;                  " href="javascript:;">43260915436940001177550010445204901195759810</a></span></td><td colspan="2"><label>Id do Evento</label><span>ID6106004326091543694000117755001044520490119575981001</span></td></tr><tr class="col-2"><td colspan="2"><label>Autor Evento (CNPJ / CPF)</label><span>33.683.111/0001-07</span></td><td colspan="2"><label>Data Evento</label><span>21/09/2026 
+        às
+      07:58:36-03:00</span></td></tr></table><br /><table class="box"><tr class="col-2"><td colspan="2"><label>Tipo de Evento</label><span>610600 - CT-e Autorizado</span></td><td colspan="2"><label>Sequencial do Evento</label><span>1</span></td></tr></table></fieldset><fieldset><legend>Detalhes do Evento</legend><table class="box"><tr class="col-2"><td colspan="2"><label>Descrição do Evento</label><span>CT-e Autorizado</span></td><td colspan="2"><label>Versão</label><span>1.00</span></td></tr></table><br /><table class="box"><tr class="col-2"><td colspan="2"><label>Chave de Acesso CT-e</label><span><a onclick="&#xA;                    abreDocumento('43260928387734002138570010175310511106651490');&#xA;                  " href="javascript:;">43260928387734002138570010175310511106651490</a></span></td><td colspan="2"><label>Protocolo do CT-e</label><span>143260253839086</span></td></tr><tr class="col-2"><td colspan="2"><label>Data de emissão do CT-e</label><span>21/09/2026 
+        às
+      07:32:28-03:00</span></td><td colspan="2"><label>Data da autorização do CT-e</label><span>21/09/2026 
+        às
+      07:32:30</span></td></tr><tr class="col-2"><td colspan="2"><label>Modal</label><span>
+                    01 - Rodoviário
+                  </span></td></tr></table></fieldset><fieldset><legend>Emitente CT-e</legend><table class="box"><tr class="col-2"><td colspan="2"><label>CNPJ</label><span>28.387.734/0021-38</span></td><td colspan="2"><label>IE</label><span>0240586638</span></td></tr><tr class="col-2"><td colspan="2"><label>Nome do Emitente</label><span>AMAZON LOGISTICA DO BRASIL LTDA</span></td></tr></table></fieldset><fieldset><legend class="titulo-aba">Autorização pela SEFAZ</legend><table class="box"><tr><td class="col-2" colspan="3"><label>Mensagem de Autorização</label><span>135 -
+                Evento registrado e vinculado a NF-e</span></td><td class="col-5" colspan="3"><label>Protocolo</label><span>591264241606169<br /></span></td><td class="col-3" colspan="3"><label>Data/Hora Autorização</label><span>21/09/2026 
+        às
+      07:58:36-03:00</span></td></tr></table></fieldset></div></div></span></td><td><span>21/09/2026 
+        às
+      07:58:36-03:00</span></td><td><span>21/09/2026 às 08:00:24</span></td></tr></table></fieldset></div></div><div id="emitente" class="dfe-conteudo-aba" style="display:none"><div id="Emitente" class="GeralXslt"><fieldset><legend class="titulo-aba">Dados do Emitente</legend><table class="box"><tr class="col-2"><td><label>Nome / Razão Social</label><span>AMAZON SERVICOS DE VAREJO DO BRASIL LTDA</span></td><td><label>Nome Fantasia</label><span>AMAZON.COM.BR</span></td></tr><tr><td><label>CNPJ</label><span>15.436.940/0011-77</span></td><td><label>Endereço</label><span>ESTRADA DA PEDREIRA PAVILHAO 5, 64</span></td></tr><tr><td><label>Bairro / Distrito</label><span>PEDREIRA</span></td><td><label>CEP</label><span>92480-000</span></td></tr><tr><td><label>Município</label><span>4313375
+                -
+                NOVA SANTA RITA</span></td><td><label>Telefone</label><span /></td></tr><tr><td><label>UF</label><span>RS</span></td><td><label>País</label><span>1058
+                    -
+                  BRASIL</span></td></tr><tr><td><label>Inscrição Estadual</label><span>3820025709</span></td><td><label>Inscrição Estadual do Substituto Tributário</label><span></span></td></tr><tr><td><label>Inscrição Municipal</label><span></span></td><td><label>Município da Ocorrência do Fato Gerador do ICMS</label><span>4313375</span></td></tr><tr><td><label>CNAE Fiscal</label><span></span></td><td><label>Código de Regime Tributário</label><span>
+                      3 - Regime Normal
+                    </span></td></tr></table></fieldset></div></div><div id="destinatario" class="dfe-conteudo-aba" style="display:none"><div id="DestRem" op="1" class="GeralXslt"><fieldset><legend class="titulo-aba">Dados do Destinatário</legend><table class="box"><tr class="col-2"><td colspan="3"><label>Nome / Razão Social</label><span>Alexandre Vieira</span></td></tr><tr class="col-2"><td colspan="2"><label>CPF</label><span>000.000.000-00</span></td><td><label>Endereço</label><span>Rua Corticeira, 413, Hipica</span></td></tr><tr><td colspan="2"><label>Bairro / Distrito</label><span>Hipica</span></td><td><label>CEP</label><span>91755-654</span></td></tr><tr><td colspan="2"><label>Município</label><span>4314902
+                    -
+                  Porto Alegre</span></td><td><label>Telefone</label><span /></td></tr><tr><td colspan="2"><label>UF</label><span>RS</span></td><td><label>País</label><span /></td></tr><tr><td style="width:25%"><label>Indicador IE</label><span>
+                      09 - Não Contribuinte, que pode ou não possuir Inscrição Estadual no Cadastro de Contribuintes do ICMS
+                    </span></td><td style="width:25%"><label>Inscrição Estadual</label><span></span></td><td style="width:50%"><label>Inscrição SUFRAMA</label><span></span></td></tr><tr><td><label>IM</label><span></span></td><td colspan="2"><label>E-mail</label><span></span></td></tr></table></fieldset></div></div><div id="produtosServicos" class="dfe-conteudo-aba" style="display:none"><div id="Prod" class="GeralXslt"><fieldset><legend class="titulo-aba">Dados dos Produtos e Serviços</legend><div><table class="prod-serv-header box"><tr><td class="fixo-prod-serv-numero"><label>Num.</label></td><td class="fixo-prod-serv-descricao"><label>Descrição</label></td><td class="fixo-prod-serv-qtd"><label>Qtd.</label></td><td class="fixo-prod-serv-uc"><label>Unidade Comercial</label></td><td class="fixo-prod-serv-vb"><label>Valor(R$)</label></td></tr></table><table class="toggle box"><tr><td class="fixo-prod-serv-numero"><span>1</span></td><td class="fixo-prod-serv-descricao"><span>Orfeu Cafe Classico em Graos, 100% Arabica, Torra Media, 1kg</span></td><td class="fixo-prod-serv-qtd"><span>1,0000</span></td><td class="fixo-prod-serv-uc"><span>UN</span></td><td class="fixo-prod-serv-vb"><span>139,00</span></td></tr></table><table class="toggable box" style="background-color:#ECECEC"><tr><td><table class="box"><tr class="col-4"><td colspan="4"><label>Código do Produto</label><span>B07HDSL78H</span></td><td colspan="2"><label>Código NCM</label><span>09012100</span></td><td colspan="2"><label>Código CEST</label><span>1709602</span></td><td colspan="4" /></tr><tr><td colspan="4"><label>Indicador de Escala Relevante</label><span></span></td><td colspan="4"><label>CNPJ do Fabricante da Mercadoria</label><span></span></td><td><label>Código de Benefício Fiscal na UF</label><span></span></td></tr><tr><td colspan="4"><label>Código EX da TIPI</label><span></span></td><td colspan="4"><label>CFOP</label><span>5102</span></td><td colspan="4"><label>Outras Despesas Acessórias</label><span /></td></tr><tr><td colspan="4"><label>Valor do Desconto</label><span>13,90</span></td><td colspan="4"><label>Valor Total do Frete</label><span /></td><td colspan="4"><label>Valor do Seguro</label><span /></td></tr></table><br /><table class="box"><tr class="col-12"><td colspan="12"><label>
+                          Indicador de Composição do Valor Total da NF-e
+                        </label><span>
+                              1 - O valor do item (vProd) compõe o valor total da NF-e (vProd)
+                            </span></td></tr><tr class="col-4"><td colspan="4"><label>Código EAN Comercial</label><span>7898912704016</span></td><td colspan="4"><label>Unidade Comercial</label><span>UN</span></td><td colspan="4"><label>Quantidade Comercial</label><span>1,0000</span></td></tr><tr><td colspan="4"><label>Código EAN Tributável</label><span>7898912704016</span></td><td colspan="4"><label>Unidade Tributável</label><span>UN</span></td><td colspan="4"><label>Quantidade Tributável</label><span>1,0000</span></td></tr><tr><td colspan="4"><label>Valor unitário de comercialização</label><span>139,0000000000</span></td><td colspan="4"><label>Valor unitário de tributação</label><span>139,0000000000</span></td><td colspan="4" /></tr><tr><td colspan="4"><label>Número do pedido de compra</label><span>501698905573301</span></td><td colspan="4"><label>Item do pedido de compra</label><span></span></td><td><label>Valor Aproximado dos Tributos</label><span>20,33</span></td></tr><tr><td colspan="4"><label>Número da FCI</label><span></span></td></tr><tr><td colspan="12"><fieldset><legend>ICMS Normal e ST</legend><table class="box"><tr class="col-3"><td><label>Origem da Mercadoria</label><span>0 - Nacional</span></td><td><label>Tributação do ICMS</label><span>00 - Tributada integralmente</span></td><td><label>Modalidade Definição da BC ICMS NORMAL</label><span>3 - Valor da Operação</span></td></tr><tr class="col-3"><td><label>Base de Cálculo do ICMS Normal</label><span>125,10</span></td><td><label>Alíquota do ICMS Normal</label><span>17,0000</span></td><td><label>Valor do ICMS Normal</label><span>21,27</span></td></tr><tr class="col-3"><td><label>Percentual do Fundo de Combate à Pobreza (FCP)</label><span /></td><td><label>Valor do Fundo de Combate à Pobreza (FCP)</label><span /></td></tr></table></fieldset><fieldset><legend>Imposto Sobre Produtos Industrializados</legend><table class="box"><tr class="col-3"><td><label>Classe de Enquadramento</label><span></span></td><td><label>Código de Enquadramento</label><span>999</span></td><td><label>Código do Selo</label><span></span></td></tr><tr><td><label>CNPJ do Produtor</label><span /></td><td><label>Qtd. Selo</label><span /></td><td><label>CST</label><span>
+                                            53-Saída não-tributada
+                                          </span></td></tr><tr><td><label>Qtd Total Unidade Padrão</label><span /></td><td><label>Valor por Unidade</label><span /></td><td><label>Valor IPI</label><span /></td></tr><tr><td><label>Base de Cálculo</label><span /></td><td><label>Alíquota</label><span /></td></tr></table></fieldset></td></tr><tr><td colspan="12"><fieldset><legend class="toggle">PIS</legend><div class="toggable"><table class="box"><tr class="col-3"><td colspan="3"><label>CST</label><span>06 - Operação Tributável (alíquota zero)</span></td></tr></table></div></fieldset></td></tr><tr /><tr><td colspan="12"><fieldset><legend class="toggle">COFINS</legend><div class="toggable"><table class="box"><tr class="col-3"><td colspan="3"><label>CST</label><span>06 - Operação Tributável (alíquota zero)</span></td></tr></table></div></fieldset></td></tr><tr /><tr /><tr /><tr><td colspan="12"><fieldset><legend class="toggle">IBSCBS</legend><div class="toggable"><table class="box"><tr class="col-3"><td><label>CST</label><span>000</span></td><td><label>cClassTrib</label><span>000001</span></td><td><label>Operação de Doação</label><span>
+									 
+								</span></td></tr><tr class="col-1"><td><label>Valor da BC</label><span>103,83</span></td></tr></table><h6>IBS Estadual</h6><table class="box"><tr class="col-3"><td><label>Alíquota do IBS da UF</label><span>0,1000</span></td></tr><tr class="col-3" /><tr class="col-1"><td><label>Valor do IBS de competência das UF</label><span>0,10</span></td></tr></table><h6>IBS Municipal</h6><table class="box"><tr class="col-3"><td><label>Alíquota do IBS do Município</label><span>0,0000</span></td></tr><tr class="col-3" /><tr class="col-1"><td><label>Valor do IBS Municipal</label><span>0,00</span></td></tr></table><br /><table class="box"><tr class="col-1"><td><label>Valor IBS do Item</label><span>0,10</span></td></tr></table><h6>CBS</h6><table class="box"><tr class="col-3"><td><label>Alíquota da CBS</label><span>0,9000</span></td></tr><tr class="col-3" /><tr class="col-1"><td><label>Valor da CBS</label><span>0,93</span></td></tr></table><br /></div></fieldset></td></tr><tr><td colspan="12" /></tr><tr><td colspan="12"><fieldset><legend>Referenciamento de item de outros DFe</legend><table class="box"><tr class="col-2"><td><label>Chave de Acesso do DFe referenciado</label><span></span></td><td><label>Número do item</label><span></span></td></tr></table></fieldset></td></tr></table></td></tr></table></div></fieldset></div></div><div id="totais" class="dfe-conteudo-aba" style="display:none"><div id="Totais" class="GeralXslt"><fieldset><legend class="titulo-aba">Totais</legend><fieldset><legend>
+            ICMS
+          </legend><table class="box"><tr class="col-4"><td><label>Base de Cálculo ICMS</label><span>125,10</span></td><td><label>Valor do ICMS</label><span>21,27</span></td><td><label>Valor do ICMS Desonerado</label><span>0,00</span></td><td><label>Valor Total do FCP</label><span>0,00</span></td></tr><tr><td><label>Valor Total ICMS Interestadual UF Destino</label><span /></td><td><label>Valor Total ICMS Interestadual UF Rem.</label><span /></td><td><label>Base de Cálculo ICMS ST</label><span>0,00</span></td></tr><tr><td><label>Valor ICMS Substituição</label><span>0,00</span></td><td><label>Valor Total do FCP retido por ST</label><span>0,00</span></td><td><label>Valor Total do FCP retido anteriormente por ST</label><span>0,00</span></td><td><label>
+                  Valor Total dos Produtos
+                </label><span>139,00</span></td></tr><tr><td><label>Valor do Frete</label><span>0,00</span></td><td><label>Valor do Seguro</label><span>0,00</span></td><td><label>Valor Total dos Descontos</label><span>13,90</span></td><td><label>Valor Total do II</label><span>0,00</span></td></tr><tr><td><label>Valor Total do IPI</label><span>0,00</span></td><td><label>Valor Total do IPI Devolvido</label><span>0,00</span></td><td><label>Valor do PIS</label><span>0,00</span></td><td><label>Valor da COFINS</label><span>0,00</span></td></tr><tr><td><label>Outras Despesas Acessórias</label><span>0,00</span></td><td><label>Valor Total da NFe</label><span>125,10</span></td><td><label>Valor Aproximado dos Tributos</label><span>20,33</span></td></tr></table></fieldset><fieldset><legend>
+					IBSCBS
+				</legend><table class="box"><tr class="col-3"><td colspan="3"><label>Base de Cálculo do IBS e CBS</label><span>103,83</span></td></tr><tr><td><label>IBS Estadual – Diferimento</label><span>0,00</span></td><td><label>IBS Estadual – Devolução de Tributo</label><span>0,00</span></td><td><label>IBS Estadual – Valor do IBS</label><span>0,10</span></td></tr><tr><td><label>IBS Municipal – Diferimento</label><span>0,00</span></td><td><label>IBS Municipal – Devolução de Tributo</label><span>0,00</span></td><td><label>IBS Municipal – Valor do IBS</label><span>0,00</span></td></tr><tr><td><label>IBS – Total</label><span>0,10</span></td><td><label>Crédito Presumido – IBS</label><span>0,00</span></td><td><label>Crédito Presumido Condição Suspensiva – IBS</label><span>0,00</span></td></tr><tr><td><label>CBS – Diferimento</label><span>0,00</span></td><td><label>CBS – Devolução de Tributo</label><span>0,00</span></td><td><label>CBS – Valor Total</label><span>0,93</span></td></tr><tr><td><label>CBS – Crédito Presumido</label><span>0,00</span></td><td colspan="2"><label>CBS – Crédito Presumido Condição Suspensiva</label><span>0,00</span></td></tr></table></fieldset></fieldset></div></div><div id="transporte" class="dfe-conteudo-aba" style="display:none"><div id="Transporte" class="GeralXslt"><fieldset><legend class="titulo-aba">Dados do Transporte</legend><table class="box"><tr><td><label>Modalidade do Frete</label><span>
+                    0 - Contratação do Frete por Conta do Remetente
+                  </span></td></tr></table></fieldset></div></div><div id="cobranca" class="dfe-conteudo-aba" style="display:none"><div id="Cobranca" class="GeralXslt"><fieldset><legend class="titulo-aba">Formas de Pagamento</legend><div><table class="prod-serv-header box"><tr><td style="width:20%"><label>Ind. Forma de Pagamento.</label></td><td style="width:20%"><label>Meio de Pagamento</label></td><td style="width:30%"><label>Descrição do Meio de Pagamento</label></td><td style="width:30%"><label>Valor do Pagamento</label></td></tr></table></div><table class="toggle box"><tr><td style="width:20%"><span>
+                        0 - Pagamento à Vista
+                      </span></td><td style="width:20%"><span>
+                        3 - Cartão de Crédito
+                      </span></td><td style="width:30%"><span></span></td><td style="width:30%"><span>125,10</span></td></tr></table><table class="toggable box" style="background-color:#ECECEC"><tr><td><table class="box"><tr><td style="width:40%"><label>Tipo de Integração Pagamento </label></td><td style="width:20%"><label>CNPJ da Credenciadora </label></td><td style="width:20%"><label>Bandeira da operadora</label></td><td style="width:20%"><label> Número de autorização </label></td></tr><tr><td style="width:40%"><span>
+                              1 - Pagamento integrado com o sistema de automação da empresa (TEF)
+                            </span></td><td style="width:20%"><span>10.440.482/0001-54</span></td><td style="width:20%"><span>
+                              02 - Mastercard
+                            </span></td><td style="width:20%"><span>3knfSjAaQtFxjbSQ9jz8</span></td></tr><tr class="col-6"><td><label>Troco</label></td></tr><tr class="col-6"><td><span></span></td></tr></table></td></tr></table></fieldset></div></div><div id="informacoes_adicionais" class="dfe-conteudo-aba" style="display:none"><div id="Inf" class="GeralXslt"><fieldset><legend class="titulo-aba">
+          Informações Adicionais
+        </legend><div id="Versao">
+          XSLT:
+    v4.1.b
+  </div><table class="box"><tr><td colspan="3"><label>Formato de Impressão DANFE</label><span>1 - DANFE normal, retrato</span></td></tr></table><fieldset><legend>Informações Complementares de Interesse do Contribuinte</legend><table class="box"><tr><td><label>Descrição</label><span><div style="word-wrap: break-word" xmlns:func="http://exslt.org/functions">Valor aproximado dos tributos: Federal - R$ 11.57 (9.25%); Estadual - R$ 8.76 (7.00%); Municipal - R$ 0.00 (0.00%) - Fonte IBPT. Numero do pedido da compra: 702-3968206-4721047</div></span></td></tr></table></fieldset><fieldset><legend class="titulo-aba-interna">Observações do Contribuinte</legend><table class="box"><tr><td class="fixo-info-adic-proc-ref"><label>Campo</label></td><td><label>Texto</label></td></tr><tr class="col-2"><td><span>icmsTransporte</span></td><td><span>1</span></td></tr></table></fieldset></fieldset></div></div><div id="aba_nft_9" class="nft" /><div id="aba_nft_10" class="nft" /></div>                        </div>
+                    </div>
+                </div>
+            </article>
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript" language="javascript">
+
+    const dicionarioDfes = {
+        55: { sistema: "nfe", action: "NFe" },
+        57: { sistema: "cte", action: "CTe" },
+        58: { sistema: "mdfe", action: "MDFe" },
+        62: { sistema: "nfcom", action: "NFCom" },
+        63: { sistema: "bpe", action: "BPe" },
+        64: { sistema: "cte", action: "CTe" },   // GTVe
+        65: { sistema: "nfce", action: "NFCe" },
+        66: { sistema: "nf3e", action: "NF3e" },
+        67: { sistema: "cte", action: "CTe" },   // CTe OS
+        75: { sistema: "nfag", action: "NFAg" },
+        76: { sistema: "nfgas", action: "NFGas" }
+    };
+
+    function exibirErroConsulta(form, mensagem) {
+        // Tenta pelo data-valmsg-for (padrão do Razor)
+        let span = form.querySelector("[data-valmsg-for='ErroConsulta']");
+
+        // Fallback: qualquer span/div com classe text-danger sem data-valmsg-for de campo
+        if (!span) {
+            span = form.querySelector(".text-danger:not([data-valmsg-for])");
+        }
+
+        if (span) {
+            span.textContent = mensagem;
+            span.classList.remove("field-validation-valid");
+            span.classList.add("field-validation-error");
+        }
+    }
+
+    function limparErroConsulta(form) {
+        const span = form.querySelector("[data-valmsg-for='ErroConsulta']");
+        if (span) {
+            span.textContent = "";
+            span.classList.remove("field-validation-error");
+            span.classList.add("field-validation-valid");
+        }
+    }
+
+    function resolverActionPorChave(form) {
+        const campoChave = form.querySelector("[name='ChaveAcessoDfe']");
+
+        if (!campoChave || !campoChave.value.trim()) {
+            exibirErroConsulta(form, "Informe a chave de acesso.");
+            return false;
+        }
+
+        const digits = campoChave.value.replace(/\D/g, "");
+        if (digits.length !== 44) {
+            exibirErroConsulta(form, "Chave de acesso inválida. Deve conter 44 dígitos.");
+            return false;
+        }
+
+        const codModelo = parseInt(digits.substring(20, 22), 10);
+        const parametros = dicionarioDfes[codModelo];
+
+        if (!parametros) {
+            exibirErroConsulta(form, "Modelo de documento não reconhecido (código: " + codModelo + ").");
+            return false;
+        }
+
+        limparErroConsulta(form);
+
+        const ehSSL = form.dataset.ssl === "true";
+        const sufixo = ehSSL ? "SSL" : "";
+
+        form.action = "/" + parametros.action + sufixo + "/Consulta";
+
+        const campoSistema = form.querySelector("[name='sistema']");
+        if (campoSistema) {
+            campoSistema.value = parametros.sistema;
+        }
+
+        return true;
+    }
+
+    // Aplica em todos os forms marcados, quando o DOM estiver pronto
+    document.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll("form[data-route-by-chave='true']").forEach(function (form) {
+            form.addEventListener("submit", function (e) {
+                e.preventDefault();
+
+                if (resolverActionPorChave(this)) {
+                    this.submit();
+                }
+            });
+        });
+    });
+
+    $().ready(function () {
+        $('#ChaveAcessoDfe').on('input', function () {
+            $('#ChaveAcessoDfe').val($('#ChaveAcessoDfe').val().replace(/[^0-9]+/g, ''));
+        });
+    })
+
+    function exibeModal(nomeModal) {
+        $("#" + nomeModal).modal();
+        document.getElementById('iframeDownload').contentWindow.location.reload(true);
+    }
+
+    function limpar() {
+        grecaptcha.reset();
+        document.getElementById("captchaParaValidar").value = '';
+        $('.field-validation-error').html("");
+        document.getElementById("frmConsulta").reset();
+    }
+
+    function showEvento(codEvento, chaveAcessoDfe, nProt, versaoEvento) {
+        // codEvento : Código do Evento a ser pesquisado no XML.
+        // chaveAcessoDfe : Chave de acesso do DFe retirado atributo ID do XML.
+        // nProt : Número do Protocolo do Evento a ser pesquisado no XML.
+        // versaoEvento: Versão do XML de Evento
+
+        chaveAcessoDfe = chaveAcessoDfe.replace(/[^0-9]/g, '');
+
+        var chaveAcessoDfeObj = {
+            cUF: parseInt(chaveAcessoDfe.substr(0, 2)),
+            Ano: parseInt(chaveAcessoDfe.substr(2, 2)),
+            Mes: parseInt(chaveAcessoDfe.substr(4, 2)),
+            AAMM: parseInt(chaveAcessoDfe.substr(2, 4)),
+            CNPJ: parseInt(chaveAcessoDfe.substr(6, 14)),
+            modelo: parseInt(chaveAcessoDfe.substr(20, 2)),
+            serie: parseInt(chaveAcessoDfe.substr(22, 3)),
+            nNF: parseInt(chaveAcessoDfe.substr(25, 9)),
+            tpEmis: parseInt(chaveAcessoDfe.substr(34, 1)),
+            cNF: parseInt(chaveAcessoDfe.substr(35, 8)),
+            cDV: parseInt(chaveAcessoDfe.substr(43, 1))
+        };
+
+        var resultado = "";
+        var siglaModelo = "";
+
+        switch (chaveAcessoDfeObj.modelo) {
+            case 55:
+            case 65:
+
+               siglaModelo = chaveAcessoDfeObj.modelo == 65 ? "Nfce" : "Nfe";
+
+               switch (codEvento) {
+
+                    case 110110:
+                        resultado = $('#CCe')[0].outerHTML;
+                        break;
+                    case 110111:
+                        resultado = $('#EventoCanc')[0].outerHTML;
+                        break;
+                    case 110140:
+                        resultado = $('#EPEC' + nProt)[0].outerHTML;
+                        break;
+
+                    case 111500:
+                    case 111501:
+                    case 111502:
+                    case 111503://Não consta no xslt NFe.xsl da Equipe NFe
+                        break;
+
+                    case 210200:
+                        resultado = $('#ConfirmacaoOperacao' + nProt)[0].outerHTML;
+                        break;
+                    case 210210:
+                        resultado = $('#CienciaOperacao' + nProt)[0].outerHTML;
+                        break;
+                    case 210220:
+                        resultado = $('#DesconhecimentoOperacao' + nProt)[0].outerHTML;
+                        break;
+                    case 210240:
+                        resultado = $('#OperacaoNaoRealizada' + nProt)[0].outerHTML;
+                        break;
+
+                    case 400100:
+                    case 400101:
+                    case 400104:
+                    case 400105:
+                    case 400120:
+                    case 400121:
+                    case 400200:
+                    case 400201:
+                    case 400300:
+                    case 411500:
+                    case 411501:
+                    case 411502:
+                    case 411503:
+                    case 500100:
+                    case 500101:
+                    case 500104:
+                    case 500105://Não consta no xslt NFe.xsl da Equipe NFe
+                        break;
+
+                    case 610500://Não exibe consulta pública (somente para ambiente intranet ou sistema_interno e igual órgão autor = 43)
+                        break;
+
+                    case 610501://Não exibe consulta pública (somente para ambiente intranet)
+                        break;
+
+                    case 610510:
+                    case 610511:
+                    case 610514:
+                    case 610515://Não consta no xslt NFe.xsl da Equipe NFe
+                        break;
+
+                    case 610550://Não exibe consulta pública (somente para ambiente intranet)
+                        break;
+
+                    case 610552:
+                    case 610554://Não consta no xslt NFe.xsl da Equipe NFe
+                        break;
+
+                    case 610600:
+                    case 610601:
+                    case 610610:
+                    case 610611://Não exibe consulta pública (somente para ambiente intranet)
+                        break;
+
+                    case 610614:
+                    case 610615:
+                    case 790700://Não consta no xslt NFe.xsl da Equipe NFe
+                        break;
+
+                    case 990900:
+                        resultado = $('#EventoVistoriaSUFRAMA' + nProt)[0].outerHTML;
+                        break;
+                    case 990910:
+                        resultado = $('#EventoVistoriaSUFRAMA' + nProt)[0].outerHTML;
+                        break;
+
+                    default:
+                        break;
+                }
+                break;
+            case 57:
+            case 67:
+                siglaModelo = "Cte";
+                resultado = $('#' + nProt)[0].outerHTML;
+                break;
+            case 63:
+                siglaModelo = "Bpe";
+                resultado = $('#' + nProt)[0].outerHTML;
+                break;
+            case 58:
+                siglaModelo = "Mdfe";
+                resultado = $('#' + nProt)[0].outerHTML;
+                break;
+
+            case 67:
+                siglaModelo = "Gtve";
+                resultado = $('#' + nProt)[0].outerHTML;
+                break;
+
+            default:
+                break;
+        }
+
+        if (resultado.length !== 0) {
+            var janela = window.open('', 'winDFeCompleta', 'top=50,left=50,width=800,height=500,scrollbars=yes,status=yes');
+            var HTML = '';
+            HTML += '		<html>';
+            HTML += '			<head>';
+            HTML += '				<title>Evento</title>';
+            HTML += '				<link rel="stylesheet" href="../Content/css/xslt.css" type="text/css">';
+
+
+            HTML += '               <link rel="stylesheet" href="../Content/css/bootstrap-matriz.min.css" media="all" />';
+            HTML += '               <link rel="stylesheet" href="../Content/css/bootstrap-override.css" media="all" />';
+            HTML += '               <link href="../Content/bootstrap.css" rel="stylesheet" />';
+            HTML += '			</head>';
+            HTML += '		<body class="container"> <div class="">  ';
+            HTML += '<style type="text/css">table{ font-size: 12px; }</style>';
+            HTML += resultado;
+            HTML += '       </div></body>';
+            HTML += '		</html>';
+
+            janela.document.write(HTML);
+            janela.document.close();
+        }
+
+    }
+
+</script>
+
+    <style type="text/css">
+        .dfe-selected {
+            background-color: #1b7bb9 !important;
+            color: white !important;
+        }
+    </style>
+
+    </div>
+
+    <script type="text/javascript">
+
+        function ajustaTamanhoIframe() {
+            var tamanhoConteudo = $('#ContainerRaiz').height();
+            var target = parent.postMessage ? parent : (parent.document.postMessage ? parent.document : undefined);
+            target.postMessage({ height: tamanhoConteudo }, '*');
+        }
+
+        var interval = setInterval(ajustaTamanhoIframe, 200);
+        ajustaTamanhoIframe();
+    </script>
+</body>
+</html>
