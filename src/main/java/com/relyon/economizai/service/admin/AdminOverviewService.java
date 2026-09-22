@@ -42,7 +42,7 @@ public class AdminOverviewService {
         var weekAgo = today.minusDays(6).atStartOfDay();
         var monthAgo = today.minusDays(29).atStartOfDay();
 
-        var usersTotal = userRepository.count();
+        var usersTotal = userRepository.countUsers(false);
         var usersToday = userRepository.countSignupsSince(startOfToday, false);
         var usersThisWeek = userRepository.countSignupsSince(weekAgo, false);
         var usersPro = userRepository.countProTier(false);

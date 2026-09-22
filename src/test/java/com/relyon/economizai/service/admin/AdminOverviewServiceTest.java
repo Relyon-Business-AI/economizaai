@@ -34,7 +34,7 @@ class AdminOverviewServiceTest {
 
     @Test
     void aggregatesCrossAreaKpisAndParseRate() {
-        when(userRepository.count()).thenReturn(72L);
+        when(userRepository.countUsers(false)).thenReturn(72L);
         when(userRepository.countSignupsSince(any(), anyBoolean())).thenReturn(3L);
         when(userRepository.countProTier(false)).thenReturn(54L);
         when(subscriptionRepository.countPaying(eq(SubscriptionStatus.ACTIVE), anyBoolean())).thenReturn(0L);
