@@ -95,4 +95,27 @@ class RealGoiasFixtureTest {
         assertEquals("https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p=" + CHAVE + "|3|1",
                 GoiasNfcePortalAdapter.shellUrl("https://evil.example.com/?p=" + CHAVE, CHAVE));
     }
+
+    @Test
+    void allowlistMarkerInQueryStringDoesNotBypassHostCheck() {
+        // The old substring check matched ".sefaz.go.gov.br/" anywhere,
+        // including inside an attacker's query string.
+        var crafted = "https://attacker.example/hook?p=" + CHAVE + "|3|1&x=.sefaz.go.gov.br/";
+        assertEquals("https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p=" + CHAVE + "|3|1",
+                GoiasNfcePortalAdapter.shellUrl(crafted, CHAVE));
+    }
+
+    @Test
+    void userinfoTrickDoesNotBypassHostCheck() {
+        var crafted = "https://nfeweb.sefaz.go.gov.br@attacker.example/?p=" + CHAVE;
+        assertEquals("https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p=" + CHAVE + "|3|1",
+                GoiasNfcePortalAdapter.shellUrl(crafted, CHAVE));
+    }
+
+    @Test
+    void lookalikeHostDoesNotBypassSuffixCheck() {
+        var crafted = "https://evilsefaz.go.gov.br.attacker.example/?p=" + CHAVE;
+        assertEquals("https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p=" + CHAVE + "|3|1",
+                GoiasNfcePortalAdapter.shellUrl(crafted, CHAVE));
+    }
 }
