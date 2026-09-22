@@ -43,6 +43,7 @@ import com.relyon.economizaai.service.priceindex.PromoDetector;
 import com.relyon.economizaai.service.sefaz.ChaveAcessoParser;
 import com.relyon.economizaai.service.sefaz.ParsedReceipt;
 import com.relyon.economizaai.service.sefaz.ParsedReceiptItem;
+import com.relyon.economizaai.service.sefaz.PrefetchPolicy;
 import com.relyon.economizaai.service.sefaz.ReceiptIngestionService;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
 import com.relyon.economizaai.service.subscription.Feature;
@@ -78,6 +79,7 @@ public class ReceiptService {
     private final ReceiptRepository receiptRepository;
     private final ReceiptItemRepository receiptItemRepository;
     private final SefazIngestionService sefazIngestionService;
+    private final PrefetchPolicy prefetchPolicy;
     private final CanonicalizationService canonicalizationService;
     private final PriceIndexService priceIndexService;
     private final PromoDetector promoDetector;
@@ -138,6 +140,9 @@ public class ReceiptService {
     public ReceiptResponse submitPrefetched(User user, PrefetchedReceiptRequest request) {
         var qrPayload = request.qrPayload();
         var rawContent = request.rawContent();
+        // Client-authored content is only trusted for UFs the server cannot
+        // fetch itself — everywhere else the server fetch is the integrity check.
+        prefetchPolicy.requireAllowed(ChaveAcessoParser.extractUf(sefazIngestionService.resolveChave(qrPayload)));
         var receipt = validateAndPersistProcessing(user, qrPayload);
         var receiptId = receipt.getId();
         dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingestPrefetched(receiptId, qrPayload, rawContent));

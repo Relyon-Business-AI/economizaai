@@ -111,6 +111,11 @@ economizaai:
       # the host matches one of these suffixes (e.g. svrs.rs.gov.br admits
       # dfe-portal.svrs.rs.gov.br). Extend when onboarding new state portals.
       allowed-url-hosts: ${SEFAZ_ALLOWED_URL_HOSTS:svrs.rs.gov.br,sefaz.rs.gov.br,fazenda.pr.gov.br,sef.sc.gov.br,fazenda.sp.gov.br}
+      # UFs allowed to POST client-fetched content to /receipts/prefetched.
+      # That content is client-authored (only the embedded chave ties it to
+      # SEFAZ), so the endpoint is restricted to portals that block our
+      # datacenter IP — everywhere else the server fetch is the integrity check.
+      prefetch-allowed-ufs: ${SEFAZ_PREFETCH_ALLOWED_UFS:PE}
       # Experimental catch-all for UFs without a dedicated adapter: fetch the QR's
       # own portal URL (gov.br hosts only) + shared responsive-DANFE parser, then
       # Infosimples when enabled. Attempts are recorded (admin: /state-coverage)
