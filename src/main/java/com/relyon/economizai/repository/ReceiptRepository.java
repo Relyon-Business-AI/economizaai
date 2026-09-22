@@ -82,10 +82,17 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
             + "GROUP BY receipt.cnpjEmitente ORDER BY count(receipt) DESC")
     List<Object[]> topMarketsByScans(Pageable pageable);
 
-    /** Most-scanned markets grouped by CHAIN (marketName) instead of CNPJ — unifies multi-unit chains like Zaffari. */
-    @Query("SELECT MIN(receipt.cnpjEmitente), receipt.marketName, count(receipt), COALESCE(sum(receipt.totalAmount), 0) "
-            + "FROM Receipt receipt WHERE receipt.status = 'CONFIRMED' AND receipt.marketName IS NOT NULL "
-            + "GROUP BY receipt.marketName ORDER BY count(receipt) DESC")
+    /**
+     * Most-scanned markets grouped by CHAIN — the CNPJ root (first 8 digits = the company
+     * registration; branches differ only in the /0002, /0003 suffix). Truly unifies every
+     * Zaffari unit into one row regardless of the (inconsistent) market name. Native so
+     * regexp_replace can strip any formatting before taking the root. (cnpj, name, scans, spend).
+     */
+    @Query(value = "SELECT MIN(cnpj_emitente) AS cnpj, MIN(market_name) AS name, "
+            + "count(*) AS scans, COALESCE(sum(total_amount), 0)::numeric AS spend "
+            + "FROM receipts WHERE status = 'CONFIRMED' AND cnpj_emitente IS NOT NULL "
+            + "GROUP BY substring(regexp_replace(cnpj_emitente, '\\D', '', 'g') FROM 1 FOR 8) "
+            + "ORDER BY count(*) DESC", nativeQuery = true)
     List<Object[]> topMarketsByChainScans(Pageable pageable);
 
     /** Confirmed receipts + spend by UF (region): (uf, count, spend). */

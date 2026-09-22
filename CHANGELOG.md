@@ -21,7 +21,7 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 - **`/admin/overview`**: `usersTotal` agora **exclui internos/teste** (antes usava contagem crua e destoava de PRO/hoje/semana, que já excluíam). O "total de usuários" fica consistente com o resto do painel.
 - **`AdminUserSummaryResponse`** ganhou **`totalSpend`** (soma das notas confirmadas do domicílio). E `/admin/users` aceita **`sort=receiptCount,desc`** e **`sort=totalSpend,desc`** (ranking por nº de notas / valor total), resolvidos no servidor por agregado.
 - **`/admin/receipts`** aceita **`?parseErrorReason=<chave>`** — filtra notas por motivo de falha (drill-down de Operações → "Erros mais comuns"). Casa a chave exata ou `chave:detalhes`.
-- **`/admin/market-intel`** agora retorna **`topMarketsByChain`** além de `topMarkets`: a mesma lista agrupada por **rede** (marketName) em vez de por CNPJ, pra unificar redes multi-loja (Zaffari etc.). `topMarkets` continua por CNPJ (uma linha por unidade).
+- **`/admin/market-intel`** agora retorna **`topMarketsByChain`** além de `topMarkets`: a mesma lista agrupada por **raiz do CNPJ** (8 primeiros dígitos = a empresa; filiais só mudam o sufixo `/0002`) — unifica de verdade todas as unidades de uma rede (Zaffari etc.) numa linha só. `topMarkets` continua por CNPJ (uma linha por unidade).
 - **Novo `GET /admin/notifications/sent?days=30&page=0&size=25`** → página de notificações **enviadas** (mais recentes primeiro): `{ id, userEmail, type, channel, title, body, delivered, deliveredAt, failureReason, read, createdAt }`.
 
 ## 2026-09-21 — retenção por coorte semanal + ticket médio (ARPU)
