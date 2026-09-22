@@ -90,6 +90,33 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final RateLimitPolicy PHONE_OTP_POLICY =
             new RateLimitPolicy("phone-otp", 10, Duration.ofHours(1));
 
+    /**
+     * 5 bulk imports per hour per user. Each request can carry up to 500
+     * chaves, every eligible one a server-side SEFAZ fetch — an unthrottled
+     * loop saturates the ingest pool and hammers the RS portal from our
+     * datacenter IP (the exact behavior that got PE to block us). One
+     * onboarding is 1-2 requests; 5/h is generous.
+     */
+    private static final RateLimitPolicy IMPORT_POLICY =
+            new RateLimitPolicy("import", 5, Duration.ofHours(1));
+
+    /**
+     * 3 verification-email resends per hour per user — without a cadence an
+     * attacker who registered a victim's address could loop resend into an
+     * email bomb (and burn our SMTP reputation).
+     */
+    private static final RateLimitPolicy RESEND_POLICY =
+            new RateLimitPolicy("resend", 3, Duration.ofHours(1));
+
+    /**
+     * 10 exports per hour per user. Each export builds the full purchase
+     * history in memory (XLSX/PDF) and delivery=email adds an SMTP send —
+     * CPU/heap heavy on a single instance, so it can't stay unmetered just
+     * because it's a GET.
+     */
+    private static final RateLimitPolicy EXPORT_POLICY =
+            new RateLimitPolicy("export", 10, Duration.ofHours(1));
+
     private final RateLimitRegistry registry;
     private final LocalizedMessageService messageService;
     private final ObjectMapper objectMapper;
@@ -101,7 +128,19 @@ public class RateLimitFilter extends OncePerRequestFilter {
      * 3x the intended limit.
      */
     private static final Set<String> SUBMIT_PATHS = Set.of(
-            "/api/v1/receipts", "/api/v1/receipts/photo", "/api/v1/receipts/chave/photo");
+            "/api/v1/receipts", "/api/v1/receipts/photo", "/api/v1/receipts/chave/photo",
+            "/api/v1/receipts/prefetched", "/api/v1/receipts/items-photo");
+
+    private static final Set<String> IMPORT_PATHS = Set.of(
+            "/api/v1/receipts/import", "/api/v1/receipts/import/nfg-csv");
+
+    private static final Set<String> EXPORT_PATHS = Set.of(
+            "/api/v1/receipts/export", "/api/v1/users/me/export");
+
+    /** POST /api/v1/receipts/{id}/device-content — same ingest budget as submit. */
+    private static boolean isDeviceContentPath(String uri) {
+        return uri.startsWith("/api/v1/receipts/") && uri.endsWith("/device-content");
+    }
 
     private final List<Rule> rules = List.of(
             new Rule(
@@ -110,7 +149,21 @@ public class RateLimitFilter extends OncePerRequestFilter {
                     KeyStrategy.IP),
             new Rule(
                     SUBMIT_POLICY,
-                    req -> "POST".equals(req.getMethod()) && SUBMIT_PATHS.contains(req.getRequestURI()),
+                    req -> "POST".equals(req.getMethod())
+                            && (SUBMIT_PATHS.contains(req.getRequestURI()) || isDeviceContentPath(req.getRequestURI())),
+                    KeyStrategy.USER_OR_IP),
+            new Rule(
+                    IMPORT_POLICY,
+                    req -> "POST".equals(req.getMethod()) && IMPORT_PATHS.contains(req.getRequestURI()),
+                    KeyStrategy.USER_OR_IP),
+            new Rule(
+                    RESEND_POLICY,
+                    req -> "POST".equals(req.getMethod())
+                            && "/api/v1/users/me/email-verification/resend".equals(req.getRequestURI()),
+                    KeyStrategy.USER_OR_IP),
+            new Rule(
+                    EXPORT_POLICY,
+                    req -> "GET".equals(req.getMethod()) && EXPORT_PATHS.contains(req.getRequestURI()),
                     KeyStrategy.USER_OR_IP),
             new Rule(
                     CONTACT_POLICY,
