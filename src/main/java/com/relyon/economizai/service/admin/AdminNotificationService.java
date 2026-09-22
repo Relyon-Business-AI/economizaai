@@ -1,16 +1,22 @@
 package com.relyon.economizai.service.admin;
 
 import com.relyon.economizai.dto.request.SendTestNotificationRequest;
+import com.relyon.economizai.dto.response.AdminNotificationSummaryResponse;
 import com.relyon.economizai.exception.UserNotFoundException;
 import com.relyon.economizai.model.enums.NotificationType;
+import com.relyon.economizai.repository.NotificationRepository;
 import com.relyon.economizai.repository.UserRepository;
 import com.relyon.economizai.service.notifications.NotificationPayload;
 import com.relyon.economizai.service.notifications.NotificationService;
 import com.relyon.economizai.service.privacy.LogMasker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.Map;
 
 /**
@@ -29,6 +35,16 @@ public class AdminNotificationService {
 
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final NotificationRepository notificationRepository;
+
+    /** Cross-user list of sent notifications over the window — the admin "enviadas" view. */
+    @Transactional(readOnly = true)
+    public Page<AdminNotificationSummaryResponse> listSent(int days, Pageable pageable) {
+        var since = LocalDate.now().minusDays(Math.max(1, days) - 1L).atStartOfDay();
+        var page = notificationRepository.findSentSince(since, pageable);
+        log.info("admin.notification.list_sent days={} total={}", days, page.getTotalElements());
+        return page.map(AdminNotificationSummaryResponse::from);
+    }
 
     public void sendTest(SendTestNotificationRequest request) {
         var user = userRepository.findByEmail(request.email())

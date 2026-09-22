@@ -52,16 +52,18 @@ public class AdminReceiptService {
                                              UUID householdId,
                                              UnidadeFederativa uf,
                                              ReceiptStatus status,
+                                             String parseErrorReason,
                                              Pageable pageable) {
         var trimmedCnpj = Optional.ofNullable(marketCnpj).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
         var trimmedSearch = Optional.ofNullable(search).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
+        var trimmedError = Optional.ofNullable(parseErrorReason).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
         var sortedPageable = pageable.getSort().isUnsorted()
                 ? PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by(Sort.Direction.DESC, "issuedAt"))
                 : pageable;
         // Admin sees FAILED_PARSE rows too (useful for parser triage) — but an
         // explicit status filter narrows to one bucket when passed.
         var spec = ReceiptSpecifications.forSearch(
-                householdId, from, to, trimmedCnpj, categories, status, trimmedSearch, false, uf);
+                householdId, from, to, trimmedCnpj, categories, status, trimmedSearch, false, uf, trimmedError);
         return receiptRepository.findAll(spec, sortedPageable).map(ReceiptSummaryResponse::from);
     }
 

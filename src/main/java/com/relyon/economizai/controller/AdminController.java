@@ -8,6 +8,7 @@ import com.relyon.economizai.dto.request.SetMetricsExclusionRequest;
 import com.relyon.economizai.dto.request.SetProductCategoryRequest;
 import com.relyon.economizai.dto.request.UpdateSubscriptionTierRequest;
 import com.relyon.economizai.dto.response.AcquisitionReportResponse;
+import com.relyon.economizai.dto.response.AdminNotificationSummaryResponse;
 import com.relyon.economizai.dto.response.AdminUserDetailResponse;
 import com.relyon.economizai.dto.response.BrandBackfillResponse;
 import com.relyon.economizai.dto.response.RetentionCohortResponse;
@@ -175,8 +176,10 @@ public class AdminController {
             @RequestParam(required = false) UUID householdId,
             @RequestParam(required = false) UnidadeFederativa uf,
             @RequestParam(required = false) ReceiptStatus status,
+            @RequestParam(required = false) String parseErrorReason,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(adminReceiptService.list(from, to, marketCnpj, category, q, householdId, uf, status, pageable));
+        return ResponseEntity.ok(adminReceiptService.list(
+                from, to, marketCnpj, category, q, householdId, uf, status, parseErrorReason, pageable));
     }
 
     @GetMapping("/receipts/{id}")
@@ -243,6 +246,16 @@ public class AdminController {
     public ResponseEntity<RelevanceReportResponse> relevanceReport(
             @RequestParam(defaultValue = "30") int days) {
         return ResponseEntity.ok(relevanceReportService.report(Math.max(1, days)));
+    }
+
+    @Operation(summary = "Sent notifications",
+            description = "Cross-user list of notifications sent over the window (newest first): recipient, "
+                    + "type/channel, title/body, delivered + read status. Paginated.")
+    @GetMapping("/notifications/sent")
+    public ResponseEntity<Page<AdminNotificationSummaryResponse>> sentNotifications(
+            @RequestParam(defaultValue = "30") int days,
+            @PageableDefault(size = 25) Pageable pageable) {
+        return ResponseEntity.ok(adminNotificationService.listSent(days, pageable));
     }
 
     /**

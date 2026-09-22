@@ -103,6 +103,13 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     @Query("SELECT count(user) FROM User user WHERE user.subscriptionTier = 'PRO'" + INTERNAL_FILTER)
     long countProTier(boolean includeInternal);
 
+    /** Total users, excluding admins/test accounts when includeInternal=false (matches the funnel counts). */
+    @Query("SELECT count(user) FROM User user WHERE (:includeInternal = TRUE OR (user.role <> 'ADMIN' "
+            + "AND user.excludedFromMetrics = FALSE "
+            + "AND lower(user.email) NOT LIKE '%@economizaai.app' "
+            + "AND lower(user.email) NOT LIKE '%@cloudtestlabaccounts.com'))")
+    long countUsers(boolean includeInternal);
+
     /**
      * One row per signup in the window: (acquisitionChannel, createdAt, firstReceiptAt).
      * firstReceiptAt is null when the user never activated. The service buckets these

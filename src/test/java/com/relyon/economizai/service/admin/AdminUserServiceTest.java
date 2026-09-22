@@ -34,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -250,5 +251,51 @@ class AdminUserServiceTest {
 
         verify(userRepository).findAll(any(Specification.class), sortedPageableCaptor.capture());
         assertEquals(requested, sortedPageableCaptor.getValue());
+    }
+
+    @Test
+    void listRanksBySpendDescWhenSortIsTotalSpend() {
+        var poorHome = UUID.randomUUID();
+        var richHome = UUID.randomUUID();
+        var poor = User.builder().id(UUID.randomUUID()).name("Poor").email("poor@test.com")
+                .household(Household.builder().id(poorHome).inviteCode("P").build()).build();
+        var rich = User.builder().id(UUID.randomUUID()).name("Rich").email("rich@test.com")
+                .household(Household.builder().id(richHome).inviteCode("R").build()).build();
+        poor.setCreatedAt(LocalDateTime.now().minusDays(1));
+        rich.setCreatedAt(LocalDateTime.now());
+        when(userRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(poor, rich)));
+        when(receiptRepository.sumConfirmedTotalByHouseholdIds(anyList())).thenReturn(List.<Object[]>of(
+                new Object[]{poorHome, new BigDecimal("10.00")},
+                new Object[]{richHome, new BigDecimal("999.00")}));
+
+        var requested = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "totalSpend"));
+        var page = service.list(null, requested);
+
+        assertEquals("rich@test.com", page.getContent().get(0).email());
+        assertEquals(new BigDecimal("999.00"), page.getContent().get(0).totalSpend());
+        assertEquals("poor@test.com", page.getContent().get(1).email());
+    }
+
+    @Test
+    void listRanksByReceiptCountAndPaginatesInMemory() {
+        var homeA = UUID.randomUUID();
+        var homeB = UUID.randomUUID();
+        var userA = User.builder().id(UUID.randomUUID()).name("A").email("a@test.com")
+                .household(Household.builder().id(homeA).inviteCode("A").build()).build();
+        var userB = User.builder().id(UUID.randomUUID()).name("B").email("b@test.com")
+                .household(Household.builder().id(homeB).inviteCode("B").build()).build();
+        userA.setCreatedAt(LocalDateTime.now());
+        userB.setCreatedAt(LocalDateTime.now());
+        when(userRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(userA, userB)));
+        when(receiptRepository.countByHouseholdIds(anyList())).thenReturn(List.<Object[]>of(
+                new Object[]{homeA, 2L}, new Object[]{homeB, 40L}));
+
+        var page = service.list(null, PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "receiptCount")));
+
+        assertEquals(2, page.getTotalElements());
+        assertEquals(1, page.getContent().size());
+        assertEquals("b@test.com", page.getContent().get(0).email()); // 40 notas ranks first
     }
 }
