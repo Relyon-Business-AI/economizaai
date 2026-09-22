@@ -4,8 +4,8 @@ Handoff notes for the **frontend** Claude — backend deltas that need FE work,
 with concrete endpoints and UX guidance. Newest at the top. For the full API
 contract see [API.md](./API.md); for the running diary see [CHANGELOG.md](./CHANGELOG.md).
 
-- **API base:** `https://economizai.economizai.workers.dev/api/v1` (self-hosted)
-- **Swagger:** `https://economizai.economizai.workers.dev/swagger-ui/index.html`
+- **API base:** `https://economizaai.economizaai.workers.dev/api/v1` (self-hosted)
+- **Swagger:** `https://economizaai.economizaai.workers.dev/swagger-ui/index.html`
 - Auth: `Authorization: Bearer <jwt>` on every call below. Send `Accept-Language: pt`.
 
 ---

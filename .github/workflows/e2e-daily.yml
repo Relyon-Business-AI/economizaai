@@ -27,12 +27,12 @@ jobs:
       - name: Run E2E
         id: run
         env:
-          BASE_URL: https://economiz-ai.onrender.com
+          BASE_URL: https://economizai-app-prod.onrender.com
           E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
           E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
           E2E_QR_PAYLOAD: ${{ secrets.E2E_QR_PAYLOAD }}
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-          SERVICE_ID: srv-d7odp50k1i2s73ep8o5g
+          SERVICE_ID: srv-d9p4nctbedkc73e3veb0
           OWNER_ID: tea-d1ijuaumcj7s73918us0
         run: bash .github/scripts/run-e2e.sh
       - name: Upload newman report

@@ -7,7 +7,7 @@ line item, and the anonymized result powers both personal dashboards and a
 shared price index. Built with Java 21 + Spring Boot 4. See `HELP.md` for
 vision, architecture, and roadmap; `MONETIZATION.md` for revenue strategy.
 
-GitHub repo: `economiz.AI` (https://github.com/XandiVieira/economiz.AI.git)
+GitHub repo: `economizaai` (https://github.com/XandiVieira/economizaai.git)
 
 ## Communication Style
 - Keep responses SHORT and concise. Avoid verbose explanations, code dumps, or excessive context.
@@ -52,7 +52,7 @@ GitHub repo: `economiz.AI` (https://github.com/XandiVieira/economiz.AI.git)
 - **Captcha is never 100% on the first try.** Any captcha-gated adapter (MS reCAPTCHA, SC Turnstile) MUST wrap its fetch in a retry loop that RE-SOLVES a fresh token on rejection — a solved token is occasionally rejected by the portal, and without retry a valid receipt fails and forces a needless rescan. Bound it (`*-max-attempts`, default 3) so a hostile portal can't grind forever (each attempt costs a paid solve). See `MsDfePortalAdapter` / `SantaCatarinaNfcePortalAdapter` for the shape. When adding a 5th captcha state, copy this pattern.
 - **Never hardcode portal form field IDs.** JSF/ASP.NET portals renumber auto-generated component IDs (`j_idtNN`) without notice — hardcoding them silently posts empty values and every receipt for that state breaks (MS did exactly this). Locate fields by stable attributes instead (the chave input by `maxlength=44`, dropdowns by `<select>`, etc.).
 - **Retry classification**: transient (5xx, timeouts, empty body, captcha-rejected) → retry; deterministic (4xx bad chave, missing sitekey/viewstate, no solver configured, invalid QR) → propagate immediately. Distinguish by exception type in the retry loop's catch.
-- **Each new state needs one real NF to verify** — the QR URL shape (full signed URL vs bare chave) AND the item/EAN semantics. Bare-chave re-consult does NOT work for SVRS/RS (needs the QR's signature params); real QR scans do. Store a fixture under `src/test/resources/fixtures/sefaz/<state>/`.
+- **Each new state needs one real NF to verify** — the QR URL shape (full signed URL vs bare chave) AND the item/EAN semantics. Bare-chave re-consult does NOT work on the `dfe-portal.svrs.rs.gov.br` QR endpoint (needs the QR's signature params); real QR scans do. **Exception (validated 2026-09-22):** the legacy RS portal `sefaz.rs.gov.br/ASP/AAE_ROOT/NFE/SAT-WEB-NFE-NFC_*.asp` DOES render the full DANFE (items incl. qty/unit/price) from the **bare 44-digit chave**, public/logged-out, server-side — GET `_1.asp?chaveNfe=<44>` (sets session cookie) → POST `_2.asp` `HML=false&chaveNFe=<44>&Action=Avançar`. This unblocks mass import-by-chave for RS (see `docs/ONBOARDING_IMPORT.md`). Store a fixture under `src/test/resources/fixtures/sefaz/<state>/`.
 
 ### Security Patterns
 - **Client IP**: always via `ClientIpResolver` — it trusts `CF-Connecting-IP` / the LAST `X-Forwarded-For` hop. Never read the first XFF hop (client-spoofable).
@@ -83,7 +83,7 @@ GitHub repo: `economiz.AI` (https://github.com/XandiVieira/economiz.AI.git)
 
 ### API & Postman
 - All APIs are versioned: `/api/v1/...`
-- A Postman collection is maintained at `postman/economizai.postman_collection.json`
+- A Postman collection is maintained at `postman/economizaai.postman_collection.json`
 - Every endpoint change (create, update, remove) must update the Postman collection
 - The collection includes an **E2E Flow** folder — a sequential test suite that runs all requests in logical order, each setting data for the next. This must also be updated on any endpoint change.
 - REST endpoints follow standard conventions: plural nouns, proper HTTP methods
@@ -128,14 +128,16 @@ GitHub repo: `economiz.AI` (https://github.com/XandiVieira/economiz.AI.git)
 - **Never mention Claude, AI, or any co-author in commit messages** — no `Co-Authored-By` lines, no references to AI assistance
 - This is a personal project on a professional MacBook — git user is configured locally per-repo to avoid mixing accounts
 - Local config: `user.name = Alexandre Vieira`, `user.email = xandivieira@gmail.com`
-- Remote: `https://github.com/XandiVieira/economiz.AI.git`
+- Remote: `https://github.com/XandiVieira/economizaai.git`
 - Never touch the global git config
 
 ## Git Workflow
-- **Prod releases (2026-09-01): `main` is the prod release branch** — Render prod (`economizai-app-prod`) auto-deploys every push to `main`. Releasing = merge `development` → `main` + push, ONLY on the owner's explicit go. Never commit directly to `main`. (The old `production` branch was deleted.)
-  - **⚠️ Reality (verified 2026-09-21): the live backend real users hit is `api.economizaai.app`, which is bound to the `development`-branch service (`economiz.AI`), NOT `economizai-app-prod`.** `economizai-app-prod`/`main` is a healthy standby with no custom domain and no real traffic (the domain cutover hasn't happened). So a `main` release alone does NOT reach users — pushing `development` is what deploys the de-facto production app. Deploy BOTH to keep them in sync until cutover. Full topology + table in `INFRASTRUCTURE.md`.
+- **Clean 2-env split (cutover done 2026-09-22).** Two Render services on one repo:
+  - **prod** = `economizai-api-prod`, branch **`main`**, domain **`api.economizaai.app`**, DB `economizai-db-prod` (the REAL data users hit).
+  - **dev** = `economizai-api-dev`, branch **`development`**, domain **`api-dev.economizaai.app`**, DB `economizai-db-dev` (stale copy = test data).
+  - Both auto-deploy on push to their branch. **Pushing `development` = deploy to DEV only (safe, no real users).** Prod ships ONLY by merging `development` → `main` + push, on the owner's explicit go. Never commit directly to `main`. Full topology in `INFRASTRUCTURE.md`.
 - **GitHub account: ALWAYS `XandiVieira` for anything economizai** — if another account is active/cached (keychain may serve `wuupsuser`), override before acting: `GH_TOKEN=$(gh auth token --user XandiVieira) gh …`, or a one-off credential helper for `git push`.
-- **Deploy windows (2026-07-22): pushing `development` auto-deploys the dev server and blips availability for real users.** Commit locally as work completes, but DO NOT push during the day without an explicit go-ahead. Urgent bug fixes may ship anytime; features/docs/refactors batch up and deploy at night (or when the owner says so). One push = one downtime blip — batch commits into a single push.
+- **Deploy windows:** pushing `development` now only redeploys the **dev** service — safe to push anytime (no real-user impact). The daytime-blip caution now applies to the **prod release** (merge → `main`): that redeploys `api.economizaai.app` and blips real users, so gate prod releases on the owner's go (batch, prefer night). `main` == `development` in code before a release so prod doesn't regress.
 - **ALWAYS pull before push.** Before any `git push`, run `git pull --rebase origin <branch>` first so the push lands on the current tip. This repo has an autonomous watchdog that also pushes — racing it causes rejected pushes and rebase conflicts. Pull-rebase-then-push every time.
 - Before reviewing or analyzing a branch, ALWAYS run `git fetch` and confirm with the user which branch to work on if there's any ambiguity.
 - Do NOT propose code fixes when the user is asking for understanding/diagnosis only — wait for explicit fix request.

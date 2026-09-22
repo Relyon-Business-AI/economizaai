@@ -10,6 +10,24 @@ mirror entries here.
 
 ---
 
+## Import em massa por chave (RS) — reconsulta server-side, sem throttle (2026-09-22)
+- **Now**: `POST /receipts/import[/nfg-csv]` reconsulta cada chave RS direto do nosso IP
+  de servidor — NFC-e via `SAT-WEB-NFE-NFC_*.asp`, NF-e 55 via SVRS `ConsultaPublicaDfe`
+  (`RsChaveReconsultClient`). Sem backoff/throttle explícito além do limite de concorrência
+  do pool `RECEIPT_INGEST_EXECUTOR`.
+- **OK for dev**: volume baixo; um usuário importando dezenas de chaves passa tranquilo.
+- **Before prod**:
+  1. **Rate-limit / bloqueio de IP**: um lote grande (ou muitos usuários) batendo em
+     `sefaz.rs.gov.br` pode fazer o SEFAZ throttlar/bloquear nosso IP. Adicionar throttle por
+     host + backoff, e/ou mover a reconsulta para **on-device (PE-style, `/receipts/prefetched`)**
+     usando o IP residencial do usuário. Bound do tamanho do lote também.
+  2. **reCAPTCHA da NF-e 55**: o POST do `ConsultaPublicaDfe` hoje **não exige** o captcha, mas
+     ele está na página — se o SEFAZ passar a exigir, o caminho NF-e 55 quebra e precisa de
+     solver (pago) ou on-device.
+  3. **Só RS**: outras UFs voltam `receipt.import.unsupported`. Estender por UF conforme
+     `docs/MULTI_STATE_RECON.md`.
+- **Effort**: throttle+backoff pequeno; on-device fallback médio.
+
 ## E-commerce price comparison — built but INERT for dev (2026-09-22)
 - **Now**: the "vale a pena online?" subsystem is wired end to end but ships **dark**.
   With no provider configured it serves only **admin-CURATED offers** (precision-first):
@@ -34,7 +52,7 @@ mirror entries here.
   confirm the token grant, the EAN search, freight, and the affiliate link when creds land.
   It's guarded (returns empty on any error), so a bad config can't break the offer lookup.
 - **Extensible**: add a new e-commerce = new `EcommerceProvider` impl + a
-  `economizai.ecommerce.providers.<key>` block. No orchestration changes.
+  `economizaai.ecommerce.providers.<key>` block. No orchestration changes.
 
 ## Discount-hunter leaderboard — opt-in (2026-09-22)
 - Public "caçador de descontos" ranking (`GET /leaderboard/discount-hunters`) shows only
@@ -97,14 +115,14 @@ mirror entries here.
 - **Before prod/scale**: page the backfill (or push it to the async pool) once a
   merchant can have hundreds of confirmed receipts — the admin request would
   otherwise hold a long transaction.
-- **Also**: when CNAE classification is disabled (`economizai.merchant.classify.enabled=false`),
+- **Also**: when CNAE classification is disabled (`economizaai.merchant.classify.enabled=false`),
   the index gate FAILS OPEN for unclassified merchants (deliberate, so dev
   environments aren't index-starved). Prod must keep classification enabled or
   every unclassified merchant contributes unreviewed. Effort: small.
 
 ## Paid-API cost caps — in place, with two known follow-ups (2026-07-09)
 - **Now**: `PaidApiGuardService` meters every paid external call — per-user daily caps
-  (`economizai.paid-api.*`: Infosimples 20/day, captcha 60/day), an Infosimples circuit
+  (`economizaai.paid-api.*`: Infosimples 20/day, captcha 60/day), an Infosimples circuit
   breaker (5 failures/10min → open 5min), and a `paid_api_call` ledger for invoice
   reconciliation. Enforcement toggles via `PAID_API_GUARD_ENABLED` (logging is always on).
 - **Follow-up 1 (accuracy)**: captcha is metered **per scrape**, not per solve. A scrape
@@ -138,7 +156,7 @@ mirror entries here.
 ## Household merge/split — shipped dark, two follow-ups before enabling
 - **Now**: full merge (join `bringData` + per-category), restore-on-leave by
   `origin_household_id`, and mutual data-share consent are implemented and tested
-  (unit + real-DB integration), but gated OFF by `economizai.households.merge-enabled`
+  (unit + real-DB integration), but gated OFF by `economizaai.households.merge-enabled`
   (default false). Conflict rule: host household wins; the joiner's colliding row is
   parked on its origin, restorable on split.
 - **Why OK for dev**: flag is off, so join/leave behave exactly as before (membership
@@ -228,7 +246,7 @@ The report works identically in SHADOW and ON (computed purely from
 
 ## Savings attribution — Phase D of the notifications overhaul (2026-06-09)
 - **Now**: `SavingsAttributionService.attribute(receipt)` runs from `ReceiptService.confirm`, **after** the receipt is CONFIRMED + observations recorded, wrapped in a try/catch (`attributeSavings`) so it can **NEVER** break a confirm — any failure is logged (`attribution.failed`) and swallowed (best-effort analytics). For each non-excluded, product-linked item it looks for a `deal_surface_state` row for the (product, market=`cnpjEmitente`) of **any user in the buyer's household** where `converted_at IS NULL` and `last_surfaced_at` is within the **attribution window**. A match records a `CONVERTED` `notification_events` row + stamps `converted_at` so one surfacing is attributed at most once (a re-surface clears it). Surfaces the total via `GET /users/me/savings` (`SavingsService`).
-- **Attribution window**: `economizai.attribution.window-days` (default **14**), a dedicated property in `CollaborativeProperties.Attribution` (distinct from the 90-day collaborative lookback — attribution is about "did they buy *soon after* we nudged", a tighter window).
+- **Attribution window**: `economizaai.attribution.window-days` (default **14**), a dedicated property in `CollaborativeProperties.Attribution` (distinct from the 90-day collaborative lookback — attribution is about "did they buy *soon after* we nudged", a tighter window).
 - **Savings formula** (counted only when **positive**): `(previousLastPaid − paidUnitPrice) × quantity`. `previousLastPaid` = the household's last paid unit price for that product on a confirmed receipt **issued strictly before** this one (the very receipt being attributed never counts as its own baseline — `findHouseholdHistoryForProduct` filtered to `issuedAt < receipt.issuedAt`). If there's **no prior purchase**, we fall back to the surfaced deal's `last_unit_price` baseline, but only when it's higher than paid; otherwise there's no provable savings and we skip.
 - **Approximations / honesty**: attribution is **heuristic + correlational, not proven causation** — we credit a deal whenever the user bought within the window after we surfaced it, with no proof the nudge caused it. `previousLastPaid` uses the household's own last unit price (no pack-size/quantity normalization beyond per-unit), and the "no prior purchase" surface-baseline fallback is a community-median proxy, not what *they* used to pay. Good enough to track a directional north-star; not an accounting figure.
 - **User-resolution choice**: a digest could go to **any** household member, so we attribute against the surface rows of **every user in the buyer's household** (`UserRepository.findAllByHouseholdId`), not only the buyer — but the `CONVERTED` event itself is recorded against `receipt.getUser()` (the actual buyer). Savings read-back (`GET /users/me/savings`) re-aggregates across the whole household, so per-user vs per-buyer attribution doesn't change the household total.
@@ -250,7 +268,7 @@ The report works identically in SHADOW and ON (computed purely from
 ## Notification channels: SMS + WhatsApp via Twilio (env-gated); Alexa still a stub; email off by default
 - **Now**: the channel framework supports `PUSH` (Expo → FCM/APNs, working), `EMAIL` (SMTP via `EmailDispatcher`, gated by `NOTIFICATIONS_EMAIL_ENABLED`, off by default until SMTP creds are set), `SMS` + `WHATSAPP` (Twilio's Messages API via `TwilioMessageClient`, off by default), and `ALEXA` which remains **structure-only** (`AlexaDispatcher` extends `StubChannelDispatcher` — logs and records a "not implemented" failure on the audit row).
 - **SMS/WhatsApp are now implemented** (`SmsDispatcher`/`WhatsAppDispatcher`): they deliver only when Twilio is configured **AND** the target user has a `phone_verified` phone. Otherwise they degrade gracefully — record a `twilio_not_configured` / `phone_not_verified` failure on the notification audit row, never throw. The phone OTP flow (`PATCH /users/me/phone`, `POST /users/me/phone/verify`) sends the 6-digit OTP over SMS via Twilio; when Twilio is unconfigured (dev) it falls back to a `[DEV-MODE] phone OTP for {maskedPhone} = {code}` WARN log so dev can still verify.
-- **Env vars** (all blank/off by default): `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_SMS` (SMS sender, E.164), `TWILIO_FROM_WHATSAPP` (Twilio WhatsApp sender number, no `whatsapp:` prefix). `isConfigured(whatsApp)` is true only when sid + token + the relevant From are all set. Bound in `application.yaml` under `economizai.notifications.twilio`.
+- **Env vars** (all blank/off by default): `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_SMS` (SMS sender, E.164), `TWILIO_FROM_WHATSAPP` (Twilio WhatsApp sender number, no `whatsapp:` prefix). `isConfigured(whatsApp)` is true only when sid + token + the relevant From are all set. Bound in `application.yaml` under `economizaai.notifications.twilio`.
 - **Swappable**: `TwilioMessageClient` is the only seam — swap it (or its `post()` method) for another SMS/WhatsApp provider without touching the dispatchers.
 - **Why OK for dev**: graceful degradation — an unconfigured/unverified channel just produces a failed audit row, never an exception. Push is the primary channel and works end-to-end.
 - **Before prod**: set the `TWILIO_*` env vars + register a Twilio WhatsApp sender; implement `deliver()` for the remaining Alexa stub (Proactive Events, skill grant per user); flip `EMAIL` on once Render has SMTP env vars.
@@ -274,7 +292,7 @@ The report works identically in SHADOW and ON (computed purely from
 - **Now**: captcha-gated states have a full ingestion path that's switched OFF until a solver provider is configured. `MsDfePortalAdapter` claims MS (`www.dfe.ms.gov.br`, reCAPTCHA v2): GET consult page → detect captcha + extract sitekey → `CaptchaSolver.solveRecaptchaV2` → resubmit → parse with the shared `ResponsiveDanfeParser`. With the default `provider=none` (`NoopCaptchaSolver`), an MS receipt fails fast with **503 `receipt.captcha.unavailable`** ("coming soon"), not a confusing parse error.
 - **MS is ON via CapSolver**: `CAPTCHA_PROVIDER=capsolver` + `CAPTCHA_API_KEY=<key>` on the server (verified live 2026-07-02). `TwoCaptchaSolver` also exists as an alternative (`CAPTCHA_PROVIDER=twocaptcha`; `CAPTCHA_BASE_URL` applies only to it — CapSolver's URL is fixed). A provider with a different HTTP API = one new class implementing `CaptchaSolver` with `@ConditionalOnProperty(...havingValue="<name>")`; nothing else changes.
 - **Post-captcha layout VERIFIED (2026-06-12)**: a real MS DANFE (C.VALE/Caarapó, saved from a browser after the user solved the captcha) parses correctly — `RealMsFixtureTest` locks all 9 items + R$61,79 total. MS uses `span.txtTit` (not `txtTit2`), 7-digit internal codes (→ ean null), single IBPT total (→ tax null); all handled by the shared parser. So the only thing still **VERIFY ON FIRST REAL SOLVE** is the HTTP transport that exchanges a solved token for the DANFE: `MsDfePortalAdapter.consultUrl` params + `fetchAuthorizedDanfe`'s resubmit shape (isolated for a quick fix — the page is reached via a form POST from the captcha page; capture it in DevTools Network during the first real solve). Cost when live: ~US$1-3 / 1000 solves.
-- **Other captcha states**: each has its own portal, so they need their own adapter (reusing `CaptchaSolver` + `ResponsiveDanfeParser`); `economizai.ingestion.sefaz.captcha.states` lists which UFs the MS adapter claims (MS only for now).
+- **Other captcha states**: each has its own portal, so they need their own adapter (reusing `CaptchaSolver` + `ResponsiveDanfeParser`); `economizaai.ingestion.sefaz.captcha.states` lists which UFs the MS adapter claims (MS only for now).
 
 ## Experimental all-states fallback chain — LIVE (2026-07-16), learning on demand
 - **Now**: every UF without a dedicated adapter is gap-filled with `GenericQrPortalAdapter`:
@@ -286,7 +304,7 @@ The report works identically in SHADOW and ON (computed purely from
   Admin inbox gets: (a) first-ever success per UF ("capture fixture, promote to svrs.states"),
   (b) total chain failure with chave + QR URL + portal snippet, deduped 1/UF/day.
 - **Promotion path**: when a UF succeeds via QR_PORTAL and a real user confirms the items,
-  add it to `economizai.ingestion.sefaz.svrs.states` + its host to `allowed-url-hosts` — it
+  add it to `economizaai.ingestion.sefaz.svrs.states` + its host to `allowed-url-hosts` — it
   becomes VERIFIED (dedicated adapter, no experimental telemetry).
 - **Regression watch (verified states)**: we can't stop a supported portal changing its DANFE
   format, but we detect it. Every VERIFIED-state PARSE failure is recorded (strategy
@@ -516,7 +534,7 @@ Helper scripts at repo root (run each in an **Administrator** PowerShell once):
 ## Data correctness
 
 ### ML categorization gated OFF (dictionary-only for now)
-- **Now**: `economizai.ml.category-apply-enabled=false`. The cascade applies dictionary entries only; the ML model is confidently wrong at current data volume (~hundreds of products), so its predictions aren't written. It's still trained + measured (shadow) via `/categorizer/benchmark`.
+- **Now**: `economizaai.ml.category-apply-enabled=false`. The cascade applies dictionary entries only; the ML model is confidently wrong at current data volume (~hundreds of products), so its predictions aren't written. It's still trained + measured (shadow) via `/categorizer/benchmark`.
 - **Why OK for dev**: dictionary-only is deterministic and currently 100% on the golden set; uncategorized is better than confidently-wrong.
 - **Fix / revisit**: once `mlCategoryAccuracyPct` (shadow) is consistently high — after the catalog has thousands of trusted labels — flip `ML_CATEGORY_APPLY_ENABLED=true` and watch the benchmark. Track via `/categorizer/quality/history`.
 
@@ -547,7 +565,7 @@ Helper scripts at repo root (run each in an **Administrator** PowerShell once):
 - **Before prod — to enable paid subscriptions**:
   1. **Pick a provider** (Stripe Brasil, Mercado Pago, or Pagar.me + Pix).
   2. **Get API keys** (publishable + secret) and create the product/price (R$9.90/mo per MONETIZATION §1).
-  3. **Set `BILLING_WEBHOOK_SECRET`** (env → `economizai.billing.webhook-secret`) to a strong random value so the webhook rejects unsigned calls (401).
+  3. **Set `BILLING_WEBHOOK_SECRET`** (env → `economizaai.billing.webhook-secret`) to a strong random value so the webhook rejects unsigned calls (401).
   4. **Point the provider's webhook** at `POST /api/v1/webhooks/subscription` and map its event payload onto our `{ userEmail, action: ACTIVATE|CANCEL, provider, providerRef, currentPeriodEnd }` shape, sending the shared secret in `X-Webhook-Secret`. (If the provider signs with HMAC instead of a static header, add a small verify step in `SubscriptionWebhookController` for that scheme.)
   5. **Build the checkout / self-serve upgrade flow** in the app + a `PUT /users/me/subscription` (or hosted-checkout redirect). Currently only admins can flip the tier from inside the app.
   6. Decide period-end handling: a scheduled job should expire `current_period_end` PRO subs back to FREE if the provider stops sending renewals (not built).
@@ -557,7 +575,7 @@ Helper scripts at repo root (run each in an **Administrator** PowerShell once):
 ## Monitoring / ops
 
 ### ~~`/actuator/prometheus` is public (no auth)~~ — RESOLVED (2026-06-11)
-- **Fixed**: `/actuator/prometheus` now sits behind a dedicated HTTP Basic security chain (`SecurityConfig.metricsSecurityFilterChain`, `@Order(1)`), with the credential from `economizai.metrics.username/password` (`METRICS_USERNAME`/`METRICS_PASSWORD`). **Fail-closed**: blank password ⇒ no user ⇒ every request 401, so it's never exposed unauthenticated. `/actuator/health` stays public on the main chain for UptimeRobot.
+- **Fixed**: `/actuator/prometheus` now sits behind a dedicated HTTP Basic security chain (`SecurityConfig.metricsSecurityFilterChain`, `@Order(1)`), with the credential from `economizaai.metrics.username/password` (`METRICS_USERNAME`/`METRICS_PASSWORD`). **Fail-closed**: blank password ⇒ no user ⇒ every request 401, so it's never exposed unauthenticated. `/actuator/health` stays public on the main chain for UptimeRobot.
 - **Remaining (infra, not code)**: nothing scrapes it yet — stand up Prometheus + Grafana on the box and set `METRICS_PASSWORD`. Steps in INFRASTRUCTURE.md → Monitoring → Metrics.
 
 ### Logs go to stdout + host file — no central aggregation

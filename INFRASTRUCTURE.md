@@ -7,15 +7,22 @@ plus a managed Postgres. Step-by-step setup runbook: [`RENDER_SETUP.md`](./RENDE
 > `.ps1` watchdogs, LAN log UI) has been **RETIRED** — it is documented at the very
 > bottom for history only and is **not** the current deploy path.
 
-## Current reality (Render)
+## Current reality (Render) — clean dev/prod split (cutover 2026-09-22)
 
-| Env | Service | Branch | Deploys when | Domain / URL |
-|---|---|---|---|---|
-| **dev** | `economiz.AI` (`srv-d7odp50k1i2s73ep8o5g`) | `development` | every push (auto-deploy) | **`api.economizaai.app`** (+ `economiz-ai.onrender.com`) |
-| **prod** | `economizai-app-prod` (`srv-d9p4nctbedkc73e3veb0`) | `main` | every push to `main` (auto-deploy) | `economizai-app-prod.onrender.com` (no custom domain yet) |
+| Env | Service | Branch | Deploys when | Domain / URL | DB |
+|---|---|---|---|---|---|
+| **prod** | `economizai-api-prod` (`srv-d7odp50k1i2s73ep8o5g`) | `main` | push to `main` (auto-deploy) | **`api.economizaai.app`** (+ `economiz-ai.onrender.com`) | `economizai-db-prod` (real data) |
+| **dev** | `economizai-api-dev` (`srv-d9p4nctbedkc73e3veb0`) | `development` | push to `development` (auto-deploy) | `api-dev.economizaai.app` (+ `economizai-app-prod.onrender.com`) | `economizai-db-dev` (stale copy = test) |
 
-- **`main`, not `production`** — the old `production` branch was **deleted on 2026-09-01**;
-  the prod service was repointed at `main`, now the single release branch.
+- **Cutover done 2026-09-22:** the real data + `api.economizaai.app` live on the service that
+  is now **prod** on branch **`main`** (`srv-d7odp…`). The old standby (`srv-d9p4…`) became
+  **dev** on `development` with its own DB + `api-dev.economizaai.app`. This was a rename +
+  branch-flip only — **no data moved** (the `DATABASE_URL`s were untouched; only the Render
+  resource labels changed). Done via the Render API; zero downtime on prod.
+- **Deploy semantics now:** push `development` → deploys **dev only** (safe, no real users);
+  merge `development` → `main` + push → deploys **prod** (`api.economizaai.app`). Keep `main`
+  == `development` in code before a release so prod never regresses.
+- **`main`, not `production`** — the old `production` branch was **deleted on 2026-09-01**.
 - **Postgres:** managed by Render, plan **basic-256mb** (never the free tier — its Postgres
   expires in 30 days). Postgres 18, separate DB per env, separate secrets. Never point dev
   and prod at the same DB.
@@ -28,15 +35,12 @@ plus a managed Postgres. Step-by-step setup runbook: [`RENDER_SETUP.md`](./RENDE
   §3). `DATABASE_URL` must be the **JDBC** form (`jdbc:postgresql://<host>:5432/<db>`) — the
   #1 gotcha, set by hand from the Postgres Info tab along with `DB_USERNAME` / `DB_PASSWORD`.
 
-### ⚠️ CRITICAL — the de-facto production backend is the DEV service
+### ✅ RESOLVED (2026-09-22) — dev and prod are now cleanly separated
 
-**Verified 2026-09-21:** the custom domain **`api.economizaai.app`** — the URL the mobile
-app / FE actually calls — is bound to the **`economiz.AI` (dev, `development` branch)**
-service, so **that service is the de-facto production backend** (all real receipt traffic
-lands there). `economizai-app-prod` (`main`) is live and healthy but has **no custom domain
-and no real traffic** — a standby the FE doesn't use yet. Net effect: **pushing `development`
-deploys the live app users hit.** The `main` / `economizai-app-prod` cutover (repoint the
-domain) hasn't happened. **Deploy to BOTH branches to keep them in sync until then.**
+The old trap (the domain `api.economizaai.app` was bound to the *dev-branch* service, making
+"dev" the de-facto prod) is **fixed**. After the cutover, `api.economizaai.app` is served by
+the **prod** service on **`main`**, and `development` deploys an isolated **dev** env at
+`api-dev.economizaai.app`. Pushing `development` no longer touches real users.
 
 **Releasing to prod** = merge `development` → `main` and push `main`. That push IS the
 `economizai-app-prod` deploy — a **GATED** action (owner's go), never autonomous; `main` is
@@ -113,7 +117,7 @@ Still-accurate checklist for the real prod cutover (repointing `api.economizaai.
 Spring Boot), `economizai-db` (PostgreSQL 18), `economizai-logs` (Dozzle log UI, 9999→8080).
 Data in named volumes (`economizai-pgdata`, `economizai-profilepics`).
 
-**Public path (the "from anywhere" URL):** FE → `https://economizai.economizai.workers.dev`
+**Public path (the "from anywhere" URL):** FE → `https://economizaai.economizaai.workers.dev`
 (a permanent **Cloudflare Worker** front door, `tunnel-proxy-worker/`) → reads the live tunnel
 URL from a Worker KV namespace → `https://<random>.trycloudflare.com` (a **cloudflared
 quick-tunnel**, dials out, no open ports, URL changes per restart) → `localhost:8080`.

@@ -6,7 +6,7 @@ you're against (everything's annotated with descriptions and examples).
 
 - **Production:** `https://economizai-app-prod.onrender.com`
 - **Dev:** `https://economiz-ai.onrender.com` (also reachable via the legacy
-  proxy `https://economizai.economizai.workers.dev`)
+  proxy `https://economizaai.economizaai.workers.dev`)
 - **Local:** `http://localhost:8080`
 
 Both environments run the same code (prod is deployed from the `production`
@@ -352,6 +352,47 @@ from our IP, no paid fallback. Same validation, caps, and `ReceiptResponse`.
   the normal `POST /receipts`. The bundled FE (`receiptService.submitReceipt`)
   already routes automatically: native + blocked UF (PE) + URL payload → this
   endpoint; everything else → `POST /receipts`.
+
+### Bulk import receipts from access keys (chaves) — onboarding (RS only)
+
+Fill a new user's history from the **chaves** they export from the Nota Fiscal
+Gaúcha portal, without scanning each nota. Each eligible **RS** chave (NFC-e 65 /
+NF-e 55) is reconsulted on a public SEFAZ portal and ingested through the normal
+pipeline.
+
+```
+POST /api/v1/receipts/import
+{ "chaves": ["43260593015006005182651200000076311055456577", ...] }   (max 500)
+→ 202 ReceiptImportResponse
+
+POST /api/v1/receipts/import/nfg-csv   (multipart/form-data, field "file")
+  file = the raw CSV exported from Nota Fiscal Gaúcha (chaves extracted server-side)
+→ 202 ReceiptImportResponse
+```
+
+`ReceiptImportResponse`:
+```
+{
+  "received": 12,
+  "queued": 9,
+  "queuedReceiptIds": ["<uuid>", ...],   // poll each via GET /receipts/{id}
+  "rejected": 3,
+  "rejectedChaves": [
+    { "chave": "4326...", "reason": "receipt.import.duplicate", "reasonMessage": "..." }
+  ]
+}
+```
+
+- Each queued id is a `PROCESSING` receipt — **poll `GET /receipts/{id}`** until it
+  reaches `PENDING_CONFIRMATION` (then confirm as usual) or `FAILED_PARSE`. Same
+  monthly cap as `POST /receipts` (over the cap → the rest come back as
+  `receipt.import.cap_reached`).
+- Rejection `reason` keys: `receipt.import.invalid_chave`, `receipt.import.unsupported`
+  (not RS / unsupported model), `receipt.import.duplicate`, `receipt.import.merchant_unsupported`,
+  `receipt.import.cap_reached`. `reasonMessage` is already localized.
+- **RS only** today; other UFs → `receipt.import.unsupported`. E-commerce notas
+  (NF-e 55, e.g. Amazon) land in personal history but stay **out of the collaborative
+  index** (non-grocery segment).
 
 ### Submit from a PHOTO of the QR code
 
@@ -824,7 +865,7 @@ same catalog product.
 - **`GET /products/mine`** → `List<HouseholdProductResponse>` = products your household has bought (confirmed, non-excluded), newest purchase first. Each: `{ productId, name, friendlyName, brand, category, timesBought, lastBoughtAt, lastUnitPrice, lastMarketCnpj, lastMarketName, lastMarketFriendlyName }`. `friendlyName` is your household's own rename of the product (null when never renamed) — prefer it for display. Display `lastMarketFriendlyName` (your custom market name when set, else the original `lastMarketName`).
   - **Search matches the rename too** (2026-08-26): the optional `query` filters by product name, brand **and `friendlyName`**. Same for `GET /products?query=` (returns products you renamed to something matching, even when the catalog name doesn't match) and `GET /receipts?q=`.
 - **`GET /products/{id}/markets`** → `List<ProductMarketPriceResponse>` = where to buy this product, cheapest first. Scope: your **watched markets** always; nearby markets only when `includeNearby=true` (`radiusKm` from home). Each: `{ cnpj, cnpjRoot, marketName, friendlyName, price, priceType, communityMinPrice, sampleCount, distinctHouseholds, distanceKm, watched, visited, observedAt }`. Display `friendlyName` (custom-or-original).
-  - **`priceType`** drives the privacy model: `OWN_LAST` = your household's own exact last paid price at a market you shopped at (your data). `COMMUNITY_MEDIAN` = the **k-anonymity-guarded** median from the collaborative index — only present when **≥3 distinct households** contributed (`economizai.collaborative.min-households-for-public`); below that the market is omitted, never shown with a single-source price. **Why:** the price index is anonymized (no user/household FK); exposing a lone contributor's single price would re-identify them (a market with one contributor = that person's purchase). K=3 guarantees no individual purchase is exposed. The threshold is configurable, so the rule can be relaxed later if the privacy/legal stance changes — without code edits.
+  - **`priceType`** drives the privacy model: `OWN_LAST` = your household's own exact last paid price at a market you shopped at (your data). `COMMUNITY_MEDIAN` = the **k-anonymity-guarded** median from the collaborative index — only present when **≥3 distinct households** contributed (`economizaai.collaborative.min-households-for-public`); below that the market is omitted, never shown with a single-source price. **Why:** the price index is anonymized (no user/household FK); exposing a lone contributor's single price would re-identify them (a market with one contributor = that person's purchase). K=3 guarantees no individual purchase is exposed. The threshold is configurable, so the rule can be relaxed later if the privacy/legal stance changes — without code edits.
 
 The "review queue" (`/unmatched`) is the workflow for messy receipts: items that didn't auto-
 match show up here, the user picks the right product, and the alias is
@@ -1506,7 +1547,7 @@ payment provider (Stripe / Mercado Pago) maps its webhook event onto:
   "currentPeriodEnd": "2026-12-31T00:00:00" }
 ```
 `action` is `ACTIVATE` (grant PRO) or `CANCEL` (drop to FREE). Verified by the
-`X-Webhook-Secret` header against `economizai.billing.webhook-secret`
+`X-Webhook-Secret` header against `economizaai.billing.webhook-secret`
 (empty in dev → check skipped; set + wrong/missing → **401**). FE doesn't call
 this — it's server-to-server from the provider.
 
@@ -1514,7 +1555,7 @@ this — it's server-to-server from the provider.
 `POST /api/v1/webhooks/revenuecat` — public route, server-to-server from
 RevenueCat. Authenticated by a fixed `Authorization` header configured in the
 RevenueCat dashboard, checked against
-`economizai.billing.revenuecat.auth-header` (**fail-closed**: config unset →
+`economizaai.billing.revenuecat.auth-header` (**fail-closed**: config unset →
 every call 401). Body is the standard RevenueCat event envelope; we read only:
 ```json
 { "event": { "type": "INITIAL_PURCHASE", "app_user_id": "<our user UUID or email>",
@@ -1556,6 +1597,6 @@ retry. FE never calls this.
 ## Postman collection
 
 Full request library + sequential E2E flow at
-`postman/economizai.postman_collection.json`. Set the `baseUrl` collection
+`postman/economizaai.postman_collection.json`. Set the `baseUrl` collection
 variable to your environment, optionally set `qrPayload` to a real NFC-e for
 the receipt steps.

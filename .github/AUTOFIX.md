@@ -13,7 +13,7 @@ health, auto-revert on failure. It also **learns** over time.
 | `.github/workflows/observation-audit.yml` | Weekly (Mon 02:00 BRT): asserts orphaned price observations (deleted-account leftovers) aren't accumulating — i.e. the nightly confirm→purge cleanup works. Read-only; not wired to the fixer. |
 | `.github/workflows/chaos-weekly.yml` | Weekly (Sun 01:00 BRT): N k6 virtual users hit dev concurrently, contending on shared catalog products, to surface races/deadlocks/pool exhaustion. Throwaway users self-delete; one persistent user (`alexandre+chaospersist@`) accumulates history to cover returning-user scenarios. Goes red on any 5xx (which the log-sweep also feeds to the fixer). |
 | `.github/workflows/autofix.yml` | Reusable fixer job (reproduce → test → push → deploy-wait → health → revert). |
-| `.github/workflows/log-sweep-prod.yml` | Every 2h (offset from dev sweep): same detection against the **prod** service (`srv-d9p4nctbedkc73e3veb0`), **alert-only** — opens a deduped `prod-error` issue, never calls the fixer. |
+| `.github/workflows/log-sweep-prod.yml` | Every 2h (offset from dev sweep): same detection against the **prod** service (`srv-d7odp50k1i2s73ep8o5g`), **alert-only** — opens a deduped `prod-error` issue, never calls the fixer. |
 | `.github/workflows/e2e-prod.yml` | Nightly (04:30 BRT): the same self-cleaning E2E Flow against **prod**, **alert-only** — red run + `prod-error` issue on failure. Uses `E2E_PROD_ADMIN_EMAIL/_PASSWORD` (optional; dev admin creds don't exist on prod). |
 | `.github/scripts/autofix.py` | The fixer + learning loop. |
 | `.github/scripts/log_sweep.py` | Render Logs API scan + detection rules. |

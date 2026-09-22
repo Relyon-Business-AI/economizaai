@@ -140,7 +140,8 @@ config tweaks.
 
 | UF | URL | Status |
 |---|---|---|
-| **RS** (old) | `www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx` | Timed out — looks like a dead legacy URL. Production RS uses `dfe-portal.svrs.rs.gov.br` instead, which is what `SvrsSharedPortalAdapter` already targets. |
+| **RS** (old) | `www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx` | Timed out — looks like a dead legacy URL. Production RS ingestion uses `dfe-portal.svrs.rs.gov.br` (what `SvrsSharedPortalAdapter` targets). **BUT** a different legacy RS path is alive and useful — see next row. |
+| **RS** (bare-chave, validated 2026-09-22) | `www.sefaz.rs.gov.br/ASP/AAE_ROOT/NFE/SAT-WEB-NFE-NFC_1.asp` (form, inside the `NFE/NFE-NFC.aspx` iframe) → POST `SAT-WEB-NFE-NFC_2.asp` | **Renders the full DANFE with items from the BARE 44-digit chave, public/logged-out, server-side.** Classic ASP (no ViewState): GET `_1.asp?chaveNfe=<44>` sets a session cookie, then POST `_2.asp` `HML=false&chaveNFe=<44>&Action=Avançar` returns the item table (código PLU, descrição, qtde, un, vl unit, vl total). PoC extracted a real Zaffari NFC-e cleanly. **This overturns the "RS bare-chave doesn't work" assumption** — it doesn't on the SVRS QR portal, but does here. Unblocks CSV-of-chaves mass import for RS (`docs/ONBOARDING_IMPORT.md`). Caveat: PoC covers **NFC-e 65**. NF-e 55 (e-commerce, e.g. Amazon) renders its items via a different portal — the SVRS public NF-e consulta (`dfe-portal.svrs.rs.gov.br` "Consulta Pública DFe", tab *Produtos e Serviços* + *Download Arquivo*), confirmed visually but not yet PoC'd server-side. Watch for IP rate-limiting under bulk. |
 
 ## Population coverage
 

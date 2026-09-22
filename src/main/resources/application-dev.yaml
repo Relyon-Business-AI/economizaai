@@ -6,7 +6,7 @@
 # with no extra setup. Add a key here only when dev needs to DIFFER from the
 # shared base rather than just fall back.
 
-economizai:
+economizaai:
   categorizer:
     consensus:
       # Short initial delay so the consensus job fires quickly after startup in dev/test.

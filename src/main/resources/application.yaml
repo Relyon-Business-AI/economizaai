@@ -54,7 +54,7 @@ jwt:
   expiration: 86400000              # access token: 24h
   refresh-expiration: 2592000000    # refresh token: 30d
 
-economizai:
+economizaai:
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:8081}
   default-locale: pt
@@ -157,7 +157,7 @@ economizai:
         # handled by a dedicated adapter (currently MS — www.dfe.ms.gov.br with
         # reCAPTCHA v2; SC uses Cloudflare Turnstile in its own adapter).
         # Solving needs a provider configured under
-        # economizai.captcha below; until then these states fail fast with a
+        # economizaai.captcha below; until then these states fail fast with a
         # clear 503 "coming soon". Each captcha state has its own portal, so
         # adding one usually means a dedicated adapter, not just this list.
         states: ${SEFAZ_CAPTCHA_STATES:MS}
@@ -430,7 +430,7 @@ economizai:
     photo-extraction:
       # Vision fallback: items from a photographed receipt (origin=PHOTO,
       # excluded from the collaborative index). Per-user daily cap under
-      # economizai.paid-api (llm-vision-daily-cap-per-user).
+      # economizaai.paid-api (llm-vision-daily-cap-per-user).
       enabled: ${PHOTO_EXTRACTION_ENABLED:true}
       max-items: ${PHOTO_EXTRACTION_MAX_ITEMS:60}
 
@@ -466,7 +466,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,prometheus   # health is public; prometheus is HTTP Basic-auth protected (see economizai.metrics)
+        include: health,prometheus   # health is public; prometheus is HTTP Basic-auth protected (see economizaai.metrics)
       base-path: /actuator
   endpoint:
     health:
@@ -485,7 +485,7 @@ management:
 
 logging:
   level:
-    com.relyon.economizai: INFO
+    com.relyon.economizaai: INFO
     org.springframework.security: WARN
   # Persist logs to a file as well as the console. In the container this path is a
   # host bind-mount (see docker-compose `app.volumes`), so history SURVIVES every

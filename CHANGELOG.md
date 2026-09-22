@@ -11,10 +11,28 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 - **Production:** `https://economizai-app-prod.onrender.com/api/v1`
   (Swagger: `/swagger-ui/index.html`, health: `/actuator/health`)
 - **Dev:** `https://economiz-ai.onrender.com/api/v1` — features land here
-  first. Also reachable at the old `https://economizai.economizai.workers.dev/api/v1`
+  first. Also reachable at the old `https://economizaai.economizaai.workers.dev/api/v1`
   (proxies to Render), so the store build's URL keeps working.
 
 ---
+
+## 2026-09-22 — import em massa de notas por chave / CSV da Nota Fiscal Gaúcha (RS)
+
+Onboarding: encher o histórico do usuário a partir das **chaves de acesso** — sem escanear
+uma-a-uma. Só **RS** por enquanto (NFC-e 65 e NF-e 55). Ver `docs/ONBOARDING_IMPORT.md`.
+
+- **Novo `POST /receipts/import`** — body `{ "chaves": ["<44 díg>", ...] }` (máx. 500).
+- **Novo `POST /receipts/import/nfg-csv`** — multipart `file` = o CSV cru exportado da Nota
+  Fiscal Gaúcha; as chaves são extraídas server-side (formato de dois blocos com espaço).
+- Ambos respondem **202** com `ReceiptImportResponse`: `{ received, queued, queuedReceiptIds[],
+  rejected, rejectedChaves[{ chave, reason, reasonMessage }] }`. Cada `receiptId` enfileirado
+  vira uma nota `PROCESSING` — **faça poll em `GET /receipts/{id}`** como no scan normal.
+- Rejeições vêm com motivo **localizado** (`reasonMessage`) e chave (`reason`): `invalid_chave`,
+  `unsupported` (fora do RS / modelo não suportado), `duplicate`, `merchant_unsupported`,
+  `cap_reached` (limite mensal do plano).
+- Notas de **e-commerce (NF-e 55, ex.: Amazon)** entram no histórico pessoal mas ficam **fora do
+  índice colaborativo** (segmento não-mercado). NFC-e de mercado/farmácia entram normalmente.
+- Nada muda no fluxo de scan existente.
 
 ## 2026-09-22 — comparação com e-commerce ("vale a pena online?") + ranking caçador de descontos
 
@@ -326,7 +344,7 @@ Toda conta existente foi promovida para `subscriptionTier: "PRO"` com validade
 de **6 meses** a partir de hoje (migration `V68__grant_premium_promo.sql`).
 Toda conta **nova** (registro por senha ou social login) recebe PRO
 automático por **3 meses** a partir do próprio cadastro, enquanto a promo
-estiver ligada (`economizai.subscription.promo.enabled`, ON por padrão — pode
+estiver ligada (`economizaai.subscription.promo.enabled`, ON por padrão — pode
 ser desligada via env var `SUBSCRIPTION_PROMO_ENABLED=false` sem deploy de
 código; duração ajustável via `SUBSCRIPTION_PROMO_MONTHS`). `GET
 /subscriptions/status` reflete isso normalmente (`provider: "manual"`,
@@ -670,7 +688,7 @@ contato normal. Rate-limited a **5/hora por IP** (bucket próprio, separado do
 
 O backend de DEV saiu da máquina self-hosted e agora roda no **Render**
 (estável, sem o túnel que caía). **Novo API base:** `https://economiz-ai.onrender.com/api/v1`.
-A **URL antiga** (`economizai.economizai.workers.dev`) **continua funcionando** —
+A **URL antiga** (`economizaai.economizaai.workers.dev`) **continua funcionando** —
 agora ela encaminha pro Render — então o app já enviado às lojas com a URL antiga
 não quebra. Builds novos da FE devem apontar pro `onrender.com`. Dados (contas,
 notas, catálogo) foram migrados; **fotos de perfil ainda não** (usuários com foto
@@ -1088,7 +1106,7 @@ Added coverage for OTHER, CLEANING, PERSONAL_CARE, HEALTH, BEVERAGES, BAKERY, ME
 ## 2026-06-28 — Household data merge on join/leave (behind a flag, dark)
 
 Joining/leaving a household can now optionally **bring your data with you** and
-**restore it when you leave**. **Shipped OFF** (`economizai.households.merge-enabled`
+**restore it when you leave**. **Shipped OFF** (`economizaai.households.merge-enabled`
 =false) — no behavior change until enabled, but the contract is here so the FE can
 build against it.
 
@@ -1366,7 +1384,7 @@ The FREE/PRO subscription tier (`User.subscriptionTier`) has a complete gating m
 
 **New endpoints:**
 - `PUT /api/v1/admin/users/{id}/subscription-tier` (ADMIN) — body `{ "tier": "PRO" | "FREE" }`; returns the admin user detail. PRO activates a manual subscription, FREE cancels it.
-- `POST /api/v1/webhooks/subscription` (public; provider-agnostic) — body `{ "userEmail", "action": "ACTIVATE"|"CANCEL", "provider", "providerRef", "currentPeriodEnd" }`. Verified by the `X-Webhook-Secret` header against `economizai.billing.webhook-secret` (**fails closed**: when the secret is unset the webhook rejects everything; wrong secret → 401; constant-time compare; unknown user → 200 no-op). This is the seam a real payment provider (Stripe / Mercado Pago) maps its webhook onto.
+- `POST /api/v1/webhooks/subscription` (public; provider-agnostic) — body `{ "userEmail", "action": "ACTIVATE"|"CANCEL", "provider", "providerRef", "currentPeriodEnd" }`. Verified by the `X-Webhook-Secret` header against `economizaai.billing.webhook-secret` (**fails closed**: when the secret is unset the webhook rejects everything; wrong secret → 401; constant-time compare; unknown user → 200 no-op). This is the seam a real payment provider (Stripe / Mercado Pago) maps its webhook onto.
 
 **Heads-up for FE:** today nothing is gated (enforcement off) — no 402s, full history for everyone. Build the **402 → "show upgrade prompt"** handling now (distinct from 403) so the FE is ready when enforcement flips on; at that point FREE dashboards will window to 90 days.
 
