@@ -16,6 +16,27 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-22 — comparação com e-commerce ("vale a pena online?") + ranking caçador de descontos
+
+**Tudo INERTE por padrão** — nenhum comportamento existente muda até configurar. Ver DEV_NOTES.
+
+- **Novo `GET /receipt-items/{id}/offer?cep=`** → melhor oferta online pra um item escaneado,
+  comparada ao que o usuário pagou. `EcommerceOfferResponse`: `{ provider, title, price, freight,
+  total, currency, externalUrl, affiliateUrl, imageUrl, inStock, curated, worthIt, paidPrice,
+  savings }`. `worthIt` só true quando compensa (economia ≥ margem configurada). **204** quando
+  não há oferta pro EAN do item. Escopo por domicílio (item de outro domicílio → 404).
+- **Curadoria admin (precisão-primeiro)** — `GET/POST/PUT/DELETE /admin/ecommerce/offers`
+  (ADMIN). Mapeia um EAN → produto online + preço + link (afiliado) manualmente. Com nenhum
+  provider configurado, o app serve **só** essas ofertas curadas.
+- **Providers plugáveis** — Mercado Livre incluso, **inerte** até `ECOMMERCE_ENABLED` +
+  credenciais (ver DEV_NOTES). Adicionar novo e-commerce = nova impl + bloco de config.
+- **Novo ranking "caçador de descontos"** — `GET /leaderboard/discount-hunters?days=30`
+  (público, **só quem opta**) e `GET /admin/leaderboard/discount-hunters?days=30` (admin, todos).
+  `LeaderboardResponse`: `{ windowDays, entries:[{ rank, handle, finds, savings, isMe }], me }`.
+  Opt-in via **`PATCH /leaderboard/opt-in`** `{ optIn: true|false }` (`share_in_leaderboard`,
+  default false). Métrica = itens comprados abaixo da média da comunidade (produto visto por ≥2
+  domicílios).
+
 ## 2026-09-21 — ajustes do painel admin (contagem, ranking, filtros, notificações)
 
 - **`/admin/overview`**: `usersTotal` agora **exclui internos/teste** (antes usava contagem crua e destoava de PRO/hoje/semana, que já excluíam). O "total de usuários" fica consistente com o resto do painel.

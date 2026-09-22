@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,6 +24,12 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     List<User> findAllByHouseholdId(UUID householdId);
 
     long countByHouseholdId(UUID householdId);
+
+    /** Users who opted in to the public leaderboard — for public handles + the opted-in household set. */
+    List<User> findByShareInLeaderboardTrue();
+
+    /** Members of the given households — resolves display handles for the leaderboard's top rows. */
+    List<User> findByHouseholdIdIn(Collection<UUID> householdIds);
 
     /**
      * Active users who haven't turned the deals digest OFF, with household

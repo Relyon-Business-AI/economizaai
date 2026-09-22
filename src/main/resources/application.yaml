@@ -240,6 +240,27 @@ economizai:
     yearly-price: ${PRO_YEARLY_PRICE:89.00}
     # Assumed months a PRO user stays, for modeled LTV = monthly-price × this.
     assumed-lifetime-months: ${PRO_ASSUMED_LIFETIME_MONTHS:12}
+  ecommerce:
+    # E-commerce price-comparison ("vale a pena online?"). Inert until configured:
+    # with providers off it still serves admin-CURATED offers (precision first).
+    # Each e-commerce is a provider block below — add a new one to plug it in.
+    # Fill these env vars on Render when you have the credentials (all empty by default).
+    enabled: ${ECOMMERCE_ENABLED:false}
+    worth-it-min-savings: ${ECOMMERCE_WORTH_IT_MIN_SAVINGS:0}
+    default-cep: ${ECOMMERCE_DEFAULT_CEP:}
+    providers:
+      mercadolivre:
+        # Catalog/price via the official ML Developer API (OAuth2: App ID + Secret → access token,
+        # product search by GTIN/EAN). Affiliate links: ML has NO official affiliate API — either a
+        # manual affiliate TAG appended to links, or a third-party link API (affiliate-api-*).
+        enabled: ${ECOMMERCE_MERCADOLIVRE_ENABLED:false}
+        client-id: ${ECOMMERCE_MERCADOLIVRE_CLIENT_ID:}
+        client-secret: ${ECOMMERCE_MERCADOLIVRE_CLIENT_SECRET:}
+        affiliate-tag: ${ECOMMERCE_MERCADOLIVRE_AFFILIATE_TAG:}
+        affiliate-api-key: ${ECOMMERCE_MERCADOLIVRE_AFFILIATE_API_KEY:}
+        affiliate-api-url: ${ECOMMERCE_MERCADOLIVRE_AFFILIATE_API_URL:}
+        site-id: ${ECOMMERCE_MERCADOLIVRE_SITE_ID:MLB}
+        base-url: ${ECOMMERCE_MERCADOLIVRE_BASE_URL:https://api.mercadolibre.com}
   billing:
     # Shared secret the provider-agnostic webhook (/api/v1/webhooks/subscription)
     # verifies via the X-Webhook-Secret header. EMPTY in dev = check skipped.
