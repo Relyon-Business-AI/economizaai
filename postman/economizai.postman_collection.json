@@ -12049,6 +12049,256 @@
      ]
     },
     {
+     "name": "49b3. Admin: garimpo marketplaces responde 200",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{adminToken}}"
+       },
+       {
+        "key": "Accept-Language",
+        "value": "pt"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/admin/garimpo/marketplaces",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "admin",
+        "garimpo",
+        "marketplaces"
+       ]
+      },
+      "description": ""
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin — pulando'); return; }",
+         "pm.test('GET /admin/garimpo/marketplaces -> 200', function () { pm.response.to.have.status(200); });",
+         "pm.test('mercadolivre esta listado', function () { var keys = pm.response.json().map(function (m) { return m.key; }); pm.expect(keys).to.include('mercadolivre'); });"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "49b4. Admin: criar watch de garimpo",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{adminToken}}"
+       },
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Accept-Language",
+        "value": "pt"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/admin/garimpo/watches",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "admin",
+        "garimpo",
+        "watches"
+       ]
+      },
+      "description": "",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"searchTerm\": \"e2e garimpo air fryer\",\n  \"targetPrice\": 300.00\n}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin — pulando'); return; }",
+         "pm.test('POST /admin/garimpo/watches -> 200', function () { pm.response.to.have.status(200); });",
+         "var w = pm.response.json();",
+         "pm.test('watch criado com defaults', function () { pm.expect(w.marketplace).to.eql('mercadolivre'); pm.expect(w.active).to.be.true; });",
+         "pm.collectionVariables.set('garimpoWatchId', w.id);"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "49b5. Admin: watch sem criterio e rejeitado (400)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{adminToken}}"
+       },
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Accept-Language",
+        "value": "pt"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/admin/garimpo/watches",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "admin",
+        "garimpo",
+        "watches"
+       ]
+      },
+      "description": "",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"searchTerm\": \"e2e garimpo invalido\"\n}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin — pulando'); return; }",
+         "pm.test('watch sem targetPrice/minDiscount -> 400', function () { pm.response.to.have.status(400); });",
+         "pm.test('mensagem localizada, sem chave crua', function () { var m = pm.response.json().message || ''; pm.expect(m).to.not.include('garimpo.watch.invalid'); });"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "49b6. Admin: atualizar watch de garimpo",
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{adminToken}}"
+       },
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Accept-Language",
+        "value": "pt"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/admin/garimpo/watches/{{garimpoWatchId}}",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "admin",
+        "garimpo",
+        "watches",
+        "{{garimpoWatchId}}"
+       ]
+      },
+      "description": "",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"searchTerm\": \"e2e garimpo air fryer\",\n  \"minDiscountPercent\": 30,\n  \"active\": false\n}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin — pulando'); return; }",
+         "if (!pm.collectionVariables.get('garimpoWatchId')) { pm.test.skip('Sem watch criado — pulando'); return; }",
+         "pm.test('PUT watch -> 200', function () { pm.response.to.have.status(200); });",
+         "pm.test('criterio atualizado', function () { pm.expect(pm.response.json().minDiscountPercent).to.eql(30); });"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "49b7. Admin: deletar watch de garimpo",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{adminToken}}"
+       },
+       {
+        "key": "Accept-Language",
+        "value": "pt"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/admin/garimpo/watches/{{garimpoWatchId}}",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "admin",
+        "garimpo",
+        "watches",
+        "{{garimpoWatchId}}"
+       ]
+      },
+      "description": ""
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin — pulando'); return; }",
+         "if (!pm.collectionVariables.get('garimpoWatchId')) { pm.test.skip('Sem watch criado — pulando'); return; }",
+         "pm.test('DELETE watch -> 204', function () { pm.response.to.have.status(204); });",
+         "pm.collectionVariables.unset('garimpoWatchId');"
+        ]
+       }
+      }
+     ]
+    },
+    {
      "name": "49c. Admin: a conta deletada nao existe mais (404)",
      "request": {
       "method": "GET",
@@ -13713,6 +13963,273 @@
        ]
       },
       "description": "All households (opted in or not), emails as handles. ADMIN."
+     },
+     "response": []
+    }
+   ]
+  },
+  {
+   "name": "Garimpo (admin)",
+   "description": "Deal hunting em marketplaces (ML) — busca por termo, historico de precos e watches com alerta via webhook. Tudo ADMIN-only. Buscas ao vivo exigem credenciais do ML (503 sem elas); watches/history funcionam sempre.",
+   "item": [
+    {
+     "name": "Admin: garimpo search by term",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{adminToken}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/admin/garimpo/search?q=air fryer&marketplace=mercadolivre&offset=0&limit=20&minDiscount=20",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "admin",
+        "garimpo",
+        "search"
+       ],
+       "query": [
+        {
+         "key": "q",
+         "value": "air fryer"
+        },
+        {
+         "key": "marketplace",
+         "value": "mercadolivre"
+        },
+        {
+         "key": "offset",
+         "value": "0"
+        },
+        {
+         "key": "limit",
+         "value": "20"
+        },
+        {
+         "key": "minDiscount",
+         "value": "20"
+        }
+       ]
+      },
+      "description": "Busca ao vivo no marketplace (default mercadolivre); grava mudancas de preco no historico. 503 sem credenciais do ML. Opcional minDiscount filtra a RESPOSTA."
+     },
+     "response": []
+    },
+    {
+     "name": "Admin: garimpo marketplaces",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{adminToken}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/admin/garimpo/marketplaces",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "admin",
+        "garimpo",
+        "marketplaces"
+       ]
+      },
+      "description": "Marketplaces plugaveis e se tem credenciais vivas."
+     },
+     "response": []
+    },
+    {
+     "name": "Admin: garimpo product price history",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{adminToken}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/admin/garimpo/products/mercadolivre/{{garimpoExternalId}}/history",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "admin",
+        "garimpo",
+        "products",
+        "mercadolivre",
+        "{{garimpoExternalId}}",
+        "history"
+       ]
+      },
+      "description": "Historico append-only de precos observados (uma linha por MUDANCA de preco), mais recente primeiro."
+     },
+     "response": []
+    },
+    {
+     "name": "Admin: list garimpo watches",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{adminToken}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/admin/garimpo/watches",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "admin",
+        "garimpo",
+        "watches"
+       ]
+      },
+      "description": "Watches (buscas fixas varridas por agendador), mais recentes primeiro."
+     },
+     "response": []
+    },
+    {
+     "name": "Admin: create garimpo watch",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{adminToken}}"
+       },
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/admin/garimpo/watches",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "admin",
+        "garimpo",
+        "watches"
+       ]
+      },
+      "description": "Cria um watch. Precisa de targetPrice e/ou minDiscountPercent (bater QUALQUER um = hit). Hits NOVOS sao POSTados no webhook configurado (GARIMPO_WEBHOOK_URL).",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"searchTerm\": \"air fryer\",\n  \"marketplace\": \"mercadolivre\",\n  \"targetPrice\": 300.00,\n  \"minDiscountPercent\": 25,\n  \"active\": true\n}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "Admin: update garimpo watch",
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{adminToken}}"
+       },
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/admin/garimpo/watches/{{garimpoWatchId}}",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "admin",
+        "garimpo",
+        "watches",
+        "{{garimpoWatchId}}"
+       ]
+      },
+      "description": "Atualiza termo/criterios/ativo.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"searchTerm\": \"air fryer 12 litros\",\n  \"marketplace\": \"mercadolivre\",\n  \"targetPrice\": 280.00,\n  \"active\": true\n}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "Admin: run garimpo watch now",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{adminToken}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/admin/garimpo/watches/{{garimpoWatchId}}/run",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "admin",
+        "garimpo",
+        "watches",
+        "{{garimpoWatchId}}",
+        "run"
+       ]
+      },
+      "description": "Roda o watch na hora (tambem alimenta o historico) e devolve os hits. 503 sem credenciais do ML."
+     },
+     "response": []
+    },
+    {
+     "name": "Admin: delete garimpo watch",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{adminToken}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/admin/garimpo/watches/{{garimpoWatchId}}",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "admin",
+        "garimpo",
+        "watches",
+        "{{garimpoWatchId}}"
+       ]
+      },
+      "description": "Hard delete; o historico de precos permanece."
      },
      "response": []
     }

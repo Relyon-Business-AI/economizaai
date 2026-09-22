@@ -28,4 +28,15 @@ public interface EcommerceProvider {
      * @param cep destination CEP for freight, may be null/blank (freight then omitted).
      */
     List<ProviderOffer> searchByEan(String ean, String cep);
+
+    /**
+     * Free-term search (the garimpo flow: deal hunting, watches, price history).
+     * Unlike {@link #searchByEan} this is an admin/ops path that wants honest errors:
+     * implementations return empty when not configured, but on a live API failure they
+     * throw {@link com.relyon.economizaai.exception.EcommerceProviderException} so the
+     * caller can surface it instead of mistaking an outage for "no results".
+     */
+    default ProviderSearchResult searchByTerm(String term, int offset, int limit) {
+        return ProviderSearchResult.empty();
+    }
 }

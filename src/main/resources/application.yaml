@@ -261,6 +261,15 @@ economizaai:
         affiliate-api-url: ${ECOMMERCE_MERCADOLIVRE_AFFILIATE_API_URL:}
         site-id: ${ECOMMERCE_MERCADOLIVRE_SITE_ID:MLB}
         base-url: ${ECOMMERCE_MERCADOLIVRE_BASE_URL:https://api.mercadolibre.com}
+  garimpo:
+    # Garimpo de promoções: admin-driven deal hunting on the e-commerce providers
+    # (term search + price history + scheduled watches). Provider credentials come
+    # from the ecommerce block above — nothing here works live until ML creds land.
+    # Watch hits POST to the webhook (a group bot); empty webhook = log-only.
+    enabled: ${GARIMPO_ENABLED:true}
+    watch-sweep-delay-ms: ${GARIMPO_WATCH_SWEEP_DELAY_MS:3600000}
+    webhook-url: ${GARIMPO_WEBHOOK_URL:}
+    search-max-limit: 50
   billing:
     # Shared secret the provider-agnostic webhook (/api/v1/webhooks/subscription)
     # verifies via the X-Webhook-Secret header. EMPTY in dev = check skipped.

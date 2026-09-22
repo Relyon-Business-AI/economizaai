@@ -2,6 +2,8 @@
 
 **The app runs on Render.** Two web services (one repo, branch-per-environment)
 plus a managed Postgres. Step-by-step setup runbook: [`RENDER_SETUP.md`](./RENDER_SETUP.md).
+Bird's-eye map of the WHOLE product (mobile, web, admin, landing, e-mail, costs):
+[`docs/INFRA_MAP.md`](./docs/INFRA_MAP.md).
 
 > The old self-hosted Windows box (Cloudflare quick-tunnel, self-hosted CI runner,
 > `.ps1` watchdogs, LAN log UI) has been **RETIRED** — it is documented at the very

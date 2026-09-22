@@ -16,6 +16,24 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-22 — garimpo de promoções (admin): busca em marketplace, histórico de preços e watches com alerta
+
+Subsistema novo, **ADMIN-only** (`/api/v1/admin/garimpo/**`) — o robô que caça promoções no
+Mercado Livre pra alimentar grupos de ofertas. Nada muda pro app do usuário; a tela admin pode
+consumir quando quiser. Absorve o protótipo standalone `garimpo` (aposentado).
+
+- **`GET /admin/garimpo/search?q=`** — busca ao vivo por termo (normalizada: preço, `originalPrice`,
+  `discountPercent`, link de afiliado). Toda mudança de preço observada vira histórico.
+- **`GET /admin/garimpo/products/{marketplace}/{externalId}/history`** — histórico append-only de
+  preços (uma linha por MUDANÇA), a base pra saber se um desconto é real.
+- **Watches** (`GET/POST/PUT/DELETE /admin/garimpo/watches`, `POST /watches/{id}/run`) — buscas
+  fixas varridas de hora em hora (`GARIMPO_WATCH_SWEEP_DELAY_MS`); precisa de `targetPrice` e/ou
+  `minDiscountPercent` (bater qualquer um = hit). Hits **novos** são POSTados no webhook
+  (`GARIMPO_WEBHOOK_URL` — bot de grupo, n8n…); sem re-spam do mesmo achado no mesmo preço.
+- **Gotcha:** buscas ao vivo retornam **503 localizado** até as credenciais do ML existirem
+  (`ECOMMERCE_MERCADOLIVRE_*` — a Search API pública do ML agora responde 403). Watches CRUD,
+  marketplaces e histórico funcionam desde já.
+
 ## 2026-09-22 — import em massa de notas por chave / CSV da Nota Fiscal Gaúcha (RS)
 
 Onboarding: encher o histórico do usuário a partir das **chaves de acesso** — sem escanear
