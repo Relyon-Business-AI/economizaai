@@ -157,6 +157,13 @@ loyalty program (Méliuz, Picpay, market-native apps), surface a deep link.
 - Click-tracking middleware.
 - Disclosure: "Patrocinado" badge.
 
+> **Foundation shipped (2026-09-22, INERT):** the e-commerce price-comparison subsystem
+> ("vale a pena online?") — pluggable providers (Mercado Livre), admin-curated offers, the
+> `/receipt-items/{id}/offer` endpoint, and an opt-in discount-hunter leaderboard. This is
+> the concrete first step of the affiliate/commerce model above. Full design, current state,
+> and next steps (incl. the "máquina de economizar" route optimizer) in
+> **[`docs/ECOMMERCE_COMPARISON.md`](docs/ECOMMERCE_COMPARISON.md)**. No FE yet by choice.
+
 ---
 
 ### 4. Sponsored Placements (with disclosure)
