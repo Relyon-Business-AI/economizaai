@@ -1,6 +1,7 @@
 package com.relyon.economizaai.security;
 
 import com.relyon.economizaai.config.MdcContextFilter;
+import com.relyon.economizaai.service.privacy.LogMasker;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -69,8 +70,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     var authToken = new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
-                    MDC.put(MdcContextFilter.USER_ID, username);
-                    log.debug("Authenticated user: {}", username);
+                    // Masked: the MDC tag lands on EVERY log line of the request
+                    // (file, Render, log-sweeper snippets) — a raw address there
+                    // is LGPD personal data replicated across all sinks.
+                    MDC.put(MdcContextFilter.USER_ID, LogMasker.email(username));
+                    log.debug("Authenticated user: {}", LogMasker.email(username));
                 }
             }
         } catch (Exception ex) {
