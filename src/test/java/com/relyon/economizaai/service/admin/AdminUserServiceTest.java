@@ -214,7 +214,7 @@ class AdminUserServiceTest {
         when(userRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(user)));
 
-        var page = service.list(null, PageRequest.of(0, 20));
+        var page = service.list(null, false, PageRequest.of(0, 20));
 
         assertEquals(1, page.getTotalElements());
         assertEquals("john@test.com", page.getContent().get(0).email());
@@ -235,7 +235,7 @@ class AdminUserServiceTest {
         when(receiptRepository.countByHouseholdIds(List.of(householdId)))
                 .thenReturn(List.<Object[]>of(new Object[]{householdId, 7L}));
 
-        var page = service.list(null, PageRequest.of(0, 20));
+        var page = service.list(null, false, PageRequest.of(0, 20));
 
         assertEquals(7L, page.getContent().get(0).receiptCount());
     }
@@ -247,7 +247,7 @@ class AdminUserServiceTest {
         when(userRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
 
-        service.list("  john  ", requested);
+        service.list("  john  ", false, requested);
 
         verify(userRepository).findAll(any(Specification.class), sortedPageableCaptor.capture());
         assertEquals(requested, sortedPageableCaptor.getValue());
@@ -270,7 +270,7 @@ class AdminUserServiceTest {
                 new Object[]{richHome, new BigDecimal("999.00")}));
 
         var requested = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "totalSpend"));
-        var page = service.list(null, requested);
+        var page = service.list(null, false, requested);
 
         assertEquals("rich@test.com", page.getContent().get(0).email());
         assertEquals(new BigDecimal("999.00"), page.getContent().get(0).totalSpend());
@@ -292,7 +292,7 @@ class AdminUserServiceTest {
         when(receiptRepository.countByHouseholdIds(anyList())).thenReturn(List.<Object[]>of(
                 new Object[]{homeA, 2L}, new Object[]{homeB, 40L}));
 
-        var page = service.list(null, PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "receiptCount")));
+        var page = service.list(null, false, PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "receiptCount")));
 
         assertEquals(2, page.getTotalElements());
         assertEquals(1, page.getContent().size());

@@ -18,6 +18,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -34,18 +35,18 @@ class MarketIntelServiceTest {
         when(priceObservationRepository.count()).thenReturn(1342L);
         when(priceObservationAuditRepository.countDistinctContributingHouseholds()).thenReturn(18L);
         var productId = UUID.randomUUID();
-        when(receiptItemRepository.topProductsByScans(any())).thenReturn(List.<Object[]>of(
+        when(receiptItemRepository.topProductsByScans(any(), anyBoolean())).thenReturn(List.<Object[]>of(
                 new Object[]{productId, "Arroz", 40L}));
-        when(receiptRepository.topMarketsByScans(any())).thenReturn(List.<Object[]>of(
+        when(receiptRepository.topMarketsByScans(any(), anyBoolean())).thenReturn(List.<Object[]>of(
                 new Object[]{"12345678000190", "ZAFFARI", 30L, new BigDecimal("5000.00")}));
-        when(receiptItemRepository.categorySpendGlobal()).thenReturn(List.<Object[]>of(
+        when(receiptItemRepository.categorySpendGlobal(anyBoolean())).thenReturn(List.<Object[]>of(
                 new Object[]{ProductCategory.GROCERIES, new BigDecimal("100.00"), 10L},
                 new Object[]{ProductCategory.MEAT_DAIRY, new BigDecimal("300.00"), 5L},
                 new Object[]{null, new BigDecimal("50.00"), 3L}));
-        when(receiptRepository.confirmedReceiptsByUf()).thenReturn(List.<Object[]>of(
+        when(receiptRepository.confirmedReceiptsByUf(anyBoolean())).thenReturn(List.<Object[]>of(
                 new Object[]{UnidadeFederativa.RS, 100L, new BigDecimal("9000.00")}));
 
-        var report = service.report();
+        var report = service.report(false);
 
         assertEquals(1342L, report.priceObservations());
         assertEquals(18L, report.contributingHouseholds());

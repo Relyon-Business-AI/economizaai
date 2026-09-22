@@ -71,7 +71,7 @@ class AdminReceiptServiceTest {
         when(receiptRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(receipt)));
 
-        var page = service.list(null, null, null, null, null, null, null, null, null, PageRequest.of(0, 20));
+        var page = service.list(null, null, null, null, null, null, null, null, null, false, PageRequest.of(0, 20));
 
         assertEquals(1, page.getTotalElements());
         assertEquals("Mercado X", page.getContent().get(0).marketName());
@@ -90,7 +90,7 @@ class AdminReceiptServiceTest {
                 .thenReturn(new PageImpl<>(List.of()));
 
         service.list(LocalDateTime.now().minusDays(7), LocalDateTime.now(),
-                "  12345678000190  ", List.of(ProductCategory.GROCERIES), "  arroz  ", UUID.randomUUID(), null, null, null, requested);
+                "  12345678000190  ", List.of(ProductCategory.GROCERIES), "  arroz  ", UUID.randomUUID(), null, null, null, false, requested);
 
         verify(receiptRepository)
                 .findAll(any(Specification.class), sortedPageableCaptor.capture());
@@ -102,7 +102,7 @@ class AdminReceiptServiceTest {
         when(receiptRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
 
-        var page = service.list(null, null, "   ", List.of(), "   ", null, null, null, null, PageRequest.of(0, 20));
+        var page = service.list(null, null, "   ", List.of(), "   ", null, null, null, null, false, PageRequest.of(0, 20));
 
         assertEquals(0, page.getTotalElements());
     }

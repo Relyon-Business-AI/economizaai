@@ -83,7 +83,7 @@ class AdminUserServiceCoverageTest {
         when(userRepository.findAll(specCaptor.capture(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
 
-        service.list("Maria", PageRequest.of(0, 10));
+        service.list("Maria", false, PageRequest.of(0, 10));
 
         @SuppressWarnings("unchecked")
         var spec = (Specification<User>) specCaptor.getValue();
@@ -121,7 +121,7 @@ class AdminUserServiceCoverageTest {
         var specCaptor = ArgumentCaptor.forClass(Specification.class);
         when(userRepository.findAll(specCaptor.capture(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
-        service.list("Bob", PageRequest.of(0, 10));
+        service.list("Bob", false, PageRequest.of(0, 10));
         @SuppressWarnings("unchecked")
         var spec = (Specification<User>) specCaptor.getValue();
 
@@ -146,7 +146,7 @@ class AdminUserServiceCoverageTest {
         when(userRepository.findAll(specCaptor.capture(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
         // "   " is blank → trimmed to null → no like predicate built.
-        service.list("   ", PageRequest.of(0, 10));
+        service.list("   ", false, PageRequest.of(0, 10));
         @SuppressWarnings("unchecked")
         var spec = (Specification<User>) specCaptor.getValue();
 
@@ -169,7 +169,7 @@ class AdminUserServiceCoverageTest {
         var specCaptor = ArgumentCaptor.forClass(Specification.class);
         when(userRepository.findAll(specCaptor.capture(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
-        service.list(null, PageRequest.of(0, 10));
+        service.list(null, false, PageRequest.of(0, 10));
         @SuppressWarnings("unchecked")
         var spec = (Specification<User>) specCaptor.getValue();
 

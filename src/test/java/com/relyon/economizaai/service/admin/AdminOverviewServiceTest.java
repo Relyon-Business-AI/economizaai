@@ -38,17 +38,17 @@ class AdminOverviewServiceTest {
         when(userRepository.countSignupsSince(any(), anyBoolean())).thenReturn(3L);
         when(userRepository.countProTier(false)).thenReturn(54L);
         when(subscriptionRepository.countPaying(eq(SubscriptionStatus.ACTIVE), anyBoolean())).thenReturn(0L);
-        when(receiptRepository.count()).thenReturn(326L);
-        when(receiptRepository.countByCreatedAtGreaterThanEqual(any())).thenReturn(12L);
-        when(receiptRepository.countActiveHouseholdsSince(any())).thenReturn(9L);
-        when(receiptRepository.sumConfirmedTotal()).thenReturn(new BigDecimal("15000.00"));
-        when(receiptRepository.statusBreakdownSince(any())).thenReturn(List.<Object[]>of(
+        when(receiptRepository.countReceipts(false)).thenReturn(326L);
+        when(receiptRepository.countByCreatedAtGreaterThanEqual(any(), anyBoolean())).thenReturn(12L);
+        when(receiptRepository.countActiveHouseholdsSince(any(), anyBoolean())).thenReturn(9L);
+        when(receiptRepository.sumConfirmedTotal(false)).thenReturn(new BigDecimal("15000.00"));
+        when(receiptRepository.statusBreakdownSince(any(), anyBoolean())).thenReturn(List.<Object[]>of(
                 new Object[]{ReceiptStatus.CONFIRMED, 80L},
                 new Object[]{ReceiptStatus.FAILED_PARSE, 20L}));
         when(priceObservationRepository.count()).thenReturn(5000L);
         when(priceObservationAuditRepository.countDistinctContributingHouseholds()).thenReturn(40L);
 
-        var overview = service.overview();
+        var overview = service.overview(false);
 
         assertEquals(72L, overview.usersTotal());
         assertEquals(54L, overview.usersPro());

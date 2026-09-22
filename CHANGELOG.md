@@ -16,6 +16,26 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-22 — dashboards admin excluem contas internas por padrão
+
+Um import de notas feito em conta de admin estava inflando os KPIs (Notas, DAU,
+gasto). Agora os endpoints admin de métricas aceitam **`includeInternal`** (query
+param, **default `false`** = exclui admins, contas `@economizaai.app` /
+`@cloudtestlabaccounts.com` e qualquer conta com `excludedFromMetrics=true`):
+
+- `GET /admin/overview?includeInternal=` — passou a filtrar Notas (total/hoje),
+  DAU/WAU/MAU, stickiness, gasto confirmado e taxa de parse. **Observações de
+  preço e domicílios no índice seguem globais** (é o índice anonimizado — sem
+  user_id, domicílio compartilhado).
+- `GET /admin/market-intel?includeInternal=` — top produtos/mercados, gasto por
+  categoria e por UF passam a filtrar; os dois contadores do índice seguem globais.
+- `GET /admin/ingestion-health?includeInternal=` — saúde da ingestão por conta.
+- `GET /admin/receipts?includeInternal=` — lista cross-household.
+- `GET /admin/users?includeInternal=` — lista de usuários.
+
+Todos são retrocompatíveis (omitir o param = `false`). A tela admin já manda o
+valor conforme o toggle "Incluir contas internas (admin/teste)".
+
 ## 2026-09-22 — passe de segurança (rate limits novos, endpoints restringidos)
 
 Auditoria completa de segurança; quase tudo é interno, mas alguns pontos tocam o FE:
