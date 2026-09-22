@@ -123,7 +123,12 @@ public class SecurityConfig {
                                 "/api/v1/categorizer/dictionary/curated/*",
                                 "/api/v1/categorizer/dictionary/learned/*").hasRole("ADMIN")
                         // Canonical products are GLOBAL — one tester's edit would
-                        // change the product for every household.
+                        // change the product for every household. Create also
+                        // relinks other households' receipt items by EAN, so it's
+                        // ADMIN-only too. POST /products/*/aliases stays open: it's
+                        // the app's unmatched-item mapping flow, and the alias
+                        // conflict check stops remapping established descriptions.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/products").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/products/*").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )

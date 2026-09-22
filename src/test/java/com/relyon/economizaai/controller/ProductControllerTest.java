@@ -13,6 +13,7 @@ import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.HouseholdProductService;
@@ -38,6 +39,8 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -64,6 +67,12 @@ class ProductControllerTest {
         return User.builder().id(UUID.randomUUID()).email("john@test.com").household(household).build();
     }
 
+    private User buildAdmin() {
+        var admin = buildUser();
+        admin.setRole(Role.ADMIN);
+        return admin;
+    }
+
     private ProductResponse sampleProduct(UUID id) {
         return new ProductResponse(id, "789", "Arroz Tio Joao", "Arroz", null, "Tio João",
                 ProductCategory.GROCERIES, "UN", new BigDecimal("5"), "KG",
@@ -84,14 +93,14 @@ class ProductControllerTest {
     }
 
     @Test
-    void create_returns201() throws Exception {
-        var user = buildUser();
+    void create_returns201ForAdmin() throws Exception {
+        var admin = buildAdmin();
         var id = UUID.randomUUID();
         var request = new CreateProductRequest("789", "Arroz Tio Joao", null, "Tio Joao", ProductCategory.GROCERIES, "UN", null, null);
         when(productService.create(any(CreateProductRequest.class))).thenReturn(sampleProduct(id));
 
         mockMvc.perform(post("/api/v1/products")
-                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .with(SecurityMockMvcRequestPostProcessors.user(admin))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -99,13 +108,29 @@ class ProductControllerTest {
     }
 
     @Test
-    void create_returns409OnDuplicateEan() throws Exception {
+    void create_returns403ForNonAdmin() throws Exception {
+        // Canonical products are global (create also relinks other households'
+        // items by EAN) — a regular user must never reach the service.
         var user = buildUser();
+        var request = new CreateProductRequest("789", "Arroz Tio Joao", null, "Tio Joao", ProductCategory.GROCERIES, "UN", null, null);
+
+        mockMvc.perform(post("/api/v1/products")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden());
+
+        verify(productService, never()).create(any());
+    }
+
+    @Test
+    void create_returns409OnDuplicateEan() throws Exception {
+        var admin = buildAdmin();
         var request = new CreateProductRequest("789", "Arroz", null, null, null, null, null, null);
         when(productService.create(any(CreateProductRequest.class))).thenThrow(new EanConflictException("789"));
 
         mockMvc.perform(post("/api/v1/products")
-                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .with(SecurityMockMvcRequestPostProcessors.user(admin))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict());
