@@ -59,7 +59,8 @@ class JwtAuthenticationFilterTest {
         var authentication = SecurityContextHolder.getContext().getAuthentication();
         assertNotNull(authentication);
         assertEquals("test@test.com", authentication.getName());
-        assertEquals("test@test.com", MDC.get(MdcContextFilter.USER_ID));
+        // MDC carries the MASKED address — it lands on every log line.
+        assertEquals("t***@test.com", MDC.get(MdcContextFilter.USER_ID));
         verify(chain).doFilter(request, response);
     }
 
