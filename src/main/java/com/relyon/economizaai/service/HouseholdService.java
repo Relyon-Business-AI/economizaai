@@ -75,8 +75,9 @@ public class HouseholdService {
                 .inviteCodeExpiresAt(LocalDateTime.now().plusHours(INVITE_TTL_HOURS))
                 .build();
         var saved = householdRepository.save(household);
+        // Invite code is a bearer credential (grants household membership) — masked.
         log.info("Household {} created with invite code {} (expires {})",
-                saved.getId(), saved.getInviteCode(), saved.getInviteCodeExpiresAt());
+                saved.getId(), LogMasker.token(saved.getInviteCode()), saved.getInviteCodeExpiresAt());
         return saved;
     }
 

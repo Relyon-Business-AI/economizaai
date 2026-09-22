@@ -22,7 +22,10 @@ public final class ScNfceDanfeParser {
     private static final Pattern EMISSION = Pattern.compile(
             "Emiss[aã]o\\s*:?\\s*(\\d{2}/\\d{2}/\\d{4}\\s+\\d{2}:\\d{2}:\\d{2})",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-    private static final Pattern CHAVE = Pattern.compile("(\\d[\\d ]{42,}\\d)");
+    // Bounded: a 44-digit chave with spaces never exceeds ~60 chars, and an
+    // unbounded {42,} backtracks badly on long digit/space runs in
+    // device-supplied 4MB content.
+    private static final Pattern CHAVE = Pattern.compile("(\\d[\\d ]{42,60}\\d)");
     private static final Pattern DIGITS = Pattern.compile("\\d+");
     private static final Pattern ITEM_HEADER = Pattern.compile(
             "^\\s*(.+?)\\s*\\(?\\s*C[oó]d(?:igo|\\.)\\s*:?\\s*([^)]*?)\\)",

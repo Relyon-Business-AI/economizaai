@@ -16,7 +16,28 @@ class CpfMaskerTest {
     @Test
     void strip_masksRawElevenDigitCpf() {
         var input = "CPF 12345678900 here";
-        assertEquals("CPF *********** here", CpfMasker.strip(input));
+        assertEquals("CPF ***.***.***-** here", CpfMasker.strip(input));
+    }
+
+    @Test
+    void strip_masksUnlabeledRawElevenDigitRun() {
+        var input = "consumidor 12345678900 fim";
+        assertEquals("consumidor *********** fim", CpfMasker.strip(input));
+    }
+
+    @Test
+    void strip_masksLooselyFormattedLabeledVariants() {
+        assertEquals("CPF: ***.***.***-**", CpfMasker.strip("CPF: 123 456 789 00"));
+        assertEquals("CPF ***.***.***-**", CpfMasker.strip("CPF 123.456.789 00"));
+        assertEquals("cpf: ***.***.***-**,", CpfMasker.strip("cpf: 123.456.789-00,"));
+    }
+
+    @Test
+    void strip_doesNotSweepUnlabeledSpacedDigitGroups() {
+        // Without a CPF label nearby, spaced digit groups (totals, phone
+        // numbers, codes) must survive.
+        var input = "itens 123 456 789 00 unidades";
+        assertEquals(input, CpfMasker.strip(input));
     }
 
     @Test
