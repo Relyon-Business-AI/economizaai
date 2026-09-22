@@ -44,7 +44,7 @@ With no provider configured, the feature serves **only admin-curated offers**.
 
 | Concern | File | Notes |
 |---|---|---|
-| Config (per-provider, env vars) | `config/EcommerceProperties.java` | `@ConfigurationProperties("economizai.ecommerce")`. Master `enabled`, `worthItMinSavings`, `defaultCep`, `Map<String,Provider> providers`. Provider = enabled/clientId/clientSecret/affiliateTag/affiliateApiKey/affiliateApiUrl/siteId/baseUrl + `isConfigured()`. |
+| Config (per-provider, env vars) | `config/EcommerceProperties.java` | `@ConfigurationProperties("economizaai.ecommerce")`. Master `enabled`, `worthItMinSavings`, `defaultCep`, `Map<String,Provider> providers`. Provider = enabled/clientId/clientSecret/affiliateTag/affiliateApiKey/affiliateApiUrl/siteId/baseUrl + `isConfigured()`. |
 | Provider SPI | `service/ecommerce/EcommerceProvider.java` | `key()`, `isConfigured()`, `searchByEan(ean, cep)`. MUST be inert (return empty, never throw) when unconfigured. |
 | Fetched-offer shape | `service/ecommerce/ProviderOffer.java` | transient record; `total()` = price + freight. |
 | Mercado Livre provider | `service/ecommerce/MercadoLivreProvider.java` | Inert until creds. Live path (OAuth client-credentials → Bearer → `/sites/{site}/search?q=EAN`) is written to the documented ML shape but **UNTESTED LIVE**. Guarded (returns empty on any error). |
@@ -93,7 +93,7 @@ counts products bought by **≥2 households** (so you can't beat your own averag
 
 ## 3. How to turn it on (config / env vars)
 
-All env vars ship **empty** (see `application.yaml` `economizai.ecommerce.*` and DEV_NOTES).
+All env vars ship **empty** (see `application.yaml` `economizaai.ecommerce.*` and DEV_NOTES).
 Set on Render when ready — **the owner fills these, not Claude** (secrets/infra are gated).
 
 ```
@@ -118,7 +118,7 @@ ECOMMERCE_DEFAULT_CEP=
   `/api/v1/convert-links`). The exact link/commission format **must be confirmed live**.
 
 Adding a **new e-commerce** (Amazon BR, Magalu, …) = implement `EcommerceProvider` + add a
-`economizai.ecommerce.providers.<key>` block with its env vars. No orchestration changes.
+`economizaai.ecommerce.providers.<key>` block with its env vars. No orchestration changes.
 
 ---
 

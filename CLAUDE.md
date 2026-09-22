@@ -83,7 +83,7 @@ GitHub repo: `economizaai` (https://github.com/XandiVieira/economizaai.git)
 
 ### API & Postman
 - All APIs are versioned: `/api/v1/...`
-- A Postman collection is maintained at `postman/economizai.postman_collection.json`
+- A Postman collection is maintained at `postman/economizaai.postman_collection.json`
 - Every endpoint change (create, update, remove) must update the Postman collection
 - The collection includes an **E2E Flow** folder — a sequential test suite that runs all requests in logical order, each setting data for the next. This must also be updated on any endpoint change.
 - REST endpoints follow standard conventions: plural nouns, proper HTTP methods

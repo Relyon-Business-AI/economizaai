@@ -63,7 +63,7 @@ across markets, and basket-level inflation tracking."
 - ✅ Single `SubscriptionGateService` (`service/subscription`) — `allows`/`require`
   + typed limit helpers (`watchedMarketLimit`, `monthlyReceiptLimit`,
   `freeHistoryWindowDays`, `clampFrom`). No inline tier checks anywhere.
-  Limits tunable via `economizai.subscription.free.{watched-markets,history-days,monthly-receipts}`.
+  Limits tunable via `economizaai.subscription.free.{watched-markets,history-days,monthly-receipts}`.
 - ✅ `PaywallException` → **HTTP 402** (`subscription.upgrade_required`).
 - ✅ Receipt upload counter — `ReceiptService.submit`, counts all statuses this calendar month.
 - ✅ Query-layer date-range cap — `clampFrom` applied in `ItemQueryService`,
@@ -77,7 +77,7 @@ across markets, and basket-level inflation tracking."
 - ✅ Provider-agnostic webhook — `POST /api/v1/webhooks/subscription` (seam for a real provider).
 - ⬜ Payment provider (Stripe Brasil / Mercado Pago / Pagar.me + Pix) — **not chosen yet**.
   Needs API keys + map the provider webhook onto `/api/v1/webhooks/subscription`
-  and set `economizai.billing.webhook-secret`. See DEV_NOTES.
+  and set `economizaai.billing.webhook-secret`. See DEV_NOTES.
 - ⬜ Self-serve subscription-management page + PUT `/users/me/subscription`.
 - ⬜ Feature-flag service so we can A/B individual gates.
 - ⬜ Top markets/categories `?limit` hard cap for FREE (history window is gated; the limit cap is not yet).
@@ -281,7 +281,7 @@ repassable COGS.
 
 Every money-spending call (captcha solve, Infosimples query) is metered:
 - **Per-user daily caps** — Infosimples 20/day, captcha 60/day (config
-  `economizai.paid-api.*`; tier-independent, a pure cost/abuse guard).
+  `economizaai.paid-api.*`; tier-independent, a pure cost/abuse guard).
 - **Global daily kill-switch** — a spend ceiling across ALL users
   (`daily-global-budget-cents`, default R$50/day). Once today's ledger total hits
   it, every paid call fails fast until midnight UTC. This is the insurance against

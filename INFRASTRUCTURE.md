@@ -117,7 +117,7 @@ Still-accurate checklist for the real prod cutover (repointing `api.economizaai.
 Spring Boot), `economizai-db` (PostgreSQL 18), `economizai-logs` (Dozzle log UI, 9999→8080).
 Data in named volumes (`economizai-pgdata`, `economizai-profilepics`).
 
-**Public path (the "from anywhere" URL):** FE → `https://economizai.economizai.workers.dev`
+**Public path (the "from anywhere" URL):** FE → `https://economizaai.economizaai.workers.dev`
 (a permanent **Cloudflare Worker** front door, `tunnel-proxy-worker/`) → reads the live tunnel
 URL from a Worker KV namespace → `https://<random>.trycloudflare.com` (a **cloudflared
 quick-tunnel**, dials out, no open ports, URL changes per restart) → `localhost:8080`.

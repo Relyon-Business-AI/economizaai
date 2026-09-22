@@ -370,7 +370,7 @@ intended as a PRO feature (see MONETIZATION.md).
   the data lives in receipts already, recomputing per request is cheap at
   current volume.
 - ✅ Volume-gated: silently skip generics with fewer than
-  `economizai.preferences.min-purchases-per-generic` (default 5) confirmed
+  `economizaai.preferences.min-purchases-per-generic` (default 5) confirmed
   purchases. Empty list until the household has data — no low-confidence
   noise.
 - ✅ Brand preference uses concentration thresholds:
@@ -444,17 +444,17 @@ placeholder):
 
 - ✅ Purchase-cadence model per (household, product). Simple mean of
   intervals between unique purchase dates over the last
-  `economizai.consumption.history-lookback-days` (default 365).
+  `economizaai.consumption.history-lookback-days` (default 365).
 - ✅ Stock-out / running-low classification with three states
   (`RAN_OUT`, `RUNNING_LOW`, `OK`). Threshold configurable via
-  `economizai.consumption.running-low-threshold-days` (default 7).
+  `economizaai.consumption.running-low-threshold-days` (default 7).
 - ✅ Confidence label (`LOW` / `MEDIUM` / `HIGH`) so the FE can
   down-weight noisy estimates.
 - ✅ Endpoints under `/api/v1/consumption`:
   - `GET /predictions` — per-product prediction list, soonest first.
   - `GET /suggested-list` — union of `RAN_OUT` + `RUNNING_LOW`.
 - ✅ Volume-gated: products with fewer than
-  `economizai.consumption.min-purchases-for-prediction` purchases
+  `economizaai.consumption.min-purchases-for-prediction` purchases
   (default 3) are silently skipped — we don't surface low-confidence
   noise.
 - 🟡 Basket optimization (split a list across nearby markets) — deferred
@@ -467,11 +467,11 @@ placeholder):
 
 | Var | Default | What it gates |
 |---|---|---|
-| `economizai.consumption.enabled` | `true` | Master switch |
-| `economizai.consumption.min-purchases-for-prediction` | `3` | Need this many prior purchases of a product before predicting |
-| `economizai.consumption.history-lookback-days` | `365` | Window for interval calculation |
-| `economizai.consumption.running-low-threshold-days` | `7` | Days-until-runout that triggers `RUNNING_LOW` |
-| `economizai.consumption.ran-out-grace-days` | `0` | Tolerance before flipping to `RAN_OUT` |
+| `economizaai.consumption.enabled` | `true` | Master switch |
+| `economizaai.consumption.min-purchases-for-prediction` | `3` | Need this many prior purchases of a product before predicting |
+| `economizaai.consumption.history-lookback-days` | `365` | Window for interval calculation |
+| `economizaai.consumption.running-low-threshold-days` | `7` | Days-until-runout that triggers `RUNNING_LOW` |
+| `economizaai.consumption.ran-out-grace-days` | `0` | Tolerance before flipping to `RAN_OUT` |
 
 ### Phase 5c — Watched Markets (shipped)
 
@@ -506,7 +506,7 @@ case. Combines with `radiusKm` filter as `radius OR watched`.
   V10 migration.
 - ✅ Write path runs on `POST /receipts/{id}/confirm`. Skipped when
   `User.contributionOptIn = false` or master switch
-  `economizai.collaborative.enabled` is off.
+  `economizaai.collaborative.enabled` is off.
 - ✅ K-anonymity-guarded queries — return empty when fewer than
   `min-households-for-public` distinct households contributed.
 - ✅ Public endpoints under `/api/v1/price-index`:
@@ -518,7 +518,7 @@ case. Combines with `radiusKm` filter as `radius OR watched`.
     baseline).
 - ✅ **Personal promo detector** runs on every confirm. Compares paid
   unit price vs the user's own historical median; threshold and
-  baseline-size configurable via `economizai.personal-promo.*`.
+  baseline-size configurable via `economizaai.personal-promo.*`.
   `POST /receipts/{id}/confirm` now returns
   `{ receipt: ReceiptResponse, personalPromos: [...] }`.
 - ✅ **Community promo detector** in `CommunityPromoService.detectAll()`
@@ -537,7 +537,7 @@ case. Combines with `radiusKm` filter as `radius OR watched`.
   accept `radiusKm` query param to filter to within X km of user's home.
 - ✅ Notifications + per-user channel preferences — Phase 5b
   (V12 migration). EmailDispatcher (SMTP via Spring Boot Mail, gated by
-  `economizai.notifications.email.enabled`) + PushDispatcher (V1 stub
+  `economizaai.notifications.email.enabled`) + PushDispatcher (V1 stub
   that logs FCM payload — wire `firebase-admin` SDK to ship real push).
   `NotificationPreference` per (user, type) chooses channel; default is
   PUSH if user has registered a `pushDeviceToken`, else EMAIL.
@@ -551,14 +551,14 @@ case. Combines with `radiusKm` filter as `radius OR watched`.
 
 | Var | Default | What it gates |
 |---|---|---|
-| `economizai.collaborative.enabled` | `true` | Master switch — turn off to disable all reads/writes |
-| `economizai.collaborative.min-households-for-public` | `3` | K-anon: queries return empty until N distinct households contributed |
-| `economizai.collaborative.min-observations-per-product-market` | `5` | Reference price hidden until enough samples |
-| `economizai.collaborative.min-observations-for-community-promo` | `10` | Community promo not flagged until baseline is solid |
-| `economizai.collaborative.community-promo-threshold-pct` | `15` | Recent median must be X% below baseline |
-| `economizai.collaborative.lookback-days` | `90` | Window for "recent" data |
-| `economizai.personal-promo.threshold-pct` | `10` | Personal promo if price < median - X% |
-| `economizai.personal-promo.min-purchases-for-baseline` | `3` | Need this many prior buys to call a personal promo |
+| `economizaai.collaborative.enabled` | `true` | Master switch — turn off to disable all reads/writes |
+| `economizaai.collaborative.min-households-for-public` | `3` | K-anon: queries return empty until N distinct households contributed |
+| `economizaai.collaborative.min-observations-per-product-market` | `5` | Reference price hidden until enough samples |
+| `economizaai.collaborative.min-observations-for-community-promo` | `10` | Community promo not flagged until baseline is solid |
+| `economizaai.collaborative.community-promo-threshold-pct` | `15` | Recent median must be X% below baseline |
+| `economizaai.collaborative.lookback-days` | `90` | Window for "recent" data |
+| `economizaai.personal-promo.threshold-pct` | `10` | Personal promo if price < median - X% |
+| `economizaai.personal-promo.min-purchases-for-baseline` | `3` | Need this many prior buys to call a personal promo |
 
 ### Phase 4.5 — LGPD compliance baseline (shipped)
 
@@ -740,9 +740,9 @@ auto_promote.done PromotionOutcome[promoted=3, skippedDueToHuman=1, skippedDueTo
 
 | Var | Default | Effect |
 |---|---|---|
-| `economizai.ml.confidence-threshold` | `0.75` | Below this, ML predictions are ignored (kept null) |
-| `economizai.ml.retrain-interval-ms` | `604800000` (7 days) | How often the ML retrains on schedule |
-| `economizai.ml.auto-promote-interval-ms` | `86400000` (1 day) | How often auto-promotion scans Products |
+| `economizaai.ml.confidence-threshold` | `0.75` | Below this, ML predictions are ignored (kept null) |
+| `economizaai.ml.retrain-interval-ms` | `604800000` (7 days) | How often the ML retrains on schedule |
+| `economizaai.ml.auto-promote-interval-ms` | `86400000` (1 day) | How often auto-promotion scans Products |
 
 Bump confidence higher to be more conservative (more items go to review,
 fewer auto-categorizations). Lower it to be more aggressive (more
@@ -767,7 +767,7 @@ auto-categorizations, more risk of wrong categories).
 
 ### Quality tracking + ML status (2026-06-06)
 
-- **ML is gated OFF in the live cascade** (`economizai.ml.category-apply-enabled=false`). It's still **trained** every cycle and still **measured** (shadow) by the benchmark, so we keep validating it. Flip it back on (env `ML_CATEGORY_APPLY_ENABLED=true`) once the benchmark's `mlCategoryAccuracyPct` is consistently high. Until then the cascade is dictionary-only (deterministic), which is the right call at current data volume.
+- **ML is gated OFF in the live cascade** (`economizaai.ml.category-apply-enabled=false`). It's still **trained** every cycle and still **measured** (shadow) by the benchmark, so we keep validating it. Flip it back on (env `ML_CATEGORY_APPLY_ENABLED=true`) once the benchmark's `mlCategoryAccuracyPct` is consistently high. Until then the cascade is dictionary-only (deterministic), which is the right call at current data volume.
 - **Quality is measured + tracked over time.** `GET /categorizer/benchmark` reports per-field accuracy (category, brand, quantity) + ML shadow accuracy over `seed/categorization-benchmark.csv`. Every benchmark run and every backfill writes a row to `categorization_quality_snapshots`; `GET /categorizer/quality/history` is the trend. Add golden rows whenever a new failure surfaces.
 
 ### Planned (documented, NOT built — avoid complexity until categorization is mature)
@@ -857,7 +857,7 @@ return Swagger UI.
   - User has `subscriptionTier` (FREE default) and `contributionOptIn` (true default) — Day-1 hooks for monetization and LGPD-aware collaborative contribution.
   - UserRepository (findByEmail, existsByEmail).
   - JWT layer: JwtService (HS256 via JJWT 0.12), JwtAuthenticationFilter, ApplicationConfig (UserDetailsService bean).
-  - SecurityConfig: stateless sessions, BCrypt, CORS via `economizai.cors.allowed-origins`, public `/api/v1/auth/**` + `/swagger-ui/**` + `/v3/api-docs/**`, `/api/v1/admin/**` requires ADMIN, everything else authenticated, 401 entry point.
+  - SecurityConfig: stateless sessions, BCrypt, CORS via `economizaai.cors.allowed-origins`, public `/api/v1/auth/**` + `/swagger-ui/**` + `/v3/api-docs/**`, `/api/v1/admin/**` requires ADMIN, everything else authenticated, 401 entry point.
   - i18n-aware exception handling: DomainException, LocalizedMessageService, MessageSourceConfig (default locale pt), GlobalExceptionHandler with EmailAlreadyExists / InvalidCredentials / InvalidCurrentPassword / UserNotFound / validation / generic.
   - DTOs: RegisterRequest, LoginRequest, UpdateUserRequest, ChangePasswordRequest, AuthResponse, UserResponse.
   - UserService: register, login, getProfile, updateProfile, changePassword.
@@ -996,7 +996,7 @@ classify OTHER (grey) unless they carry a conveniência CNAE.
 
 **Prod-readiness (from the DEV_NOTES gap review):**
 - Auth codes (password reset / email verify / phone OTP) are never logged in prod:
-  `economizai.auth.dev-code-log-enabled`, hard `false` in `application-prod.yaml`.
+  `economizaai.auth.dev-code-log-enabled`, hard `false` in `application-prod.yaml`.
 - Twilio SMS/WhatsApp metered through the paid-API guard (`TWILIO_MESSAGE`, ~R$0.30):
   per-user daily cap (`TWILIO_DAILY_CAP`, default 10) + global budget + ledger. The OTP
   endpoint returns a localized 429 when over cap.

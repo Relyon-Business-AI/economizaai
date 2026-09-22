@@ -27,7 +27,7 @@ winget may prompt for elevation).
 | Claude Code | your AI pair | `npm install -g @anthropic-ai/claude-code`, then `claude` and log in with your account |
 | GitHub CLI | push auth | `winget install GitHub.cli` |
 | Tesseract *(optional)* | chave-OCR endpoint | `winget install UB-Mannheim.TesseractOCR` — without it that one endpoint returns a clean 503, everything else works |
-| Postman *(optional)* | manual API testing | import `postman/economizai.postman_collection.json` |
+| Postman *(optional)* | manual API testing | import `postman/economizaai.postman_collection.json` |
 
 Maven is NOT needed — the repo ships the wrapper (`mvnw.cmd`).
 
@@ -39,21 +39,21 @@ Open a **new** terminal after installing (PATH refresh), then verify:
 Nothing secret lives in this repo. You need:
 
 1. **GitHub** — your account (`polyf`) already has **write** access to
-   `XandiVieira/economiz.AI`: you can push to `development` and `main`. Nothing
+   `XandiVieira/economizaai`: you can push to `development` and `main`. Nothing
    to do.
 2. **Render access** — you'll receive a **Render API key** from Alexandre
    (the workspace is single-member, so no dashboard invite). Store it with:
 
    ```powershell
    mkdir -Force $HOME\.config\render | Out-Null
-   Set-Content $HOME\.config\render\economizai.key '<paste-the-key-here>' -NoNewline
+   Set-Content $HOME\.config\render\economizaai.key '<paste-the-key-here>' -NoNewline
    ```
 
    Never commit it or put it in `.env` files inside the repo. Your Claude uses
    it to read deploy status and logs, e.g.:
 
    ```powershell
-   curl.exe -s -H "Authorization: Bearer $(Get-Content $HOME\.config\render\economizai.key)" `
+   curl.exe -s -H "Authorization: Bearer $(Get-Content $HOME\.config\render\economizaai.key)" `
      "https://api.render.com/v1/services/srv-d7odp50k1i2s73ep8o5g/deploys?limit=5"
    ```
 
@@ -73,7 +73,7 @@ emailed).
 ```powershell
 gh auth login                  # log in as YOUR GitHub account (polyf) — browser flow, HTTPS
 gh auth setup-git              # makes git push use that login
-git clone https://github.com/XandiVieira/economiz.AI.git
+git clone https://github.com/XandiVieira/economizaai.git
 cd economiz.AI
 git checkout development
 git config user.name "Your Name"             # local to this repo

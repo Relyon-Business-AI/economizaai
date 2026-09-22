@@ -38,7 +38,7 @@ The two repos are one product: the FE consumes the backend's API, so many fixes/
 span both. **Never reason about one in isolation when a change touches the contract.**
 
 - **Shared workspace.** Any operator run (scheduled or interactive) that could touch the
-  contract checks out **both** repos: backend `XandiVieira/economiz.AI` and frontend
+  contract checks out **both** repos: backend `XandiVieira/economizaai` and frontend
   `Relyon-Business-AI/economiza-ai-front` (canonical org path — `polyf/...` redirects).
 - **Contract is the seam.** The backend's OpenAPI (`/v3/api-docs`, Swagger) + `API.md` +
   `CHANGELOG.md` are the source of truth the FE depends on. On any endpoint/response-shape
