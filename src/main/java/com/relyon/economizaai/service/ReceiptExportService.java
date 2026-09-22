@@ -120,11 +120,33 @@ public class ReceiptExportService {
         return value == null ? "" : value;
     }
 
-    /** RFC-4180-style quoting, adapted to the semicolon separator. */
+    /**
+     * RFC-4180-style quoting, adapted to the semicolon separator. Cells that
+     * would be interpreted as formulas get a leading apostrophe — item
+     * descriptions come from receipt text an attacker can influence, and this
+     * file is built to be opened in Excel (=WEBSERVICE/DDE injection).
+     */
     private static String escape(String value) {
-        if (value.contains(SEPARATOR) || value.contains("\"") || value.contains("\n") || value.contains("\r")) {
-            return '"' + value.replace("\"", "\"\"") + '"';
+        var neutralized = neutralizeFormula(value);
+        if (neutralized.contains(SEPARATOR) || neutralized.contains("\"")
+                || neutralized.contains("\n") || neutralized.contains("\r")) {
+            return '"' + neutralized.replace("\"", "\"\"") + '"';
+        }
+        return neutralized;
+    }
+
+    private static String neutralizeFormula(String value) {
+        if (value.isEmpty()) return value;
+        var first = value.charAt(0);
+        if (first == '=' || first == '+' || first == '@' || first == '\t'
+                || (first == '-' && !isNegativeNumber(value))) {
+            return "'" + value;
         }
         return value;
+    }
+
+    /** Keeps legitimate negative amounts ("-12,34") intact for Excel. */
+    private static boolean isNegativeNumber(String value) {
+        return value.matches("-\\d+(,\\d+)?");
     }
 }
