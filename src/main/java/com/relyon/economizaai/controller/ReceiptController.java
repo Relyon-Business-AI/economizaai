@@ -5,12 +5,14 @@ import com.relyon.economizaai.dto.request.ConfirmReceiptRequest;
 import com.relyon.economizaai.dto.request.DeviceContentRequest;
 import com.relyon.economizaai.dto.request.ImportChavesRequest;
 import com.relyon.economizaai.dto.request.PrefetchedReceiptRequest;
+import com.relyon.economizaai.dto.request.ReceiptIdsRequest;
 import com.relyon.economizaai.dto.request.SubmitReceiptRequest;
 import com.relyon.economizaai.dto.request.UpdateItemCategoryRequest;
 import com.relyon.economizaai.dto.request.UpdateItemPersonalRequest;
 import com.relyon.economizaai.dto.request.UpdateReceiptItemRequest;
 import com.relyon.economizaai.dto.response.ChaveExtractionResponse;
 import com.relyon.economizaai.exception.InvalidExportFormatException;
+import com.relyon.economizaai.dto.response.BatchResultResponse;
 import com.relyon.economizaai.dto.response.ConfirmReceiptResponse;
 import com.relyon.economizaai.dto.response.ReceiptImportResponse;
 import com.relyon.economizaai.dto.response.ReceiptResponse;
@@ -129,6 +131,30 @@ public class ReceiptController {
                                                                   @RequestParam("file") MultipartFile file) throws IOException {
         var csv = new String(file.getBytes(), StandardCharsets.UTF_8);
         return ResponseEntity.accepted().body(receiptImportService.importFromNfgCsv(user, csv));
+    }
+
+    /**
+     * Re-queue a failed import nota for another paced reconsult (e.g. one that hit
+     * {@code receipt.processing.timeout}). Re-queues the receipt; poll {@code GET /receipts/{id}}.
+     */
+    @PostMapping("/{id}/retry")
+    public ResponseEntity<Void> retry(@AuthenticationPrincipal User user, @PathVariable UUID id) {
+        receiptImportService.retry(user, List.of(id));
+        return ResponseEntity.accepted().build();
+    }
+
+    /** Batch re-queue of failed import notas — the "tentar de novo" on the import screen. */
+    @PostMapping("/retry")
+    public ResponseEntity<BatchResultResponse> retryBatch(@AuthenticationPrincipal User user,
+                                                          @Valid @RequestBody ReceiptIdsRequest request) {
+        return ResponseEntity.accepted().body(new BatchResultResponse(receiptImportService.retry(user, request.ids())));
+    }
+
+    /** Batch delete of the household's notas — the "apagar selecionadas" on the import screen. */
+    @PostMapping("/delete-batch")
+    public ResponseEntity<BatchResultResponse> deleteBatch(@AuthenticationPrincipal User user,
+                                                           @Valid @RequestBody ReceiptIdsRequest request) {
+        return ResponseEntity.ok(new BatchResultResponse(receiptService.deleteBatch(user, request.ids())));
     }
 
     /**

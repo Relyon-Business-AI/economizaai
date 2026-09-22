@@ -16,6 +16,22 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-22 — import por chave: fila paceada + retry/delete (corrige timeouts)
+
+Correção do import em massa: em vez de disparar todas as reconsultas de uma vez (o que
+estourava o pool e o sweeper marcava as presas como `receipt.processing.timeout`), as notas
+entram como **`IMPORT_QUEUED`** e um worker reconsulta **poucas por vez**, cedendo lugar aos
+scans reais. Sem mais timeout em lote.
+
+- **Novo status `IMPORT_QUEUED`** no `ReceiptResponse.status` — trate como PROCESSING na UI
+  (nota na fila do import). Poll normal em `GET /receipts/{id}`.
+- **Reimportar agora RETENTA**: uma chave que já existe como FAILED/PENDING é substituída e
+  re-enfileirada (antes vinha como `duplicate`). Só CONFIRMED continua bloqueando (duplicata real).
+- **Novo `POST /receipts/{id}/retry`** — re-enfileira uma nota falha pra nova reconsulta (202).
+- **Novo `POST /receipts/retry`** — body `{ "ids": ["<uuid>", ...] }` → `{ "affected": n }`.
+- **Novo `POST /receipts/delete-batch`** — body `{ "ids": [...] }`, apaga em lote (household-scoped)
+  → `{ "affected": n }`. (Delete individual segue em `DELETE /receipts/{id}`.)
+
 ## 2026-09-22 — dashboards admin excluem contas internas por padrão
 
 Um import de notas feito em conta de admin estava inflando os KPIs (Notas, DAU,
