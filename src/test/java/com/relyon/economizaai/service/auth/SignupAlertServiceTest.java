@@ -51,6 +51,7 @@ class SignupAlertServiceTest {
     @Test
     void sendsAdminEmailWithUserAndRequestInfo() {
         var request = new MockHttpServletRequest();
+        request.setRemoteAddr("104.16.1.1");
         request.addHeader("CF-Connecting-IP", "203.0.113.7");
         request.addHeader("CF-IPCountry", "BR");
         bindRequest(request);
