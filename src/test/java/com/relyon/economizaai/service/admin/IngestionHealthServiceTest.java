@@ -13,6 +13,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -23,21 +24,21 @@ class IngestionHealthServiceTest {
 
     @Test
     void computesStatusMixSuccessRateStuckAndPerUf() {
-        when(receiptRepository.statusBreakdownSince(any())).thenReturn(List.<Object[]>of(
+        when(receiptRepository.statusBreakdownSince(any(), anyBoolean())).thenReturn(List.<Object[]>of(
                 new Object[]{ReceiptStatus.CONFIRMED, 60L},
                 new Object[]{ReceiptStatus.PENDING_CONFIRMATION, 10L},
                 new Object[]{ReceiptStatus.FAILED_PARSE, 20L},
                 new Object[]{ReceiptStatus.PROCESSING, 5L}));
-        when(receiptRepository.ufStatusBreakdownSince(any())).thenReturn(List.<Object[]>of(
+        when(receiptRepository.ufStatusBreakdownSince(any(), anyBoolean())).thenReturn(List.<Object[]>of(
                 new Object[]{UnidadeFederativa.RS, ReceiptStatus.CONFIRMED, 40L},
                 new Object[]{UnidadeFederativa.RS, ReceiptStatus.FAILED_PARSE, 10L},
                 new Object[]{UnidadeFederativa.PE, ReceiptStatus.CONFIRMED, 20L}));
-        when(receiptRepository.errorReasonBreakdownSince(any())).thenReturn(List.<Object[]>of(
+        when(receiptRepository.errorReasonBreakdownSince(any(), anyBoolean())).thenReturn(List.<Object[]>of(
                 new Object[]{"receipt.parse.failed", 12L},
                 new Object[]{"receipt.processing.timeout", 5L},
                 new Object[]{"receipt.device_fetch.timeout", 3L}));
 
-        var report = service.report(30);
+        var report = service.report(30, false);
 
         assertEquals(95L, report.totalReceipts());
         assertEquals(70L, report.parsedOk());

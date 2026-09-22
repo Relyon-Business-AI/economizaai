@@ -7,6 +7,7 @@ import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
+import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -132,6 +133,45 @@ class ReceiptRepositoryTest {
         var cnpjs = receiptRepository.findDistinctCnpjsByHousehold(householdId);
 
         assertEquals(Set.of(CNPJ_A, CNPJ_B), Set.copyOf(cnpjs));
+    }
+
+    // ---------------------------------------------------------- internal-account filter
+
+    private int inviteSeq = 0;
+
+    private User internalUser(String email, Role role, boolean excludedFromMetrics) {
+        var household = householdRepository.save(Household.builder().inviteCode("INT" + (++inviteSeq)).build());
+        return userRepository.save(User.builder()
+                .name("Internal").email(email).password("x")
+                .role(role).excludedFromMetrics(excludedFromMetrics)
+                .household(household)
+                .acceptedTermsVersion("1.0").acceptedPrivacyVersion("1.0")
+                .acceptedLegalAt(LocalDateTime.of(2026, Month.JANUARY, 1, 0, 0))
+                .build());
+    }
+
+    @Test
+    void internalFilter_excludesAdminTestAndFlaggedAccountsByDefault() {
+        var confirmedAt = LocalDateTime.of(2026, Month.MAY, 1, 10, 0);
+        // Real user (the setUp `user`) — always counted.
+        saveReceipt(user, CNPJ_A, ReceiptStatus.CONFIRMED, confirmedAt, new BigDecimal("100.00"));
+        // Admin, test-domain, and metrics-excluded submitters — internal.
+        saveReceipt(internalUser("boss@test.com", Role.ADMIN, false), CNPJ_A, ReceiptStatus.CONFIRMED, confirmedAt, new BigDecimal("10.00"));
+        saveReceipt(internalUser("qa@economizaai.app", Role.USER, false), CNPJ_A, ReceiptStatus.CONFIRMED, confirmedAt, new BigDecimal("20.00"));
+        saveReceipt(internalUser("robo@cloudtestlabaccounts.com", Role.USER, false), CNPJ_A, ReceiptStatus.CONFIRMED, confirmedAt, new BigDecimal("30.00"));
+        saveReceipt(internalUser("flagged@real.com", Role.USER, true), CNPJ_A, ReceiptStatus.CONFIRMED, confirmedAt, new BigDecimal("40.00"));
+
+        // Off by default: only the one real user's receipt / household / spend.
+        assertEquals(1L, receiptRepository.countReceipts(false));
+        assertEquals(1L, receiptRepository.countActiveHouseholdsSince(
+                LocalDateTime.of(2026, Month.JANUARY, 1, 0, 0), false));
+        assertEquals(0, receiptRepository.sumConfirmedTotal(false).compareTo(new BigDecimal("100.00")));
+
+        // Toggle on: everything is included.
+        assertEquals(5L, receiptRepository.countReceipts(true));
+        assertEquals(5L, receiptRepository.countActiveHouseholdsSince(
+                LocalDateTime.of(2026, Month.JANUARY, 1, 0, 0), true));
+        assertEquals(0, receiptRepository.sumConfirmedTotal(true).compareTo(new BigDecimal("200.00")));
     }
 
     // ---------------------------------------------------------- findByIdWithItemsAndProducts

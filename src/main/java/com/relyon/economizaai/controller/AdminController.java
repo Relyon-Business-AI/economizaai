@@ -136,8 +136,9 @@ public class AdminController {
     @GetMapping("/users")
     public ResponseEntity<Page<AdminUserSummaryResponse>> listUsers(
             @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "false") boolean includeInternal,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(adminUserService.list(q, pageable));
+        return ResponseEntity.ok(adminUserService.list(q, includeInternal, pageable));
     }
 
     @GetMapping("/users/{id}")
@@ -177,9 +178,10 @@ public class AdminController {
             @RequestParam(required = false) UnidadeFederativa uf,
             @RequestParam(required = false) ReceiptStatus status,
             @RequestParam(required = false) String parseErrorReason,
+            @RequestParam(defaultValue = "false") boolean includeInternal,
             @PageableDefault(size = 20) Pageable pageable) {
         return ResponseEntity.ok(adminReceiptService.list(
-                from, to, marketCnpj, category, q, householdId, uf, status, parseErrorReason, pageable));
+                from, to, marketCnpj, category, q, householdId, uf, status, parseErrorReason, includeInternal, pageable));
     }
 
     @GetMapping("/receipts/{id}")
@@ -272,24 +274,28 @@ public class AdminController {
             description = "Cross-area KPIs in one call: users (total/today/week/PRO), receipts (total/today + "
                     + "30-day parse rate), 7-day active households, global confirmed spend, and price-index size.")
     @GetMapping("/overview")
-    public ResponseEntity<AdminOverviewResponse> overview() {
-        return ResponseEntity.ok(adminOverviewService.overview());
+    public ResponseEntity<AdminOverviewResponse> overview(
+            @RequestParam(defaultValue = "false") boolean includeInternal) {
+        return ResponseEntity.ok(adminOverviewService.overview(includeInternal));
     }
 
     @Operation(summary = "Market intelligence",
             description = "Collaborative index size + most-scanned products/markets, spend by category and by UF, "
                     + "aggregated across all households (confirmed, non-excluded data).")
     @GetMapping("/market-intel")
-    public ResponseEntity<MarketIntelResponse> marketIntel() {
-        return ResponseEntity.ok(marketIntelService.report());
+    public ResponseEntity<MarketIntelResponse> marketIntel(
+            @RequestParam(defaultValue = "false") boolean includeInternal) {
+        return ResponseEntity.ok(marketIntelService.report(includeInternal));
     }
 
     @Operation(summary = "Ingestion pipeline health",
             description = "Receipt outcomes over the window: status mix, parse success rate, sweeper-timed-out "
                     + "(stuck) counts, per-UF outcomes, and the top failure reasons — the ops view for what's breaking.")
     @GetMapping("/ingestion-health")
-    public ResponseEntity<IngestionHealthResponse> ingestionHealth(@RequestParam(defaultValue = "30") int days) {
-        return ResponseEntity.ok(ingestionHealthService.report(days));
+    public ResponseEntity<IngestionHealthResponse> ingestionHealth(
+            @RequestParam(defaultValue = "30") int days,
+            @RequestParam(defaultValue = "false") boolean includeInternal) {
+        return ResponseEntity.ok(ingestionHealthService.report(days, includeInternal));
     }
 
     @Operation(summary = "Acquisition dashboard",

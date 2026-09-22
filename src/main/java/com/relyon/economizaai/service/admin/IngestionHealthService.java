@@ -37,12 +37,12 @@ public class IngestionHealthService {
     private final ReceiptRepository receiptRepository;
 
     @Transactional(readOnly = true)
-    public IngestionHealthResponse report(int days) {
+    public IngestionHealthResponse report(int days, boolean includeInternal) {
         var windowDays = Math.max(1, days);
         var since = LocalDate.now().minusDays(windowDays - 1L).atStartOfDay();
 
         var byStatus = new LinkedHashMap<String, Long>();
-        for (var row : receiptRepository.statusBreakdownSince(since)) {
+        for (var row : receiptRepository.statusBreakdownSince(since, includeInternal)) {
             byStatus.put(((ReceiptStatus) row[0]).name(), ((Number) row[1]).longValue());
         }
         var total = byStatus.values().stream().mapToLong(Long::longValue).sum();
@@ -53,11 +53,11 @@ public class IngestionHealthService {
         var inFlight = statusCount(byStatus, ReceiptStatus.PROCESSING)
                 + statusCount(byStatus, ReceiptStatus.NEEDS_DEVICE_FETCH);
 
-        var byUf = buildUfOutcomes(since);
+        var byUf = buildUfOutcomes(since, includeInternal);
         var topErrors = new ArrayList<ErrorLine>();
         var stuckProcessing = 0L;
         var stuckDeviceFetch = 0L;
-        for (var row : receiptRepository.errorReasonBreakdownSince(since)) {
+        for (var row : receiptRepository.errorReasonBreakdownSince(since, includeInternal)) {
             var reason = row[0] == null ? "(unknown)" : row[0].toString();
             var count = ((Number) row[1]).longValue();
             topErrors.add(new ErrorLine(reason, count));
@@ -71,9 +71,9 @@ public class IngestionHealthService {
                 rate(parsedOk, parsedOk + failedParse), stuckProcessing, stuckDeviceFetch, byUf, topErrors);
     }
 
-    private ArrayList<UfOutcomeLine> buildUfOutcomes(LocalDateTime since) {
+    private ArrayList<UfOutcomeLine> buildUfOutcomes(LocalDateTime since, boolean includeInternal) {
         var ufAggregate = new LinkedHashMap<String, long[]>(); // [total, parsed, failed]
-        for (var row : receiptRepository.ufStatusBreakdownSince(since)) {
+        for (var row : receiptRepository.ufStatusBreakdownSince(since, includeInternal)) {
             var uf = row[0] == null ? "??" : ((UnidadeFederativa) row[0]).name();
             var status = (ReceiptStatus) row[1];
             var count = ((Number) row[2]).longValue();

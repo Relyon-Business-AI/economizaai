@@ -4,6 +4,7 @@ import com.relyon.economizaai.model.HouseholdProductAlias;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
+import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
@@ -124,6 +125,24 @@ public final class ReceiptSpecifications {
                 }
             }
             return cb.and(predicates.toArray(new Predicate[0]));
+        };
+    }
+
+    /**
+     * Drops receipts submitted by internal accounts (admins, @economizaai.app /
+     * Firebase Test Lab, and anyone flagged {@code excludedFromMetrics}) — the
+     * admin dashboards {@code .and()} this on when "incluir contas internas" is off,
+     * so a bulk admin import doesn't pollute the cross-household list. Mirrors
+     * UserRepository.INTERNAL_FILTER, joined through the receipt's submitting user.
+     */
+    public static Specification<Receipt> excludeInternal() {
+        return (root, query, cb) -> {
+            var submitter = root.join("user", JoinType.INNER);
+            return cb.and(
+                    cb.notEqual(submitter.get("role"), Role.ADMIN),
+                    cb.isFalse(submitter.get("excludedFromMetrics")),
+                    cb.notLike(cb.lower(submitter.get("email")), "%@economizaai.app"),
+                    cb.notLike(cb.lower(submitter.get("email")), "%@cloudtestlabaccounts.com"));
         };
     }
 }

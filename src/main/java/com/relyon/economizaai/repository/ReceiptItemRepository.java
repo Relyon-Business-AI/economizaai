@@ -49,20 +49,29 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
     List<Object[]> discountHuntersSince(@Param("since") LocalDateTime since);
 
     // --- Market intelligence (admin) ---
+    // Same internal-account filter as ReceiptRepository, joined through the item's
+    // receipt → submitting user so an admin bulk import doesn't skew the top lists.
+    String ITEM_INTERNAL_FILTER =
+            " AND (:includeInternal = TRUE OR (receiptUser.role <> 'ADMIN' "
+            + "AND receiptUser.excludedFromMetrics = FALSE "
+            + "AND lower(receiptUser.email) NOT LIKE '%@economizaai.app' "
+            + "AND lower(receiptUser.email) NOT LIKE '%@cloudtestlabaccounts.com'))";
 
     /** Most-scanned products across all households (confirmed, non-excluded items). */
     @Query("SELECT item.product.id, COALESCE(item.product.genericName, item.product.normalizedName), count(item) "
-            + "FROM ReceiptItem item WHERE item.receipt.status = 'CONFIRMED' AND item.excluded = false "
-            + "AND item.product IS NOT NULL "
-            + "GROUP BY item.product.id, item.product.genericName, item.product.normalizedName "
+            + "FROM ReceiptItem item JOIN item.receipt.user receiptUser "
+            + "WHERE item.receipt.status = 'CONFIRMED' AND item.excluded = false "
+            + "AND item.product IS NOT NULL" + ITEM_INTERNAL_FILTER
+            + " GROUP BY item.product.id, item.product.genericName, item.product.normalizedName "
             + "ORDER BY count(item) DESC")
-    List<Object[]> topProductsByScans(Pageable pageable);
+    List<Object[]> topProductsByScans(Pageable pageable, boolean includeInternal);
 
     /** Global spend by category (confirmed, non-excluded), using the confirmation-time snapshot. */
     @Query("SELECT item.categoryAtConfirmation, COALESCE(sum(item.totalPrice), 0), count(item) "
-            + "FROM ReceiptItem item WHERE item.receipt.status = 'CONFIRMED' AND item.excluded = false "
-            + "GROUP BY item.categoryAtConfirmation")
-    List<Object[]> categorySpendGlobal();
+            + "FROM ReceiptItem item JOIN item.receipt.user receiptUser "
+            + "WHERE item.receipt.status = 'CONFIRMED' AND item.excluded = false" + ITEM_INTERNAL_FILTER
+            + " GROUP BY item.categoryAtConfirmation")
+    List<Object[]> categorySpendGlobal(boolean includeInternal);
 
     /**
      * The household's own friendly name for each of the given products, taken from its

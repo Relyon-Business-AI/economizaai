@@ -66,18 +66,18 @@ public class AdminUserService {
     private static final int AGGREGATE_SORT_CAP = 5000;
 
     @Transactional(readOnly = true)
-    public Page<AdminUserSummaryResponse> list(String search, Pageable pageable) {
+    public Page<AdminUserSummaryResponse> list(String search, boolean includeInternal, Pageable pageable) {
         var trimmed = Optional.ofNullable(search).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
         var aggregateOrder = pageable.getSort().stream()
                 .filter(order -> AGGREGATE_SORTS.contains(order.getProperty()))
                 .findFirst().orElse(null);
         if (aggregateOrder != null) {
-            return listRankedByAggregate(trimmed, pageable, aggregateOrder);
+            return listRankedByAggregate(trimmed, includeInternal, pageable, aggregateOrder);
         }
         var sortedPageable = pageable.getSort().isUnsorted()
                 ? PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by(Sort.Direction.DESC, "createdAt"))
                 : pageable;
-        var page = userRepository.findAll(searchSpec(trimmed), sortedPageable);
+        var page = userRepository.findAll(searchSpec(trimmed, includeInternal), sortedPageable);
         var counts = receiptCountsFor(page.getContent());
         var spend = spendFor(page.getContent());
         return page.map(user -> summaryFor(user, counts, spend));
@@ -89,8 +89,9 @@ public class AdminUserService {
      * cap), so we load the matching users, enrich with the batched aggregates, sort in
      * memory and paginate manually — correct and simple at this scale.
      */
-    private Page<AdminUserSummaryResponse> listRankedByAggregate(String search, Pageable pageable, Sort.Order order) {
-        var all = userRepository.findAll(searchSpec(search),
+    private Page<AdminUserSummaryResponse> listRankedByAggregate(String search, boolean includeInternal,
+                                                                 Pageable pageable, Sort.Order order) {
+        var all = userRepository.findAll(searchSpec(search, includeInternal),
                 PageRequest.of(0, AGGREGATE_SORT_CAP, Sort.by(Sort.Direction.DESC, "createdAt"))).getContent();
         var counts = receiptCountsFor(all);
         var spend = spendFor(all);
@@ -221,7 +222,7 @@ public class AdminUserService {
         );
     }
 
-    private Specification<User> searchSpec(String search) {
+    private Specification<User> searchSpec(String search, boolean includeInternal) {
         return (root, query, cb) -> {
             var predicates = new ArrayList<Predicate>();
             if (search != null) {
@@ -230,6 +231,13 @@ public class AdminUserService {
                         cb.like(cb.lower(root.get("email")), like),
                         cb.like(cb.lower(root.get("name")), like)
                 ));
+            }
+            // Off by default: hide admins / test accounts / metrics-excluded from the list.
+            if (!includeInternal) {
+                predicates.add(cb.notEqual(root.get("role"), Role.ADMIN));
+                predicates.add(cb.isFalse(root.get("excludedFromMetrics")));
+                predicates.add(cb.notLike(cb.lower(root.get("email")), "%@economizaai.app"));
+                predicates.add(cb.notLike(cb.lower(root.get("email")), "%@cloudtestlabaccounts.com"));
             }
             return cb.and(predicates.toArray(new Predicate[0]));
         };

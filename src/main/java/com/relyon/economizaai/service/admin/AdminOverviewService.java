@@ -36,42 +36,45 @@ public class AdminOverviewService {
     private final PriceObservationAuditRepository priceObservationAuditRepository;
 
     @Transactional(readOnly = true)
-    public AdminOverviewResponse overview() {
+    public AdminOverviewResponse overview(boolean includeInternal) {
         var today = LocalDate.now();
         var startOfToday = today.atStartOfDay();
         var weekAgo = today.minusDays(6).atStartOfDay();
         var monthAgo = today.minusDays(29).atStartOfDay();
 
-        var usersTotal = userRepository.countUsers(false);
-        var usersToday = userRepository.countSignupsSince(startOfToday, false);
-        var usersThisWeek = userRepository.countSignupsSince(weekAgo, false);
-        var usersPro = userRepository.countProTier(false);
-        var payingActive = subscriptionRepository.countPaying(SubscriptionStatus.ACTIVE, false);
+        var usersTotal = userRepository.countUsers(includeInternal);
+        var usersToday = userRepository.countSignupsSince(startOfToday, includeInternal);
+        var usersThisWeek = userRepository.countSignupsSince(weekAgo, includeInternal);
+        var usersPro = userRepository.countProTier(includeInternal);
+        var payingActive = subscriptionRepository.countPaying(SubscriptionStatus.ACTIVE, includeInternal);
 
-        var receiptsTotal = receiptRepository.count();
-        var receiptsToday = receiptRepository.countByCreatedAtGreaterThanEqual(startOfToday);
-        var parseRate30d = parseRateSince(monthAgo);
-        var dau = receiptRepository.countActiveHouseholdsSince(startOfToday);
-        var wau = receiptRepository.countActiveHouseholdsSince(weekAgo);
-        var mau = receiptRepository.countActiveHouseholdsSince(monthAgo);
+        var receiptsTotal = receiptRepository.countReceipts(includeInternal);
+        var receiptsToday = receiptRepository.countByCreatedAtGreaterThanEqual(startOfToday, includeInternal);
+        var parseRate30d = parseRateSince(monthAgo, includeInternal);
+        var dau = receiptRepository.countActiveHouseholdsSince(startOfToday, includeInternal);
+        var wau = receiptRepository.countActiveHouseholdsSince(weekAgo, includeInternal);
+        var mau = receiptRepository.countActiveHouseholdsSince(monthAgo, includeInternal);
         var stickiness = mau <= 0 ? 0d : BigDecimal.valueOf(dau)
                 .divide(BigDecimal.valueOf(mau), 4, RoundingMode.HALF_UP).doubleValue();
-        var totalSpend = scale(receiptRepository.sumConfirmedTotal());
+        var totalSpend = scale(receiptRepository.sumConfirmedTotal(includeInternal));
 
+        // The collaborative index is deliberately anonymized (PriceObservation carries no
+        // user_id, households are shared) — its size stays a GLOBAL figure regardless of
+        // the toggle, unlike the user/receipt-scoped KPIs above.
         var observations = priceObservationRepository.count();
         var contributingHouseholds = priceObservationAuditRepository.countDistinctContributingHouseholds();
 
-        log.info("admin.overview users={} today={} receipts={} parse30d={} dau={} wau={} mau={} spend={} obs={}",
-                usersTotal, usersToday, receiptsTotal, parseRate30d, dau, wau, mau, totalSpend, observations);
+        log.info("admin.overview internal={} users={} today={} receipts={} parse30d={} dau={} wau={} mau={} spend={} obs={}",
+                includeInternal, usersTotal, usersToday, receiptsTotal, parseRate30d, dau, wau, mau, totalSpend, observations);
         return new AdminOverviewResponse(usersTotal, usersToday, usersThisWeek, usersPro, payingActive,
                 receiptsTotal, receiptsToday, parseRate30d, dau, wau, mau, stickiness, totalSpend,
                 observations, contributingHouseholds);
     }
 
     /** Parsed (confirmed/pending/rejected) ÷ (parsed + failed) over the window. */
-    private double parseRateSince(LocalDateTime since) {
+    private double parseRateSince(LocalDateTime since, boolean includeInternal) {
         var byStatus = new EnumMap<ReceiptStatus, Long>(ReceiptStatus.class);
-        for (var row : receiptRepository.statusBreakdownSince(since)) {
+        for (var row : receiptRepository.statusBreakdownSince(since, includeInternal)) {
             byStatus.put((ReceiptStatus) row[0], ((Number) row[1]).longValue());
         }
         var parsed = count(byStatus, ReceiptStatus.CONFIRMED)

@@ -62,25 +62,54 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
 
     long countByHouseholdIdAndStatusAndConfirmedAtAfter(UUID householdId, ReceiptStatus status, LocalDateTime since);
 
+    // --- Admin metrics: internal-account filter ---
+    // `:includeInternal = false` (dashboard default) drops receipts submitted by
+    // admins / test accounts (@economizaai.app, Firebase Test Lab) and anyone flagged
+    // excludedFromMetrics — so a bulk admin import doesn't inflate the numbers. Mirror
+    // of UserRepository.INTERNAL_FILTER, joined through the receipt's submitting user.
+    // Each query joins `receipt.user receiptUser` before applying it.
+    String RECEIPT_INTERNAL_FILTER =
+            " AND (:includeInternal = TRUE OR (receiptUser.role <> 'ADMIN' "
+            + "AND receiptUser.excludedFromMetrics = FALSE "
+            + "AND lower(receiptUser.email) NOT LIKE '%@economizaai.app' "
+            + "AND lower(receiptUser.email) NOT LIKE '%@cloudtestlabaccounts.com'))";
+
+    // Native-SQL twin of the above (joins `users u ON u.id = receipts.user_id`).
+    String NATIVE_RECEIPT_INTERNAL_FILTER =
+            " AND (:includeInternal = TRUE OR (u.role <> 'ADMIN' "
+            + "AND u.excluded_from_metrics = FALSE "
+            + "AND lower(u.email) NOT LIKE '%@economizaai.app' "
+            + "AND lower(u.email) NOT LIKE '%@cloudtestlabaccounts.com'))";
+
     // --- Admin overview (cross-area KPIs) ---
 
-    long countByCreatedAtGreaterThanEqual(LocalDateTime since);
+    /** Total receipts, honoring the internal-account filter. */
+    @Query("SELECT count(receipt) FROM Receipt receipt JOIN receipt.user receiptUser "
+            + "WHERE 1 = 1" + RECEIPT_INTERNAL_FILTER)
+    long countReceipts(boolean includeInternal);
+
+    @Query("SELECT count(receipt) FROM Receipt receipt JOIN receipt.user receiptUser "
+            + "WHERE receipt.createdAt >= :since" + RECEIPT_INTERNAL_FILTER)
+    long countByCreatedAtGreaterThanEqual(@Param("since") LocalDateTime since, boolean includeInternal);
 
     /** Global confirmed spend (all households) — the collaborative total. */
-    @Query("SELECT COALESCE(sum(receipt.totalAmount), 0) FROM Receipt receipt WHERE receipt.status = 'CONFIRMED'")
-    BigDecimal sumConfirmedTotal();
+    @Query("SELECT COALESCE(sum(receipt.totalAmount), 0) FROM Receipt receipt JOIN receipt.user receiptUser "
+            + "WHERE receipt.status = 'CONFIRMED'" + RECEIPT_INTERNAL_FILTER)
+    BigDecimal sumConfirmedTotal(boolean includeInternal);
 
     /** Distinct households that scanned at least one receipt since the cutoff (active users proxy). */
-    @Query("SELECT count(distinct receipt.household.id) FROM Receipt receipt WHERE receipt.createdAt >= :since")
-    long countActiveHouseholdsSince(@Param("since") LocalDateTime since);
+    @Query("SELECT count(distinct receipt.household.id) FROM Receipt receipt JOIN receipt.user receiptUser "
+            + "WHERE receipt.createdAt >= :since" + RECEIPT_INTERNAL_FILTER)
+    long countActiveHouseholdsSince(@Param("since") LocalDateTime since, boolean includeInternal);
 
     // --- Market intelligence (admin) ---
 
     /** Most-scanned markets (confirmed): (cnpj, name, scans, spend). One row per CNPJ (per store unit). */
     @Query("SELECT receipt.cnpjEmitente, MIN(receipt.marketName), count(receipt), COALESCE(sum(receipt.totalAmount), 0) "
-            + "FROM Receipt receipt WHERE receipt.status = 'CONFIRMED' AND receipt.cnpjEmitente IS NOT NULL "
-            + "GROUP BY receipt.cnpjEmitente ORDER BY count(receipt) DESC")
-    List<Object[]> topMarketsByScans(Pageable pageable);
+            + "FROM Receipt receipt JOIN receipt.user receiptUser "
+            + "WHERE receipt.status = 'CONFIRMED' AND receipt.cnpjEmitente IS NOT NULL" + RECEIPT_INTERNAL_FILTER
+            + " GROUP BY receipt.cnpjEmitente ORDER BY count(receipt) DESC")
+    List<Object[]> topMarketsByScans(Pageable pageable, boolean includeInternal);
 
     /**
      * Most-scanned markets grouped by CHAIN — the CNPJ root (first 8 digits = the company
@@ -88,17 +117,20 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
      * Zaffari unit into one row regardless of the (inconsistent) market name. Native so
      * regexp_replace can strip any formatting before taking the root. (cnpj, name, scans, spend).
      */
-    @Query(value = "SELECT MIN(cnpj_emitente) AS cnpj, MIN(market_name) AS name, "
-            + "count(*) AS scans, COALESCE(sum(total_amount), 0)::numeric AS spend "
-            + "FROM receipts WHERE status = 'CONFIRMED' AND cnpj_emitente IS NOT NULL "
-            + "GROUP BY substring(regexp_replace(cnpj_emitente, '\\D', '', 'g') FROM 1 FOR 8) "
+    @Query(value = "SELECT MIN(r.cnpj_emitente) AS cnpj, MIN(r.market_name) AS name, "
+            + "count(*) AS scans, COALESCE(sum(r.total_amount), 0)::numeric AS spend "
+            + "FROM receipts r JOIN users u ON u.id = r.user_id "
+            + "WHERE r.status = 'CONFIRMED' AND r.cnpj_emitente IS NOT NULL" + NATIVE_RECEIPT_INTERNAL_FILTER
+            + " GROUP BY substring(regexp_replace(r.cnpj_emitente, '\\D', '', 'g') FROM 1 FOR 8) "
             + "ORDER BY count(*) DESC", nativeQuery = true)
-    List<Object[]> topMarketsByChainScans(Pageable pageable);
+    List<Object[]> topMarketsByChainScans(Pageable pageable, boolean includeInternal);
 
     /** Confirmed receipts + spend by UF (region): (uf, count, spend). */
     @Query("SELECT receipt.uf, count(receipt), COALESCE(sum(receipt.totalAmount), 0) "
-            + "FROM Receipt receipt WHERE receipt.status = 'CONFIRMED' GROUP BY receipt.uf ORDER BY count(receipt) DESC")
-    List<Object[]> confirmedReceiptsByUf();
+            + "FROM Receipt receipt JOIN receipt.user receiptUser "
+            + "WHERE receipt.status = 'CONFIRMED'" + RECEIPT_INTERNAL_FILTER
+            + " GROUP BY receipt.uf ORDER BY count(receipt) DESC")
+    List<Object[]> confirmedReceiptsByUf(boolean includeInternal);
 
     /** (householdId, receiptCount) for the given households — batch enrichment for the admin user list. */
     @Query("SELECT receipt.household.id, count(receipt) FROM Receipt receipt "
@@ -114,24 +146,25 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
     // --- Ingestion health (ops dashboard) ---
 
     /** (status, count) for receipts submitted since the window start. */
-    @Query("SELECT receipt.status, count(receipt) FROM Receipt receipt "
-            + "WHERE receipt.createdAt >= :since GROUP BY receipt.status")
-    List<Object[]> statusBreakdownSince(@Param("since") LocalDateTime since);
+    @Query("SELECT receipt.status, count(receipt) FROM Receipt receipt JOIN receipt.user receiptUser "
+            + "WHERE receipt.createdAt >= :since" + RECEIPT_INTERNAL_FILTER + " GROUP BY receipt.status")
+    List<Object[]> statusBreakdownSince(@Param("since") LocalDateTime since, boolean includeInternal);
 
     /** (uf, status, count) since the window start — per-state pipeline outcome. */
-    @Query("SELECT receipt.uf, receipt.status, count(receipt) FROM Receipt receipt "
-            + "WHERE receipt.createdAt >= :since GROUP BY receipt.uf, receipt.status")
-    List<Object[]> ufStatusBreakdownSince(@Param("since") LocalDateTime since);
+    @Query("SELECT receipt.uf, receipt.status, count(receipt) FROM Receipt receipt JOIN receipt.user receiptUser "
+            + "WHERE receipt.createdAt >= :since" + RECEIPT_INTERNAL_FILTER + " GROUP BY receipt.uf, receipt.status")
+    List<Object[]> ufStatusBreakdownSince(@Param("since") LocalDateTime since, boolean includeInternal);
 
     /**
      * (errorKey, count) grouped by the machine key before the ':' in parseErrorReason
      * (native, so the args after ':' don't fragment the buckets). Most frequent first.
      */
-    @Query(value = "SELECT split_part(parse_error_reason, ':', 1) AS error_key, count(*) AS hits "
-            + "FROM receipts WHERE created_at >= :since AND parse_error_reason IS NOT NULL "
-            + "GROUP BY split_part(parse_error_reason, ':', 1) ORDER BY hits DESC",
+    @Query(value = "SELECT split_part(r.parse_error_reason, ':', 1) AS error_key, count(*) AS hits "
+            + "FROM receipts r JOIN users u ON u.id = r.user_id "
+            + "WHERE r.created_at >= :since AND r.parse_error_reason IS NOT NULL" + NATIVE_RECEIPT_INTERNAL_FILTER
+            + " GROUP BY split_part(r.parse_error_reason, ':', 1) ORDER BY hits DESC",
             nativeQuery = true)
-    List<Object[]> errorReasonBreakdownSince(@Param("since") LocalDateTime since);
+    List<Object[]> errorReasonBreakdownSince(@Param("since") LocalDateTime since, boolean includeInternal);
 
     // Merchant support gate: scan volume per grey merchant (review queue ranking)
     // and the confirmed receipts to backfill into the index on promotion.

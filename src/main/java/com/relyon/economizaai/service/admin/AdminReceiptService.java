@@ -53,6 +53,7 @@ public class AdminReceiptService {
                                              UnidadeFederativa uf,
                                              ReceiptStatus status,
                                              String parseErrorReason,
+                                             boolean includeInternal,
                                              Pageable pageable) {
         var trimmedCnpj = Optional.ofNullable(marketCnpj).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
         var trimmedSearch = Optional.ofNullable(search).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
@@ -64,6 +65,8 @@ public class AdminReceiptService {
         // explicit status filter narrows to one bucket when passed.
         var spec = ReceiptSpecifications.forSearch(
                 householdId, from, to, trimmedCnpj, categories, status, trimmedSearch, false, uf, trimmedError);
+        // Off by default: hide receipts from admin/test accounts so a bulk import doesn't flood the list.
+        if (!includeInternal) spec = spec.and(ReceiptSpecifications.excludeInternal());
         return receiptRepository.findAll(spec, sortedPageable).map(ReceiptSummaryResponse::from);
     }
 
