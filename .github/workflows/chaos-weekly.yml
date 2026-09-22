@@ -21,7 +21,7 @@ jobs:
       - uses: grafana/setup-k6-action@db07bd9765aac508ef18982e52ab937fe633a065  # v1 — pinned to SHA (supply-chain)
       - name: Run chaos journey
         env:
-          BASE_URL: https://economiz-ai.onrender.com
+          BASE_URL: https://api-dev.economizaai.app   # DEV env — NEVER prod: chaos load must not hit real users
           VUS: '6'
           RUN_ID: ${{ github.run_id }}
         run: k6 run .github/scripts/chaos.js
