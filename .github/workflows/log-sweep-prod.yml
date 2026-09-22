@@ -22,7 +22,7 @@ jobs:
         id: sweep
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-          SERVICE_ID: srv-d9p4nctbedkc73e3veb0
+          SERVICE_ID: srv-d7odp50k1i2s73ep8o5g
           OWNER_ID: tea-d1ijuaumcj7s73918us0
           LOG_WINDOW_MIN: '150'
           # Prod dedup is against `prod-error` issues (prod_alert.py), not the
