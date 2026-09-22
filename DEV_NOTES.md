@@ -119,7 +119,7 @@ mirror entries here.
 ---
 
 ## ⚠️ EAN catalog is NOT seeded by a migration — prod DB starts EMPTY (2026-07-04)
-- **Now**: `V51__create_ean_catalog.sql` creates the `ean_catalog` table but seeds NOTHING. The ~32k Brazilian products came from a one-off runtime import (stream the Open Food Facts CSV dump through `POST /api/v1/categorizer/ean-catalog/import-off` — see `scratchpad/stream_import.py` for the script: `curl -sL <OFF csv.gz> | gunzip | python3 stream_import.py`, filters BR rows, pushes in batches of 500).
+- **Now**: `V51__create_ean_catalog.sql` creates the `ean_catalog` table but seeds NOTHING. The LIVE DB (dev-branch service, what real users hit) currently holds **~910k EAN entries** (verified 2026-09-22): **907.5k `OPEN_FOOD_FACTS`** (the full OFF dump was imported, NOT just the BR subset — the old "~32k Brazilian products" note was wrong), **2.5k `CURATED_IMPORT`**, **~720 `LIVE_API`** (the on-demand fallback cache-through, grows on every scan). ~594k have a brand. Imported via a one-off runtime stream through `POST /api/v1/categorizer/ean-catalog/import-off` (OFF CSV dump → gunzip → batches of 500).
 - **Why it matters for prod**: a fresh prod DB rebuilds schema from Flyway on an empty volume → the EAN catalog is **empty**, so barcode-scan (`/products/by-ean`) returns catalog-preview misses and category-for-EAN-items silently degrades to dictionary-only. No migration and (until this note) no checklist item = data-loss-on-migrate trap.
 - **Fix before prod**: after the first prod deploy, re-run the OFF import against the prod host (ADMIN token). ~40 min streaming. Consider baking a seed migration or a startup importer later.
 
