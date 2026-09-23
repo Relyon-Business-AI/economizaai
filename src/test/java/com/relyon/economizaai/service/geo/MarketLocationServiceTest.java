@@ -100,6 +100,7 @@ class MarketLocationServiceTest {
         market.setGeocodeFailedAt(LocalDateTime.now());
         when(geocoder.geocode(any())).thenReturn(Optional.of(
                 new GeocodeResult(new BigDecimal("-30.05"), new BigDecimal("-51.22"), "Porto Alegre", "RS")));
+        when(repository.findById(any())).thenReturn(Optional.of(market));
 
         service.geocodeOne(market);
 
@@ -119,6 +120,7 @@ class MarketLocationServiceTest {
                 .cnpj("11111111000111").cnpjRoot("11111111")
                 .address("Nowhere").geocodeAttempts(1).build();
         when(geocoder.geocode(any())).thenReturn(Optional.empty());
+        when(repository.findById(any())).thenReturn(Optional.of(market));
 
         service.geocodeOne(market);
 
@@ -148,6 +150,7 @@ class MarketLocationServiceTest {
         when(repository.findAllByLatitudeIsNullAndGeocodeAttemptsLessThan(anyInt()))
                 .thenReturn(List.of(marketOne, marketTwo));
         when(geocoder.geocode(any())).thenReturn(Optional.empty());
+        when(repository.findById(any())).thenReturn(Optional.of(marketOne), Optional.of(marketTwo));
 
         service.geocodePending();
 
