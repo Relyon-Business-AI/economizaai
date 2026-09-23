@@ -16,6 +16,23 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-23 — import só aceita mercado/farmácia + e-commerce (resto falha)
+
+O import em massa agora é **seletivo** (o scan do usuário segue igual). Ao reconsultar, a nota é
+avaliada e:
+- **Mercado / farmácia / varejo de alimentos** (NFC-e 65) → importa normal.
+- **Compra online / e-commerce** (NF-e modelo 55, ex: Amazon) → importa (é a aposta de comparar
+  produto online vs. mercado; identificada pelo **modelo fiscal 55**, não pelo segmento).
+- **Qualquer outro segmento físico** (restaurante, pet, doceria, etc.) → vai pra **FALHA** com
+  motivo localizado, em vez de entrar como item sem categoria:
+  `receipt.import.segment_food_service` (restaurante/bar), `receipt.import.segment_other`
+  (outro comércio), `receipt.import.segment_unknown` (não deu pra classificar o segmento agora).
+
+Motivo: fora de mercado/farmácia a categorização não é confiável — melhor recusar do que poluir o
+histórico. E-commerce é mantido de propósito. O `parseErrorMessage` já vem localizado pro FE mostrar.
+
+---
+
 ## 2026-09-23 — import em massa: staging persistente + confirm em lote; fix de pool
 
 Duas frentes.

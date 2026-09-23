@@ -52,6 +52,28 @@ public class MerchantSupportGate {
         return statusOf(market) == SupportStatus.BLOCKED;
     }
 
+    /**
+     * Bulk-import policy — deliberately STRICTER than a live scan. Onboarding imports a
+     * user's whole Nota Fiscal Gaúcha export (gas, restaurants, pet shops, e-commerce…),
+     * and we only handle grocery/pharmacy well, so anything else is rejected with a
+     * localized reason instead of polluting the history with uncategorizable OTHER items.
+     * The exception is <b>e-commerce</b> (online purchases issue NF-e model 55, vs NFC-e
+     * 65 for physical stores): we keep those on purpose — they're the online-vs-market
+     * price-comparison bet we still want to validate.
+     *
+     * @return the i18n rejection key, or {@code null} when the nota is importable.
+     */
+    public String importRejectionKey(String fiscalModel, MerchantSegment segment) {
+        if ("55".equals(fiscalModel)) return null; // e-commerce / online — kept on purpose
+        var resolved = segment == null ? MerchantSegment.UNKNOWN : segment;
+        if (SUPPORTED_SEGMENTS.contains(resolved)) return null;
+        return switch (resolved) {
+            case FOOD_SERVICE -> "receipt.import.segment_food_service";
+            case UNKNOWN -> "receipt.import.segment_unknown";
+            default -> "receipt.import.segment_other";
+        };
+    }
+
     /** Submit-time check: only a previously-seen (and classified) CNPJ can reject synchronously. */
     public boolean isKnownBlockedCnpj(String cnpj) {
         if (cnpj == null || cnpj.isBlank()) return false;

@@ -390,9 +390,31 @@ POST /api/v1/receipts/import/nfg-csv   (multipart/form-data, field "file")
 - Rejection `reason` keys: `receipt.import.invalid_chave`, `receipt.import.unsupported`
   (not RS / unsupported model), `receipt.import.duplicate`, `receipt.import.merchant_unsupported`,
   `receipt.import.cap_reached`. `reasonMessage` is already localized.
-- **RS only** today; other UFs → `receipt.import.unsupported`. E-commerce notas
-  (NF-e 55, e.g. Amazon) land in personal history but stay **out of the collaborative
-  index** (non-grocery segment).
+- **RS only** today; other UFs → `receipt.import.unsupported`.
+- **Segment policy (import is stricter than a live scan).** After reconsult each nota is gated:
+  grocery/pharmacy/food-retail (NFC-e 65) and **e-commerce (NF-e model 55, e.g. Amazon)** are
+  imported; any other physical merchant → `FAILED_PARSE` with a localized reason
+  (`receipt.import.segment_food_service` / `segment_other` / `segment_unknown`). E-commerce is
+  identified by the **fiscal model (55)**, not the segment, and lands in personal history but
+  stays **out of the collaborative index** (non-grocery). Failed rows carry `parseErrorMessage`.
+
+**Persistent staging.** Imported notas carry `origin: "IMPORT"` and stay in a staging
+list until the user acts on them — the import screen rehydrates from the server, so
+nothing is lost on refresh/navigation.
+
+```
+GET  /api/v1/receipts/import/staging
+→ 200 ReceiptResponse[]   // every non-confirmed IMPORT nota for the household, newest first
+
+POST /api/v1/receipts/confirm-batch
+{ "ids": ["<uuid>", ...] }
+→ 200 { "affected": <int> }   // confirm (definitive save) several at once
+```
+
+- Staging returns everything except `CONFIRMED` (which has been saved definitively and
+  drops off): `IMPORT_QUEUED` / `PROCESSING` / `PENDING_CONFIRMATION` / `FAILED_PARSE` /
+  `NEEDS_DEVICE_FETCH`. Confirm a nota (`POST /receipts/{id}/confirm` or `confirm-batch`)
+  or delete it (`DELETE /receipts/{id}` / `POST /receipts/delete-batch`) to remove it.
 
 **Persistent staging.** Imported notas carry `origin: "IMPORT"` and stay in a staging
 list until the user acts on them — the import screen rehydrates from the server, so
