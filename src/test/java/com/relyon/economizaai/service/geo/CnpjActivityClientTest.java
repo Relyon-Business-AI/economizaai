@@ -67,10 +67,18 @@ class CnpjActivityClientTest {
     }
 
     @Test
-    void pharmacyInSecondaryCnaeStillCounts() {
-        // primary is something else, but a 4771 secondary marks it a pharmacy
-        assertEquals(MerchantSegment.PHARMACY,
+    void classifiesByPrimaryCnae_notSecondary() {
+        // Primary is conveniência (food retail); a 4771 pharmacy code is only SECONDARY.
+        // The primary wins now — matching any secondary code falsely tagged Amazon/Cobasi
+        // (which list a 4771 secondary) as PHARMACY.
+        assertEquals(MerchantSegment.FOOD_RETAIL,
                 CnpjActivityClient.segmentFromCnae(List.of("4729602", "4771701")));
+        // Amazon's real primary is IT retail (4751*) → OTHER, despite pharmacy secondaries.
+        assertEquals(MerchantSegment.OTHER,
+                CnpjActivityClient.segmentFromCnae(List.of("4751201", "4771704", "4772500")));
+        // A real pharmacy's primary is 4771* → PHARMACY.
+        assertEquals(MerchantSegment.PHARMACY,
+                CnpjActivityClient.segmentFromCnae(List.of("4771701", "4729602")));
     }
 
     @Test
@@ -83,9 +91,11 @@ class CnpjActivityClientTest {
     }
 
     @Test
-    void gasStationWithConvenienceSecondaryIsFoodRetail() {
-        // posto (4731) whose CNPJ lists the loja de conveniência as secondary activity
-        assertEquals(MerchantSegment.FOOD_RETAIL,
+    void gasStationWithConvenienceSecondary_followsPrimary() {
+        // posto (4731 primary) with a loja de conveniência as SECONDARY now follows its
+        // primary → OTHER. Trade-off of primary-only classification (accepted: avoiding
+        // false positives like Amazon→PHARMACY matters more than catching posto grocery).
+        assertEquals(MerchantSegment.OTHER,
                 CnpjActivityClient.segmentFromCnae(List.of("4731800", "4729602")));
     }
 
@@ -96,10 +106,14 @@ class CnpjActivityClientTest {
     }
 
     @Test
-    void retailCnaeWinsOverFoodService() {
-        // padaria that also serves café da manhã: retail wins, stays supported
-        assertEquals(MerchantSegment.FOOD_RETAIL,
+    void primaryFoodServiceIsFoodService_evenWithRetailSecondary() {
+        // Lanchonete (5611 primary) that also has a padaria secondary follows its primary
+        // → FOOD_SERVICE (not auto-blocked anymore, just out of the index).
+        assertEquals(MerchantSegment.FOOD_SERVICE,
                 CnpjActivityClient.segmentFromCnae(List.of("5611203", "4721102")));
+        // ...but a padaria (4721 primary) that also serves café stays FOOD_RETAIL.
+        assertEquals(MerchantSegment.FOOD_RETAIL,
+                CnpjActivityClient.segmentFromCnae(List.of("4721102", "5611203")));
     }
 
     @Test

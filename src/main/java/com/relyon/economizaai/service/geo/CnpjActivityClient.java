@@ -133,18 +133,25 @@ public class CnpjActivityClient {
             List.of("4721", "4722", "4723", "4724", "4729");
 
     /**
-     * Pure mapping (CNAE prefixes → segment), extracted for testability. Any
-     * supported retail CNAE in the list wins over food service, so a mixed
-     * CNPJ (posto + conveniência, padaria + café) stays supported.
+     * Pure mapping (CNAE prefix → segment), extracted for testability. Classifies by
+     * the merchant's PRIMARY (first) CNAE — its registered main activity. {@link #parseCnaes}
+     * puts {@code cnae_fiscal} first, followed by the secondaries.
+     *
+     * <p>Was {@code anyMatch} over the whole list ("any supported CNAE wins"), but that
+     * produced false positives: Amazon, Cobasi and pet shops list a pharmacy code (4771*)
+     * as a SECONDARY activity and were wrongly tagged PHARMACY — putting e-commerce/pet
+     * spend into the physical grocery index. The primary CNAE is the honest signal.
+     * Trade-off: a mixed CNPJ (posto + conveniência) now follows its primary (gas → OTHER)
+     * instead of its secondary grocery code — accepted, false positives are worse here.
      */
     static MerchantSegment segmentFromCnae(List<String> cnaes) {
-        if (cnaes.stream().anyMatch(code -> code.startsWith("4771"))) return MerchantSegment.PHARMACY;
-        if (cnaes.stream().anyMatch(code -> code.startsWith("4711") || code.startsWith("4712"))) {
-            return MerchantSegment.SUPERMARKET;
-        }
-        if (cnaes.stream().anyMatch(CnpjActivityClient::isFoodRetailCnae)) return MerchantSegment.FOOD_RETAIL;
-        if (cnaes.stream().anyMatch(code -> code.startsWith("56"))) return MerchantSegment.FOOD_SERVICE;
-        return cnaes.isEmpty() ? MerchantSegment.UNKNOWN : MerchantSegment.OTHER;
+        if (cnaes.isEmpty()) return MerchantSegment.UNKNOWN;
+        var primary = cnaes.get(0);
+        if (primary.startsWith("4771")) return MerchantSegment.PHARMACY;
+        if (primary.startsWith("4711") || primary.startsWith("4712")) return MerchantSegment.SUPERMARKET;
+        if (isFoodRetailCnae(primary)) return MerchantSegment.FOOD_RETAIL;
+        if (primary.startsWith("56")) return MerchantSegment.FOOD_SERVICE;
+        return MerchantSegment.OTHER;
     }
 
     private static boolean isFoodRetailCnae(String code) {

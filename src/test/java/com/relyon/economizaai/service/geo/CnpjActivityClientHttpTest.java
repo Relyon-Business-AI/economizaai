@@ -40,10 +40,11 @@ class CnpjActivityClientHttpTest {
     }
 
     @Test
-    void secondaryPharmacyCnae_classifiesPharmacy() {
-        // primary is a non-matching activity, but a 4771 secondary marks it pharmacy
+    void classifiesByPrimaryCnae_ignoringSecondaries() {
+        // Primary is conveniência (food retail); a 4771 pharmacy code is only SECONDARY.
+        // The primary wins — matching secondaries falsely tagged Amazon/Cobasi as PHARMACY.
         var body = "{\"cnae_fiscal\":4729602,\"cnaes_secundarios\":[{\"codigo\":4771701}]}";
-        assertEquals(MerchantSegment.PHARMACY, clientReturning(body).classify(CNPJ));
+        assertEquals(MerchantSegment.FOOD_RETAIL, clientReturning(body).classify(CNPJ));
     }
 
     @Test
