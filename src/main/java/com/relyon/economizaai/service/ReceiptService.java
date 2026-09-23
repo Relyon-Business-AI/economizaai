@@ -28,12 +28,15 @@ import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
+import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.cache.HouseholdCacheGen;
 import com.relyon.economizaai.service.canonicalization.CanonicalizationService;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.geo.MarketNameService;
 import com.relyon.economizaai.service.geo.MerchantSupportGate;
+import com.relyon.economizaai.model.enums.MarketScope;
+import org.springframework.data.jpa.domain.Specification;
 import com.relyon.economizaai.service.notifications.NotificationPayload;
 import com.relyon.economizaai.service.notifications.NotificationRuleService;
 import com.relyon.economizaai.service.notifications.NotificationService;
@@ -78,6 +81,7 @@ import java.util.UUID;
 public class ReceiptService {
 
     private final ReceiptRepository receiptRepository;
+    private final InsightsRepository insightsRepository;
     private final ReceiptItemRepository receiptItemRepository;
     private final SefazIngestionService sefazIngestionService;
     private final PrefetchPolicy prefetchPolicy;
@@ -303,7 +307,9 @@ public class ReceiptService {
                                              List<ProductCategory> categories,
                                              ReceiptStatus status,
                                              String search,
+                                             MarketScope scope,
                                              Pageable pageable) {
+        var householdId = user.getHousehold().getId();
         var cnpj = Optional.ofNullable(cnpjEmitente).map(String::trim).filter(trimmed -> !trimmed.isBlank()).orElse(null);
         var trimmedSearch = Optional.ofNullable(search).map(String::trim).filter(trimmed -> !trimmed.isBlank()).orElse(null);
         var sortedPageable = pageable.getSort().isUnsorted()
@@ -311,9 +317,12 @@ public class ReceiptService {
                         Sort.by(Sort.Direction.DESC, "issuedAt"))
                 : pageable;
         var spec = ReceiptSpecifications.forSearch(
-                user.getHousehold().getId(), from, to, cnpj, categories, status, trimmedSearch, true, null);
+                householdId, from, to, cnpj, categories, status, trimmedSearch, true, null);
+        if (scope != null && scope != MarketScope.ALL) {
+            spec = spec.and(scopeSpec(scope,
+                    insightsRepository.supportedCnpjs(householdId, MerchantSupportGate.supportedSegments())));
+        }
         var page = receiptRepository.findAll(spec, sortedPageable);
-        var householdId = user.getHousehold().getId();
         var cnpjs = page.getContent().stream()
                 .map(Receipt::getCnpjEmitente)
                 .filter(receiptCnpj -> receiptCnpj != null)
@@ -323,6 +332,23 @@ public class ReceiptService {
         return page.map(receipt -> ReceiptSummaryResponse.from(receipt)
                 .withMarketFriendlyName(marketNameService.applyOverride(
                         overrides, receipt.getCnpjEmitente(), receipt.getMarketName())));
+    }
+
+    /**
+     * Filters receipts by merchant segment for the Mercado/Outras lens: SUPPORTED keeps only the
+     * household's grocery/pharmacy CNPJs; OTHER keeps the rest (incl. unregistered / no-CNPJ).
+     * Empty supported set → SUPPORTED shows nothing, OTHER shows all.
+     */
+    private static Specification<Receipt> scopeSpec(MarketScope scope, List<String> supportedCnpjs) {
+        return (root, query, cb) -> {
+            if (supportedCnpjs.isEmpty()) {
+                return scope == MarketScope.SUPPORTED ? cb.disjunction() : cb.conjunction();
+            }
+            var inSupported = root.get("cnpjEmitente").in(supportedCnpjs);
+            return scope == MarketScope.SUPPORTED
+                    ? inSupported
+                    : cb.or(root.get("cnpjEmitente").isNull(), cb.not(inSupported));
+        };
     }
 
     @Transactional(readOnly = true)

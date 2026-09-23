@@ -19,6 +19,7 @@ import com.relyon.economizaai.dto.response.ReceiptResponse;
 import com.relyon.economizaai.dto.response.ReceiptSummaryResponse;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.model.enums.MarketScope;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.service.ReceiptExportService;
 import com.relyon.economizaai.service.ReceiptImportService;
@@ -233,8 +234,9 @@ public class ReceiptController {
             @RequestParam(required = false) List<ProductCategory> category,
             @RequestParam(required = false) ReceiptStatus status,
             @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "ALL") MarketScope scope,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(receiptService.list(user, from, to, marketCnpj, category, status, q, pageable));
+        return ResponseEntity.ok(receiptService.list(user, from, to, marketCnpj, category, status, q, scope, pageable));
     }
 
     /**
