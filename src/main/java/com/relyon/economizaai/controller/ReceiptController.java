@@ -158,6 +158,23 @@ public class ReceiptController {
     }
 
     /**
+     * The import screen's staging list: every non-confirmed import receipt for the
+     * household, so the screen rehydrates exactly where the user left it (nothing is
+     * lost on refresh/navigation). Rows stay until confirmed, deleted, or cleared.
+     */
+    @GetMapping("/import/staging")
+    public ResponseEntity<List<ReceiptResponse>> importStaging(@AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(receiptService.listImportStaging(user));
+    }
+
+    /** Batch confirm — the "confirmar selecionadas" on the import screen (definitive save). */
+    @PostMapping("/confirm-batch")
+    public ResponseEntity<BatchResultResponse> confirmBatch(@AuthenticationPrincipal User user,
+                                                            @Valid @RequestBody ReceiptIdsRequest request) {
+        return ResponseEntity.ok(new BatchResultResponse(receiptService.confirmBatch(user, request.ids())));
+    }
+
+    /**
      * On-device retry for a receipt the server left in {@code NEEDS_DEVICE_FETCH}
      * (the state's portal blocks our datacenter IP). The app fetched the nota on its
      * own accepted IP and reposts the raw body; we re-ingest the existing receipt.

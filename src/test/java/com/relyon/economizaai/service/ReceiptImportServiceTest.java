@@ -3,6 +3,7 @@ package com.relyon.economizaai.service;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.geo.MerchantSupportGate;
@@ -62,6 +63,7 @@ class ReceiptImportServiceTest {
         var saved = ArgumentCaptor.forClass(Receipt.class);
         verify(receiptRepository).save(saved.capture());
         assertThat(saved.getValue().getStatus()).isEqualTo(ReceiptStatus.IMPORT_QUEUED);
+        assertThat(saved.getValue().getOrigin()).isEqualTo(ReceiptOrigin.IMPORT);
     }
 
     @Test

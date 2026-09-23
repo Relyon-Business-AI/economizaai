@@ -1,6 +1,7 @@
 package com.relyon.economizaai.repository;
 
 import com.relyon.economizaai.model.Receipt;
+import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -10,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -27,6 +29,19 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
     List<Receipt> findByStatusOrderByCreatedAtAsc(ReceiptStatus status, Pageable pageable);
 
     long countByStatus(ReceiptStatus status);
+
+    // Import staging: every non-confirmed import receipt for the household, so the
+    // import screen rehydrates exactly what the user left (queued/processing/ready/failed).
+    // Confirmed rows drop off — they've been saved definitively.
+    List<Receipt> findByHouseholdIdAndOriginAndStatusNotOrderByCreatedAtDesc(
+            UUID householdId, ReceiptOrigin origin, ReceiptStatus status);
+
+    // Import completion: the worker fires a "done" notification when a user's import
+    // batch has no more in-flight notas (queued/processing), reporting how many are
+    // ready to review vs failed.
+    long countByUserIdAndOriginAndStatusIn(UUID userId, ReceiptOrigin origin, Collection<ReceiptStatus> statuses);
+
+    long countByUserIdAndOriginAndStatus(UUID userId, ReceiptOrigin origin, ReceiptStatus status);
 
     boolean existsByChaveAcesso(String chaveAcesso);
 

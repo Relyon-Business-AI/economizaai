@@ -25,6 +25,7 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
+import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
@@ -551,6 +552,43 @@ public class ReceiptService {
         }
         log.info("delete-batch requested={} deleted={}", receiptIds.size(), deleted);
         return deleted;
+    }
+
+    /**
+     * The import screen's staging list: every non-confirmed import receipt for the
+     * household, newest first. Rehydrates the screen exactly where the user left it
+     * (queued/processing/ready/failed) — confirmed rows have been saved definitively
+     * and drop off.
+     */
+    @Transactional(readOnly = true)
+    public List<ReceiptResponse> listImportStaging(User user) {
+        return receiptRepository
+                .findByHouseholdIdAndOriginAndStatusNotOrderByCreatedAtDesc(
+                        user.getHousehold().getId(), ReceiptOrigin.IMPORT, ReceiptStatus.CONFIRMED)
+                .stream()
+                .map(receipt -> toResponse(user, receipt))
+                .toList();
+    }
+
+    /**
+     * Confirm several of the household's receipts in one call (bulk "save definitively"
+     * on the import screen). Each goes through the same confirm as {@link #confirm} with
+     * default options; ids not owned / not confirmable are skipped. Returns how many were
+     * actually confirmed.
+     */
+    @Transactional
+    public int confirmBatch(User user, List<UUID> receiptIds) {
+        var confirmed = 0;
+        for (var receiptId : receiptIds) {
+            try {
+                confirm(user, receiptId, null);
+                confirmed++;
+            } catch (RuntimeException ex) {
+                log.warn("confirm-batch skip receipt={} reason={}", abbrev(receiptId), ex.getClass().getSimpleName());
+            }
+        }
+        log.info("confirm-batch requested={} confirmed={}", receiptIds.size(), confirmed);
+        return confirmed;
     }
 
     /**
