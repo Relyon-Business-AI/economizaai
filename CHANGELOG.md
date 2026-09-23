@@ -16,7 +16,25 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
-## 2026-09-23 — import só aceita mercado/farmácia + e-commerce (resto falha)
+## 2026-09-23 — aceitar QUALQUER segmento na ingestão; índice segue só mercado/farmácia
+
+Revertemos a régua estrita de import (abaixo) por uma política mais simples e consistente entre
+**scan e batch**:
+
+- **Ingestão aceita tudo.** Nenhuma nota é mais recusada por segmento — restaurante, pet, loja de
+  roupa, e-commerce, etc. entram no **histórico pessoal** do usuário. (Só um **override admin
+  BLOCKED**, manual, ainda recusa — válvula anti-spam/fraude.) Vale igual pra scan individual e import.
+- **Índice / métricas / algoritmos / treino continuam só de mercado e farmácia** — que é a nossa
+  especialidade. Isso já era garantido pelo `contributesToIndex` (supermercado, farmácia e varejo de
+  alimentos alimentam o índice; todo o resto é "GREY": entra no histórico, fica fora do índice).
+
+Efeito prático: seus gráficos pessoais mostram tudo que você comprou; o índice coletivo (e o que
+treina nossos algoritmos) só considera NFs válidas de mercado/farmácia. `FOOD_SERVICE` deixou de ser
+auto-bloqueado (agora é GREY como os demais).
+
+---
+
+## 2026-09-23 — [SUPERSEDED] import só aceita mercado/farmácia + e-commerce (resto falha)
 
 O import em massa agora é **seletivo** (o scan do usuário segue igual). Ao reconsultar, a nota é
 avaliada e:
