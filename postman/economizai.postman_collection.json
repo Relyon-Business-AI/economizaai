@@ -3758,6 +3758,33 @@
      "response": []
     },
     {
+     "name": "Online reference price (national, all sellers)",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Accept-Language",
+        "value": "pt"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/price-index/products/{{e2eProductId}}/online-reference",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "price-index",
+        "products",
+        "{{e2eProductId}}",
+        "online-reference"
+       ]
+      }
+     },
+     "response": []
+    },
+    {
      "name": "Best markets for a product",
      "request": {
       "method": "GET",
@@ -7116,6 +7143,50 @@
         "exec": [
          "pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
          "pm.test('Returns an array', function () { pm.expect(pm.response.json()).to.be.an('array'); });"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "27b. Online reference price (national, k-anon protected)",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Accept-Language",
+        "value": "pt"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/price-index/products/{{e2eProductId}}/online-reference",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "price-index",
+        "products",
+        "{{e2eProductId}}",
+        "online-reference"
+       ]
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id — skipping'); return; }",
+         "pm.test('Returns 200 (200 even when k-anon hides data)', function () { pm.response.to.have.status(200); });",
+         "var d = pm.response.json();",
+         "pm.test('Has sampleCount + distinctHouseholds', function () {",
+         "    pm.expect(d).to.have.property('sampleCount');",
+         "    pm.expect(d).to.have.property('distinctHouseholds');",
+         "});"
         ]
        }
       }

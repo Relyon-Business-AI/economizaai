@@ -1,7 +1,10 @@
 package com.relyon.economizaai.model;
 
+import com.relyon.economizaai.model.enums.ReceiptChannel;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -35,6 +38,16 @@ public class PriceObservation extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
+
+    /**
+     * Physical (IN_STORE) vs online (ONLINE), copied from the source receipt's channel.
+     * Splits the index into two independent series — reads never mix them: the physical
+     * near-you index filters IN_STORE; the national online index filters ONLINE.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    @lombok.Builder.Default
+    private ReceiptChannel channel = ReceiptChannel.IN_STORE;
 
     @Column(name = "market_cnpj", nullable = false, length = 14)
     private String marketCnpj;

@@ -40,10 +40,13 @@ public interface PriceObservationRepository extends JpaRepository<PriceObservati
     @Query("UPDATE PriceObservation po SET po.product = :survivor WHERE po.product = :absorbed")
     int repointProduct(@Param("absorbed") Product absorbed, @Param("survivor") Product survivor);
 
+    // Physical index reads: the "cheapest market near you" series. Filter to IN_STORE so
+    // online observations (national, different price dynamics) never leak into geo results.
     @Query("""
         SELECT po FROM PriceObservation po
         WHERE po.product.id = :productId
           AND po.marketCnpj = :marketCnpj
+          AND po.channel = 'IN_STORE'
           AND po.outlier = false
           AND po.observedAt >= :since
         ORDER BY po.observedAt DESC
@@ -55,6 +58,7 @@ public interface PriceObservationRepository extends JpaRepository<PriceObservati
     @Query("""
         SELECT po FROM PriceObservation po
         WHERE po.product.id = :productId
+          AND po.channel = 'IN_STORE'
           AND po.outlier = false
           AND po.observedAt >= :since
         ORDER BY po.observedAt DESC
@@ -62,9 +66,22 @@ public interface PriceObservationRepository extends JpaRepository<PriceObservati
     List<PriceObservation> findRecentByProduct(@Param("productId") UUID productId,
                                                @Param("since") LocalDateTime since);
 
+    /** Online index: recent ONLINE observations for a product, across all sellers (national). */
+    @Query("""
+        SELECT po FROM PriceObservation po
+        WHERE po.product.id = :productId
+          AND po.channel = 'ONLINE'
+          AND po.outlier = false
+          AND po.observedAt >= :since
+        ORDER BY po.observedAt DESC
+    """)
+    List<PriceObservation> findRecentOnlineByProduct(@Param("productId") UUID productId,
+                                                     @Param("since") LocalDateTime since);
+
     @Query("""
         SELECT po FROM PriceObservation po
         WHERE po.observedAt >= :since
+          AND po.channel = 'IN_STORE'
           AND po.outlier = false
     """)
     List<PriceObservation> findRecent(@Param("since") LocalDateTime since);
@@ -72,6 +89,7 @@ public interface PriceObservationRepository extends JpaRepository<PriceObservati
     @Query("""
         SELECT DISTINCT po.product.id FROM PriceObservation po
         WHERE po.product.id IN :productIds
+          AND po.channel = 'IN_STORE'
           AND po.outlier = false
           AND po.marketCnpj IN (
               SELECT DISTINCT r.cnpjEmitente FROM Receipt r
@@ -86,6 +104,7 @@ public interface PriceObservationRepository extends JpaRepository<PriceObservati
     @Query("""
         SELECT DISTINCT po.product.id FROM PriceObservation po
         WHERE po.product.id IN :productIds
+          AND po.channel = 'IN_STORE'
           AND po.outlier = false
           AND EXISTS (
               SELECT 1 FROM MarketLocation ml
@@ -116,6 +135,7 @@ public interface PriceObservationRepository extends JpaRepository<PriceObservati
         FROM PriceObservation po
         JOIN MarketLocation ml ON ml.cnpj = po.marketCnpj
         WHERE po.product.id IN :productIds
+          AND po.channel = 'IN_STORE'
           AND po.outlier = false
           AND ml.latitude IS NOT NULL
           AND ml.longitude IS NOT NULL

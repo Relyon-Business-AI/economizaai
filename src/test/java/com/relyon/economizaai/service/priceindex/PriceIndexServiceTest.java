@@ -9,6 +9,7 @@ import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.ReceiptChannel;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository.MarketHouseholdCount;
 import com.relyon.economizaai.repository.PriceObservationRepository;
@@ -32,7 +33,9 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -90,6 +93,113 @@ class PriceIndexServiceTest {
 
     private Product product() {
         return Product.builder().id(UUID.randomUUID()).normalizedName("Arroz").build();
+    }
+
+    private ReceiptItem itemWithProductAndEan(Product product, BigDecimal unitPrice, String ean) {
+        var item = itemWithProduct(product, unitPrice);
+        item.setEan(ean);
+        return item;
+    }
+
+    private void stubObservationSaveEchoing() {
+        when(observationRepository.save(any(PriceObservation.class))).thenAnswer(inv -> {
+            var obs = inv.<PriceObservation>getArgument(0);
+            obs.setId(UUID.randomUUID());
+            return obs;
+        });
+    }
+
+    @Test
+    void recordContributions_onlineReceiptContributesEanItemsIgnoringMerchantSupport() {
+        // Amazon (marketplace, segment OTHER) selling a real grocery EAN → still contributes.
+        // The online path never consults merchantSupportGate (the lenient default stub is unused).
+        var receipt = buildConfirmedReceipt(true,
+                itemWithProductAndEan(product(), new BigDecimal("12.90"), "7898912704016"));
+        receipt.setChannel(ReceiptChannel.ONLINE);
+        stubObservationSaveEchoing();
+
+        var written = service.recordContributions(receipt);
+
+        assertEquals(1, written);
+        verify(observationRepository).save(argThat(obs -> obs.getChannel() == ReceiptChannel.ONLINE));
+    }
+
+    @Test
+    void recordContributions_onlineReceiptSkipsItemsWithoutEan() {
+        var withEan = itemWithProductAndEan(product(), new BigDecimal("12.90"), "7898912704016");
+        var noEan = itemWithProduct(Product.builder().id(UUID.randomUUID()).normalizedName("Livro").build(),
+                new BigDecimal("59.90")); // e.g. a book on the marketplace — no grocery GTIN match
+        var receipt = buildConfirmedReceipt(true, withEan, noEan);
+        receipt.setChannel(ReceiptChannel.ONLINE);
+        stubObservationSaveEchoing();
+
+        var written = service.recordContributions(receipt);
+
+        assertEquals(1, written, "online index gates by EAN — the no-EAN line is skipped");
+        verify(observationRepository, times(1)).save(any(PriceObservation.class));
+    }
+
+    @Test
+    void recordContributions_onlineObservationsDoNotFeedLocalWatchEngine() {
+        var receipt = buildConfirmedReceipt(true,
+                itemWithProductAndEan(product(), new BigDecimal("12.90"), "7898912704016"));
+        receipt.setChannel(ReceiptChannel.ONLINE);
+        stubObservationSaveEchoing();
+
+        service.recordContributions(receipt);
+
+        // "avise-me quando" rules are location-based → online prices must not trigger them.
+        verify(notificationRuleEngine).evaluate(argThat(List::isEmpty), any());
+    }
+
+    @Test
+    void recordContributions_inStoreObservationsFeedWatchEngine() {
+        var receipt = buildConfirmedReceipt(true, itemWithProduct(product(), new BigDecimal("10")));
+        stubObservationSaveEchoing();
+
+        service.recordContributions(receipt);
+
+        verify(notificationRuleEngine).evaluate(argThat(list -> list.size() == 1), any());
+    }
+
+    @Test
+    void onlineReferencePrice_returnsDataWhenThresholdsMet() {
+        var productId = UUID.randomUUID();
+        var observations = List.of(
+                obs(productId, new BigDecimal("10")), obs(productId, new BigDecimal("11")),
+                obs(productId, new BigDecimal("12")), obs(productId, new BigDecimal("9")),
+                obs(productId, new BigDecimal("13"))
+        );
+        when(observationRepository.findRecentOnlineByProduct(eq(productId), any()))
+                .thenReturn(observations);
+        when(auditRepository.countDistinctOnlineHouseholdsForProduct(eq(productId), any()))
+                .thenReturn(3L);
+
+        var ref = service.onlineReferencePrice(productId);
+
+        assertTrue(ref.hasData());
+        assertEquals(0, ref.medianPrice().compareTo(new BigDecimal("11")));
+        assertEquals(5, ref.sampleCount());
+    }
+
+    @Test
+    void onlineReferencePrice_blocksBelowKAnon() {
+        var productId = UUID.randomUUID();
+        var observations = List.of(
+                obs(productId, new BigDecimal("10")), obs(productId, new BigDecimal("11")),
+                obs(productId, new BigDecimal("12")), obs(productId, new BigDecimal("10")),
+                obs(productId, new BigDecimal("11"))
+        );
+        when(observationRepository.findRecentOnlineByProduct(eq(productId), any()))
+                .thenReturn(observations);
+        when(auditRepository.countDistinctOnlineHouseholdsForProduct(eq(productId), any()))
+                .thenReturn(1L);
+
+        var ref = service.onlineReferencePrice(productId);
+
+        assertFalse(ref.hasData());
+        assertNull(ref.medianPrice());
+        assertTrue(ref.kAnonBlocked());
     }
 
     @Test

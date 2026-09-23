@@ -17,18 +17,32 @@ public interface PriceObservationAuditRepository extends JpaRepository<PriceObse
     @Query("SELECT COUNT(DISTINCT a.householdId) FROM PriceObservationAudit a WHERE a.observation.outlier = false")
     long countDistinctContributingHouseholds();
 
-    /** K-anonymity helper: how many distinct households contributed observations
-     * for a given (product, market) since the cutoff? */
+    /** K-anonymity helper (physical index): how many distinct households contributed IN_STORE
+     * observations for a given (product, market) since the cutoff? */
     @Query("""
         SELECT COUNT(DISTINCT a.householdId)
         FROM PriceObservationAudit a
         WHERE a.observation.product.id = :productId
           AND a.observation.marketCnpj = :marketCnpj
+          AND a.observation.channel = 'IN_STORE'
           AND a.observation.outlier = false
           AND a.observation.observedAt >= :since
     """)
     long countDistinctHouseholdsForProductMarket(@Param("productId") UUID productId,
                                                  @Param("marketCnpj") String marketCnpj,
+                                                 @Param("since") LocalDateTime since);
+
+    /** K-anonymity helper (online index): distinct households that contributed ONLINE
+     * observations for a product nationally (across all sellers) since the cutoff. */
+    @Query("""
+        SELECT COUNT(DISTINCT a.householdId)
+        FROM PriceObservationAudit a
+        WHERE a.observation.product.id = :productId
+          AND a.observation.channel = 'ONLINE'
+          AND a.observation.outlier = false
+          AND a.observation.observedAt >= :since
+    """)
+    long countDistinctOnlineHouseholdsForProduct(@Param("productId") UUID productId,
                                                  @Param("since") LocalDateTime since);
 
     @Query("""
@@ -52,6 +66,7 @@ public interface PriceObservationAuditRepository extends JpaRepository<PriceObse
         SELECT a.observation.marketCnpj AS cnpj, COUNT(DISTINCT a.householdId) AS households
         FROM PriceObservationAudit a
         WHERE a.observation.product.id = :productId
+          AND a.observation.channel = 'IN_STORE'
           AND a.observation.outlier = false
           AND a.observation.observedAt >= :since
         GROUP BY a.observation.marketCnpj

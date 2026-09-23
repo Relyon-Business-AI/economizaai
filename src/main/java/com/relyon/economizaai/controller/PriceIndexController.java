@@ -46,6 +46,16 @@ public class PriceIndexController {
     }
 
     /**
+     * National ONLINE reference price for a product — median across online sellers
+     * (marketplaces + supermarket delivery), a separate series from the physical index.
+     * K-anon protected: null price with counts when volume is insufficient.
+     */
+    @GetMapping("/products/{productId}/online-reference")
+    public ResponseEntity<PriceIndexService.ReferencePrice> onlineReference(@PathVariable UUID productId) {
+        return ResponseEntity.ok(priceIndexService.onlineReferencePrice(productId));
+    }
+
+    /**
      * Cheapest markets for a product. Distance is measured from the user's HOME
      * location by default; pass {@code lat}/{@code lng} to measure from the
      * current position instead (barcode scan inside a store).

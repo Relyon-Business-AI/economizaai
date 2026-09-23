@@ -936,6 +936,17 @@ When `kAnonBlocked: true`, `medianPrice` is `null` but `sampleCount` /
 `distinctHouseholds` are still visible — show the "poucas amostras" warning.
 
 ```
+GET /api/v1/price-index/products/{productId}/online-reference
+→ same ReferencePrice shape as above
+```
+
+National ONLINE reference price — median across all online sellers (marketplaces
++ supermarket delivery), no geo. A **separate series** from the physical index:
+the two never mix. Fed by items with a real EAN regardless of the seller's
+segment (a marketplace's grocery EAN counts; a book doesn't match a grocery
+product). Same k-anon / min-sample rules as the physical reference.
+
+```
 GET /api/v1/price-index/products/{productId}/best-markets?limit=10&radiusKm=5[&lat=&lng=]
 GET /api/v1/price-index/promos?radiusKm=5
 ```
