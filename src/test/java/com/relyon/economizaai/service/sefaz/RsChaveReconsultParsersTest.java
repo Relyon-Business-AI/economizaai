@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.sefaz;
 
+import com.relyon.economizaai.model.enums.ReceiptChannel;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
 
@@ -66,5 +67,16 @@ class RsChaveReconsultParsersTest {
         assertThat(coffee.unit()).isEqualTo("UN");
         assertThat(coffee.totalPrice()).isEqualByComparingTo("139.00");
         assertThat(coffee.unitPrice()).isEqualByComparingTo(new BigDecimal("139.0000"));
+        // NF-e 55 e-commerce → "Presença do Comprador: 2 - Operação pela internet" → ONLINE.
+        assertThat(parsed.channel()).isEqualTo(ReceiptChannel.ONLINE);
+    }
+
+    @Test
+    void nfceParserLeavesChannelNullSoIngestDefaultsInStore() throws Exception {
+        // NFC-e (65) não expõe indPres; o parser deixa channel null e o ingest aplica IN_STORE.
+        var parsed = SatWebNfceParser.parse(
+                fixture("nfce-satweb-zaffari.html", StandardCharsets.ISO_8859_1), ZAFFARI_CHAVE, "https://test/source");
+
+        assertThat(parsed.channel()).isNull();
     }
 }

@@ -8,6 +8,7 @@ import com.relyon.economizaai.exception.ReceiptParseException;
 import com.relyon.economizaai.exception.UnsupportedMerchantException;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
+import com.relyon.economizaai.model.enums.ReceiptChannel;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.extraction.EanCatalogEnrichmentService;
@@ -351,6 +352,8 @@ public class ReceiptIngestionService {
         receipt.setApproxTaxEstadual(parsed.approxTaxEstadual());
         receipt.setSourceUrl(parsed.sourceUrl());
         receipt.setRawHtml(parsed.rawHtml());
+        // Parsers that don't read indPres (NFC-e 65) leave channel null → IN_STORE (presencial).
+        receipt.setChannel(parsed.channel() != null ? parsed.channel() : ReceiptChannel.IN_STORE);
         parsed.items().forEach(parsedItem -> receipt.addItem(toReceiptItem(parsedItem)));
     }
 
