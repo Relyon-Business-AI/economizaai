@@ -4,6 +4,7 @@ import com.relyon.economizaai.dto.response.SpendInsightsResponse;
 import com.relyon.economizaai.dto.response.SuggestedShoppingListResponse;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.MarketScope;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.InsightsService;
 import com.relyon.economizaai.service.cache.HouseholdCacheGen;
@@ -58,7 +59,7 @@ class DashboardCacheTest {
         user = User.builder().id(UUID.randomUUID()).email("u@e")
                 .household(Household.builder().id(UUID.randomUUID()).build())
                 .build();
-        when(insightsService.spend(eq(user), any(), any())).thenReturn(
+        when(insightsService.spend(eq(user), any(), any(), any())).thenReturn(
                 new SpendInsightsResponse(null, null, BigDecimal.ZERO, BigDecimal.ZERO, List.of(), List.of(), List.of(), List.of()));
         when(consumptionService.suggestedList(user, false, 0))
                 .thenReturn(new SuggestedShoppingListResponse(List.of(), null));
@@ -69,25 +70,25 @@ class DashboardCacheTest {
 
     @Test
     void core_isServedFromCacheOnRepeat() {
-        dashboardCacheService.buildCachedDashboard(user);
-        dashboardCacheService.buildCachedDashboard(user);
-        verify(insightsService, times(1)).spend(eq(user), any(), any());
+        dashboardCacheService.buildCachedDashboard(user, MarketScope.ALL);
+        dashboardCacheService.buildCachedDashboard(user, MarketScope.ALL);
+        verify(insightsService, times(1)).spend(eq(user), any(), any(), any());
     }
 
     @Test
     void bumpingHouseholdGeneration_invalidatesCore() {
-        dashboardCacheService.buildCachedDashboard(user);
+        dashboardCacheService.buildCachedDashboard(user, MarketScope.ALL);
         householdCacheGen.bump(user.getHousehold().getId());
-        dashboardCacheService.buildCachedDashboard(user);
-        verify(insightsService, times(2)).spend(eq(user), any(), any());
+        dashboardCacheService.buildCachedDashboard(user, MarketScope.ALL);
+        verify(insightsService, times(2)).spend(eq(user), any(), any(), any());
     }
 
     @Test
     void bumpingAnotherHousehold_keepsCoreCached() {
-        dashboardCacheService.buildCachedDashboard(user);
+        dashboardCacheService.buildCachedDashboard(user, MarketScope.ALL);
         householdCacheGen.bump(UUID.randomUUID());
-        dashboardCacheService.buildCachedDashboard(user);
-        verify(insightsService, times(1)).spend(eq(user), any(), any());
+        dashboardCacheService.buildCachedDashboard(user, MarketScope.ALL);
+        verify(insightsService, times(1)).spend(eq(user), any(), any(), any());
     }
 
     @Test
@@ -95,15 +96,15 @@ class DashboardCacheTest {
         var housemate = User.builder().id(UUID.randomUUID()).email("h@e")
                 .household(user.getHousehold())
                 .build();
-        when(insightsService.spend(eq(housemate), any(), any())).thenReturn(
+        when(insightsService.spend(eq(housemate), any(), any(), any())).thenReturn(
                 new SpendInsightsResponse(null, null, BigDecimal.ZERO, BigDecimal.ZERO, List.of(), List.of(), List.of(), List.of()));
         when(consumptionService.suggestedList(housemate, false, 0))
                 .thenReturn(new SuggestedShoppingListResponse(List.of(), null));
 
-        dashboardCacheService.buildCachedDashboard(user);
-        dashboardCacheService.buildCachedDashboard(housemate);
+        dashboardCacheService.buildCachedDashboard(user, MarketScope.ALL);
+        dashboardCacheService.buildCachedDashboard(housemate, MarketScope.ALL);
 
-        verify(insightsService, times(1)).spend(eq(user), any(), any());
-        verify(insightsService, times(1)).spend(eq(housemate), any(), any());
+        verify(insightsService, times(1)).spend(eq(user), any(), any(), any());
+        verify(insightsService, times(1)).spend(eq(housemate), any(), any(), any());
     }
 }

@@ -8,9 +8,12 @@ import com.relyon.economizaai.dto.response.DashboardResponse.SpendSnapshot;
 import com.relyon.economizaai.dto.response.ReceiptSummaryResponse;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.MarketScope;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
+import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.InsightsService;
+import com.relyon.economizaai.service.geo.MerchantSupportGate;
 import com.relyon.economizaai.service.consumption.ConsumptionIntelligenceService;
 import com.relyon.economizaai.service.geo.MarketNameService;
 import com.relyon.economizaai.service.geo.WatchedMarketService;
@@ -54,19 +57,26 @@ public class DashboardCacheService {
     private static final int PROMOS_TOP_N = 5;
 
     private final InsightsService insightsService;
+    private final InsightsRepository insightsRepository;
     private final ReceiptRepository receiptRepository;
     private final ConsumptionIntelligenceService consumptionService;
     private final CommunityPromoService communityPromoService;
     private final WatchedMarketService watchedMarketService;
     private final MarketNameService marketNameService;
 
+    /** Backwards-compatible entry point — every segment (ALL scope). */
+    @Transactional(readOnly = true)
+    public DashboardResponse buildCachedDashboard(User user) {
+        return buildCachedDashboard(user, MarketScope.ALL);
+    }
+
     @Transactional(readOnly = true)
     @Cacheable(value = CachingConfig.DASHBOARD_CACHE,
-            key = "#user.id + ':' + @householdCacheGen.get(#user.household.id)")
-    public DashboardResponse buildCachedDashboard(User user) {
+            key = "#user.id + ':' + #scope + ':' + @householdCacheGen.get(#user.household.id)")
+    public DashboardResponse buildCachedDashboard(User user, MarketScope scope) {
         var householdId = user.getHousehold().getId();
-        var spendSnapshot = buildSpendSnapshot(user);
-        var recent = loadRecentReceipts(user, householdId);
+        var spendSnapshot = buildSpendSnapshot(user, scope);
+        var recent = loadRecentReceipts(user, householdId, scope);
         var suggested = consumptionService.suggestedList(user, false, 0).items().stream()
                 .limit(SUGGESTED_TOP_N)
                 .toList();
@@ -78,12 +88,12 @@ public class DashboardCacheService {
         return new DashboardResponse(spendSnapshot, recent, suggested, promos, 0L, LocalDateTime.now());
     }
 
-    private SpendSnapshot buildSpendSnapshot(User user) {
+    private SpendSnapshot buildSpendSnapshot(User user, MarketScope scope) {
         var ym = YearMonth.now();
         var monthStart = ym.atDay(1).atStartOfDay();
         var monthEnd = ym.atEndOfMonth().atTime(23, 59, 59);
 
-        var spendInsights = insightsService.spend(user, monthStart, monthEnd);
+        var spendInsights = insightsService.spend(user, monthStart, monthEnd, scope);
         var receiptCount = spendInsights.byMarket().stream()
                 .mapToLong(bucket -> bucket.receiptCount())
                 .sum();
@@ -94,9 +104,9 @@ public class DashboardCacheService {
                 spendInsights.total(), spendInsights.totalDiscount(), receiptCount, avgTicket);
     }
 
-    private List<ReceiptSummaryResponse> loadRecentReceipts(User user, UUID householdId) {
+    private List<ReceiptSummaryResponse> loadRecentReceipts(User user, UUID householdId, MarketScope scope) {
         var recentReceipts = receiptRepository
-                .findAll(recentForHousehold(user), PageRequest.of(0, RECENT_RECEIPTS,
+                .findAll(recentForHousehold(user, scope), PageRequest.of(0, RECENT_RECEIPTS,
                         Sort.by(Sort.Direction.DESC, "issuedAt")))
                 .getContent();
         var recentCnpjs = recentReceipts.stream()
@@ -130,10 +140,22 @@ public class DashboardCacheService {
                 .toList();
     }
 
-    private Specification<Receipt> recentForHousehold(User user) {
-        return (root, query, cb) -> cb.and(
-                cb.equal(root.get("household").get("id"), user.getHousehold().getId()),
-                cb.equal(root.get("status"), ReceiptStatus.CONFIRMED)
-        );
+    private Specification<Receipt> recentForHousehold(User user, MarketScope scope) {
+        var householdId = user.getHousehold().getId();
+        return (root, query, cb) -> {
+            var base = cb.and(
+                    cb.equal(root.get("household").get("id"), householdId),
+                    cb.equal(root.get("status"), ReceiptStatus.CONFIRMED));
+            if (scope == MarketScope.ALL) return base;
+            var supported = insightsRepository.supportedCnpjs(householdId, MerchantSupportGate.supportedSegments());
+            if (supported.isEmpty()) {
+                // No grocery/pharmacy CNPJs yet: SUPPORTED shows nothing, OTHER shows all.
+                return scope == MarketScope.SUPPORTED ? cb.and(base, cb.disjunction()) : base;
+            }
+            var inSupported = root.get("cnpjEmitente").in(supported);
+            return scope == MarketScope.SUPPORTED
+                    ? cb.and(base, inSupported)
+                    : cb.and(base, cb.or(root.get("cnpjEmitente").isNull(), cb.not(inSupported)));
+        };
     }
 }

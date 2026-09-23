@@ -10,6 +10,7 @@ import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
+import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.InsightsService;
 import com.relyon.economizaai.service.consumption.ConsumptionIntelligenceService;
@@ -62,6 +63,7 @@ class DashboardCacheServiceTest {
     private static final String CNPJ_NACIONAL = "99887766000155";
 
     @Mock private InsightsService insightsService;
+    @Mock private InsightsRepository insightsRepository;
     @Mock private ReceiptRepository receiptRepository;
     @Mock private ConsumptionIntelligenceService consumptionService;
     @Mock private CommunityPromoService communityPromoService;
@@ -86,7 +88,7 @@ class DashboardCacheServiceTest {
 
     /** Baseline: everything empty; individual tests override what they exercise. */
     private void stubEmptySections() {
-        lenient().when(insightsService.spend(eq(user), any(), any())).thenReturn(spend(BigDecimal.ZERO, BigDecimal.ZERO, List.of()));
+        lenient().when(insightsService.spend(eq(user), any(), any(), any())).thenReturn(spend(BigDecimal.ZERO, BigDecimal.ZERO, List.of()));
         lenient().when(receiptRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(Page.empty());
         lenient().when(consumptionService.suggestedList(user, false, 0))
                 .thenReturn(new SuggestedShoppingListResponse(List.of(), null));
@@ -129,7 +131,7 @@ class DashboardCacheServiceTest {
 
     @Test
     void core_sumsReceiptCountAcrossMarketsAndComputesAverageTicket() {
-        when(insightsService.spend(eq(user), any(), any())).thenReturn(spend(
+        when(insightsService.spend(eq(user), any(), any(), any())).thenReturn(spend(
                 new BigDecimal("100.00"), new BigDecimal("4.00"),
                 List.of(new MarketBucket(CNPJ_ZAFFARI, "Zaffari", "Zaffari", new BigDecimal("70.00"), BigDecimal.ZERO, 2),
                         new MarketBucket(CNPJ_NACIONAL, "Nacional", "Nacional", new BigDecimal("30.00"), BigDecimal.ZERO, 1))));

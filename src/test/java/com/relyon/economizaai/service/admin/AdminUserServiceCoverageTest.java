@@ -190,7 +190,7 @@ class AdminUserServiceCoverageTest {
         when(receiptRepository.countByHouseholdIdAndStatus(householdId, ReceiptStatus.CONFIRMED)).thenReturn(2L);
         when(receiptRepository.countByHouseholdIdAndStatus(householdId, ReceiptStatus.REJECTED)).thenReturn(3L);
         when(receiptRepository.countByHouseholdIdAndStatus(householdId, ReceiptStatus.FAILED_PARSE)).thenReturn(4L);
-        when(insightsRepository.totalSpend(eq(householdId), any(), any())).thenReturn(new java.math.BigDecimal("99.00"));
+        when(insightsRepository.totalSpend(eq(householdId), any(), any(), any(), any())).thenReturn(new java.math.BigDecimal("99.00"));
         when(userRepository.countByHouseholdId(householdId)).thenReturn(5L);
 
         var detail = service.get(user.getId());

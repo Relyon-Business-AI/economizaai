@@ -1,6 +1,7 @@
 package com.relyon.economizaai.repository;
 
 import com.relyon.economizaai.model.Receipt;
+import com.relyon.economizaai.model.enums.MerchantSegment;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -8,11 +9,34 @@ import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Personal spend aggregations for the dashboard/insights, all scoped by a
+ * {@code scope} ({@code ALL} / {@code SUPPORTED} / {@code OTHER}) so the home
+ * screen can show only grocery/pharmacy (our specialty) while an "Outras notas"
+ * view shows the rest. The scope filters by the emitente's merchant segment via
+ * the household's {@code supportedCnpjs} set (computed once in the service): a
+ * receipt is SUPPORTED when its CNPJ maps to a grocery/pharmacy market, OTHER
+ * otherwise (incl. unregistered / photo receipts with no CNPJ). ALL ignores it.
+ */
 @Repository
 public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
+
+    // The household's CONFIRMED-receipt CNPJs that belong to an index-supported
+    // (grocery/pharmacy) segment. Used to partition every aggregation below.
+    @Query("""
+        SELECT DISTINCT r.cnpjEmitente
+        FROM Receipt r
+        JOIN MarketLocation ml ON ml.cnpj = r.cnpjEmitente
+        WHERE r.household.id = :householdId
+          AND r.status = 'CONFIRMED'
+          AND ml.segment IN :segments
+    """)
+    List<String> supportedCnpjs(@Param("householdId") UUID householdId,
+                                @Param("segments") Collection<MerchantSegment> segments);
 
     @Query("""
         SELECT COALESCE(SUM(ri.totalPrice), 0)
@@ -24,10 +48,15 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
           AND ri.excludedFromPersonal = false
           AND r.issuedAt >= :from
           AND r.issuedAt <= :to
+          AND (:scope = 'ALL'
+               OR (:scope = 'SUPPORTED' AND r.cnpjEmitente IN :supportedCnpjs)
+               OR (:scope = 'OTHER' AND (r.cnpjEmitente IS NULL OR r.cnpjEmitente NOT IN :supportedCnpjs)))
     """)
     BigDecimal totalSpend(@Param("householdId") UUID householdId,
                           @Param("from") LocalDateTime from,
-                          @Param("to") LocalDateTime to);
+                          @Param("to") LocalDateTime to,
+                          @Param("scope") String scope,
+                          @Param("supportedCnpjs") Collection<String> supportedCnpjs);
 
     @Query("""
         SELECT EXTRACT(YEAR FROM r.issuedAt) AS year,
@@ -42,12 +71,17 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
           AND ri.excludedFromPersonal = false
           AND r.issuedAt >= :from
           AND r.issuedAt <= :to
+          AND (:scope = 'ALL'
+               OR (:scope = 'SUPPORTED' AND r.cnpjEmitente IN :supportedCnpjs)
+               OR (:scope = 'OTHER' AND (r.cnpjEmitente IS NULL OR r.cnpjEmitente NOT IN :supportedCnpjs)))
         GROUP BY EXTRACT(YEAR FROM r.issuedAt), EXTRACT(MONTH FROM r.issuedAt)
         ORDER BY year ASC, month ASC
     """)
     List<Object[]> spendByMonth(@Param("householdId") UUID householdId,
                                 @Param("from") LocalDateTime from,
-                                @Param("to") LocalDateTime to);
+                                @Param("to") LocalDateTime to,
+                                @Param("scope") String scope,
+                                @Param("supportedCnpjs") Collection<String> supportedCnpjs);
 
     // Receipt-level discount aggregations. These query Receipt directly (NO item
     // join) so the receipt-level discountTotal is counted once per receipt, never
@@ -61,10 +95,15 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
           AND r.status = 'CONFIRMED'
           AND r.issuedAt >= :from
           AND r.issuedAt <= :to
+          AND (:scope = 'ALL'
+               OR (:scope = 'SUPPORTED' AND r.cnpjEmitente IN :supportedCnpjs)
+               OR (:scope = 'OTHER' AND (r.cnpjEmitente IS NULL OR r.cnpjEmitente NOT IN :supportedCnpjs)))
     """)
     BigDecimal totalDiscount(@Param("householdId") UUID householdId,
                              @Param("from") LocalDateTime from,
-                             @Param("to") LocalDateTime to);
+                             @Param("to") LocalDateTime to,
+                             @Param("scope") String scope,
+                             @Param("supportedCnpjs") Collection<String> supportedCnpjs);
 
     @Query("""
         SELECT EXTRACT(YEAR FROM r.issuedAt) AS year,
@@ -75,11 +114,16 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
           AND r.status = 'CONFIRMED'
           AND r.issuedAt >= :from
           AND r.issuedAt <= :to
+          AND (:scope = 'ALL'
+               OR (:scope = 'SUPPORTED' AND r.cnpjEmitente IN :supportedCnpjs)
+               OR (:scope = 'OTHER' AND (r.cnpjEmitente IS NULL OR r.cnpjEmitente NOT IN :supportedCnpjs)))
         GROUP BY EXTRACT(YEAR FROM r.issuedAt), EXTRACT(MONTH FROM r.issuedAt)
     """)
     List<Object[]> discountByMonth(@Param("householdId") UUID householdId,
                                    @Param("from") LocalDateTime from,
-                                   @Param("to") LocalDateTime to);
+                                   @Param("to") LocalDateTime to,
+                                   @Param("scope") String scope,
+                                   @Param("supportedCnpjs") Collection<String> supportedCnpjs);
 
     @Query("""
         SELECT EXTRACT(YEAR FROM r.issuedAt) AS year,
@@ -90,11 +134,16 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
           AND r.status = 'CONFIRMED'
           AND r.issuedAt >= :from
           AND r.issuedAt <= :to
+          AND (:scope = 'ALL'
+               OR (:scope = 'SUPPORTED' AND r.cnpjEmitente IN :supportedCnpjs)
+               OR (:scope = 'OTHER' AND (r.cnpjEmitente IS NULL OR r.cnpjEmitente NOT IN :supportedCnpjs)))
         GROUP BY EXTRACT(YEAR FROM r.issuedAt), EXTRACT(WEEK FROM r.issuedAt)
     """)
     List<Object[]> discountByWeek(@Param("householdId") UUID householdId,
                                   @Param("from") LocalDateTime from,
-                                  @Param("to") LocalDateTime to);
+                                  @Param("to") LocalDateTime to,
+                                  @Param("scope") String scope,
+                                  @Param("supportedCnpjs") Collection<String> supportedCnpjs);
 
     @Query("""
         SELECT r.cnpjEmitente AS cnpj,
@@ -104,11 +153,16 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
           AND r.status = 'CONFIRMED'
           AND r.issuedAt >= :from
           AND r.issuedAt <= :to
+          AND (:scope = 'ALL'
+               OR (:scope = 'SUPPORTED' AND r.cnpjEmitente IN :supportedCnpjs)
+               OR (:scope = 'OTHER' AND (r.cnpjEmitente IS NULL OR r.cnpjEmitente NOT IN :supportedCnpjs)))
         GROUP BY r.cnpjEmitente
     """)
     List<Object[]> discountByMarket(@Param("householdId") UUID householdId,
                                     @Param("from") LocalDateTime from,
-                                    @Param("to") LocalDateTime to);
+                                    @Param("to") LocalDateTime to,
+                                    @Param("scope") String scope,
+                                    @Param("supportedCnpjs") Collection<String> supportedCnpjs);
 
     @Query("""
         SELECT r.cnpjEmitente AS cnpj,
@@ -123,12 +177,17 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
           AND ri.excludedFromPersonal = false
           AND r.issuedAt >= :from
           AND r.issuedAt <= :to
+          AND (:scope = 'ALL'
+               OR (:scope = 'SUPPORTED' AND r.cnpjEmitente IN :supportedCnpjs)
+               OR (:scope = 'OTHER' AND (r.cnpjEmitente IS NULL OR r.cnpjEmitente NOT IN :supportedCnpjs)))
         GROUP BY r.cnpjEmitente
         ORDER BY total DESC
     """)
     List<Object[]> spendByMarket(@Param("householdId") UUID householdId,
                                  @Param("from") LocalDateTime from,
-                                 @Param("to") LocalDateTime to);
+                                 @Param("to") LocalDateTime to,
+                                 @Param("scope") String scope,
+                                 @Param("supportedCnpjs") Collection<String> supportedCnpjs);
 
     // COALESCE must yield the ProductCategory ENUM (the result is cast to
     // ProductCategory in InsightsService), so the null fallback needs the
@@ -152,12 +211,17 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
           AND ri.excludedFromPersonal = false
           AND r.issuedAt >= :from
           AND r.issuedAt <= :to
+          AND (:scope = 'ALL'
+               OR (:scope = 'SUPPORTED' AND r.cnpjEmitente IN :supportedCnpjs)
+               OR (:scope = 'OTHER' AND (r.cnpjEmitente IS NULL OR r.cnpjEmitente NOT IN :supportedCnpjs)))
         GROUP BY COALESCE(ri.categoryAtConfirmation, p.category, com.relyon.economizaai.model.enums.ProductCategory.OTHER)
         ORDER BY total DESC
     """)
     List<Object[]> spendByCategory(@Param("householdId") UUID householdId,
                                    @Param("from") LocalDateTime from,
-                                   @Param("to") LocalDateTime to);
+                                   @Param("to") LocalDateTime to,
+                                   @Param("scope") String scope,
+                                   @Param("supportedCnpjs") Collection<String> supportedCnpjs);
 
     // Product-granularity spend, used by the HOUSEHOLD category lens: the global
     // p.category is returned per product so InsightsService can re-bucket by the
@@ -178,11 +242,16 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
           AND ri.excludedFromPersonal = false
           AND r.issuedAt >= :from
           AND r.issuedAt <= :to
+          AND (:scope = 'ALL'
+               OR (:scope = 'SUPPORTED' AND r.cnpjEmitente IN :supportedCnpjs)
+               OR (:scope = 'OTHER' AND (r.cnpjEmitente IS NULL OR r.cnpjEmitente NOT IN :supportedCnpjs)))
         GROUP BY p.id, COALESCE(ri.categoryAtConfirmation, p.category)
     """)
     List<Object[]> spendByProduct(@Param("householdId") UUID householdId,
                                   @Param("from") LocalDateTime from,
-                                  @Param("to") LocalDateTime to);
+                                  @Param("to") LocalDateTime to,
+                                  @Param("scope") String scope,
+                                  @Param("supportedCnpjs") Collection<String> supportedCnpjs);
 
     @Query("""
         SELECT r.issuedAt AS issuedAt,
@@ -219,10 +288,15 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
           AND ri.excludedFromPersonal = false
           AND r.issuedAt >= :from
           AND r.issuedAt <= :to
+          AND (:scope = 'ALL'
+               OR (:scope = 'SUPPORTED' AND r.cnpjEmitente IN :supportedCnpjs)
+               OR (:scope = 'OTHER' AND (r.cnpjEmitente IS NULL OR r.cnpjEmitente NOT IN :supportedCnpjs)))
         GROUP BY EXTRACT(YEAR FROM r.issuedAt), EXTRACT(WEEK FROM r.issuedAt)
         ORDER BY year ASC, week ASC
     """)
     List<Object[]> spendByWeek(@Param("householdId") UUID householdId,
                                @Param("from") LocalDateTime from,
-                               @Param("to") LocalDateTime to);
+                               @Param("to") LocalDateTime to,
+                               @Param("scope") String scope,
+                               @Param("supportedCnpjs") Collection<String> supportedCnpjs);
 }

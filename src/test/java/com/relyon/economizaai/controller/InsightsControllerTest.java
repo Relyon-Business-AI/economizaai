@@ -61,7 +61,7 @@ class InsightsControllerTest {
                 List.of(new SpendInsightsResponse.MarketBucket("12345678000190", "Mercado X", "Mercado X", new BigDecimal("250.50"), new BigDecimal("5.00"), 3L)),
                 List.of(SpendInsightsResponse.CategoryBucket.ofEnum(ProductCategory.GROCERIES, new BigDecimal("100.00"), 5L))
         );
-        when(insightsService.spend(any(User.class), any(), any())).thenReturn(response);
+        when(insightsService.spend(any(User.class), any(), any(), any())).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/insights/spend")
                         .with(SecurityMockMvcRequestPostProcessors.user(user)))
@@ -76,7 +76,7 @@ class InsightsControllerTest {
     void topMarkets_respectsLimit() throws Exception {
         var user = buildUser();
         var bucket = new SpendInsightsResponse.MarketBucket("123", "Mercado X", "Mercado X", new BigDecimal("100"), new BigDecimal("2.00"), 2L);
-        when(insightsService.topMarkets(any(User.class), any(), any(), anyInt())).thenReturn(List.of(bucket));
+        when(insightsService.topMarkets(any(User.class), any(), any(), anyInt(), any())).thenReturn(List.of(bucket));
 
         mockMvc.perform(get("/api/v1/insights/markets/top?limit=3")
                         .with(SecurityMockMvcRequestPostProcessors.user(user)))
@@ -89,7 +89,7 @@ class InsightsControllerTest {
         var user = buildUser();
         var market = new MarketDiscountResponse("123", "Mercado X", "Mercado X",
                 new BigDecimal("100.00"), new BigDecimal("9.00"), new BigDecimal("0.0900"), 2L);
-        when(insightsService.topMarketsByDiscount(any(User.class), any(), any(), anyInt()))
+        when(insightsService.topMarketsByDiscount(any(User.class), any(), any(), anyInt(), any()))
                 .thenReturn(List.of(market));
 
         mockMvc.perform(get("/api/v1/insights/markets/top-discounts?limit=5")
@@ -104,7 +104,7 @@ class InsightsControllerTest {
     void topCategories_returnsList_defaultsToHouseholdLens() throws Exception {
         var user = buildUser();
         var bucket = SpendInsightsResponse.CategoryBucket.ofEnum(ProductCategory.PRODUCE, new BigDecimal("50"), 7L);
-        when(insightsService.topCategories(any(User.class), any(), any(), anyInt(), eq(CategoryView.HOUSEHOLD)))
+        when(insightsService.topCategories(any(User.class), any(), any(), anyInt(), eq(CategoryView.HOUSEHOLD), any()))
                 .thenReturn(List.of(bucket));
 
         mockMvc.perform(get("/api/v1/insights/categories/top")
@@ -118,7 +118,7 @@ class InsightsControllerTest {
     void topCategories_passesGlobalLensThrough() throws Exception {
         var user = buildUser();
         var bucket = SpendInsightsResponse.CategoryBucket.ofEnum(ProductCategory.BEVERAGES, new BigDecimal("12"), 3L);
-        when(insightsService.topCategories(any(User.class), any(), any(), anyInt(), eq(CategoryView.GLOBAL)))
+        when(insightsService.topCategories(any(User.class), any(), any(), anyInt(), eq(CategoryView.GLOBAL), any()))
                 .thenReturn(List.of(bucket));
 
         mockMvc.perform(get("/api/v1/insights/categories/top?categoryView=GLOBAL")

@@ -208,7 +208,8 @@ public class AdminUserService {
         var householdId = user.getHousehold().getId();
         var receipts = countReceiptsByStatus(householdId);
         var spend = insightsRepository.totalSpend(
-                householdId, LocalDateTime.now().minusDays(SPEND_WINDOW_DAYS), LocalDateTime.now());
+                householdId, LocalDateTime.now().minusDays(SPEND_WINDOW_DAYS), LocalDateTime.now(),
+                "ALL", List.of("__none__"));
         var memberCount = userRepository.countByHouseholdId(householdId);
         return AdminUserDetailResponse.from(user, memberCount, receipts, spend);
     }

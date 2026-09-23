@@ -32,6 +32,11 @@ public class MerchantSupportGate {
     private static final Set<MerchantSegment> SUPPORTED_SEGMENTS =
             Set.of(MerchantSegment.SUPERMARKET, MerchantSegment.PHARMACY, MerchantSegment.FOOD_RETAIL);
 
+    /** Segments that feed the index and count as "mercado/farmácia" — our specialty. */
+    public static Set<MerchantSegment> supportedSegments() {
+        return SUPPORTED_SEGMENTS;
+    }
+
     private final MarketLocationRepository marketLocationRepository;
     private final CnpjActivityClient cnpjActivityClient;
 

@@ -7,11 +7,13 @@ import com.relyon.economizaai.dto.response.SpendInsightsResponse.CategoryBucket;
 import com.relyon.economizaai.exception.ProductNotFoundException;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.CategoryView;
+import com.relyon.economizaai.model.enums.MarketScope;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.config.CachingConfig;
 import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.service.geo.MarketNameService;
+import com.relyon.economizaai.service.geo.MerchantSupportGate;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -47,32 +49,52 @@ public class InsightsService {
     private final SubscriptionGateService subscriptionGate;
     private final HouseholdProductAliasService householdProductAliasService;
 
+    /** Backwards-compatible entry point — every segment (ALL scope). */
+    @Transactional(readOnly = true)
+    public SpendInsightsResponse spend(User user, LocalDateTime from, LocalDateTime to) {
+        return spend(user, from, to, MarketScope.ALL);
+    }
+
     @Transactional(readOnly = true)
     @Cacheable(value = CachingConfig.INSIGHTS_SPEND_CACHE,
-            key = "#user.household.id + ':' + @householdCacheGen.get(#user.household.id) + ':' + #user.subscriptionTier + ':' + #from + ':' + #to")
-    public SpendInsightsResponse spend(User user, LocalDateTime from, LocalDateTime to) {
+            key = "#user.household.id + ':' + @householdCacheGen.get(#user.household.id) + ':' + #user.subscriptionTier + ':' + #scope + ':' + #from + ':' + #to")
+    public SpendInsightsResponse spend(User user, LocalDateTime from, LocalDateTime to, MarketScope scope) {
         var householdId = user.getHousehold().getId();
         // FREE tier: clamp the lower bound to the allowed history window. Tier is
         // part of the cache key so FREE/PRO results don't collide.
         from = subscriptionGate.clampFrom(user, from);
         var fromBound = from != null ? from : EPOCH_FLOOR;
         var toBound = to != null ? to : EPOCH_CEIL;
-        var total = insightsRepository.totalSpend(householdId, fromBound, toBound);
-        var totalDiscount = toBigDecimal(insightsRepository.totalDiscount(householdId, fromBound, toBound));
-        var byMonth = buildMonthBuckets(householdId, fromBound, toBound);
-        var byWeek = buildWeekBuckets(householdId, fromBound, toBound);
-        var byMarket = buildMarketBuckets(householdId, fromBound, toBound);
-        var byCategory = buildCategoryBuckets(householdId, fromBound, toBound);
-        log.debug("Spend insights for household {} (from={}, to={}): total={} discount={}",
-                householdId, from, to, total, totalDiscount);
+        var scopeName = scope.name();
+        var cnpjs = scopeCnpjs(householdId, scope);
+        var total = insightsRepository.totalSpend(householdId, fromBound, toBound, scopeName, cnpjs);
+        var totalDiscount = toBigDecimal(insightsRepository.totalDiscount(householdId, fromBound, toBound, scopeName, cnpjs));
+        var byMonth = buildMonthBuckets(householdId, fromBound, toBound, scopeName, cnpjs);
+        var byWeek = buildWeekBuckets(householdId, fromBound, toBound, scopeName, cnpjs);
+        var byMarket = buildMarketBuckets(householdId, fromBound, toBound, scopeName, cnpjs);
+        var byCategory = buildCategoryBuckets(householdId, fromBound, toBound, scopeName, cnpjs);
+        log.debug("Spend insights for household {} (from={}, to={}, scope={}): total={} discount={}",
+                householdId, from, to, scope, total, totalDiscount);
         return new SpendInsightsResponse(from, to, total, totalDiscount, byMonth, byWeek, byMarket, byCategory);
     }
 
+    /**
+     * The CNPJ set the scope predicate filters on. For SUPPORTED/OTHER it's the
+     * household's grocery/pharmacy CNPJs; for ALL (and when the set is empty) a
+     * sentinel keeps the {@code IN}/{@code NOT IN} well-formed (never an empty list).
+     */
+    private List<String> scopeCnpjs(UUID householdId, MarketScope scope) {
+        if (scope == MarketScope.ALL) return List.of("__none__");
+        var supported = insightsRepository.supportedCnpjs(householdId, MerchantSupportGate.supportedSegments());
+        return supported.isEmpty() ? List.of("__none__") : supported;
+    }
+
     private List<SpendInsightsResponse.MonthBucket> buildMonthBuckets(UUID householdId,
-                                                                      LocalDateTime fromBound, LocalDateTime toBound) {
-        var discountByMonth = discountMap(insightsRepository.discountByMonth(householdId, fromBound, toBound),
+                                                                      LocalDateTime fromBound, LocalDateTime toBound,
+                                                                      String scope, List<String> cnpjs) {
+        var discountByMonth = discountMap(insightsRepository.discountByMonth(householdId, fromBound, toBound, scope, cnpjs),
                 row -> pairKey(((Number) row[0]).intValue(), ((Number) row[1]).intValue()));
-        return insightsRepository.spendByMonth(householdId, fromBound, toBound).stream()
+        return insightsRepository.spendByMonth(householdId, fromBound, toBound, scope, cnpjs).stream()
                 .map(row -> new SpendInsightsResponse.MonthBucket(
                         ((Number) row[0]).intValue(),
                         ((Number) row[1]).intValue(),
@@ -83,10 +105,11 @@ public class InsightsService {
     }
 
     private List<SpendInsightsResponse.WeekBucket> buildWeekBuckets(UUID householdId,
-                                                                    LocalDateTime fromBound, LocalDateTime toBound) {
-        var discountByWeek = discountMap(insightsRepository.discountByWeek(householdId, fromBound, toBound),
+                                                                    LocalDateTime fromBound, LocalDateTime toBound,
+                                                                    String scope, List<String> cnpjs) {
+        var discountByWeek = discountMap(insightsRepository.discountByWeek(householdId, fromBound, toBound, scope, cnpjs),
                 row -> pairKey(((Number) row[0]).intValue(), ((Number) row[1]).intValue()));
-        return insightsRepository.spendByWeek(householdId, fromBound, toBound).stream()
+        return insightsRepository.spendByWeek(householdId, fromBound, toBound, scope, cnpjs).stream()
                 .map(row -> new SpendInsightsResponse.WeekBucket(
                         ((Number) row[0]).intValue(),
                         ((Number) row[1]).intValue(),
@@ -97,10 +120,11 @@ public class InsightsService {
     }
 
     private List<SpendInsightsResponse.MarketBucket> buildMarketBuckets(UUID householdId,
-                                                                        LocalDateTime fromBound, LocalDateTime toBound) {
-        var discountByMarket = discountMap(insightsRepository.discountByMarket(householdId, fromBound, toBound),
+                                                                        LocalDateTime fromBound, LocalDateTime toBound,
+                                                                        String scope, List<String> cnpjs) {
+        var discountByMarket = discountMap(insightsRepository.discountByMarket(householdId, fromBound, toBound, scope, cnpjs),
                 row -> (String) row[0]);
-        var marketBuckets = insightsRepository.spendByMarket(householdId, fromBound, toBound).stream()
+        var marketBuckets = insightsRepository.spendByMarket(householdId, fromBound, toBound, scope, cnpjs).stream()
                 .map(row -> new SpendInsightsResponse.MarketBucket(
                         (String) row[0],
                         (String) row[1],
@@ -121,8 +145,9 @@ public class InsightsService {
     }
 
     private List<CategoryBucket> buildCategoryBuckets(UUID householdId,
-                                                      LocalDateTime fromBound, LocalDateTime toBound) {
-        return insightsRepository.spendByCategory(householdId, fromBound, toBound).stream()
+                                                      LocalDateTime fromBound, LocalDateTime toBound,
+                                                      String scope, List<String> cnpjs) {
+        return insightsRepository.spendByCategory(householdId, fromBound, toBound, scope, cnpjs).stream()
                 .map(row -> SpendInsightsResponse.CategoryBucket.ofEnum(
                         (ProductCategory) row[0],
                         toBigDecimal(row[1]),
@@ -151,7 +176,13 @@ public class InsightsService {
 
     @Transactional(readOnly = true)
     public List<SpendInsightsResponse.MarketBucket> topMarkets(User user, LocalDateTime from, LocalDateTime to, int limit) {
-        return spend(user, from, to).byMarket().stream().limit(Math.max(0, limit)).toList();
+        return topMarkets(user, from, to, limit, MarketScope.ALL);
+    }
+
+    @Transactional(readOnly = true)
+    public List<SpendInsightsResponse.MarketBucket> topMarkets(User user, LocalDateTime from, LocalDateTime to,
+                                                               int limit, MarketScope scope) {
+        return spend(user, from, to, scope).byMarket().stream().limit(Math.max(0, limit)).toList();
     }
 
     /**
@@ -161,7 +192,13 @@ public class InsightsService {
      */
     @Transactional(readOnly = true)
     public List<MarketDiscountResponse> topMarketsByDiscount(User user, LocalDateTime from, LocalDateTime to, int limit) {
-        return spend(user, from, to).byMarket().stream()
+        return topMarketsByDiscount(user, from, to, limit, MarketScope.ALL);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MarketDiscountResponse> topMarketsByDiscount(User user, LocalDateTime from, LocalDateTime to,
+                                                             int limit, MarketScope scope) {
+        return spend(user, from, to, scope).byMarket().stream()
                 .filter(bucket -> bucket.discount() != null && bucket.discount().signum() > 0)
                 .sorted(Comparator.comparing(SpendInsightsResponse.MarketBucket::discount).reversed())
                 .limit(Math.max(0, limit))
@@ -169,20 +206,26 @@ public class InsightsService {
                 .toList();
     }
 
-    /** Backwards-compatible entry point — uses the default HOUSEHOLD lens. */
+    /** Backwards-compatible entry point — uses the default HOUSEHOLD lens, ALL scope. */
     @Transactional(readOnly = true)
     public List<CategoryBucket> topCategories(User user, LocalDateTime from, LocalDateTime to, int limit) {
-        return topCategories(user, from, to, limit, CategoryView.HOUSEHOLD);
+        return topCategories(user, from, to, limit, CategoryView.HOUSEHOLD, MarketScope.ALL);
     }
 
     @Transactional(readOnly = true)
     public List<CategoryBucket> topCategories(User user, LocalDateTime from, LocalDateTime to,
                                               int limit, CategoryView categoryView) {
+        return topCategories(user, from, to, limit, categoryView, MarketScope.ALL);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CategoryBucket> topCategories(User user, LocalDateTime from, LocalDateTime to,
+                                              int limit, CategoryView categoryView, MarketScope scope) {
         var safeLimit = Math.max(0, limit);
         if (categoryView == CategoryView.GLOBAL) {
-            return spend(user, from, to).byCategory().stream().limit(safeLimit).toList();
+            return spend(user, from, to, scope).byCategory().stream().limit(safeLimit).toList();
         }
-        return householdCategoryBuckets(user, from, to).stream().limit(safeLimit).toList();
+        return householdCategoryBuckets(user, from, to, scope).stream().limit(safeLimit).toList();
     }
 
     /**
@@ -192,12 +235,12 @@ public class InsightsService {
      * correct and free of the double-counting a SQL group-by-p.category would
      * cause once overrides exist.
      */
-    private List<CategoryBucket> householdCategoryBuckets(User user, LocalDateTime from, LocalDateTime to) {
+    private List<CategoryBucket> householdCategoryBuckets(User user, LocalDateTime from, LocalDateTime to, MarketScope scope) {
         var householdId = user.getHousehold().getId();
         from = subscriptionGate.clampFrom(user, from);
         var fromBound = from != null ? from : EPOCH_FLOOR;
         var toBound = to != null ? to : EPOCH_CEIL;
-        var rows = insightsRepository.spendByProduct(householdId, fromBound, toBound);
+        var rows = insightsRepository.spendByProduct(householdId, fromBound, toBound, scope.name(), scopeCnpjs(householdId, scope));
         var productIds = rows.stream()
                 .map(row -> (UUID) row[0])
                 .filter(Objects::nonNull)
