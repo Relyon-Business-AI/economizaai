@@ -88,6 +88,7 @@ class CnpjActivityClientTest {
         assertEquals(MerchantSegment.FOOD_RETAIL, CnpjActivityClient.segmentFromCnae(List.of("4723700"))); // bebidas
         assertEquals(MerchantSegment.FOOD_RETAIL, CnpjActivityClient.segmentFromCnae(List.of("4724500"))); // hortifrúti
         assertEquals(MerchantSegment.FOOD_RETAIL, CnpjActivityClient.segmentFromCnae(List.of("4729602"))); // conveniência
+        assertEquals(MerchantSegment.FOOD_RETAIL, CnpjActivityClient.segmentFromCnae(List.of("4691500"))); // atacarejo (atacado c/ predominância de alimentos)
     }
 
     @Test

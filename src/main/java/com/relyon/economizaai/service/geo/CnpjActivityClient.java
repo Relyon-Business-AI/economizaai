@@ -129,8 +129,12 @@ public class CnpjActivityClient {
         return digits.length() == 7 ? digits : null;
     }
 
+    // 4721-4724/4729 = varejo de alimentos (padaria, açougue, bebidas, hortifrúti, conveniência).
+    // 4691 = atacado de mercadorias em geral COM PREDOMINÂNCIA DE ALIMENTOS — os atacarejos /
+    // cash-and-carry (Atacadão/Assaí-like) registram-se assim; são fonte de preço de mercado
+    // legítima, então contam como suportados. Um 4691 B2B-puro atípico se bloqueia via override.
     private static final List<String> FOOD_RETAIL_PREFIXES =
-            List.of("4721", "4722", "4723", "4724", "4729");
+            List.of("4691", "4721", "4722", "4723", "4724", "4729");
 
     /**
      * Pure mapping (CNAE prefix → segment), extracted for testability. Classifies by
