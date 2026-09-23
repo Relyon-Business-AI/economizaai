@@ -22,6 +22,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -118,11 +120,23 @@ public class MarketLocationService {
         log.info("geocode.batch.done attempted={}", pending.size());
     }
 
-    @Transactional
+    /**
+     * Never holds a DB transaction across the Nominatim HTTP call — that would pin a
+     * Hikari connection for the whole round-trip and, under load, starve the pool.
+     * The query is built from the already-loaded entity, the geocode runs untransacted,
+     * and only the result is persisted in a short transaction.
+     */
     public void geocodeOne(MarketLocation market) {
-        market.setGeocodeAttempts(market.getGeocodeAttempts() + 1);
         var query = buildGeocodeQuery(market);
         var result = geocoder.geocode(query);
+        self.persistGeocodeResult(market.getId(), result);
+    }
+
+    @Transactional
+    public void persistGeocodeResult(UUID marketId, Optional<NominatimGeocoder.GeocodeResult> result) {
+        var market = repository.findById(marketId).orElse(null);
+        if (market == null) return;
+        market.setGeocodeAttempts(market.getGeocodeAttempts() + 1);
         if (result.isPresent()) {
             var hit = result.get();
             market.setLatitude(hit.latitude());
