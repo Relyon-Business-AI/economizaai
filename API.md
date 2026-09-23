@@ -391,12 +391,11 @@ POST /api/v1/receipts/import/nfg-csv   (multipart/form-data, field "file")
   (not RS / unsupported model), `receipt.import.duplicate`, `receipt.import.merchant_unsupported`,
   `receipt.import.cap_reached`. `reasonMessage` is already localized.
 - **RS only** today; other UFs → `receipt.import.unsupported`.
-- **Segment policy (import is stricter than a live scan).** After reconsult each nota is gated:
-  grocery/pharmacy/food-retail (NFC-e 65) and **e-commerce (NF-e model 55, e.g. Amazon)** are
-  imported; any other physical merchant → `FAILED_PARSE` with a localized reason
-  (`receipt.import.segment_food_service` / `segment_other` / `segment_unknown`). E-commerce is
-  identified by the **fiscal model (55)**, not the segment, and lands in personal history but
-  stays **out of the collaborative index** (non-grocery). Failed rows carry `parseErrorMessage`.
+- **Segment policy (same for scan and import).** Any merchant is accepted into the user's personal
+  history — restaurants, pet, apparel, e-commerce, etc. Only an explicit **admin BLOCKED override**
+  rejects. What's gated is **index contribution**: only grocery/pharmacy (supermarket, pharmacy,
+  food-retail) feed the collaborative price index and our algorithms/metrics; everything else is
+  "GREY" (kept in personal history, out of the shared index).
 
 **Persistent staging.** Imported notas carry `origin: "IMPORT"` and stay in a staging
 list until the user acts on them — the import screen rehydrates from the server, so

@@ -15,7 +15,6 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -43,35 +42,15 @@ class MerchantSupportGateTest {
     }
 
     @Test
-    void foodServiceIsBlocked() {
-        assertEquals(SupportStatus.BLOCKED, gate.statusOf(market(MerchantSegment.FOOD_SERVICE, null)));
-        assertTrue(gate.isBlocked(market(MerchantSegment.FOOD_SERVICE, null)));
-    }
-
-    @Test
-    void importKeepsEcommerceRegardlessOfSegment() {
-        // NF-e model 55 = online purchase — kept on purpose for the comparison bet.
-        assertNull(gate.importRejectionKey("55", MerchantSegment.OTHER));
-        assertNull(gate.importRejectionKey("55", MerchantSegment.UNKNOWN));
-    }
-
-    @Test
-    void importKeepsGroceryAndPharmacy() {
-        assertNull(gate.importRejectionKey("65", MerchantSegment.SUPERMARKET));
-        assertNull(gate.importRejectionKey("65", MerchantSegment.PHARMACY));
-        assertNull(gate.importRejectionKey("65", MerchantSegment.FOOD_RETAIL));
-    }
-
-    @Test
-    void importRejectsPhysicalNonGroceryWithSegmentReason() {
-        assertEquals("receipt.import.segment_food_service",
-                gate.importRejectionKey("65", MerchantSegment.FOOD_SERVICE));
-        assertEquals("receipt.import.segment_other",
-                gate.importRejectionKey("65", MerchantSegment.OTHER));
-        assertEquals("receipt.import.segment_unknown",
-                gate.importRejectionKey("65", MerchantSegment.UNKNOWN));
-        assertEquals("receipt.import.segment_unknown",
-                gate.importRejectionKey("65", null));
+    void nothingIsAutoBlocked_onlyAdminOverride() {
+        // Food service is no longer auto-blocked — it's accepted (GREY), just out of the index.
+        assertEquals(SupportStatus.GREY, gate.statusOf(market(MerchantSegment.FOOD_SERVICE, null)));
+        assertEquals(SupportStatus.GREY, gate.statusOf(market(MerchantSegment.OTHER, null)));
+        assertFalse(gate.isBlocked(market(MerchantSegment.FOOD_SERVICE, null)));
+        // Only an explicit admin BLOCKED override rejects.
+        assertEquals(SupportStatus.BLOCKED,
+                gate.statusOf(market(MerchantSegment.SUPERMARKET, MerchantSupportOverride.BLOCKED)));
+        assertTrue(gate.isBlocked(market(MerchantSegment.OTHER, MerchantSupportOverride.BLOCKED)));
     }
 
     @Test
@@ -91,8 +70,9 @@ class MerchantSupportGateTest {
 
     @Test
     void isKnownBlockedCnpj_trueOnlyForRegisteredBlockedMerchant() {
+        // Only an explicit admin BLOCKED override rejects — segment alone never does anymore.
         when(marketLocationRepository.findByCnpj("22222222000122"))
-                .thenReturn(Optional.of(market(MerchantSegment.FOOD_SERVICE, null)));
+                .thenReturn(Optional.of(market(MerchantSegment.OTHER, MerchantSupportOverride.BLOCKED)));
         when(marketLocationRepository.findByCnpj("33333333000133")).thenReturn(Optional.empty());
 
         assertTrue(gate.isKnownBlockedCnpj("22222222000122"));

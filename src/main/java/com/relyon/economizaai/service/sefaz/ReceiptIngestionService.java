@@ -8,7 +8,6 @@ import com.relyon.economizaai.exception.ReceiptParseException;
 import com.relyon.economizaai.exception.UnsupportedMerchantException;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
-import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.extraction.EanCatalogEnrichmentService;
@@ -143,7 +142,7 @@ public class ReceiptIngestionService {
             }
             try {
                 var parsed = sefazIngestionService.parse(fetched, userId);
-                if (rejectUnsupportedMerchant(receiptId, receipt.getOrigin(), receipt.getChaveAcesso(), parsed)) {
+                if (rejectUnsupportedMerchant(receiptId, parsed)) {
                     return;
                 }
                 warmEanCatalog(parsed);
@@ -203,38 +202,28 @@ public class ReceiptIngestionService {
      * product deliberately stores nothing from unsupported receipts. Grey-zone
      * merchants pass through (their index exclusion happens at confirm time).
      */
-    private boolean rejectUnsupportedMerchant(UUID receiptId, ReceiptOrigin origin, String chave, ParsedReceipt parsed) {
+    private boolean rejectUnsupportedMerchant(UUID receiptId, ParsedReceipt parsed) {
         var market = marketLocationService.resolveForIngest(
                 parsed.cnpjEmitente(), parsed.marketName(), parsed.marketAddress());
-        // Bulk import is stricter than a live scan: only grocery/pharmacy or e-commerce (NF-e 55).
-        if (origin == ReceiptOrigin.IMPORT) {
-            var segment = market == null ? null : market.getSegment();
-            var rejectionKey = merchantSupportGate.importRejectionKey(ChaveAcessoParser.extractModel(chave), segment);
-            if (rejectionKey == null) return false;
-            persistMerchantRejection(receiptId, parsed, rejectionKey);
-            log.info("import rejected reason={} segment={} cnpj={} market='{}'",
-                    rejectionKey, segment, parsed.cnpjEmitente(), parsed.marketName());
-            return true;
-        }
+        // Accept any merchant into the user's history; only an explicit admin BLOCKED
+        // override rejects. Grocery/pharmacy vs the rest is an index-contribution concern
+        // (MerchantSupportGate#contributesToIndex), not an ingestion gate.
         if (!merchantSupportGate.isBlocked(market)) {
             return false;
         }
-        persistMerchantRejection(receiptId, parsed, new UnsupportedMerchantException().getMessageKey());
-        log.info("ingest rejected reason=merchant_unsupported segment={} cnpj={} market='{}'",
-                market.getSegment(), parsed.cnpjEmitente(), parsed.marketName());
-        return true;
-    }
-
-    private void persistMerchantRejection(UUID receiptId, ParsedReceipt parsed, String reasonKey) {
+        var reason = new UnsupportedMerchantException();
         transactionTemplate.executeWithoutResult(txStatus -> {
             var receipt = loadIfProcessing(receiptId);
             if (receipt == null) return;
             receipt.setCnpjEmitente(parsed.cnpjEmitente());
             receipt.setMarketName(parsed.marketName());
-            receipt.setParseErrorReason(reasonKey + ":");
+            receipt.setParseErrorReason(reason.getMessageKey() + ":");
             receipt.setStatus(ReceiptStatus.FAILED_PARSE);
             receiptRepository.save(receipt);
         });
+        log.info("ingest rejected reason=merchant_unsupported segment={} cnpj={} market='{}'",
+                market.getSegment(), parsed.cnpjEmitente(), parsed.marketName());
+        return true;
     }
 
     private void persistParsed(UUID receiptId, ParsedReceipt parsed) {
