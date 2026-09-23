@@ -16,6 +16,26 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-23 — dashboard/insights ganham `scope` (mercado/farmácia vs outras notas)
+
+Preparo pra separar o dashboard: **Início** vai mostrar só mercado/farmácia e uma tela "Outras
+notas" mostra o resto — cada um com seus gráficos/valores. **Aditivo e retrocompatível: default
+`scope=ALL` = comportamento atual, zero mudança pra quem não passa o param.**
+
+- Novo param opcional **`scope`** (`ALL` | `SUPPORTED` | `OTHER`) em:
+  `GET /dashboard`, `GET /insights/spend`, `GET /insights/markets/top`,
+  `GET /insights/markets/top-discounts`, `GET /insights/categories/top`.
+  - `SUPPORTED` = supermercado + farmácia + varejo de alimentos (nossa especialidade / o que
+    alimenta o índice). `OTHER` = todo o resto (restaurante, pet, roupa, e-commerce, não-registrado).
+- Filtra pelo **segmento do emitente** (não pela categoria do produto): um produto de limpeza
+  comprado no mercado conta em `SUPPORTED`; um item qualquer de uma loja de roupa conta em `OTHER`.
+- Cache é por-scope (sem cruzar dados entre as visões).
+
+FE por enquanto só usa isso pra admin (Início `SUPPORTED` + menu "Outras notas" `OTHER`); usuário
+comum segue vendo tudo (`ALL`).
+
+---
+
 ## 2026-09-23 — aceitar QUALQUER segmento na ingestão; índice segue só mercado/farmácia
 
 Revertemos a régua estrita de import (abaixo) por uma política mais simples e consistente entre

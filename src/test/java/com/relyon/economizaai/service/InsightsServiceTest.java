@@ -67,12 +67,15 @@ class InsightsServiceTest {
         return User.builder().id(UUID.randomUUID()).email("maria@test.com").household(household).build();
     }
 
+    private static final String ALL_SCOPE = "ALL";
+    private static final List<String> ALL_CNPJS = List.of("__none__");
+
     private void stubEmptyAggregates(UUID householdId, LocalDateTime fromBound, LocalDateTime toBound) {
-        lenient().when(insightsRepository.totalSpend(householdId, fromBound, toBound)).thenReturn(BigDecimal.ZERO);
-        lenient().when(insightsRepository.spendByMonth(householdId, fromBound, toBound)).thenReturn(List.of());
-        lenient().when(insightsRepository.spendByWeek(householdId, fromBound, toBound)).thenReturn(List.of());
-        lenient().when(insightsRepository.spendByMarket(householdId, fromBound, toBound)).thenReturn(List.of());
-        lenient().when(insightsRepository.spendByCategory(householdId, fromBound, toBound)).thenReturn(List.of());
+        lenient().when(insightsRepository.totalSpend(householdId, fromBound, toBound, ALL_SCOPE, ALL_CNPJS)).thenReturn(BigDecimal.ZERO);
+        lenient().when(insightsRepository.spendByMonth(householdId, fromBound, toBound, ALL_SCOPE, ALL_CNPJS)).thenReturn(List.of());
+        lenient().when(insightsRepository.spendByWeek(householdId, fromBound, toBound, ALL_SCOPE, ALL_CNPJS)).thenReturn(List.of());
+        lenient().when(insightsRepository.spendByMarket(householdId, fromBound, toBound, ALL_SCOPE, ALL_CNPJS)).thenReturn(List.of());
+        lenient().when(insightsRepository.spendByCategory(householdId, fromBound, toBound, ALL_SCOPE, ALL_CNPJS)).thenReturn(List.of());
     }
 
     @Test
@@ -82,14 +85,14 @@ class InsightsServiceTest {
         var from = LocalDateTime.of(2026, Month.JANUARY, 1, 0, 0);
         var to = LocalDateTime.of(2026, Month.JUNE, 30, 23, 59);
 
-        when(insightsRepository.totalSpend(householdId, from, to)).thenReturn(new BigDecimal("123.45"));
-        when(insightsRepository.spendByMonth(householdId, from, to))
+        when(insightsRepository.totalSpend(householdId, from, to, ALL_SCOPE, ALL_CNPJS)).thenReturn(new BigDecimal("123.45"));
+        when(insightsRepository.spendByMonth(householdId, from, to, ALL_SCOPE, ALL_CNPJS))
                 .thenReturn(List.<Object[]>of(new Object[]{2026, 4, new BigDecimal("50.00"), 2L}));
-        when(insightsRepository.spendByWeek(householdId, from, to))
+        when(insightsRepository.spendByWeek(householdId, from, to, ALL_SCOPE, ALL_CNPJS))
                 .thenReturn(List.<Object[]>of(new Object[]{2026, 17, new BigDecimal("25.00"), 1L}));
-        when(insightsRepository.spendByMarket(householdId, from, to))
+        when(insightsRepository.spendByMarket(householdId, from, to, ALL_SCOPE, ALL_CNPJS))
                 .thenReturn(List.<Object[]>of(new Object[]{"12345678000190", "Zaffari", new BigDecimal("73.45"), 3L}));
-        when(insightsRepository.spendByCategory(householdId, from, to))
+        when(insightsRepository.spendByCategory(householdId, from, to, ALL_SCOPE, ALL_CNPJS))
                 .thenReturn(List.<Object[]>of(new Object[]{ProductCategory.GROCERIES, new BigDecimal("40.00"), 7L}));
 
         var response = insightsService.spend(user, from, to);
@@ -133,11 +136,11 @@ class InsightsServiceTest {
         assertEquals(null, response.from());
         assertEquals(null, response.to());
         assertTrue(response.byMonth().isEmpty());
-        verify(insightsRepository).totalSpend(householdId, EPOCH_FLOOR, EPOCH_CEIL);
-        verify(insightsRepository).spendByMonth(householdId, EPOCH_FLOOR, EPOCH_CEIL);
-        verify(insightsRepository).spendByWeek(householdId, EPOCH_FLOOR, EPOCH_CEIL);
-        verify(insightsRepository).spendByMarket(householdId, EPOCH_FLOOR, EPOCH_CEIL);
-        verify(insightsRepository).spendByCategory(householdId, EPOCH_FLOOR, EPOCH_CEIL);
+        verify(insightsRepository).totalSpend(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS);
+        verify(insightsRepository).spendByMonth(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS);
+        verify(insightsRepository).spendByWeek(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS);
+        verify(insightsRepository).spendByMarket(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS);
+        verify(insightsRepository).spendByCategory(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS);
     }
 
     @Test
@@ -146,9 +149,9 @@ class InsightsServiceTest {
         var householdId = user.getHousehold().getId();
         stubEmptyAggregates(householdId, EPOCH_FLOOR, EPOCH_CEIL);
         // double total + null category total exercise the toBigDecimal Number and null branches
-        when(insightsRepository.spendByMonth(householdId, EPOCH_FLOOR, EPOCH_CEIL))
+        when(insightsRepository.spendByMonth(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS))
                 .thenReturn(List.<Object[]>of(new Object[]{2026, 3, 12.5d, 1L}));
-        when(insightsRepository.spendByCategory(householdId, EPOCH_FLOOR, EPOCH_CEIL))
+        when(insightsRepository.spendByCategory(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS))
                 .thenReturn(List.<Object[]>of(new Object[]{ProductCategory.OTHER, null, 4L}));
 
         var response = insightsService.spend(user, null, null);
@@ -162,7 +165,7 @@ class InsightsServiceTest {
         var user = buildUser();
         var householdId = user.getHousehold().getId();
         stubEmptyAggregates(householdId, EPOCH_FLOOR, EPOCH_CEIL);
-        when(insightsRepository.spendByMarket(householdId, EPOCH_FLOOR, EPOCH_CEIL))
+        when(insightsRepository.spendByMarket(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS))
                 .thenReturn(List.of(
                         new Object[]{"111", "A", new BigDecimal("30.00"), 3L},
                         new Object[]{"222", "B", new BigDecimal("20.00"), 2L},
@@ -180,12 +183,12 @@ class InsightsServiceTest {
         var user = buildUser();
         var householdId = user.getHousehold().getId();
         stubEmptyAggregates(householdId, EPOCH_FLOOR, EPOCH_CEIL);
-        when(insightsRepository.spendByMarket(householdId, EPOCH_FLOOR, EPOCH_CEIL))
+        when(insightsRepository.spendByMarket(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS))
                 .thenReturn(List.of(
                         new Object[]{"111", "A", new BigDecimal("30.00"), 3L},
                         new Object[]{"222", "B", new BigDecimal("20.00"), 2L},
                         new Object[]{"333", "C", new BigDecimal("10.00"), 1L}));
-        when(insightsRepository.discountByMarket(householdId, EPOCH_FLOOR, EPOCH_CEIL))
+        when(insightsRepository.discountByMarket(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS))
                 .thenReturn(List.of(
                         new Object[]{"111", new BigDecimal("3.00")},
                         new Object[]{"222", new BigDecimal("9.00")}));
@@ -207,7 +210,7 @@ class InsightsServiceTest {
         var user = buildUser();
         var householdId = user.getHousehold().getId();
         stubEmptyAggregates(householdId, EPOCH_FLOOR, EPOCH_CEIL);
-        when(insightsRepository.spendByMarket(householdId, EPOCH_FLOOR, EPOCH_CEIL))
+        when(insightsRepository.spendByMarket(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS))
                 .thenReturn(List.of(
                         new Object[]{"111", "A", new BigDecimal("30.00"), 3L},
                         new Object[]{"222", "B", new BigDecimal("20.00"), 2L}));
@@ -224,7 +227,7 @@ class InsightsServiceTest {
         var user = buildUser();
         var householdId = user.getHousehold().getId();
         stubEmptyAggregates(householdId, EPOCH_FLOOR, EPOCH_CEIL);
-        when(insightsRepository.spendByCategory(householdId, EPOCH_FLOOR, EPOCH_CEIL))
+        when(insightsRepository.spendByCategory(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS))
                 .thenReturn(List.of(
                         new Object[]{ProductCategory.GROCERIES, new BigDecimal("40.00"), 5L},
                         new Object[]{ProductCategory.BEVERAGES, new BigDecimal("15.00"), 2L}));
@@ -243,7 +246,7 @@ class InsightsServiceTest {
         var leite = UUID.randomUUID();      // global MEAT_DAIRY, overridden to GROCERIES
         var arroz = UUID.randomUUID();      // global GROCERIES, no override
         var sabao = UUID.randomUUID();      // global CLEANING, moved to a custom category
-        when(insightsRepository.spendByProduct(householdId, EPOCH_FLOOR, EPOCH_CEIL))
+        when(insightsRepository.spendByProduct(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS))
                 .thenReturn(List.<Object[]>of(
                         new Object[]{leite, ProductCategory.MEAT_DAIRY, new BigDecimal("10.00"), 2L},
                         new Object[]{arroz, ProductCategory.GROCERIES, new BigDecimal("30.00"), 3L},
@@ -278,7 +281,7 @@ class InsightsServiceTest {
         var arroz = UUID.randomUUID();   // global OTHER, no override
         var sabao = UUID.randomUUID();   // moved into a custom category literally named "OTHER"
         var customId = UUID.randomUUID();
-        when(insightsRepository.spendByProduct(householdId, EPOCH_FLOOR, EPOCH_CEIL))
+        when(insightsRepository.spendByProduct(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS))
                 .thenReturn(List.<Object[]>of(
                         new Object[]{arroz, ProductCategory.OTHER, new BigDecimal("12.00"), 2L},
                         new Object[]{sabao, ProductCategory.CLEANING, new BigDecimal("7.00"), 1L}));
@@ -303,7 +306,7 @@ class InsightsServiceTest {
         var user = buildUser();
         var householdId = user.getHousehold().getId();
         var arroz = UUID.randomUUID();
-        when(insightsRepository.spendByProduct(householdId, EPOCH_FLOOR, EPOCH_CEIL))
+        when(insightsRepository.spendByProduct(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS))
                 .thenReturn(List.<Object[]>of(new Object[]{arroz, ProductCategory.GROCERIES, new BigDecimal("30.00"), 3L}));
         when(categoryOverrideService.overrideKeysByProduct(eq(householdId), any())).thenReturn(Map.of());
 

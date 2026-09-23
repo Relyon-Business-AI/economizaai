@@ -88,7 +88,7 @@ class AdminUserServiceTest {
                 .household(household).build();
         when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
         when(receiptRepository.countByHouseholdIdAndStatus(eq(householdId), any(ReceiptStatus.class))).thenReturn(0L);
-        when(insightsRepository.totalSpend(eq(householdId), any(LocalDateTime.class), any(LocalDateTime.class)))
+        when(insightsRepository.totalSpend(eq(householdId), any(LocalDateTime.class), any(LocalDateTime.class), any(), any()))
                 .thenReturn(BigDecimal.ZERO);
         when(userRepository.countByHouseholdId(householdId)).thenReturn(1L);
 
@@ -106,7 +106,7 @@ class AdminUserServiceTest {
                 .household(household).build();
         when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
         when(receiptRepository.countByHouseholdIdAndStatus(eq(householdId), any(ReceiptStatus.class))).thenReturn(0L);
-        when(insightsRepository.totalSpend(eq(householdId), any(LocalDateTime.class), any(LocalDateTime.class)))
+        when(insightsRepository.totalSpend(eq(householdId), any(LocalDateTime.class), any(LocalDateTime.class), any(), any()))
                 .thenReturn(BigDecimal.ZERO);
         when(userRepository.countByHouseholdId(householdId)).thenReturn(1L);
 
@@ -130,7 +130,7 @@ class AdminUserServiceTest {
                 .household(household).build();
         when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
         when(receiptRepository.countByHouseholdIdAndStatus(eq(householdId), any(ReceiptStatus.class))).thenReturn(0L);
-        when(insightsRepository.totalSpend(eq(householdId), any(LocalDateTime.class), any(LocalDateTime.class)))
+        when(insightsRepository.totalSpend(eq(householdId), any(LocalDateTime.class), any(LocalDateTime.class), any(), any()))
                 .thenReturn(BigDecimal.ZERO);
         when(userRepository.countByHouseholdId(householdId)).thenReturn(1L);
 
@@ -157,7 +157,7 @@ class AdminUserServiceTest {
         when(receiptRepository.countByHouseholdIdAndStatus(householdId, ReceiptStatus.CONFIRMED)).thenReturn(7L);
         when(receiptRepository.countByHouseholdIdAndStatus(householdId, ReceiptStatus.REJECTED)).thenReturn(0L);
         when(receiptRepository.countByHouseholdIdAndStatus(householdId, ReceiptStatus.FAILED_PARSE)).thenReturn(1L);
-        when(insightsRepository.totalSpend(eq(householdId), any(LocalDateTime.class), any(LocalDateTime.class)))
+        when(insightsRepository.totalSpend(eq(householdId), any(LocalDateTime.class), any(LocalDateTime.class), any(), any()))
                 .thenReturn(new BigDecimal("321.45"));
         when(userRepository.countByHouseholdId(householdId)).thenReturn(2L);
 
@@ -191,7 +191,7 @@ class AdminUserServiceTest {
 
         when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
         when(receiptRepository.countByHouseholdIdAndStatus(eq(householdId), any(ReceiptStatus.class))).thenReturn(0L);
-        when(insightsRepository.totalSpend(eq(householdId), any(LocalDateTime.class), any(LocalDateTime.class)))
+        when(insightsRepository.totalSpend(eq(householdId), any(LocalDateTime.class), any(LocalDateTime.class), any(), any()))
                 .thenReturn(null);
         when(userRepository.countByHouseholdId(householdId)).thenReturn(1L);
 

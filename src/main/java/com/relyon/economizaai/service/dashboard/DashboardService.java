@@ -2,6 +2,7 @@ package com.relyon.economizaai.service.dashboard;
 
 import com.relyon.economizaai.dto.response.DashboardResponse;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.MarketScope;
 import com.relyon.economizaai.service.notifications.NotificationInboxService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +28,12 @@ public class DashboardService {
 
     @Transactional(readOnly = true)
     public DashboardResponse build(User user) {
-        var core = dashboardCacheService.buildCachedDashboard(user);
+        return build(user, MarketScope.ALL);
+    }
+
+    @Transactional(readOnly = true)
+    public DashboardResponse build(User user, MarketScope scope) {
+        var core = dashboardCacheService.buildCachedDashboard(user, scope);
         var unread = notificationInboxService.unreadCount(user);
         log.debug("dashboard.built household={} unread={}", user.getHousehold().getId(), unread);
         return new DashboardResponse(

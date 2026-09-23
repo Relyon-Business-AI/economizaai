@@ -4,6 +4,7 @@ import com.relyon.economizaai.config.SecurityConfig;
 import com.relyon.economizaai.dto.response.DashboardResponse;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.MarketScope;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.dashboard.DashboardService;
@@ -50,7 +51,7 @@ class DashboardControllerTest {
         var snapshot = new DashboardResponse.SpendSnapshot(2026, 6, new BigDecimal("450.30"),
                 new BigDecimal("12.50"), 4L, new BigDecimal("112.58"));
         var response = new DashboardResponse(snapshot, List.of(), List.of(), List.of(), 7L, LocalDateTime.now());
-        when(dashboardService.build(any(User.class))).thenReturn(response);
+        when(dashboardService.build(any(User.class), any())).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/dashboard")
                         .with(SecurityMockMvcRequestPostProcessors.user(user)))
@@ -64,7 +65,7 @@ class DashboardControllerTest {
                 .andExpect(jsonPath("$.suggestedShoppingList").isEmpty())
                 .andExpect(jsonPath("$.communityPromosNearby").isEmpty());
 
-        verify(dashboardService).build(user);
+        verify(dashboardService).build(user, MarketScope.ALL);
     }
 
     @Test

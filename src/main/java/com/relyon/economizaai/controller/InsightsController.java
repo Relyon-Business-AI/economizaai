@@ -7,6 +7,7 @@ import com.relyon.economizaai.dto.response.SpendInsightsResponse;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.CategoryView;
 import com.relyon.economizaai.model.enums.InsightsGroupBy;
+import com.relyon.economizaai.model.enums.MarketScope;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.service.InsightsQueryService;
 import com.relyon.economizaai.service.InsightsQueryService.QueryFilters;
@@ -40,8 +41,9 @@ public class InsightsController {
     public ResponseEntity<SpendInsightsResponse> spend(
             @AuthenticationPrincipal User user,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
-        return ResponseEntity.ok(insightsService.spend(user, from, to));
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
+            @RequestParam(defaultValue = "ALL") MarketScope scope) {
+        return ResponseEntity.ok(insightsService.spend(user, from, to, scope));
     }
 
     @GetMapping("/markets/top")
@@ -49,8 +51,9 @@ public class InsightsController {
             @AuthenticationPrincipal User user,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
-            @RequestParam(defaultValue = "5") int limit) {
-        return ResponseEntity.ok(insightsService.topMarkets(user, from, to, limit));
+            @RequestParam(defaultValue = "5") int limit,
+            @RequestParam(defaultValue = "ALL") MarketScope scope) {
+        return ResponseEntity.ok(insightsService.topMarkets(user, from, to, limit, scope));
     }
 
     @GetMapping("/markets/top-discounts")
@@ -58,8 +61,9 @@ public class InsightsController {
             @AuthenticationPrincipal User user,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
-            @RequestParam(defaultValue = "5") int limit) {
-        return ResponseEntity.ok(insightsService.topMarketsByDiscount(user, from, to, limit));
+            @RequestParam(defaultValue = "5") int limit,
+            @RequestParam(defaultValue = "ALL") MarketScope scope) {
+        return ResponseEntity.ok(insightsService.topMarketsByDiscount(user, from, to, limit, scope));
     }
 
     @GetMapping("/categories/top")
@@ -68,8 +72,9 @@ public class InsightsController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
             @RequestParam(defaultValue = "5") int limit,
-            @RequestParam(defaultValue = "HOUSEHOLD") CategoryView categoryView) {
-        return ResponseEntity.ok(insightsService.topCategories(user, from, to, limit, categoryView));
+            @RequestParam(defaultValue = "HOUSEHOLD") CategoryView categoryView,
+            @RequestParam(defaultValue = "ALL") MarketScope scope) {
+        return ResponseEntity.ok(insightsService.topCategories(user, from, to, limit, categoryView, scope));
     }
 
     @GetMapping("/products/{productId}/price-history")
