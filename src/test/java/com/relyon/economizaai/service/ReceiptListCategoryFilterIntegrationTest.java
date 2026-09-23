@@ -1,14 +1,18 @@
 package com.relyon.economizaai.service;
 
 import com.relyon.economizaai.model.Household;
+import com.relyon.economizaai.model.MarketLocation;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.MarketScope;
+import com.relyon.economizaai.model.enums.MerchantSegment;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.HouseholdRepository;
+import com.relyon.economizaai.repository.MarketLocationRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.repository.UserRepository;
@@ -43,6 +47,7 @@ class ReceiptListCategoryFilterIntegrationTest {
     @Autowired private HouseholdRepository householdRepository;
     @Autowired private ReceiptRepository receiptRepository;
     @Autowired private ProductRepository productRepository;
+    @Autowired private MarketLocationRepository marketLocationRepository;
 
     private User user;
 
@@ -63,28 +68,46 @@ class ReceiptListCategoryFilterIntegrationTest {
         var leite = productRepository.save(Product.builder()
                 .normalizedName("leite 1l").category(ProductCategory.MEAT_DAIRY).build());
 
+        // CNPJ ...5182 = SUPERMARKET (mercado); ...0111 = OTHER — for the scope filter test.
+        marketLocationRepository.save(MarketLocation.builder()
+                .cnpj("93015006005182").cnpjRoot("93015006").segment(MerchantSegment.SUPERMARKET).build());
+        marketLocationRepository.save(MarketLocation.builder()
+                .cnpj("93015006000111").cnpjRoot("93015006").segment(MerchantSegment.OTHER).build());
+
         receipt(household, "93015006005182", LocalDateTime.of(2026, Month.APRIL, 10, 10, 0), arroz);       // GROCERIES
         receipt(household, "93015006000111", LocalDateTime.of(2026, Month.APRIL, 11, 10, 0), detergente);   // CLEANING
         receipt(household, "93015006005182", LocalDateTime.of(2026, Month.APRIL, 12, 10, 0), leite);        // MEAT_DAIRY
     }
 
     @Test
+    void scopeSupported_keepsOnlyGroceryPharmacyMerchants() {
+        var page = receiptService.list(user, null, null, null, null, null, null, MarketScope.SUPPORTED, PageRequest.of(0, 20));
+        assertEquals(2, page.getTotalElements()); // as duas notas do CNPJ ...5182 (SUPERMARKET)
+    }
+
+    @Test
+    void scopeOther_keepsOnlyNonGroceryMerchants() {
+        var page = receiptService.list(user, null, null, null, null, null, null, MarketScope.OTHER, PageRequest.of(0, 20));
+        assertEquals(1, page.getTotalElements()); // só a nota do CNPJ ...0111 (OTHER)
+    }
+
+    @Test
     void noCategory_returnsAll() {
-        var page = receiptService.list(user, null, null, null, null, null, null, PageRequest.of(0, 20));
+        var page = receiptService.list(user, null, null, null, null, null, null, MarketScope.ALL, PageRequest.of(0, 20));
         assertEquals(3, page.getTotalElements());
     }
 
     @Test
     void singleCategory_narrowsToOne() {
         var page = receiptService.list(user, null, null, null,
-                List.of(ProductCategory.GROCERIES), null, null, PageRequest.of(0, 20));
+                List.of(ProductCategory.GROCERIES), null, null, MarketScope.ALL, PageRequest.of(0, 20));
         assertEquals(1, page.getTotalElements());
     }
 
     @Test
     void multipleCategories_orThemTogether() {
         var page = receiptService.list(user, null, null, null,
-                List.of(ProductCategory.GROCERIES, ProductCategory.CLEANING), null, null, PageRequest.of(0, 20));
+                List.of(ProductCategory.GROCERIES, ProductCategory.CLEANING), null, null, MarketScope.ALL, PageRequest.of(0, 20));
         assertEquals(2, page.getTotalElements());
     }
 

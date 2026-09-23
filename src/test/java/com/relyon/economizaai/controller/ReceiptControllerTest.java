@@ -16,6 +16,7 @@ import com.relyon.economizaai.exception.ReceiptNotEditableException;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.MarketScope;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.security.JwtService;
@@ -312,7 +313,7 @@ class ReceiptControllerTest {
         var summary = new ReceiptSummaryResponse(UUID.randomUUID(), "Mercado X", "Mercado X", LocalDateTime.now(),
                 new BigDecimal("57.80"), new BigDecimal("57.80"), null, null, 1, ReceiptStatus.CONFIRMED);
         Page<ReceiptSummaryResponse> page = new PageImpl<>(List.of(summary));
-        when(receiptService.list(any(User.class), isNull(), isNull(), isNull(), isNull(List.class), isNull(), isNull(), any(Pageable.class)))
+        when(receiptService.list(any(User.class), isNull(), isNull(), isNull(), isNull(List.class), isNull(), isNull(), any(MarketScope.class), any(Pageable.class)))
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/v1/receipts")
@@ -329,7 +330,7 @@ class ReceiptControllerTest {
                 new BigDecimal("57.80"), new BigDecimal("57.80"), null, null, 1, ReceiptStatus.CONFIRMED);
         Page<ReceiptSummaryResponse> page = new PageImpl<>(List.of(summary));
         when(receiptService.list(any(User.class), isNull(), isNull(), isNull(), isNull(List.class),
-                eq(ReceiptStatus.CONFIRMED), isNull(), any(Pageable.class)))
+                eq(ReceiptStatus.CONFIRMED), isNull(), any(MarketScope.class), any(Pageable.class)))
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/v1/receipts")

@@ -12,6 +12,7 @@ import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.MarketScope;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
@@ -158,7 +159,7 @@ class ReceiptServiceCoverageTest {
                 .thenReturn(page);
 
         var result = receiptService.list(user, null, null, null, null, null, null,
-                PageRequest.of(0, 20));
+                MarketScope.ALL, PageRequest.of(0, 20));
 
         assertEquals(1, result.getContent().size());
         assertEquals("Mercado X", result.getContent().get(0).marketName());
@@ -183,6 +184,7 @@ class ReceiptServiceCoverageTest {
                 List.of(ProductCategory.GROCERIES),
                 null,
                 "  arroz  ",
+                MarketScope.ALL,
                 callerPageable);
 
         assertTrue(result.getContent().isEmpty());
@@ -198,7 +200,7 @@ class ReceiptServiceCoverageTest {
 
         // Blank cnpj/search should not blow up — they're trimmed to null.
         var result = receiptService.list(user, null, null, "   ", null, null, "   ",
-                PageRequest.of(0, 10));
+                MarketScope.ALL, PageRequest.of(0, 10));
 
         assertTrue(result.getContent().isEmpty());
         verify(receiptRepository).findAll(any(Specification.class), any(Pageable.class));
