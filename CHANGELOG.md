@@ -16,6 +16,27 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-23 — import em massa: staging persistente + confirm em lote; fix de pool
+
+Duas frentes.
+
+**1. A tela de import agora é persistente (staging).** As notas importadas ficam marcadas com
+origem `IMPORT` e **permanecem visíveis até você confirmar (salvar definitivo), apagar ou limpar** —
+não some mais nada ao atualizar a página ou navegar. Tudo roda no servidor; a tela só reidrata o estado.
+
+- **Novo `GET /receipts/import/staging`** → `ReceiptResponse[]`: todas as notas de import da household
+  que **ainda não foram confirmadas** (fila/processando/prontas/falhas), mais novas primeiro. Chame ao
+  abrir a tela pra restaurar a lista. Confirmadas somem daqui (foram salvas definitivamente).
+- **Novo `POST /receipts/confirm-batch`** `{ ids: string[] }` → `{ affected }`: confirma várias de uma vez.
+- Notas de import agora carregam `origin: "IMPORT"` (novo valor do enum `ReceiptOrigin`, junto de `SCAN`/`PHOTO`).
+
+**2. Correção do travamento do dashboard** (páginas ficavam girando / “para de carregar”). Causa: o pool
+de conexões do banco esgotava sob carga do import — a tela disparava **uma requisição por nota em paralelo**
+a cada 4s, e o geocoder segurava conexão durante a chamada HTTP externa. Ajustes: polling em ondas
+(máx. 5 simultâneas) no FE e geocode fora da transação no backend. Sem mudança de contrato.
+
+---
+
 ## 2026-09-22 — import por chave: fila paceada + retry/delete (corrige timeouts)
 
 Correção do import em massa: em vez de disparar todas as reconsultas de uma vez (o que

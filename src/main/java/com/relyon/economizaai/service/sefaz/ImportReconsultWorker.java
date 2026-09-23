@@ -27,6 +27,7 @@ public class ImportReconsultWorker {
 
     private final ReceiptRepository receiptRepository;
     private final ReceiptIngestionService receiptIngestionService;
+    private final ImportCompletionNotifier importCompletionNotifier;
     private final TransactionTemplate transactionTemplate;
     private final boolean enabled;
     private final int batchSize;
@@ -34,12 +35,14 @@ public class ImportReconsultWorker {
 
     public ImportReconsultWorker(ReceiptRepository receiptRepository,
                                  ReceiptIngestionService receiptIngestionService,
+                                 ImportCompletionNotifier importCompletionNotifier,
                                  TransactionTemplate transactionTemplate,
                                  @Value("${economizaai.import.worker.enabled:true}") boolean enabled,
                                  @Value("${economizaai.import.worker.batch-size:4}") int batchSize,
                                  @Value("${economizaai.import.worker.max-in-flight:6}") int maxInFlight) {
         this.receiptRepository = receiptRepository;
         this.receiptIngestionService = receiptIngestionService;
+        this.importCompletionNotifier = importCompletionNotifier;
         this.transactionTemplate = transactionTemplate;
         this.enabled = enabled;
         this.batchSize = Math.max(1, batchSize);
@@ -60,20 +63,22 @@ public class ImportReconsultWorker {
         for (var queued : batch) {
             var receiptId = queued.getId();
             var chave = queued.getChaveAcesso();
-            var flipped = Boolean.TRUE.equals(transactionTemplate.execute(status -> {
+            var userId = transactionTemplate.execute(status -> {
                 var receipt = receiptRepository.findById(receiptId).orElse(null);
-                if (receipt == null || receipt.getStatus() != ReceiptStatus.IMPORT_QUEUED) return false;
+                if (receipt == null || receipt.getStatus() != ReceiptStatus.IMPORT_QUEUED) return null;
                 receipt.setStatus(ReceiptStatus.PROCESSING);
                 receiptRepository.save(receipt);
-                return true;
-            }));
-            if (!flipped) continue;
+                return receipt.getUser().getId();
+            });
+            if (userId == null) continue;
             try {
                 receiptIngestionService.ingestReconsult(receiptId, chave);
                 dispatched++;
             } catch (RuntimeException ex) {
                 receiptIngestionService.markFailed(receiptId, ex);
             }
+            // Ping the user once their whole batch is done (no more in-flight import notas).
+            importCompletionNotifier.notifyIfBatchComplete(userId);
         }
         if (dispatched > 0) {
             log.info("import.worker dispatched={} inFlightBefore={}", dispatched, inFlight);

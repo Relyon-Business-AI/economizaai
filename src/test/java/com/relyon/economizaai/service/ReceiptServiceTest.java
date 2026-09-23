@@ -20,6 +20,7 @@ import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
@@ -444,6 +445,37 @@ class ReceiptServiceTest {
 
         assertEquals(ReceiptStatus.CONFIRMED, receipt.getStatus());
         assertNotNull(receipt.getConfirmedAt());
+    }
+
+    @Test
+    void listImportStaging_returnsNonConfirmedImportReceipts() {
+        var user = buildUser();
+        var staging = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        when(receiptRepository.findByHouseholdIdAndOriginAndStatusNotOrderByCreatedAtDesc(
+                user.getHousehold().getId(), ReceiptOrigin.IMPORT, ReceiptStatus.CONFIRMED))
+                .thenReturn(List.of(staging));
+
+        var result = receiptService.listImportStaging(user);
+
+        assertEquals(1, result.size());
+        assertEquals(staging.getId(), result.get(0).id());
+    }
+
+    @Test
+    void confirmBatch_confirmsEachOwnedReceiptAndCountsSuccesses() {
+        var user = buildUser();
+        var one = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        var two = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        when(receiptRepository.findByIdWithItemsAndProducts(one.getId())).thenReturn(Optional.of(one));
+        when(receiptRepository.findByIdWithItemsAndProducts(two.getId())).thenReturn(Optional.of(two));
+        when(receiptRepository.save(any(Receipt.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(promoDetector.detectPersonalPromos(any(Receipt.class))).thenReturn(List.of());
+
+        var confirmed = receiptService.confirmBatch(user, List.of(one.getId(), two.getId()));
+
+        assertEquals(2, confirmed);
+        assertEquals(ReceiptStatus.CONFIRMED, one.getStatus());
+        assertEquals(ReceiptStatus.CONFIRMED, two.getStatus());
     }
 
     @Test

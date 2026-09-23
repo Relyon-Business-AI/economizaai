@@ -394,6 +394,24 @@ POST /api/v1/receipts/import/nfg-csv   (multipart/form-data, field "file")
   (NF-e 55, e.g. Amazon) land in personal history but stay **out of the collaborative
   index** (non-grocery segment).
 
+**Persistent staging.** Imported notas carry `origin: "IMPORT"` and stay in a staging
+list until the user acts on them — the import screen rehydrates from the server, so
+nothing is lost on refresh/navigation.
+
+```
+GET  /api/v1/receipts/import/staging
+→ 200 ReceiptResponse[]   // every non-confirmed IMPORT nota for the household, newest first
+
+POST /api/v1/receipts/confirm-batch
+{ "ids": ["<uuid>", ...] }
+→ 200 { "affected": <int> }   // confirm (definitive save) several at once
+```
+
+- Staging returns everything except `CONFIRMED` (which has been saved definitively and
+  drops off): `IMPORT_QUEUED` / `PROCESSING` / `PENDING_CONFIRMATION` / `FAILED_PARSE` /
+  `NEEDS_DEVICE_FETCH`. Confirm a nota (`POST /receipts/{id}/confirm` or `confirm-batch`)
+  or delete it (`DELETE /receipts/{id}` / `POST /receipts/delete-batch`) to remove it.
+
 ### Submit from a PHOTO of the QR code
 
 For users who can't scan live (web version, or a saved picture in the gallery):

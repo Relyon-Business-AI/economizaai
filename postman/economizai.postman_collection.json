@@ -1658,6 +1658,65 @@
      "response": []
     },
     {
+     "name": "Import staging (non-confirmed import notas — rehydrates the import screen)",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Accept-Language",
+        "value": "pt"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/receipts/import/staging",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "receipts",
+        "import",
+        "staging"
+       ]
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "Confirm receipts batch (definitive save from import screen)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Accept-Language",
+        "value": "pt"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/receipts/confirm-batch",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "receipts",
+        "confirm-batch"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"ids\": [\n    \"{{receiptId}}\"\n  ]\n}"
+      }
+     },
+     "response": []
+    },
+    {
      "name": "Extract chave from photo via OCR (multipart, max 5MB, JPG/PNG)",
      "request": {
       "method": "POST",
