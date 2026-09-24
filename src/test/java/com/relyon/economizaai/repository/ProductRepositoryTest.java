@@ -2,6 +2,7 @@ package com.relyon.economizaai.repository;
 
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.Product;
+import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
@@ -89,10 +90,22 @@ class ProductRepositoryTest {
         productRepository.save(metadataProduct("Arroz Camil 1kg", "Arroz", "Camil", "1.000", "KG"));
         productRepository.save(metadataProduct("Arroz Tio Joao 5kg", "Arroz", "Tio Joao", "5.000", "KG"));
 
-        var matches = productRepository.findByMetadata("Arroz", "Camil", new BigDecimal("5.000"), "KG");
+        var matches = productRepository.findByMetadata("arroz", "camil", new BigDecimal("5.000"), "KG");
 
         assertEquals(1, matches.size());
         assertEquals(pseudoEanTwin.getId(), matches.get(0).getId());
+    }
+
+    @Test
+    void findByMetadata_dedupsAcrossAccentAndCaseViaNormColumns() {
+        var accented = productRepository.save(metadataProduct("Cafe Pilao 500g", "Café", "Pilão", "500.000", "G"));
+        var plain = productRepository.save(metadataProduct("CAFE PILAO 500G", "CAFE", "PILAO", "500.000", "G"));
+
+        // Query with the normalized form; both accent/case variants must match.
+        var matches = productRepository.findByMetadata("cafe", "pilao", new BigDecimal("500.000"), "G");
+
+        assertEquals(Set.of(accented.getId(), plain.getId()),
+                matches.stream().map(Product::getId).collect(Collectors.toSet()));
     }
 
     // ---------------------------------------------------------- findMissingBrand
@@ -167,6 +180,8 @@ class ProductRepositoryTest {
     private Product metadataProduct(String name, String genericName, String brand, String packSize, String packUnit) {
         return Product.builder()
                 .normalizedName(name).genericName(genericName).brand(brand)
+                .genericNameNorm(DescriptionNormalizer.normalizeOrNull(genericName))
+                .brandNorm(DescriptionNormalizer.normalizeOrNull(brand))
                 .packSize(new BigDecimal(packSize)).packUnit(packUnit)
                 .category(ProductCategory.GROCERIES).build();
     }

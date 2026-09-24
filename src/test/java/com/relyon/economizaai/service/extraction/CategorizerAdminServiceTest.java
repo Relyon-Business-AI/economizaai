@@ -8,8 +8,10 @@ import com.relyon.economizaai.repository.CuratedDictionaryEntryRepository;
 import com.relyon.economizaai.repository.EanCatalogRepository;
 import com.relyon.economizaai.repository.LearnedDictionaryRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.canonicalization.CanonicalizationService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -19,6 +21,7 @@ import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -39,6 +42,7 @@ class CategorizerAdminServiceTest {
     @Mock private BrandRegistryEntryRepository brandRepository;
     @Mock private CategorizationBenchmarkEntryRepository benchmarkRepository;
     @Mock private EanCatalogRepository eanCatalogRepository;
+    @Mock private CanonicalizationService canonicalizationService;
 
     @InjectMocks private CategorizerAdminService service;
 
@@ -70,6 +74,22 @@ class CategorizerAdminServiceTest {
 
         assertEquals(1, page.getTotalElements());
         verify(curatedRepository, never()).findAll(any(Pageable.class));
+    }
+
+    @Test
+    void importCuratedEntries_normalizesAccentedKeyword() {
+        when(curatedRepository.findByKeyword("acucar")).thenReturn(Optional.empty());
+        var saved = ArgumentCaptor.forClass(CuratedDictionaryEntry.class);
+
+        var outcome = service.importCuratedEntries(List.of(
+                new CategorizerAdminService.CuratedImportRequest("AÇÚCAR", "Açúcar", null, ProductCategory.GROCERIES)));
+
+        assertEquals(1, outcome.imported());
+        verify(curatedRepository).save(saved.capture());
+        // Key stored fully normalized (accent-stripped, lowercased) so it matches at lookup.
+        assertEquals("acucar", saved.getValue().getKeyword());
+        // Display value kept as typed.
+        assertEquals("Açúcar", saved.getValue().getGenericName());
     }
 
     @Test

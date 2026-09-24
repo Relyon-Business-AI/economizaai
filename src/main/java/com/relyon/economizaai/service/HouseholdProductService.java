@@ -12,6 +12,7 @@ import com.relyon.economizaai.model.HouseholdProductAlias;
 import com.relyon.economizaai.repository.HouseholdProductAliasRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
+import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import com.relyon.economizaai.service.geo.DistanceCalculator;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.geo.MarketNameService;
@@ -90,10 +91,16 @@ public class HouseholdProductService {
 
     private boolean matchesQuery(HouseholdProductResponse resp, String query) {
         if (query == null || query.isBlank()) return true;
-        var lower = query.strip().toLowerCase();
-        return (resp.name() != null && resp.name().toLowerCase().contains(lower))
-                || (resp.friendlyName() != null && resp.friendlyName().toLowerCase().contains(lower))
-                || (resp.brand() != null && resp.brand().toLowerCase().contains(lower));
+        // Normalize both sides (accent-strip + lowercase) so "café" matches "cafe" and vice-versa.
+        var needle = DescriptionNormalizer.normalize(query);
+        if (needle.isBlank()) return true;
+        return normalizedContains(resp.name(), needle)
+                || normalizedContains(resp.friendlyName(), needle)
+                || normalizedContains(resp.brand(), needle);
+    }
+
+    private static boolean normalizedContains(String value, String needle) {
+        return value != null && DescriptionNormalizer.normalize(value).contains(needle);
     }
 
     /** Collapse the household's confirmed history into one Aggregate per product

@@ -86,9 +86,10 @@ public class CategorizerAdminService {
 
     @Transactional(readOnly = true)
     public Page<CuratedEntryResponse> listCurated(String query, Pageable pageable) {
-        var page = (query == null || query.isBlank())
+        var normalizedQuery = query == null ? "" : DescriptionNormalizer.normalize(query);
+        var page = normalizedQuery.isBlank()
                 ? curatedRepository.findAll(pageable)
-                : curatedRepository.findByKeywordContainingIgnoreCase(query.trim().toLowerCase(), pageable);
+                : curatedRepository.findByKeywordContainingIgnoreCase(normalizedQuery, pageable);
         return page.map(CuratedEntryResponse::from);
     }
 
@@ -101,9 +102,10 @@ public class CategorizerAdminService {
 
     @Transactional(readOnly = true)
     public Page<LearnedEntryResponse> listLearned(String query, Pageable pageable) {
-        var page = (query == null || query.isBlank())
+        var normalizedQuery = query == null ? "" : DescriptionNormalizer.normalize(query);
+        var page = normalizedQuery.isBlank()
                 ? learnedRepository.findAll(pageable)
-                : learnedRepository.findByNormalizedTokenContainingIgnoreCase(query.trim().toLowerCase(), pageable);
+                : learnedRepository.findByNormalizedTokenContainingIgnoreCase(normalizedQuery, pageable);
         return page.map(LearnedEntryResponse::from);
     }
 
@@ -133,7 +135,10 @@ public class CategorizerAdminService {
     @Transactional
     public BulkImportOutcome bulkImport(List<DictionaryImportRequest> entries) {
         if (entries == null || entries.isEmpty()) return new BulkImportOutcome(0, 0);
-        var tokens = entries.stream().map(DictionaryImportRequest::token).toList();
+        var tokens = entries.stream()
+                .map(req -> DescriptionNormalizer.normalize(req.token()))
+                .filter(token -> !token.isBlank())
+                .toList();
         var existingByToken = learnedRepository.findByNormalizedTokenIn(tokens).stream()
                 .collect(Collectors.toMap(
                         LearnedDictionaryEntry::getNormalizedToken,
@@ -146,9 +151,14 @@ public class CategorizerAdminService {
                 skipped++;
                 continue;
             }
-            var entry = existingByToken.getOrDefault(req.token(),
+            var normalizedToken = DescriptionNormalizer.normalize(req.token());
+            if (normalizedToken.isBlank()) {
+                skipped++;
+                continue;
+            }
+            var entry = existingByToken.getOrDefault(normalizedToken,
                     LearnedDictionaryEntry.builder()
-                            .normalizedToken(req.token().trim().toLowerCase())
+                            .normalizedToken(normalizedToken)
                             .sampleCount(0)
                             .promotedAt(now)
                             .build());
@@ -201,7 +211,13 @@ public class CategorizerAdminService {
                 skipped++;
                 continue;
             }
-            var keyword = request.keyword().trim().toLowerCase();
+            // Normalize the match key the same way descriptions are normalized at lookup
+            // (accent-strip + lowercase + SEFAZ expansion), so accented keywords still match.
+            var keyword = DescriptionNormalizer.normalize(request.keyword());
+            if (keyword.isBlank()) {
+                skipped++;
+                continue;
+            }
             var entry = curatedRepository.findByKeyword(keyword)
                     .orElseGet(() -> CuratedDictionaryEntry.builder().keyword(keyword).build());
             entry.setGenericName(request.genericName());
@@ -234,7 +250,11 @@ public class CategorizerAdminService {
                 skipped++;
                 continue;
             }
-            var normalizedKey = request.key().trim().toLowerCase();
+            var normalizedKey = DescriptionNormalizer.normalize(request.key());
+            if (normalizedKey.isBlank()) {
+                skipped++;
+                continue;
+            }
             var entry = brandRepository.findByNormalizedKey(normalizedKey)
                     .orElseGet(() -> BrandRegistryEntry.builder().normalizedKey(normalizedKey).build());
             entry.setDisplayName(request.displayName().trim());

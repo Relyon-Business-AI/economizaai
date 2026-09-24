@@ -8,6 +8,7 @@ import com.relyon.economizaai.dto.response.HouseholdPreferenceResponse.Confidenc
 import com.relyon.economizaai.model.ManualBrandPreference;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.ReceiptItem;
+import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.repository.ManualBrandPreferenceRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
@@ -123,8 +124,11 @@ public class HouseholdPreferenceService {
 
     private static BigDecimal shareForBrand(List<BrandShare> distribution, String brand) {
         if (distribution == null || brand == null) return null;
+        // Normalize both sides (accent-strip + lowercase) so "Müller"/"muller" match.
+        var normalizedBrand = DescriptionNormalizer.normalize(brand);
         return distribution.stream()
-                .filter(share -> brand.equalsIgnoreCase(share.brand()))
+                .filter(share -> share.brand() != null
+                        && DescriptionNormalizer.normalize(share.brand()).equals(normalizedBrand))
                 .map(BrandShare::share)
                 .findFirst()
                 .orElse(null);

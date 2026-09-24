@@ -11,6 +11,7 @@ import com.relyon.economizaai.repository.CuratedDictionaryEntryRepository;
 import com.relyon.economizaai.repository.LlmDisagreementRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
+import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import com.relyon.economizaai.service.extraction.DictionaryClassifier;
 import com.relyon.economizaai.service.extraction.LearnableTokenFilter;
 import com.relyon.economizaai.service.paidapi.PaidApiGuardService;
@@ -228,11 +229,13 @@ public class LlmEnrichmentService {
         var brand = textOrNull(result, "brand");
         if (brand != null && (product.getBrand() == null || product.getBrand().isBlank())) {
             product.setBrand(brand);
+            product.setBrandNorm(DescriptionNormalizer.normalizeOrNull(brand));
             changed = true;
         }
         var genericName = textOrNull(result, "generic_name");
         if (genericName != null && (product.getGenericName() == null || product.getGenericName().isBlank())) {
             product.setGenericName(genericName);
+            product.setGenericNameNorm(DescriptionNormalizer.normalizeOrNull(genericName));
             changed = true;
         }
         return changed;
@@ -283,9 +286,12 @@ public class LlmEnrichmentService {
         var category = parseCategory(result.path("category").asText(null));
         var genericName = textOrNull(result, "generic_name");
         if (keyword == null || category == null) return;
-        keyword = keyword.toLowerCase(Locale.ROOT).trim();
+        // Normalize the match key the same way descriptions are (accent-strip + lowercase +
+        // SEFAZ expansion), so the curated rule matches at lookup time.
+        keyword = DescriptionNormalizer.normalize(keyword);
+        if (keyword.isBlank()) return;
         if (!LearnableTokenFilter.isLearnable(keyword)) return;
-        if (!product.getNormalizedName().toLowerCase(Locale.ROOT).contains(keyword)) return;
+        if (!DescriptionNormalizer.normalize(product.getNormalizedName()).contains(keyword)) return;
         if (curatedRepository.findByKeyword(keyword).isPresent()) return;
         curatedRepository.save(CuratedDictionaryEntry.builder()
                 .keyword(keyword)

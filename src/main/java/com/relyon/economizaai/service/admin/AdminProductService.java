@@ -29,6 +29,7 @@ import com.relyon.economizaai.repository.ProductAliasRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.repository.ShoppingListItemRepository;
+import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -101,6 +102,7 @@ public class AdminProductService {
             var brand = brandExtractor.find(product.getNormalizedName());
             if (brand != null) {
                 product.setBrand(brand);
+                product.setBrandNorm(DescriptionNormalizer.normalizeOrNull(brand));
                 filled++;
             } else {
                 stillMissing++;
@@ -299,6 +301,7 @@ public class AdminProductService {
                 .orElseThrow(ProductNotFoundException::new);
         var brand = request.brand().trim();
         product.setBrand(brand);
+        product.setBrandNorm(DescriptionNormalizer.normalizeOrNull(brand));
         var saved = productRepository.save(product);
         log.info("admin.product.brand_set product={} brand='{}'", productId, brand);
         return ProductResponse.from(saved);
@@ -334,7 +337,9 @@ public class AdminProductService {
         var products = productRepository.findDuplicateCandidates();
         var groups = new LinkedHashMap<String, List<Product>>();
         for (var product : products) {
-            var key = product.getGenericName() + " " + product.getBrand() + " "
+            // Group on the normalized profile so accent/case variants (e.g. "NESCAFE"
+            // and "Nescafé") land in the same duplicate group for the admin to merge.
+            var key = product.getGenericNameNorm() + " " + product.getBrandNorm() + " "
                     + product.getPackSize() + " " + product.getPackUnit();
             groups.computeIfAbsent(key, groupKey -> new ArrayList<>()).add(product);
         }
