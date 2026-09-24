@@ -4,14 +4,16 @@ Practical walk-through of the backend, organized by user flow. For the
 machine-readable contract, hit **`/swagger-ui`** on whichever environment
 you're against (everything's annotated with descriptions and examples).
 
-- **Production:** `https://economizai-app-prod.onrender.com`
-- **Dev:** `https://economiz-ai.onrender.com` (also reachable via the legacy
-  proxy `https://economizaai.economizaai.workers.dev`)
+- **Production:** `https://api.economizaai.app`
+- **Dev:** `https://api-dev.economizaai.app`
 - **Local:** `http://localhost:8080`
 
-Both environments run the same code (prod is deployed from the `production`
-branch, promoted from `development`); dev is where features land first and
-where test/screenshot data lives.
+> Use the custom domains above. The `*.onrender.com` subdomains are
+> misleadingly named (the **dev** service's onrender URL is
+> `economizai-app-prod.onrender.com`) — don't reference them.
+
+Both environments run the same code (prod is deployed from `main`, promoted from
+`development`); dev is where features land first and where test/screenshot data lives.
 
 All `/api/v1/**` routes (except `/auth/*` and `/legal/*`) require a JWT in the
 `Authorization: Bearer <token>` header. Access tokens expire after 24h —

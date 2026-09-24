@@ -110,8 +110,12 @@ expected; use the dev environment for anything catalog-dependent.
 | Env | URL | Branch | Deploys |
 |---|---|---|---|
 | **local** | `http://localhost:8080/api/v1` | your working copy | — |
-| **dev** | `https://economiz-ai.onrender.com/api/v1` | `development` | **auto on every push** |
-| **prod** | `https://economizai-app-prod.onrender.com/api/v1` | `main` | auto on push to `main` — **owner only** |
+| **dev** | `https://api-dev.economizaai.app/api/v1` | `development` | **auto on every push** |
+| **prod** | `https://api.economizaai.app/api/v1` | `main` | auto on push to `main` — **owner only** |
+
+> ⚠️ Use the custom domains above, NOT the `*.onrender.com` URLs — they're
+> misleadingly named: the **dev** service's onrender URL is
+> `economizai-app-prod.onrender.com` and **prod**'s is `economiz-ai.onrender.com`.
 
 Swagger and `/actuator/health` exist on dev at the same base host. Prod has
 Swagger disabled.
@@ -181,8 +185,8 @@ git push origin development            # ⚠️ this IS a dev deploy (see rules 
 - **Local**: app logs to stdout. Every request line carries MDC tags —
   `req=<id> user=<email> rcpt=<id> item=<id>`. To trace one receipt end-to-end,
   grep the log by `rcpt=<first-8-chars>`.
-- **Dev server**: logs live in the Render dashboard (service `economiz.AI`) —
-  same MDC grep applies. Health: `https://economiz-ai.onrender.com/actuator/health`.
+- **Dev server**: logs live in the Render dashboard (service `economizaai-api-dev`) —
+  same MDC grep applies. Health: `https://api-dev.economizaai.app/actuator/health`.
 - **Reproduce against dev** via Swagger or the Postman collection (it has a
   sequential E2E Flow folder that sets up its own data).
 - When investigating a bug with Claude: ask for **root cause first** — the
@@ -209,7 +213,7 @@ git push origin development            # ⚠️ this IS a dev deploy (see rules 
   git checkout development
   ```
 
-  After the deploy: check `https://economizai-app-prod.onrender.com/actuator/health`
+  After the deploy: check `https://api.economizaai.app/actuator/health`
   and smoke-test the released change on prod.
 
 ## 10. Cross-repo changes (FE + backend)

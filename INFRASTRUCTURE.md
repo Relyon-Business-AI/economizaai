@@ -16,6 +16,12 @@ Bird's-eye map of the WHOLE product (mobile, web, admin, landing, e-mail, costs)
 | **prod** | `economizai-api-prod` (`srv-d7odp50k1i2s73ep8o5g`) | `main` | push to `main` (auto-deploy) | **`api.economizaai.app`** (+ `economiz-ai.onrender.com`) | `economizai-db-prod` (real data) |
 | **dev** | `economizai-api-dev` (`srv-d9p4nctbedkc73e3veb0`) | `development` | push to `development` (auto-deploy) | `api-dev.economizaai.app` (+ `economizai-app-prod.onrender.com`) | `economizai-db-dev` (stale copy = test) |
 
+> ⚠️ **The `*.onrender.com` subdomains are misleadingly named** (a leftover from the pre-cutover
+> topology; Render can't rename a subdomain without recreating the service). The **dev** service's
+> onrender URL is literally **`economizai-app-prod.onrender.com`**, and **prod**'s is
+> `economiz-ai.onrender.com`. Always use the **custom domains** (`api.` = prod, `api-dev.` = dev)
+> everywhere — code, docs, FE config. Never advertise the onrender URLs.
+
 - **Cutover done 2026-09-22:** the real data + `api.economizaai.app` live on the service that
   is now **prod** on branch **`main`** (`srv-d7odp…`). The old standby (`srv-d9p4…`) became
   **dev** on `development` with its own DB + `api-dev.economizaai.app`. This was a rename +

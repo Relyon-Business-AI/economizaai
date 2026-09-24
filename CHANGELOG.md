@@ -7,12 +7,12 @@ Skim from the top until you hit a date you've already read.
 For the complete API contract see [API.md](./API.md) (walk-through) or
 `/swagger-ui` on whichever environment you're hitting.
 
-**Environments:**
-- **Production:** `https://economizai-app-prod.onrender.com/api/v1`
+**Environments** (use the custom domains — the `*.onrender.com` subdomains are
+misleadingly named and must NOT be used: the dev service's onrender URL literally
+says `economizai-app-prod`):
+- **Production:** `https://api.economizaai.app/api/v1`
   (Swagger: `/swagger-ui/index.html`, health: `/actuator/health`)
-- **Dev:** `https://economiz-ai.onrender.com/api/v1` — features land here
-  first. Also reachable at the old `https://economizaai.economizaai.workers.dev/api/v1`
-  (proxies to Render), so the store build's URL keeps working.
+- **Dev:** `https://api-dev.economizaai.app/api/v1` — features land here first.
 
 ---
 
