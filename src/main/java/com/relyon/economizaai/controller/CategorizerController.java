@@ -210,7 +210,7 @@ public class CategorizerController {
      * <pre>[{"keyword":"arroz","genericName":"Arroz","category":"GROCERIES"}, ...]</pre>
      */
     @PostMapping("/dictionary/curated/import")
-    public ResponseEntity<CategorizerAdminService.BulkImportOutcome> bulkImportCurated(
+    public ResponseEntity<CategorizerAdminService.CuratedImportOutcome> bulkImportCurated(
             @Size(max = MAX_IMPORT_BATCH) @RequestBody List<CategorizerAdminService.CuratedImportRequest> entries) {
         return ResponseEntity.ok(categorizerAdminService.importCuratedEntries(entries));
     }

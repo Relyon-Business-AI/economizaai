@@ -32,7 +32,7 @@ class CategorizationDebugServiceTest {
         when(productExtractor.extract("Batata Frita")).thenReturn(new ProductExtraction(
                 "Batata", null, new BigDecimal("100"), "G", ProductCategory.PRODUCE, CategorizationSource.DICTIONARY));
         when(dictionaryClassifier.classify("Batata Frita")).thenReturn(
-                new DictEntry("Batata", ProductCategory.PRODUCE, CategorizationSource.DICTIONARY));
+                new DictEntry("Batata", null, ProductCategory.PRODUCE, CategorizationSource.DICTIONARY));
         when(mlClassifier.getConfidenceThreshold()).thenReturn(0.75);
         when(mlClassifier.isReady()).thenReturn(true);
         when(mlClassifier.isCategoryApplyEnabled()).thenReturn(false);

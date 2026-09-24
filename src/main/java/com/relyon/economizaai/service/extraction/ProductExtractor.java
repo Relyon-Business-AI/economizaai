@@ -35,8 +35,9 @@ public class ProductExtractor {
             return ProductExtraction.EMPTY;
         }
         var packSize = PackSizeExtractor.extract(rawDescription);
-        var brand = brandExtractor.find(rawDescription);
         var dictHit = dictionaryClassifier.classify(rawDescription);
+        // A curated rule's brand wins over the registry extractor when present.
+        var brand = dictHit.brand() != null ? dictHit.brand() : brandExtractor.find(rawDescription);
 
         var genericName = dictHit.genericName();
         var category = dictHit.category();

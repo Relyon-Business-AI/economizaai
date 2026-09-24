@@ -51,7 +51,7 @@ public class DictionaryClassifier {
         var entries = new LinkedHashMap<String, DictEntry>();
         for (var entry : curatedRepository.findAll()) {
             entries.put(entry.getKeyword(), new DictEntry(
-                    entry.getGenericName(), entry.getCategory(), CategorizationSource.DICTIONARY));
+                    entry.getGenericName(), entry.getBrand(), entry.getCategory(), CategorizationSource.DICTIONARY));
         }
         curatedRef.set(Map.copyOf(entries));
         log.info("Loaded {} curated dictionary entries", entries.size());
@@ -87,7 +87,7 @@ public class DictionaryClassifier {
         return DictEntry.EMPTY;
     }
 
-    public record DictEntry(String genericName, ProductCategory category, CategorizationSource source) {
-        public static final DictEntry EMPTY = new DictEntry(null, null, CategorizationSource.NONE);
+    public record DictEntry(String genericName, String brand, ProductCategory category, CategorizationSource source) {
+        public static final DictEntry EMPTY = new DictEntry(null, null, null, CategorizationSource.NONE);
     }
 }

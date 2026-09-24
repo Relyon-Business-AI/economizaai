@@ -202,6 +202,7 @@ public class AutoPromotionService {
         for (var entry : entries) {
             map.put(entry.getNormalizedToken(), new DictionaryClassifier.DictEntry(
                     entry.getGenericName(),
+                    null,
                     entry.getCategory(),
                     CategorizationSource.LEARNED_DICTIONARY));
         }

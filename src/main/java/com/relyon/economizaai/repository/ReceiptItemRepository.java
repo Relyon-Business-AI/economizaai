@@ -151,6 +151,16 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
     """)
     List<Object[]> topUnmatchedDescriptions(org.springframework.data.domain.Pageable pageable);
 
+    // Confirmed, non-excluded orphans (no product) whose description matches a LIKE pattern —
+    // re-canonicalized after an admin saves a curated rule so the backlog drops out of the queue.
+    @Query("""
+        SELECT ri FROM ReceiptItem ri
+        JOIN FETCH ri.receipt r
+        WHERE r.status = 'CONFIRMED' AND ri.excluded = false AND ri.product IS NULL
+        AND LOWER(ri.rawDescription) LIKE :pattern
+    """)
+    List<ReceiptItem> findUnmatchedConfirmedByDescriptionLike(@Param("pattern") String pattern);
+
     List<ReceiptItem> findAllByProductIdOrderByReceiptIssuedAtAsc(UUID productId);
 
     /** Same intent as the method above but fetches receipt + household up front,

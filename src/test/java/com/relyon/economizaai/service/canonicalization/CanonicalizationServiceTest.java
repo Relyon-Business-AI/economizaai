@@ -10,6 +10,7 @@ import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.ProductAliasRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.model.EanCatalogEntry;
 import com.relyon.economizaai.model.enums.EanCatalogSource;
 import com.relyon.economizaai.service.HouseholdProductAliasService;
@@ -48,6 +49,7 @@ class CanonicalizationServiceTest {
     @Mock private HouseholdProductAliasService householdProductAliasService;
     @Mock private MerchantClassifier merchantClassifier;
     @Mock private EanCatalogService eanCatalogService;
+    @Mock private ReceiptItemRepository receiptItemRepository;
 
     @InjectMocks private CanonicalizationService service;
 
@@ -284,6 +286,38 @@ class CanonicalizationServiceTest {
         assertNotNull(product);
         assertEquals(product, item.getProduct());
         verify(productRepository).save(any(Product.class));
+    }
+
+    @Test
+    void recanonicalizeUnmatchedForKeyword_linksMatchingOrphansAndSkipsNonMatching() {
+        // Two orphans returned by the LIKE prefilter; only the one whose description
+        // contains the keyword phrase should be re-canonicalized (get a product).
+        var receipt = buildReceipt(item("GEL DENTAL SORRISO F", null), item("SABONETE X", null));
+        var gelItem = receipt.getItems().get(0);
+        var otherItem = receipt.getItems().get(1);
+        when(receiptItemRepository.findUnmatchedConfirmedByDescriptionLike(anyString()))
+                .thenReturn(List.of(gelItem, otherItem));
+        when(aliasRepository.findByNormalizedDescription(anyString())).thenReturn(Optional.empty());
+        when(productExtractor.extract(any())).thenReturn(ProductExtraction.EMPTY);
+        when(aliasRepository.existsByNormalizedDescription(anyString())).thenReturn(false);
+        when(productRepository.save(any(Product.class))).thenAnswer(inv -> {
+            var savedProduct = inv.<Product>getArgument(0);
+            savedProduct.setId(UUID.randomUUID());
+            return savedProduct;
+        });
+
+        var relinked = service.recanonicalizeUnmatchedForKeyword("gel dental");
+
+        assertEquals(1, relinked);
+        assertNotNull(gelItem.getProduct());
+        assertNull(otherItem.getProduct());
+        verify(productRepository).save(any(Product.class));
+    }
+
+    @Test
+    void recanonicalizeUnmatchedForKeyword_blankKeywordReturnsZero() {
+        assertEquals(0, service.recanonicalizeUnmatchedForKeyword("  "));
+        verify(receiptItemRepository, never()).findUnmatchedConfirmedByDescriptionLike(anyString());
     }
 
     @Test

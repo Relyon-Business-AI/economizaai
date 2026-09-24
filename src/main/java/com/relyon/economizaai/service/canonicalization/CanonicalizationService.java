@@ -10,6 +10,7 @@ import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.ProductAliasRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.service.HouseholdProductAliasService;
 import com.relyon.economizaai.service.extraction.EanCatalogService;
 import com.relyon.economizaai.service.extraction.ProductExtraction;
@@ -41,6 +42,7 @@ public class CanonicalizationService {
 
     private final ProductRepository productRepository;
     private final ProductAliasRepository aliasRepository;
+    private final ReceiptItemRepository receiptItemRepository;
     private final ProductExtractor productExtractor;
     private final HouseholdProductAliasService householdProductAliasService;
     private final MerchantClassifier merchantClassifier;
@@ -105,6 +107,36 @@ public class CanonicalizationService {
         } finally {
             MDC.remove(MdcContextFilter.ITEM_ID);
         }
+    }
+
+    /**
+     * Re-runs canonicalization on the confirmed UNMATCHED items whose description
+     * contains {@code keyword} as a contiguous token phrase — used right after an
+     * admin saves a curated rule so the backlog those items form drops out of the
+     * "não-casados" queue. Returns how many got linked to a product.
+     */
+    @Transactional
+    public int recanonicalizeUnmatchedForKeyword(String keyword) {
+        if (keyword == null || keyword.isBlank()) return 0;
+        var normalizedKeyword = DescriptionNormalizer.normalize(keyword);
+        if (normalizedKeyword.isBlank()) return 0;
+        var candidates = receiptItemRepository.findUnmatchedConfirmedByDescriptionLike(
+                "%" + keyword.trim().toLowerCase() + "%");
+        var relinked = 0;
+        for (var item : candidates) {
+            if (!descriptionContainsPhrase(item.getRawDescription(), normalizedKeyword)) continue;
+            linkOrCreateProduct(item.getReceipt(), item);
+            if (item.getProduct() != null) relinked++;
+        }
+        log.info("recanonicalize.keyword keyword='{}' candidates={} relinked={}", keyword, candidates.size(), relinked);
+        return relinked;
+    }
+
+    /** True when the normalized description contains the normalized phrase as whole, contiguous tokens. */
+    private static boolean descriptionContainsPhrase(String rawDescription, String normalizedPhrase) {
+        var normalized = DescriptionNormalizer.normalize(rawDescription);
+        if (normalized.isBlank()) return false;
+        return (" " + normalized + " ").contains(" " + normalizedPhrase + " ");
     }
 
     /**
