@@ -6,6 +6,7 @@ import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.service.ItemQueryService.ItemFilters;
 import com.relyon.economizaai.service.geo.MarketNameService;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
@@ -51,6 +52,7 @@ class ItemQueryServiceTest {
     @Mock private HouseholdProductCategoryOverrideService categoryOverrideService;
     @Mock private MarketNameService marketNameService;
     @Mock private SubscriptionGateService subscriptionGate;
+    @Mock private InsightsRepository insightsRepository;
     @Mock private EntityManager entityManager;
     @Mock private TypedQuery<Long> countQuery;
     @Mock private TypedQuery<ReceiptItem> rowQuery;
@@ -61,7 +63,8 @@ class ItemQueryServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ItemQueryService(categoryOverrideService, marketNameService, subscriptionGate);
+        service = new ItemQueryService(categoryOverrideService, marketNameService, subscriptionGate,
+                insightsRepository);
         // Default: PRO passthrough (no clamping) so existing clause assertions hold.
         lenient().when(subscriptionGate.clampFrom(any(), any()))
                 .thenAnswer(invocation -> invocation.getArgument(1));

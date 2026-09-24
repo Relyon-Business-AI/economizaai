@@ -2830,6 +2830,12 @@
         {
          "key": "groupBy",
          "value": "WEEK"
+        },
+        {
+         "key": "scope",
+         "value": "SUPPORTED",
+         "disabled": true,
+         "description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
         }
        ]
       },
@@ -2866,6 +2872,12 @@
         {
          "key": "limit",
          "value": "10"
+        },
+        {
+         "key": "scope",
+         "value": "SUPPORTED",
+         "disabled": true,
+         "description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
         }
        ]
       },
@@ -2902,6 +2914,12 @@
         {
          "key": "groupBy",
          "value": "CATEGORY"
+        },
+        {
+         "key": "scope",
+         "value": "SUPPORTED",
+         "disabled": true,
+         "description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
         }
        ]
       },
@@ -2946,6 +2964,12 @@
         {
          "key": "limit",
          "value": "20"
+        },
+        {
+         "key": "scope",
+         "value": "SUPPORTED",
+         "disabled": true,
+         "description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
         }
        ]
       },
@@ -2982,6 +3006,12 @@
         {
          "key": "groupBy",
          "value": "MONTH"
+        },
+        {
+         "key": "scope",
+         "value": "SUPPORTED",
+         "disabled": true,
+         "description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
         }
        ]
       },
@@ -3018,6 +3048,12 @@
         {
          "key": "to",
          "value": "2026-04-30T23:59:59"
+        },
+        {
+         "key": "scope",
+         "value": "SUPPORTED",
+         "disabled": true,
+         "description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
         }
        ]
       },
@@ -3129,6 +3165,12 @@
          "key": "categoryView",
          "value": "HOUSEHOLD",
          "description": "Default. Re-aggregates spend by effective category, one product counted once (no double count)."
+        },
+        {
+         "key": "scope",
+         "value": "SUPPORTED",
+         "disabled": true,
+         "description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
         }
        ]
       }
@@ -3165,6 +3207,12 @@
          "key": "categoryView",
          "value": "GLOBAL",
          "description": "Group purely by global Product.category."
+        },
+        {
+         "key": "scope",
+         "value": "SUPPORTED",
+         "disabled": true,
+         "description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
         }
        ]
       }
@@ -4419,6 +4467,12 @@
         {
          "key": "size",
          "value": "20"
+        },
+        {
+         "key": "scope",
+         "value": "SUPPORTED",
+         "disabled": true,
+         "description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
         }
        ]
       }
@@ -4449,6 +4503,12 @@
         {
          "key": "category",
          "value": "MEAT_DAIRY"
+        },
+        {
+         "key": "scope",
+         "value": "SUPPORTED",
+         "disabled": true,
+         "description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
         }
        ]
       }
@@ -4479,6 +4539,12 @@
         {
          "key": "productId",
          "value": "{{productId}}"
+        },
+        {
+         "key": "scope",
+         "value": "SUPPORTED",
+         "disabled": true,
+         "description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
         }
        ]
       }
@@ -4514,6 +4580,12 @@
          "key": "categoryView",
          "value": "HOUSEHOLD",
          "description": "Default. Effective category: excludes products moved to a custom category or another enum."
+        },
+        {
+         "key": "scope",
+         "value": "SUPPORTED",
+         "disabled": true,
+         "description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
         }
        ]
       }
@@ -4549,6 +4621,12 @@
          "key": "categoryView",
          "value": "GLOBAL",
          "description": "Ignore household overrides; filter by global Product.category (pre-lens behavior)."
+        },
+        {
+         "key": "scope",
+         "value": "SUPPORTED",
+         "disabled": true,
+         "description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
         }
        ]
       }
@@ -4674,6 +4752,12 @@
         {
          "key": "customCategoryId",
          "value": "{{customCategoryId}}"
+        },
+        {
+         "key": "scope",
+         "value": "SUPPORTED",
+         "disabled": true,
+         "description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
         }
        ]
       }
@@ -8697,6 +8781,12 @@
         {
          "key": "productId",
          "value": "{{e2eProductId}}"
+        },
+        {
+         "key": "scope",
+         "value": "SUPPORTED",
+         "disabled": true,
+         "description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
         }
        ]
       }
@@ -8885,6 +8975,12 @@
         {
          "key": "customCategoryId",
          "value": "{{e2eCustomCategoryId}}"
+        },
+        {
+         "key": "scope",
+         "value": "SUPPORTED",
+         "disabled": true,
+         "description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
         }
        ]
       }
@@ -10056,6 +10152,12 @@
         {
          "key": "groupBy",
          "value": "WEEK"
+        },
+        {
+         "key": "scope",
+         "value": "SUPPORTED",
+         "disabled": true,
+         "description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
         }
        ]
       },
@@ -11953,6 +12055,12 @@
         {
          "key": "limit",
          "value": "abc"
+        },
+        {
+         "key": "scope",
+         "value": "SUPPORTED",
+         "disabled": true,
+         "description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
         }
        ]
       }

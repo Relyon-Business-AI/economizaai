@@ -16,6 +16,18 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-23 — `scope` (Mercado/Outras/Tudo) em `GET /items` e `GET /insights/query`
+
+Fecha o plano do filtro de scope: a tela **Itens por categoria** ganha o mesmo seletor
+Mercado/Outras/Tudo que Início e Notas já tinham. **Aditivo e retrocompatível** (default `ALL`).
+
+- Novo param **`scope`** (`ALL` | `SUPPORTED` | `OTHER`) em:
+  `GET /api/v1/items` e `GET /api/v1/insights/query`.
+- Filtra pelo **segmento do emitente** (via supportedCnpjs do household), igual aos outros
+  endpoints de scope. `SUPPORTED` sem mercados suportados → vazio; `OTHER` sem eles → tudo.
+- Os dois andam juntos na tela de itens (lista via `/items`, total do topo via `/insights/query`),
+  então o total sempre bate com a lista filtrada.
+
 ## 2026-09-23 — `best-markets` passa a expor o preço REAL mais recente (não só a mediana)
 
 O card "onde está mais barato" deve mostrar um **valor real** que o usuário vai (aproximadamente)

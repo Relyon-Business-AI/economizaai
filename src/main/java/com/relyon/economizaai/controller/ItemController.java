@@ -3,6 +3,7 @@ package com.relyon.economizaai.controller;
 import com.relyon.economizaai.dto.response.PurchasedItemResponse;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.CategoryView;
+import com.relyon.economizaai.model.enums.MarketScope;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.service.CustomCategoryService;
 import com.relyon.economizaai.service.ItemQueryService;
@@ -66,6 +67,7 @@ public class ItemController {
             @RequestParam(required = false) BigDecimal maxReceiptTotal,
             @RequestParam(required = false) UUID customCategoryId,
             @RequestParam(defaultValue = "HOUSEHOLD") CategoryView categoryView,
+            @RequestParam(defaultValue = "ALL") MarketScope scope,
             @PageableDefault(size = 20) Pageable pageable) {
         // Filtering by a custom category resolves to the household's products
         // migrated into it; combine with any explicit productId filter.
@@ -78,7 +80,7 @@ public class ItemController {
             productIds = inCustom;
         }
         var filters = ItemFilters.fromRequest(from, to, marketCnpj, marketCnpjRoot, category,
-                productIds, ean, minReceiptTotal, maxReceiptTotal, categoryView);
+                productIds, ean, minReceiptTotal, maxReceiptTotal, categoryView, scope);
         return ResponseEntity.ok(itemQueryService.query(user, filters, pageable));
     }
 }
