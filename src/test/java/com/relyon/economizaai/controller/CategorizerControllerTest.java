@@ -25,7 +25,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -92,7 +92,7 @@ class CategorizerControllerTest {
     @Test
     void status_returnsClassifierState() throws Exception {
         when(mlClassifier.isReady()).thenReturn(true);
-        when(mlClassifier.getLastTrainedAt()).thenReturn(LocalDateTime.now());
+        when(mlClassifier.getLastTrainedAt()).thenReturn(Instant.now());
         when(mlClassifier.getConfidenceThreshold()).thenReturn(0.75);
 
         mockMvc.perform(get("/api/v1/categorizer/status")

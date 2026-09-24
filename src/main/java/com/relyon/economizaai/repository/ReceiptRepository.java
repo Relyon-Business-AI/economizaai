@@ -16,7 +16,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpecificationExecutor<Receipt> {
+public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpecificationExecutor<Receipt>,
+        ReceiptAggregationRepository {
 
     Optional<Receipt> findByChaveAcesso(String chaveAcesso);
 

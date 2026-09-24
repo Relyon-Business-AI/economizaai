@@ -15,7 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
 
@@ -67,7 +67,9 @@ public class MlClassifierService {
     private final MultinomialNaiveBayes<ProductCategory> categoryModel = new MultinomialNaiveBayes<>();
     private final MultinomialNaiveBayes<String> genericNameModel = new MultinomialNaiveBayes<>();
     private volatile boolean ready = false;
-    private volatile LocalDateTime lastTrainedAt;
+    // Instant (not LocalDateTime): serializa com offset 'Z' pro FE converter pra fuso local.
+    // LocalDateTime.now() gravava a hora do servidor (UTC) sem zona e o FE mostrava a hora UTC.
+    private volatile Instant lastTrainedAt;
 
     @PostConstruct
     void trainOnStartup() {
@@ -112,7 +114,7 @@ public class MlClassifierService {
         categoryModel.train(categoryExamples, CharNGramFeatureExtractor::extract);
         genericNameModel.train(genericNameExamples, CharNGramFeatureExtractor::extract);
         ready = true;
-        lastTrainedAt = LocalDateTime.now();
+        lastTrainedAt = Instant.now();
         var elapsed = Duration.ofNanos(System.nanoTime() - started);
         log.info("ml.retrain.done categoryExamples={} categoryLabels={} genericExamples={} genericLabels={} vocab={} elapsedMs={}",
                 categoryExamples.size(), categoryModel.labelCount(),
@@ -140,7 +142,7 @@ public class MlClassifierService {
         return categoryApplyEnabled;
     }
 
-    public LocalDateTime getLastTrainedAt() {
+    public Instant getLastTrainedAt() {
         return lastTrainedAt;
     }
 

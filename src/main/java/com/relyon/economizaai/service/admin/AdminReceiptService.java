@@ -1,14 +1,18 @@
 package com.relyon.economizaai.service.admin;
 
+import com.relyon.economizaai.dto.response.AdminReceiptDetailResponse;
+import com.relyon.economizaai.dto.response.AdminReceiptStatsResponse;
 import com.relyon.economizaai.dto.response.ReceiptResponse;
 import com.relyon.economizaai.dto.response.ReceiptSummaryResponse;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
+import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
 import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
+import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.ReceiptSpecifications;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +20,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +47,7 @@ public class AdminReceiptService {
     private final ReceiptRepository receiptRepository;
     private final PriceObservationAuditRepository observationAuditRepository;
     private final PriceObservationRepository observationRepository;
+    private final LocalizedMessageService localizedMessageService;
 
     @Transactional(readOnly = true)
     public Page<ReceiptSummaryResponse> list(LocalDateTime from,
@@ -55,25 +61,72 @@ public class AdminReceiptService {
                                              String parseErrorReason,
                                              boolean includeInternal,
                                              Pageable pageable) {
-        var trimmedCnpj = Optional.ofNullable(marketCnpj).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
-        var trimmedSearch = Optional.ofNullable(search).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
-        var trimmedError = Optional.ofNullable(parseErrorReason).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
         var sortedPageable = pageable.getSort().isUnsorted()
                 ? PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by(Sort.Direction.DESC, "issuedAt"))
                 : pageable;
+        var spec = buildSearchSpec(from, to, marketCnpj, categories, search, householdId, uf, status,
+                parseErrorReason, includeInternal);
+        return receiptRepository.findAll(spec, sortedPageable).map(ReceiptSummaryResponse::from);
+    }
+
+    /** Count + total value of the notes matching the same filters as {@link #list} — the list header total. */
+    @Transactional(readOnly = true)
+    public AdminReceiptStatsResponse stats(LocalDateTime from,
+                                           LocalDateTime to,
+                                           String marketCnpj,
+                                           List<ProductCategory> categories,
+                                           String search,
+                                           UUID householdId,
+                                           UnidadeFederativa uf,
+                                           ReceiptStatus status,
+                                           String parseErrorReason,
+                                           boolean includeInternal) {
+        var spec = buildSearchSpec(from, to, marketCnpj, categories, search, householdId, uf, status,
+                parseErrorReason, includeInternal);
+        return new AdminReceiptStatsResponse(receiptRepository.count(spec), receiptRepository.sumTotalAmount(spec));
+    }
+
+    private Specification<Receipt> buildSearchSpec(LocalDateTime from, LocalDateTime to, String marketCnpj,
+                                                   List<ProductCategory> categories, String search, UUID householdId,
+                                                   UnidadeFederativa uf, ReceiptStatus status, String parseErrorReason,
+                                                   boolean includeInternal) {
+        var trimmedCnpj = Optional.ofNullable(marketCnpj).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
+        var trimmedSearch = Optional.ofNullable(search).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
+        var trimmedError = Optional.ofNullable(parseErrorReason).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
         // Admin sees FAILED_PARSE rows too (useful for parser triage) — but an
         // explicit status filter narrows to one bucket when passed.
         var spec = ReceiptSpecifications.forSearch(
                 householdId, from, to, trimmedCnpj, categories, status, trimmedSearch, false, uf, trimmedError);
         // Off by default: hide receipts from admin/test accounts so a bulk import doesn't flood the list.
         if (!includeInternal) spec = spec.and(ReceiptSpecifications.excludeInternal());
-        return receiptRepository.findAll(spec, sortedPageable).map(ReceiptSummaryResponse::from);
+        return spec;
     }
 
     @Transactional(readOnly = true)
-    public ReceiptResponse get(UUID receiptId) {
+    public AdminReceiptDetailResponse get(UUID receiptId) {
         var receipt = receiptRepository.findById(receiptId).orElseThrow(ReceiptNotFoundException::new);
-        return ReceiptResponse.from(receipt);
+        var response = ReceiptResponse.from(receipt).withParseErrorMessage(localizedParseError(receipt));
+        return AdminReceiptDetailResponse.of(response, receipt.getUser());
+    }
+
+    /**
+     * Translates the machine {@code parseErrorReason} ("key:args") into a
+     * user-showable message in the request's locale. Unknown keys fall back to
+     * the generic parse-failure message; non-failed receipts get null.
+     */
+    private String localizedParseError(Receipt receipt) {
+        if (receipt.getStatus() != ReceiptStatus.FAILED_PARSE || receipt.getParseErrorReason() == null) {
+            return null;
+        }
+        var reason = receipt.getParseErrorReason();
+        var separatorIndex = reason.indexOf(':');
+        var key = separatorIndex < 0 ? reason : reason.substring(0, separatorIndex);
+        var argument = separatorIndex < 0 ? "" : reason.substring(separatorIndex + 1);
+        try {
+            return localizedMessageService.translate(key, argument);
+        } catch (RuntimeException ex) {
+            return localizedMessageService.translate("receipt.parse.failed", argument);
+        }
     }
 
     /**

@@ -1,9 +1,11 @@
 package com.relyon.economizaai.repository;
 
 import com.relyon.economizaai.model.Household;
+import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.AcquisitionChannel;
 import com.relyon.economizaai.model.enums.Platform;
+import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.model.enums.SubscriptionTier;
 import org.junit.jupiter.api.Test;
@@ -29,6 +31,7 @@ class UserRepositoryAnalyticsTest {
 
     @Autowired private UserRepository userRepository;
     @Autowired private HouseholdRepository householdRepository;
+    @Autowired private ReceiptRepository receiptRepository;
 
     private User createUser(String suffix, AcquisitionChannel channel, String campaign,
                             boolean verified, SubscriptionTier tier) {
@@ -99,6 +102,30 @@ class UserRepositoryAnalyticsTest {
 
         assertThat(userRepository.countSignupsSince(since, false)).isEqualTo(1); // only the real user
         assertThat(userRepository.countSignupsSince(since, true)).isEqualTo(3);  // everyone
+    }
+
+    @Test
+    void cohortActivityGroupsByAcquisitionChannelDespiteReceiptChannelCollision() {
+        // Regressão: a query junta receipts (que tem coluna `channel`); agrupar pelo alias
+        // `channel` fazia o Postgres resolver receipts.channel e quebrar. Deve rodar e casar
+        // o usuário à sua própria semana de cadastro (offset 0).
+        var user = createUser("C1", AcquisitionChannel.ORGANIC, null, true, SubscriptionTier.FREE);
+        receiptRepository.save(Receipt.builder()
+                .user(user)
+                .household(user.getHousehold())
+                .chaveAcesso("43260412345678000190650010000123451123456780")
+                .qrPayload("https://sefaz/p=chave")
+                .status(ReceiptStatus.CONFIRMED)
+                .build());
+
+        var since = LocalDateTime.now().minusDays(7);
+        // week_offset (date - date) é integer no Postgres mas Interval no H2 de teste; o valor
+        // exato do offset é validado no dev (PG). Aqui garantimos que a query roda e agrupa certo.
+        var rows = userRepository.cohortActivitySince(since, false);
+
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0)[1]).isEqualTo(AcquisitionChannel.ORGANIC.name()); // channel
+        assertThat(((Number) rows.get(0)[3]).longValue()).isEqualTo(1);          // active_users
     }
 
     @Test

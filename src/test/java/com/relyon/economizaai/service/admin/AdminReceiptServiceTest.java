@@ -4,12 +4,14 @@ import com.relyon.economizaai.exception.ReceiptNotFoundException;
 import com.relyon.economizaai.model.PriceObservation;
 import com.relyon.economizaai.model.PriceObservationAudit;
 import com.relyon.economizaai.model.Receipt;
+import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
 import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
+import com.relyon.economizaai.service.LocalizedMessageService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -44,6 +46,7 @@ class AdminReceiptServiceTest {
     @Mock private ReceiptRepository receiptRepository;
     @Mock private PriceObservationAuditRepository observationAuditRepository;
     @Mock private PriceObservationRepository observationRepository;
+    @Mock private LocalizedMessageService localizedMessageService;
 
     @InjectMocks private AdminReceiptService service;
 
@@ -108,15 +111,31 @@ class AdminReceiptServiceTest {
     }
 
     @Test
-    void get_returnsReceiptResponse() {
+    void get_returnsReceiptWithOwner() {
         var receipt = receipt(ReceiptStatus.PENDING_CONFIRMATION);
+        var owner = User.builder().id(UUID.randomUUID()).name("Robson").email("robson@economizaai.app").build();
+        receipt.setUser(owner);
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
 
         var response = service.get(receipt.getId());
 
-        assertEquals(receipt.getId(), response.id());
-        assertEquals("Mercado X", response.marketName());
-        assertEquals(ReceiptStatus.PENDING_CONFIRMATION, response.status());
+        assertEquals(receipt.getId(), response.receipt().id());
+        assertEquals("Mercado X", response.receipt().marketName());
+        assertEquals(ReceiptStatus.PENDING_CONFIRMATION, response.receipt().status());
+        assertEquals(owner.getId(), response.owner().id());
+        assertEquals("robson@economizaai.app", response.owner().email());
+    }
+
+    @Test
+    void get_localizesFailureMessageForFailedParse() {
+        var receipt = receipt(ReceiptStatus.FAILED_PARSE);
+        receipt.setParseErrorReason("infosimples.error");
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(localizedMessageService.translate("infosimples.error", "")).thenReturn("Falha ao consultar a nota.");
+
+        var response = service.get(receipt.getId());
+
+        assertEquals("Falha ao consultar a nota.", response.receipt().parseErrorMessage());
     }
 
     @Test
@@ -125,6 +144,17 @@ class AdminReceiptServiceTest {
         when(receiptRepository.findById(unknownId)).thenReturn(Optional.empty());
 
         assertThrows(ReceiptNotFoundException.class, () -> service.get(unknownId));
+    }
+
+    @Test
+    void stats_returnsCountAndSummedTotalFromSpec() {
+        when(receiptRepository.count(any(Specification.class))).thenReturn(9L);
+        when(receiptRepository.sumTotalAmount(any(Specification.class))).thenReturn(new BigDecimal("1234.56"));
+
+        var stats = service.stats(null, null, null, null, null, null, null, null, null, false);
+
+        assertEquals(9L, stats.count());
+        assertEquals(new BigDecimal("1234.56"), stats.totalAmount());
     }
 
     @Test
