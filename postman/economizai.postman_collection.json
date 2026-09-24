@@ -3632,7 +3632,7 @@
       ],
       "body": {
        "mode": "raw",
-       "raw": "[\n  { \"keyword\": \"arroz\", \"genericName\": \"Arroz\", \"category\": \"GROCERIES\" }\n]",
+       "raw": "[\n  { \"keyword\": \"arroz\", \"genericName\": \"Arroz\", \"brand\": \"Sorriso\", \"category\": \"GROCERIES\" }\n]",
        "options": {
         "raw": {
          "language": "json"

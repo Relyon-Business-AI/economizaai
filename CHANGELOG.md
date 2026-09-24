@@ -16,6 +16,18 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-24 — Categorização: regra curada define marca + re-canoniza não-casados ao salvar
+
+- **`POST /api/v1/categorizer/dictionary/curated/import`**: cada entrada aceita agora um
+  campo opcional **`brand`** (`{ keyword, genericName?, brand?, category }`). A marca do
+  dicionário passa a ter prioridade sobre o extrator de marca na canonicalização.
+- **Resposta mudou**: além de `{ imported, skipped }`, retorna **`recanonicalized`** — quantos
+  itens **não-casados** (confirmados, `product IS NULL`) cuja descrição casa a keyword foram
+  re-canonizados (ganharam produto e **saíram da fila de não-casados**) ao salvar a regra.
+- **`CuratedEntry`** (listagem do dicionário) agora traz **`brand`**.
+- Efeito prático: definir uma regra na fila "Não-casados" agora **limpa os itens existentes**
+  que casam a keyword de uma vez, não só os scans futuros.
+
 ## 2026-09-24 — Admin: detalhe de nota (dono/erro/QR), total de valor, período por estado, dispositivo do usuário
 
 Lote de melhorias do dashboard admin + 2 correções.
