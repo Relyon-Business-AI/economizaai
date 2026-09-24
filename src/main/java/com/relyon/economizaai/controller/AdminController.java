@@ -9,6 +9,7 @@ import com.relyon.economizaai.dto.request.SetProductCategoryRequest;
 import com.relyon.economizaai.dto.request.UpdateSubscriptionTierRequest;
 import com.relyon.economizaai.dto.response.AcquisitionReportResponse;
 import com.relyon.economizaai.dto.response.AdminNotificationSummaryResponse;
+import com.relyon.economizaai.dto.response.AdminReceiptDetailResponse;
 import com.relyon.economizaai.dto.response.AdminUserDetailResponse;
 import com.relyon.economizaai.dto.response.BrandBackfillResponse;
 import com.relyon.economizaai.dto.response.RetentionCohortResponse;
@@ -185,7 +186,7 @@ public class AdminController {
     }
 
     @GetMapping("/receipts/{id}")
-    public ResponseEntity<ReceiptResponse> getReceipt(@PathVariable UUID id) {
+    public ResponseEntity<AdminReceiptDetailResponse> getReceipt(@PathVariable UUID id) {
         return ResponseEntity.ok(adminReceiptService.get(id));
     }
 

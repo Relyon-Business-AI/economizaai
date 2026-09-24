@@ -15,6 +15,7 @@ import com.relyon.economizaai.dto.response.ProductDeletionResponse;
 import com.relyon.economizaai.dto.response.ProductMergeResultResponse;
 import com.relyon.economizaai.dto.response.ProductResponse;
 import com.relyon.economizaai.dto.response.ReceiptItemResponse;
+import com.relyon.economizaai.dto.response.AdminReceiptDetailResponse;
 import com.relyon.economizaai.dto.response.ReceiptResponse;
 import com.relyon.economizaai.dto.response.ReceiptSummaryResponse;
 import com.relyon.economizaai.dto.response.RecategorizeReportResponse;
@@ -27,6 +28,7 @@ import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.CategorizationQualityTrigger;
 import com.relyon.economizaai.model.enums.CategorizationSource;
+import com.relyon.economizaai.model.enums.Platform;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.Role;
@@ -72,6 +74,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
@@ -292,7 +295,8 @@ class AdminControllerTest {
         var id = UUID.randomUUID();
         var detail = new AdminUserDetailResponse(id, "John", "john@test.com",
                 Role.USER, SubscriptionTier.FREE, true, true, true, false, UUID.randomUUID(),
-                3L, new ReceiptCounts(1L, 5L, 0L, 2L), new BigDecimal("99.90"), LocalDateTime.now());
+                3L, new ReceiptCounts(1L, 5L, 0L, 2L), new BigDecimal("99.90"), LocalDateTime.now(),
+                Platform.IOS, Platform.ANDROID, OffsetDateTime.now());
         when(adminUserService.get(id)).thenReturn(detail);
 
         mockMvc.perform(get("/api/v1/admin/users/" + id)
@@ -300,7 +304,9 @@ class AdminControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value("john@test.com"))
                 .andExpect(jsonPath("$.receipts.confirmed").value(5))
-                .andExpect(jsonPath("$.householdMemberCount").value(3));
+                .andExpect(jsonPath("$.householdMemberCount").value(3))
+                .andExpect(jsonPath("$.registrationPlatform").value("IOS"))
+                .andExpect(jsonPath("$.lastPlatform").value("ANDROID"));
     }
 
     @Test
@@ -333,7 +339,8 @@ class AdminControllerTest {
         var id = UUID.randomUUID();
         var detail = new AdminUserDetailResponse(id, "John", "john@test.com",
                 Role.USER, SubscriptionTier.PRO, true, true, true, false, UUID.randomUUID(),
-                1L, new ReceiptCounts(0L, 0L, 0L, 0L), BigDecimal.ZERO, LocalDateTime.now());
+                1L, new ReceiptCounts(0L, 0L, 0L, 0L), BigDecimal.ZERO, LocalDateTime.now(),
+                null, null, null);
         when(adminUserService.setTier(id, SubscriptionTier.PRO)).thenReturn(detail);
 
         mockMvc.perform(put("/api/v1/admin/users/" + id + "/subscription-tier")
@@ -391,12 +398,16 @@ class AdminControllerTest {
     @Test
     void getReceipt_returnsReceipt() throws Exception {
         var id = UUID.randomUUID();
-        when(adminReceiptService.get(id)).thenReturn(sampleReceipt(ReceiptStatus.PENDING_CONFIRMATION));
+        var owner = User.builder().id(UUID.randomUUID()).name("Robson").email("robson@economizaai.app").build();
+        var detail = AdminReceiptDetailResponse.of(sampleReceipt(ReceiptStatus.PENDING_CONFIRMATION), owner);
+        when(adminReceiptService.get(id)).thenReturn(detail);
 
         mockMvc.perform(get("/api/v1/admin/receipts/" + id)
                         .with(SecurityMockMvcRequestPostProcessors.user(adminUser())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.chaveAcesso").value(CHAVE_RS));
+                .andExpect(jsonPath("$.receipt.chaveAcesso").value(CHAVE_RS))
+                .andExpect(jsonPath("$.receipt.qrPayload").value("https://sefaz/p=" + CHAVE_RS))
+                .andExpect(jsonPath("$.owner.email").value("robson@economizaai.app"));
     }
 
     @Test

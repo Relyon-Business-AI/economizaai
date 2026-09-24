@@ -1,14 +1,17 @@
 package com.relyon.economizaai.service.admin;
 
+import com.relyon.economizaai.dto.response.AdminReceiptDetailResponse;
 import com.relyon.economizaai.dto.response.ReceiptResponse;
 import com.relyon.economizaai.dto.response.ReceiptSummaryResponse;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
+import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
 import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
+import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.ReceiptSpecifications;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +45,7 @@ public class AdminReceiptService {
     private final ReceiptRepository receiptRepository;
     private final PriceObservationAuditRepository observationAuditRepository;
     private final PriceObservationRepository observationRepository;
+    private final LocalizedMessageService localizedMessageService;
 
     @Transactional(readOnly = true)
     public Page<ReceiptSummaryResponse> list(LocalDateTime from,
@@ -71,9 +75,30 @@ public class AdminReceiptService {
     }
 
     @Transactional(readOnly = true)
-    public ReceiptResponse get(UUID receiptId) {
+    public AdminReceiptDetailResponse get(UUID receiptId) {
         var receipt = receiptRepository.findById(receiptId).orElseThrow(ReceiptNotFoundException::new);
-        return ReceiptResponse.from(receipt);
+        var response = ReceiptResponse.from(receipt).withParseErrorMessage(localizedParseError(receipt));
+        return AdminReceiptDetailResponse.of(response, receipt.getUser());
+    }
+
+    /**
+     * Translates the machine {@code parseErrorReason} ("key:args") into a
+     * user-showable message in the request's locale. Unknown keys fall back to
+     * the generic parse-failure message; non-failed receipts get null.
+     */
+    private String localizedParseError(Receipt receipt) {
+        if (receipt.getStatus() != ReceiptStatus.FAILED_PARSE || receipt.getParseErrorReason() == null) {
+            return null;
+        }
+        var reason = receipt.getParseErrorReason();
+        var separatorIndex = reason.indexOf(':');
+        var key = separatorIndex < 0 ? reason : reason.substring(0, separatorIndex);
+        var argument = separatorIndex < 0 ? "" : reason.substring(separatorIndex + 1);
+        try {
+            return localizedMessageService.translate(key, argument);
+        } catch (RuntimeException ex) {
+            return localizedMessageService.translate("receipt.parse.failed", argument);
+        }
     }
 
     /**
