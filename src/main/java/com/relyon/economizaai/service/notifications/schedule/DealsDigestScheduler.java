@@ -36,6 +36,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Daily deals digest (Phase C): once an hour, for every user whose effective
@@ -120,8 +121,17 @@ public class DealsDigestScheduler {
         return self != null ? self : this;
     }
 
-    /** One transaction per user; returns true when a digest was actually sent. */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    /**
+     * One send per user; returns true when a digest was actually sent.
+     *
+     * <p>Deliberately NOT {@code @Transactional}: {@code notificationService.notify(...)} dispatches
+     * over the network (Expo push / SMTP) and holding a transaction across it would pin a Hikari
+     * connection for the whole round-trip, starving the pool under load. The deal reads and the send
+     * run untransacted; the post-send state (per-deal dedup upserts, SENT telemetry rows, and the
+     * 1/day {@code lastDigestSentAt} cap) is then persisted in ONE short transaction — the "already
+     * sent today" guard still gates entry via {@link #isDue}, and the whole persist block is atomic
+     * (same split as {@code MarketLocationService.geocodeOne}/{@code persistGeocodeResult}).
+     */
     public boolean processUser(User user, OffsetDateTime now) {
         var deals = dealsService.findDeals(user, false, null, DEAL_LIMIT);
         var newsworthy = deals.stream().filter(deal -> isNewsworthy(user, deal, now)).toList();
@@ -135,6 +145,20 @@ public class DealsDigestScheduler {
         var notification = notificationService.notify(buildPayload(user, best, newsworthy.size()));
         var notificationId = notification != null ? notification.getId() : null;
 
+        effectiveSelf().persistDigest(user, newsworthy, notificationId, now);
+        log.info("digest.sent user={} best={} newsworthy={}",
+                LogMasker.email(user.getEmail()), best.productName(), newsworthy.size());
+        return true;
+    }
+
+    /**
+     * Persist everything the send produced in one short transaction, AFTER the network dispatch:
+     * each newsworthy deal's {@link DealSurfaceState} dedup upsert and its {@code SENT} telemetry
+     * event, then the 1/day cap on {@code User.lastDigestSentAt}. REQUIRES_NEW keeps one user's
+     * persistence isolated from the batch so a single failure is caught in {@link #run}.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void persistDigest(User user, List<DealResponse> newsworthy, UUID notificationId, OffsetDateTime now) {
         for (var deal : newsworthy) {
             upsertState(user, deal, now);
             eventService.record(user, NotificationEventType.SENT, RecordContext.builder()
@@ -145,12 +169,8 @@ public class DealsDigestScheduler {
                     .metadata(Map.of("discountFraction", deal.discountFraction()))
                     .build());
         }
-
         user.setLastDigestSentAt(now);
         userRepository.save(user);
-        log.info("digest.sent user={} best={} newsworthy={}",
-                LogMasker.email(user.getEmail()), best.productName(), newsworthy.size());
-        return true;
     }
 
     /**

@@ -11,6 +11,8 @@ import com.relyon.economizaai.service.notifications.NotificationService;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,7 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.Map;
 import java.util.Objects;
 
@@ -45,23 +46,42 @@ public class ReplenishmentService {
     private final NotificationService notificationService;
     private final LocalizedMessageService messageService;
 
+    // Self-reference so the per-rule @Transactional persist goes through the Spring
+    // proxy (a direct call would bypass it). Defaults to `this` for plain unit tests;
+    // Spring replaces it with the lazy proxy at runtime.
+    @Lazy
+    @Autowired
+    private ReplenishmentService self = this;
+
+    /**
+     * Never holds a DB transaction across {@code notificationService.notify(...)} — that dispatch is an
+     * outbound HTTP/SMTP call and a transaction spanning the loop would pin a Hikari connection for the
+     * whole round-trip, starving the pool under load. History reads and the send run untransacted; only
+     * the cooldown timestamp is persisted afterwards, in a short transaction (same split as
+     * {@code MarketLocationService.geocodeOne}/{@code persistGeocodeResult}).
+     */
     @Scheduled(fixedDelayString = "${economizaai.notifications.replenishment.interval-ms:21600000}",
             initialDelayString = "${economizaai.notifications.replenishment.initial-delay-ms:60000}")
-    @Transactional
     public void run() {
         var rules = ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.STOCKOUT);
         if (rules.isEmpty()) return;
         var now = LocalDateTime.now();
-        var fired = new ArrayList<NotificationRule>();
+        var fired = 0;
         for (var rule : rules) {
             if (inCooldown(rule, now) || rule.getProduct() == null || rule.getUser().getHousehold() == null) continue;
             if (evaluate(rule, now)) {
-                rule.setLastFiredAt(now);
-                fired.add(rule);
+                self.markFired(rule, now);
+                fired++;
             }
         }
-        if (!fired.isEmpty()) ruleRepository.saveAll(fired);
-        log.info("replenishment.run done rules={} fired={}", rules.size(), fired.size());
+        log.info("replenishment.run done rules={} fired={}", rules.size(), fired);
+    }
+
+    /** Persist the per-rule cooldown timestamp in a short transaction, after the send. */
+    @Transactional
+    public void markFired(NotificationRule rule, LocalDateTime firedAt) {
+        rule.setLastFiredAt(firedAt);
+        ruleRepository.save(rule);
     }
 
     private boolean evaluate(NotificationRule rule, LocalDateTime now) {

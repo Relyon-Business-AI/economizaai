@@ -26,6 +26,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -74,6 +75,26 @@ class DigestServiceTest {
         var captor = ArgumentCaptor.forClass(NotificationPayload.class);
         verify(notificationService).notify(captor.capture());
         assertEquals(NotificationType.DIGEST, captor.getValue().type());
+    }
+
+    @Test
+    void run_readsActivityBeforeDispatching() {
+        // The window reads (which decide whether to notify) run before the network send;
+        // run() holds no transaction across notify() (tx boundary moved off the loop).
+        when(ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.DIGEST))
+                .thenReturn(List.of(digestRule()));
+        when(receiptRepository.countByHouseholdIdAndStatusAndConfirmedAtAfter(
+                eq(HOUSEHOLD_ID), eq(ReceiptStatus.CONFIRMED), any())).thenReturn(3L);
+        when(receiptRepository.sumConfirmedTotalSince(eq(HOUSEHOLD_ID), any()))
+                .thenReturn(new BigDecimal("210.50"));
+
+        service.run();
+
+        var inOrder = inOrder(receiptRepository, notificationService);
+        inOrder.verify(receiptRepository).countByHouseholdIdAndStatusAndConfirmedAtAfter(
+                eq(HOUSEHOLD_ID), eq(ReceiptStatus.CONFIRMED), any());
+        inOrder.verify(receiptRepository).sumConfirmedTotalSince(eq(HOUSEHOLD_ID), any());
+        inOrder.verify(notificationService).notify(any(NotificationPayload.class));
     }
 
     @Test

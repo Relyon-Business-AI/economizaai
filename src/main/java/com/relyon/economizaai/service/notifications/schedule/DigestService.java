@@ -11,7 +11,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -33,9 +32,14 @@ public class DigestService {
     private final NotificationService notificationService;
     private final LocalizedMessageService messageService;
 
+    /**
+     * Deliberately NOT {@code @Transactional}: {@code notificationService.notify(...)} dispatches over
+     * the network (Expo push / SMTP) and a transaction spanning the loop would pin a Hikari connection
+     * across every send, starving the pool under load. The counts read here are plain repository calls
+     * (each in its own short tx) and there is no post-send write to protect.
+     */
     @Scheduled(cron = "${economizaai.notifications.digest.cron:0 0 8 * * MON}",
             zone = "${economizaai.notifications.digest.zone:America/Sao_Paulo}")
-    @Transactional
     public void run() {
         var rules = ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.DIGEST);
         if (rules.isEmpty()) return;
