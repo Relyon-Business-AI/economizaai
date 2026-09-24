@@ -329,8 +329,11 @@ public class CanonicalizationService {
                 || extraction.packSize() == null || extraction.packUnit() == null) {
             return null;
         }
+        // Dedup on the normalized mirror so accent/case variants of the same
+        // (genericName, brand) collapse to one product.
         var matches = productRepository.findByMetadata(
-                extraction.genericName(), extraction.brand(),
+                DescriptionNormalizer.normalize(extraction.genericName()),
+                DescriptionNormalizer.normalize(extraction.brand()),
                 extraction.packSize(), extraction.packUnit());
         return matches.isEmpty() ? null : matches.get(0);
     }
@@ -354,7 +357,7 @@ public class CanonicalizationService {
             return null;
         }
         var candidates = aliasRepository.findCandidatesByProductMetadata(
-                extraction.genericName(), extraction.packSize(), extraction.packUnit());
+                DescriptionNormalizer.normalize(extraction.genericName()), extraction.packSize(), extraction.packUnit());
         ProductAlias best = null;
         var bestScore = 0.0;
         for (var candidate : candidates) {
@@ -392,9 +395,11 @@ public class CanonicalizationService {
         }
         if (product.getGenericName() == null && entry.getGenericName() != null) {
             product.setGenericName(entry.getGenericName());
+            product.setGenericNameNorm(DescriptionNormalizer.normalizeOrNull(entry.getGenericName()));
         }
         if (product.getBrand() == null && entry.getBrand() != null) {
             product.setBrand(entry.getBrand());
+            product.setBrandNorm(DescriptionNormalizer.normalizeOrNull(entry.getBrand()));
         }
     }
 
@@ -418,7 +423,9 @@ public class CanonicalizationService {
                 .normalizedName(item.getRawDescription())
                 .unit(item.getUnit())
                 .genericName(extraction.genericName())
+                .genericNameNorm(DescriptionNormalizer.normalizeOrNull(extraction.genericName()))
                 .brand(extraction.brand())
+                .brandNorm(DescriptionNormalizer.normalizeOrNull(extraction.brand()))
                 .category(extraction.category())
                 .packSize(extraction.packSize())
                 .packUnit(extraction.packUnit())

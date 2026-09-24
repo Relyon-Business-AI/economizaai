@@ -124,13 +124,13 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
      */
     @Query("""
         SELECT p FROM Product p
-        WHERE p.genericName = :genericName
-          AND p.brand = :brand
+        WHERE p.genericNameNorm = :genericNameNorm
+          AND p.brandNorm = :brandNorm
           AND p.packSize = :packSize
           AND p.packUnit = :packUnit
     """)
-    List<Product> findByMetadata(@Param("genericName") String genericName,
-                                 @Param("brand") String brand,
+    List<Product> findByMetadata(@Param("genericNameNorm") String genericNameNorm,
+                                 @Param("brandNorm") String brandNorm,
                                  @Param("packSize") BigDecimal packSize,
                                  @Param("packUnit") String packUnit);
 
@@ -157,19 +157,27 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
      */
     @Query("""
         SELECT p FROM Product p
-        WHERE p.genericName IS NOT NULL
-          AND p.brand IS NOT NULL
+        WHERE p.genericNameNorm IS NOT NULL
+          AND p.brandNorm IS NOT NULL
           AND p.packSize IS NOT NULL
           AND p.packUnit IS NOT NULL
           AND EXISTS (
               SELECT 1 FROM Product p2
               WHERE p2.id <> p.id
-                AND p2.genericName = p.genericName
-                AND p2.brand = p.brand
+                AND p2.genericNameNorm = p.genericNameNorm
+                AND p2.brandNorm = p.brandNorm
                 AND p2.packSize = p.packSize
                 AND p2.packUnit = p.packUnit
           )
-        ORDER BY p.genericName ASC, p.brand ASC, p.packSize ASC, p.packUnit ASC, p.createdAt ASC
+        ORDER BY p.genericNameNorm ASC, p.brandNorm ASC, p.packSize ASC, p.packUnit ASC, p.createdAt ASC
     """)
     List<Product> findDuplicateCandidates();
+
+    /** Products whose normalized mirror columns still need populating (one-time backfill; empty after). */
+    @Query("""
+        SELECT p FROM Product p
+        WHERE (p.genericName IS NOT NULL AND p.genericNameNorm IS NULL)
+           OR (p.brand IS NOT NULL AND p.brandNorm IS NULL)
+    """)
+    List<Product> findNeedingNormBackfill();
 }

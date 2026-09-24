@@ -27,11 +27,11 @@ public interface ProductAliasRepository extends JpaRepository<ProductAlias, UUID
     @Query("""
         SELECT a FROM ProductAlias a
         JOIN a.product p
-        WHERE p.genericName = :genericName
+        WHERE p.genericNameNorm = :genericNameNorm
           AND p.packSize = :packSize
           AND p.packUnit = :packUnit
     """)
-    List<ProductAlias> findCandidatesByProductMetadata(@Param("genericName") String genericName,
+    List<ProductAlias> findCandidatesByProductMetadata(@Param("genericNameNorm") String genericNameNorm,
                                                        @Param("packSize") BigDecimal packSize,
                                                        @Param("packUnit") String packUnit);
 

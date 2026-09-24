@@ -180,7 +180,8 @@ class CanonicalizationServiceTest {
         when(productExtractor.extract(any())).thenReturn(
                 new ProductExtraction("Leite", "Itambe", new BigDecimal("1"), "L",
                         ProductCategory.MEAT_DAIRY, CategorizationSource.DICTIONARY));
-        when(productRepository.findByMetadata("Leite", "Itambe", new BigDecimal("1"), "L"))
+        // dedup queries on the normalized mirror columns
+        when(productRepository.findByMetadata("leite", "itambe", new BigDecimal("1"), "L"))
                 .thenReturn(List.of(existing));
         when(aliasRepository.existsByNormalizedDescription(anyString())).thenReturn(false);
 
@@ -352,7 +353,7 @@ class CanonicalizationServiceTest {
         when(productExtractor.extract("ARROZ TIO J 5KG")).thenReturn(
                 new ProductExtraction("Arroz", "Tio Joao", new BigDecimal("5"), "KG",
                         ProductCategory.GROCERIES, CategorizationSource.DICTIONARY));
-        when(aliasRepository.findCandidatesByProductMetadata("Arroz", new BigDecimal("5"), "KG"))
+        when(aliasRepository.findCandidatesByProductMetadata("arroz", new BigDecimal("5"), "KG"))
                 .thenReturn(List.of(existingAlias));
         when(aliasRepository.existsByNormalizedDescription("arroz tio j 5kg")).thenReturn(false);
 
@@ -380,7 +381,7 @@ class CanonicalizationServiceTest {
         when(productExtractor.extract("FEIJAO PRETO 5KG")).thenReturn(
                 new ProductExtraction("Arroz", null, new BigDecimal("5"), "KG",
                         ProductCategory.GROCERIES, CategorizationSource.DICTIONARY));
-        when(aliasRepository.findCandidatesByProductMetadata("Arroz", new BigDecimal("5"), "KG"))
+        when(aliasRepository.findCandidatesByProductMetadata("arroz", new BigDecimal("5"), "KG"))
                 .thenReturn(List.of(existingAlias));
         when(productRepository.save(any(Product.class))).thenAnswer(inv -> {
             var p = inv.<Product>getArgument(0);

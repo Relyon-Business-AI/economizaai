@@ -159,7 +159,9 @@ public class ProductService {
         var product = loadProduct(id);
         product.setNormalizedName(request.normalizedName());
         product.setGenericName(blankToNull(request.genericName()));
+        product.setGenericNameNorm(DescriptionNormalizer.normalizeOrNull(request.genericName()));
         product.setBrand(blankToNull(request.brand()));
+        product.setBrandNorm(DescriptionNormalizer.normalizeOrNull(request.brand()));
         product.setCategory(request.category());
         product.setUnit(blankToNull(request.unit()));
         product.setPackSize(request.packSize());

@@ -6,6 +6,7 @@ import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.PaidApiService;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.CuratedDictionaryEntryRepository;
+import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import com.relyon.economizaai.repository.HouseholdProductCategoryOverrideRepository;
 import com.relyon.economizaai.repository.LlmDisagreementRepository;
 import com.relyon.economizaai.repository.PaidApiCallRepository;
@@ -84,6 +85,7 @@ public class AdminLlmService {
                 product.setCategorizationSource(CategorizationSource.USER);
             } else if ("brand".equals(disagreement.getField())) {
                 product.setBrand(disagreement.getSuggestedValue());
+                product.setBrandNorm(DescriptionNormalizer.normalizeOrNull(disagreement.getSuggestedValue()));
             }
             productRepository.save(product);
         }

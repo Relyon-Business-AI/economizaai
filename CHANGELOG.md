@@ -16,6 +16,24 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-24 — Normalização consistente de texto (match/busca/dedup) em todo o app
+
+Padronização: **valores de exibição continuam como digitados** (nome genérico, marca, mercado
+mantêm acento/maiúscula), mas **tudo que é match/comparação/dedup/chave-de-busca é normalizado**
+(minúsculo + sem acento, via o mesmo `DescriptionNormalizer` já usado nas descrições).
+
+- **Keyword de regra curada** agora é normalizada ao salvar (`AÇÚCAR` → `acucar`) — antes só
+  minúsculo, então acento na keyword não casava. Vale também pra token aprendido, chave de marca
+  e keyword vinda do LLM.
+- **Dedup de produto** passou a comparar por colunas normalizadas (`generic_name_norm`,
+  `brand_norm`): "Nescafé" e "NESCAFE" agora são o **mesmo** produto (daqui pra frente). Duplicatas
+  que já existem por acento/caixa aparecem no **relatório de produtos duplicados** (aba Produtos)
+  pra merge manual — nada é fundido automaticamente.
+- **Buscas/filtros** de produto do household e preferência de marca ficaram acento-insensíveis.
+- Um backfill de boot re-normaliza as chaves de dicionário/marca antigas e preenche as colunas
+  `_norm` dos produtos (idempotente, não-destrutivo — colisões são logadas, nunca apagadas).
+- **FE**: novo util `normalizeText`; buscas client-side de categorias e campanhas agora sem acento.
+
 ## 2026-09-24 — Categorização: regra curada define marca + re-canoniza não-casados ao salvar
 
 - **`POST /api/v1/categorizer/dictionary/curated/import`**: cada entrada aceita agora um

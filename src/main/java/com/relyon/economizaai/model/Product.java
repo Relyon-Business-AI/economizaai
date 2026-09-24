@@ -34,8 +34,18 @@ public class Product extends BaseEntity {
     @Column(name = "generic_name", length = 100)
     private String genericName;
 
+    // Normalized (accent-stripped, lowercased, SEFAZ-expanded) mirror of genericName,
+    // used for dedup/matching so "Fermento Biológico" == "fermento biologico".
+    // Display always uses genericName; logic uses this. Kept in sync on every write.
+    @Column(name = "generic_name_norm", length = 160)
+    private String genericNameNorm;
+
     @Column(length = 100)
     private String brand;
+
+    /** Normalized mirror of brand — see {@link #genericNameNorm}. */
+    @Column(name = "brand_norm", length = 160)
+    private String brandNorm;
 
     @Enumerated(EnumType.STRING)
     @Column(length = 30)

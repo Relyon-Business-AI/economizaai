@@ -18,4 +18,15 @@ public final class DescriptionNormalizer {
         // to the same product + category (e.g. "MANT ELEGE" == "MANTEIGA ELEGE").
         return SefazAbbreviationExpander.expand(cleaned);
     }
+
+    /**
+     * Normalized mirror for dedup/matching that preserves null: {@code null} in →
+     * {@code null} out, and a value that normalizes to blank → {@code null}. Used
+     * to fill the {@code *_norm} columns/keys without turning "no value" into "".
+     */
+    public static String normalizeOrNull(String raw) {
+        if (raw == null) return null;
+        var normalized = normalize(raw);
+        return normalized.isBlank() ? null : normalized;
+    }
 }
