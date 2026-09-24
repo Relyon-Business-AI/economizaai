@@ -16,6 +16,36 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-23 — `best-markets` passa a expor o preço REAL mais recente (não só a mediana)
+
+O card "onde está mais barato" deve mostrar um **valor real** que o usuário vai (aproximadamente)
+encontrar — a mediana mascarava o número e a data. Cada linha de
+`GET /price-index/products/{id}/best-markets` agora traz **dois campos novos**:
+- **`latestPrice`** — o preço unitário real da observação **mais recente** naquele mercado.
+- **`latestObservedAt`** — quando essa observação foi vista (pra o usuário julgar se está fresca).
+
+`medianPrice` e `minPrice` continuam (a mediana segue como "preço usual" / baseline dos deals).
+**Aditivo — nada removido.** Recomendação de UI: mostrar `latestPrice` + "visto em {data}" no card
+do mercado; usar a mediana só onde o conceito é "preço usual". k-anon (≥3 famílias) inalterado — o
+valor real só aparece quando o mercado já tem contribuição de ≥3 famílias pra aquele produto.
+
+## 2026-09-23 — índice colaborativo ONLINE (série separada da física) + novo endpoint
+
+Toda observação de preço agora carrega um **canal** (físico x online), derivado do canal da
+nota. As duas viram **séries independentes** — leituras nunca misturam: o índice físico
+("melhor mercado perto de você") filtra só presencial; nasce um índice **online nacional**.
+
+- **Novo endpoint:** `GET /api/v1/price-index/products/{productId}/online-reference` →
+  preço de referência **online nacional** de um produto (mediana entre todos os vendedores
+  online — marketplaces + delivery de mercado), sem geo. Mesma proteção k-anon/amostra
+  mínima e o **mesmo shape de `ReferencePrice`** de `.../markets/{cnpj}/reference` (retorna
+  `medianPrice: null` + contagens quando o volume é insuficiente).
+- **O que alimenta o índice online:** itens com **EAN válido** (→ produto canônico), venham
+  de site de mercado OU de marketplace. O gate NÃO é o segmento da loja (online, a Amazon
+  vende café com EAN real ao lado de livros) — é o item. Item sem EAN não entra.
+- **Nada muda nos endpoints físicos existentes** (`.../reference`, `best-markets`, `promos`):
+  passam a filtrar só presencial, então não são poluídos por preços online. Retrocompatível.
+
 ## 2026-09-23 — dashboard/insights ganham `scope` (mercado/farmácia vs outras notas)
 
 Preparo pra separar o dashboard: **Início** vai mostrar só mercado/farmácia e uma tela "Outras

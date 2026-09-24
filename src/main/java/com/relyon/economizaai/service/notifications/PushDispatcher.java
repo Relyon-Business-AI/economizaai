@@ -50,9 +50,8 @@ public class PushDispatcher implements NotificationDispatcher {
         }
         var trimmed = token.trim();
         if (!EXPO_TOKEN_PATTERN.matcher(trimmed).matches()) {
-            log.warn("notification.push.invalid_token user={} token_prefix='{}'",
-                    LogMasker.email(payload.user().getEmail()),
-                    trimmed.length() > 20 ? trimmed.substring(0, 20) : trimmed);
+            log.warn("notification.push.invalid_token user={} token={}",
+                    LogMasker.email(payload.user().getEmail()), LogMasker.token(trimmed));
             return DispatchResult.failed("token is not an Expo push token (expected ExponentPushToken[...])");
         }
         if (payload.title() == null || payload.title().isBlank()

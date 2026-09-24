@@ -26,6 +26,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -74,7 +75,24 @@ class BudgetMonitorServiceTest {
         var captor = ArgumentCaptor.forClass(NotificationPayload.class);
         verify(notificationService).notify(captor.capture());
         assertEquals(NotificationType.BUDGET, captor.getValue().type());
-        verify(ruleRepository).saveAll(any());
+        verify(ruleRepository).save(rule);
+    }
+
+    @Test
+    void run_persistsFiredTimestampOnlyAfterSend() {
+        // Guards that the notify() dispatch is NOT wrapped in the persist transaction:
+        // the send happens first, the fired-timestamp is saved afterwards.
+        var rule = budgetRule(new BigDecimal("500.00"), null);
+        when(ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.BUDGET))
+                .thenReturn(List.of(rule));
+        when(receiptRepository.sumConfirmedTotalSince(eq(HOUSEHOLD_ID), any()))
+                .thenReturn(new BigDecimal("620.00"));
+
+        service.run();
+
+        var inOrder = inOrder(notificationService, ruleRepository);
+        inOrder.verify(notificationService).notify(any(NotificationPayload.class));
+        inOrder.verify(ruleRepository).save(rule);
     }
 
     @Test

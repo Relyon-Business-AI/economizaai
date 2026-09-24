@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.sefaz;
 
 import com.relyon.economizaai.exception.ReceiptParseException;
+import com.relyon.economizaai.model.enums.ReceiptChannel;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
@@ -62,6 +63,7 @@ public final class SvrsNfeProdutosParser {
                 .approxTaxEstadual(null)
                 .sourceUrl(sourceUrl)
                 .rawHtml(html)
+                .channel(parseChannel(document))
                 .items(items)
                 .build();
         log.info("Parsed NF-e 55 receipt: market='{}', total={}, items={}",
@@ -137,6 +139,23 @@ public final class SvrsNfeProdutosParser {
                 .map(ParsedReceiptItem::totalPrice)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * "Presença do Comprador" (indPres): "2 - Operação pela internet", "1 - Operação presencial", etc.
+     * Não presencial (2 internet, 3 teleatendimento, 4 entrega domicílio, 9 outros) → ONLINE;
+     * qualquer outro / ausente → IN_STORE (conservador, não infla o índice online por engano).
+     */
+    private static ReceiptChannel parseChannel(Document document) {
+        var value = findLabelValue(document, "Presença do Comprador");
+        var digit = DIGITS.matcher(value == null ? "" : value);
+        if (digit.find()) {
+            var code = digit.group();
+            if (code.equals("2") || code.equals("3") || code.equals("4") || code.equals("9")) {
+                return ReceiptChannel.ONLINE;
+            }
+        }
+        return ReceiptChannel.IN_STORE;
     }
 
     private static String findLabelValue(Element root, String labelContains) {

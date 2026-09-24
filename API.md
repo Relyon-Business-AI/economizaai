@@ -954,6 +954,17 @@ When `kAnonBlocked: true`, `medianPrice` is `null` but `sampleCount` /
 `distinctHouseholds` are still visible — show the "poucas amostras" warning.
 
 ```
+GET /api/v1/price-index/products/{productId}/online-reference
+→ same ReferencePrice shape as above
+```
+
+National ONLINE reference price — median across all online sellers (marketplaces
++ supermarket delivery), no geo. A **separate series** from the physical index:
+the two never mix. Fed by items with a real EAN regardless of the seller's
+segment (a marketplace's grocery EAN counts; a book doesn't match a grocery
+product). Same k-anon / min-sample rules as the physical reference.
+
+```
 GET /api/v1/price-index/products/{productId}/best-markets?limit=10&radiusKm=5[&lat=&lng=]
 GET /api/v1/price-index/promos?radiusKm=5
 ```
@@ -964,6 +975,14 @@ GET /api/v1/price-index/promos?radiusKm=5
 `best-markets` measures distance from the user's HOME location by default; pass
 `lat`/`lng` to measure from the current position instead (barcode scan inside a
 store — see the flow below).
+
+Each `best-markets` row carries both an aggregate and a real value:
+`medianPrice`/`minPrice` (the "usual price" baseline) **plus** `latestPrice` +
+`latestObservedAt` — the actual most-recent observed price at that market and when
+it was seen. Show `latestPrice` + "visto em {latestObservedAt}" on the market card
+(a real number the shopper will roughly find, honestly dated); reserve the median
+for "usual price" contexts. Both are k-anon gated (row only appears with ≥3
+contributing households), so the real value never exposes a lone shopper.
 
 ### Barcode scan flow (scan → price nearby)
 
@@ -1478,7 +1497,7 @@ GET  /api/v1/categorizer/classify?description=Milho&description=Lays
                                        → full chain: dictionary + ML + final decision (dev)
 GET  /api/v1/categorizer/ml/predict?description=Milho&description=Lays
                                        → ML model ALONE (dev — inspect/improve the model)
-GET  /api/v1/categorizer/benchmark     → categorization accuracy % over the golden set (records a snapshot)
+POST /api/v1/categorizer/benchmark     → categorization accuracy % over the golden set (records a snapshot)   [ADMIN only]
 GET  /api/v1/categorizer/quality/history?limit=50 → quality trend over time (snapshots)
 GET  /api/v1/categorizer/status        → ML model state
 POST /api/v1/categorizer/retrain       → trigger retraining manually          [ADMIN only]
@@ -1502,7 +1521,7 @@ GET    /api/v1/admin/products/brand-coverage    → dry-run brand-extraction cov
 GET    /api/v1/admin/products/unmatched-report?topN=30 → item→product matching KPI + worst orphans [ADMIN only]
 ```
 
-> The **model-training / catalog-mutating** endpoints (`retrain`, `auto-promote`, `promote-consensus`, `learned`, `consensus`, the four `*/import`s) require `Role.ADMIN` — a normal user gets `403`. The read/debug GETs (`classify`, `ml/predict`, `benchmark`, `quality/history`, `status`) remain open to any authenticated user.
+> The **model-training / catalog-mutating** endpoints (`retrain`, `auto-promote`, `promote-consensus`, `learned`, `consensus`, the four `*/import`s, and `benchmark` — it records a snapshot) require `Role.ADMIN` — a normal user gets `403`. The read/debug GETs (`classify`, `ml/predict`, `quality/history`, `status`) remain open to any authenticated user.
 
 > Since 2026-07-02 the curated dictionary, brand registry and benchmark golden set live in **DB tables** (formerly classpath CSVs) — the three new imports make them editable at runtime, no deploy needed. Bodies: curated `[{keyword, genericName, category}]`, brands `[{key, displayName}]`, benchmark `[{description, expectedCategory, expectedBrand?, expectedPackSize?, expectedPackUnit?}]`. All are upserts returning `{imported, skipped}`.
 

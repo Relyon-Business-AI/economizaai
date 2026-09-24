@@ -261,9 +261,11 @@ class HouseholdProductServiceTest {
         when(priceIndexService.bestMarkets(eq(product.getId()), anyInt(), any(), any(), isNull(), any()))
                 .thenReturn(List.of(
                         new MarketPriceRow(CNPJ_NACIONAL, "99887766", "Nacional",
-                                new BigDecimal("4.00"), new BigDecimal("3.50"), 5, 3L, 2.0, false),
+                                new BigDecimal("4.00"), new BigDecimal("3.50"),
+                                new BigDecimal("3.50"), LocalDateTime.of(2026, 1, 1, 0, 0), 5, 3L, 2.0, false),
                         new MarketPriceRow(CNPJ_ZAFFARI, "12345678", "Zaffari Community",
-                                new BigDecimal("6.00"), new BigDecimal("5.50"), 4, 3L, 1.0, false)));
+                                new BigDecimal("6.00"), new BigDecimal("5.50"),
+                                new BigDecimal("5.50"), LocalDateTime.of(2026, 1, 1, 0, 0), 4, 3L, 1.0, false)));
 
         var result = service.productMarkets(user, product.getId(), false, null);
 
@@ -288,7 +290,8 @@ class HouseholdProductServiceTest {
         // A scale-4 median (5.3350) must be rounded HALF_UP to 5.34 in the response.
         when(priceIndexService.bestMarkets(eq(product.getId()), anyInt(), any(), any(), isNull(), any()))
                 .thenReturn(List.of(new MarketPriceRow(CNPJ_NACIONAL, "99887766", "Nacional",
-                        new BigDecimal("5.3350"), new BigDecimal("3.50"), 5, 3L, 2.0, false)));
+                        new BigDecimal("5.3350"), new BigDecimal("3.50"),
+                        new BigDecimal("3.50"), LocalDateTime.of(2026, 1, 1, 0, 0), 5, 3L, 2.0, false)));
 
         var result = service.productMarkets(user, product.getId(), false, null);
 
@@ -438,7 +441,7 @@ class HouseholdProductServiceTest {
         // k-anon-suppressed market: row present but no median price.
         when(priceIndexService.bestMarkets(eq(product.getId()), anyInt(), any(), any(), isNull(), any()))
                 .thenReturn(List.of(new MarketPriceRow(CNPJ_NACIONAL, "99887766", "Nacional",
-                        null, null, 2, 2L, 2.0, false)));
+                        null, null, null, null, 2, 2L, 2.0, false)));
 
         var result = service.productMarkets(user, product.getId(), false, null);
 

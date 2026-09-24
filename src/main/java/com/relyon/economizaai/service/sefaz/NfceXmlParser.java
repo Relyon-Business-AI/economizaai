@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.sefaz;
 
 import com.relyon.economizaai.exception.ReceiptParseException;
+import com.relyon.economizaai.model.enums.ReceiptChannel;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
@@ -63,6 +64,7 @@ public final class NfceXmlParser {
                 .approxTaxEstadual(null)
                 .sourceUrl(sourceUrl)
                 .rawHtml(xml)
+                .channel(parseChannel(document))
                 .items(items)
                 .build();
         log.info("Parsed NFe XML receipt: market='{}', total={}, items={}",
@@ -110,6 +112,19 @@ public final class NfceXmlParser {
         if (!district.isBlank()) parts.add(district);
         if (!city.isBlank()) parts.add(uf.isBlank() ? city : city + " - " + uf);
         return parts.isEmpty() ? null : String.join(", ", parts);
+    }
+
+    /**
+     * {@code &lt;ide&gt;&lt;indPres&gt;} carries the exact indicador de presença — the authoritative
+     * channel signal (cleaner than the HTML parsers' label scraping). Não presencial
+     * (2 internet, 3 teleatendimento, 4 entrega domicílio, 9 outros) → ONLINE; else IN_STORE.
+     */
+    private static ReceiptChannel parseChannel(Element document) {
+        var indPres = textOf(document.selectFirst("indPres"));
+        return switch (indPres) {
+            case "2", "3", "4", "9" -> ReceiptChannel.ONLINE;
+            default -> ReceiptChannel.IN_STORE;
+        };
     }
 
     private static LocalDateTime parseIssuedAt(Element document) {

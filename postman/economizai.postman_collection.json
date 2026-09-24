@@ -3257,7 +3257,7 @@
     {
      "name": "Benchmark (categorization accuracy %)",
      "request": {
-      "method": "GET",
+      "method": "POST",
       "header": [
        {
         "key": "Accept-Language",
@@ -3752,6 +3752,33 @@
         "markets",
         "93015006005182",
         "reference"
+       ]
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "Online reference price (national, all sellers)",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Accept-Language",
+        "value": "pt"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/price-index/products/{{e2eProductId}}/online-reference",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "price-index",
+        "products",
+        "{{e2eProductId}}",
+        "online-reference"
        ]
       }
      },
@@ -7122,6 +7149,50 @@
      ]
     },
     {
+     "name": "27b. Online reference price (national, k-anon protected)",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Accept-Language",
+        "value": "pt"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/price-index/products/{{e2eProductId}}/online-reference",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "price-index",
+        "products",
+        "{{e2eProductId}}",
+        "online-reference"
+       ]
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id — skipping'); return; }",
+         "pm.test('Returns 200 (200 even when k-anon hides data)', function () { pm.response.to.have.status(200); });",
+         "var d = pm.response.json();",
+         "pm.test('Has sampleCount + distinctHouseholds', function () {",
+         "    pm.expect(d).to.have.property('sampleCount');",
+         "    pm.expect(d).to.have.property('distinctHouseholds');",
+         "});"
+        ]
+       }
+      }
+     ]
+    },
+    {
      "name": "27b. Deals — Ofertas pra você",
      "request": {
       "method": "GET",
@@ -10111,7 +10182,7 @@
     {
      "name": "COV: Benchmark (categorization accuracy %)",
      "request": {
-      "method": "GET",
+      "method": "POST",
       "header": [
        {
         "key": "Accept-Language",

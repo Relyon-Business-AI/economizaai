@@ -1,5 +1,6 @@
 package com.relyon.economizaai.model;
 
+import com.relyon.economizaai.model.enums.ReceiptChannel;
 import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
@@ -63,6 +64,12 @@ public class Receipt extends BaseEntity implements HouseholdScoped {
     @Column(nullable = false, length = 10)
     @Builder.Default
     private ReceiptOrigin origin = ReceiptOrigin.SCAN;
+
+    /** IN_STORE (default) or ONLINE — from the nota's indPres. Orthogonal to origin/segment. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    @Builder.Default
+    private ReceiptChannel channel = ReceiptChannel.IN_STORE;
 
     @Enumerated(EnumType.STRING)
     @Column(length = 2)  // null for PHOTO-origin receipts (no SEFAZ document exists)

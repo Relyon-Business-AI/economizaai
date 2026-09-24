@@ -234,7 +234,13 @@ public class ReceiptService {
                 }
             });
         } else {
-            ingestTask.run();
+            // No active tx sync (e.g. the untransacted submitPrefetched path): still fail the
+            // already-committed row on a pool rejection, or the FE polls a stuck PROCESSING forever.
+            try {
+                ingestTask.run();
+            } catch (RuntimeException ex) {
+                receiptIngestionService.markFailed(receiptId, ex);
+            }
         }
     }
 

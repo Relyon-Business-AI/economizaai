@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.sefaz;
 
+import com.relyon.economizaai.model.enums.ReceiptChannel;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
 
@@ -83,6 +84,36 @@ class NfceXmlParserTest {
         assertEquals("PAO DIVERSOS", first.rawDescription());
         assertEquals(0, first.quantity().compareTo(new BigDecimal("0.9200")));
         assertEquals(0, first.totalPrice().compareTo(new BigDecimal("11.04")));
+    }
+
+    @Test
+    void presencialXmlReceiptIsInStore() throws Exception {
+        // PE fixtures are all indPres=1 (presencial) → IN_STORE. Proves the parser reads
+        // the authoritative <indPres> instead of silently defaulting.
+        var parsed = NfceXmlParser.parse(fixture("pe-novo-israel-4items.xml"),
+                "26260920534381000287651020001738551001743421", "https://test/source");
+
+        assertEquals(ReceiptChannel.IN_STORE, parsed.channel());
+    }
+
+    @Test
+    void internetIndPresXmlReceiptIsOnline() {
+        // indPres=2 (operação pela internet) → ONLINE. Minimal synthetic NFe so an online
+        // NF-e fetched as XML no longer leaks into the physical index (was defaulting IN_STORE).
+        var xml = """
+                <?xml version="1.0"?>
+                <nfeProc><NFe><infNFe>
+                  <ide><indPres>2</indPres><dhEmi>2026-09-20T10:00:00-03:00</dhEmi></ide>
+                  <emit><CNPJ>15436940001177</CNPJ><xNome>LOJA ONLINE LTDA</xNome></emit>
+                  <det><prod><xProd>CAFE ORFEU</xProd><cEAN>7898912704016</cEAN>
+                    <qCom>1.0000</qCom><uCom>UN</uCom><vUnCom>39.90</vUnCom><vProd>39.90</vProd></prod></det>
+                  <total><ICMSTot><vNF>39.90</vNF></ICMSTot></total>
+                </infNFe></NFe></nfeProc>
+                """;
+        var parsed = NfceXmlParser.parse(xml, "26260915436940001177550010000000011000000010", "https://test/source");
+
+        assertEquals(ReceiptChannel.ONLINE, parsed.channel());
+        assertEquals(1, parsed.items().size());
     }
 
     @Test

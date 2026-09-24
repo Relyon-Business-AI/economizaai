@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * categorization_benchmark_entries table (grown via the admin import endpoint
  * in production); here it is seeded alongside representative curated-dictionary
  * and brand-registry rows so the floor stays meaningful. The live
- * GET /categorizer/benchmark reports the dictionary + trained-ML number.
+ * POST /categorizer/benchmark (ADMIN) reports the dictionary + trained-ML number.
  */
 @SpringBootTest
 @ActiveProfiles("test")

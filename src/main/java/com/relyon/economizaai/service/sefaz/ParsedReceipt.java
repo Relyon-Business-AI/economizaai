@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.sefaz;
 
+import com.relyon.economizaai.model.enums.ReceiptChannel;
 import lombok.Builder;
 
 import java.math.BigDecimal;
@@ -19,5 +20,7 @@ public record ParsedReceipt(
         BigDecimal approxTaxEstadual,
         String sourceUrl,
         String rawHtml,
+        // In-store vs online. Null from parsers that don't read indPres (NFC-e 65) → IN_STORE at persist.
+        ReceiptChannel channel,
         List<ParsedReceiptItem> items
 ) {}

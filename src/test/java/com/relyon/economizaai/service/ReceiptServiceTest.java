@@ -286,6 +286,26 @@ class ReceiptServiceTest {
     }
 
     @Test
+    void submitPrefetched_dispatchRejectionMarksRowFailed() {
+        // Untransacted path (no active tx sync) → the dispatch runs inline. A pool rejection must
+        // fail the already-committed PROCESSING row, not propagate and leave the FE polling forever.
+        var user = buildUser();
+        when(receiptRepository.findByHouseholdIdAndChaveAcesso(any(), eq(CHAVE_RS))).thenReturn(Optional.empty());
+        when(receiptRepository.save(any(Receipt.class))).thenAnswer(inv -> {
+            var receipt = inv.<Receipt>getArgument(0);
+            receipt.setId(UUID.randomUUID());
+            return receipt;
+        });
+        doThrow(new RuntimeException("pool rejected"))
+                .when(receiptIngestionService).ingestPrefetched(any(), any(), any());
+
+        var response = receiptService.submitPrefetched(user, new PrefetchedReceiptRequest(QR_RS, "<html>content</html>"));
+
+        assertEquals(ReceiptStatus.PROCESSING, response.status());
+        verify(receiptIngestionService).markFailed(eq(response.id()), any(RuntimeException.class));
+    }
+
+    @Test
     void submit_rejectsKnownBlockedMerchantWithoutStoringAnything() {
         var user = buildUser();
         when(merchantSupportGate.isKnownBlockedCnpj("12345678000190")).thenReturn(true);

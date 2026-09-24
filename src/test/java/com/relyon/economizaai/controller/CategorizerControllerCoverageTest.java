@@ -102,8 +102,8 @@ class CategorizerControllerCoverageTest {
                         "Leite", "category", "MEAT_DAIRY", "OTHER", "ML")));
         when(categorizationBenchmarkService.run()).thenReturn(report);
 
-        mockMvc.perform(get("/api/v1/categorizer/benchmark")
-                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+        mockMvc.perform(post("/api/v1/categorizer/benchmark")
+                        .with(SecurityMockMvcRequestPostProcessors.user(adminPrincipal())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.total").value(10))
                 .andExpect(jsonPath("$.correct").value(8))
@@ -215,7 +215,14 @@ class CategorizerControllerCoverageTest {
 
     @Test
     void benchmark_unauthenticated_returns401() throws Exception {
-        mockMvc.perform(get("/api/v1/categorizer/benchmark"))
+        mockMvc.perform(post("/api/v1/categorizer/benchmark"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void benchmark_forbiddenForNonAdmin() throws Exception {
+        mockMvc.perform(post("/api/v1/categorizer/benchmark")
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+                .andExpect(status().isForbidden());
     }
 }

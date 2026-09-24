@@ -2,6 +2,7 @@ package com.relyon.economizaai.service.geo;
 
 import com.relyon.economizaai.model.MarketLocation;
 import com.relyon.economizaai.model.Receipt;
+import com.relyon.economizaai.service.geo.CnpjActivityClient.CnpjLookup;
 import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.MerchantSegment;
 import com.relyon.economizaai.model.enums.ProductCategory;
@@ -158,7 +159,7 @@ public class MarketLocationService {
      * categorization carry on normally without business-type context. When a
      * market resolves to PHARMACY, OTHER products bought there are backfilled.
      */
-    @Scheduled(fixedDelayString = "${economizaai.merchant.classify.interval-ms:600000}",
+    @Scheduled(fixedDelayString = "${economizaai.merchant.classify.interval-ms:3600000}",
                initialDelayString = "${economizaai.merchant.classify.initial-delay-ms:45000}")
     public void scheduledSegmentClassification() {
         classifyPendingSegments();
@@ -205,10 +206,32 @@ public class MarketLocationService {
     public record SegmentClassificationSummary(int attempted, int pharmacy, int supermarket, int foodRetail,
                                                int foodService, int other, int stillUnknown) {}
 
-    @Transactional
+    /**
+     * Classify one market from its CNPJ's CNAE. The lookup is an outbound HTTP call, so it runs
+     * UNTRANSACTED — never pins a Hikari connection across the round-trip (same split as
+     * {@link #geocodeOne}/{@link #persistGeocodeResult}). Only the result is persisted, in a short
+     * transaction; the grey-sighting admin alert (also network) and the pharmacy backfill (its own
+     * short tx) run afterwards, outside any long-held connection.
+     */
     public void classifySegmentOne(MarketLocation market) {
-        market.setSegmentAttempts(market.getSegmentAttempts() + 1);
         var lookup = cnpjActivityClient.lookup(market.getCnpj());
+        var newGraySighting = self.persistSegmentResult(market, lookup);
+        if (newGraySighting) {
+            notifyGraySighting(market);
+        }
+        if (lookup.segment() == MerchantSegment.PHARMACY) {
+            self.backfillPharmacyProducts(market.getCnpj());
+        }
+    }
+
+    /**
+     * Persist a CNAE lookup result in a short transaction. Increments the bounded attempts counter,
+     * sets segment/IBGE/CNAE when resolved, and returns true only the FIRST time the market lands in
+     * the grey zone (segment OTHER) — the caller then sends the one-per-CNPJ admin alert outside the tx.
+     */
+    @Transactional
+    public boolean persistSegmentResult(MarketLocation market, CnpjLookup lookup) {
+        market.setSegmentAttempts(market.getSegmentAttempts() + 1);
         var segment = lookup.segment();
         if (segment != MerchantSegment.UNKNOWN) {
             market.setSegment(segment);
@@ -220,14 +243,12 @@ public class MarketLocationService {
         if (market.getIbgeCityCode() == null && lookup.ibgeCityCode() != null) {
             market.setIbgeCityCode(lookup.ibgeCityCode());
         }
-        if (segment == MerchantSegment.OTHER && market.getGraySightingNotifiedAt() == null) {
+        var newGraySighting = segment == MerchantSegment.OTHER && market.getGraySightingNotifiedAt() == null;
+        if (newGraySighting) {
             market.setGraySightingNotifiedAt(LocalDateTime.now());
-            notifyGraySighting(market);
         }
         repository.save(market);
-        if (segment == MerchantSegment.PHARMACY) {
-            backfillPharmacyProducts(market.getCnpj());
-        }
+        return newGraySighting;
     }
 
     /**
@@ -264,8 +285,9 @@ public class MarketLocationService {
         }
     }
 
-    /** Re-tag OTHER products bought at a now-verified pharmacy as PHARMACY. */
-    private void backfillPharmacyProducts(String cnpj) {
+    /** Re-tag OTHER products bought at a now-verified pharmacy as PHARMACY. Own short tx. */
+    @Transactional
+    public void backfillPharmacyProducts(String cnpj) {
         var products = productRepository.findOtherCategoryProductsByMerchant(cnpj);
         for (var product : products) {
             product.setCategory(ProductCategory.HEALTH);

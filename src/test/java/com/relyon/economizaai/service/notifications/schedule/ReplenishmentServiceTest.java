@@ -27,6 +27,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -87,7 +88,26 @@ class ReplenishmentServiceTest {
         var captor = ArgumentCaptor.forClass(NotificationPayload.class);
         verify(notificationService).notify(captor.capture());
         assertEquals(NotificationType.STOCKOUT, captor.getValue().type());
-        verify(ruleRepository).saveAll(any());
+        verify(ruleRepository).save(rule);
+    }
+
+    @Test
+    void run_persistsCooldownTimestampOnlyAfterSend() {
+        // The notify() dispatch must run BEFORE the fired-timestamp persist (tx boundary sits
+        // after the send), so a slow HTTP call never pins a connection through the save.
+        var rule = stockoutRule(null, 3);
+        when(ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.STOCKOUT))
+                .thenReturn(List.of(rule));
+        when(receiptItemRepository.findHouseholdHistoryForProduct(PRODUCT_ID, HOUSEHOLD_ID))
+                .thenReturn(List.of(
+                        purchaseOn(LocalDateTime.now().minusDays(13)),
+                        purchaseOn(LocalDateTime.now().minusDays(6))));
+
+        service.run();
+
+        var inOrder = inOrder(notificationService, ruleRepository);
+        inOrder.verify(notificationService).notify(any(NotificationPayload.class));
+        inOrder.verify(ruleRepository).save(rule);
     }
 
     @Test

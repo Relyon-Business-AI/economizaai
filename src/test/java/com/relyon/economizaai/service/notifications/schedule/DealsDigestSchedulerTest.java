@@ -41,6 +41,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -116,6 +117,30 @@ class DealsDigestSchedulerTest {
         verify(surfaceStateRepository, times(2)).save(any(DealSurfaceState.class));
         // 1/day cap marked on the user.
         verify(userRepository).save(user);
+    }
+
+    @Test
+    void dispatchesNotificationBeforePersistingState() {
+        // Tx boundary sits AFTER the send: notify() (network) must run before the per-deal
+        // state upserts, telemetry rows, and the 1/day cap are persisted, so a slow push
+        // never pins a Hikari connection through the DB writes.
+        var user = dueUser(DigestFrequency.DAILY, null);
+        when(userRepository.findDigestCandidates(DigestFrequency.OFF)).thenReturn(List.of(user));
+        when(scheduleService.effectiveSendHour(user)).thenReturn(currentHour);
+        when(dealsService.findDeals(eq(user), anyBoolean(), isNull(), eq(50)))
+                .thenReturn(List.of(deal(productId, 0.22, new BigDecimal("7.80"))));
+        when(surfaceStateRepository.findByUserIdAndProductIdAndMarketCnpj(any(), any(), any()))
+                .thenReturn(Optional.empty());
+        when(notificationService.notify(any(NotificationPayload.class)))
+                .thenReturn(Notification.builder().id(UUID.randomUUID()).build());
+
+        scheduler.run();
+
+        var inOrder = inOrder(notificationService, surfaceStateRepository, eventService, userRepository);
+        inOrder.verify(notificationService).notify(any(NotificationPayload.class));
+        inOrder.verify(surfaceStateRepository).save(any(DealSurfaceState.class));
+        inOrder.verify(eventService).record(eq(user), eq(NotificationEventType.SENT), any());
+        inOrder.verify(userRepository).save(user);
     }
 
     @Test

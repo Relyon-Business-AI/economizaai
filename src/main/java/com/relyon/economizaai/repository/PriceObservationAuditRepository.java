@@ -17,13 +17,14 @@ public interface PriceObservationAuditRepository extends JpaRepository<PriceObse
     @Query("SELECT COUNT(DISTINCT a.householdId) FROM PriceObservationAudit a WHERE a.observation.outlier = false")
     long countDistinctContributingHouseholds();
 
-    /** K-anonymity helper: how many distinct households contributed observations
-     * for a given (product, market) since the cutoff? */
+    /** K-anonymity helper (physical index): how many distinct households contributed IN_STORE
+     * observations for a given (product, market) since the cutoff? */
     @Query("""
         SELECT COUNT(DISTINCT a.householdId)
         FROM PriceObservationAudit a
         WHERE a.observation.product.id = :productId
           AND a.observation.marketCnpj = :marketCnpj
+          AND a.observation.channel = 'IN_STORE'
           AND a.observation.outlier = false
           AND a.observation.observedAt >= :since
     """)
@@ -31,15 +32,18 @@ public interface PriceObservationAuditRepository extends JpaRepository<PriceObse
                                                  @Param("marketCnpj") String marketCnpj,
                                                  @Param("since") LocalDateTime since);
 
+    /** K-anonymity helper (online index): distinct households that contributed ONLINE
+     * observations for a product nationally (across all sellers) since the cutoff. */
     @Query("""
         SELECT COUNT(DISTINCT a.householdId)
         FROM PriceObservationAudit a
         WHERE a.observation.product.id = :productId
+          AND a.observation.channel = 'ONLINE'
           AND a.observation.outlier = false
           AND a.observation.observedAt >= :since
     """)
-    long countDistinctHouseholdsForProduct(@Param("productId") UUID productId,
-                                           @Param("since") LocalDateTime since);
+    long countDistinctOnlineHouseholdsForProduct(@Param("productId") UUID productId,
+                                                 @Param("since") LocalDateTime since);
 
     /** All audit rows a given receipt contributed — used by the admin purge that
      * removes the anonymized observations a test/erroneous receipt produced (a plain
@@ -52,6 +56,7 @@ public interface PriceObservationAuditRepository extends JpaRepository<PriceObse
         SELECT a.observation.marketCnpj AS cnpj, COUNT(DISTINCT a.householdId) AS households
         FROM PriceObservationAudit a
         WHERE a.observation.product.id = :productId
+          AND a.observation.channel = 'IN_STORE'
           AND a.observation.outlier = false
           AND a.observation.observedAt >= :since
         GROUP BY a.observation.marketCnpj
@@ -62,25 +67,6 @@ public interface PriceObservationAuditRepository extends JpaRepository<PriceObse
     /** Projection for {@link #countDistinctHouseholdsForProductByMarket}. */
     interface MarketHouseholdCount {
         String getCnpj();
-        long getHouseholds();
-    }
-
-    /** Batched k-anonymity helper: distinct contributing households per product, in
-     * one query (avoids an N+1 over a search-results page in {@code ProductService.search}). */
-    @Query("""
-        SELECT a.observation.product.id AS productId, COUNT(DISTINCT a.householdId) AS households
-        FROM PriceObservationAudit a
-        WHERE a.observation.product.id IN :productIds
-          AND a.observation.outlier = false
-          AND a.observation.observedAt >= :since
-        GROUP BY a.observation.product.id
-    """)
-    List<ProductHouseholdCount> countDistinctHouseholdsByProductIn(@Param("productIds") List<UUID> productIds,
-                                                                   @Param("since") LocalDateTime since);
-
-    /** Projection for {@link #countDistinctHouseholdsByProductIn}. */
-    interface ProductHouseholdCount {
-        UUID getProductId();
         long getHouseholds();
     }
 

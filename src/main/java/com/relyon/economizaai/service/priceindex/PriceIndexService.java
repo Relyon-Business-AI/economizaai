@@ -5,6 +5,7 @@ import com.relyon.economizaai.model.MarketLocation;
 import com.relyon.economizaai.model.PriceObservation;
 import com.relyon.economizaai.model.PriceObservationAudit;
 import com.relyon.economizaai.model.Receipt;
+import com.relyon.economizaai.model.enums.ReceiptChannel;
 import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
@@ -71,18 +72,23 @@ public class PriceIndexService {
             return 0;
         }
 
+        var channel = receipt.getChannel();
         var location = snapshotMarketLocation(receipt);
         var contributed = new ArrayList<PriceObservation>();
         for (var item : receipt.getItems()) {
-            if (!isContributable(item)) continue;
+            if (!isContributable(item, channel)) continue;
             contributed.add(recordItemObservation(receipt, item, location));
         }
-        log.info("price_index.write.done receipt={} contributed={} marketCnpj={}",
-                receipt.getId(), contributed.size(), receipt.getCnpjEmitente());
+        log.info("price_index.write.done receipt={} channel={} contributed={} marketCnpj={}",
+                receipt.getId(), channel, contributed.size(), receipt.getCnpjEmitente());
 
-        // Community retention loop: this household's prices may satisfy other
-        // households' "avise-me quando" rules. Skips the contributor's own.
-        notificationRuleEngine.evaluate(contributed, receipt.getHousehold().getId());
+        // Community retention loop: this household's prices may satisfy other households'
+        // "avise-me quando" rules. Those rules are location-based (physical), so only feed
+        // IN_STORE observations — an online national price shouldn't fire a local-market watch.
+        var physicalContributions = contributed.stream()
+                .filter(observation -> observation.getChannel() == ReceiptChannel.IN_STORE)
+                .toList();
+        notificationRuleEngine.evaluate(physicalContributions, receipt.getHousehold().getId());
         return contributed.size();
     }
 
@@ -117,20 +123,37 @@ public class PriceIndexService {
                     receipt.getId(), LogMasker.chave(receipt.getChaveAcesso()));
             return true;
         }
-        var market = marketLocationService.findByCnpjs(List.of(receipt.getCnpjEmitente()))
-                .get(receipt.getCnpjEmitente());
-        if (!merchantSupportGate.contributesToIndex(market)) {
-            // Grey-zone merchant: the receipt stays in the user's history, but its
-            // prices wait for admin review before feeding the shared index.
-            log.info("price_index.write.skipped reason=merchant_not_supported segment={} receipt={}",
-                    market == null ? "UNREGISTERED" : market.getSegment(), receipt.getId());
-            return true;
+        // The merchant-segment gate only applies to the PHYSICAL index: a physical
+        // supermarket means "everything here is groceries". Online, the merchant CNAE is a
+        // poor proxy (a marketplace sells a real grocery EAN next to books), so the online
+        // index gates per-item by EAN instead — see isContributable.
+        if (receipt.getChannel() == ReceiptChannel.IN_STORE) {
+            var market = marketLocationService.findByCnpjs(List.of(receipt.getCnpjEmitente()))
+                    .get(receipt.getCnpjEmitente());
+            if (!merchantSupportGate.contributesToIndex(market)) {
+                // Grey-zone merchant: the receipt stays in the user's history, but its
+                // prices wait for admin review before feeding the shared index.
+                log.info("price_index.write.skipped reason=merchant_not_supported segment={} receipt={}",
+                        market == null ? "UNREGISTERED" : market.getSegment(), receipt.getId());
+                return true;
+            }
         }
         return false;
     }
 
-    private boolean isContributable(ReceiptItem item) {
-        return !item.isExcluded() && item.getProduct() != null && item.getUnitPrice() != null;
+    /**
+     * Physical: any linked, non-excluded, priced item contributes (the merchant gate already
+     * vouched for the store). Online: additionally require a real EAN — the item's identity
+     * comes from its GTIN (matched to a canonical product), not from the seller's segment.
+     */
+    private boolean isContributable(ReceiptItem item, ReceiptChannel channel) {
+        if (item.isExcluded() || item.getProduct() == null || item.getUnitPrice() == null) {
+            return false;
+        }
+        if (channel == ReceiptChannel.ONLINE) {
+            return item.getEan() != null && !item.getEan().isBlank();
+        }
+        return true;
     }
 
     /**
@@ -156,6 +179,7 @@ public class PriceIndexService {
                 item.getTotalPrice());
         var observation = PriceObservation.builder()
                 .product(product)
+                .channel(receipt.getChannel())
                 .marketCnpj(receipt.getCnpjEmitente())
                 .marketCnpjRoot(cnpjRoot(receipt.getCnpjEmitente()))
                 .marketName(receipt.getMarketName())
@@ -200,6 +224,31 @@ public class PriceIndexService {
                 || distinctHouseholds < properties.getCollaborative().getMinHouseholdsForPublic()) {
             log.debug("reference_price.kanon_blocked product={} market={} samples={} households={}",
                     productId, marketCnpj, observations.size(), distinctHouseholds);
+            return new ReferencePrice(null, null, null, observations.size(), distinctHouseholds, null, true);
+        }
+        var prices = observations.stream().map(PriceObservation::getUnitPrice).toList();
+        return new ReferencePrice(median(prices), min(prices), max(prices),
+                observations.size(), distinctHouseholds, observations.get(0).getObservedAt(), false);
+    }
+
+    /**
+     * National ONLINE reference price for a product — median across all online sellers
+     * (marketplaces + supermarket delivery sites), no geo. A separate series from the
+     * physical index; same k-anon + min-sample thresholds. Never mixes with in-store prices.
+     */
+    @Transactional(readOnly = true)
+    public ReferencePrice onlineReferencePrice(UUID productId) {
+        if (!properties.getCollaborative().isEnabled()) return ReferencePrice.empty();
+        var since = LocalDateTime.now().minusDays(properties.getCollaborative().getLookbackDays());
+        var observations = observationRepository.findRecentOnlineByProduct(productId, since);
+        var distinctHouseholds = observations.isEmpty()
+                ? 0L
+                : auditRepository.countDistinctOnlineHouseholdsForProduct(productId, since);
+
+        if (observations.size() < properties.getCollaborative().getMinObservationsPerProductMarket()
+                || distinctHouseholds < properties.getCollaborative().getMinHouseholdsForPublic()) {
+            log.debug("online_reference_price.kanon_blocked product={} samples={} households={}",
+                    productId, observations.size(), distinctHouseholds);
             return new ReferencePrice(null, null, null, observations.size(), distinctHouseholds, null, true);
         }
         var prices = observations.stream().map(PriceObservation::getUnitPrice).toList();
@@ -259,8 +308,14 @@ public class PriceIndexService {
             return null;
         }
         var prices = rows.stream().map(PriceObservation::getUnitPrice).toList();
-        return new MarketPriceRow(cnpj, cnpjRoot(cnpj), rows.get(0).getMarketName(),
-                median(prices), min(prices), rows.size(), distinct, distanceKm, isWatched);
+        // The "onde está mais barato" screen shows a REAL observed price + its date, not the
+        // median — a shopper needs the actual number they'll (roughly) see, and the date lets
+        // them judge staleness. k-anon still holds via the ≥K-households gate above; the median
+        // stays as the "usual price" baseline (deals). Most recent by observedAt.
+        var mostRecent = rows.stream().max(Comparator.comparing(PriceObservation::getObservedAt)).orElse(rows.get(0));
+        return new MarketPriceRow(cnpj, cnpjRoot(cnpj), mostRecent.getMarketName(),
+                median(prices), min(prices), mostRecent.getUnitPrice(), mostRecent.getObservedAt(),
+                rows.size(), distinct, distanceKm, isWatched);
     }
 
     /** Median (50th percentile) of a price list. Returns null on empty. */
@@ -297,6 +352,7 @@ public class PriceIndexService {
 
     public record MarketPriceRow(String cnpj, String cnpjRoot, String marketName,
                                  BigDecimal medianPrice, BigDecimal minPrice,
+                                 BigDecimal latestPrice, LocalDateTime latestObservedAt,
                                  int sampleCount, long distinctHouseholds,
                                  Double distanceKm, boolean watching) {}
 }
