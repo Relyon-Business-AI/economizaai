@@ -229,4 +229,22 @@ class CategorizerControllerCoverageTest {
                         .with(SecurityMockMvcRequestPostProcessors.user(principal())))
                 .andExpect(status().isForbidden());
     }
+
+    @Test
+    void searchBrands_returnsMatches() throws Exception {
+        when(categorizerAdminService.searchBrands("dona", 20)).thenReturn(List.of("Dona Benta", "Dona Bela"));
+
+        mockMvc.perform(get("/api/v1/categorizer/brands").param("q", "dona")
+                        .with(SecurityMockMvcRequestPostProcessors.user(adminPrincipal())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0]").value("Dona Benta"))
+                .andExpect(jsonPath("$[1]").value("Dona Bela"));
+    }
+
+    @Test
+    void searchBrands_forbiddenForNonAdmin() throws Exception {
+        mockMvc.perform(get("/api/v1/categorizer/brands").param("q", "dona")
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+                .andExpect(status().isForbidden());
+    }
 }

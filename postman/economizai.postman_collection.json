@@ -3697,6 +3697,26 @@
      }
     },
     {
+     "name": "Search brands (autocomplete) [ADMIN]",
+     "request": {
+      "method": "GET",
+      "header": [
+       { "key": "Accept-Language", "value": "pt" }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/categorizer/brands?q=dona&limit=20",
+       "host": ["{{baseUrl}}"],
+       "path": ["api", "v1", "categorizer", "brands"],
+       "query": [
+        { "key": "q", "value": "dona" },
+        { "key": "limit", "value": "20" }
+       ]
+      },
+      "description": "[ADMIN] Autocomplete do campo Marca no editor de regras: nomes de marca distintos do registro cujo key normalizado casa com q. Retorna string[] (nomes de exibição). Alimenta o combobox — marcas escolhidas do registro em vez de texto livre."
+     },
+     "response": []
+    },
+    {
      "name": "Import brand registry entries (ADMIN)",
      "request": {
       "method": "POST",

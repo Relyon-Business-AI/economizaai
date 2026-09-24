@@ -267,6 +267,18 @@ public class CategorizerController {
      * ADMIN. Upsert brand-registry entries — hot-reloaded, no deploy. Body:
      * <pre>[{"key":"tio joao","displayName":"Tio João"}, ...]</pre>
      */
+    /**
+     * ADMIN. Autocomplete for the rule editor's Marca field — distinct brand
+     * display names from the registry matching {@code q} (normalized), capped.
+     * Lets admins pick an existing brand instead of free-typing (no typos/dupes).
+     */
+    @GetMapping("/brands")
+    public ResponseEntity<List<String>> searchBrands(
+            @RequestParam(required = false, defaultValue = "") String q,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(categorizerAdminService.searchBrands(q, limit));
+    }
+
     @PostMapping("/brands/import")
     public ResponseEntity<CategorizerAdminService.BulkImportOutcome> bulkImportBrands(
             @Size(max = MAX_IMPORT_BATCH) @RequestBody List<CategorizerAdminService.BrandImportRequest> entries) {

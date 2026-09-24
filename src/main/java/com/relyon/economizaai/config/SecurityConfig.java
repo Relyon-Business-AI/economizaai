@@ -119,7 +119,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET,
                                 "/api/v1/categorizer/dictionary/curated",
                                 "/api/v1/categorizer/dictionary/learned",
-                                "/api/v1/categorizer/simulate").hasRole("ADMIN")
+                                "/api/v1/categorizer/simulate",
+                                "/api/v1/categorizer/brands").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE,
                                 "/api/v1/categorizer/learned",
                                 "/api/v1/categorizer/consensus",

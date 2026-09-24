@@ -16,6 +16,16 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-24 — Autocomplete de marca no editor de regras
+
+- **Novo endpoint (ADMIN):** `GET /api/v1/categorizer/brands?q=<busca>&limit=20` — nomes de
+  marca distintos do registro cujo key normalizado casa com `q`. Retorna `string[]`.
+- **FE:** o campo **Marca** dos modais de regra (Definir/Nova) e do "Editar produto" virou um
+  **combobox com busca** — sugere marcas do registro (evita typo/duplicata como "Dona Benta"
+  vs "dona benta"), mas ainda permite digitar marca nova.
+- **Dado (dev):** registro de marcas cresceu de ~1.700 → ~2.340 (derivação BR do catálogo EAN
+  + fetch incremental do OFF). Cobertura de marca brasileira melhor no scan.
+
 ## 2026-09-24 — Promoção de aliases de marca (aprendizado determinístico)
 
 Fecha o loop do fuzzy: acertos confirmados viram aliases exatos no registro de marcas.

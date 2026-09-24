@@ -19,6 +19,7 @@ import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -236,6 +237,19 @@ public class CategorizerAdminService {
         }
         log.info("categorizer.curated_import imported={} skipped={} recanonicalized={}", imported, skipped, recanonicalized);
         return new CuratedImportOutcome(imported, skipped, recanonicalized);
+    }
+
+    /**
+     * Distinct brand display names matching {@code query} (normalized the same way
+     * as lookup keys), capped at {@code limit}. Powers the brand autocomplete in
+     * the admin rule editor so brands are picked from the registry instead of
+     * free-typed (avoids typos/duplicates).
+     */
+    @Transactional(readOnly = true)
+    public List<String> searchBrands(String query, int limit) {
+        var normalized = query == null ? "" : DescriptionNormalizer.normalize(query);
+        var capped = Math.max(1, Math.min(limit, 50));
+        return brandRepository.searchDisplayNames(normalized, PageRequest.of(0, capped));
     }
 
     /** Upserts brand-registry entries and hot-reloads the in-memory snapshot. */
