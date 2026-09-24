@@ -1479,7 +1479,7 @@ GET  /api/v1/categorizer/classify?description=Milho&description=Lays
                                        → full chain: dictionary + ML + final decision (dev)
 GET  /api/v1/categorizer/ml/predict?description=Milho&description=Lays
                                        → ML model ALONE (dev — inspect/improve the model)
-GET  /api/v1/categorizer/benchmark     → categorization accuracy % over the golden set (records a snapshot)
+POST /api/v1/categorizer/benchmark     → categorization accuracy % over the golden set (records a snapshot)   [ADMIN only]
 GET  /api/v1/categorizer/quality/history?limit=50 → quality trend over time (snapshots)
 GET  /api/v1/categorizer/status        → ML model state
 POST /api/v1/categorizer/retrain       → trigger retraining manually          [ADMIN only]
@@ -1503,7 +1503,7 @@ GET    /api/v1/admin/products/brand-coverage    → dry-run brand-extraction cov
 GET    /api/v1/admin/products/unmatched-report?topN=30 → item→product matching KPI + worst orphans [ADMIN only]
 ```
 
-> The **model-training / catalog-mutating** endpoints (`retrain`, `auto-promote`, `promote-consensus`, `learned`, `consensus`, the four `*/import`s) require `Role.ADMIN` — a normal user gets `403`. The read/debug GETs (`classify`, `ml/predict`, `benchmark`, `quality/history`, `status`) remain open to any authenticated user.
+> The **model-training / catalog-mutating** endpoints (`retrain`, `auto-promote`, `promote-consensus`, `learned`, `consensus`, the four `*/import`s, and `benchmark` — it records a snapshot) require `Role.ADMIN` — a normal user gets `403`. The read/debug GETs (`classify`, `ml/predict`, `quality/history`, `status`) remain open to any authenticated user.
 
 > Since 2026-07-02 the curated dictionary, brand registry and benchmark golden set live in **DB tables** (formerly classpath CSVs) — the three new imports make them editable at runtime, no deploy needed. Bodies: curated `[{keyword, genericName, category}]`, brands `[{key, displayName}]`, benchmark `[{description, expectedCategory, expectedBrand?, expectedPackSize?, expectedPackUnit?}]`. All are upserts returning `{imported, skipped}`.
 

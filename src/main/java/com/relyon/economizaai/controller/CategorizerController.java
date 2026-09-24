@@ -77,7 +77,9 @@ public class CategorizerController {
      * Categorization quality over the golden set. Returns the detailed report
      * (accuracyPct + failing cases) AND records a snapshot so the trend is kept.
      */
-    @GetMapping("/benchmark")
+    // POST (not GET): it runs a CPU-heavy golden-set pass AND records a quality snapshot,
+    // so it mutates state — must not be a cacheable/prefetchable GET. ADMIN-only in SecurityConfig.
+    @PostMapping("/benchmark")
     public ResponseEntity<CategorizationBenchmarkResponse> benchmark() {
         var report = categorizationBenchmarkService.run();
         categorizationQualityService.record(CategorizationQualityTrigger.BENCHMARK, report);

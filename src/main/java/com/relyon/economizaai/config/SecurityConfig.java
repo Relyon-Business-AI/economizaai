@@ -99,8 +99,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/auth/**", "/api/v1/legal/**", "/api/v1/webhooks/**", "/api/v1/contact", "/api/v1/beta-signup", "/api/v1/visits", "/swagger-ui/**", "/v3/api-docs/**", "/actuator/health").permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         // Model-training / catalog-mutating categorizer endpoints are ADMIN-only.
-                        // The read/debug ones (classify, ml/predict, status, benchmark, quality)
-                        // stay open to authenticated users.
+                        // The read/debug ones (classify, ml/predict, status, quality) stay open to
+                        // authenticated users. benchmark is a POST here because it records a snapshot.
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/categorizer/retrain",
                                 "/api/v1/categorizer/auto-promote",
@@ -111,6 +111,7 @@ public class SecurityConfig {
                                 "/api/v1/categorizer/dictionary/curated/import",
                                 "/api/v1/categorizer/brands/import",
                                 "/api/v1/categorizer/brands/derive-from-catalog",
+                                "/api/v1/categorizer/benchmark",
                                 "/api/v1/categorizer/benchmark/import").hasRole("ADMIN")
                         // Dictionary MANAGEMENT (list + single delete) is ADMIN-only — it exposes and
                         // edits the full curated/learned dictionary, unlike the read/debug GETs above.

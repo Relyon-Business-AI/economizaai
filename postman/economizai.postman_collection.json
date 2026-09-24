@@ -3257,7 +3257,7 @@
     {
      "name": "Benchmark (categorization accuracy %)",
      "request": {
-      "method": "GET",
+      "method": "POST",
       "header": [
        {
         "key": "Accept-Language",
@@ -10182,7 +10182,7 @@
     {
      "name": "COV: Benchmark (categorization accuracy %)",
      "request": {
-      "method": "GET",
+      "method": "POST",
       "header": [
        {
         "key": "Accept-Language",
