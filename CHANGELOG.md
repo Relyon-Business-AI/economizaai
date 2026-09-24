@@ -16,6 +16,26 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-24 — Admin: detalhe de nota (dono/erro/QR), total de valor, período por estado, dispositivo do usuário
+
+Lote de melhorias do dashboard admin + 2 correções.
+
+- **`GET /api/v1/admin/receipts/{id}` mudou de forma.** Antes devolvia um `ReceiptResponse` cru;
+  agora devolve **`AdminReceiptDetailResponse`**: `{ receipt: ReceiptResponse, owner: { id, name, email } | null }`.
+  O `receipt.parseErrorMessage` vem **localizado** quando `FAILED_PARSE`. Use este endpoint (admin,
+  cross-household) para abrir uma nota de qualquer usuário — o `GET /receipts/{id}` comum é
+  household-scoped e dá 404 para nota de outro usuário.
+- **Novo `GET /api/v1/admin/receipts/stats`** — mesmos filtros de `GET /admin/receipts`
+  (`q`, `from`, `to`, `uf`, `status`, `parseErrorReason`, `includeInternal`), retorna
+  `{ count, totalAmount }` para o total de valor no topo da lista de Notas.
+- **`GET /api/v1/admin/state-coverage` aceita `?days=`** (7/30/90). Ausente = geral (todo o histórico).
+- **`AdminUserDetailResponse` ganhou campos de dispositivo:** `registrationPlatform`,
+  `lastPlatform` (`WEB`|`ANDROID`|`IOS`|null) e `lastAccessAt` (ISO, ou null).
+- **Fix:** a tela de **Aquisição** (retention-cohorts) voltava 500 — a query de coorte agrupava por
+  um alias que colidia com `receipts.channel`. Corrigido.
+- **Fix:** o `lastTrainedAt` do categorizer (`GET /categorizer/status`) agora é um instante com
+  offset (`...Z`), então o FE converte pro fuso local (antes vinha a hora do servidor em UTC sem zona).
+
 ## 2026-09-23 — `scope` (Mercado/Outras/Tudo) em `GET /items` e `GET /insights/query`
 
 Fecha o plano do filtro de scope: a tela **Itens por categoria** ganha o mesmo seletor
