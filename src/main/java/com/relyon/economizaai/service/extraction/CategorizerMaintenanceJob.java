@@ -32,9 +32,14 @@ public class CategorizerMaintenanceJob {
     private final MlClassifierService mlClassifierService;
     private final AdminProductService adminProductService;
     private final CategorizationQualityService categorizationQualityService;
+    private final CategorizerAdminService categorizerAdminService;
+    private final BrandAliasPromotionService brandAliasPromotionService;
 
     @Value("${economizaai.categorizer.maintenance.enabled:true}")
     private boolean enabled;
+
+    @Value("${economizaai.categorizer.maintenance.brand-derivation-min-products:2}")
+    private int brandDerivationMinProducts;
 
     @Scheduled(cron = "${economizaai.categorizer.maintenance.cron:0 40 4 * * *}",
             zone = "${economizaai.categorizer.maintenance.zone:America/Sao_Paulo}")
@@ -51,6 +56,28 @@ public class CategorizerMaintenanceJob {
                     recategorized.updated(), recategorized.skippedUserOverrides(), recategorized.unchanged());
         } catch (RuntimeException ex) {
             log.error("categorizer.maintenance.failed", ex);
+        }
+        maintainBrands();
+    }
+
+    /**
+     * Keeps the brand registry in sync with the growing EAN catalog and receipt
+     * corpus — the "derivation ran once and went stale" gap (Dog Chow sat in the
+     * catalog for months without ever becoming a recognizable brand):
+     * <ol>
+     *   <li>derive new BRAZILIAN brands from the EAN catalog (789/790 only);</li>
+     *   <li>promote confirmed abbreviated brand forms into registry aliases.</li>
+     * </ol>
+     * Isolated from the main block so a brand failure never blocks retrain/quality.
+     */
+    private void maintainBrands() {
+        try {
+            var derivation = categorizerAdminService.deriveBrandsFromEanCatalog(brandDerivationMinProducts, true);
+            var aliases = brandAliasPromotionService.promoteFromKnownBrands();
+            log.info("categorizer.maintenance.brands derived={} aliasesPromoted={} conflictsSkipped={}",
+                    derivation.created(), aliases.created(), aliases.conflictsSkipped());
+        } catch (RuntimeException ex) {
+            log.error("categorizer.maintenance.brands_failed", ex);
         }
     }
 }

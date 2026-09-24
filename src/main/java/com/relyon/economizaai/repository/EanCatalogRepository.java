@@ -21,6 +21,15 @@ public interface EanCatalogRepository extends JpaRepository<EanCatalogEntry, UUI
            "where e.brand is not null and e.brand <> '' group by e.brand")
     List<BrandOccurrence> countByBrand();
 
+    // Same, restricted to Brazilian GS1 prefixes (789/790). The OFF import is
+    // ~97% foreign (US store brands like Kroger/Wegmans), so deriving from the
+    // full catalog would flood the registry with brands no Brazilian receipt
+    // ever mentions — BR-only is the safe default.
+    @Query("select e.brand as brand, count(e) as occurrences from EanCatalogEntry e " +
+           "where e.brand is not null and e.brand <> '' " +
+           "and (e.ean like '789%' or e.ean like '790%') group by e.brand")
+    List<BrandOccurrence> countByBrandBrazilOnly();
+
     interface BrandOccurrence {
         String getBrand();
         long getOccurrences();

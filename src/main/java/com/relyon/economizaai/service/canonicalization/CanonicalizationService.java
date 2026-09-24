@@ -142,11 +142,21 @@ public class CanonicalizationService {
     /**
      * Create a product for an EAN-less item the alias cascade couldn't place.
      * Mirrors {@link #createProductFromEan} but the source description is the
-     * only signal, so there's no EAN to enrich from.
+     * only signal, so there's no EAN to enrich from. Runs the same metadata-dedup
+     * gate as the EAN path first — two different receipts abbreviating the same
+     * item differently must converge on ONE product, not spawn duplicates.
      */
     private ItemResult createProductFromDescription(ReceiptItem item, String normalized,
                                                     ProductExtraction extraction,
                                                     boolean pharmacyMerchant) {
+        var dedup = tryMetadataDedup(extraction);
+        if (dedup != null) {
+            item.setProduct(dedup);
+            ensureAlias(dedup, item.getRawDescription(), normalized);
+            log.info("item.matched_by_metadata_no_ean product={} description='{}'",
+                    abbrev(dedup.getId()), item.getRawDescription());
+            return ItemResult.MATCHED;
+        }
         var newProduct = buildEnrichedProduct(item, extraction);
         applyPharmacyMerchantFallback(newProduct, pharmacyMerchant);
         var created = productRepository.save(newProduct);

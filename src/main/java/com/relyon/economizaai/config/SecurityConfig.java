@@ -120,10 +120,12 @@ public class SecurityConfig {
                                 "/api/v1/categorizer/dictionary/curated",
                                 "/api/v1/categorizer/dictionary/learned",
                                 "/api/v1/categorizer/simulate",
-                                "/api/v1/categorizer/brands").hasRole("ADMIN")
+                                "/api/v1/categorizer/brands",
+                                "/api/v1/categorizer/brands/entries").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE,
                                 "/api/v1/categorizer/learned",
                                 "/api/v1/categorizer/consensus",
+                                "/api/v1/categorizer/brands/*",
                                 "/api/v1/categorizer/dictionary/curated/*",
                                 "/api/v1/categorizer/dictionary/learned/*").hasRole("ADMIN")
                         // Canonical products are GLOBAL — one tester's edit would

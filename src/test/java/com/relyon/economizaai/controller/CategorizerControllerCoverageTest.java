@@ -42,6 +42,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -244,6 +245,38 @@ class CategorizerControllerCoverageTest {
     @Test
     void searchBrands_forbiddenForNonAdmin() throws Exception {
         mockMvc.perform(get("/api/v1/categorizer/brands").param("q", "dona")
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void listBrandEntries_returnsRowsWithIds() throws Exception {
+        var id = UUID.randomUUID();
+        when(categorizerAdminService.listBrandEntries("dona", 50)).thenReturn(List.of(
+                new CategorizerAdminService.BrandEntryView(id, "dona benta", "Dona Benta", "CURATED")));
+
+        mockMvc.perform(get("/api/v1/categorizer/brands/entries").param("q", "dona")
+                        .with(SecurityMockMvcRequestPostProcessors.user(adminPrincipal())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(id.toString()))
+                .andExpect(jsonPath("$[0].displayName").value("Dona Benta"))
+                .andExpect(jsonPath("$[0].source").value("CURATED"));
+    }
+
+    @Test
+    void deleteBrand_removesAndReturnsNoContent() throws Exception {
+        var id = UUID.randomUUID();
+
+        mockMvc.perform(delete("/api/v1/categorizer/brands/" + id)
+                        .with(SecurityMockMvcRequestPostProcessors.user(adminPrincipal())))
+                .andExpect(status().isNoContent());
+
+        verify(categorizerAdminService).deleteBrand(id);
+    }
+
+    @Test
+    void deleteBrand_forbiddenForNonAdmin() throws Exception {
+        mockMvc.perform(delete("/api/v1/categorizer/brands/" + UUID.randomUUID())
                         .with(SecurityMockMvcRequestPostProcessors.user(principal())))
                 .andExpect(status().isForbidden());
     }

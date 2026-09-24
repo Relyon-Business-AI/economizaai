@@ -59,7 +59,10 @@ public class ConsensusPromotionService {
     @Autowired
     private ConsensusPromotionService self = this;
 
-    @Value("${economizaai.categorizer.consensus.min-households:2}")
+    // Default 3 (was 2): two colluding/coinciding households were enough to
+    // graduate a product to GLOBAL truth — too permissive for an irreversible
+    // promotion. 3 matches the app's K-anonymity floor.
+    @Value("${economizaai.categorizer.consensus.min-households:3}")
     private int minHouseholds;
 
     @Value("${economizaai.categorizer.consensus.min-token-products:2}")

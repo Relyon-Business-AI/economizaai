@@ -2,9 +2,11 @@ package com.relyon.economizaai.service;
 
 import com.relyon.economizaai.model.CuratedDictionaryEntry;
 import com.relyon.economizaai.model.Product;
+import com.relyon.economizaai.model.ProductAlias;
 import com.relyon.economizaai.repository.BrandRegistryEntryRepository;
 import com.relyon.economizaai.repository.CuratedDictionaryEntryRepository;
 import com.relyon.economizaai.repository.LearnedDictionaryRepository;
+import com.relyon.economizaai.repository.ProductAliasRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.service.extraction.BrandExtractor;
 import com.relyon.economizaai.service.extraction.DictionaryClassifier;
@@ -34,6 +36,7 @@ class NormalizationBackfillRunnerTest {
     @Mock private LearnedDictionaryRepository learnedRepository;
     @Mock private BrandRegistryEntryRepository brandRepository;
     @Mock private ProductRepository productRepository;
+    @Mock private ProductAliasRepository aliasRepository;
     @Mock private DictionaryClassifier dictionaryClassifier;
     @Mock private BrandExtractor brandExtractor;
 
@@ -91,9 +94,43 @@ class NormalizationBackfillRunnerTest {
         when(learnedRepository.findAll()).thenReturn(List.of());
         when(brandRepository.findAll()).thenReturn(List.of());
         when(productRepository.findNeedingNormBackfill()).thenReturn(List.of());
+        when(aliasRepository.findAll()).thenReturn(List.of());
 
         assertDoesNotThrow(() -> runner.run(null));
         // No successful curated update → no snapshot reload triggered.
         verify(dictionaryClassifier, never()).reloadCuratedEntries();
+    }
+
+    @Test
+    void backfillAliasKeys_reNormalizesFromRawDescription() {
+        // Stored key predates the digit-split; re-normalizing from RAW must fix it.
+        var alias = ProductAlias.builder().id(UUID.randomUUID())
+                .rawDescription("SHAMP PALMOLIVE DETOX350ML")
+                .normalizedDescription("shamp palmolive detox350ml")
+                .build();
+        when(aliasRepository.findAll()).thenReturn(List.of(alias));
+        when(aliasRepository.existsByNormalizedDescription("shamp palmolive detox 350 ml")).thenReturn(false);
+
+        var updated = runner.backfillAliasKeys();
+
+        assertEquals(1, updated);
+        assertEquals("shamp palmolive detox 350 ml", alias.getNormalizedDescription());
+        verify(aliasRepository).save(alias);
+    }
+
+    @Test
+    void backfillAliasKeys_collisionLeavesRowUntouched() {
+        var alias = ProductAlias.builder().id(UUID.randomUUID())
+                .rawDescription("LEITE 1L")
+                .normalizedDescription("leite 1l")
+                .build();
+        when(aliasRepository.findAll()).thenReturn(List.of(alias));
+        when(aliasRepository.existsByNormalizedDescription("leite 1 l")).thenReturn(true);
+
+        var updated = runner.backfillAliasKeys();
+
+        assertEquals(0, updated);
+        assertEquals("leite 1l", alias.getNormalizedDescription(), "left untouched on collision");
+        verify(aliasRepository, never()).save(any());
     }
 }

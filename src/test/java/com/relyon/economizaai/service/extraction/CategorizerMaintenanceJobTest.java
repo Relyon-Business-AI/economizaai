@@ -22,37 +22,54 @@ class CategorizerMaintenanceJobTest {
     @Mock private MlClassifierService mlClassifierService;
     @Mock private AdminProductService adminProductService;
     @Mock private CategorizationQualityService categorizationQualityService;
+    @Mock private CategorizerAdminService categorizerAdminService;
+    @Mock private BrandAliasPromotionService brandAliasPromotionService;
 
     private CategorizerMaintenanceJob job(boolean enabled) {
-        var j = new CategorizerMaintenanceJob(mlClassifierService, adminProductService, categorizationQualityService);
+        var j = new CategorizerMaintenanceJob(mlClassifierService, adminProductService,
+                categorizationQualityService, categorizerAdminService, brandAliasPromotionService);
         ReflectionTestUtils.setField(j, "enabled", enabled);
         return j;
+    }
+
+    private void stubBrandMaintenance() {
+        when(categorizerAdminService.deriveBrandsFromEanCatalog(0, true))
+                .thenReturn(new CategorizerAdminService.BrandDerivationOutcome(0, 0, 0));
+        when(brandAliasPromotionService.promoteFromKnownBrands())
+                .thenReturn(new BrandAliasPromotionService.PromotionOutcome(0, 0));
     }
 
     @Test
     void maintain_whenEnabled_retrainsRecategorizesAndSnapshots() {
         when(adminProductService.recategorizeApply(false)).thenReturn(new RecategorizeResultResponse(10, 2, 0, 0, 8));
+        stubBrandMaintenance();
 
         job(true).maintain();
 
         verify(mlClassifierService).retrain();
         verify(adminProductService).recategorizeApply(false);
         verify(categorizationQualityService).measureAndRecord(eq(CategorizationQualityTrigger.BACKFILL));
+        verify(categorizerAdminService).deriveBrandsFromEanCatalog(0, true);
+        verify(brandAliasPromotionService).promoteFromKnownBrands();
     }
 
     @Test
     void maintain_whenDisabled_doesNothing() {
         job(false).maintain();
 
-        verifyNoInteractions(mlClassifierService, adminProductService, categorizationQualityService);
+        verifyNoInteractions(mlClassifierService, adminProductService, categorizationQualityService,
+                categorizerAdminService, brandAliasPromotionService);
     }
 
     @Test
     void maintain_swallowsFailures_soTheSchedulerKeepsRunning() {
         when(mlClassifierService.retrain()).thenThrow(new RuntimeException("boom"));
+        stubBrandMaintenance();
 
         job(true).maintain(); // must not throw
 
         verify(adminProductService, never()).recategorizeApply(false);
+        // Brand maintenance is isolated — a retrain failure must not block it.
+        verify(categorizerAdminService).deriveBrandsFromEanCatalog(0, true);
     }
 }

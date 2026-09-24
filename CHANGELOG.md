@@ -16,6 +16,31 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-24 — Robustez do motor de categorização (pacote de correções)
+
+Correções dos gaps achados na auditoria do motor de detecção (produto/marca/categoria):
+
+- **Normalizador separa token colado:** `detox350ml` → `detox 350 ml` — antes o dicionário/alias
+  nunca via nem o produto nem o tamanho. Aliases armazenados são re-normalizados no startup
+  (backfill idempotente; colisões são puladas e logadas).
+- **Abreviação também no nome/categoria** (não só marca): `shamp` casa a keyword curada
+  `shampoo` por prefixo, com pisos de tamanho e trava de ambiguidade (candidatos discordando
+  de categoria → não casa). Env var `ECONOMIZAAI_CATEGORIZATION_DICTIONARY_FUZZY_ENABLED`
+  (default false; ligada no dev).
+- **Derivação de marcas agora é BR-only por default** (`onlyBrazil=true`, EANs 789/790) — o
+  catálogo é ~97% estrangeiro e derivar sem filtro enchia o registro de rede americana. Chave
+  multi-palavra igual a keyword curada deixou de ser bloqueada (caso Dog Chow: é produto E marca).
+- **Derivação + promoção de aliases agora rodam na manutenção noturna** — o registro de marcas
+  não fica mais defasado meses em relação ao catálogo.
+- **Dedup por metadados no caminho SEM EAN:** dois cupons abreviando o mesmo item de formas
+  diferentes convergem pro MESMO produto (antes duplicava — 67 grupos duplicados no dev).
+- **Gestão de marcas:** `GET /categorizer/brands/entries` (linhas com id/source) e
+  `DELETE /categorizer/brands/{id}` pra limpar marcas DERIVED ruidosas, com hot-reload.
+- **Consenso mais rígido:** `min-households` default 2 → **3** (2 households graduando verdade
+  global era permissivo demais).
+- **FE:** linha ML do teste de categorização rotulada "sombra — não decide" (a confiança de
+  99% do Naive Bayes é enganosa e ele está fora do fluxo).
+
 ## 2026-09-24 — Autocomplete de marca no editor de regras
 
 - **Novo endpoint (ADMIN):** `GET /api/v1/categorizer/brands?q=<busca>&limit=20` — nomes de

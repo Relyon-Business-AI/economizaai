@@ -25,4 +25,12 @@ public interface BrandRegistryEntryRepository extends JpaRepository<BrandRegistr
         ORDER BY b.displayName
     """)
     List<String> searchDisplayNames(@Param("query") String query, Pageable pageable);
+
+    /** Full rows (id + key + source) for the admin management list, filtered like the autocomplete. */
+    @Query("""
+        SELECT b FROM BrandRegistryEntry b
+        WHERE :query = '' OR b.normalizedKey LIKE CONCAT('%', :query, '%')
+        ORDER BY b.normalizedKey
+    """)
+    List<BrandRegistryEntry> searchEntries(@Param("query") String query, Pageable pageable);
 }

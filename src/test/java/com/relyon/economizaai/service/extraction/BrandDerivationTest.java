@@ -47,7 +47,7 @@ class BrandDerivationTest {
 
     @Test
     void derive_groupsVariantsByNormalizedKeyAndPicksMostFrequentDisplay() {
-        when(eanCatalogRepository.countByBrand()).thenReturn(List.of(
+        when(eanCatalogRepository.countByBrandBrazilOnly()).thenReturn(List.of(
                 occurrence("Nestlé", 40),
                 occurrence("NESTLE", 3),
                 occurrence("nestle", 2)));
@@ -70,7 +70,7 @@ class BrandDerivationTest {
         when(curatedRepository.findAll()).thenReturn(List.of(
                 com.relyon.economizaai.model.CuratedDictionaryEntry.builder()
                         .keyword("tomate").category(com.relyon.economizaai.model.enums.ProductCategory.PRODUCE).build()));
-        when(eanCatalogRepository.countByBrand()).thenReturn(List.of(
+        when(eanCatalogRepository.countByBrandBrazilOnly()).thenReturn(List.of(
                 occurrence("Tomate", 12),
                 occurrence("Piraquê", 8)));
         when(brandRepository.findByNormalizedKey("piraque")).thenReturn(Optional.empty());
@@ -85,7 +85,7 @@ class BrandDerivationTest {
 
     @Test
     void derive_dropsBrandsBelowThreshold() {
-        when(eanCatalogRepository.countByBrand()).thenReturn(List.of(
+        when(eanCatalogRepository.countByBrandBrazilOnly()).thenReturn(List.of(
                 occurrence("Marca Obscura", 1)));
 
         var outcome = categorizerAdminService.deriveBrandsFromEanCatalog(2);
@@ -98,7 +98,7 @@ class BrandDerivationTest {
 
     @Test
     void derive_neverOverwritesExistingRegistryEntries() {
-        when(eanCatalogRepository.countByBrand()).thenReturn(List.of(
+        when(eanCatalogRepository.countByBrandBrazilOnly()).thenReturn(List.of(
                 occurrence("Tio João", 25)));
         when(brandRepository.findByNormalizedKey("tio joao")).thenReturn(Optional.of(
                 BrandRegistryEntry.builder().normalizedKey("tio joao").displayName("Tio João").build()));
@@ -112,7 +112,7 @@ class BrandDerivationTest {
 
     @Test
     void derive_skipsJunkKeys() {
-        when(eanCatalogRepository.countByBrand()).thenReturn(List.of(
+        when(eanCatalogRepository.countByBrandBrazilOnly()).thenReturn(List.of(
                 occurrence("7", 50),            // numeric-only
                 occurrence("de", 50),           // stopword — would false-match "BOLACHA DE MANTEIGA"
                 occurrence("nat", 50),          // stopword + too short
@@ -127,7 +127,7 @@ class BrandDerivationTest {
 
     @Test
     void derive_tagsEntriesAsDerived() {
-        when(eanCatalogRepository.countByBrand()).thenReturn(List.of(occurrence("Nestlé", 40)));
+        when(eanCatalogRepository.countByBrandBrazilOnly()).thenReturn(List.of(occurrence("Nestlé", 40)));
         when(brandRepository.findByNormalizedKey("nestle")).thenReturn(Optional.empty());
 
         categorizerAdminService.deriveBrandsFromEanCatalog(2);

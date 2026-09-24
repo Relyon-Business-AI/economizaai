@@ -4,9 +4,11 @@ import com.relyon.economizaai.model.BrandRegistryEntry;
 import com.relyon.economizaai.model.CuratedDictionaryEntry;
 import com.relyon.economizaai.model.LearnedDictionaryEntry;
 import com.relyon.economizaai.model.Product;
+import com.relyon.economizaai.model.ProductAlias;
 import com.relyon.economizaai.repository.BrandRegistryEntryRepository;
 import com.relyon.economizaai.repository.CuratedDictionaryEntryRepository;
 import com.relyon.economizaai.repository.LearnedDictionaryRepository;
+import com.relyon.economizaai.repository.ProductAliasRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import com.relyon.economizaai.service.extraction.BrandExtractor;
@@ -50,6 +52,7 @@ public class NormalizationBackfillRunner implements ApplicationRunner {
     private final LearnedDictionaryRepository learnedRepository;
     private final BrandRegistryEntryRepository brandRepository;
     private final ProductRepository productRepository;
+    private final ProductAliasRepository aliasRepository;
     private final DictionaryClassifier dictionaryClassifier;
     private final BrandExtractor brandExtractor;
 
@@ -59,6 +62,7 @@ public class NormalizationBackfillRunner implements ApplicationRunner {
         backfillLearnedKeys();
         var brandUpdated = backfillBrandKeys();
         backfillProductNorms();
+        backfillAliasKeys();
         // Refresh the in-memory snapshots so the re-normalized keys take effect now
         // (not only after the next restart / reload trigger).
         if (curatedUpdated > 0) dictionaryClassifier.reloadCuratedEntries();
@@ -96,12 +100,22 @@ public class NormalizationBackfillRunner implements ApplicationRunner {
                                  BiConsumer<T, String> setKey,
                                  Function<String, Boolean> keyExists,
                                  Consumer<T> save) {
+        // For plain key tables the string to normalize IS the stored key.
+        return backfillKeys(table, rowsSupplier, getKey, setKey, keyExists, save, getKey);
+    }
+
+    private <T> int backfillKeys(String table, Supplier<List<T>> rowsSupplier,
+                                 Function<T, String> getKey,
+                                 BiConsumer<T, String> setKey,
+                                 Function<String, Boolean> keyExists,
+                                 Consumer<T> save,
+                                 Function<T, String> getSource) {
         var updated = 0;
         var collisions = 0;
         try {
             for (var row : rowsSupplier.get()) {
                 var current = getKey.apply(row);
-                var normalized = DescriptionNormalizer.normalize(current);
+                var normalized = DescriptionNormalizer.normalize(getSource.apply(row));
                 if (normalized.isBlank() || normalized.equals(current)) continue;
                 if (keyExists.apply(normalized)) {
                     collisions++;
@@ -117,6 +131,22 @@ public class NormalizationBackfillRunner implements ApplicationRunner {
             log.warn("normalization.backfill.failed table={} reason={}", table, ex.getClass().getSimpleName());
         }
         return updated;
+    }
+
+    /**
+     * Re-normalizes stored alias match keys after any normalizer evolution (e.g.
+     * the glued digit↔letter split), so exact-alias lookup keeps matching what the
+     * live normalizer now produces for the same raw description. Collisions (two
+     * aliases converging on the same key) are skipped — the first row keeps the
+     * key and still matches, the stale duplicate is left for manual cleanup.
+     */
+    protected int backfillAliasKeys() {
+        return backfillKeys("product_aliases", aliasRepository::findAll,
+                ProductAlias::getNormalizedDescription,
+                (alias, key) -> alias.setNormalizedDescription(key),
+                key -> aliasRepository.existsByNormalizedDescription(key),
+                aliasRepository::save,
+                ProductAlias::getRawDescription);
     }
 
     protected void backfillProductNorms() {

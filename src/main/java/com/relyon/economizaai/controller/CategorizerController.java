@@ -279,6 +279,24 @@ public class CategorizerController {
         return ResponseEntity.ok(categorizerAdminService.searchBrands(q, limit));
     }
 
+    /**
+     * ADMIN. Full brand-registry rows (id + key + display + source) so noisy
+     * DERIVED entries can be reviewed and deleted from the ops center.
+     */
+    @GetMapping("/brands/entries")
+    public ResponseEntity<List<CategorizerAdminService.BrandEntryView>> listBrandEntries(
+            @RequestParam(required = false, defaultValue = "") String q,
+            @RequestParam(defaultValue = "50") int limit) {
+        return ResponseEntity.ok(categorizerAdminService.listBrandEntries(q, limit));
+    }
+
+    /** ADMIN. Removes one brand-registry entry and hot-reloads the detector. */
+    @DeleteMapping("/brands/{id}")
+    public ResponseEntity<Void> deleteBrand(@PathVariable UUID id) {
+        categorizerAdminService.deleteBrand(id);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/brands/import")
     public ResponseEntity<CategorizerAdminService.BulkImportOutcome> bulkImportBrands(
             @Size(max = MAX_IMPORT_BATCH) @RequestBody List<CategorizerAdminService.BrandImportRequest> entries) {
@@ -291,11 +309,14 @@ public class CategorizerController {
      * normalized key (most frequent wins as display name); keys with fewer than
      * {@code minProducts} catalog occurrences are dropped as crowd-sourced
      * noise. Fill-only: existing registry entries are never overwritten.
+     * {@code onlyBrazil} (default true) restricts to 789/790 EANs — the catalog
+     * is ~97% foreign and deriving from it floods the registry with US chains.
      */
     @PostMapping("/brands/derive-from-catalog")
     public ResponseEntity<CategorizerAdminService.BrandDerivationOutcome> deriveBrandsFromCatalog(
-            @RequestParam(defaultValue = "2") int minProducts) {
-        return ResponseEntity.ok(categorizerAdminService.deriveBrandsFromEanCatalog(minProducts));
+            @RequestParam(defaultValue = "2") int minProducts,
+            @RequestParam(defaultValue = "true") boolean onlyBrazil) {
+        return ResponseEntity.ok(categorizerAdminService.deriveBrandsFromEanCatalog(minProducts, onlyBrazil));
     }
 
     /**

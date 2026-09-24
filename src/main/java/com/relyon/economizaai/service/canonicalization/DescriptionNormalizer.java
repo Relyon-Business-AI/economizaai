@@ -12,6 +12,10 @@ public final class DescriptionNormalizer {
                 .replaceAll("\\p{InCombiningDiacriticalMarks}+", "");
         var cleaned = stripped.toLowerCase()
                 .replaceAll("[^a-z0-9 ]", " ")
+                // Split glued digit↔letter boundaries so "detox350ml" tokenizes as
+                // "detox 350 ml" — without this the dictionary/alias token matching
+                // never sees the product word or the size.
+                .replaceAll("(?<=[a-z])(?=[0-9])|(?<=[0-9])(?=[a-z])", " ")
                 .replaceAll("\\s+", " ")
                 .trim();
         // Expand SEFAZ abbreviations so abbreviated and spelled-out receipts converge
