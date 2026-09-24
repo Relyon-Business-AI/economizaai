@@ -161,6 +161,15 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
     """)
     List<ReceiptItem> findUnmatchedConfirmedByDescriptionLike(@Param("pattern") String pattern);
 
+    // All confirmed orphans (no LIKE filter) — the nightly sweeper's work list, so
+    // items that predate a dictionary/brand improvement get retried automatically.
+    @Query("""
+        SELECT ri FROM ReceiptItem ri
+        JOIN FETCH ri.receipt r
+        WHERE r.status = 'CONFIRMED' AND ri.excluded = false AND ri.product IS NULL
+    """)
+    List<ReceiptItem> findUnmatchedConfirmed(Pageable pageable);
+
     List<ReceiptItem> findAllByProductIdOrderByReceiptIssuedAtAsc(UUID productId);
 
     /** Same intent as the method above but fetches receipt + household up front,

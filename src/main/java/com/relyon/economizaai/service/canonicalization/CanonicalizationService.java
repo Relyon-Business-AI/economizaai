@@ -19,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
@@ -132,6 +133,30 @@ public class CanonicalizationService {
         return relinked;
     }
 
+    /**
+     * Nightly retry of the confirmed UNMATCHED backlog against the CURRENT rules
+     * (dictionary/brand/EAN improvements land continuously, but orphans were only
+     * retried when an admin saved a curated rule). Uses the same non-forcing
+     * cascade as ingestion — an item that still matches nothing STAYS unmatched
+     * (no junk product creation), so this is safe to run unattended. Capped so a
+     * huge backlog can't stretch the maintenance window.
+     */
+    @Transactional
+    public RetryOutcome retryUnmatched(int maxItems) {
+        var cap = Math.max(1, Math.min(maxItems, 2000));
+        var orphans = receiptItemRepository.findUnmatchedConfirmed(PageRequest.of(0, cap));
+        var linked = 0;
+        for (var item : orphans) {
+            var pharmacyMerchant = merchantClassifier.isPharmacy(
+                    item.getReceipt().getCnpjEmitente(), item.getReceipt().getMarketName());
+            if (canonicalizeItem(item, pharmacyMerchant) != ItemResult.UNMATCHED) linked++;
+        }
+        log.info("recanonicalize.retry_unmatched scanned={} linked={}", orphans.size(), linked);
+        return new RetryOutcome(orphans.size(), linked);
+    }
+
+    public record RetryOutcome(int scanned, int linked) {}
+
     /** True when the normalized description contains the normalized phrase as whole, contiguous tokens. */
     private static boolean descriptionContainsPhrase(String rawDescription, String normalizedPhrase) {
         var normalized = DescriptionNormalizer.normalize(rawDescription);
@@ -142,11 +167,30 @@ public class CanonicalizationService {
     /**
      * Create a product for an EAN-less item the alias cascade couldn't place.
      * Mirrors {@link #createProductFromEan} but the source description is the
-     * only signal, so there's no EAN to enrich from.
+     * only signal, so there's no EAN to enrich from. Runs the same metadata-dedup
+     * gate as the EAN path first — two different receipts abbreviating the same
+     * item differently must converge on ONE product, not spawn duplicates.
      */
     private ItemResult createProductFromDescription(ReceiptItem item, String normalized,
                                                     ProductExtraction extraction,
                                                     boolean pharmacyMerchant) {
+        var dedup = tryMetadataDedup(extraction);
+        // Metadata alone is too coarse for no-EAN convergence: "SAL GROSSO" and
+        // "SAL REFINADO" share (Sal, Cisne, 1KG) but are different products. Only
+        // accept the dedup when the DESCRIPTIONS also look like the same item.
+        if (dedup != null && score(normalized,
+                DescriptionNormalizer.normalize(dedup.getNormalizedName())) < FUZZY_MATCH_THRESHOLD) {
+            log.info("item.metadata_dedup_rejected_by_name product={} description='{}'",
+                    abbrev(dedup.getId()), item.getRawDescription());
+            dedup = null;
+        }
+        if (dedup != null) {
+            item.setProduct(dedup);
+            ensureAlias(dedup, item.getRawDescription(), normalized);
+            log.info("item.matched_by_metadata_no_ean product={} description='{}'",
+                    abbrev(dedup.getId()), item.getRawDescription());
+            return ItemResult.MATCHED;
+        }
         var newProduct = buildEnrichedProduct(item, extraction);
         applyPharmacyMerchantFallback(newProduct, pharmacyMerchant);
         var created = productRepository.save(newProduct);

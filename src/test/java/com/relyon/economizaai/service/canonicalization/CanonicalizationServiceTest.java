@@ -120,6 +120,32 @@ class CanonicalizationServiceTest {
     }
 
     @Test
+    void createdProduct_populatesNormalizedMirrorsKeepingDisplayValues() {
+        var receipt = buildReceipt(item("CAFE PILAO 500G", "555"));
+        when(productExtractor.extract(any())).thenReturn(
+                new ProductExtraction("Café", "Pilão", new BigDecimal("500"), "G",
+                        ProductCategory.GROCERIES, CategorizationSource.DICTIONARY));
+        when(productRepository.findByEan("555")).thenReturn(Optional.empty());
+        // No metadata dedup hit → forces creation, exercising buildEnrichedProduct.
+        when(productRepository.findByMetadata(any(), any(), any(), any())).thenReturn(List.of());
+        when(productRepository.save(any(Product.class))).thenAnswer(inv -> {
+            var p = inv.<Product>getArgument(0);
+            p.setId(UUID.randomUUID());
+            return p;
+        });
+        when(aliasRepository.existsByNormalizedDescription(anyString())).thenReturn(false);
+
+        service.canonicalize(receipt);
+
+        var product = receipt.getItems().get(0).getProduct();
+        assertNotNull(product);
+        assertEquals("Café", product.getGenericName(), "display generic name kept as typed");
+        assertEquals("Pilão", product.getBrand(), "display brand kept as typed");
+        assertEquals("cafe", product.getGenericNameNorm(), "generic name mirror normalized");
+        assertEquals("pilao", product.getBrandNorm(), "brand mirror normalized");
+    }
+
+    @Test
     void pharmacyMerchant_defaultsUnknownItemToPharmacy() {
         var receipt = buildReceipt(item("PRODUTO DESCONHECIDO XYZ", "999"));
         receipt.setMarketName("DROGARIA SAO JOAO");
@@ -349,13 +375,13 @@ class CanonicalizationServiceTest {
                 .build();
         // Incoming item from another market with abbreviation
         var receipt = buildReceipt(item("ARROZ TIO J 5KG", null));
-        when(aliasRepository.findByNormalizedDescription("arroz tio j 5kg")).thenReturn(Optional.empty());
+        when(aliasRepository.findByNormalizedDescription("arroz tio j 5 kg")).thenReturn(Optional.empty());
         when(productExtractor.extract("ARROZ TIO J 5KG")).thenReturn(
                 new ProductExtraction("Arroz", "Tio Joao", new BigDecimal("5"), "KG",
                         ProductCategory.GROCERIES, CategorizationSource.DICTIONARY));
         when(aliasRepository.findCandidatesByProductMetadata("arroz", new BigDecimal("5"), "KG"))
                 .thenReturn(List.of(existingAlias));
-        when(aliasRepository.existsByNormalizedDescription("arroz tio j 5kg")).thenReturn(false);
+        when(aliasRepository.existsByNormalizedDescription("arroz tio j 5 kg")).thenReturn(false);
 
         var outcome = service.canonicalize(receipt);
 
@@ -377,7 +403,7 @@ class CanonicalizationServiceTest {
                 .normalizedDescription("arroz tio joao tipo 1 5kg")
                 .build();
         var receipt = buildReceipt(item("FEIJAO PRETO 5KG", null));
-        when(aliasRepository.findByNormalizedDescription("feijao preto 5kg")).thenReturn(Optional.empty());
+        when(aliasRepository.findByNormalizedDescription("feijao preto 5 kg")).thenReturn(Optional.empty());
         when(productExtractor.extract("FEIJAO PRETO 5KG")).thenReturn(
                 new ProductExtraction("Arroz", null, new BigDecimal("5"), "KG",
                         ProductCategory.GROCERIES, CategorizationSource.DICTIONARY));
@@ -388,13 +414,74 @@ class CanonicalizationServiceTest {
             p.setId(UUID.randomUUID());
             return p;
         });
-        when(aliasRepository.existsByNormalizedDescription("feijao preto 5kg")).thenReturn(false);
+        when(aliasRepository.existsByNormalizedDescription("feijao preto 5 kg")).thenReturn(false);
 
         var outcome = service.canonicalize(receipt);
 
         assertEquals(1, outcome.created());
         assertEquals(ProductCategory.GROCERIES, receipt.getItems().get(0).getProduct().getCategory());
         verify(aliasRepository).save(any(ProductAlias.class));
+    }
+
+    @Test
+    void noEanItemDedupsToExistingProductByMetadataInsteadOfDuplicating() {
+        // Two receipts abbreviating the same no-EAN item differently must land on
+        // the SAME product — the metadata-dedup gate now also runs on this path.
+        var existing = Product.builder().id(UUID.randomUUID())
+                .normalizedName("LEITE ITAMBE INT 1L")
+                .genericName("Leite").brand("Itambé")
+                .packSize(new BigDecimal("1")).packUnit("L")
+                .category(ProductCategory.MEAT_DAIRY)
+                .build();
+        var receipt = buildReceipt(item("LEITE ITAMB INTEGRAL 1L", null));
+        when(aliasRepository.findByNormalizedDescription("leite itamb integral 1 l")).thenReturn(Optional.empty());
+        when(productExtractor.extract("LEITE ITAMB INTEGRAL 1L")).thenReturn(
+                new ProductExtraction("Leite", "Itambé", new BigDecimal("1"), "L",
+                        ProductCategory.MEAT_DAIRY, CategorizationSource.DICTIONARY));
+        when(aliasRepository.findCandidatesByProductMetadata("leite", new BigDecimal("1"), "L"))
+                .thenReturn(List.of());
+        when(productRepository.findByMetadata("leite", "itambe", new BigDecimal("1"), "L"))
+                .thenReturn(List.of(existing));
+        when(aliasRepository.existsByNormalizedDescription("leite itamb integral 1 l")).thenReturn(false);
+
+        var outcome = service.canonicalize(receipt);
+
+        assertEquals(1, outcome.matched());
+        assertEquals(0, outcome.created());
+        assertEquals(existing.getId(), receipt.getItems().get(0).getProduct().getId());
+        verify(productRepository, never()).save(any(Product.class));
+    }
+
+    @Test
+    void noEanMetadataDedupRejectedWhenDescriptionsDiffer() {
+        // Same coarse metadata (Sal/Cisne/1KG) but clearly different products —
+        // the name-similarity guard must refuse the convergence and create new.
+        var salGrosso = Product.builder().id(UUID.randomUUID())
+                .normalizedName("SAL GROSSO CHURRASCO CISNE 1KG")
+                .genericName("Sal").brand("Cisne")
+                .packSize(new BigDecimal("1")).packUnit("KG")
+                .category(ProductCategory.GROCERIES)
+                .build();
+        var receipt = buildReceipt(item("SAL CISNE REF 1KG", null));
+        when(aliasRepository.findByNormalizedDescription("sal cisne ref 1 kg")).thenReturn(Optional.empty());
+        when(productExtractor.extract("SAL CISNE REF 1KG")).thenReturn(
+                new ProductExtraction("Sal", "Cisne", new BigDecimal("1"), "KG",
+                        ProductCategory.GROCERIES, CategorizationSource.DICTIONARY));
+        when(aliasRepository.findCandidatesByProductMetadata("sal", new BigDecimal("1"), "KG"))
+                .thenReturn(List.of());
+        when(productRepository.findByMetadata("sal", "cisne", new BigDecimal("1"), "KG"))
+                .thenReturn(List.of(salGrosso));
+        when(productRepository.save(any(Product.class))).thenAnswer(inv -> {
+            var saved = inv.<Product>getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+        when(aliasRepository.existsByNormalizedDescription("sal cisne ref 1 kg")).thenReturn(false);
+
+        var outcome = service.canonicalize(receipt);
+
+        assertEquals(1, outcome.created(), "must create a NEW product, not converge on sal grosso");
+        assertEquals(0, outcome.matched());
     }
 
     @Test

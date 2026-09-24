@@ -39,6 +39,17 @@ public interface ProductAliasRepository extends JpaRepository<ProductAlias, UUID
 
     long countByProduct(Product product);
 
+    /**
+     * (rawDescription, brand) for every alias of a branded product — the raw
+     * material for promoting abbreviated brand forms into registry aliases.
+     */
+    @Query("""
+        SELECT a.rawDescription, p.brand FROM ProductAlias a
+        JOIN a.product p
+        WHERE p.brand IS NOT NULL AND p.brand <> ''
+    """)
+    List<Object[]> findRawDescriptionsOfBrandedProducts();
+
     @Modifying
     @Query("UPDATE ProductAlias a SET a.product = :survivor WHERE a.product = :absorbed")
     int repointProduct(@Param("absorbed") Product absorbed, @Param("survivor") Product survivor);

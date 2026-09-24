@@ -14,6 +14,7 @@ import com.relyon.economizaai.repository.ProductAliasRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
+import com.relyon.economizaai.service.extraction.BrandAliasPromotionService;
 import com.relyon.economizaai.service.extraction.EanCatalogService;
 import com.relyon.economizaai.service.extraction.ProductExtraction;
 import com.relyon.economizaai.service.extraction.ProductExtractor;
@@ -53,6 +54,7 @@ class ProductServiceSearchGetUpdateTest {
     @Mock private PriceObservationRepository priceObservationRepository;
     @Mock private ProductExtractor productExtractor;
     @Mock private EanCatalogService eanCatalogService;
+    @Mock private BrandAliasPromotionService brandAliasPromotionService;
 
     private ProductService productService;
 
@@ -64,7 +66,7 @@ class ProductServiceSearchGetUpdateTest {
                 new HouseholdProductAliasService(householdProductAliasRepository, receiptItemRepository);
         productService = new ProductService(productRepository, aliasRepository, householdProductAliasRepository,
                 receiptItemRepository, priceObservationRepository, productExtractor, eanCatalogService,
-                householdProductAliasService);
+                householdProductAliasService, brandAliasPromotionService);
     }
 
     private User user() {
@@ -316,6 +318,27 @@ class ProductServiceSearchGetUpdateTest {
         assertEquals(ProductCategory.GROCERIES, saved.getValue().getCategory());
         assertEquals(CategorizationSource.USER, saved.getValue().getCategorizationSource());
         assertEquals("Arroz Tio Joao 1kg", response.normalizedName());
+    }
+
+    @Test
+    void update_populatesNormalizedMirrorsKeepingDisplayValues() {
+        var id = UUID.randomUUID();
+        var existing = buildProduct(id);
+        when(productRepository.findById(id)).thenReturn(Optional.of(existing));
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var request = new UpdateProductRequest(
+                "Cafe Pilao", "Café", "Pilão",
+                ProductCategory.GROCERIES, "UN", new BigDecimal("500.000"), "G");
+
+        productService.update(id, request);
+
+        var saved = ArgumentCaptor.forClass(Product.class);
+        verify(productRepository).save(saved.capture());
+        assertEquals("Café", saved.getValue().getGenericName(), "display generic name kept");
+        assertEquals("Pilão", saved.getValue().getBrand(), "display brand kept");
+        assertEquals("cafe", saved.getValue().getGenericNameNorm(), "generic name mirror normalized");
+        assertEquals("pilao", saved.getValue().getBrandNorm(), "brand mirror normalized");
     }
 
     @Test

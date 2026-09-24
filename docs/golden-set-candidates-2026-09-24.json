@@ -1,0 +1,422 @@
+[
+  {
+    "description": "P.BOLACHA MILHO kg",
+    "expectedCategory": "BAKERY",
+    "expectedBrand": null,
+    "proposedGeneric": "Bolacha de Padaria",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "MOIDA DE 1 KG",
+    "expectedCategory": "MEAT_DAIRY",
+    "expectedBrand": null,
+    "proposedGeneric": null,
+    "source": "LEARNED_DICTIONARY"
+  },
+  {
+    "description": "BACON BORRUSSIA EXTRA PERNIL EV",
+    "expectedCategory": "MEAT_DAIRY",
+    "expectedBrand": null,
+    "proposedGeneric": "Bacon",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "DOCE LEITE MERCATTO DIET 440G",
+    "expectedCategory": "GROCERIES",
+    "expectedBrand": "Mercatto",
+    "proposedGeneric": "Doce de Leite",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "MANT PRES GASTRO S/S TAB200G",
+    "expectedCategory": "MEAT_DAIRY",
+    "expectedBrand": null,
+    "proposedGeneric": "Manteiga",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "AGUA MINERAL POR DO SOL 510ML S/GAS",
+    "expectedCategory": "BEVERAGES",
+    "expectedBrand": null,
+    "proposedGeneric": "Água Mineral",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "CR LEITE PARMALAT TP200G",
+    "expectedCategory": "MEAT_DAIRY",
+    "expectedBrand": "Parmalat",
+    "proposedGeneric": "Leite",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "CARNE MOIDA PRIMEIRA BOVINA",
+    "expectedCategory": "MEAT_DAIRY",
+    "expectedBrand": null,
+    "proposedGeneric": "Carne",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "ERVILHA ODERICH 200G",
+    "expectedCategory": "GROCERIES",
+    "expectedBrand": "Oderich",
+    "proposedGeneric": "Ervilha",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "F.PERA NACIONAL kg",
+    "expectedCategory": "PRODUCE",
+    "expectedBrand": null,
+    "proposedGeneric": "Pera",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "MAMAO FORMOSA kg",
+    "expectedCategory": "PRODUCE",
+    "expectedBrand": null,
+    "proposedGeneric": "Mamão",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "PRESUNTO COZ SEARA FAT 350G",
+    "expectedCategory": "MEAT_DAIRY",
+    "expectedBrand": "Seara",
+    "proposedGeneric": "Presunto",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "ALCATRA PEDACO EF",
+    "expectedCategory": "MEAT_DAIRY",
+    "expectedBrand": null,
+    "proposedGeneric": "Alcatra",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "LEITE COCO TUTTI TRAD 500ML",
+    "expectedCategory": "MEAT_DAIRY",
+    "expectedBrand": "COCO",
+    "proposedGeneric": "Leite",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "MASSA OVOS PENA RENATA 500G",
+    "expectedCategory": "GROCERIES",
+    "expectedBrand": "Renata",
+    "proposedGeneric": "Massa",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "MACA GALA NATURALE 1KG",
+    "expectedCategory": "PRODUCE",
+    "expectedBrand": "Naturale",
+    "proposedGeneric": "Maçã",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "BISC.LACTA BIS XTRA",
+    "expectedCategory": "GROCERIES",
+    "expectedBrand": "Lacta",
+    "proposedGeneric": "Biscoito",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "MASSA LASANHA TUTTI 500G",
+    "expectedCategory": "GROCERIES",
+    "expectedBrand": "Tutti",
+    "proposedGeneric": "Massa",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "SARDINHA COQUEIRO 75G OLEO",
+    "expectedCategory": "MEAT_DAIRY",
+    "expectedBrand": "Coqueiro",
+    "proposedGeneric": "Sardinha",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "MAIONESE HELLMANNS LIGHT 500G",
+    "expectedCategory": "GROCERIES",
+    "expectedBrand": "Hellmann's",
+    "proposedGeneric": "Maionese",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "FLUCONAZOL 150 MG C/ 2 CAP(MED)**",
+    "expectedCategory": "OTHER",
+    "expectedBrand": null,
+    "proposedGeneric": null,
+    "source": "NONE"
+  },
+  {
+    "description": "F.MACA FUJI kg",
+    "expectedCategory": "PRODUCE",
+    "expectedBrand": null,
+    "proposedGeneric": "Maçã",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "IOG GREGO VIGOR MGO Z.L 90G",
+    "expectedCategory": "MEAT_DAIRY",
+    "expectedBrand": "Vigor",
+    "proposedGeneric": "Iogurte",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "LEITE COCO TUTTI TRAD 200ML",
+    "expectedCategory": "MEAT_DAIRY",
+    "expectedBrand": "COCO",
+    "proposedGeneric": "Leite",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "EMB LOMBO COZ SEARA LEVIS 180G",
+    "expectedCategory": "MEAT_DAIRY",
+    "expectedBrand": "Seara",
+    "proposedGeneric": "Lombo",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "ESSENCIA OETKER BAUNILHA 30ML",
+    "expectedCategory": "OTHER",
+    "expectedBrand": null,
+    "proposedGeneric": null,
+    "source": "NONE"
+  },
+  {
+    "description": "CHOC NEUGEB 1891 INTENSE 70% 90G",
+    "expectedCategory": "GROCERIES",
+    "expectedBrand": "Neugebauer",
+    "proposedGeneric": "Chocolate",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "IOG GREGO VIGOR TRAD Z.L 90G",
+    "expectedCategory": "MEAT_DAIRY",
+    "expectedBrand": "Vigor",
+    "proposedGeneric": "Iogurte",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "PAO DOGAO R.BRANCO 200G",
+    "expectedCategory": "BAKERY",
+    "expectedBrand": null,
+    "proposedGeneric": "Pão",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "LING MIST SADIA FININHA 215G",
+    "expectedCategory": "MEAT_DAIRY",
+    "expectedBrand": "Sadia",
+    "proposedGeneric": "Linguiça",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "PRESUNTO COZ MAGRO LEBON CP AS",
+    "expectedCategory": "MEAT_DAIRY",
+    "expectedBrand": "Magro",
+    "proposedGeneric": "Presunto",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "CHOC LACTA 40%AMARO 80G",
+    "expectedCategory": "GROCERIES",
+    "expectedBrand": "Lacta",
+    "proposedGeneric": "Chocolate",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "LAV LOUCA YPE CLEAR 500ML",
+    "expectedCategory": "CLEANING",
+    "expectedBrand": "Ypê",
+    "proposedGeneric": "Lava-louças",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "CHOCOTUBES HERSHEY'S 25G CREME",
+    "expectedCategory": "GROCERIES",
+    "expectedBrand": "Hershey's",
+    "proposedGeneric": "Chocolate",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "CR P PENT SALON LINE 1L SUPER CONTROLE",
+    "expectedCategory": "PERSONAL_CARE",
+    "expectedBrand": "Salon Line",
+    "proposedGeneric": "Pente",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "MARGARINA QUALY 500G COM SAL",
+    "expectedCategory": "MEAT_DAIRY",
+    "expectedBrand": "Qualy",
+    "proposedGeneric": "Margarina",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "FARINHA DE TRIGO VENTURELLI 5kg FAMIGLIA PURISSIMA",
+    "expectedCategory": "GROCERIES",
+    "expectedBrand": "Venturelli",
+    "proposedGeneric": "Farinha",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "MOIDA DE 2 KG",
+    "expectedCategory": "MEAT_DAIRY",
+    "expectedBrand": null,
+    "proposedGeneric": null,
+    "source": "LEARNED_DICTIONARY"
+  },
+  {
+    "description": "REFRI MINI COCA COLA PET 250ML ZER",
+    "expectedCategory": "BEVERAGES",
+    "expectedBrand": "Coca-Cola",
+    "proposedGeneric": "Refrigerante",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "REFRESCO EM PO FRISCO SACHE 18G MORANGO C/ IOG",
+    "expectedCategory": "BEVERAGES",
+    "expectedBrand": "FRISCO",
+    "proposedGeneric": "Refresco em Pó",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "LEITE COND MOCA TP 395G S DESNATADO",
+    "expectedCategory": "MEAT_DAIRY",
+    "expectedBrand": "Moça",
+    "proposedGeneric": "Leite",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "SALG DORITOS 32G QUEIJO NACHO",
+    "expectedCategory": "GROCERIES",
+    "expectedBrand": "Doritos",
+    "proposedGeneric": "Salgadinho",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "KOMBUCHA FESTV",
+    "expectedCategory": "BEVERAGES",
+    "expectedBrand": "KOMBUCHA",
+    "proposedGeneric": "Kombucha",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "IOG NATURAL NESTLE 170G CEN/LARANJA",
+    "expectedCategory": "MEAT_DAIRY",
+    "expectedBrand": "NATURAL",
+    "proposedGeneric": "Iogurte",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "REFRI PEPSI PET 200ML COLA",
+    "expectedCategory": "BEVERAGES",
+    "expectedBrand": "Pepsi",
+    "proposedGeneric": "Refrigerante",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "SUCO DEL VALLE FRUT 450ML FR CITRICAS",
+    "expectedCategory": "BEVERAGES",
+    "expectedBrand": "DEL VALLE FRUT",
+    "proposedGeneric": "Suco",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "SONHO CHOC/AVELA*",
+    "expectedCategory": "BAKERY",
+    "expectedBrand": null,
+    "proposedGeneric": "Sonho",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "BISC RECH RICH ANIMADOS ZOO 130G CHOCOLATE",
+    "expectedCategory": "GROCERIES",
+    "expectedBrand": null,
+    "proposedGeneric": "Biscoito",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "KETCHUP ARISCO SQUEEZE 370G",
+    "expectedCategory": "GROCERIES",
+    "expectedBrand": "Arisco",
+    "proposedGeneric": "Ketchup",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "REFRESCO EM PO FRISCO SACHE 18G SALADA DE FRUTA",
+    "expectedCategory": "BEVERAGES",
+    "expectedBrand": "FRISCO",
+    "proposedGeneric": "Refresco em Pó",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "ABS SEMPRE LIVRE C ABAS 32UND",
+    "expectedCategory": "PERSONAL_CARE",
+    "expectedBrand": "Sempre Livre",
+    "proposedGeneric": "Absorvente",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "ETANOL COMUM Bico 14",
+    "expectedCategory": "OTHER",
+    "expectedBrand": null,
+    "proposedGeneric": null,
+    "source": "NONE"
+  },
+  {
+    "description": "HASTES FLEX COTTON LINE C75",
+    "expectedCategory": "OTHER",
+    "expectedBrand": null,
+    "proposedGeneric": null,
+    "source": "NONE"
+  },
+  {
+    "description": "TOMATE COMUM kg",
+    "expectedCategory": "PRODUCE",
+    "expectedBrand": "TOMATE",
+    "proposedGeneric": "Tomate",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "FILE PEITO FGO SADIA BD 1KG PROM",
+    "expectedCategory": "MEAT_DAIRY",
+    "expectedBrand": "Sadia",
+    "proposedGeneric": "Filé",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "CARNE MOIDA DE SEGUN",
+    "expectedCategory": "MEAT_DAIRY",
+    "expectedBrand": null,
+    "proposedGeneric": "Carne",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "BISC C CRACKER FORT 350G TOSTADINHA",
+    "expectedCategory": "GROCERIES",
+    "expectedBrand": null,
+    "proposedGeneric": "Biscoito",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "REMOVEDOR S ACETONA ALYNE 100ML MORANGO",
+    "expectedCategory": "CLEANING",
+    "expectedBrand": "MORANGO",
+    "proposedGeneric": "Removedor",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "GOIABA PALOMA kg",
+    "expectedCategory": "PRODUCE",
+    "expectedBrand": "paloma",
+    "proposedGeneric": "Goiaba",
+    "source": "DICTIONARY"
+  },
+  {
+    "description": "ACENDEDOR BASTAO PARANA L10P8",
+    "expectedCategory": "OTHER",
+    "expectedBrand": null,
+    "proposedGeneric": null,
+    "source": "NONE"
+  }
+]

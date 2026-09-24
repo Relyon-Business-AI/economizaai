@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.llm;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.relyon.economizaai.model.CuratedDictionaryEntry;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.enums.CategorizationSource;
@@ -15,6 +16,7 @@ import com.relyon.economizaai.service.paidapi.PaidApiGuardService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Pageable;
@@ -107,6 +109,31 @@ class LlmEnrichmentServiceTest {
         verify(curatedRepository).save(any());
         verify(dictionaryClassifier).reloadCuratedEntries();
         verify(paidApiGuard).recordSuccess(null, PaidApiService.LLM_ENRICH, null, "openai");
+    }
+
+    @Test
+    void enrich_normalizesBrandGenericMirrorsAndDictionaryKeyword() throws Exception {
+        var cafe = product("CAFE PILAO 500G UN", CategorizationSource.NONE, ProductCategory.OTHER);
+        when(productRepository.findEnrichmentCandidates(anyInt(), any(Pageable.class)))
+                .thenReturn(List.of(cafe));
+        when(curatedRepository.findByKeyword("cafe")).thenReturn(Optional.empty());
+        // LLM returns accented brand/generic/keyword — mirrors + curated key must be accent-stripped.
+        stubResponse("""
+                {"products": [{"id": 0, "category": "GROCERIES", "brand": "Pilão",
+                 "generic_name": "Café", "pack_size": 500, "pack_unit": "g",
+                 "confidence": 0.95, "dictionary_keyword": "Café"}]}""");
+        var savedRule = ArgumentCaptor.forClass(CuratedDictionaryEntry.class);
+
+        service.enrichPendingProducts();
+
+        // Display values kept as returned; normalized mirrors accent-stripped.
+        assertThat(cafe.getBrand()).isEqualTo("Pilão");
+        assertThat(cafe.getBrandNorm()).isEqualTo("pilao");
+        assertThat(cafe.getGenericName()).isEqualTo("Café");
+        assertThat(cafe.getGenericNameNorm()).isEqualTo("cafe");
+        // The curated rule written back keys on the normalized (accent-stripped) keyword.
+        verify(curatedRepository).save(savedRule.capture());
+        assertThat(savedRule.getValue().getKeyword()).isEqualTo("cafe");
     }
 
     @Test

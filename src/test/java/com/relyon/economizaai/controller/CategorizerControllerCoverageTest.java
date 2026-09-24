@@ -16,12 +16,14 @@ import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.extraction.AutoPromotionService;
+import com.relyon.economizaai.service.extraction.BrandAliasPromotionService;
 import com.relyon.economizaai.service.extraction.CategorizationBenchmarkService;
 import com.relyon.economizaai.service.extraction.CategorizationDebugService;
 import com.relyon.economizaai.service.extraction.CategorizationQualityService;
 import com.relyon.economizaai.service.extraction.CategorizerAdminService;
 import com.relyon.economizaai.service.extraction.ConsensusPromotionService;
 import com.relyon.economizaai.service.extraction.EanCatalogService;
+import com.relyon.economizaai.service.extraction.PhraseTokenSimulationService;
 import com.relyon.economizaai.service.extraction.ml.MlClassifierService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,6 +42,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -59,6 +62,8 @@ class CategorizerControllerCoverageTest {
     @MockitoBean private ConsensusPromotionService consensusPromotionService;
     @MockitoBean private CategorizerAdminService categorizerAdminService;
     @MockitoBean private EanCatalogService eanCatalogService;
+    @MockitoBean private BrandAliasPromotionService brandAliasPromotionService;
+    @MockitoBean private PhraseTokenSimulationService phraseTokenSimulationService;
     @MockitoBean private JwtService jwtService;
     @MockitoBean private UserDetailsService userDetailsService;
     @MockitoBean private LocalizedMessageService localizedMessageService;
@@ -222,6 +227,56 @@ class CategorizerControllerCoverageTest {
     @Test
     void benchmark_forbiddenForNonAdmin() throws Exception {
         mockMvc.perform(post("/api/v1/categorizer/benchmark")
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void searchBrands_returnsMatches() throws Exception {
+        when(categorizerAdminService.searchBrands("dona", 20)).thenReturn(List.of("Dona Benta", "Dona Bela"));
+
+        mockMvc.perform(get("/api/v1/categorizer/brands").param("q", "dona")
+                        .with(SecurityMockMvcRequestPostProcessors.user(adminPrincipal())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0]").value("Dona Benta"))
+                .andExpect(jsonPath("$[1]").value("Dona Bela"));
+    }
+
+    @Test
+    void searchBrands_forbiddenForNonAdmin() throws Exception {
+        mockMvc.perform(get("/api/v1/categorizer/brands").param("q", "dona")
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void listBrandEntries_returnsRowsWithIds() throws Exception {
+        var id = UUID.randomUUID();
+        when(categorizerAdminService.listBrandEntries("dona", 50)).thenReturn(List.of(
+                new CategorizerAdminService.BrandEntryView(id, "dona benta", "Dona Benta", "CURATED")));
+
+        mockMvc.perform(get("/api/v1/categorizer/brands/entries").param("q", "dona")
+                        .with(SecurityMockMvcRequestPostProcessors.user(adminPrincipal())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(id.toString()))
+                .andExpect(jsonPath("$[0].displayName").value("Dona Benta"))
+                .andExpect(jsonPath("$[0].source").value("CURATED"));
+    }
+
+    @Test
+    void deleteBrand_removesAndReturnsNoContent() throws Exception {
+        var id = UUID.randomUUID();
+
+        mockMvc.perform(delete("/api/v1/categorizer/brands/" + id)
+                        .with(SecurityMockMvcRequestPostProcessors.user(adminPrincipal())))
+                .andExpect(status().isNoContent());
+
+        verify(categorizerAdminService).deleteBrand(id);
+    }
+
+    @Test
+    void deleteBrand_forbiddenForNonAdmin() throws Exception {
+        mockMvc.perform(delete("/api/v1/categorizer/brands/" + UUID.randomUUID())
                         .with(SecurityMockMvcRequestPostProcessors.user(principal())))
                 .andExpect(status().isForbidden());
     }

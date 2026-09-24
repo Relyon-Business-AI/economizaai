@@ -6,14 +6,18 @@ import com.relyon.economizaai.dto.response.CategorizationQualitySnapshotResponse
 import com.relyon.economizaai.dto.response.CuratedEntryResponse;
 import com.relyon.economizaai.dto.response.LearnedEntryResponse;
 import com.relyon.economizaai.dto.response.MlClassificationResponse;
+import com.relyon.economizaai.dto.response.PhraseTokenSimulationResponse;
+import com.relyon.economizaai.model.ConsensusGraduationAudit;
 import com.relyon.economizaai.model.enums.CategorizationQualityTrigger;
 import com.relyon.economizaai.service.extraction.AutoPromotionService;
+import com.relyon.economizaai.service.extraction.BrandAliasPromotionService;
 import com.relyon.economizaai.service.extraction.CategorizationBenchmarkService;
 import com.relyon.economizaai.service.extraction.CategorizerAdminService;
 import com.relyon.economizaai.service.extraction.ConsensusPromotionService;
 import com.relyon.economizaai.service.extraction.CategorizationDebugService;
 import com.relyon.economizaai.service.extraction.CategorizationQualityService;
 import com.relyon.economizaai.service.extraction.EanCatalogService;
+import com.relyon.economizaai.service.extraction.PhraseTokenSimulationService;
 import com.relyon.economizaai.service.extraction.ml.MlClassifierService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -61,6 +65,8 @@ public class CategorizerController {
     private final ConsensusPromotionService consensusPromotionService;
     private final CategorizerAdminService categorizerAdminService;
     private final EanCatalogService eanCatalogService;
+    private final BrandAliasPromotionService brandAliasPromotionService;
+    private final PhraseTokenSimulationService phraseTokenSimulationService;
 
     /**
      * Promote user-correction consensus into deterministic knowledge: products
@@ -115,6 +121,21 @@ public class CategorizerController {
         return ResponseEntity.ok(categorizationDebugService.mlPredictAll(description));
     }
 
+    /**
+     * What-if: simulate the dictionary/brand phrase-window size over the real
+     * unmatched backlog (coverage) and the golden set (accuracy), for each N in
+     * [minTokens, maxTokens]. Read-only — to adopt a window, set the env var
+     * ECONOMIZAAI_CATEGORIZATION_MAX_PHRASE_TOKENS. ADMIN-only in SecurityConfig.
+     */
+    @GetMapping("/simulate")
+    public ResponseEntity<PhraseTokenSimulationResponse> simulatePhraseTokens(
+            @RequestParam(defaultValue = "3") int minTokens,
+            @RequestParam(defaultValue = "6") int maxTokens,
+            @RequestParam(defaultValue = "2000") int sampleSize) {
+        return ResponseEntity.ok(
+                phraseTokenSimulationService.simulate(minTokens, maxTokens, sampleSize));
+    }
+
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> status() {
         var body = new LinkedHashMap<String, Object>();
@@ -165,6 +186,18 @@ public class CategorizerController {
     @GetMapping("/consensus")
     public ResponseEntity<List<CategorizerAdminService.ConsensusProductView>> listConsensus() {
         return ResponseEntity.ok(categorizerAdminService.listConsensus());
+    }
+
+    /**
+     * ADMIN. Consensus graduation audit trail — who (which households) promoted
+     * which product to which category, newest first. Optional productId filter.
+     * Makes a bad/gamed consensus traceable and reversible.
+     */
+    @GetMapping("/consensus/audit")
+    public ResponseEntity<List<ConsensusGraduationAudit>> consensusAudit(
+            @RequestParam(required = false) UUID productId,
+            @RequestParam(defaultValue = "50") int limit) {
+        return ResponseEntity.ok(categorizerAdminService.consensusAudit(productId, limit));
     }
 
     /**
@@ -247,6 +280,36 @@ public class CategorizerController {
      * ADMIN. Upsert brand-registry entries — hot-reloaded, no deploy. Body:
      * <pre>[{"key":"tio joao","displayName":"Tio João"}, ...]</pre>
      */
+    /**
+     * ADMIN. Autocomplete for the rule editor's Marca field — distinct brand
+     * display names from the registry matching {@code q} (normalized), capped.
+     * Lets admins pick an existing brand instead of free-typing (no typos/dupes).
+     */
+    @GetMapping("/brands")
+    public ResponseEntity<List<String>> searchBrands(
+            @RequestParam(required = false, defaultValue = "") String q,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(categorizerAdminService.searchBrands(q, limit));
+    }
+
+    /**
+     * ADMIN. Full brand-registry rows (id + key + display + source) so noisy
+     * DERIVED entries can be reviewed and deleted from the ops center.
+     */
+    @GetMapping("/brands/entries")
+    public ResponseEntity<List<CategorizerAdminService.BrandEntryView>> listBrandEntries(
+            @RequestParam(required = false, defaultValue = "") String q,
+            @RequestParam(defaultValue = "50") int limit) {
+        return ResponseEntity.ok(categorizerAdminService.listBrandEntries(q, limit));
+    }
+
+    /** ADMIN. Removes one brand-registry entry and hot-reloads the detector. */
+    @DeleteMapping("/brands/{id}")
+    public ResponseEntity<Void> deleteBrand(@PathVariable UUID id) {
+        categorizerAdminService.deleteBrand(id);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/brands/import")
     public ResponseEntity<CategorizerAdminService.BulkImportOutcome> bulkImportBrands(
             @Size(max = MAX_IMPORT_BATCH) @RequestBody List<CategorizerAdminService.BrandImportRequest> entries) {
@@ -259,11 +322,25 @@ public class CategorizerController {
      * normalized key (most frequent wins as display name); keys with fewer than
      * {@code minProducts} catalog occurrences are dropped as crowd-sourced
      * noise. Fill-only: existing registry entries are never overwritten.
+     * {@code onlyBrazil} (default true) restricts to 789/790 EANs — the catalog
+     * is ~97% foreign and deriving from it floods the registry with US chains.
      */
     @PostMapping("/brands/derive-from-catalog")
     public ResponseEntity<CategorizerAdminService.BrandDerivationOutcome> deriveBrandsFromCatalog(
-            @RequestParam(defaultValue = "2") int minProducts) {
-        return ResponseEntity.ok(categorizerAdminService.deriveBrandsFromEanCatalog(minProducts));
+            @RequestParam(defaultValue = "2") int minProducts,
+            @RequestParam(defaultValue = "true") boolean onlyBrazil) {
+        return ResponseEntity.ok(categorizerAdminService.deriveBrandsFromEanCatalog(minProducts, onlyBrazil));
+    }
+
+    /**
+     * ADMIN. Promote confirmed brand matches into registry aliases: scans branded
+     * products' receipt descriptions and turns each unambiguous abbreviated brand
+     * form ("d benta" → Dona Benta) into a deterministic alias. Grows the registry
+     * from data we already have; conflicting keys are skipped.
+     */
+    @PostMapping("/brands/promote-aliases")
+    public ResponseEntity<BrandAliasPromotionService.PromotionOutcome> promoteBrandAliases() {
+        return ResponseEntity.ok(brandAliasPromotionService.promoteFromKnownBrands());
     }
 
     /**

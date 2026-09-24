@@ -194,6 +194,38 @@ class HouseholdProductServiceTest {
     }
 
     @Test
+    void listHouseholdProducts_queryMatchesAccentInsensitiveOnName() {
+        var cafe = product("CAFÉ PILÃO");
+        var leite = product("Leite Integral");
+        when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID)).thenReturn(List.of(
+                item(cafe, "5.00", CNPJ_ZAFFARI, "Zaffari", LocalDateTime.of(2026, Month.JANUARY, 1, 10, 0)),
+                item(leite, "4.50", CNPJ_NACIONAL, "Nacional", LocalDateTime.of(2026, Month.FEBRUARY, 1, 10, 0))));
+
+        // Query WITHOUT accent finds the accented product name.
+        var noAccent = service.listHouseholdProducts(user, "cafe pilao");
+        assertEquals(1, noAccent.size());
+        assertEquals(cafe.getId(), noAccent.get(0).productId());
+
+        // Query WITH accent also matches.
+        var withAccent = service.listHouseholdProducts(user, "café");
+        assertEquals(1, withAccent.size());
+        assertEquals(cafe.getId(), withAccent.get(0).productId());
+    }
+
+    @Test
+    void listHouseholdProducts_queryMatchesAccentInsensitiveOnBrand() {
+        var product = Product.builder().id(UUID.randomUUID()).normalizedName("Po de cafe")
+                .brand("Pilão").category(ProductCategory.GROCERIES).build();
+        when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID)).thenReturn(List.of(
+                item(product, "5.00", CNPJ_ZAFFARI, "Zaffari", LocalDateTime.of(2026, Month.JANUARY, 1, 10, 0))));
+
+        var result = service.listHouseholdProducts(user, "pilao"); // no accent → matches brand "Pilão"
+
+        assertEquals(1, result.size());
+        assertEquals(product.getId(), result.get(0).productId());
+    }
+
+    @Test
     void listHouseholdProducts_queryMatchesHouseholdFriendlyName() {
         var renamed = product("GRAO FINO TIPO 1 5KG");
         var leite = product("Leite Integral");

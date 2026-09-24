@@ -75,6 +75,22 @@ economizaai:
     dev-cleanup-enabled: ${DEV_CLEANUP_ENABLED:false}
   privacy:
     k-anonymity: 3
+  categorization:
+    # Longest phrase (in tokens) the dictionary/brand lookup assembles and tests.
+    # Raising it lets curated keys have more words (e.g. "ferm bio d benta"), at a
+    # negligible cost. Use GET /categorizer/simulate to measure the effect on
+    # coverage + golden-set accuracy before changing it.
+    max-phrase-tokens: ${ECONOMIZAAI_CATEGORIZATION_MAX_PHRASE_TOKENS:3}
+    # Fuzzy brand fallback: when the exact registry scan misses, try abbreviation
+    # matching ("d benta" → Dona Benta / "antarc" → Antártica). OFF by default —
+    # a dev dry-run flagged too many false matches from the old typo branch (now
+    # removed); re-measure before enabling.
+    brand-fuzzy-enabled: ${ECONOMIZAAI_CATEGORIZATION_BRAND_FUZZY_ENABLED:false}
+    # Abbreviation fallback for the generic/category side: "shamp" matches the
+    # curated keyword "shampoo" by prefix, with per-token length floors and an
+    # ambiguity guard (candidates disagreeing on category → no match). OFF by
+    # default until measured on real data.
+    dictionary-fuzzy-enabled: ${ECONOMIZAAI_CATEGORIZATION_DICTIONARY_FUZZY_ENABLED:false}
   ingestion:
     # Async-ingest safety net: PROCESSING receipts older than this are failed by
     # the sweeper so the FE never polls forever. Must exceed the worst-case
@@ -297,8 +313,10 @@ economizaai:
     consensus:
       # User category corrections graduate to global truth (+ learned dictionary)
       # once this many distinct households agree on the same product→category.
-      # A single household never changes anything globally.
-      min-households: ${CONSENSUS_MIN_HOUSEHOLDS:2}
+      # A single household never changes anything globally. Default 3 (was 2):
+      # two colluding/coinciding households graduating GLOBAL truth was too
+      # permissive — 3 matches the k-anonymity floor.
+      min-households: ${CONSENSUS_MIN_HOUSEHOLDS:3}
       # A token enters the learned dictionary only if it recurs across at least
       # this many consensus products, with no category disagreement.
       min-token-products: ${CONSENSUS_MIN_TOKEN_PRODUCTS:2}

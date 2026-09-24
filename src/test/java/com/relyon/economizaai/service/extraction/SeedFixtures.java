@@ -67,7 +67,7 @@ final class SeedFixtures {
     }
 
     static BrandExtractor loadedBrandExtractor() {
-        var extractor = new BrandExtractor(brandRepositoryMock());
+        var extractor = new BrandExtractor(brandRepositoryMock(), curatedRepositoryMock());
         extractor.reload();
         return extractor;
     }

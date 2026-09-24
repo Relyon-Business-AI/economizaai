@@ -7,14 +7,101 @@ Skim from the top until you hit a date you've already read.
 For the complete API contract see [API.md](./API.md) (walk-through) or
 `/swagger-ui` on whichever environment you're hitting.
 
-**Environments:**
-- **Production:** `https://economizai-app-prod.onrender.com/api/v1`
+**Environments** (use the custom domains — the `*.onrender.com` subdomains are
+misleadingly named and must NOT be used: the dev service's onrender URL literally
+says `economizai-app-prod`):
+- **Production:** `https://api.economizaai.app/api/v1`
   (Swagger: `/swagger-ui/index.html`, health: `/actuator/health`)
-- **Dev:** `https://economiz-ai.onrender.com/api/v1` — features land here
-  first. Also reachable at the old `https://economizaai.economizaai.workers.dev/api/v1`
-  (proxies to Render), so the store build's URL keeps working.
+- **Dev:** `https://api-dev.economizaai.app/api/v1` — features land here first.
 
 ---
+
+## 2026-09-24 — Robustez do motor (batch 2): sweeper noturno + auditoria de consenso
+
+- **Sweeper noturno de órfãos:** a manutenção agora re-tenta os itens **não-casados** contra as
+  regras atuais toda noite (antes só quando um admin salvava regra curada com aquela keyword).
+  Não-forçante: item que segue sem match continua não-casado (não cria produto lixo); correções
+  humanas intocadas por construção. Cap configurável (`unmatched-retry-cap`, default 1000).
+- **Auditoria de consenso:** graduações agora gravam **quais households votaram** (tabela
+  `consensus_graduation_audit`) — consenso ruim/manipulado vira rastreável e reversível.
+  Novo endpoint ADMIN `GET /categorizer/consensus/audit?productId=&limit=`. De quebra, a
+  contagem de votos passou a ser por household DISTINTO (antes contava linhas de override).
+
+## 2026-09-24 — Robustez do motor de categorização (pacote de correções)
+
+Correções dos gaps achados na auditoria do motor de detecção (produto/marca/categoria):
+
+- **Normalizador separa token colado:** `detox350ml` → `detox 350 ml` — antes o dicionário/alias
+  nunca via nem o produto nem o tamanho. Aliases armazenados são re-normalizados no startup
+  (backfill idempotente; colisões são puladas e logadas).
+- **Abreviação também no nome/categoria** (não só marca): `shamp` casa a keyword curada
+  `shampoo` por prefixo, com pisos de tamanho e trava de ambiguidade (candidatos discordando
+  de categoria → não casa). Env var `ECONOMIZAAI_CATEGORIZATION_DICTIONARY_FUZZY_ENABLED`
+  (default false; ligada no dev).
+- **Derivação de marcas agora é BR-only por default** (`onlyBrazil=true`, EANs 789/790) — o
+  catálogo é ~97% estrangeiro e derivar sem filtro enchia o registro de rede americana. Chave
+  multi-palavra igual a keyword curada deixou de ser bloqueada (caso Dog Chow: é produto E marca).
+- **Derivação + promoção de aliases agora rodam na manutenção noturna** — o registro de marcas
+  não fica mais defasado meses em relação ao catálogo.
+- **Dedup por metadados no caminho SEM EAN:** dois cupons abreviando o mesmo item de formas
+  diferentes convergem pro MESMO produto (antes duplicava — 67 grupos duplicados no dev).
+- **Gestão de marcas:** `GET /categorizer/brands/entries` (linhas com id/source) e
+  `DELETE /categorizer/brands/{id}` pra limpar marcas DERIVED ruidosas, com hot-reload.
+- **Consenso mais rígido:** `min-households` default 2 → **3** (2 households graduando verdade
+  global era permissivo demais).
+- **FE:** linha ML do teste de categorização rotulada "sombra — não decide" (a confiança de
+  99% do Naive Bayes é enganosa e ele está fora do fluxo).
+
+## 2026-09-24 — Autocomplete de marca no editor de regras
+
+- **Novo endpoint (ADMIN):** `GET /api/v1/categorizer/brands?q=<busca>&limit=20` — nomes de
+  marca distintos do registro cujo key normalizado casa com `q`. Retorna `string[]`.
+- **FE:** o campo **Marca** dos modais de regra (Definir/Nova) e do "Editar produto" virou um
+  **combobox com busca** — sugere marcas do registro (evita typo/duplicata como "Dona Benta"
+  vs "dona benta"), mas ainda permite digitar marca nova.
+- **Dado (dev):** registro de marcas cresceu de ~1.700 → ~2.340 (derivação BR do catálogo EAN
+  + fetch incremental do OFF). Cobertura de marca brasileira melhor no scan.
+
+## 2026-09-24 — Promoção de aliases de marca (aprendizado determinístico)
+
+Fecha o loop do fuzzy: acertos confirmados viram aliases exatos no registro de marcas.
+
+- **Novo endpoint (ADMIN):** `POST /api/v1/categorizer/brands/promote-aliases` — varre as
+  descrições de nota de produtos que já têm marca e promove cada forma abreviada não-ambígua
+  (`d benta` → Dona Benta) a um alias determinístico. Chaves conflitantes (mesma abreviação →
+  marcas diferentes) são puladas. Retorna `{ created, conflictsSkipped }`.
+- **Hook automático:** ao um admin corrigir a marca de um produto (PATCH `/products/{id}`), os
+  aliases implícitos nas descrições daquele produto são aprendidos na hora.
+- Aliases novos ficam com `source=LEARNED_ALIAS` (limpáveis à parte). Isso torna os matches
+  determinísticos/auditáveis e permite, no futuro, apertar ou desligar o fuzzy.
+
+## 2026-09-24 — Detecção de marca com fuzzy (abreviação + typo)
+
+O `BrandExtractor` agora tem um **fallback fuzzy** (abreviação) quando o match exato no
+registro de marcas falha — resolve o caso clássico da nota abreviar a marca:
+
+- **Abreviação ancorada:** `d benta` → **Dona Benta** (cada token é prefixo do token da
+  marca, ancorado por ao menos uma palavra inteira exata — `d b` sozinho não casa).
+- **Prefixo de token único:** `fleischm` → **Fleischmann**, `predilec` → Predilecta
+  (prefixo ≥6 chars, marca claramente maior, e **nunca** palavra genérica de produto —
+  `verde`/`biscoito`/etc. são bloqueadas via dicionário curado + stoplist).
+- **Sem Jaro-Winkler:** um dry-run em dados reais mostrou que o ramo de typo gerava ~70%
+  de falso-positivo (`verde`→Verdemar), então foi removido. Precisão medida agora ~90%.
+- Limitado a candidatos com a mesma inicial, todo hit logado (`brand.matched_by_fuzzy`).
+  **OFF por padrão** (`ECONOMIZAAI_CATEGORIZATION_BRAND_FUZZY_ENABLED=false`) até re-medir
+  em prod. Nada muda no contrato de API — só melhora a marca inferida no scan.
+
+## 2026-09-24 — Simulação da janela de N palavras + tooltips nas regras de categorização
+
+- **Novo endpoint (ADMIN):** `GET /api/v1/categorizer/simulate?minTokens=3&maxTokens=6&sampleSize=2000`.
+  Read-only: para cada janela N (nº de palavras que a chave do dicionário pode ter), reporta a
+  **cobertura** sobre o backlog de itens não-casados e a **acurácia** (categoria/marca) sobre o golden
+  set. Serve pra decidir se vale ampliar a janela hoje fixa em 3. Nada é persistido.
+- **Config:** a janela virou env var **`ECONOMIZAAI_CATEGORIZATION_MAX_PHRASE_TOKENS`** (default 3).
+  Para adotar um N novo, ajusta a env var no Render — sem redeploy de código.
+- **FE (admin/Categorização):** aba **Testar** ganhou o card "Simular janela de palavras"; e os campos
+  do modal "Definir regra" ganharam **tooltips** explicando palavra-chave / nome genérico / marca /
+  categoria (marca fixa sobrescreve a detectada; chave genérica → deixar marca vazia).
 
 ## 2026-09-24 — Normalização consistente de texto (match/busca/dedup) em todo o app
 

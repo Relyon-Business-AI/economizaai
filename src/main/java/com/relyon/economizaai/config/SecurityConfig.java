@@ -111,16 +111,22 @@ public class SecurityConfig {
                                 "/api/v1/categorizer/dictionary/curated/import",
                                 "/api/v1/categorizer/brands/import",
                                 "/api/v1/categorizer/brands/derive-from-catalog",
+                                "/api/v1/categorizer/brands/promote-aliases",
                                 "/api/v1/categorizer/benchmark",
                                 "/api/v1/categorizer/benchmark/import").hasRole("ADMIN")
                         // Dictionary MANAGEMENT (list + single delete) is ADMIN-only — it exposes and
                         // edits the full curated/learned dictionary, unlike the read/debug GETs above.
                         .requestMatchers(HttpMethod.GET,
                                 "/api/v1/categorizer/dictionary/curated",
-                                "/api/v1/categorizer/dictionary/learned").hasRole("ADMIN")
+                                "/api/v1/categorizer/dictionary/learned",
+                                "/api/v1/categorizer/simulate",
+                                "/api/v1/categorizer/brands",
+                                "/api/v1/categorizer/brands/entries",
+                                "/api/v1/categorizer/consensus/audit").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE,
                                 "/api/v1/categorizer/learned",
                                 "/api/v1/categorizer/consensus",
+                                "/api/v1/categorizer/brands/*",
                                 "/api/v1/categorizer/dictionary/curated/*",
                                 "/api/v1/categorizer/dictionary/learned/*").hasRole("ADMIN")
                         // Canonical products are GLOBAL — one tester's edit would

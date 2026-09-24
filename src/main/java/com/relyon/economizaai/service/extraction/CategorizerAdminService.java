@@ -4,12 +4,14 @@ import com.relyon.economizaai.dto.response.CuratedEntryResponse;
 import com.relyon.economizaai.dto.response.LearnedEntryResponse;
 import com.relyon.economizaai.model.BrandRegistryEntry;
 import com.relyon.economizaai.model.CategorizationBenchmarkEntry;
+import com.relyon.economizaai.model.ConsensusGraduationAudit;
 import com.relyon.economizaai.model.CuratedDictionaryEntry;
 import com.relyon.economizaai.model.LearnedDictionaryEntry;
 import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.BrandRegistryEntryRepository;
 import com.relyon.economizaai.repository.CategorizationBenchmarkEntryRepository;
+import com.relyon.economizaai.repository.ConsensusGraduationAuditRepository;
 import com.relyon.economizaai.repository.CuratedDictionaryEntryRepository;
 import com.relyon.economizaai.repository.EanCatalogRepository;
 import com.relyon.economizaai.repository.LearnedDictionaryRepository;
@@ -19,6 +21,7 @@ import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -71,6 +74,7 @@ public class CategorizerAdminService {
     private final BrandRegistryEntryRepository brandRepository;
     private final CategorizationBenchmarkEntryRepository benchmarkRepository;
     private final EanCatalogRepository eanCatalogRepository;
+    private final ConsensusGraduationAuditRepository consensusAuditRepository;
     private final CanonicalizationService canonicalizationService;
 
     @Transactional
@@ -188,6 +192,14 @@ public class CategorizerAdminService {
         return allEntries.size();
     }
 
+    /** Graduation audit rows (who voted what), newest first; optionally filtered by product. */
+    @Transactional(readOnly = true)
+    public List<ConsensusGraduationAudit> consensusAudit(UUID productId, int limit) {
+        if (productId != null) return consensusAuditRepository.findByProductIdOrderByCreatedAtDesc(productId);
+        var capped = Math.max(1, Math.min(limit, 200));
+        return consensusAuditRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, capped));
+    }
+
     public List<ConsensusProductView> listConsensus() {
         return productRepository.findByCategorizationSourceIn(CONSENSUS_SOURCES).stream()
                 .map(product -> new ConsensusProductView(
@@ -238,6 +250,38 @@ public class CategorizerAdminService {
         return new CuratedImportOutcome(imported, skipped, recanonicalized);
     }
 
+    /**
+     * Distinct brand display names matching {@code query} (normalized the same way
+     * as lookup keys), capped at {@code limit}. Powers the brand autocomplete in
+     * the admin rule editor so brands are picked from the registry instead of
+     * free-typed (avoids typos/duplicates).
+     */
+    @Transactional(readOnly = true)
+    public List<String> searchBrands(String query, int limit) {
+        var normalized = query == null ? "" : DescriptionNormalizer.normalize(query);
+        var capped = Math.max(1, Math.min(limit, 50));
+        return brandRepository.searchDisplayNames(normalized, PageRequest.of(0, capped));
+    }
+
+    /** Full brand-registry rows (id + key + display + source) for the admin management list. */
+    @Transactional(readOnly = true)
+    public List<BrandEntryView> listBrandEntries(String query, int limit) {
+        var normalized = query == null ? "" : DescriptionNormalizer.normalize(query);
+        var capped = Math.max(1, Math.min(limit, 100));
+        return brandRepository.searchEntries(normalized, PageRequest.of(0, capped)).stream()
+                .map(entry -> new BrandEntryView(
+                        entry.getId(), entry.getNormalizedKey(), entry.getDisplayName(), entry.getSource()))
+                .toList();
+    }
+
+    /** Removes one brand-registry entry (e.g. noisy DERIVED rows) and hot-reloads the snapshot. */
+    @Transactional
+    public void deleteBrand(UUID id) {
+        brandRepository.deleteById(id);
+        brandExtractor.reload();
+        log.info("categorizer.brand_deleted id={}", id);
+    }
+
     /** Upserts brand-registry entries and hot-reloads the in-memory snapshot. */
     @Transactional
     public BulkImportOutcome importBrands(List<BrandImportRequest> entries) {
@@ -286,18 +330,29 @@ public class CategorizerAdminService {
      */
     @Transactional
     public BrandDerivationOutcome deriveBrandsFromEanCatalog(int minProducts) {
+        return deriveBrandsFromEanCatalog(minProducts, true);
+    }
+
+    @Transactional
+    public BrandDerivationOutcome deriveBrandsFromEanCatalog(int minProducts, boolean onlyBrazil) {
         var threshold = Math.max(1, minProducts);
         // Words the curated dictionary already knows are generic PRODUCT terms
-        // (arroz, tomate, leite…). A brand key equal to one of these is noise —
-        // "tomate" is never a brand — so skip it. Uses our own truth instead of
-        // an ever-growing stopword list.
+        // (arroz, tomate, leite…). A SINGLE-token brand key equal to one of these
+        // is noise — "tomate" is never a brand. Multi-token keys are kept even
+        // when they collide with a curated keyword: "dog chow" is both a product
+        // keyword (Ração/Pet) and a legitimate brand. Uses our own truth instead
+        // of an ever-growing stopword list.
         // Normalize with the SAME normalizer the brand keys use (accent-stripping),
         // else an accented product word ("açúcar") won't match its stripped brand key.
         var productWords = curatedRepository.findAll().stream()
                 .map(entry -> DescriptionNormalizer.normalize(entry.getKeyword()))
+                .filter(keyword -> !keyword.contains(" "))
                 .collect(java.util.stream.Collectors.toSet());
+        var occurrences = onlyBrazil
+                ? eanCatalogRepository.countByBrandBrazilOnly()
+                : eanCatalogRepository.countByBrand();
         var variantsByKey = new LinkedHashMap<String, List<EanCatalogRepository.BrandOccurrence>>();
-        for (var occurrence : eanCatalogRepository.countByBrand()) {
+        for (var occurrence : occurrences) {
             var key = DescriptionNormalizer.normalize(occurrence.getBrand());
             if (key.length() < MIN_BRAND_KEY_LENGTH || key.chars().allMatch(Character::isDigit)
                     || BRAND_KEY_STOPWORDS.contains(key) || productWords.contains(key)) {
@@ -367,6 +422,8 @@ public class CategorizerAdminService {
     public record CuratedImportRequest(String keyword, String genericName, String brand, ProductCategory category) {}
 
     public record BrandImportRequest(String key, String displayName) {}
+
+    public record BrandEntryView(UUID id, String normalizedKey, String displayName, String source) {}
 
     public record BrandDerivationOutcome(int created, int skippedExisting, int belowThreshold) {}
 

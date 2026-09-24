@@ -3387,6 +3387,46 @@
      "response": []
     },
     {
+     "name": "Simulate phrase-window (N tokens) [ADMIN]",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Accept-Language",
+        "value": "pt"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/categorizer/simulate?minTokens=3&maxTokens=6&sampleSize=2000",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "categorizer",
+        "simulate"
+       ],
+       "query": [
+        {
+         "key": "minTokens",
+         "value": "3"
+        },
+        {
+         "key": "maxTokens",
+         "value": "6"
+        },
+        {
+         "key": "sampleSize",
+         "value": "2000"
+        }
+       ]
+      },
+      "description": "ADMIN. Read-only what-if: for each phrase-window size N in [minTokens, maxTokens], reports dictionary coverage over the unmatched backlog + category/brand accuracy over the golden set. Adopt a window via env var ECONOMIZAAI_CATEGORIZATION_MAX_PHRASE_TOKENS; nothing is persisted."
+     },
+     "response": []
+    },
+    {
      "name": "Retrain ML now",
      "request": {
       "method": "POST",
@@ -3657,6 +3697,26 @@
      }
     },
     {
+     "name": "Search brands (autocomplete) [ADMIN]",
+     "request": {
+      "method": "GET",
+      "header": [
+       { "key": "Accept-Language", "value": "pt" }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/categorizer/brands?q=dona&limit=20",
+       "host": ["{{baseUrl}}"],
+       "path": ["api", "v1", "categorizer", "brands"],
+       "query": [
+        { "key": "q", "value": "dona" },
+        { "key": "limit", "value": "20" }
+       ]
+      },
+      "description": "[ADMIN] Autocomplete do campo Marca no editor de regras: nomes de marca distintos do registro cujo key normalizado casa com q. Retorna string[] (nomes de exibição). Alimenta o combobox — marcas escolhidas do registro em vez de texto livre."
+     },
+     "response": []
+    },
+    {
      "name": "Import brand registry entries (ADMIN)",
      "request": {
       "method": "POST",
@@ -3749,7 +3809,7 @@
        }
       ],
       "url": {
-       "raw": "{{baseUrl}}/api/v1/categorizer/brands/derive-from-catalog?minProducts=2",
+       "raw": "{{baseUrl}}/api/v1/categorizer/brands/derive-from-catalog?minProducts=2&onlyBrazil=true",
        "host": [
         "{{baseUrl}}"
        ],
@@ -3764,10 +3824,76 @@
         {
          "key": "minProducts",
          "value": "2"
+        },
+        {
+         "key": "onlyBrazil",
+         "value": "true"
         }
        ]
       },
-      "description": "[ADMIN] Upserts a batch of token → (genericName, category) entries directly into the learned dictionary (sampleCount defaults to 999 if omitted). Immediately swaps the in-memory dictionary. Use to seed large volumes of known mappings without re-parsing receipts. Returns { imported, skipped }."
+      "description": "[ADMIN] Grows the brand registry from brand strings already in the EAN catalog. onlyBrazil=true (default) restricts to 789/790 EANs — the catalog is ~97% foreign and deriving without the filter floods the registry with US chains. Returns { created, skippedExisting, belowThreshold }."
+     }
+    },
+    {
+     "name": "List brand registry entries (ADMIN)",
+     "request": {
+      "method": "GET",
+      "header": [
+       { "key": "Accept-Language", "value": "pt" }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/categorizer/brands/entries?q=&limit=50",
+       "host": ["{{baseUrl}}"],
+       "path": ["api", "v1", "categorizer", "brands", "entries"],
+       "query": [
+        { "key": "q", "value": "" },
+        { "key": "limit", "value": "50" }
+       ]
+      },
+      "description": "[ADMIN] Full brand-registry rows (id, normalizedKey, displayName, source) so noisy DERIVED entries can be reviewed. Pair with DELETE /categorizer/brands/{id}."
+     },
+     "response": []
+    },
+    {
+     "name": "Delete brand registry entry (ADMIN)",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       { "key": "Accept-Language", "value": "pt" }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/categorizer/brands/{{brandEntryId}}",
+       "host": ["{{baseUrl}}"],
+       "path": ["api", "v1", "categorizer", "brands", "{{brandEntryId}}"]
+      },
+      "description": "[ADMIN] Removes one brand-registry entry (e.g. a noisy DERIVED brand) and hot-reloads the detector. Get ids from GET /categorizer/brands/entries."
+     },
+     "response": []
+    },
+    {
+     "name": "Promote brand aliases from known brands (ADMIN)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Accept-Language",
+        "value": "pt"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/categorizer/brands/promote-aliases",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "categorizer",
+        "brands",
+        "promote-aliases"
+       ]
+      },
+      "description": "[ADMIN] Scans branded products' receipt descriptions and promotes each unambiguous abbreviated brand form (e.g. 'd benta' → Dona Benta) into a deterministic registry alias. Conflicting keys are skipped. Returns { created, conflictsSkipped }."
      }
     }
    ]
