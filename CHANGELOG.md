@@ -16,6 +16,19 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-24 — Promoção de aliases de marca (aprendizado determinístico)
+
+Fecha o loop do fuzzy: acertos confirmados viram aliases exatos no registro de marcas.
+
+- **Novo endpoint (ADMIN):** `POST /api/v1/categorizer/brands/promote-aliases` — varre as
+  descrições de nota de produtos que já têm marca e promove cada forma abreviada não-ambígua
+  (`d benta` → Dona Benta) a um alias determinístico. Chaves conflitantes (mesma abreviação →
+  marcas diferentes) são puladas. Retorna `{ created, conflictsSkipped }`.
+- **Hook automático:** ao um admin corrigir a marca de um produto (PATCH `/products/{id}`), os
+  aliases implícitos nas descrições daquele produto são aprendidos na hora.
+- Aliases novos ficam com `source=LEARNED_ALIAS` (limpáveis à parte). Isso torna os matches
+  determinísticos/auditáveis e permite, no futuro, apertar ou desligar o fuzzy.
+
 ## 2026-09-24 — Detecção de marca com fuzzy (abreviação + typo)
 
 O `BrandExtractor` agora tem um **fallback fuzzy** quando o match exato no registro de

@@ -16,6 +16,7 @@ import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.extraction.AutoPromotionService;
+import com.relyon.economizaai.service.extraction.BrandAliasPromotionService;
 import com.relyon.economizaai.service.extraction.CategorizationBenchmarkService;
 import com.relyon.economizaai.service.extraction.CategorizationDebugService;
 import com.relyon.economizaai.service.extraction.CategorizationQualityService;
@@ -59,6 +60,7 @@ class CategorizerControllerCoverageTest {
     @MockitoBean private ConsensusPromotionService consensusPromotionService;
     @MockitoBean private CategorizerAdminService categorizerAdminService;
     @MockitoBean private EanCatalogService eanCatalogService;
+    @MockitoBean private BrandAliasPromotionService brandAliasPromotionService;
     @MockitoBean private JwtService jwtService;
     @MockitoBean private UserDetailsService userDetailsService;
     @MockitoBean private LocalizedMessageService localizedMessageService;

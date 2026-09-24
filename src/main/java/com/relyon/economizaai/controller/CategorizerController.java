@@ -8,6 +8,7 @@ import com.relyon.economizaai.dto.response.LearnedEntryResponse;
 import com.relyon.economizaai.dto.response.MlClassificationResponse;
 import com.relyon.economizaai.model.enums.CategorizationQualityTrigger;
 import com.relyon.economizaai.service.extraction.AutoPromotionService;
+import com.relyon.economizaai.service.extraction.BrandAliasPromotionService;
 import com.relyon.economizaai.service.extraction.CategorizationBenchmarkService;
 import com.relyon.economizaai.service.extraction.CategorizerAdminService;
 import com.relyon.economizaai.service.extraction.ConsensusPromotionService;
@@ -61,6 +62,7 @@ public class CategorizerController {
     private final ConsensusPromotionService consensusPromotionService;
     private final CategorizerAdminService categorizerAdminService;
     private final EanCatalogService eanCatalogService;
+    private final BrandAliasPromotionService brandAliasPromotionService;
 
     /**
      * Promote user-correction consensus into deterministic knowledge: products
@@ -264,6 +266,17 @@ public class CategorizerController {
     public ResponseEntity<CategorizerAdminService.BrandDerivationOutcome> deriveBrandsFromCatalog(
             @RequestParam(defaultValue = "2") int minProducts) {
         return ResponseEntity.ok(categorizerAdminService.deriveBrandsFromEanCatalog(minProducts));
+    }
+
+    /**
+     * ADMIN. Promote confirmed brand matches into registry aliases: scans branded
+     * products' receipt descriptions and turns each unambiguous abbreviated brand
+     * form ("d benta" → Dona Benta) into a deterministic alias. Grows the registry
+     * from data we already have; conflicting keys are skipped.
+     */
+    @PostMapping("/brands/promote-aliases")
+    public ResponseEntity<BrandAliasPromotionService.PromotionOutcome> promoteBrandAliases() {
+        return ResponseEntity.ok(brandAliasPromotionService.promoteFromKnownBrands());
     }
 
     /**

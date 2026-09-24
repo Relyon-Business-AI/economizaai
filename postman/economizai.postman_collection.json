@@ -3769,6 +3769,32 @@
       },
       "description": "[ADMIN] Upserts a batch of token → (genericName, category) entries directly into the learned dictionary (sampleCount defaults to 999 if omitted). Immediately swaps the in-memory dictionary. Use to seed large volumes of known mappings without re-parsing receipts. Returns { imported, skipped }."
      }
+    },
+    {
+     "name": "Promote brand aliases from known brands (ADMIN)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Accept-Language",
+        "value": "pt"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/categorizer/brands/promote-aliases",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "categorizer",
+        "brands",
+        "promote-aliases"
+       ]
+      },
+      "description": "[ADMIN] Scans branded products' receipt descriptions and promotes each unambiguous abbreviated brand form (e.g. 'd benta' → Dona Benta) into a deterministic registry alias. Conflicting keys are skipped. Returns { created, conflictsSkipped }."
+     }
     }
    ]
   },

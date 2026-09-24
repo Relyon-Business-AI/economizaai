@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
@@ -120,6 +121,34 @@ public class BrandExtractor {
             }
         }
         return null;
+    }
+
+    /**
+     * Description sub-phrases (normalized) that abbreviate {@code brandDisplayName}
+     * but aren't already exact registry keys. Used to PROMOTE confirmed fuzzy hits
+     * into curated aliases: a product whose brand we already know (e.g. via EAN)
+     * yields "d benta" from "ferm bio d benta 10g" → a deterministic alias for
+     * "Dona Benta". Returns empty when the brand is blank or nothing abbreviates it.
+     */
+    public List<String> abbreviationCandidates(String rawDescription, String brandDisplayName) {
+        if (brandDisplayName == null) return List.of();
+        var brandKey = DescriptionNormalizer.normalize(brandDisplayName);
+        if (brandKey.isBlank()) return List.of();
+        var brandTokens = brandKey.split("\\s+");
+        var normalized = DescriptionNormalizer.normalize(rawDescription);
+        if (normalized.isBlank()) return List.of();
+        var tokens = normalized.split("\\s+");
+        var brands = brandsRef.get();
+        var candidates = new LinkedHashSet<String>();
+        for (var size = MAX_PHRASE_TOKENS; size >= 1; size--) {
+            for (var i = 0; i + size <= tokens.length; i++) {
+                var window = Arrays.copyOfRange(tokens, i, i + size);
+                if (!matchesAbbreviation(window, brandTokens)) continue;
+                var key = String.join(" ", window);
+                if (!brands.containsKey(key)) candidates.add(key); // skip existing exact keys
+            }
+        }
+        return new ArrayList<>(candidates);
     }
 
     /**

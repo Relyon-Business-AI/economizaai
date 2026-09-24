@@ -14,6 +14,7 @@ import com.relyon.economizaai.repository.ProductAliasRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
+import com.relyon.economizaai.service.extraction.BrandAliasPromotionService;
 import com.relyon.economizaai.service.extraction.EanCatalogService;
 import com.relyon.economizaai.service.extraction.ProductExtraction;
 import com.relyon.economizaai.service.extraction.ProductExtractor;
@@ -53,6 +54,7 @@ class ProductServiceSearchGetUpdateTest {
     @Mock private PriceObservationRepository priceObservationRepository;
     @Mock private ProductExtractor productExtractor;
     @Mock private EanCatalogService eanCatalogService;
+    @Mock private BrandAliasPromotionService brandAliasPromotionService;
 
     private ProductService productService;
 
@@ -64,7 +66,7 @@ class ProductServiceSearchGetUpdateTest {
                 new HouseholdProductAliasService(householdProductAliasRepository, receiptItemRepository);
         productService = new ProductService(productRepository, aliasRepository, householdProductAliasRepository,
                 receiptItemRepository, priceObservationRepository, productExtractor, eanCatalogService,
-                householdProductAliasService);
+                householdProductAliasService, brandAliasPromotionService);
     }
 
     private User user() {

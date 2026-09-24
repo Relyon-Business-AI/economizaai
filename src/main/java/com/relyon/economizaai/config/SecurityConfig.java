@@ -111,6 +111,7 @@ public class SecurityConfig {
                                 "/api/v1/categorizer/dictionary/curated/import",
                                 "/api/v1/categorizer/brands/import",
                                 "/api/v1/categorizer/brands/derive-from-catalog",
+                                "/api/v1/categorizer/brands/promote-aliases",
                                 "/api/v1/categorizer/benchmark",
                                 "/api/v1/categorizer/benchmark/import").hasRole("ADMIN")
                         // Dictionary MANAGEMENT (list + single delete) is ADMIN-only — it exposes and

@@ -21,6 +21,7 @@ import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import com.relyon.economizaai.service.extraction.EanCatalogService;
+import com.relyon.economizaai.service.extraction.BrandAliasPromotionService;
 import com.relyon.economizaai.service.extraction.ProductExtractor;
 import com.relyon.economizaai.service.geo.DistanceCalculator;
 import lombok.RequiredArgsConstructor;
@@ -53,6 +54,7 @@ public class ProductService {
     private final ProductExtractor productExtractor;
     private final EanCatalogService eanCatalogService;
     private final HouseholdProductAliasService householdProductAliasService;
+    private final BrandAliasPromotionService brandAliasPromotionService;
 
     @Transactional(readOnly = true)
     public Page<ProductResponse> search(String query, User user, Pageable pageable) {
@@ -172,7 +174,22 @@ public class ProductService {
                 : CategorizationSource.NONE);
         var saved = productRepository.save(product);
         log.info("Product {} updated source=USER", saved.getId());
+        learnBrandAliasesFrom(saved);
         return ProductResponse.from(saved);
+    }
+
+    /**
+     * When an admin sets a product's brand, learn any abbreviated forms of that
+     * brand appearing in its receipt descriptions as registry aliases — so the
+     * correction propagates to future scans without waiting for the backfill.
+     */
+    private void learnBrandAliasesFrom(Product product) {
+        if (product.getBrand() == null || product.getBrand().isBlank()) return;
+        var descriptions = aliasRepository.findByProductIdIn(List.of(product.getId())).stream()
+                .map(ProductAlias::getRawDescription)
+                .toList();
+        var learned = brandAliasPromotionService.promoteForProduct(product.getBrand(), descriptions);
+        if (learned > 0) log.info("Product {} brand aliases learned={}", product.getId(), learned);
     }
 
     @Transactional
