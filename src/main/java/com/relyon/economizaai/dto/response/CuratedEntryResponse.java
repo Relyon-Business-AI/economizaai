@@ -10,11 +10,13 @@ public record CuratedEntryResponse(
         UUID id,
         String keyword,
         String genericName,
+        String brand,
         ProductCategory category,
         String origin
 ) {
     public static CuratedEntryResponse from(CuratedDictionaryEntry entry) {
         return new CuratedEntryResponse(
-                entry.getId(), entry.getKeyword(), entry.getGenericName(), entry.getCategory(), entry.getOrigin());
+                entry.getId(), entry.getKeyword(), entry.getGenericName(), entry.getBrand(),
+                entry.getCategory(), entry.getOrigin());
     }
 }

@@ -3632,7 +3632,7 @@
       ],
       "body": {
        "mode": "raw",
-       "raw": "[\n  { \"keyword\": \"arroz\", \"genericName\": \"Arroz\", \"category\": \"GROCERIES\" }\n]",
+       "raw": "[\n  { \"keyword\": \"arroz\", \"genericName\": \"Arroz\", \"brand\": \"Sorriso\", \"category\": \"GROCERIES\" }\n]",
        "options": {
         "raw": {
          "language": "json"
@@ -11199,6 +11199,93 @@
      ]
     },
     {
+     "name": "Admin - Receipt stats (count + total)",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{adminToken}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/admin/receipts/stats?q=&from=&to=&uf=&status=&parseErrorReason=&includeInternal=",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "admin",
+        "receipts",
+        "stats"
+       ],
+       "query": [
+        {
+         "key": "q",
+         "value": "",
+         "disabled": true
+        },
+        {
+         "key": "from",
+         "value": "",
+         "disabled": true
+        },
+        {
+         "key": "to",
+         "value": "",
+         "disabled": true
+        },
+        {
+         "key": "uf",
+         "value": "",
+         "disabled": true
+        },
+        {
+         "key": "status",
+         "value": "",
+         "disabled": true
+        },
+        {
+         "key": "parseErrorReason",
+         "value": "",
+         "disabled": true
+        },
+        {
+         "key": "includeInternal",
+         "value": "",
+         "disabled": true
+        }
+       ]
+      },
+      "description": "Aggregate stats for the admin receipts list under the same filters as GET /admin/receipts (q, from, to, uf, status, parseErrorReason, includeInternal — all optional). Returns { count, totalAmount }. ADMIN only.",
+      "auth": {
+       "type": "bearer",
+       "bearer": [
+        {
+         "key": "token",
+         "value": "{{adminToken}}",
+         "type": "string"
+        }
+       ]
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+         "    pm.expect(pm.response.code).to.be.below(500);",
+         "});"
+        ]
+       }
+      }
+     ]
+    },
+    {
      "name": "COV admin: Relevance report (filter validation)",
      "request": {
       "method": "GET",
@@ -11329,6 +11416,13 @@
         "v1",
         "admin",
         "state-coverage"
+       ],
+       "query": [
+        {
+         "key": "days",
+         "value": "30",
+         "disabled": true
+        }
        ]
       },
       "description": "Per-UF ingestion coverage: mode (VERIFIED = dedicated adapter / EXPERIMENTAL = QR-portal+Infosimples fallback chain / UNSUPPORTED = chain disabled), attempts/successes/failures per chain layer from real users' scans, and lastAttemptAt. The data for deciding which state adapter to build next. ADMIN only.",
@@ -13560,6 +13654,13 @@
         "v1",
         "admin",
         "state-coverage"
+       ],
+       "query": [
+        {
+         "key": "days",
+         "value": "30",
+         "disabled": true
+        }
        ]
       },
       "description": "Per-UF ingestion coverage: mode (VERIFIED = dedicated adapter / EXPERIMENTAL = QR-portal+Infosimples fallback chain / UNSUPPORTED = chain disabled), attempts/successes/failures per chain layer from real users' scans, and lastAttemptAt. The data for deciding which state adapter to build next. ADMIN only."

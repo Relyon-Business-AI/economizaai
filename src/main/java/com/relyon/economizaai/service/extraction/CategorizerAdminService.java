@@ -14,6 +14,7 @@ import com.relyon.economizaai.repository.CuratedDictionaryEntryRepository;
 import com.relyon.economizaai.repository.EanCatalogRepository;
 import com.relyon.economizaai.repository.LearnedDictionaryRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.canonicalization.CanonicalizationService;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -70,6 +71,7 @@ public class CategorizerAdminService {
     private final BrandRegistryEntryRepository brandRepository;
     private final CategorizationBenchmarkEntryRepository benchmarkRepository;
     private final EanCatalogRepository eanCatalogRepository;
+    private final CanonicalizationService canonicalizationService;
 
     @Transactional
     public ResetLearnedOutcome resetLearned() {
@@ -170,7 +172,7 @@ public class CategorizerAdminService {
         var snapshot = new LinkedHashMap<String, DictionaryClassifier.DictEntry>();
         for (var entry : allEntries) {
             snapshot.put(entry.getNormalizedToken(), new DictionaryClassifier.DictEntry(
-                    entry.getGenericName(), entry.getCategory(), CategorizationSource.LEARNED_DICTIONARY));
+                    entry.getGenericName(), null, entry.getCategory(), CategorizationSource.LEARNED_DICTIONARY));
         }
         dictionaryClassifier.replaceLearnedEntries(snapshot);
         return allEntries.size();
@@ -189,10 +191,11 @@ public class CategorizerAdminService {
      * hot-reloads the in-memory snapshot — no deploy needed to grow it.
      */
     @Transactional
-    public BulkImportOutcome importCuratedEntries(List<CuratedImportRequest> entries) {
-        if (entries == null || entries.isEmpty()) return new BulkImportOutcome(0, 0);
+    public CuratedImportOutcome importCuratedEntries(List<CuratedImportRequest> entries) {
+        if (entries == null || entries.isEmpty()) return new CuratedImportOutcome(0, 0, 0);
         var imported = 0;
         var skipped = 0;
+        var importedKeywords = new ArrayList<String>();
         for (var request : entries) {
             if (request.keyword() == null || request.keyword().isBlank() || request.category() == null) {
                 skipped++;
@@ -202,13 +205,21 @@ public class CategorizerAdminService {
             var entry = curatedRepository.findByKeyword(keyword)
                     .orElseGet(() -> CuratedDictionaryEntry.builder().keyword(keyword).build());
             entry.setGenericName(request.genericName());
+            entry.setBrand(request.brand() == null || request.brand().isBlank() ? null : request.brand().trim());
             entry.setCategory(request.category());
             curatedRepository.save(entry);
+            importedKeywords.add(keyword);
             imported++;
         }
         dictionaryClassifier.reloadCuratedEntries();
-        log.info("categorizer.curated_import imported={} skipped={}", imported, skipped);
-        return new BulkImportOutcome(imported, skipped);
+        // With the new rules live, re-canonicalize the orphan items they now match so
+        // they get a product and leave the "não-casados" queue.
+        var recanonicalized = 0;
+        for (var keyword : importedKeywords) {
+            recanonicalized += canonicalizationService.recanonicalizeUnmatchedForKeyword(keyword);
+        }
+        log.info("categorizer.curated_import imported={} skipped={} recanonicalized={}", imported, skipped, recanonicalized);
+        return new CuratedImportOutcome(imported, skipped, recanonicalized);
     }
 
     /** Upserts brand-registry entries and hot-reloads the in-memory snapshot. */
@@ -333,7 +344,7 @@ public class CategorizerAdminService {
 
     public record DictionaryImportRequest(String token, String genericName, ProductCategory category, int sampleCount) {}
 
-    public record CuratedImportRequest(String keyword, String genericName, ProductCategory category) {}
+    public record CuratedImportRequest(String keyword, String genericName, String brand, ProductCategory category) {}
 
     public record BrandImportRequest(String key, String displayName) {}
 
@@ -348,6 +359,9 @@ public class CategorizerAdminService {
     public record ResetConsensusOutcome(int revertedProducts) {}
 
     public record BulkImportOutcome(int imported, int skipped) {}
+
+    /** Curated import result, plus how many orphan items got re-canonicalized (left the queue). */
+    public record CuratedImportOutcome(int imported, int skipped, int recanonicalized) {}
 
     public record ConsensusProductView(
             UUID id, String ean, String normalizedName,

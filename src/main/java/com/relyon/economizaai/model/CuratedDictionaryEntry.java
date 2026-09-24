@@ -33,6 +33,10 @@ public class CuratedDictionaryEntry extends BaseEntity {
     @Column(name = "generic_name", length = 120)
     private String genericName;
 
+    /** Optional canonical brand this rule assigns to the matched product. */
+    @Column(length = 120)
+    private String brand;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private ProductCategory category;

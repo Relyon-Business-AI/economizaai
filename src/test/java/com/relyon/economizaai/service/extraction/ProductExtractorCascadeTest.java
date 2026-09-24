@@ -67,7 +67,7 @@ class ProductExtractorCascadeTest {
     void dictionaryHitWinsAndMlIsNotConsulted() {
         when(brandExtractor.find(anyString())).thenReturn("Tio João");
         when(dictionaryClassifier.classify(anyString())).thenReturn(
-                new DictEntry("Arroz", ProductCategory.GROCERIES, CategorizationSource.DICTIONARY));
+                new DictEntry("Arroz", null, ProductCategory.GROCERIES, CategorizationSource.DICTIONARY));
 
         var result = extractor.extract("ARROZ TIO J TP1 5KG");
 
@@ -168,7 +168,7 @@ class ProductExtractorCascadeTest {
         // Dictionary supplied a category (so source=DICTIONARY) but no genericName.
         when(brandExtractor.find(anyString())).thenReturn(null);
         when(dictionaryClassifier.classify(anyString())).thenReturn(
-                new DictEntry(null, ProductCategory.GROCERIES, CategorizationSource.DICTIONARY));
+                new DictEntry(null, null, ProductCategory.GROCERIES, CategorizationSource.DICTIONARY));
         when(mlClassifier.isReady()).thenReturn(true);
         when(mlClassifier.isCategoryApplyEnabled()).thenReturn(true);
         when(mlClassifier.predictGenericName(anyString()))
