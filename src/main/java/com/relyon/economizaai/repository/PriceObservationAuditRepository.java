@@ -45,16 +45,6 @@ public interface PriceObservationAuditRepository extends JpaRepository<PriceObse
     long countDistinctOnlineHouseholdsForProduct(@Param("productId") UUID productId,
                                                  @Param("since") LocalDateTime since);
 
-    @Query("""
-        SELECT COUNT(DISTINCT a.householdId)
-        FROM PriceObservationAudit a
-        WHERE a.observation.product.id = :productId
-          AND a.observation.outlier = false
-          AND a.observation.observedAt >= :since
-    """)
-    long countDistinctHouseholdsForProduct(@Param("productId") UUID productId,
-                                           @Param("since") LocalDateTime since);
-
     /** All audit rows a given receipt contributed — used by the admin purge that
      * removes the anonymized observations a test/erroneous receipt produced (a plain
      * receipt delete cascades these audit rows but NOT the observations they link). */
@@ -77,25 +67,6 @@ public interface PriceObservationAuditRepository extends JpaRepository<PriceObse
     /** Projection for {@link #countDistinctHouseholdsForProductByMarket}. */
     interface MarketHouseholdCount {
         String getCnpj();
-        long getHouseholds();
-    }
-
-    /** Batched k-anonymity helper: distinct contributing households per product, in
-     * one query (avoids an N+1 over a search-results page in {@code ProductService.search}). */
-    @Query("""
-        SELECT a.observation.product.id AS productId, COUNT(DISTINCT a.householdId) AS households
-        FROM PriceObservationAudit a
-        WHERE a.observation.product.id IN :productIds
-          AND a.observation.outlier = false
-          AND a.observation.observedAt >= :since
-        GROUP BY a.observation.product.id
-    """)
-    List<ProductHouseholdCount> countDistinctHouseholdsByProductIn(@Param("productIds") List<UUID> productIds,
-                                                                   @Param("since") LocalDateTime since);
-
-    /** Projection for {@link #countDistinctHouseholdsByProductIn}. */
-    interface ProductHouseholdCount {
-        UUID getProductId();
         long getHouseholds();
     }
 
