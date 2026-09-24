@@ -175,6 +175,15 @@ public class CanonicalizationService {
                                                     ProductExtraction extraction,
                                                     boolean pharmacyMerchant) {
         var dedup = tryMetadataDedup(extraction);
+        // Metadata alone is too coarse for no-EAN convergence: "SAL GROSSO" and
+        // "SAL REFINADO" share (Sal, Cisne, 1KG) but are different products. Only
+        // accept the dedup when the DESCRIPTIONS also look like the same item.
+        if (dedup != null && score(normalized,
+                DescriptionNormalizer.normalize(dedup.getNormalizedName())) < FUZZY_MATCH_THRESHOLD) {
+            log.info("item.metadata_dedup_rejected_by_name product={} description='{}'",
+                    abbrev(dedup.getId()), item.getRawDescription());
+            dedup = null;
+        }
         if (dedup != null) {
             item.setProduct(dedup);
             ensureAlias(dedup, item.getRawDescription(), normalized);

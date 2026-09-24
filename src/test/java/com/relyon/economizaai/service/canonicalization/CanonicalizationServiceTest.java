@@ -453,6 +453,38 @@ class CanonicalizationServiceTest {
     }
 
     @Test
+    void noEanMetadataDedupRejectedWhenDescriptionsDiffer() {
+        // Same coarse metadata (Sal/Cisne/1KG) but clearly different products —
+        // the name-similarity guard must refuse the convergence and create new.
+        var salGrosso = Product.builder().id(UUID.randomUUID())
+                .normalizedName("SAL GROSSO CHURRASCO CISNE 1KG")
+                .genericName("Sal").brand("Cisne")
+                .packSize(new BigDecimal("1")).packUnit("KG")
+                .category(ProductCategory.GROCERIES)
+                .build();
+        var receipt = buildReceipt(item("SAL CISNE REF 1KG", null));
+        when(aliasRepository.findByNormalizedDescription("sal cisne ref 1 kg")).thenReturn(Optional.empty());
+        when(productExtractor.extract("SAL CISNE REF 1KG")).thenReturn(
+                new ProductExtraction("Sal", "Cisne", new BigDecimal("1"), "KG",
+                        ProductCategory.GROCERIES, CategorizationSource.DICTIONARY));
+        when(aliasRepository.findCandidatesByProductMetadata("sal", new BigDecimal("1"), "KG"))
+                .thenReturn(List.of());
+        when(productRepository.findByMetadata("sal", "cisne", new BigDecimal("1"), "KG"))
+                .thenReturn(List.of(salGrosso));
+        when(productRepository.save(any(Product.class))).thenAnswer(inv -> {
+            var saved = inv.<Product>getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+        when(aliasRepository.existsByNormalizedDescription("sal cisne ref 1 kg")).thenReturn(false);
+
+        var outcome = service.canonicalize(receipt);
+
+        assertEquals(1, outcome.created(), "must create a NEW product, not converge on sal grosso");
+        assertEquals(0, outcome.matched());
+    }
+
+    @Test
     void createsProductWhenFuzzySkippedButDescriptionIsCategorized() {
         // No packSize extracted — fuzzy is skipped to avoid wide-net false positives
         var receipt = buildReceipt(item("BANANA PRATA KG", null));
