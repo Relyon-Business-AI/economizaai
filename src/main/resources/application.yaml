@@ -75,6 +75,11 @@ economizaai:
     dev-cleanup-enabled: ${DEV_CLEANUP_ENABLED:false}
   privacy:
     k-anonymity: 3
+  categorization:
+    # Fuzzy brand fallback: when the exact registry scan misses, try abbreviation
+    # ("d benta" → Dona Benta) and single-token typo (Jaro-Winkler) matching,
+    # both gated conservatively. Set false to fall back to exact-only.
+    brand-fuzzy-enabled: ${ECONOMIZAAI_CATEGORIZATION_BRAND_FUZZY_ENABLED:true}
   ingestion:
     # Async-ingest safety net: PROCESSING receipts older than this are failed by
     # the sweeper so the FE never polls forever. Must exceed the worst-case
