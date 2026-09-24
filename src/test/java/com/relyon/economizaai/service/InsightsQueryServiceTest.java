@@ -3,6 +3,7 @@ import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.CategoryView;
 import com.relyon.economizaai.model.enums.InsightsGroupBy;
+import com.relyon.economizaai.model.enums.MarketScope;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.service.InsightsQueryService.QueryFilters;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
@@ -367,7 +368,7 @@ class InsightsQueryServiceTest {
         // IllegalArgumentException: -1 until normalize() began clamping the limit.
         var input = new QueryFilters(null, null, null, null, null,
                 List.of(ProductCategory.GROCERIES), null, null, null, null,
-                InsightsGroupBy.CATEGORY, -1, CategoryView.HOUSEHOLD);
+                InsightsGroupBy.CATEGORY, -1, CategoryView.HOUSEHOLD, MarketScope.ALL, null);
 
         var response = insightsQueryService.query(user, input);
 

@@ -7,8 +7,11 @@ import com.relyon.economizaai.dto.response.InsightsQueryResponse.Summary;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.CategoryView;
 import com.relyon.economizaai.model.enums.InsightsGroupBy;
+import com.relyon.economizaai.model.enums.MarketScope;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
+import com.relyon.economizaai.repository.InsightsRepository;
+import com.relyon.economizaai.service.geo.MerchantSupportGate;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -56,6 +59,7 @@ public class InsightsQueryService {
 
     private final HouseholdProductCategoryOverrideService categoryOverrideService;
     private final SubscriptionGateService subscriptionGate;
+    private final InsightsRepository insightsRepository;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -64,6 +68,12 @@ public class InsightsQueryService {
     public InsightsQueryResponse query(User user, QueryFilters input) {
         var clampedInput = clampToAllowedHistory(user, input);
         var filters = QueryFilters.normalize(clampedInput, user.getHousehold().getId());
+        // Scope by merchant segment (same lens as /items and the other insights endpoints): resolve
+        // the household's supported CNPJs once and bind them into the filters for the clause builder.
+        if (filters.scope() != MarketScope.ALL) {
+            filters = filters.withSupportedCnpjs(
+                    insightsRepository.supportedCnpjs(filters.householdId(), MerchantSupportGate.supportedSegments()));
+        }
         var groupBy = filters.groupBy();
         var summary = computeSummary(filters);
         List<Bucket> buckets;
@@ -101,7 +111,8 @@ public class InsightsQueryService {
         return new QueryFilters(input.householdId(), clampedFrom, input.to(),
                 input.marketCnpjs(), input.marketCnpjRoots(), input.categories(),
                 input.productIds(), input.eans(), input.minReceiptTotal(),
-                input.maxReceiptTotal(), input.groupBy(), input.limit(), input.categoryView());
+                input.maxReceiptTotal(), input.groupBy(), input.limit(), input.categoryView(),
+                input.scope(), input.supportedCnpjs());
     }
 
     private Summary computeSummary(QueryFilters filters) {
@@ -304,6 +315,22 @@ public class InsightsQueryService {
         clauses.add("r.status = :status");
         bindings.put("status", ReceiptStatus.CONFIRMED);
 
+        // Market-segment scope. supportedCnpjs is resolved in query() (null for ALL). SUPPORTED with
+        // none matches nothing (summary/buckets can't early-return like a page can); JPQL rejects IN ().
+        if (filters.scope() == MarketScope.SUPPORTED) {
+            var supported = filters.supportedCnpjs();
+            if (supported == null || supported.isEmpty()) {
+                clauses.add("r.id IS NULL");
+            } else {
+                clauses.add("r.cnpjEmitente IN (:scopeCnpjs)");
+                bindings.put("scopeCnpjs", supported);
+            }
+        } else if (filters.scope() == MarketScope.OTHER
+                && filters.supportedCnpjs() != null && !filters.supportedCnpjs().isEmpty()) {
+            clauses.add("(r.cnpjEmitente IS NULL OR r.cnpjEmitente NOT IN (:scopeCnpjs))");
+            bindings.put("scopeCnpjs", filters.supportedCnpjs());
+        }
+
         clauses.add("ri.excluded = false");
         clauses.add("ri.excludedFromPersonal = false");
 
@@ -384,9 +411,13 @@ public class InsightsQueryService {
             BigDecimal maxReceiptTotal,
             InsightsGroupBy groupBy,
             int limit,
-            CategoryView categoryView
+            CategoryView categoryView,
+            MarketScope scope,
+            // Resolved by the service (not from the request): the household's supported-segment
+            // CNPJs, used by the scope clause. Null/empty until resolved in query().
+            List<String> supportedCnpjs
     ) {
-        /** Backwards-compatible builder — defaults the lens to HOUSEHOLD. */
+        /** Backwards-compatible builder — defaults the lens to HOUSEHOLD, scope to ALL. */
         public static QueryFilters fromRequest(LocalDateTime from, LocalDateTime to,
                                                List<String> marketCnpjs,
                                                List<String> marketCnpjRoots,
@@ -401,7 +432,6 @@ public class InsightsQueryService {
                     minReceiptTotal, maxReceiptTotal, groupBy, limit, CategoryView.HOUSEHOLD);
         }
 
-        /** Builder for the controller — householdId is filled in by the service. */
         public static QueryFilters fromRequest(LocalDateTime from, LocalDateTime to,
                                                List<String> marketCnpjs,
                                                List<String> marketCnpjRoots,
@@ -413,12 +443,31 @@ public class InsightsQueryService {
                                                InsightsGroupBy groupBy,
                                                Integer limit,
                                                CategoryView categoryView) {
+            return fromRequest(from, to, marketCnpjs, marketCnpjRoots, categories, productIds, eans,
+                    minReceiptTotal, maxReceiptTotal, groupBy, limit, categoryView, MarketScope.ALL);
+        }
+
+        /** Builder for the controller — householdId is filled in by the service. */
+        public static QueryFilters fromRequest(LocalDateTime from, LocalDateTime to,
+                                               List<String> marketCnpjs,
+                                               List<String> marketCnpjRoots,
+                                               List<ProductCategory> categories,
+                                               List<UUID> productIds,
+                                               List<String> eans,
+                                               BigDecimal minReceiptTotal,
+                                               BigDecimal maxReceiptTotal,
+                                               InsightsGroupBy groupBy,
+                                               Integer limit,
+                                               CategoryView categoryView,
+                                               MarketScope scope) {
             return new QueryFilters(null, from, to,
                     marketCnpjs, marketCnpjRoots, categories, productIds, eans,
                     minReceiptTotal, maxReceiptTotal,
                     groupBy != null ? groupBy : InsightsGroupBy.NONE,
                     clampLimit(limit),
-                    categoryView != null ? categoryView : CategoryView.HOUSEHOLD);
+                    categoryView != null ? categoryView : CategoryView.HOUSEHOLD,
+                    scope != null ? scope : MarketScope.ALL,
+                    null);
         }
 
         static QueryFilters normalize(QueryFilters filters, UUID householdId) {
@@ -435,8 +484,17 @@ public class InsightsQueryService {
                     filters.maxReceiptTotal(),
                     filters.groupBy(),
                     clampLimit(filters.limit()),
-                    filters.categoryView() != null ? filters.categoryView() : CategoryView.HOUSEHOLD
+                    filters.categoryView() != null ? filters.categoryView() : CategoryView.HOUSEHOLD,
+                    filters.scope() != null ? filters.scope() : MarketScope.ALL,
+                    filters.supportedCnpjs()
             );
+        }
+
+        /** Copy with the service-resolved supported-segment CNPJs bound in. */
+        QueryFilters withSupportedCnpjs(List<String> resolved) {
+            return new QueryFilters(householdId, from, to, marketCnpjs, marketCnpjRoots, categories,
+                    productIds, eans, minReceiptTotal, maxReceiptTotal, groupBy, limit, categoryView,
+                    scope, resolved);
         }
 
         private static <T> List<T> nullIfEmpty(List<T> list) {

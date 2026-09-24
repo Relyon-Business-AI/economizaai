@@ -121,9 +121,10 @@ public class InsightsController {
             @RequestParam(required = false) BigDecimal maxReceiptTotal,
             @RequestParam(required = false) InsightsGroupBy groupBy,
             @RequestParam(required = false) Integer limit,
-            @RequestParam(defaultValue = "HOUSEHOLD") CategoryView categoryView) {
+            @RequestParam(defaultValue = "HOUSEHOLD") CategoryView categoryView,
+            @RequestParam(defaultValue = "ALL") MarketScope scope) {
         var filters = QueryFilters.fromRequest(from, to, marketCnpj, marketCnpjRoot, category,
-                productId, ean, minReceiptTotal, maxReceiptTotal, groupBy, limit, categoryView);
+                productId, ean, minReceiptTotal, maxReceiptTotal, groupBy, limit, categoryView, scope);
         return ResponseEntity.ok(insightsQueryService.query(user, filters));
     }
 }

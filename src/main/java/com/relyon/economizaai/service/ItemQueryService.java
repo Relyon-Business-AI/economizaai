@@ -4,9 +4,12 @@ import com.relyon.economizaai.dto.response.PurchasedItemResponse;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.CategoryView;
+import com.relyon.economizaai.model.enums.MarketScope;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
+import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.service.geo.MarketNameService;
+import com.relyon.economizaai.service.geo.MerchantSupportGate;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -53,6 +56,7 @@ public class ItemQueryService {
     private final HouseholdProductCategoryOverrideService categoryOverrideService;
     private final MarketNameService marketNameService;
     private final SubscriptionGateService subscriptionGate;
+    private final InsightsRepository insightsRepository;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -64,9 +68,20 @@ public class ItemQueryService {
         var clamped = new ItemFilters(input.householdId(), clampedFrom, input.to(),
                 input.marketCnpjs(), input.marketCnpjRoots(), input.categories(),
                 input.productIds(), input.eans(), input.minReceiptTotal(),
-                input.maxReceiptTotal(), input.categoryView());
+                input.maxReceiptTotal(), input.categoryView(), input.scope());
         var filters = ItemFilters.normalize(clamped, user.getHousehold().getId());
-        var clauses = buildClauses(filters);
+
+        // Scope by merchant segment (same lens as /receipts and /insights): resolve the household's
+        // supported-segment CNPJs once. SUPPORTED with none → no rows; OTHER with none → everything.
+        var supportedCnpjs = filters.scope() == MarketScope.ALL
+                ? List.<String>of()
+                : insightsRepository.supportedCnpjs(filters.householdId(), MerchantSupportGate.supportedSegments());
+        if (filters.scope() == MarketScope.SUPPORTED && supportedCnpjs.isEmpty()) {
+            log.info("items.query household={} scope=SUPPORTED total=0 reason=no_supported_markets",
+                    filters.householdId());
+            return Page.empty(pageable);
+        }
+        var clauses = buildClauses(filters, supportedCnpjs);
 
         var total = countMatching(clauses);
         List<PurchasedItemResponse> rows = List.of();
@@ -124,7 +139,7 @@ public class ItemQueryService {
                 .toList();
     }
 
-    private static FilterClauses buildClauses(ItemFilters filters) {
+    private static FilterClauses buildClauses(ItemFilters filters, List<String> supportedCnpjs) {
         var clauses = new ArrayList<String>();
         var bindings = new LinkedHashMap<String, Object>();
         var join = "";
@@ -134,6 +149,16 @@ public class ItemQueryService {
 
         clauses.add("r.status = :status");
         bindings.put("status", ReceiptStatus.CONFIRMED);
+
+        // Market-segment scope. SUPPORTED-with-none is short-circuited in query() before we get here,
+        // so a SUPPORTED clause always has a non-empty list (JPQL rejects an empty IN ()).
+        if (filters.scope() == MarketScope.SUPPORTED) {
+            clauses.add("r.cnpjEmitente IN (:scopeCnpjs)");
+            bindings.put("scopeCnpjs", supportedCnpjs);
+        } else if (filters.scope() == MarketScope.OTHER && !supportedCnpjs.isEmpty()) {
+            clauses.add("(r.cnpjEmitente IS NULL OR r.cnpjEmitente NOT IN (:scopeCnpjs))");
+            bindings.put("scopeCnpjs", supportedCnpjs);
+        }
 
         clauses.add("ri.excluded = false");
         clauses.add("ri.excludedFromPersonal = false");
@@ -217,9 +242,10 @@ public class ItemQueryService {
             List<String> eans,
             BigDecimal minReceiptTotal,
             BigDecimal maxReceiptTotal,
-            CategoryView categoryView
+            CategoryView categoryView,
+            MarketScope scope
     ) {
-        /** Backwards-compatible builder — defaults the lens to HOUSEHOLD. */
+        /** Backwards-compatible builder — defaults the lens to HOUSEHOLD, scope to ALL. */
         public static ItemFilters fromRequest(LocalDateTime from, LocalDateTime to,
                                               List<String> marketCnpjs,
                                               List<String> marketCnpjRoots,
@@ -241,9 +267,24 @@ public class ItemQueryService {
                                               BigDecimal minReceiptTotal,
                                               BigDecimal maxReceiptTotal,
                                               CategoryView categoryView) {
+            return fromRequest(from, to, marketCnpjs, marketCnpjRoots, categories,
+                    productIds, eans, minReceiptTotal, maxReceiptTotal, categoryView, MarketScope.ALL);
+        }
+
+        public static ItemFilters fromRequest(LocalDateTime from, LocalDateTime to,
+                                              List<String> marketCnpjs,
+                                              List<String> marketCnpjRoots,
+                                              List<ProductCategory> categories,
+                                              List<UUID> productIds,
+                                              List<String> eans,
+                                              BigDecimal minReceiptTotal,
+                                              BigDecimal maxReceiptTotal,
+                                              CategoryView categoryView,
+                                              MarketScope scope) {
             return new ItemFilters(null, from, to, marketCnpjs, marketCnpjRoots, categories,
                     productIds, eans, minReceiptTotal, maxReceiptTotal,
-                    categoryView != null ? categoryView : CategoryView.HOUSEHOLD);
+                    categoryView != null ? categoryView : CategoryView.HOUSEHOLD,
+                    scope != null ? scope : MarketScope.ALL);
         }
 
         static ItemFilters normalize(ItemFilters filters, UUID householdId) {
@@ -258,7 +299,8 @@ public class ItemQueryService {
                     nullIfEmpty(trimAll(filters.eans())),
                     filters.minReceiptTotal(),
                     filters.maxReceiptTotal(),
-                    filters.categoryView() != null ? filters.categoryView() : CategoryView.HOUSEHOLD);
+                    filters.categoryView() != null ? filters.categoryView() : CategoryView.HOUSEHOLD,
+                    filters.scope() != null ? filters.scope() : MarketScope.ALL);
         }
 
         private static <T> List<T> nullIfEmpty(List<T> list) {

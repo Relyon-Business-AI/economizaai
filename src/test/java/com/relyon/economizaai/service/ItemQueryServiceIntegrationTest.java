@@ -2,16 +2,20 @@ package com.relyon.economizaai.service;
 
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.HouseholdCustomCategory;
+import com.relyon.economizaai.model.MarketLocation;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.CategoryView;
+import com.relyon.economizaai.model.enums.MarketScope;
+import com.relyon.economizaai.model.enums.MerchantSegment;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.HouseholdCustomCategoryRepository;
 import com.relyon.economizaai.repository.HouseholdRepository;
+import com.relyon.economizaai.repository.MarketLocationRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.repository.UserRepository;
@@ -52,6 +56,7 @@ class ItemQueryServiceIntegrationTest {
     @Autowired private ProductRepository productRepository;
     @Autowired private HouseholdProductCategoryOverrideService categoryOverrideService;
     @Autowired private HouseholdCustomCategoryRepository customCategoryRepository;
+    @Autowired private MarketLocationRepository marketLocationRepository;
 
     private User user;
     private Product leite;
@@ -278,6 +283,56 @@ class ItemQueryServiceIntegrationTest {
                         List.of(ProductCategory.GROCERIES), null, null, null, null),
                 PageRequest.of(0, 20));
         assertEquals(3, groceries.getTotalElements()); // arroz x3 only
+    }
+
+    @Test
+    void scope_supportedReturnsOnlyGroceryPharmacyMarkets() {
+        seedSegments(); // Zaffari = SUPERMARKET (supported), Bistek = OTHER
+
+        var supported = service.query(user, filtersScope(MarketScope.SUPPORTED), PageRequest.of(0, 20));
+        // Zaffari items only: arroz 50, leite 10, leite 12
+        assertEquals(3, supported.getTotalElements());
+        assertTrue(supported.getContent().stream()
+                .allMatch(row -> "93015006005182".equals(row.marketCnpj())));
+    }
+
+    @Test
+    void scope_otherReturnsEverythingElse() {
+        seedSegments();
+
+        var other = service.query(user, filtersScope(MarketScope.OTHER), PageRequest.of(0, 20));
+        // Bistek items only: detergente 5, arroz 40, arroz 30, leite 8, detergente 6
+        assertEquals(5, other.getTotalElements());
+        assertTrue(other.getContent().stream()
+                .allMatch(row -> "93015006000111".equals(row.marketCnpj())));
+    }
+
+    @Test
+    void scope_allReturnsBothSegments() {
+        seedSegments();
+
+        var all = service.query(user, filtersScope(MarketScope.ALL), PageRequest.of(0, 20));
+        assertEquals(8, all.getTotalElements());
+    }
+
+    @Test
+    void scope_supportedWithNoSupportedMarkets_returnsEmpty() {
+        // No MarketLocation rows at all → nothing is "supported" → SUPPORTED yields no rows
+        // (and must not throw on an empty IN list).
+        var supported = service.query(user, filtersScope(MarketScope.SUPPORTED), PageRequest.of(0, 20));
+        assertEquals(0, supported.getTotalElements());
+    }
+
+    private void seedSegments() {
+        marketLocationRepository.save(MarketLocation.builder()
+                .cnpj("93015006005182").cnpjRoot("93015006").segment(MerchantSegment.SUPERMARKET).build());
+        marketLocationRepository.save(MarketLocation.builder()
+                .cnpj("93015006000111").cnpjRoot("93015006").segment(MerchantSegment.OTHER).build());
+    }
+
+    private ItemFilters filtersScope(MarketScope scope) {
+        return ItemFilters.fromRequest(null, null, null, null, null, null, null, null, null,
+                CategoryView.HOUSEHOLD, scope);
     }
 
     private ItemFilters filters() {

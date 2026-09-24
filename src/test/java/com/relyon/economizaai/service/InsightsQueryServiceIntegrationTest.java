@@ -2,17 +2,21 @@ package com.relyon.economizaai.service;
 
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.HouseholdCustomCategory;
+import com.relyon.economizaai.model.MarketLocation;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.CategoryView;
 import com.relyon.economizaai.model.enums.InsightsGroupBy;
+import com.relyon.economizaai.model.enums.MarketScope;
+import com.relyon.economizaai.model.enums.MerchantSegment;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.HouseholdCustomCategoryRepository;
 import com.relyon.economizaai.repository.HouseholdRepository;
+import com.relyon.economizaai.repository.MarketLocationRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.repository.UserRepository;
@@ -51,6 +55,7 @@ class InsightsQueryServiceIntegrationTest {
     @Autowired private ProductRepository productRepository;
     @Autowired private HouseholdProductCategoryOverrideService categoryOverrideService;
     @Autowired private HouseholdCustomCategoryRepository customCategoryRepository;
+    @Autowired private MarketLocationRepository marketLocationRepository;
 
     private User user;
     private Product leite;
@@ -265,6 +270,49 @@ class InsightsQueryServiceIntegrationTest {
         assertEquals(List.of(ProductCategory.MEAT_DAIRY), result.filters().categories());
     }
 
+    @Test
+    void scope_supportedSummary_coversOnlyGroceryPharmacyMarkets() {
+        seedSegments(); // Zaffari = SUPERMARKET (supported), Bistek = OTHER
+
+        var result = service.query(user, filters().scope(MarketScope.SUPPORTED).build());
+        // Zaffari only: 60 (April) + 12 (May) = 72
+        assertEquals(0, new BigDecimal("72.00").compareTo(result.summary().total()));
+        assertEquals(2, result.summary().receiptCount());
+    }
+
+    @Test
+    void scope_otherSummary_coversEverythingElse() {
+        seedSegments();
+
+        var result = service.query(user, filters().scope(MarketScope.OTHER).build());
+        // Bistek only: 45 (April) + 44 (May) = 89
+        assertEquals(0, new BigDecimal("89.00").compareTo(result.summary().total()));
+        assertEquals(2, result.summary().receiptCount());
+    }
+
+    @Test
+    void scope_allSummary_coversBothSegments() {
+        seedSegments();
+
+        var result = service.query(user, filters().scope(MarketScope.ALL).build());
+        assertEquals(0, new BigDecimal("161.00").compareTo(result.summary().total()));
+    }
+
+    @Test
+    void scope_supportedWithNoSupportedMarkets_summaryIsZero() {
+        // No MarketLocation rows → nothing supported → SUPPORTED total is 0, not an IN () error.
+        var result = service.query(user, filters().scope(MarketScope.SUPPORTED).build());
+        assertEquals(0, BigDecimal.ZERO.compareTo(result.summary().total()));
+        assertEquals(0, result.summary().receiptCount());
+    }
+
+    private void seedSegments() {
+        marketLocationRepository.save(MarketLocation.builder()
+                .cnpj("93015006005182").cnpjRoot("93015006").segment(MerchantSegment.SUPERMARKET).build());
+        marketLocationRepository.save(MarketLocation.builder()
+                .cnpj("93015006000111").cnpjRoot("93015006").segment(MerchantSegment.OTHER).build());
+    }
+
     private void receipt(Household household, String cnpj, String marketName,
                          LocalDateTime issuedAt, List<ReceiptItem> items) {
         var receipt = Receipt.builder()
@@ -325,6 +373,7 @@ class InsightsQueryServiceIntegrationTest {
         private InsightsGroupBy groupBy = InsightsGroupBy.NONE;
         private Integer limit;
         private CategoryView categoryView = CategoryView.HOUSEHOLD;
+        private MarketScope scope = MarketScope.ALL;
 
         FilterBuilder from(LocalDateTime v) { this.from = v; return this; }
         FilterBuilder to(LocalDateTime v) { this.to = v; return this; }
@@ -335,10 +384,11 @@ class InsightsQueryServiceIntegrationTest {
         FilterBuilder groupBy(InsightsGroupBy v) { this.groupBy = v; return this; }
         FilterBuilder limit(Integer v) { this.limit = v; return this; }
         FilterBuilder categoryView(CategoryView v) { this.categoryView = v; return this; }
+        FilterBuilder scope(MarketScope v) { this.scope = v; return this; }
 
         QueryFilters build() {
             return QueryFilters.fromRequest(from, to, marketCnpjs, marketCnpjRoots, categories,
-                    productIds, eans, minReceiptTotal, maxReceiptTotal, groupBy, limit, categoryView);
+                    productIds, eans, minReceiptTotal, maxReceiptTotal, groupBy, limit, categoryView, scope);
         }
     }
 }
