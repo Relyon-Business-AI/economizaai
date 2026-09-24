@@ -105,7 +105,10 @@ public class CollaborativeProperties {
          * later if the privacy/legal stance changes, without touching code.
          */
         private int minHouseholdsForPublic = 3;
-        private int minObservationsPerProductMarket = 5;
+        // Not a privacy control — k-anon (minHouseholdsForPublic=3) fully guards re-identification.
+        // This is only a noise floor for the median; set to 3 so K (which implies >=3 observations)
+        // is the sole gate: the minimum that still respects LGPD, physical and online alike.
+        private int minObservationsPerProductMarket = 3;
         private int minObservationsForCommunityPromo = 10;
         private int communityPromoThresholdPct = 15;
         private int lookbackDays = 90;
