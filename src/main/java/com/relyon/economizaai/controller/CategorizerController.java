@@ -6,6 +6,7 @@ import com.relyon.economizaai.dto.response.CategorizationQualitySnapshotResponse
 import com.relyon.economizaai.dto.response.CuratedEntryResponse;
 import com.relyon.economizaai.dto.response.LearnedEntryResponse;
 import com.relyon.economizaai.dto.response.MlClassificationResponse;
+import com.relyon.economizaai.dto.response.PhraseTokenSimulationResponse;
 import com.relyon.economizaai.model.enums.CategorizationQualityTrigger;
 import com.relyon.economizaai.service.extraction.AutoPromotionService;
 import com.relyon.economizaai.service.extraction.BrandAliasPromotionService;
@@ -15,6 +16,7 @@ import com.relyon.economizaai.service.extraction.ConsensusPromotionService;
 import com.relyon.economizaai.service.extraction.CategorizationDebugService;
 import com.relyon.economizaai.service.extraction.CategorizationQualityService;
 import com.relyon.economizaai.service.extraction.EanCatalogService;
+import com.relyon.economizaai.service.extraction.PhraseTokenSimulationService;
 import com.relyon.economizaai.service.extraction.ml.MlClassifierService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -63,6 +65,7 @@ public class CategorizerController {
     private final CategorizerAdminService categorizerAdminService;
     private final EanCatalogService eanCatalogService;
     private final BrandAliasPromotionService brandAliasPromotionService;
+    private final PhraseTokenSimulationService phraseTokenSimulationService;
 
     /**
      * Promote user-correction consensus into deterministic knowledge: products
@@ -115,6 +118,21 @@ public class CategorizerController {
     public ResponseEntity<List<MlClassificationResponse>> mlPredict(
             @RequestParam(required = false, defaultValue = "") List<String> description) {
         return ResponseEntity.ok(categorizationDebugService.mlPredictAll(description));
+    }
+
+    /**
+     * What-if: simulate the dictionary/brand phrase-window size over the real
+     * unmatched backlog (coverage) and the golden set (accuracy), for each N in
+     * [minTokens, maxTokens]. Read-only — to adopt a window, set the env var
+     * ECONOMIZAAI_CATEGORIZATION_MAX_PHRASE_TOKENS. ADMIN-only in SecurityConfig.
+     */
+    @GetMapping("/simulate")
+    public ResponseEntity<PhraseTokenSimulationResponse> simulatePhraseTokens(
+            @RequestParam(defaultValue = "3") int minTokens,
+            @RequestParam(defaultValue = "6") int maxTokens,
+            @RequestParam(defaultValue = "2000") int sampleSize) {
+        return ResponseEntity.ok(
+                phraseTokenSimulationService.simulate(minTokens, maxTokens, sampleSize));
     }
 
     @GetMapping("/status")

@@ -118,7 +118,8 @@ public class SecurityConfig {
                         // edits the full curated/learned dictionary, unlike the read/debug GETs above.
                         .requestMatchers(HttpMethod.GET,
                                 "/api/v1/categorizer/dictionary/curated",
-                                "/api/v1/categorizer/dictionary/learned").hasRole("ADMIN")
+                                "/api/v1/categorizer/dictionary/learned",
+                                "/api/v1/categorizer/simulate").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE,
                                 "/api/v1/categorizer/learned",
                                 "/api/v1/categorizer/consensus",

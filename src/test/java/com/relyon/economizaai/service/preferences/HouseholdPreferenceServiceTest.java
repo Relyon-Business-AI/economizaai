@@ -4,6 +4,7 @@ import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.dto.response.HouseholdPreferenceResponse.BrandStrength;
 import com.relyon.economizaai.dto.response.HouseholdPreferenceResponse.Confidence;
 import com.relyon.economizaai.model.Household;
+import com.relyon.economizaai.model.ManualBrandPreference;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -144,6 +146,34 @@ class HouseholdPreferenceServiceTest {
     }
 
     @Test
+    void manualBrandShare_matchesDistributionAccentInsensitive() {
+        var elege = product("Leite", "Elegê", new BigDecimal("1"), "L");
+        when(receiptItemRepository.findConfirmedHistoryForHousehold(any())).thenReturn(repeat(purchase(elege), 6));
+        // Manual override brand typed WITHOUT accent must still resolve the "Elegê" share.
+        when(manualBrandPreferenceRepository.findAllByHouseholdId(any())).thenReturn(List.of(
+                manualOverride("Leite", "elege")));
+
+        var prefs = service.derivePreferences(user);
+
+        assertEquals(1, prefs.size());
+        assertEquals("elege", prefs.get(0).topBrand());
+        assertNotNull(prefs.get(0).topBrandShare(), "accent-insensitive lookup found Elegê's share");
+    }
+
+    @Test
+    void manualBrandShare_nullWhenBrandNotInDistribution() {
+        var elege = product("Leite", "Elegê", new BigDecimal("1"), "L");
+        when(receiptItemRepository.findConfirmedHistoryForHousehold(any())).thenReturn(repeat(purchase(elege), 6));
+        when(manualBrandPreferenceRepository.findAllByHouseholdId(any())).thenReturn(List.of(
+                manualOverride("Leite", "Nescau")));
+
+        var prefs = service.derivePreferences(user);
+
+        assertEquals(1, prefs.size());
+        assertNull(prefs.get(0).topBrandShare(), "brand absent from distribution → no share");
+    }
+
+    @Test
     void skipsItemsWithoutGenericName() {
         var noGeneric = Product.builder()
                 .id(UUID.randomUUID()).normalizedName("X").packSize(new BigDecimal("1")).packUnit("L")
@@ -172,6 +202,15 @@ class HouseholdPreferenceServiceTest {
 
         assertEquals(1, prefs.size());
         assertEquals(10, prefs.get(0).sampleSize(), "all 10 'Leite' purchases collapse into one group");
+    }
+
+    private ManualBrandPreference manualOverride(String genericName, String brand) {
+        return ManualBrandPreference.builder()
+                .household(user.getHousehold())
+                .genericName(genericName)
+                .brand(brand)
+                .strength(BrandStrength.MUST_HAVE)
+                .build();
     }
 
     private Product product(String genericName, String brand, BigDecimal packSize, String packUnit) {

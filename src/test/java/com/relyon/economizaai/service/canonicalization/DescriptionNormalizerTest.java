@@ -3,6 +3,7 @@ package com.relyon.economizaai.service.canonicalization;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class DescriptionNormalizerTest {
 
@@ -55,5 +56,34 @@ class DescriptionNormalizerTest {
     void onlyExpandsWholeTokensNotSubstrings() {
         // "mantiqueira" merely starts with "mant" — must NOT become "manteigaiqueira"
         assertEquals("amendoim mantiqueira", DescriptionNormalizer.normalize("AMENDOIM MANTIQUEIRA"));
+    }
+
+    // ---------------------------------------------------------- normalizeOrNull
+
+    @Test
+    void normalizeOrNull_nullStaysNull() {
+        assertNull(DescriptionNormalizer.normalizeOrNull(null));
+    }
+
+    @Test
+    void normalizeOrNull_blankAndPunctuationOnlyBecomeNull() {
+        // "no value" must stay "no value", not become "" — so dedup/norm columns don't
+        // collide an accidental blank with a real empty string.
+        assertNull(DescriptionNormalizer.normalizeOrNull(""));
+        assertNull(DescriptionNormalizer.normalizeOrNull("   "));
+        assertNull(DescriptionNormalizer.normalizeOrNull("--- , ."));
+    }
+
+    @Test
+    void normalizeOrNull_stripsAccentsAndLowercases() {
+        assertEquals("fermento biologico", DescriptionNormalizer.normalizeOrNull("Fermento Biológico"));
+        assertEquals("nescafe", DescriptionNormalizer.normalizeOrNull("Nescafé"));
+    }
+
+    @Test
+    void normalizeOrNull_isIdempotent() {
+        var once = DescriptionNormalizer.normalizeOrNull("Café Pilão");
+        assertEquals(once, DescriptionNormalizer.normalizeOrNull(once));
+        assertEquals("cafe pilao", once);
     }
 }

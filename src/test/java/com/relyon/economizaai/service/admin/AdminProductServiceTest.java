@@ -240,6 +240,18 @@ class AdminProductServiceTest {
     }
 
     @Test
+    void setBrand_populatesNormalizedMirrorKeepingDisplay() {
+        var product = Product.builder().id(UUID.randomUUID()).normalizedName("Cafe").build();
+        when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
+        when(productRepository.save(any(Product.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.setBrand(product.getId(), new SetProductBrandRequest("  Nescafé  "));
+
+        assertEquals("Nescafé", product.getBrand(), "display brand kept (trimmed)");
+        assertEquals("nescafe", product.getBrandNorm(), "brand mirror normalized");
+    }
+
+    @Test
     void setBrandThrowsForUnknownProduct() {
         var unknownId = UUID.randomUUID();
         when(productRepository.findById(unknownId)).thenReturn(Optional.empty());

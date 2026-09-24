@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * One-time-ish (idempotent) startup backfill that re-normalizes the match keys /
@@ -65,7 +66,7 @@ public class NormalizationBackfillRunner implements ApplicationRunner {
     }
 
     protected int backfillCuratedKeys() {
-        return backfillKeys("curated", curatedRepository.findAll(),
+        return backfillKeys("curated", curatedRepository::findAll,
                 CuratedDictionaryEntry::getKeyword,
                 (entry, key) -> entry.setKeyword(key),
                 key -> curatedRepository.findByKeyword(key).isPresent(),
@@ -73,7 +74,7 @@ public class NormalizationBackfillRunner implements ApplicationRunner {
     }
 
     protected int backfillLearnedKeys() {
-        return backfillKeys("learned", learnedRepository.findAll(),
+        return backfillKeys("learned", learnedRepository::findAll,
                 LearnedDictionaryEntry::getNormalizedToken,
                 (entry, key) -> entry.setNormalizedToken(key),
                 key -> learnedRepository.findByNormalizedToken(key).isPresent(),
@@ -81,14 +82,16 @@ public class NormalizationBackfillRunner implements ApplicationRunner {
     }
 
     protected int backfillBrandKeys() {
-        return backfillKeys("brand", brandRepository.findAll(),
+        return backfillKeys("brand", brandRepository::findAll,
                 BrandRegistryEntry::getNormalizedKey,
                 (entry, key) -> entry.setNormalizedKey(key),
                 key -> brandRepository.findByNormalizedKey(key).isPresent(),
                 brandRepository::save);
     }
 
-    private <T> int backfillKeys(String table, List<T> rows,
+    // rows come from a Supplier (not a materialized List) so the fetch itself runs
+    // INSIDE the try — a failing findAll() must never escape and block startup.
+    private <T> int backfillKeys(String table, Supplier<List<T>> rowsSupplier,
                                  Function<T, String> getKey,
                                  BiConsumer<T, String> setKey,
                                  Function<String, Boolean> keyExists,
@@ -96,7 +99,7 @@ public class NormalizationBackfillRunner implements ApplicationRunner {
         var updated = 0;
         var collisions = 0;
         try {
-            for (var row : rows) {
+            for (var row : rowsSupplier.get()) {
                 var current = getKey.apply(row);
                 var normalized = DescriptionNormalizer.normalize(current);
                 if (normalized.isBlank() || normalized.equals(current)) continue;

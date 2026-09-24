@@ -42,7 +42,8 @@ import java.util.concurrent.atomic.AtomicReference;
 @RequiredArgsConstructor
 public class BrandExtractor {
 
-    private static final int MAX_PHRASE_TOKENS = 3;
+    @Value("${economizaai.categorization.max-phrase-tokens:3}")
+    private int maxPhraseTokens = 3;
 
     /** Anchored match: an exact full-word token this long or longer anchors it. */
     private static final int MIN_ANCHOR_LENGTH = 3;
@@ -112,17 +113,22 @@ public class BrandExtractor {
     }
 
     public String find(String rawDescription) {
+        return find(rawDescription, maxPhraseTokens);
+    }
+
+    /** Same lookup as {@link #find(String)} with an explicit phrase-window size (for simulation). */
+    public String find(String rawDescription, int maxTokens) {
         var normalized = DescriptionNormalizer.normalize(rawDescription);
         if (normalized.isBlank()) return null;
         var tokens = normalized.split("\\s+");
-        var exact = findExact(tokens);
+        var exact = findExact(tokens, maxTokens);
         if (exact != null) return exact;
-        return fuzzyEnabled ? findFuzzy(tokens) : null;
+        return fuzzyEnabled ? findFuzzy(tokens, maxTokens) : null;
     }
 
-    private String findExact(String[] tokens) {
+    private String findExact(String[] tokens, int maxTokens) {
         var brands = brandsRef.get();
-        for (var size = MAX_PHRASE_TOKENS; size >= 1; size--) {
+        for (var size = Math.min(maxTokens, tokens.length); size >= 1; size--) {
             for (var i = 0; i + size <= tokens.length; i++) {
                 var phrase = String.join(" ", Arrays.copyOfRange(tokens, i, i + size));
                 var match = brands.get(phrase);
@@ -133,9 +139,9 @@ public class BrandExtractor {
     }
 
     /** Longest window first so a fuzzy hit prefers the most specific brand phrase. */
-    private String findFuzzy(String[] tokens) {
+    private String findFuzzy(String[] tokens, int maxTokens) {
         var index = fuzzyIndexRef.get();
-        for (var size = MAX_PHRASE_TOKENS; size >= 1; size--) {
+        for (var size = Math.min(maxTokens, tokens.length); size >= 1; size--) {
             for (var i = 0; i + size <= tokens.length; i++) {
                 var window = Arrays.copyOfRange(tokens, i, i + size);
                 var candidates = index.get(window[0].charAt(0));
@@ -169,7 +175,7 @@ public class BrandExtractor {
         var tokens = normalized.split("\\s+");
         var brands = brandsRef.get();
         var candidates = new LinkedHashSet<String>();
-        for (var size = MAX_PHRASE_TOKENS; size >= 1; size--) {
+        for (var size = Math.min(maxPhraseTokens, tokens.length); size >= 1; size--) {
             for (var i = 0; i + size <= tokens.length; i++) {
                 var window = Arrays.copyOfRange(tokens, i, i + size);
                 if (!abbreviates(window, brandTokens)) continue;
