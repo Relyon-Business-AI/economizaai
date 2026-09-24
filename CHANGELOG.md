@@ -31,16 +31,19 @@ Fecha o loop do fuzzy: acertos confirmados viram aliases exatos no registro de m
 
 ## 2026-09-24 — Detecção de marca com fuzzy (abreviação + typo)
 
-O `BrandExtractor` agora tem um **fallback fuzzy** quando o match exato no registro de
-marcas falha — resolve o caso clássico da nota abreviar a marca:
+O `BrandExtractor` agora tem um **fallback fuzzy** (abreviação) quando o match exato no
+registro de marcas falha — resolve o caso clássico da nota abreviar a marca:
 
-- **Abreviação:** `d benta` → **Dona Benta** (cada token da nota é prefixo do token da
+- **Abreviação ancorada:** `d benta` → **Dona Benta** (cada token é prefixo do token da
   marca, ancorado por ao menos uma palavra inteira exata — `d b` sozinho não casa).
-- **Typo:** token único longo via Jaro-Winkler com threshold alto (ex.: `nestlee` → Nestlé);
-  marcas curtas (≤4 chars) são ignoradas pra não gerar falso-match.
-- Ambos limitados a candidatos com a mesma inicial (barato) e **todo hit fuzzy é logado**
-  (`brand.matched_by_fuzzy`). Liga/desliga por `ECONOMIZAAI_CATEGORIZATION_BRAND_FUZZY_ENABLED`
-  (default `true`). Nada muda no contrato de API — só melhora a marca inferida no scan.
+- **Prefixo de token único:** `fleischm` → **Fleischmann**, `predilec` → Predilecta
+  (prefixo ≥6 chars, marca claramente maior, e **nunca** palavra genérica de produto —
+  `verde`/`biscoito`/etc. são bloqueadas via dicionário curado + stoplist).
+- **Sem Jaro-Winkler:** um dry-run em dados reais mostrou que o ramo de typo gerava ~70%
+  de falso-positivo (`verde`→Verdemar), então foi removido. Precisão medida agora ~90%.
+- Limitado a candidatos com a mesma inicial, todo hit logado (`brand.matched_by_fuzzy`).
+  **OFF por padrão** (`ECONOMIZAAI_CATEGORIZATION_BRAND_FUZZY_ENABLED=false`) até re-medir
+  em prod. Nada muda no contrato de API — só melhora a marca inferida no scan.
 
 ## 2026-09-24 — Normalização consistente de texto (match/busca/dedup) em todo o app
 

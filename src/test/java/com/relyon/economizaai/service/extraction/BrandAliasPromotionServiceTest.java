@@ -2,6 +2,7 @@ package com.relyon.economizaai.service.extraction;
 
 import com.relyon.economizaai.model.BrandRegistryEntry;
 import com.relyon.economizaai.repository.BrandRegistryEntryRepository;
+import com.relyon.economizaai.repository.CuratedDictionaryEntryRepository;
 import com.relyon.economizaai.repository.ProductAliasRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,7 +31,9 @@ class BrandAliasPromotionServiceTest {
         // Registry knows the full brand only ("dona benta"), not the abbreviation.
         when(brandRepository.findAll()).thenReturn(List.of(
                 BrandRegistryEntry.builder().normalizedKey("dona benta").displayName("Dona Benta").build()));
-        var brandExtractor = new BrandExtractor(brandRepository);
+        var curatedRepository = mock(CuratedDictionaryEntryRepository.class);
+        when(curatedRepository.findAll()).thenReturn(List.of());
+        var brandExtractor = new BrandExtractor(brandRepository, curatedRepository);
         brandExtractor.reload();
         service = new BrandAliasPromotionService(aliasRepository, brandRepository, brandExtractor);
     }

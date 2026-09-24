@@ -77,9 +77,10 @@ economizaai:
     k-anonymity: 3
   categorization:
     # Fuzzy brand fallback: when the exact registry scan misses, try abbreviation
-    # ("d benta" → Dona Benta) and single-token typo (Jaro-Winkler) matching,
-    # both gated conservatively. Set false to fall back to exact-only.
-    brand-fuzzy-enabled: ${ECONOMIZAAI_CATEGORIZATION_BRAND_FUZZY_ENABLED:true}
+    # matching ("d benta" → Dona Benta / "antarc" → Antártica). OFF by default —
+    # a dev dry-run flagged too many false matches from the old typo branch (now
+    # removed); re-measure before enabling.
+    brand-fuzzy-enabled: ${ECONOMIZAAI_CATEGORIZATION_BRAND_FUZZY_ENABLED:false}
   ingestion:
     # Async-ingest safety net: PROCESSING receipts older than this are failed by
     # the sweeper so the FE never polls forever. Must exceed the worst-case
