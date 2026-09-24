@@ -16,6 +16,18 @@ For the complete API contract see [API.md](./API.md) (walk-through) or
 
 ---
 
+## 2026-09-24 — Simulação da janela de N palavras + tooltips nas regras de categorização
+
+- **Novo endpoint (ADMIN):** `GET /api/v1/categorizer/simulate?minTokens=3&maxTokens=6&sampleSize=2000`.
+  Read-only: para cada janela N (nº de palavras que a chave do dicionário pode ter), reporta a
+  **cobertura** sobre o backlog de itens não-casados e a **acurácia** (categoria/marca) sobre o golden
+  set. Serve pra decidir se vale ampliar a janela hoje fixa em 3. Nada é persistido.
+- **Config:** a janela virou env var **`ECONOMIZAAI_CATEGORIZATION_MAX_PHRASE_TOKENS`** (default 3).
+  Para adotar um N novo, ajusta a env var no Render — sem redeploy de código.
+- **FE (admin/Categorização):** aba **Testar** ganhou o card "Simular janela de palavras"; e os campos
+  do modal "Definir regra" ganharam **tooltips** explicando palavra-chave / nome genérico / marca /
+  categoria (marca fixa sobrescreve a detectada; chave genérica → deixar marca vazia).
+
 ## 2026-09-24 — Normalização consistente de texto (match/busca/dedup) em todo o app
 
 Padronização: **valores de exibição continuam como digitados** (nome genérico, marca, mercado

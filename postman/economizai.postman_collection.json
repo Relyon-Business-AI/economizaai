@@ -3387,6 +3387,46 @@
      "response": []
     },
     {
+     "name": "Simulate phrase-window (N tokens) [ADMIN]",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Accept-Language",
+        "value": "pt"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/categorizer/simulate?minTokens=3&maxTokens=6&sampleSize=2000",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "categorizer",
+        "simulate"
+       ],
+       "query": [
+        {
+         "key": "minTokens",
+         "value": "3"
+        },
+        {
+         "key": "maxTokens",
+         "value": "6"
+        },
+        {
+         "key": "sampleSize",
+         "value": "2000"
+        }
+       ]
+      },
+      "description": "ADMIN. Read-only what-if: for each phrase-window size N in [minTokens, maxTokens], reports dictionary coverage over the unmatched backlog + category/brand accuracy over the golden set. Adopt a window via env var ECONOMIZAAI_CATEGORIZATION_MAX_PHRASE_TOKENS; nothing is persisted."
+     },
+     "response": []
+    },
+    {
      "name": "Retrain ML now",
      "request": {
       "method": "POST",

@@ -75,6 +75,12 @@ economizaai:
     dev-cleanup-enabled: ${DEV_CLEANUP_ENABLED:false}
   privacy:
     k-anonymity: 3
+  categorization:
+    # Longest phrase (in tokens) the dictionary/brand lookup assembles and tests.
+    # Raising it lets curated keys have more words (e.g. "ferm bio d benta"), at a
+    # negligible cost. Use GET /categorizer/simulate to measure the effect on
+    # coverage + golden-set accuracy before changing it.
+    max-phrase-tokens: ${ECONOMIZAAI_CATEGORIZATION_MAX_PHRASE_TOKENS:3}
   ingestion:
     # Async-ingest safety net: PROCESSING receipts older than this are failed by
     # the sweeper so the FE never polls forever. Must exceed the worst-case

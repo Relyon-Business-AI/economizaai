@@ -120,6 +120,32 @@ class CanonicalizationServiceTest {
     }
 
     @Test
+    void createdProduct_populatesNormalizedMirrorsKeepingDisplayValues() {
+        var receipt = buildReceipt(item("CAFE PILAO 500G", "555"));
+        when(productExtractor.extract(any())).thenReturn(
+                new ProductExtraction("Café", "Pilão", new BigDecimal("500"), "G",
+                        ProductCategory.GROCERIES, CategorizationSource.DICTIONARY));
+        when(productRepository.findByEan("555")).thenReturn(Optional.empty());
+        // No metadata dedup hit → forces creation, exercising buildEnrichedProduct.
+        when(productRepository.findByMetadata(any(), any(), any(), any())).thenReturn(List.of());
+        when(productRepository.save(any(Product.class))).thenAnswer(inv -> {
+            var p = inv.<Product>getArgument(0);
+            p.setId(UUID.randomUUID());
+            return p;
+        });
+        when(aliasRepository.existsByNormalizedDescription(anyString())).thenReturn(false);
+
+        service.canonicalize(receipt);
+
+        var product = receipt.getItems().get(0).getProduct();
+        assertNotNull(product);
+        assertEquals("Café", product.getGenericName(), "display generic name kept as typed");
+        assertEquals("Pilão", product.getBrand(), "display brand kept as typed");
+        assertEquals("cafe", product.getGenericNameNorm(), "generic name mirror normalized");
+        assertEquals("pilao", product.getBrandNorm(), "brand mirror normalized");
+    }
+
+    @Test
     void pharmacyMerchant_defaultsUnknownItemToPharmacy() {
         var receipt = buildReceipt(item("PRODUTO DESCONHECIDO XYZ", "999"));
         receipt.setMarketName("DROGARIA SAO JOAO");
