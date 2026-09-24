@@ -1,6 +1,8 @@
 package com.relyon.economizaai.service.extraction;
 
+import com.relyon.economizaai.model.BrandRegistryEntry;
 import com.relyon.economizaai.model.CuratedDictionaryEntry;
+import com.relyon.economizaai.model.LearnedDictionaryEntry;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.BrandRegistryEntryRepository;
 import com.relyon.economizaai.repository.CategorizationBenchmarkEntryRepository;
@@ -90,6 +92,59 @@ class CategorizerAdminServiceTest {
         assertEquals("acucar", saved.getValue().getKeyword());
         // Display value kept as typed.
         assertEquals("Açúcar", saved.getValue().getGenericName());
+    }
+
+    @Test
+    void importCuratedEntries_keepsBrandAndGenericDisplayButNormalizesKeyword() {
+        when(curatedRepository.findByKeyword("cafe pilao")).thenReturn(Optional.empty());
+        var saved = ArgumentCaptor.forClass(CuratedDictionaryEntry.class);
+
+        service.importCuratedEntries(List.of(new CategorizerAdminService.CuratedImportRequest(
+                "Café Pilão", "Café", "Pilão", ProductCategory.GROCERIES)));
+
+        verify(curatedRepository).save(saved.capture());
+        assertEquals("cafe pilao", saved.getValue().getKeyword());   // match key normalized
+        assertEquals("Café", saved.getValue().getGenericName());       // display kept
+        assertEquals("Pilão", saved.getValue().getBrand());           // display kept
+    }
+
+    @Test
+    void importBrands_normalizesKeyAccentsNotOnlyLowercase() {
+        when(brandRepository.findByNormalizedKey("nescafe")).thenReturn(Optional.empty());
+        var saved = ArgumentCaptor.forClass(BrandRegistryEntry.class);
+
+        service.importBrands(List.of(new CategorizerAdminService.BrandImportRequest("Nescafé", "Nescafé")));
+
+        verify(brandRepository).save(saved.capture());
+        assertEquals("nescafe", saved.getValue().getNormalizedKey()); // key accent-stripped
+        assertEquals("Nescafé", saved.getValue().getDisplayName());   // display kept
+    }
+
+    @Test
+    void bulkImport_learnedTokenIsNormalizedAccentStripped() {
+        when(learnedRepository.findByNormalizedTokenIn(any())).thenReturn(List.of());
+        when(learnedRepository.findAll()).thenReturn(List.of());
+        var saved = ArgumentCaptor.forClass(List.class);
+
+        service.bulkImport(List.of(new CategorizerAdminService.DictionaryImportRequest(
+                "Açaí", "Açaí", ProductCategory.GROCERIES, 999)));
+
+        verify(learnedRepository).saveAll(saved.capture());
+        var entries = (List<LearnedDictionaryEntry>) saved.getValue();
+        assertEquals(1, entries.size());
+        assertEquals("acai", entries.get(0).getNormalizedToken()); // token accent-stripped
+    }
+
+    @Test
+    void listCurated_normalizesAccentedQueryBeforeSearch() {
+        var pageable = PageRequest.of(0, 50);
+        when(curatedRepository.findByKeywordContainingIgnoreCase(eq("acucar"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(curated())));
+
+        service.listCurated("AÇÚCAR", pageable);
+
+        // The accented query is normalized so it matches the accent-stripped stored key.
+        verify(curatedRepository).findByKeywordContainingIgnoreCase(eq("acucar"), any(Pageable.class));
     }
 
     @Test
