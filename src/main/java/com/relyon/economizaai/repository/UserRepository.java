@@ -157,6 +157,9 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
             + "count(DISTINCT u.id) AS active_users "
             + "FROM users u JOIN receipts r ON r.user_id = u.id "
             + "WHERE u.created_at >= :since" + NATIVE_INTERNAL_FILTER
-            + " GROUP BY cohort_week, channel, week_offset", nativeQuery = true)
+            // GROUP BY u.acquisition_channel (não o alias `channel`): com o JOIN em receipts,
+            // o alias colide com receipts.channel (coluna real), que o Postgres prioriza,
+            // deixando u.acquisition_channel fora do GROUP BY e quebrando a query.
+            + " GROUP BY cohort_week, u.acquisition_channel, week_offset", nativeQuery = true)
     List<Object[]> cohortActivitySince(LocalDateTime since, boolean includeInternal);
 }
