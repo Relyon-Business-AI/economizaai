@@ -19,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
@@ -131,6 +132,30 @@ public class CanonicalizationService {
         log.info("recanonicalize.keyword keyword='{}' candidates={} relinked={}", keyword, candidates.size(), relinked);
         return relinked;
     }
+
+    /**
+     * Nightly retry of the confirmed UNMATCHED backlog against the CURRENT rules
+     * (dictionary/brand/EAN improvements land continuously, but orphans were only
+     * retried when an admin saved a curated rule). Uses the same non-forcing
+     * cascade as ingestion — an item that still matches nothing STAYS unmatched
+     * (no junk product creation), so this is safe to run unattended. Capped so a
+     * huge backlog can't stretch the maintenance window.
+     */
+    @Transactional
+    public RetryOutcome retryUnmatched(int maxItems) {
+        var cap = Math.max(1, Math.min(maxItems, 2000));
+        var orphans = receiptItemRepository.findUnmatchedConfirmed(PageRequest.of(0, cap));
+        var linked = 0;
+        for (var item : orphans) {
+            var pharmacyMerchant = merchantClassifier.isPharmacy(
+                    item.getReceipt().getCnpjEmitente(), item.getReceipt().getMarketName());
+            if (canonicalizeItem(item, pharmacyMerchant) != ItemResult.UNMATCHED) linked++;
+        }
+        log.info("recanonicalize.retry_unmatched scanned={} linked={}", orphans.size(), linked);
+        return new RetryOutcome(orphans.size(), linked);
+    }
+
+    public record RetryOutcome(int scanned, int linked) {}
 
     /** True when the normalized description contains the normalized phrase as whole, contiguous tokens. */
     private static boolean descriptionContainsPhrase(String rawDescription, String normalizedPhrase) {

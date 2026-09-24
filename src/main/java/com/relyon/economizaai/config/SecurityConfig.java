@@ -121,7 +121,8 @@ public class SecurityConfig {
                                 "/api/v1/categorizer/dictionary/learned",
                                 "/api/v1/categorizer/simulate",
                                 "/api/v1/categorizer/brands",
-                                "/api/v1/categorizer/brands/entries").hasRole("ADMIN")
+                                "/api/v1/categorizer/brands/entries",
+                                "/api/v1/categorizer/consensus/audit").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE,
                                 "/api/v1/categorizer/learned",
                                 "/api/v1/categorizer/consensus",

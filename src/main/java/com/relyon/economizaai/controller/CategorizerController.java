@@ -7,6 +7,7 @@ import com.relyon.economizaai.dto.response.CuratedEntryResponse;
 import com.relyon.economizaai.dto.response.LearnedEntryResponse;
 import com.relyon.economizaai.dto.response.MlClassificationResponse;
 import com.relyon.economizaai.dto.response.PhraseTokenSimulationResponse;
+import com.relyon.economizaai.model.ConsensusGraduationAudit;
 import com.relyon.economizaai.model.enums.CategorizationQualityTrigger;
 import com.relyon.economizaai.service.extraction.AutoPromotionService;
 import com.relyon.economizaai.service.extraction.BrandAliasPromotionService;
@@ -185,6 +186,18 @@ public class CategorizerController {
     @GetMapping("/consensus")
     public ResponseEntity<List<CategorizerAdminService.ConsensusProductView>> listConsensus() {
         return ResponseEntity.ok(categorizerAdminService.listConsensus());
+    }
+
+    /**
+     * ADMIN. Consensus graduation audit trail — who (which households) promoted
+     * which product to which category, newest first. Optional productId filter.
+     * Makes a bad/gamed consensus traceable and reversible.
+     */
+    @GetMapping("/consensus/audit")
+    public ResponseEntity<List<ConsensusGraduationAudit>> consensusAudit(
+            @RequestParam(required = false) UUID productId,
+            @RequestParam(defaultValue = "50") int limit) {
+        return ResponseEntity.ok(categorizerAdminService.consensusAudit(productId, limit));
     }
 
     /**

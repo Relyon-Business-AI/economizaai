@@ -16,6 +16,17 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-24 — Robustez do motor (batch 2): sweeper noturno + auditoria de consenso
+
+- **Sweeper noturno de órfãos:** a manutenção agora re-tenta os itens **não-casados** contra as
+  regras atuais toda noite (antes só quando um admin salvava regra curada com aquela keyword).
+  Não-forçante: item que segue sem match continua não-casado (não cria produto lixo); correções
+  humanas intocadas por construção. Cap configurável (`unmatched-retry-cap`, default 1000).
+- **Auditoria de consenso:** graduações agora gravam **quais households votaram** (tabela
+  `consensus_graduation_audit`) — consenso ruim/manipulado vira rastreável e reversível.
+  Novo endpoint ADMIN `GET /categorizer/consensus/audit?productId=&limit=`. De quebra, a
+  contagem de votos passou a ser por household DISTINTO (antes contava linhas de override).
+
 ## 2026-09-24 — Robustez do motor de categorização (pacote de correções)
 
 Correções dos gaps achados na auditoria do motor de detecção (produto/marca/categoria):

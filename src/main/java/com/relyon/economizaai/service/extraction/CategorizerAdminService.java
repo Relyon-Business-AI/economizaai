@@ -4,12 +4,14 @@ import com.relyon.economizaai.dto.response.CuratedEntryResponse;
 import com.relyon.economizaai.dto.response.LearnedEntryResponse;
 import com.relyon.economizaai.model.BrandRegistryEntry;
 import com.relyon.economizaai.model.CategorizationBenchmarkEntry;
+import com.relyon.economizaai.model.ConsensusGraduationAudit;
 import com.relyon.economizaai.model.CuratedDictionaryEntry;
 import com.relyon.economizaai.model.LearnedDictionaryEntry;
 import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.BrandRegistryEntryRepository;
 import com.relyon.economizaai.repository.CategorizationBenchmarkEntryRepository;
+import com.relyon.economizaai.repository.ConsensusGraduationAuditRepository;
 import com.relyon.economizaai.repository.CuratedDictionaryEntryRepository;
 import com.relyon.economizaai.repository.EanCatalogRepository;
 import com.relyon.economizaai.repository.LearnedDictionaryRepository;
@@ -72,6 +74,7 @@ public class CategorizerAdminService {
     private final BrandRegistryEntryRepository brandRepository;
     private final CategorizationBenchmarkEntryRepository benchmarkRepository;
     private final EanCatalogRepository eanCatalogRepository;
+    private final ConsensusGraduationAuditRepository consensusAuditRepository;
     private final CanonicalizationService canonicalizationService;
 
     @Transactional
@@ -187,6 +190,14 @@ public class CategorizerAdminService {
         }
         dictionaryClassifier.replaceLearnedEntries(snapshot);
         return allEntries.size();
+    }
+
+    /** Graduation audit rows (who voted what), newest first; optionally filtered by product. */
+    @Transactional(readOnly = true)
+    public List<ConsensusGraduationAudit> consensusAudit(UUID productId, int limit) {
+        if (productId != null) return consensusAuditRepository.findByProductIdOrderByCreatedAtDesc(productId);
+        var capped = Math.max(1, Math.min(limit, 200));
+        return consensusAuditRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, capped));
     }
 
     public List<ConsensusProductView> listConsensus() {

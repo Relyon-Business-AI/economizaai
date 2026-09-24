@@ -1,9 +1,11 @@
 package com.relyon.economizaai.service.extraction;
 
+import com.relyon.economizaai.model.ConsensusGraduationAudit;
 import com.relyon.economizaai.model.LearnedDictionaryEntry;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.repository.ConsensusGraduationAuditRepository;
 import com.relyon.economizaai.repository.HouseholdProductCategoryOverrideRepository;
 import com.relyon.economizaai.repository.LearnedDictionaryRepository;
 import com.relyon.economizaai.repository.ProductRepository;
@@ -21,9 +23,11 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -52,6 +56,7 @@ public class ConsensusPromotionService {
     private final ProductRepository productRepository;
     private final LearnedDictionaryRepository learnedRepository;
     private final DictionaryClassifier dictionaryClassifier;
+    private final ConsensusGraduationAuditRepository auditRepository;
 
     // Self-reference so the scheduled trigger's call to @Transactional promote()
     // goes through the Spring proxy. Defaults to `this` for plain unit tests.
@@ -88,48 +93,66 @@ public class ConsensusPromotionService {
         return outcome;
     }
 
-    /** productId -> (category -> distinct households that corrected it to that category). */
-    private Map<UUID, Map<ProductCategory, Integer>> tallyHouseholdVotes() {
-        var votesByProduct = new HashMap<UUID, Map<ProductCategory, Integer>>();
+    /**
+     * productId -> (category -> DISTINCT households that corrected it to that
+     * category). Collecting the household ids (not just a count) both fixes a
+     * latent double-count (multiple override rows from one household) and feeds
+     * the graduation audit trail.
+     */
+    private Map<UUID, Map<ProductCategory, Set<UUID>>> tallyHouseholdVotes() {
+        var votesByProduct = new HashMap<UUID, Map<ProductCategory, Set<UUID>>>();
         for (var override : overrideRepository.findAll()) {
             // Custom-category overrides are household-specific and never graduate
             // to the global enum — only enum corrections count toward consensus.
             if (override.getCategory() == null) continue;
             votesByProduct
                     .computeIfAbsent(override.getProduct().getId(), key -> new HashMap<>())
-                    .merge(override.getCategory(), 1, Integer::sum);
+                    .computeIfAbsent(override.getCategory(), key -> new HashSet<>())
+                    .add(override.getHousehold().getId());
         }
         return votesByProduct;
     }
 
     /**
      * Resolve consensus first, then load the winning products in one query
-     * instead of a findById per product.
+     * instead of a findById per product. Keeps the winning voters so the
+     * graduation can be audited (and reverted) later.
      */
-    private Map<UUID, ProductCategory> resolveConsensus(Map<UUID, Map<ProductCategory, Integer>> votesByProduct) {
-        var consensusByProduct = new HashMap<UUID, ProductCategory>();
+    private Map<UUID, ConsensusVerdict> resolveConsensus(Map<UUID, Map<ProductCategory, Set<UUID>>> votesByProduct) {
+        var consensusByProduct = new HashMap<UUID, ConsensusVerdict>();
         votesByProduct.forEach((productId, votes) -> {
             var consensusCategory = categoryWithConsensus(votes);
-            if (consensusCategory != null) consensusByProduct.put(productId, consensusCategory);
+            if (consensusCategory != null) {
+                consensusByProduct.put(productId,
+                        new ConsensusVerdict(consensusCategory, votes.get(consensusCategory)));
+            }
         });
         return consensusByProduct;
     }
 
     /** Graduate winning products to global truth (source CONSENSUS) and collect token votes for generalization. */
-    private Graduation graduateConsensusProducts(Map<UUID, ProductCategory> consensusByProduct) {
+    private Graduation graduateConsensusProducts(Map<UUID, ConsensusVerdict> consensusByProduct) {
         var tokenVotes = new HashMap<String, Map<ProductCategory, Integer>>();
         var toSave = new ArrayList<Product>();
+        var auditRows = new ArrayList<ConsensusGraduationAudit>();
 
         for (var product : productRepository.findAllById(consensusByProduct.keySet())) {
-            var consensusCategory = consensusByProduct.get(product.getId());
+            var verdict = consensusByProduct.get(product.getId());
+            var consensusCategory = verdict.category();
 
             if (product.getCategory() != consensusCategory
                     || product.getCategorizationSource() != CategorizationSource.CONSENSUS) {
                 product.setCategory(consensusCategory);
                 product.setCategorizationSource(CategorizationSource.CONSENSUS);
                 toSave.add(product);
-                log.info("consensus_promote.product_graduated product={} category={}",
-                        product.getId(), consensusCategory);
+                auditRows.add(ConsensusGraduationAudit.builder()
+                        .productId(product.getId())
+                        .category(consensusCategory)
+                        .householdIds(verdict.voterIdsCsv())
+                        .votes(verdict.voters().size())
+                        .build());
+                log.info("consensus_promote.product_graduated product={} category={} votes={}",
+                        product.getId(), consensusCategory, verdict.voters().size());
             }
 
             // Feed token consensus for generalization to similar future products.
@@ -141,25 +164,33 @@ public class ConsensusPromotionService {
 
         if (!toSave.isEmpty()) {
             productRepository.saveAll(toSave);
+            auditRepository.saveAll(auditRows);
         }
         return new Graduation(toSave.size(), tokenVotes);
     }
 
     /** Category corrected by enough distinct households; null if no clear winner. */
-    private ProductCategory categoryWithConsensus(Map<ProductCategory, Integer> householdsByCategory) {
+    private ProductCategory categoryWithConsensus(Map<ProductCategory, Set<UUID>> householdsByCategory) {
         ProductCategory winner = null;
         var winnerHouseholds = 0;
         var tie = false;
         for (var entry : householdsByCategory.entrySet()) {
-            if (entry.getValue() > winnerHouseholds) {
+            if (entry.getValue().size() > winnerHouseholds) {
                 winner = entry.getKey();
-                winnerHouseholds = entry.getValue();
+                winnerHouseholds = entry.getValue().size();
                 tie = false;
-            } else if (entry.getValue() == winnerHouseholds) {
+            } else if (entry.getValue().size() == winnerHouseholds) {
                 tie = true;
             }
         }
         return (!tie && winnerHouseholds >= minHouseholds) ? winner : null;
+    }
+
+    /** Winning category plus the distinct households behind it (for the audit trail). */
+    private record ConsensusVerdict(ProductCategory category, Set<UUID> voters) {
+        String voterIdsCsv() {
+            return voters.stream().map(UUID::toString).sorted().collect(Collectors.joining(","));
+        }
     }
 
     /** Collect agreed tokens then batch-upsert into the learned dictionary. */

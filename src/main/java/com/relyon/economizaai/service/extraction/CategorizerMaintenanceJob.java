@@ -2,6 +2,7 @@ package com.relyon.economizaai.service.extraction;
 
 import com.relyon.economizaai.model.enums.CategorizationQualityTrigger;
 import com.relyon.economizaai.service.admin.AdminProductService;
+import com.relyon.economizaai.service.canonicalization.CanonicalizationService;
 import com.relyon.economizaai.service.extraction.ml.MlClassifierService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,12 +35,16 @@ public class CategorizerMaintenanceJob {
     private final CategorizationQualityService categorizationQualityService;
     private final CategorizerAdminService categorizerAdminService;
     private final BrandAliasPromotionService brandAliasPromotionService;
+    private final CanonicalizationService canonicalizationService;
 
     @Value("${economizaai.categorizer.maintenance.enabled:true}")
     private boolean enabled;
 
     @Value("${economizaai.categorizer.maintenance.brand-derivation-min-products:2}")
     private int brandDerivationMinProducts;
+
+    @Value("${economizaai.categorizer.maintenance.unmatched-retry-cap:1000}")
+    private int unmatchedRetryCap;
 
     @Scheduled(cron = "${economizaai.categorizer.maintenance.cron:0 40 4 * * *}",
             zone = "${economizaai.categorizer.maintenance.zone:America/Sao_Paulo}")
@@ -78,6 +83,24 @@ public class CategorizerMaintenanceJob {
                     derivation.created(), aliases.created(), aliases.conflictsSkipped());
         } catch (RuntimeException ex) {
             log.error("categorizer.maintenance.brands_failed", ex);
+        }
+        retryUnmatchedBacklog();
+    }
+
+    /**
+     * Retries the confirmed UNMATCHED backlog against the current rules — before
+     * this, an orphan only got retried when an admin happened to save a curated
+     * rule whose keyword it contained. Non-forcing (an item matching nothing stays
+     * unmatched), and USER corrections are untouched by construction: unmatched
+     * items have no product, so there is nothing human-made to override.
+     */
+    private void retryUnmatchedBacklog() {
+        try {
+            var outcome = canonicalizationService.retryUnmatched(unmatchedRetryCap);
+            log.info("categorizer.maintenance.unmatched_retry scanned={} linked={}",
+                    outcome.scanned(), outcome.linked());
+        } catch (RuntimeException ex) {
+            log.error("categorizer.maintenance.unmatched_retry_failed", ex);
         }
     }
 }

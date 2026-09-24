@@ -3,6 +3,7 @@ package com.relyon.economizaai.service.extraction;
 import com.relyon.economizaai.dto.response.RecategorizeResultResponse;
 import com.relyon.economizaai.model.enums.CategorizationQualityTrigger;
 import com.relyon.economizaai.service.admin.AdminProductService;
+import com.relyon.economizaai.service.canonicalization.CanonicalizationService;
 import com.relyon.economizaai.service.extraction.ml.MlClassifierService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,15 +25,19 @@ class CategorizerMaintenanceJobTest {
     @Mock private CategorizationQualityService categorizationQualityService;
     @Mock private CategorizerAdminService categorizerAdminService;
     @Mock private BrandAliasPromotionService brandAliasPromotionService;
+    @Mock private CanonicalizationService canonicalizationService;
 
     private CategorizerMaintenanceJob job(boolean enabled) {
         var j = new CategorizerMaintenanceJob(mlClassifierService, adminProductService,
-                categorizationQualityService, categorizerAdminService, brandAliasPromotionService);
+                categorizationQualityService, categorizerAdminService, brandAliasPromotionService,
+                canonicalizationService);
         ReflectionTestUtils.setField(j, "enabled", enabled);
         return j;
     }
 
     private void stubBrandMaintenance() {
+        when(canonicalizationService.retryUnmatched(0))
+                .thenReturn(new CanonicalizationService.RetryOutcome(0, 0));
         when(categorizerAdminService.deriveBrandsFromEanCatalog(0, true))
                 .thenReturn(new CategorizerAdminService.BrandDerivationOutcome(0, 0, 0));
         when(brandAliasPromotionService.promoteFromKnownBrands())
