@@ -16,6 +16,7 @@ import com.relyon.economizaai.dto.response.ProductMergeResultResponse;
 import com.relyon.economizaai.dto.response.ProductResponse;
 import com.relyon.economizaai.dto.response.ReceiptItemResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptDetailResponse;
+import com.relyon.economizaai.dto.response.AdminReceiptStatsResponse;
 import com.relyon.economizaai.dto.response.ReceiptResponse;
 import com.relyon.economizaai.dto.response.ReceiptSummaryResponse;
 import com.relyon.economizaai.dto.response.RecategorizeReportResponse;
@@ -272,7 +273,7 @@ class AdminControllerTest {
                 Map.of("QR_PORTAL", new StateCoverageResponse.StateCoverageEntry.StrategyStats(5, 2)))));
         when(sefazIngestionService.getVerifiedStates()).thenReturn(Set.of(UnidadeFederativa.RS));
         when(sefazIngestionService.experimentalStates()).thenReturn(Set.of(UnidadeFederativa.BA));
-        when(stateCoverageService.report(Set.of(UnidadeFederativa.RS), Set.of(UnidadeFederativa.BA)))
+        when(stateCoverageService.report(Set.of(UnidadeFederativa.RS), Set.of(UnidadeFederativa.BA), null))
                 .thenReturn(report);
 
         mockMvc.perform(get("/api/v1/admin/state-coverage")
@@ -393,6 +394,18 @@ class AdminControllerTest {
         mockMvc.perform(get("/api/v1/admin/receipts")
                         .with(SecurityMockMvcRequestPostProcessors.user(regularUser())))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void receiptStats_returnsCountAndTotal() throws Exception {
+        when(adminReceiptService.stats(any(), any(), any(), any(), any(), any(), any(), any(), any(), eq(false)))
+                .thenReturn(new AdminReceiptStatsResponse(12, new BigDecimal("3456.78")));
+
+        mockMvc.perform(get("/api/v1/admin/receipts/stats")
+                        .with(SecurityMockMvcRequestPostProcessors.user(adminUser())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(12))
+                .andExpect(jsonPath("$.totalAmount").value(3456.78));
     }
 
     @Test

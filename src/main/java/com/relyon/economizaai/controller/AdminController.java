@@ -10,6 +10,7 @@ import com.relyon.economizaai.dto.request.UpdateSubscriptionTierRequest;
 import com.relyon.economizaai.dto.response.AcquisitionReportResponse;
 import com.relyon.economizaai.dto.response.AdminNotificationSummaryResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptDetailResponse;
+import com.relyon.economizaai.dto.response.AdminReceiptStatsResponse;
 import com.relyon.economizaai.dto.response.AdminUserDetailResponse;
 import com.relyon.economizaai.dto.response.BrandBackfillResponse;
 import com.relyon.economizaai.dto.response.RetentionCohortResponse;
@@ -185,6 +186,23 @@ public class AdminController {
                 from, to, marketCnpj, category, q, householdId, uf, status, parseErrorReason, includeInternal, pageable));
     }
 
+    /** Count + total value of the notes matching the given filters (list header total). */
+    @GetMapping("/receipts/stats")
+    public ResponseEntity<AdminReceiptStatsResponse> receiptStats(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
+            @RequestParam(required = false) String marketCnpj,
+            @RequestParam(required = false) List<ProductCategory> category,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) UUID householdId,
+            @RequestParam(required = false) UnidadeFederativa uf,
+            @RequestParam(required = false) ReceiptStatus status,
+            @RequestParam(required = false) String parseErrorReason,
+            @RequestParam(defaultValue = "false") boolean includeInternal) {
+        return ResponseEntity.ok(adminReceiptService.stats(
+                from, to, marketCnpj, category, q, householdId, uf, status, parseErrorReason, includeInternal));
+    }
+
     @GetMapping("/receipts/{id}")
     public ResponseEntity<AdminReceiptDetailResponse> getReceipt(@PathVariable UUID id) {
         return ResponseEntity.ok(adminReceiptService.get(id));
@@ -343,9 +361,10 @@ public class AdminController {
      * deciding which state adapter to build next.
      */
     @GetMapping("/state-coverage")
-    public ResponseEntity<StateCoverageResponse> stateCoverage() {
+    public ResponseEntity<StateCoverageResponse> stateCoverage(
+            @RequestParam(required = false) Integer days) {
         return ResponseEntity.ok(stateCoverageService.report(
-                sefazIngestionService.getVerifiedStates(), sefazIngestionService.experimentalStates()));
+                sefazIngestionService.getVerifiedStates(), sefazIngestionService.experimentalStates(), days));
     }
 
     /**

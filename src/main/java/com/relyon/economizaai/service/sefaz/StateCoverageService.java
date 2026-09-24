@@ -189,8 +189,20 @@ public class StateCoverageService {
      * this service never depends back on {@code SefazIngestionService}.
      */
     public StateCoverageResponse report(Set<UnidadeFederativa> verified, Set<UnidadeFederativa> experimental) {
+        return report(verified, experimental, null);
+    }
+
+    /**
+     * @param days period window (last N days of attempts); {@code null} or {@code <= 0}
+     *             means all-time (total). Lets the admin see whether errors keep happening.
+     */
+    public StateCoverageResponse report(Set<UnidadeFederativa> verified, Set<UnidadeFederativa> experimental,
+                                        Integer days) {
+        var summaries = days == null || days <= 0
+                ? repository.summarize()
+                : repository.summarizeSince(OffsetDateTime.now(ZoneOffset.UTC).minusDays(days));
         var summariesByUf = new HashMap<UnidadeFederativa, List<StateIngestionAttemptRepository.StateAttemptSummary>>();
-        for (var summary : repository.summarize()) {
+        for (var summary : summaries) {
             summariesByUf.computeIfAbsent(summary.getUf(), key -> new ArrayList<>()).add(summary);
         }
         var entries = Arrays.stream(UnidadeFederativa.values())

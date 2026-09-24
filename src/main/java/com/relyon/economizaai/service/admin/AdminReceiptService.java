@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.admin;
 
 import com.relyon.economizaai.dto.response.AdminReceiptDetailResponse;
+import com.relyon.economizaai.dto.response.AdminReceiptStatsResponse;
 import com.relyon.economizaai.dto.response.ReceiptResponse;
 import com.relyon.economizaai.dto.response.ReceiptSummaryResponse;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
@@ -19,6 +20,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -59,19 +61,45 @@ public class AdminReceiptService {
                                              String parseErrorReason,
                                              boolean includeInternal,
                                              Pageable pageable) {
-        var trimmedCnpj = Optional.ofNullable(marketCnpj).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
-        var trimmedSearch = Optional.ofNullable(search).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
-        var trimmedError = Optional.ofNullable(parseErrorReason).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
         var sortedPageable = pageable.getSort().isUnsorted()
                 ? PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by(Sort.Direction.DESC, "issuedAt"))
                 : pageable;
+        var spec = buildSearchSpec(from, to, marketCnpj, categories, search, householdId, uf, status,
+                parseErrorReason, includeInternal);
+        return receiptRepository.findAll(spec, sortedPageable).map(ReceiptSummaryResponse::from);
+    }
+
+    /** Count + total value of the notes matching the same filters as {@link #list} — the list header total. */
+    @Transactional(readOnly = true)
+    public AdminReceiptStatsResponse stats(LocalDateTime from,
+                                           LocalDateTime to,
+                                           String marketCnpj,
+                                           List<ProductCategory> categories,
+                                           String search,
+                                           UUID householdId,
+                                           UnidadeFederativa uf,
+                                           ReceiptStatus status,
+                                           String parseErrorReason,
+                                           boolean includeInternal) {
+        var spec = buildSearchSpec(from, to, marketCnpj, categories, search, householdId, uf, status,
+                parseErrorReason, includeInternal);
+        return new AdminReceiptStatsResponse(receiptRepository.count(spec), receiptRepository.sumTotalAmount(spec));
+    }
+
+    private Specification<Receipt> buildSearchSpec(LocalDateTime from, LocalDateTime to, String marketCnpj,
+                                                   List<ProductCategory> categories, String search, UUID householdId,
+                                                   UnidadeFederativa uf, ReceiptStatus status, String parseErrorReason,
+                                                   boolean includeInternal) {
+        var trimmedCnpj = Optional.ofNullable(marketCnpj).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
+        var trimmedSearch = Optional.ofNullable(search).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
+        var trimmedError = Optional.ofNullable(parseErrorReason).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
         // Admin sees FAILED_PARSE rows too (useful for parser triage) — but an
         // explicit status filter narrows to one bucket when passed.
         var spec = ReceiptSpecifications.forSearch(
                 householdId, from, to, trimmedCnpj, categories, status, trimmedSearch, false, uf, trimmedError);
         // Off by default: hide receipts from admin/test accounts so a bulk import doesn't flood the list.
         if (!includeInternal) spec = spec.and(ReceiptSpecifications.excludeInternal());
-        return receiptRepository.findAll(spec, sortedPageable).map(ReceiptSummaryResponse::from);
+        return spec;
     }
 
     @Transactional(readOnly = true)

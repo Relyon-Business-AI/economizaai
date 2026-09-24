@@ -28,6 +28,16 @@ public interface StateIngestionAttemptRepository extends JpaRepository<StateInge
             """)
     List<StateAttemptSummary> summarize();
 
+    /** Same aggregation as {@link #summarize()} but only over attempts since {@code since} (period filter). */
+    @Query("""
+            select attempt.uf as uf, attempt.strategy as strategy, attempt.outcome as outcome,
+                   count(attempt) as attempts, max(attempt.createdAt) as lastAttemptAt
+            from StateIngestionAttempt attempt
+            where attempt.createdAt >= :since
+            group by attempt.uf, attempt.strategy, attempt.outcome
+            """)
+    List<StateAttemptSummary> summarizeSince(OffsetDateTime since);
+
     interface StateAttemptSummary {
         UnidadeFederativa getUf();
         StateIngestionStrategy getStrategy();

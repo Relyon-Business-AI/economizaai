@@ -147,6 +147,17 @@ class AdminReceiptServiceTest {
     }
 
     @Test
+    void stats_returnsCountAndSummedTotalFromSpec() {
+        when(receiptRepository.count(any(Specification.class))).thenReturn(9L);
+        when(receiptRepository.sumTotalAmount(any(Specification.class))).thenReturn(new BigDecimal("1234.56"));
+
+        var stats = service.stats(null, null, null, null, null, null, null, null, null, false);
+
+        assertEquals(9L, stats.count());
+        assertEquals(new BigDecimal("1234.56"), stats.totalAmount());
+    }
+
+    @Test
     void purgeObservationsForReceipt_deletesAuditsThenObservationsAndReturnsCount() {
         var receiptId = UUID.randomUUID();
         var firstObservationId = UUID.randomUUID();
