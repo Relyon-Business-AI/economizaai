@@ -86,7 +86,7 @@ class DealsServiceTest {
     private PriceIndexService.MarketPriceRow market(String cnpj, BigDecimal median, long households,
                                                     Double distanceKm, boolean watching) {
         return new PriceIndexService.MarketPriceRow(cnpj, PriceIndexService.cnpjRoot(cnpj), "Mercado",
-                median, median, 5, households, distanceKm, watching);
+                median, median, median, LocalDateTime.of(2026, 1, 1, 0, 0), 5, households, distanceKm, watching);
     }
 
     @Test

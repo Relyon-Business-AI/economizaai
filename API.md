@@ -958,6 +958,14 @@ GET /api/v1/price-index/promos?radiusKm=5
 `lat`/`lng` to measure from the current position instead (barcode scan inside a
 store — see the flow below).
 
+Each `best-markets` row carries both an aggregate and a real value:
+`medianPrice`/`minPrice` (the "usual price" baseline) **plus** `latestPrice` +
+`latestObservedAt` — the actual most-recent observed price at that market and when
+it was seen. Show `latestPrice` + "visto em {latestObservedAt}" on the market card
+(a real number the shopper will roughly find, honestly dated); reserve the median
+for "usual price" contexts. Both are k-anon gated (row only appears with ≥3
+contributing households), so the real value never exposes a lone shopper.
+
 ### Barcode scan flow (scan → price nearby)
 
 ```

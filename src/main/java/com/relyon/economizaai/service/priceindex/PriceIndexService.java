@@ -308,8 +308,14 @@ public class PriceIndexService {
             return null;
         }
         var prices = rows.stream().map(PriceObservation::getUnitPrice).toList();
-        return new MarketPriceRow(cnpj, cnpjRoot(cnpj), rows.get(0).getMarketName(),
-                median(prices), min(prices), rows.size(), distinct, distanceKm, isWatched);
+        // The "onde está mais barato" screen shows a REAL observed price + its date, not the
+        // median — a shopper needs the actual number they'll (roughly) see, and the date lets
+        // them judge staleness. k-anon still holds via the ≥K-households gate above; the median
+        // stays as the "usual price" baseline (deals). Most recent by observedAt.
+        var mostRecent = rows.stream().max(Comparator.comparing(PriceObservation::getObservedAt)).orElse(rows.get(0));
+        return new MarketPriceRow(cnpj, cnpjRoot(cnpj), mostRecent.getMarketName(),
+                median(prices), min(prices), mostRecent.getUnitPrice(), mostRecent.getObservedAt(),
+                rows.size(), distinct, distanceKm, isWatched);
     }
 
     /** Median (50th percentile) of a price list. Returns null on empty. */
@@ -346,6 +352,7 @@ public class PriceIndexService {
 
     public record MarketPriceRow(String cnpj, String cnpjRoot, String marketName,
                                  BigDecimal medianPrice, BigDecimal minPrice,
+                                 BigDecimal latestPrice, LocalDateTime latestObservedAt,
                                  int sampleCount, long distinctHouseholds,
                                  Double distanceKm, boolean watching) {}
 }

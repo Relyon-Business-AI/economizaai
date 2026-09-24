@@ -86,7 +86,8 @@ class PriceIndexControllerTest {
         when(priceIndexService.bestMarkets(any(), anyInt(), isNull(), isNull(), isNull(), any()))
                 .thenReturn(List.of(
                         new PriceIndexService.MarketPriceRow("93015006005182", "93015006", "Mercado X",
-                                new BigDecimal("10"), new BigDecimal("9"), 5, 3L, null, false)
+                                new BigDecimal("10"), new BigDecimal("9"),
+                                new BigDecimal("9"), LocalDateTime.of(2026, 1, 1, 0, 0), 5, 3L, null, false)
                 ));
 
         mockMvc.perform(get("/api/v1/price-index/products/" + pid + "/best-markets")
