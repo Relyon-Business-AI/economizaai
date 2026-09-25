@@ -6,6 +6,7 @@ import com.relyon.economizaai.dto.request.SubmitReceiptRequest;
 import com.relyon.economizaai.dto.request.UpdateReceiptItemRequest;
 import com.relyon.economizaai.dto.response.ChaveExtractionResponse;
 import com.relyon.economizaai.dto.response.ConfirmReceiptResponse;
+import com.relyon.economizaai.dto.response.ReceiptImportResponse;
 import com.relyon.economizaai.dto.response.ReceiptItemResponse;
 import com.relyon.economizaai.dto.response.ReceiptResponse;
 import com.relyon.economizaai.dto.response.ReceiptSummaryResponse;
@@ -18,6 +19,7 @@ import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.MarketScope;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
+import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.LocalizedMessageService;
@@ -55,6 +57,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -121,6 +124,34 @@ class ReceiptControllerTest {
         user.setCreatedAt(LocalDateTime.now());
         user.setUpdatedAt(LocalDateTime.now());
         return user;
+    }
+
+    private User adminUser() {
+        var user = buildUser();
+        user.setRole(Role.ADMIN);
+        return user;
+    }
+
+    @Test
+    void importChaves_forbiddenForNonAdmin() throws Exception {
+        mockMvc.perform(post("/api/v1/receipts/import")
+                        .with(SecurityMockMvcRequestPostProcessors.user(buildUser()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"chaves\":[\"" + CHAVE_RS + "\"]}"))
+                .andExpect(status().isForbidden());
+        verify(receiptImportService, never()).importChaves(any(), any());
+    }
+
+    @Test
+    void importChaves_acceptedForAdmin() throws Exception {
+        when(receiptImportService.importChaves(any(), any()))
+                .thenReturn(new ReceiptImportResponse(1, 1, List.of(UUID.randomUUID()), 0, List.of()));
+
+        mockMvc.perform(post("/api/v1/receipts/import")
+                        .with(SecurityMockMvcRequestPostProcessors.user(adminUser()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"chaves\":[\"" + CHAVE_RS + "\"]}"))
+                .andExpect(status().isAccepted());
     }
 
     private ReceiptResponse sampleReceipt(ReceiptStatus status) {
