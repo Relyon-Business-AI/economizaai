@@ -144,7 +144,7 @@ public class AiController {
         var user = """
                 Item de cupom fiscal brasileiro: "%s"
                 Responda SOMENTE um objeto JSON:
-                {"genericName": "<nome limpo sem marca>", "brand": "<marca ou null>", "category": "<uma de: %s>", "packSize": "<tamanho ou null>", "confidence": <0..1>, "reason": "<1 frase>"}
+                {"genericName": "<nome limpo sem marca e sem tamanho>", "brand": "<marca ou null>", "category": "<uma de: %s>", "packSize": "<tamanho/volume ex: 500ml, 1kg, ou null>", "unit": "<unidade de venda: UN, KG, L, G, ML, ou null>", "confidence": <0..1>, "reason": "<1 frase>"}
                 """.formatted(description, categories);
         var system = "Você interpreta descrições abreviadas de cupom fiscal (NFC-e) de supermercado/farmácia no Brasil. "
                 + "Responda somente JSON válido, sem markdown. Não invente marca.";
@@ -163,6 +163,7 @@ public class AiController {
             result.put("brand", node.path("brand").isNull() ? null : node.path("brand").asText(null));
             result.put("category", node.path("category").asText(null));
             result.put("packSize", node.path("packSize").isNull() ? null : node.path("packSize").asText(null));
+            result.put("unit", node.path("unit").isNull() ? null : node.path("unit").asText(null));
             result.put("confidence", node.path("confidence").asDouble(0));
             result.put("reason", node.path("reason").asText(null));
             return result;
