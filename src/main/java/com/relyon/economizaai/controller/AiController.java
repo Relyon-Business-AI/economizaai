@@ -84,11 +84,15 @@ public class AiController {
                         "error", String.valueOf(latest.getError()))));
     }
 
-    /** Starts the async sweep; returns the run id. */
+    /**
+     * Starts the async sweep.
+     * ?full=true percorre TODA a fila (modo backfill da base histórica);
+     * sem o parâmetro (ou false) roda apenas o lote normal de 40 por módulo.
+     */
     @PostMapping("/sweep")
-    public ResponseEntity<Map<String, Object>> sweep() {
-        var runId = aiSweepService.startSweep();
-        return ResponseEntity.accepted().body(Map.of("runId", runId, "status", AiSweepRun.STATUS_RUNNING));
+    public ResponseEntity<Map<String, Object>> sweep(@RequestParam(defaultValue = "false") boolean full) {
+        var runId = aiSweepService.startSweep(full);
+        return ResponseEntity.accepted().body(Map.of("runId", runId, "status", AiSweepRun.STATUS_RUNNING, "full", full));
     }
 
     @GetMapping("/findings")
