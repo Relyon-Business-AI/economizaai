@@ -57,6 +57,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -150,6 +152,26 @@ public class ReceiptController {
         var chaves = ReceiptImportService.extractChaves(text);
         log.info("import.extract_chaves fileBytes={} found={}", file.getSize(), chaves.size());
         return ResponseEntity.ok(new ExtractedChavesResponse(chaves));
+    }
+
+    /**
+     * Import receipts from raw NFe XML files the user downloaded from an e-commerce order
+     * (Amazon / Mercado Livre / Shopee). The XML is self-contained → parsed directly, NO SEFAZ
+     * fetch, so it works for any state (a marketplace seller's chave is usually from another state
+     * and not reconsultable). Accepts several XMLs at once; each is deduped by chave and reported
+     * per-item so nothing is silently dropped. User-facing — deliberately NOT under {@code /import}
+     * (that path is ADMIN-only); this is the consumer route for online notas.
+     */
+    @PostMapping("/xml")
+    public ResponseEntity<ReceiptImportResponse> importXml(@AuthenticationPrincipal User user,
+                                                           @RequestParam("files") List<MultipartFile> files)
+            throws IOException {
+        var contents = new ArrayList<String>();
+        for (var file : files) {
+            contents.add(new String(file.getBytes(), StandardCharsets.UTF_8));
+        }
+        log.info("import.xml.received files={}", files.size());
+        return ResponseEntity.accepted().body(receiptService.importXmlBatch(user, contents));
     }
 
     /**

@@ -7,11 +7,14 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
 import java.util.UUID;
 
 public interface AiFindingRepository extends JpaRepository<AiFinding, UUID> {
 
     Page<AiFinding> findByStatusOrderByCreatedAtDesc(AiFindingStatus status, Pageable pageable);
+
+    List<AiFinding> findByStatus(AiFindingStatus status);
 
     Page<AiFinding> findByStatusAndTypeOrderByCreatedAtDesc(AiFindingStatus status, AiFindingType type, Pageable pageable);
 

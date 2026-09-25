@@ -320,6 +320,62 @@ class ReceiptServiceTest {
         verify(receiptIngestionService, never()).ingest(any(), any());
     }
 
+    private static final String XML_CHAVE = "35260593015006005182651200000076311055456575"; // SP, valid DV
+
+    @Test
+    void importXmlBatch_validXml_queuesAndDispatchesSelfContainedParse() {
+        var user = buildUser();
+        var xml = "<NFe><infNFe Id=\"NFe" + XML_CHAVE + "\"><ide><indPres>2</indPres></ide></infNFe></NFe>";
+        when(receiptRepository.findByHouseholdIdAndChaveAcesso(any(), eq(XML_CHAVE))).thenReturn(Optional.empty());
+        when(receiptRepository.save(any(Receipt.class))).thenAnswer(inv -> {
+            var receipt = inv.<Receipt>getArgument(0);
+            receipt.setId(UUID.randomUUID());
+            return receipt;
+        });
+
+        var response = receiptService.importXmlBatch(user, List.of(xml));
+
+        assertEquals(1, response.queued());
+        assertEquals(0, response.rejected());
+        verify(receiptIngestionService).ingestXml(any(), eq(xml)); // no fetch — parses the uploaded XML
+    }
+
+    @Test
+    void importXmlBatch_confirmedDuplicate_rejectedWithoutDispatch() {
+        var user = buildUser();
+        var xml = "<NFe><infNFe Id=\"NFe" + XML_CHAVE + "\"></infNFe></NFe>";
+        var confirmed = Receipt.builder().id(UUID.randomUUID()).status(ReceiptStatus.CONFIRMED).build();
+        when(receiptRepository.findByHouseholdIdAndChaveAcesso(any(), eq(XML_CHAVE))).thenReturn(Optional.of(confirmed));
+        when(localizedMessageService.translate("receipt.import.duplicate")).thenReturn("já está no histórico");
+
+        var response = receiptService.importXmlBatch(user, List.of(xml));
+
+        assertEquals(0, response.queued());
+        assertEquals(1, response.rejected());
+        assertEquals("receipt.import.duplicate", response.rejectedChaves().get(0).reason());
+        verify(receiptIngestionService, never()).ingestXml(any(), any());
+    }
+
+    @Test
+    void importXmlBatch_fileWithoutValidChave_rejectedNotDropped() {
+        var user = buildUser();
+        when(localizedMessageService.translate("receipt.import.invalid_chave")).thenReturn("chave inválida");
+
+        var response = receiptService.importXmlBatch(user, List.of("<html>not a nota</html>"));
+
+        assertEquals(0, response.queued());
+        assertEquals(1, response.rejected()); // counted, never silently lost
+        assertEquals("receipt.import.invalid_chave", response.rejectedChaves().get(0).reason());
+    }
+
+    @Test
+    void extractChaveFromXml_returnsValidKeyOrNull() {
+        assertEquals(XML_CHAVE, ReceiptService.extractChaveFromXml("<x Id=\"NFe" + XML_CHAVE + "\"/>"));
+        assertEquals(XML_CHAVE, ReceiptService.extractChaveFromXml("<chNFe>" + XML_CHAVE + "</chNFe>"));
+        assertNull(ReceiptService.extractChaveFromXml("<x>sem chave</x>"));
+        assertNull(ReceiptService.extractChaveFromXml(null));
+    }
+
     @Test
     void submit_experimentalStateAtEvidenceCap_rejectsWithoutStoringOrSpending() {
         var user = buildUser();

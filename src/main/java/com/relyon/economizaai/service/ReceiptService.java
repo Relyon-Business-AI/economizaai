@@ -8,6 +8,8 @@ import com.relyon.economizaai.dto.request.SubmitReceiptRequest;
 import com.relyon.economizaai.dto.request.UpdateItemPersonalRequest;
 import com.relyon.economizaai.dto.request.UpdateReceiptItemRequest;
 import com.relyon.economizaai.dto.response.ConfirmReceiptResponse;
+import com.relyon.economizaai.dto.response.ReceiptImportResponse;
+import com.relyon.economizaai.dto.response.ReceiptImportResponse.RejectedChave;
 import com.relyon.economizaai.dto.response.ReceiptResponse;
 import com.relyon.economizaai.dto.response.ReceiptSummaryResponse;
 import com.relyon.economizaai.exception.ManualChaveUnsupportedException;
@@ -70,12 +72,15 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -155,6 +160,79 @@ public class ReceiptService {
         var receiptId = receipt.getId();
         dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingestPrefetched(receiptId, qrPayload, rawContent));
         return withFriendlyName(user.getHousehold().getId(), receipt, ReceiptResponse.from(receipt));
+    }
+
+    /**
+     * Import receipts from their raw NFe XML (e-commerce / model 55 — Amazon, Mercado Livre,
+     * Shopee). The XML is self-contained, so there's NO SEFAZ fetch: we extract the chave from
+     * the XML itself and parse the provided content with the same pipeline as the prefetched path.
+     * This is the state-agnostic route for online notas (a marketplace seller's chave is usually
+     * from another state and not reconsultable). Batch-friendly and idempotent: same dedup as the
+     * chave import (CONFIRMED rejects; stale is replaced), a per-item cap guard, and a per-item
+     * response so a partial failure never silently drops a nota.
+     */
+    @Transactional
+    public ReceiptImportResponse importXmlBatch(User user, List<String> xmlContents) {
+        var householdId = user.getHousehold().getId();
+        var queuedIds = new ArrayList<UUID>();
+        var rejected = new ArrayList<RejectedChave>();
+        var seen = new LinkedHashSet<String>();
+        var capReached = false;
+        for (var xml : xmlContents) {
+            var chave = extractChaveFromXml(xml);
+            if (chave == null) {
+                rejected.add(rejectXml("(sem chave)", "receipt.import.invalid_chave"));
+                continue;
+            }
+            if (!seen.add(chave)) continue; // same XML twice in one upload
+            if (capReached) {
+                rejected.add(rejectXml(chave, "receipt.import.cap_reached"));
+                continue;
+            }
+            var existing = receiptRepository.findByHouseholdIdAndChaveAcesso(householdId, chave).orElse(null);
+            if (existing != null) {
+                if (existing.getStatus() == ReceiptStatus.CONFIRMED) {
+                    rejected.add(rejectXml(chave, "receipt.import.duplicate"));
+                    continue;
+                }
+                receiptRepository.delete(existing); // stale (FAILED/PENDING/…) → replace on re-upload
+            }
+            try {
+                enforceMonthlyReceiptCap(user);
+            } catch (PaywallException ex) {
+                capReached = true;
+                rejected.add(rejectXml(chave, "receipt.import.cap_reached"));
+                continue;
+            }
+            var receipt = persistProcessing(user, chave, chave, ReceiptOrigin.IMPORT);
+            var receiptId = receipt.getId();
+            var content = xml;
+            // Self-contained parse (no fetch); reuses the ingest persist pipeline. Dispatch after
+            // commit so the async parse reads a committed PROCESSING row; a pool rejection fails it.
+            dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingestXml(receiptId, content));
+            queuedIds.add(receiptId);
+        }
+        log.info("import.xml.done received={} queued={} rejected={}",
+                xmlContents.size(), queuedIds.size(), rejected.size());
+        return new ReceiptImportResponse(xmlContents.size(), queuedIds.size(), queuedIds,
+                rejected.size(), rejected);
+    }
+
+    // First valid 44-digit access key in the XML (from <infNFe Id="NFe…"> or <chNFe>).
+    private static final Pattern XML_CHAVE = Pattern.compile("(?:chNFe>|Id=\"NFe)(\\d{44})");
+
+    static String extractChaveFromXml(String xml) {
+        if (xml == null) return null;
+        var matcher = XML_CHAVE.matcher(xml);
+        while (matcher.find()) {
+            var chave = matcher.group(1);
+            if (ChaveAcessoParser.hasValidCheckDigit(chave)) return chave;
+        }
+        return null;
+    }
+
+    private RejectedChave rejectXml(String chave, String reasonKey) {
+        return new RejectedChave(chave, reasonKey, localizedMessageService.translate(reasonKey));
     }
 
     /**
@@ -261,12 +339,17 @@ public class ReceiptService {
      * DANFE is parsed.
      */
     private Receipt persistProcessing(User user, String qrPayload, String chave) {
+        return persistProcessing(user, qrPayload, chave, ReceiptOrigin.SCAN);
+    }
+
+    private Receipt persistProcessing(User user, String qrPayload, String chave, ReceiptOrigin origin) {
         var receipt = Receipt.builder()
                 .user(user)
                 .household(user.getHousehold())
                 .chaveAcesso(chave)
                 .uf(ChaveAcessoParser.extractUf(chave))
                 .qrPayload(qrPayload)
+                .origin(origin)
                 .status(ReceiptStatus.PROCESSING)
                 .build();
         return receiptRepository.save(receipt);

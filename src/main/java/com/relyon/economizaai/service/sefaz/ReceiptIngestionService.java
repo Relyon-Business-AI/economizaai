@@ -117,6 +117,17 @@ public class ReceiptIngestionService {
     }
 
     /**
+     * Ingest a user-uploaded NFe XML (e-commerce import). The XML is self-contained, so this
+     * parses the provided content directly ({@link SefazIngestionService#fromXml}) — no fetch —
+     * through the same persist pipeline (EAN warm-up, merchant gate, parse-failure handling).
+     */
+    @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
+    public void ingestXml(UUID receiptId, String xmlContent) {
+        ingestResolved(receiptId, receipt -> sefazIngestionService.fromXml(xmlContent, receipt.getChaveAcesso(), null),
+                false, null);
+    }
+
+    /**
      * Shared ingest body: load the PROCESSING row, resolve the document (server
      * fetch or client-provided), parse, and persist — with the same failure
      * handling for every path (parse failure keeps the raw for review; transient

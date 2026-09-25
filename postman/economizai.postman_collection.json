@@ -1658,6 +1658,42 @@
 					"response": []
 				},
 				{
+					"name": "Upload e-commerce XML (Amazon/ML/Shopee)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "files",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/receipts/xml",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"receipts",
+								"xml"
+							]
+						},
+						"description": "Upload one or more e-commerce NF-e (model 55) XML files the user downloaded from Amazon/Mercado Livre/Shopee order pages. Field \"files\" accepts several. Self-contained parse (no SEFAZ fetch), any UF. Returns 202 ReceiptImportResponse (received/queued/queuedReceiptIds/rejected/rejectedChaves). User-facing (authenticated), not admin."
+					},
+					"response": []
+				},
+				{
 					"name": "Extract chaves from export file (CSV/Excel/PDF — no import)",
 					"request": {
 						"method": "POST",
