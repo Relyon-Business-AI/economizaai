@@ -168,6 +168,72 @@ public class AiFindingService {
         productRepository.save(product);
     }
 
+    @Transactional
+    public int reEnrich() {
+        var toEnrich = findingRepository.findByStatus(AiFindingStatus.PENDING).stream()
+                .filter(finding -> {
+                    var payload = parsePayload(finding.getPayload());
+                    var hasProductId = !payload.path("productId").asText("").isBlank()
+                            || !payload.path("survivorId").asText("").isBlank();
+                    var alreadyEnriched = !payload.path("normalizedName").asText("").isBlank()
+                            || !payload.path("survivorName").asText("").isBlank();
+                    return hasProductId && !alreadyEnriched;
+                })
+                .toList();
+
+        var enriched = 0;
+        for (var finding : toEnrich) {
+            try {
+                if (reEnrichOne(finding)) enriched++;
+            } catch (RuntimeException ex) {
+                log.warn("ai.finding.re_enrich_failed id={} reason={}", finding.getId(), ex.getMessage());
+            }
+        }
+        log.info("ai.finding.re_enrich total={} enriched={}", toEnrich.size(), enriched);
+        return enriched;
+    }
+
+    private boolean reEnrichOne(AiFinding finding) {
+        var payload = parsePayload(finding.getPayload());
+        var merged = objectMapper.createObjectNode();
+        payload.fields().forEachRemaining(entry -> merged.set(entry.getKey(), entry.getValue()));
+
+        if (finding.getType() == AiFindingType.DUPLICATE) {
+            var survivorId = payload.path("survivorId").asText("");
+            var absorbedId = payload.path("absorbedId").asText("");
+            if (survivorId.isBlank() || absorbedId.isBlank()) return false;
+            var survivorName = productRepository.findById(UUID.fromString(survivorId))
+                    .map(product -> product.getNormalizedName()).orElse(survivorId.substring(0, Math.min(8, survivorId.length())));
+            var absorbedName = productRepository.findById(UUID.fromString(absorbedId))
+                    .map(product -> product.getNormalizedName()).orElse(absorbedId.substring(0, Math.min(8, absorbedId.length())));
+            merged.put("survivorName", survivorName);
+            merged.put("absorbedName", absorbedName);
+            finding.setTitle(truncate("Fundir: \"" + absorbedName + "\" → \"" + survivorName + "\""));
+        } else {
+            var productIdStr = payload.path("productId").asText("");
+            if (productIdStr.isBlank()) return false;
+            var product = productRepository.findById(UUID.fromString(productIdStr)).orElse(null);
+            if (product == null) return false;
+            merged.put("normalizedName", product.getNormalizedName());
+            if (product.getBrand() != null) merged.put("productBrand", product.getBrand());
+            if (product.getCategory() != null) merged.put("productCategory", product.getCategory().name());
+            var newTitle = switch (finding.getType()) {
+                case FRIENDLY_NAME -> "Nome: \"" + product.getNormalizedName() + "\" → \"" + payload.path("genericName").asText("?") + "\"";
+                case SUSPECT_CATEGORY -> "Categoria: \"" + product.getNormalizedName() + "\" → " + payload.path("category").asText("?");
+                default -> finding.getTitle();
+            };
+            finding.setTitle(truncate(newTitle));
+        }
+
+        finding.setPayload(merged.toString());
+        findingRepository.save(finding);
+        return true;
+    }
+
+    private static String truncate(String text) {
+        return text.length() > 290 ? text.substring(0, 290) : text;
+    }
+
     private JsonNode parsePayload(String payload) {
         try {
             return objectMapper.readTree(payload);

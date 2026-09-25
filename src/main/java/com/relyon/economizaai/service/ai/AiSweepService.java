@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.relyon.economizaai.model.AiFinding;
 import com.relyon.economizaai.model.AiSweepRun;
+import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.enums.AiActivity;
 import com.relyon.economizaai.model.enums.AiFindingStatus;
 import com.relyon.economizaai.model.enums.AiFindingType;
@@ -185,6 +186,8 @@ public class AiSweepService {
             if (products.isEmpty()) break;
             var productIdToName = products.stream().collect(
                     Collectors.toMap(product -> product.getId().toString(), product -> product.getNormalizedName()));
+            var productById = products.stream().collect(
+                    Collectors.toMap(product -> product.getId().toString(), product -> product, (a, b) -> a));
             var lines = products.stream()
                     .map(product -> "- id=" + product.getId() + " \"" + product.getNormalizedName() + "\"")
                     .collect(Collectors.joining("\n"));
@@ -203,7 +206,11 @@ public class AiSweepService {
                 var display = node.path("brandDisplay").asText("");
                 if (display.isBlank() || productId.isBlank()) continue;
                 var normalizedName = productIdToName.get(productId);
-                var enriched = enrichedPayload(node, Map.of("normalizedName", normalizedName != null ? normalizedName : productId));
+                var matchedProduct = productById.get(productId);
+                var enriched = objectMapper.createObjectNode();
+                node.fields().forEachRemaining(entry -> enriched.set(entry.getKey(), entry.getValue()));
+                enriched.put("normalizedName", normalizedName != null ? normalizedName : productId);
+                if (matchedProduct != null && matchedProduct.getCategory() != null) enriched.put("productCategory", matchedProduct.getCategory().name());
                 created += saveFinding(runId, AiFindingType.MISSING_BRAND, AiActivity.BRAND_SUGGESTION,
                         "Marca: \"" + node.path("brandKey").asText("") + "\" → " + display,
                         node.path("reason").asText(null), enriched, node.path("confidence").asDouble(0));
@@ -220,6 +227,8 @@ public class AiSweepService {
             if (products.isEmpty()) break;
             var productIdToName = products.stream().collect(
                     Collectors.toMap(product -> product.getId().toString(), product -> product.getNormalizedName()));
+            var productById = products.stream().collect(
+                    Collectors.toMap(product -> product.getId().toString(), product -> product, (a, b) -> a));
             var lines = products.stream()
                     .map(product -> "- id=" + product.getId() + " \"" + product.getNormalizedName() + "\"")
                     .collect(Collectors.joining("\n"));
@@ -238,9 +247,12 @@ public class AiSweepService {
                 if (category == null || category == ProductCategory.OTHER) continue;
                 var productId = node.path("productId").asText("");
                 var normalizedName = productIdToName.getOrDefault(productId, productId);
-                var enriched = enrichedPayload(node, Map.of(
-                        "normalizedName", normalizedName,
-                        "currentCategory", "OTHER"));
+                var matchedProduct = productById.get(productId);
+                var enriched = objectMapper.createObjectNode();
+                node.fields().forEachRemaining(entry -> enriched.set(entry.getKey(), entry.getValue()));
+                enriched.put("normalizedName", normalizedName);
+                enriched.put("currentCategory", "OTHER");
+                if (matchedProduct != null && matchedProduct.getBrand() != null) enriched.put("productBrand", matchedProduct.getBrand());
                 created += saveFinding(runId, AiFindingType.SUSPECT_CATEGORY, AiActivity.CATEGORY_REVIEW,
                         "Categoria: \"" + normalizedName + "\" → " + category,
                         node.path("reason").asText(null), enriched, node.path("confidence").asDouble(0));
@@ -348,6 +360,8 @@ public class AiSweepService {
             if (products.isEmpty()) break;
             var productIdToName = products.stream().collect(
                     Collectors.toMap(product -> product.getId().toString(), product -> product.getNormalizedName()));
+            var productById = products.stream().collect(
+                    Collectors.toMap(product -> product.getId().toString(), product -> product, (a, b) -> a));
             var lines = products.stream()
                     .map(product -> "- id=" + product.getId() + " \"" + product.getNormalizedName() + "\"")
                     .collect(Collectors.joining("\n"));
@@ -367,7 +381,12 @@ public class AiSweepService {
                 if (genericName.isBlank()) continue;
                 var productId = node.path("productId").asText("");
                 var normalizedName = productIdToName.getOrDefault(productId, productId);
-                var enriched = enrichedPayload(node, Map.of("normalizedName", normalizedName));
+                var matchedProduct = productById.get(productId);
+                var enriched = objectMapper.createObjectNode();
+                node.fields().forEachRemaining(entry -> enriched.set(entry.getKey(), entry.getValue()));
+                enriched.put("normalizedName", normalizedName);
+                if (matchedProduct != null && matchedProduct.getBrand() != null) enriched.put("productBrand", matchedProduct.getBrand());
+                if (matchedProduct != null && matchedProduct.getCategory() != null) enriched.put("productCategory", matchedProduct.getCategory().name());
                 created += saveFinding(runId, AiFindingType.FRIENDLY_NAME, AiActivity.FRIENDLY_NAMES,
                         "Nome: \"" + normalizedName + "\" → \"" + genericName + "\"",
                         null, enriched, node.path("confidence").asDouble(0));

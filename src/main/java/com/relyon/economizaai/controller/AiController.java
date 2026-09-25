@@ -121,6 +121,12 @@ public class AiController {
         return ResponseEntity.ok(aiFindingService.approveBulk(ids));
     }
 
+    @PostMapping("/findings/re-enrich")
+    public ResponseEntity<Map<String, Object>> reEnrich() {
+        var count = aiFindingService.reEnrich();
+        return ResponseEntity.ok(Map.of("enriched", count));
+    }
+
     /** Spend panel: totals + per-activity + per-day, over the last N days. */
     @GetMapping("/usage")
     public ResponseEntity<AiUsageService.UsageSummary> usage(@RequestParam(defaultValue = "30") int days) {
