@@ -46,6 +46,10 @@ import static com.relyon.economizaai.config.AsyncConfig.AI_SWEEP_EXECUTOR;
 public class AiSweepService {
 
     private static final int MAX_FINDING_TITLE = 290;
+    private static final int BATCH_SIZE = 40;
+    private static final int ANOMALY_BATCH_SIZE = 150;
+    // Teto de segurança do modo completo: 50 páginas × 40 = 2000 itens por módulo.
+    private static final int MAX_FULL_PAGES = 50;
 
     private final AiGateway aiGateway;
     private final AiFindingRepository findingRepository;
@@ -64,8 +68,19 @@ public class AiSweepService {
     @Autowired
     private AiSweepService self = this;
 
-    /** Kicks off a sweep; returns the run id immediately. One at a time. */
+    /**
+     * Kicks off a normal sweep (lote de 40 por módulo); retorna o run id imediatamente.
+     * Uma varredura por vez.
+     */
     public UUID startSweep() {
+        return startSweep(false);
+    }
+
+    /**
+     * Varredura completa (full=true): percorre TODA a fila paginando até esvaziá-la
+     * ou atingir MAX_FULL_PAGES por módulo. Use para cobrir a base histórica uma vez.
+     */
+    public UUID startSweep(boolean full) {
         if (!aiGateway.isEnabled()) {
             throw new AiGateway.AiUnavailableException("IA desabilitada: configure ANTHROPIC_API_KEY.");
         }
@@ -74,28 +89,35 @@ public class AiSweepService {
         }
         var run = sweepRunRepository.save(AiSweepRun.builder()
                 .status(AiSweepRun.STATUS_RUNNING).findings(0).build());
-        self.runSweep(run.getId());
+        self.runSweep(run.getId(), full);
         return run.getId();
     }
 
     @Async(AI_SWEEP_EXECUTOR)
-    public void runSweep(UUID runId) {
+    public void runSweep(UUID runId, boolean full) {
+        var maxPages = full ? MAX_FULL_PAGES : 1;
         var total = 0;
         try {
-            total += runModule("regras", () -> sweepMissingRules(runId));
-            total += runModule("marcas", () -> sweepMissingBrands(runId));
-            total += runModule("categorias", () -> sweepSuspectCategories(runId));
+            total += runModule("regras",     () -> sweepMissingRules(runId, maxPages));
+            total += runModule("marcas",     () -> sweepMissingBrands(runId, maxPages));
+            total += runModule("categorias", () -> sweepSuspectCategories(runId, maxPages));
             total += runModule("duplicatas", () -> sweepDuplicates(runId));
-            total += runModule("consenso", () -> sweepConsensus(runId));
-            total += runModule("mercados", () -> sweepMerchants(runId));
-            total += runModule("nomes", () -> sweepFriendlyNames(runId));
-            total += runModule("anomalias", () -> sweepAnomalies(runId));
+            total += runModule("consenso",   () -> sweepConsensus(runId));
+            total += runModule("mercados",   () -> sweepMerchants(runId));
+            total += runModule("nomes",      () -> sweepFriendlyNames(runId, maxPages));
+            total += runModule("anomalias",  () -> sweepAnomalies(runId));
             finishRun(runId, AiSweepRun.STATUS_DONE, total, null);
-            log.info("ai.sweep.done run={} findings={}", runId, total);
+            log.info("ai.sweep.done run={} full={} findings={}", runId, full, total);
         } catch (RuntimeException ex) {
             finishRun(runId, AiSweepRun.STATUS_FAILED, total, ex.getMessage());
             log.error("ai.sweep.failed run={} findings={} reason={}", runId, total, ex.getMessage());
         }
+    }
+
+    // Compat: chamada sem full (testes legados).
+    @Async(AI_SWEEP_EXECUTOR)
+    public void runSweep(UUID runId) {
+        runSweep(runId, false);
     }
 
     /**
@@ -121,86 +143,95 @@ public class AiSweepService {
 
     // ── Módulos ─────────────────────────────────────────────────────────────
 
-    private int sweepMissingRules(UUID runId) {
-        var orphans = receiptItemRepository.topUnmatchedDescriptions(PageRequest.of(0, 40));
-        if (orphans.isEmpty()) return 0;
-        var lines = orphans.stream()
-                .map(row -> "- \"" + row[0] + "\" (vista " + row[1] + "x)")
-                .collect(Collectors.joining("\n"));
-        var user = """
-                Descrições de itens de cupom fiscal brasileiro que NÃO casaram com nenhum produto:
-                %s
-
-                Para cada descrição que você conseguir interpretar, proponha uma regra de dicionário.
-                Responda SOMENTE um array JSON, cada elemento:
-                {"description": "<descrição original>", "keyword": "<1-3 palavras da descrição que identificam o produto, minúsculas>", "genericName": "<nome limpo do produto SEM marca>", "brand": "<marca se identificável, senão null>", "category": "<uma de: %s>", "confidence": <0..1>, "reason": "<1 frase>"}
-                Pule descrições ininteligíveis. Não invente marca.
-                """.formatted(lines, categoryList());
-        var text = aiGateway.complete(AiActivity.RULE_SUGGESTION, aiGateway.extractorModel(),
-                systemPrompt(), user, 4000);
+    private int sweepMissingRules(UUID runId, int maxPages) {
         var created = 0;
-        for (var node : parseArray(text)) {
-            var keyword = node.path("keyword").asText("");
-            var category = node.path("category").asText("");
-            if (keyword.isBlank() || parseCategory(category) == null) continue;
-            created += saveFinding(runId, AiFindingType.MISSING_RULE, AiActivity.RULE_SUGGESTION,
-                    "Regra: \"" + keyword + "\" → " + node.path("genericName").asText("?") + " / " + category,
-                    node.path("reason").asText(null) + " (descrição: " + node.path("description").asText("") + ")",
-                    node, node.path("confidence").asDouble(0));
+        for (var page = 0; page < maxPages; page++) {
+            var orphans = receiptItemRepository.topUnmatchedDescriptions(PageRequest.of(page, BATCH_SIZE));
+            if (orphans.isEmpty()) break;
+            var lines = orphans.stream()
+                    .map(row -> "- \"" + row[0] + "\" (vista " + row[1] + "x)")
+                    .collect(Collectors.joining("\n"));
+            var user = """
+                    Descrições de itens de cupom fiscal brasileiro que NÃO casaram com nenhum produto:
+                    %s
+
+                    Para cada descrição que você conseguir interpretar, proponha uma regra de dicionário.
+                    Responda SOMENTE um array JSON, cada elemento:
+                    {"description": "<descrição original>", "keyword": "<1-3 palavras da descrição que identificam o produto, minúsculas>", "genericName": "<nome limpo do produto SEM marca>", "brand": "<marca se identificável, senão null>", "category": "<uma de: %s>", "confidence": <0..1>, "reason": "<1 frase>"}
+                    Pule descrições ininteligíveis. Não invente marca.
+                    """.formatted(lines, categoryList());
+            var text = aiGateway.complete(AiActivity.RULE_SUGGESTION, aiGateway.extractorModel(),
+                    systemPrompt(), user, 4000);
+            for (var node : parseArray(text)) {
+                var keyword = node.path("keyword").asText("");
+                var category = node.path("category").asText("");
+                if (keyword.isBlank() || parseCategory(category) == null) continue;
+                created += saveFinding(runId, AiFindingType.MISSING_RULE, AiActivity.RULE_SUGGESTION,
+                        "Regra: \"" + keyword + "\" → " + node.path("genericName").asText("?") + " / " + category,
+                        node.path("reason").asText(null) + " (descrição: " + node.path("description").asText("") + ")",
+                        node, node.path("confidence").asDouble(0));
+            }
+            if (orphans.size() < BATCH_SIZE) break;
         }
         return created;
     }
 
-    private int sweepMissingBrands(UUID runId) {
-        var products = productRepository.findTop40ByBrandIsNullOrderByCreatedAtDesc();
-        if (products.isEmpty()) return 0;
-        var lines = products.stream()
-                .map(product -> "- id=" + product.getId() + " \"" + product.getNormalizedName() + "\"")
-                .collect(Collectors.joining("\n"));
-        var user = """
-                Produtos de supermercado brasileiros SEM marca identificada (nome vindo do cupom):
-                %s
-
-                Identifique a marca quando ela estiver visível/abreviada no nome. Responda SOMENTE um array JSON:
-                {"productId": "<id>", "brandKey": "<texto da marca como aparece no cupom, minúsculo>", "brandDisplay": "<nome oficial da marca>", "confidence": <0..1>, "reason": "<1 frase>"}
-                Inclua APENAS produtos onde a marca é clara. Nunca trate palavra genérica de produto (sal, leite, verde) como marca.
-                """.formatted(lines);
-        var text = aiGateway.complete(AiActivity.BRAND_SUGGESTION, aiGateway.extractorModel(),
-                systemPrompt(), user, 3000);
+    private int sweepMissingBrands(UUID runId, int maxPages) {
         var created = 0;
-        for (var node : parseArray(text)) {
-            var display = node.path("brandDisplay").asText("");
-            if (display.isBlank() || node.path("productId").asText("").isBlank()) continue;
-            created += saveFinding(runId, AiFindingType.MISSING_BRAND, AiActivity.BRAND_SUGGESTION,
-                    "Marca: \"" + node.path("brandKey").asText("") + "\" → " + display,
-                    node.path("reason").asText(null), node, node.path("confidence").asDouble(0));
+        for (var page = 0; page < maxPages; page++) {
+            var products = productRepository.findByBrandIsNullOrderByCreatedAtDesc(PageRequest.of(page, BATCH_SIZE));
+            if (products.isEmpty()) break;
+            var lines = products.stream()
+                    .map(product -> "- id=" + product.getId() + " \"" + product.getNormalizedName() + "\"")
+                    .collect(Collectors.joining("\n"));
+            var user = """
+                    Produtos de supermercado brasileiros SEM marca identificada (nome vindo do cupom):
+                    %s
+
+                    Identifique a marca quando ela estiver visível/abreviada no nome. Responda SOMENTE um array JSON:
+                    {"productId": "<id>", "brandKey": "<texto da marca como aparece no cupom, minúsculo>", "brandDisplay": "<nome oficial da marca>", "confidence": <0..1>, "reason": "<1 frase>"}
+                    Inclua APENAS produtos onde a marca é clara. Nunca trate palavra genérica de produto (sal, leite, verde) como marca.
+                    """.formatted(lines);
+            var text = aiGateway.complete(AiActivity.BRAND_SUGGESTION, aiGateway.extractorModel(),
+                    systemPrompt(), user, 3000);
+            for (var node : parseArray(text)) {
+                var display = node.path("brandDisplay").asText("");
+                if (display.isBlank() || node.path("productId").asText("").isBlank()) continue;
+                created += saveFinding(runId, AiFindingType.MISSING_BRAND, AiActivity.BRAND_SUGGESTION,
+                        "Marca: \"" + node.path("brandKey").asText("") + "\" → " + display,
+                        node.path("reason").asText(null), node, node.path("confidence").asDouble(0));
+            }
+            if (products.size() < BATCH_SIZE) break;
         }
         return created;
     }
 
-    private int sweepSuspectCategories(UUID runId) {
-        var products = productRepository.findTop40ByCategoryOrderByCreatedAtDesc(ProductCategory.OTHER);
-        if (products.isEmpty()) return 0;
-        var lines = products.stream()
-                .map(product -> "- id=" + product.getId() + " \"" + product.getNormalizedName() + "\"")
-                .collect(Collectors.joining("\n"));
-        var user = """
-                Produtos atualmente na categoria OTHER (não classificados):
-                %s
-
-                Proponha a categoria correta. Responda SOMENTE um array JSON:
-                {"productId": "<id>", "category": "<uma de: %s>", "confidence": <0..1>, "reason": "<1 frase>"}
-                Pule os que realmente não dá para classificar.
-                """.formatted(lines, categoryList());
-        var text = aiGateway.complete(AiActivity.CATEGORY_REVIEW, aiGateway.extractorModel(),
-                systemPrompt(), user, 3000);
+    private int sweepSuspectCategories(UUID runId, int maxPages) {
         var created = 0;
-        for (var node : parseArray(text)) {
-            var category = parseCategory(node.path("category").asText(""));
-            if (category == null || category == ProductCategory.OTHER) continue;
-            created += saveFinding(runId, AiFindingType.SUSPECT_CATEGORY, AiActivity.CATEGORY_REVIEW,
-                    "Categoria: produto " + shortId(node.path("productId").asText("")) + " → " + category,
-                    node.path("reason").asText(null), node, node.path("confidence").asDouble(0));
+        for (var page = 0; page < maxPages; page++) {
+            var products = productRepository.findByCategoryOrderByCreatedAtDesc(ProductCategory.OTHER, PageRequest.of(page, BATCH_SIZE));
+            if (products.isEmpty()) break;
+            var lines = products.stream()
+                    .map(product -> "- id=" + product.getId() + " \"" + product.getNormalizedName() + "\"")
+                    .collect(Collectors.joining("\n"));
+            var user = """
+                    Produtos atualmente na categoria OTHER (não classificados):
+                    %s
+
+                    Proponha a categoria correta. Responda SOMENTE um array JSON:
+                    {"productId": "<id>", "category": "<uma de: %s>", "confidence": <0..1>, "reason": "<1 frase>"}
+                    Pule os que realmente não dá para classificar.
+                    """.formatted(lines, categoryList());
+            var text = aiGateway.complete(AiActivity.CATEGORY_REVIEW, aiGateway.extractorModel(),
+                    systemPrompt(), user, 3000);
+            for (var node : parseArray(text)) {
+                var category = parseCategory(node.path("category").asText(""));
+                if (category == null || category == ProductCategory.OTHER) continue;
+                created += saveFinding(runId, AiFindingType.SUSPECT_CATEGORY, AiActivity.CATEGORY_REVIEW,
+                        "Categoria: produto " + shortId(node.path("productId").asText("")) + " → " + category,
+                        node.path("reason").asText(null), node, node.path("confidence").asDouble(0));
+            }
+            if (products.size() < BATCH_SIZE) break;
         }
         return created;
     }
@@ -288,29 +319,32 @@ public class AiSweepService {
         return created;
     }
 
-    private int sweepFriendlyNames(UUID runId) {
-        var products = productRepository.findTop40ByGenericNameIsNullOrderByCreatedAtDesc();
-        if (products.isEmpty()) return 0;
-        var lines = products.stream()
-                .map(product -> "- id=" + product.getId() + " \"" + product.getNormalizedName() + "\"")
-                .collect(Collectors.joining("\n"));
-        var user = """
-                Produtos SEM nome genérico amigável (só o texto cru do cupom):
-                %s
-
-                Proponha um nome limpo e curto em português (ex.: "Arroz Branco", "Detergente"), SEM marca e SEM tamanho.
-                Responda SOMENTE um array JSON:
-                {"productId": "<id>", "genericName": "<nome amigável>", "confidence": <0..1>}
-                Pule os ininteligíveis.
-                """.formatted(lines);
-        var text = aiGateway.complete(AiActivity.FRIENDLY_NAMES, aiGateway.extractorModel(),
-                systemPrompt(), user, 3000);
+    private int sweepFriendlyNames(UUID runId, int maxPages) {
         var created = 0;
-        for (var node : parseArray(text)) {
-            if (node.path("genericName").asText("").isBlank()) continue;
-            created += saveFinding(runId, AiFindingType.FRIENDLY_NAME, AiActivity.FRIENDLY_NAMES,
-                    "Nome: produto " + shortId(node.path("productId").asText("")) + " → \"" + node.path("genericName").asText("") + "\"",
-                    null, node, node.path("confidence").asDouble(0));
+        for (var page = 0; page < maxPages; page++) {
+            var products = productRepository.findByGenericNameIsNullOrderByCreatedAtDesc(PageRequest.of(page, BATCH_SIZE));
+            if (products.isEmpty()) break;
+            var lines = products.stream()
+                    .map(product -> "- id=" + product.getId() + " \"" + product.getNormalizedName() + "\"")
+                    .collect(Collectors.joining("\n"));
+            var user = """
+                    Produtos SEM nome genérico amigável (só o texto cru do cupom):
+                    %s
+
+                    Proponha um nome limpo e curto em português (ex.: "Arroz Branco", "Detergente"), SEM marca e SEM tamanho.
+                    Responda SOMENTE um array JSON:
+                    {"productId": "<id>", "genericName": "<nome amigável>", "confidence": <0..1>}
+                    Pule os ininteligíveis.
+                    """.formatted(lines);
+            var text = aiGateway.complete(AiActivity.FRIENDLY_NAMES, aiGateway.extractorModel(),
+                    systemPrompt(), user, 3000);
+            for (var node : parseArray(text)) {
+                if (node.path("genericName").asText("").isBlank()) continue;
+                created += saveFinding(runId, AiFindingType.FRIENDLY_NAME, AiActivity.FRIENDLY_NAMES,
+                        "Nome: produto " + shortId(node.path("productId").asText("")) + " → \"" + node.path("genericName").asText("") + "\"",
+                        null, node, node.path("confidence").asDouble(0));
+            }
+            if (products.size() < BATCH_SIZE) break;
         }
         return created;
     }

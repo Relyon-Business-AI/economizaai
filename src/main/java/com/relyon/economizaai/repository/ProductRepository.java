@@ -18,8 +18,15 @@ import java.util.UUID;
 
 public interface ProductRepository extends JpaRepository<Product, UUID> {
 
-    // AI sweep inputs: bounded samples of products the deterministic layers left wanting.
+    // AI sweep inputs: bounded samples (normal sweep) — kept for tests/compat.
     List<Product> findTop40ByBrandIsNullOrderByCreatedAtDesc();
+    List<Product> findTop40ByGenericNameIsNullOrderByCreatedAtDesc();
+    List<Product> findTop40ByCategoryOrderByCreatedAtDesc(ProductCategory category);
+
+    // Paginado: usado pelo modo full-sweep (percorre toda a fila).
+    List<Product> findByBrandIsNullOrderByCreatedAtDesc(Pageable pageable);
+    List<Product> findByGenericNameIsNullOrderByCreatedAtDesc(Pageable pageable);
+    List<Product> findByCategoryOrderByCreatedAtDesc(ProductCategory category, Pageable pageable);
 
     // "Fila aguardando IA" counters (status panel): what the next sweep will cover.
     long countByBrandIsNull();
@@ -27,10 +34,6 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     long countByGenericNameIsNull();
 
     long countByCategory(ProductCategory category);
-
-    List<Product> findTop40ByGenericNameIsNullOrderByCreatedAtDesc();
-
-    List<Product> findTop40ByCategoryOrderByCreatedAtDesc(ProductCategory category);
 
     /**
      * Products the strong (free) layers left wanting: unmatched/weak category
