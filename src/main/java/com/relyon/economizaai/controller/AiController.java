@@ -1,5 +1,6 @@
 package com.relyon.economizaai.controller;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.relyon.economizaai.model.AiFinding;
 import com.relyon.economizaai.model.AiSweepRun;
@@ -105,8 +106,9 @@ public class AiController {
     }
 
     @PostMapping("/findings/{id}/approve")
-    public ResponseEntity<AiFinding> approve(@PathVariable UUID id) {
-        return ResponseEntity.ok(aiFindingService.approve(id));
+    public ResponseEntity<AiFinding> approve(@PathVariable UUID id,
+            @RequestBody(required = false) JsonNode overrides) {
+        return ResponseEntity.ok(aiFindingService.approve(id, overrides));
     }
 
     @PostMapping("/findings/{id}/reject")

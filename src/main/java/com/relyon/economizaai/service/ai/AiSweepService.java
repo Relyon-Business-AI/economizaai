@@ -2,6 +2,7 @@ package com.relyon.economizaai.service.ai;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.relyon.economizaai.model.AiFinding;
 import com.relyon.economizaai.model.AiSweepRun;
 import com.relyon.economizaai.model.enums.AiActivity;
@@ -28,6 +29,7 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -181,6 +183,8 @@ public class AiSweepService {
         for (var page = 0; page < maxPages; page++) {
             var products = productRepository.findByBrandIsNullOrderByCreatedAtDesc(PageRequest.of(page, BATCH_SIZE));
             if (products.isEmpty()) break;
+            var productIdToName = products.stream().collect(
+                    Collectors.toMap(product -> product.getId().toString(), product -> product.getNormalizedName()));
             var lines = products.stream()
                     .map(product -> "- id=" + product.getId() + " \"" + product.getNormalizedName() + "\"")
                     .collect(Collectors.joining("\n"));
@@ -195,11 +199,14 @@ public class AiSweepService {
             var text = aiGateway.complete(AiActivity.BRAND_SUGGESTION, aiGateway.extractorModel(),
                     systemPrompt(), user, 3000);
             for (var node : parseArray(text)) {
+                var productId = node.path("productId").asText("");
                 var display = node.path("brandDisplay").asText("");
-                if (display.isBlank() || node.path("productId").asText("").isBlank()) continue;
+                if (display.isBlank() || productId.isBlank()) continue;
+                var normalizedName = productIdToName.get(productId);
+                var enriched = enrichedPayload(node, Map.of("normalizedName", normalizedName != null ? normalizedName : productId));
                 created += saveFinding(runId, AiFindingType.MISSING_BRAND, AiActivity.BRAND_SUGGESTION,
                         "Marca: \"" + node.path("brandKey").asText("") + "\" → " + display,
-                        node.path("reason").asText(null), node, node.path("confidence").asDouble(0));
+                        node.path("reason").asText(null), enriched, node.path("confidence").asDouble(0));
             }
             if (products.size() < BATCH_SIZE) break;
         }
@@ -211,6 +218,8 @@ public class AiSweepService {
         for (var page = 0; page < maxPages; page++) {
             var products = productRepository.findByCategoryOrderByCreatedAtDesc(ProductCategory.OTHER, PageRequest.of(page, BATCH_SIZE));
             if (products.isEmpty()) break;
+            var productIdToName = products.stream().collect(
+                    Collectors.toMap(product -> product.getId().toString(), product -> product.getNormalizedName()));
             var lines = products.stream()
                     .map(product -> "- id=" + product.getId() + " \"" + product.getNormalizedName() + "\"")
                     .collect(Collectors.joining("\n"));
@@ -227,9 +236,14 @@ public class AiSweepService {
             for (var node : parseArray(text)) {
                 var category = parseCategory(node.path("category").asText(""));
                 if (category == null || category == ProductCategory.OTHER) continue;
+                var productId = node.path("productId").asText("");
+                var normalizedName = productIdToName.getOrDefault(productId, productId);
+                var enriched = enrichedPayload(node, Map.of(
+                        "normalizedName", normalizedName,
+                        "currentCategory", "OTHER"));
                 created += saveFinding(runId, AiFindingType.SUSPECT_CATEGORY, AiActivity.CATEGORY_REVIEW,
-                        "Categoria: produto " + shortId(node.path("productId").asText("")) + " → " + category,
-                        node.path("reason").asText(null), node, node.path("confidence").asDouble(0));
+                        "Categoria: \"" + normalizedName + "\" → " + category,
+                        node.path("reason").asText(null), enriched, node.path("confidence").asDouble(0));
             }
             if (products.size() < BATCH_SIZE) break;
         }
@@ -239,6 +253,9 @@ public class AiSweepService {
     private int sweepDuplicates(UUID runId) {
         var groups = adminProductService.listDuplicateGroups();
         if (groups.isEmpty()) return 0;
+        var idToName = groups.stream()
+                .flatMap(group -> group.products().stream())
+                .collect(Collectors.toMap(product -> product.id().toString(), product -> product.normalizedName(), (a, b) -> a));
         var lines = new StringBuilder();
         for (var group : groups) {
             lines.append("Grupo ").append(group.genericName()).append(" / ").append(group.brand()).append(":\n");
@@ -258,9 +275,14 @@ public class AiSweepService {
         var created = 0;
         for (var node : parseArray(text)) {
             if (!node.path("sameProduct").asBoolean(false)) continue;
+            var survivorId = node.path("survivorId").asText("");
+            var absorbedId = node.path("absorbedId").asText("");
+            var survivorName = idToName.getOrDefault(survivorId, shortId(survivorId));
+            var absorbedName = idToName.getOrDefault(absorbedId, shortId(absorbedId));
+            var enriched = enrichedPayload(node, Map.of("survivorName", survivorName, "absorbedName", absorbedName));
             created += saveFinding(runId, AiFindingType.DUPLICATE, AiActivity.DUPLICATE_JUDGE,
-                    "Fundir: " + shortId(node.path("absorbedId").asText("")) + " → " + shortId(node.path("survivorId").asText("")),
-                    node.path("reason").asText(null), node, node.path("confidence").asDouble(0));
+                    "Fundir: \"" + absorbedName + "\" → \"" + survivorName + "\"",
+                    node.path("reason").asText(null), enriched, node.path("confidence").asDouble(0));
         }
         return created;
     }
@@ -324,6 +346,8 @@ public class AiSweepService {
         for (var page = 0; page < maxPages; page++) {
             var products = productRepository.findByGenericNameIsNullOrderByCreatedAtDesc(PageRequest.of(page, BATCH_SIZE));
             if (products.isEmpty()) break;
+            var productIdToName = products.stream().collect(
+                    Collectors.toMap(product -> product.getId().toString(), product -> product.getNormalizedName()));
             var lines = products.stream()
                     .map(product -> "- id=" + product.getId() + " \"" + product.getNormalizedName() + "\"")
                     .collect(Collectors.joining("\n"));
@@ -339,10 +363,14 @@ public class AiSweepService {
             var text = aiGateway.complete(AiActivity.FRIENDLY_NAMES, aiGateway.extractorModel(),
                     systemPrompt(), user, 3000);
             for (var node : parseArray(text)) {
-                if (node.path("genericName").asText("").isBlank()) continue;
+                var genericName = node.path("genericName").asText("");
+                if (genericName.isBlank()) continue;
+                var productId = node.path("productId").asText("");
+                var normalizedName = productIdToName.getOrDefault(productId, productId);
+                var enriched = enrichedPayload(node, Map.of("normalizedName", normalizedName));
                 created += saveFinding(runId, AiFindingType.FRIENDLY_NAME, AiActivity.FRIENDLY_NAMES,
-                        "Nome: produto " + shortId(node.path("productId").asText("")) + " → \"" + node.path("genericName").asText("") + "\"",
-                        null, node, node.path("confidence").asDouble(0));
+                        "Nome: \"" + normalizedName + "\" → \"" + genericName + "\"",
+                        null, enriched, node.path("confidence").asDouble(0));
             }
             if (products.size() < BATCH_SIZE) break;
         }
@@ -449,5 +477,15 @@ public class AiSweepService {
 
     private static String shortId(String id) {
         return id.length() > 8 ? id.substring(0, 8) : id;
+    }
+
+    private ObjectNode enrichedPayload(JsonNode base, Map<String, String> extra) {
+        var node = objectMapper.createObjectNode();
+        base.fields().forEachRemaining(entry -> node.set(entry.getKey(), entry.getValue()));
+        extra.forEach((key, value) -> {
+            if (value != null) node.put(key, value);
+            else node.putNull(key);
+        });
+        return node;
     }
 }

@@ -43,6 +43,11 @@ public class AiFindingService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    @Transactional
+    public AiFinding approve(UUID id) {
+        return approve(id, null);
+    }
+
     @Transactional(readOnly = true)
     public Page<AiFinding> list(AiFindingStatus status, AiFindingType type, int page, int size) {
         var pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 100));
@@ -51,9 +56,21 @@ public class AiFindingService {
                 : findingRepository.findByStatusAndTypeOrderByCreatedAtDesc(status, type, pageable);
     }
 
+    /**
+     * Approves with optional field overrides: the caller may edit any payload
+     * fields (e.g. correct the suggested genericName or category) before the
+     * proposal is applied. Null overrides → use stored payload as-is.
+     */
     @Transactional
-    public AiFinding approve(UUID id) {
+    public AiFinding approve(UUID id, JsonNode overrides) {
         var finding = loadPending(id);
+        if (overrides != null && !overrides.isEmpty()) {
+            var base = parsePayload(finding.getPayload());
+            var merged = objectMapper.createObjectNode();
+            base.fields().forEachRemaining(entry -> merged.set(entry.getKey(), entry.getValue()));
+            overrides.fields().forEachRemaining(entry -> merged.set(entry.getKey(), entry.getValue()));
+            finding.setPayload(merged.toString());
+        }
         apply(finding);
         finding.setStatus(AiFindingStatus.APPROVED);
         finding.setAppliedAt(LocalDateTime.now());
