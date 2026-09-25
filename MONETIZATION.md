@@ -5,6 +5,46 @@ afterthought. The entities, anonymization boundaries, and feature gates listed
 below should appear in the data model from the first migration that touches
 their area, even if the actual paywall is unenforced for months.
 
+---
+
+## Revisão 2026-09-25 — pós-IA na categorização + "cobrar só com volume"
+
+> Esta estratégia foi escrita **antes** de a IA entrar na categorização e assume cobrança só
+> **depois de ter volume/PMF**. Duas mudanças de contexto reposicionam os muros abaixo — o resto
+> segue válido.
+
+**1. Categorização por IA entrou (aposentou o Naive Bayes).**
+- **Categorização virou núcleo GRÁTIS** — todo usuário ganha categorias melhores. Isso reforça o
+  **magic moment** (hook grátis) *e* a **qualidade do painel** (dado melhor categorizado = índice
+  B2B mais valioso). Não é paywall; é base.
+- **Novo COGS por scan:** a chamada de LLM (extração/categorização) tem custo por nota — soma ao
+  fetch/captcha. Precisa ser **metrada pelo `PaidApiGuardService`** (mesmo kill-switch/orçamento
+  diário), senão o custo de IA escala silencioso com o uso grátis.
+- **Alavanca premium NOVA:** o pago não é *categorizar*, é **IA aprofundada** — insights em
+  linguagem natural, análise de cesta, previsões melhores. Categoria básica grátis; "a IA trabalha
+  pra você" no PRO.
+
+**2. Só cobrar depois de ter volume — muros ficam DORMENTES no warm-up.**
+- Ainda não há provedor de pagamento (⬜), então limitar o free agora só estrangula crescimento
+  **sem receita nenhuma**. **Ação:** manter os limites free **largos/ilimitados via config**
+  (`economizaai.subscription.free.*`) até um gatilho de volume/PMF. Os números do matrix abaixo são
+  o **alvo pós-PMF**, não a config de hoje.
+- **Os dois muros mais arriscados de ligar cedo:** (a) **volume de scan** — é o ativo que constrói
+  o painel; estrangular = matar o moat; (b) **push/notificações** — é o loop de retenção; gatear =
+  churn mais rápido = painel menor. Manter generosos até o PMF (free deveria ter **ao menos push
+  dos mercados/itens fixados**).
+- **Ordem certa:** grátis e colante primeiro → medir retenção e notas/semana → só então ligar
+  muros, um a um, com **A/B**. Isso depende do **feature-flag service (⬜)** — é **pré-requisito**
+  da própria metodologia "cada gate é um A/B", não um nice-to-have.
+
+**3. Acesso antecipado como valor contínuo do PRO (novo perk):** PRO recebe features primeiro
+(exclusividade temporária), entregue pela mesma infra de flags. Reduz churn sem capar o free.
+
+O resto (freemium por profundidade, B2B como moat, affiliate, sponsored, family/business
+usage-based) **segue válido** — a IA reforça o B2B e não remove nenhum modelo.
+
+---
+
 ## Revenue Models (by priority)
 
 ### 1. Freemium — economizai Pro (R$9.90/month, R$89/year)
@@ -44,6 +84,9 @@ This maps what's *already shipped* to where it should live. Anything in the
 | Personal inflation index | — | ✅ | Compute basket-level IPCA equivalent. Real-time, beats government numbers. Differentiator. |
 | Recipe-based shopping | — | ✅ | Input recipes, get optimized list per recipe. Future feature. |
 | CSV/Parquet export of own data | — | ✅ | Power users + tax / accounting use case. |
+| Categorização por IA | ✅ (núcleo) | ✅ | Base grátis desde que aposentou o Naive Bayes — melhora hook + qualidade do painel. Custo LLM/scan → metrar no guard. Não é paywall. |
+| Insights de IA (linguagem natural, análise de cesta) | — | ✅ | A alavanca premium da IA: categorizar é grátis, "a IA analisa pra você" é PRO. Future. |
+| Acesso antecipado a novas features | — | ✅ | PRO recebe primeiro (exclusividade temporária via feature flags). Valor contínuo → reduz churn. |
 
 **The PRO pitch in one sentence:** "Pay R$9.90/mo to get unlimited history,
 push alerts when your usual stuff is on sale, automatic shopping lists optimized
@@ -92,6 +135,11 @@ across markets, and basket-level inflation tracking."
 5. ⬜ **Manual preference override** (PRO only) — depends on Phase 2.6 completion.
 
 Each gate is an A/B; measure conversion before leaning harder on the next.
+
+> **Postura de warm-up (revisão 2026-09-25):** os gates estão CONSTRUÍDOS mas devem ficar
+> **dormentes** (limites free largos via `economizaai.subscription.free.*`) até haver volume/PMF —
+> cobrar antes só estrangula crescimento sem receita (não há provedor de pagamento ainda). Ligar
+> um a um, com A/B, depois do PMF — o que exige o **feature-flag service (⬜)**.
 
 ---
 
@@ -252,6 +300,7 @@ receipt *costs us* in paid external calls. Treated as a Day-1 concern too.
 | RS / PR / SP / MS / SC scrape | ~R$0.03–0.09 | captcha solve only (1–3 solves) |
 | **CE** | **~R$0.24** | Infosimples paid API on **every** note (no native scraper yet) |
 | Any-state fallback | +R$0.24 | primary scraper failed → Infosimples rescue |
+| **Categorização/extração por IA (LLM, por nota)** | **~R$0.03–0.08** | Agora padrão (aposentou o Naive Bayes); prompt cacheado. **Meter no `PaidApiGuardService`** — escala com o volume grátis. |
 | OFF product enrichment | R$0.00 | Open Food Facts is free/open data |
 
 The danger case: a heavy CE user scanning 40 notes/month costs ~R$9.60 — nearly
