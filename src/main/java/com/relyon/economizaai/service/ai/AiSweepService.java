@@ -210,7 +210,7 @@ public class AiSweepService {
                 var enriched = objectMapper.createObjectNode();
                 node.fields().forEachRemaining(entry -> enriched.set(entry.getKey(), entry.getValue()));
                 enriched.put("normalizedName", normalizedName != null ? normalizedName : productId);
-                if (matchedProduct != null && matchedProduct.getCategory() != null) enriched.put("productCategory", matchedProduct.getCategory().name());
+                enriched.put("productCategory", matchedProduct != null && matchedProduct.getCategory() != null ? matchedProduct.getCategory().name() : "");
                 created += saveFinding(runId, AiFindingType.MISSING_BRAND, AiActivity.BRAND_SUGGESTION,
                         "Marca: \"" + node.path("brandKey").asText("") + "\" → " + display,
                         node.path("reason").asText(null), enriched, node.path("confidence").asDouble(0));
@@ -252,7 +252,7 @@ public class AiSweepService {
                 node.fields().forEachRemaining(entry -> enriched.set(entry.getKey(), entry.getValue()));
                 enriched.put("normalizedName", normalizedName);
                 enriched.put("currentCategory", "OTHER");
-                if (matchedProduct != null && matchedProduct.getBrand() != null) enriched.put("productBrand", matchedProduct.getBrand());
+                enriched.put("productBrand", matchedProduct != null && matchedProduct.getBrand() != null ? matchedProduct.getBrand() : "");
                 created += saveFinding(runId, AiFindingType.SUSPECT_CATEGORY, AiActivity.CATEGORY_REVIEW,
                         "Categoria: \"" + normalizedName + "\" → " + category,
                         node.path("reason").asText(null), enriched, node.path("confidence").asDouble(0));
@@ -385,8 +385,8 @@ public class AiSweepService {
                 var enriched = objectMapper.createObjectNode();
                 node.fields().forEachRemaining(entry -> enriched.set(entry.getKey(), entry.getValue()));
                 enriched.put("normalizedName", normalizedName);
-                if (matchedProduct != null && matchedProduct.getBrand() != null) enriched.put("productBrand", matchedProduct.getBrand());
-                if (matchedProduct != null && matchedProduct.getCategory() != null) enriched.put("productCategory", matchedProduct.getCategory().name());
+                enriched.put("productBrand", matchedProduct != null && matchedProduct.getBrand() != null ? matchedProduct.getBrand() : "");
+                enriched.put("productCategory", matchedProduct != null && matchedProduct.getCategory() != null ? matchedProduct.getCategory().name() : "");
                 created += saveFinding(runId, AiFindingType.FRIENDLY_NAME, AiActivity.FRIENDLY_NAMES,
                         "Nome: \"" + normalizedName + "\" → \"" + genericName + "\"",
                         null, enriched, node.path("confidence").asDouble(0));
