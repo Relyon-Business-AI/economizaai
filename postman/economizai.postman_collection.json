@@ -1856,6 +1856,31 @@
 					"response": []
 				},
 				{
+					"name": "Supported states (scan/import coverage)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/sefaz/supported-states",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"sefaz",
+								"supported-states"
+							]
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "Get receipt by id",
 					"request": {
 						"method": "GET",
