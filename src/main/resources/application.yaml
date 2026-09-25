@@ -91,6 +91,16 @@ economizaai:
     # ambiguity guard (candidates disagreeing on category → no match). OFF by
     # default until measured on real data.
     dictionary-fuzzy-enabled: ${ECONOMIZAAI_CATEGORIZATION_DICTIONARY_FUZZY_ENABLED:false}
+  ai:
+    # AI assist layer (sweep + curadoria + painel de gastos). Fail-closed: with no
+    # API key everything AI returns a clean "disabled" message and costs nothing.
+    api-key: ${ANTHROPIC_API_KEY:}
+    # Cheap high-volume extraction vs stronger judgment calls (duplicates/consensus/anomalies).
+    extractor-model: ${ECONOMIZAAI_AI_EXTRACTOR_MODEL:claude-haiku-4-5}
+    curator-model: ${ECONOMIZAAI_AI_CURATOR_MODEL:claude-sonnet-4-6}
+    # Hard daily cap on AI calls — a bug can never run up a surprise bill.
+    daily-request-cap: ${ECONOMIZAAI_AI_DAILY_REQUEST_CAP:300}
+    timeout-seconds: ${ECONOMIZAAI_AI_TIMEOUT_SECONDS:60}
   ingestion:
     # Async-ingest safety net: PROCESSING receipts older than this are failed by
     # the sweeper so the FE never polls forever. Must exceed the worst-case

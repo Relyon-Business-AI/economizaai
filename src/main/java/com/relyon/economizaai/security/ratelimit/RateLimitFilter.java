@@ -132,7 +132,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
             "/api/v1/receipts/prefetched", "/api/v1/receipts/items-photo");
 
     private static final Set<String> IMPORT_PATHS = Set.of(
-            "/api/v1/receipts/import", "/api/v1/receipts/import/nfg-csv");
+            "/api/v1/receipts/import", "/api/v1/receipts/import/nfg-csv",
+            "/api/v1/receipts/import/extract-chaves");
 
     private static final Set<String> EXPORT_PATHS = Set.of(
             "/api/v1/receipts/export", "/api/v1/users/me/export");

@@ -61,4 +61,29 @@ public class AsyncConfig {
     public Executor receiptIngestExecutorSync() {
         return new SyncTaskExecutor();
     }
+
+    public static final String AI_SWEEP_EXECUTOR = "aiSweepExecutor";
+
+    /**
+     * Single-threaded lane for the admin AI sweep — one sweep at a time by
+     * design (it's an occasional, human-triggered batch), isolated from the
+     * ingestion pool so a long sweep never delays receipt processing.
+     */
+    @Bean(AI_SWEEP_EXECUTOR)
+    @Profile("!test")
+    public Executor aiSweepExecutor() {
+        var executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(2);
+        executor.setThreadNamePrefix("ai-sweep-");
+        executor.initialize();
+        return executor;
+    }
+
+    @Bean(AI_SWEEP_EXECUTOR)
+    @Profile("test")
+    public Executor aiSweepExecutorSync() {
+        return new SyncTaskExecutor();
+    }
 }

@@ -16,6 +16,26 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-24 — Camada de IA (Fase 1): varredura com revisão humana + painel de gastos
+
+IA como **professora com humano no circuito** — nada é aplicado sem aprovação do admin:
+
+- **`POST /categorizer/ai/sweep`** (ADMIN, assíncrono): a IA varre órfãos, produtos sem
+  marca/OTHER/sem nome, duplicatas, graduações de consenso, mercados e anomalias de nota,
+  e grava **achados** (`ai_findings`, migração V84) com título, proposta e confiança.
+- **Revisão:** `GET /categorizer/ai/findings` + `approve`/`reject`/`approve-bulk`. Aprovar
+  APLICA via os serviços já existentes (regra curada → import + re-canonização; marca →
+  registro + produto; categoria → patch; duplicata → merge; nome amigável → produto).
+  Consenso/mercado/anomalia são informativos (aprovar = reconhecer).
+- **Painel de gastos:** `GET /categorizer/ai/usage?days=30` — chamadas, tokens e custo
+  estimado (USD), **por atividade** e por dia. Toda chamada de IA é logada (`ai_usage_log`).
+- **Toggle IA na tela Testar:** `GET /categorizer/ai/classify?description=` — o LLM
+  classifica uma descrição (compare com o motor determinístico).
+- **Guardas:** fail-closed sem `ANTHROPIC_API_KEY`; cap diário de chamadas
+  (`ECONOMIZAAI_AI_DAILY_REQUEST_CAP`, default 300); modelos configuráveis
+  (extrator=Haiku 4.5, curador=Sonnet 4.6); 1 varredura por vez; chamadas de IA nunca
+  dentro de transação de banco.
+
 ## 2026-09-24 — Robustez do motor (batch 2): sweeper noturno + auditoria de consenso
 
 - **Sweeper noturno de órfãos:** a manutenção agora re-tenta os itens **não-casados** contra as

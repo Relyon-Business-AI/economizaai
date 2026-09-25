@@ -21,6 +21,10 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
 
     Optional<Receipt> findByChaveAcesso(String chaveAcesso);
 
+    // AI merchant-review input: the distinct merchants we've seen (bounded sample).
+    @Query("SELECT DISTINCT r.cnpjEmitente, r.marketName FROM Receipt r WHERE r.marketName IS NOT NULL")
+    List<Object[]> findDistinctMerchants(Pageable pageable);
+
     // Sweeper: PROCESSING rows older than the ingest timeout are stuck (commit-time
     // failure, app restart mid-ingest, or pool rejection) and must be failed.
     List<Receipt> findByStatusAndCreatedAtBefore(ReceiptStatus status, LocalDateTime cutoff);

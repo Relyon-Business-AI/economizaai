@@ -51,6 +51,13 @@
 			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
 
+		<!-- Claude API (extração/curadoria assistida por IA no categorizador) -->
+		<dependency>
+			<groupId>com.anthropic</groupId>
+			<artifactId>anthropic-java</artifactId>
+			<version>2.34.0</version>
+		</dependency>
+
 		<!-- Database -->
 		<dependency>
 			<groupId>org.postgresql</groupId>
@@ -175,6 +182,13 @@
 			<artifactId>poi-ooxml</artifactId>
 			<!-- 5.4.1+: CVE-2025-31672 (duplicate ZIP entries in OOXML parsing) -->
 			<version>5.4.1</version>
+		</dependency>
+		<!-- Text extraction from PDF exports on the chave import (same version tess4j
+		     already pulls transitively — pinned because we now use it directly) -->
+		<dependency>
+			<groupId>org.apache.pdfbox</groupId>
+			<artifactId>pdfbox</artifactId>
+			<version>3.0.3</version>
 		</dependency>
 
 		<!-- PDF purchase report (tables + charts) -->
