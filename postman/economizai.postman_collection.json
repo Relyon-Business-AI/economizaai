@@ -3430,17 +3430,21 @@
 					"response": []
 				},
 				{
-					"name": "Classifier status",
+					"name": "AI categorizer status [ADMIN]",
 					"request": {
 						"method": "GET",
 						"header": [
 							{
 								"key": "Accept-Language",
 								"value": "pt"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
 							}
 						],
 						"url": {
-							"raw": "{{baseUrl}}/api/v1/categorizer/status",
+							"raw": "{{baseUrl}}/api/v1/categorizer/ai/status",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -3448,9 +3452,11 @@
 								"api",
 								"v1",
 								"categorizer",
+								"ai",
 								"status"
 							]
-						}
+						},
+						"description": "[ADMIN] Returns AI layer status: enabled, pendingQueue (itensNaoCasados, produtosSemMarca, produtosSemNome, produtosOutros), lastSweep. Replaces the retired /categorizer/status endpoint."
 					},
 					"response": []
 				},
@@ -7471,17 +7477,21 @@
 					]
 				},
 				{
-					"name": "22. Categorizer status",
+					"name": "22. Categorizer AI status (admin)",
 					"request": {
 						"method": "GET",
 						"header": [
 							{
 								"key": "Accept-Language",
 								"value": "pt"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
 							}
 						],
 						"url": {
-							"raw": "{{baseUrl}}/api/v1/categorizer/status",
+							"raw": "{{baseUrl}}/api/v1/categorizer/ai/status",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -7489,6 +7499,7 @@
 								"api",
 								"v1",
 								"categorizer",
+								"ai",
 								"status"
 							]
 						}
@@ -7500,11 +7511,12 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
+									"var adminToken = pm.collectionVariables.get('adminToken');",
+									"if (!adminToken) { console.log('adminToken not set — skipping step 22'); return; }",
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"var d = pm.response.json();",
-									"pm.test('Has ready + threshold fields', function () {",
-									"    pm.expect(d).to.have.property('ready');",
-									"    pm.expect(d).to.have.property('confidenceThreshold');",
+									"pm.test('Has enabled field', function () {",
+									"    pm.expect(d).to.have.property('enabled');",
 									"});"
 								]
 							}
