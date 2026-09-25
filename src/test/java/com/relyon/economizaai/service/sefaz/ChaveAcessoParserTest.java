@@ -40,6 +40,20 @@ class ChaveAcessoParserTest {
     }
 
     @Test
+    void extractModel_readsFiscalModelFromPositions21To22() {
+        // NFC-e (65) — the "65" sits at chave positions 21-22 (0-indexed 20-21).
+        assertEquals("65", ChaveAcessoParser.extractModel(CHAVE_RS));
+        // NF-e (55) — same layout, model swapped. Used by RsChaveReconsultService to route the parser.
+        assertEquals("55", ChaveAcessoParser.extractModel("43250912345678000190550010000123451123456780"));
+    }
+
+    @Test
+    void extractModel_throwsOnMalformedChave() {
+        assertThrows(InvalidQrPayloadException.class, () -> ChaveAcessoParser.extractModel("123"));
+        assertThrows(InvalidQrPayloadException.class, () -> ChaveAcessoParser.extractModel(null));
+    }
+
+    @Test
     void extractChave_acceptsPipeSeparatedPayload() {
         var payload = CHAVE_RS + "|2|1|1|abcdef0123456789";
         assertEquals(CHAVE_RS, ChaveAcessoParser.extractChave(payload));

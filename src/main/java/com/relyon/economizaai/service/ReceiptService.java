@@ -13,6 +13,7 @@ import com.relyon.economizaai.dto.response.ReceiptSummaryResponse;
 import com.relyon.economizaai.exception.ManualChaveUnsupportedException;
 import com.relyon.economizaai.exception.PaywallException;
 import com.relyon.economizaai.exception.ReceiptAlreadyIngestedException;
+import com.relyon.economizaai.exception.UnsupportedStateException;
 import com.relyon.economizaai.exception.ReceiptItemNotFoundException;
 import com.relyon.economizaai.exception.InvalidItemPriceException;
 import com.relyon.economizaai.exception.ReceiptNotEditableException;
@@ -50,6 +51,7 @@ import com.relyon.economizaai.service.sefaz.ParsedReceiptItem;
 import com.relyon.economizaai.service.sefaz.PrefetchPolicy;
 import com.relyon.economizaai.service.sefaz.ReceiptIngestionService;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
+import com.relyon.economizaai.service.sefaz.StateCoverageService;
 import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import lombok.RequiredArgsConstructor;
@@ -84,6 +86,7 @@ public class ReceiptService {
     private final InsightsRepository insightsRepository;
     private final ReceiptItemRepository receiptItemRepository;
     private final SefazIngestionService sefazIngestionService;
+    private final StateCoverageService stateCoverageService;
     private final PrefetchPolicy prefetchPolicy;
     private final CanonicalizationService canonicalizationService;
     private final PriceIndexService priceIndexService;
@@ -191,6 +194,13 @@ public class ReceiptService {
         // would only surface a raw FAILED_PARSE key after polling.
         var uf = ChaveAcessoParser.extractUf(chave);
         sefazIngestionService.requireSupported(uf);
+        // Experimental (unproven) states are attempted so we CAPTURE their nota data — but only up
+        // to the evidence cap. Once we have enough failing samples to build support later, stop
+        // spending (captcha/fetch) on that state and fail fast with the honest "not supported yet".
+        if (sefazIngestionService.isExperimental(uf) && stateCoverageService.hasEnoughEvidence(uf)) {
+            log.info("submit rejected reason=experimental_evidence_cap uf={}", uf);
+            throw new UnsupportedStateException(uf.name());
+        }
         // A manually-typed bare chave has no QR signature. Portals that require it
         // can only be served by the paid by-chave fallback — and RS not even by that
         // (gov.br wall). Reject up front instead of failing (or spending) async.

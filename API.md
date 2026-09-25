@@ -330,6 +330,14 @@ spaces/hyphens on submit, and validates length = 44 digits before sending. A
 grouped input (11 × 4-digit fields with auto-advance) reduces transcription
 errors but is optional — the backend handles both.
 
+**Which states work** — `GET /api/v1/sefaz/supported-states` →
+`{ "verified": ["RS","SC","SP","PR","MG","GO","MS"], "experimental": [...] }`.
+`verified` = dedicated adapter + real fixture (safe to advertise); `experimental` =
+best-effort catch-all we attempt-and-capture but haven't proven (beta). Use it to show
+"Funciona em: …" on the scan screen. A scan from an unverified state is still attempted
+(so we capture the nota to add support) up to an evidence cap per UF; past that it returns
+a localized 400 (`receipt.state.unsupported`). Authenticated, not admin.
+
 ### Submit a receipt the app fetched on-device (blocked states, e.g. PE)
 
 ```

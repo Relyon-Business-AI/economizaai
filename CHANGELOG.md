@@ -16,6 +16,21 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-25 — estados suportados: endpoint + rollout com teto de evidência
+
+Preparo pra abrir o scan/import pra mais estados sem prometer o que ainda não funciona.
+
+- **Novo endpoint:** `GET /api/v1/sefaz/supported-states` (autenticado, não-admin) →
+  `{ "verified": ["RS","SC","SP","PR","MG","GO","MS"], "experimental": [...] }`. `verified` são
+  os estados com adapter dedicado + fixture real (pode anunciar); `experimental` é o catch-all
+  best-effort (beta). A FE usa pra mostrar "Funciona em: ..." na tela de scan.
+- **Rollout com teto de evidência:** estados experimentais seguem sendo *tentados e capturados*
+  (pra juntar HTML real da nota e virar fixture), mas só até um teto por UF (default 3 falhas
+  terminais). Depois disso o submit falha rápido com a mensagem localizada "estado ainda não
+  suportado" — sem gastar captcha/fetch numa nota que já sabemos que não parseia. Config:
+  `economizaai.ingestion.sefaz.experimental.max-evidence-per-uf`.
+- Corrige a lista de estados na mensagem `receipt.state.unsupported` (estava desatualizada).
+
 ## 2026-09-24 — IA: garantia de crédito esgotado + fila pendente no status
 
 - **`GET /categorizer/ai/status` agora inclui `pendingQueue`**:

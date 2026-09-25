@@ -140,6 +140,13 @@ public class SecurityConfig {
                         // conflict check stops remapping established descriptions.
                         .requestMatchers(HttpMethod.POST, "/api/v1/products").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/products/*").hasRole("ADMIN")
+                        // Bulk import (chave/CSV import + staging + batch confirm/delete) is an
+                        // ADMIN-only operator tool for now — not exposed to end users yet. The FE
+                        // hides it behind the admin menu; gate it on the server too so the API can't
+                        // be called directly by a non-admin. The normal scan (POST /receipts) stays open.
+                        .requestMatchers("/api/v1/receipts/import", "/api/v1/receipts/import/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/v1/receipts/confirm-batch", "/api/v1/receipts/delete-batch").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex
