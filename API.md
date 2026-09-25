@@ -368,8 +368,15 @@ POST /api/v1/receipts/import
 → 202 ReceiptImportResponse
 
 POST /api/v1/receipts/import/nfg-csv   (multipart/form-data, field "file")
-  file = the raw CSV exported from Nota Fiscal Gaúcha (chaves extracted server-side)
+  file = a state-program export — CSV/TXT, Excel (xlsx/xls) or PDF; format is
+  sniffed by content, chaves extracted server-side (route name kept for compat)
 → 202 ReceiptImportResponse
+
+POST /api/v1/receipts/import/extract-chaves   (multipart/form-data, field "file")
+  same formats, but EXTRACTION ONLY — nothing is imported; use it to preview
+  the detected chaves and then confirm via POST /receipts/import
+→ 200 { "chaves": ["4326...", ...] }
+→ 400 receipt.import.file.unreadable when the file can't be parsed
 ```
 
 `ReceiptImportResponse`:

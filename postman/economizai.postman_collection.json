@@ -1688,6 +1688,40 @@
 								"extract-chaves"
 							]
 						},
+						"description": "Server-side chave extraction from a state-program export upload (CSV/TXT, Excel or PDF; format sniffed by content). Returns {chaves:[...]} and imports NOTHING — the client shows the count and the user confirms via POST /receipts/import. 400 receipt.import.file.unreadable when the file can't be parsed."
+					}
+				},
+				{
+					"name": "Extract chaves from export file (CSV/Excel/PDF — no import)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/receipts/import/extract-chaves",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"receipts",
+								"import",
+								"extract-chaves"
+							]
+						},
 						"description": "Server-side chave extraction from a state-program export upload (CSV/TXT, Excel or PDF; format sniffed by content). Returns {chaves:[...]} and imports NOTHING - the client shows the count and the user confirms via POST /receipts/import. 400 receipt.import.file.unreadable when the file can't be parsed."
 					}
 				},

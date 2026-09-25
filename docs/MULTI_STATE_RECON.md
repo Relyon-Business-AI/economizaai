@@ -17,6 +17,49 @@ path-to-coverage looks like.
 > per-portal risk notes below** — those are still the useful guide for the next state;
 > just treat the "verified count" as historical.
 
+## Recon 2026-09-24 — consulta por CHAVE PURA (import em massa / onboarding)
+
+Superfície diferente do QR: as páginas de **consulta-por-chave** de cada UF,
+testadas com **chaves reais** (fixtures + banco dev/prod), de IP residencial.
+Objetivo: saber onde "CSV do programa estadual → chaves → itens" funciona
+(contexto em `ONBOARDING_IMPORT.md` §3). Captchas resolvidos com o CapSolver
+do projeto (~R$0,004/solve reCAPTCHA v2).
+
+| UF | Chave pura → itens? | Como / bloqueio |
+|---|---|---|
+| **RS** | ✅ grátis | SAT-WEB legado, já em prod |
+| **GO** | ✅ grátis | `nfeweb…danfeNFCe?p=<chave>\|3\|1` (QR v3 é não-assinado; v2 exige hash do QR). `GoiasNfcePortalAdapter` já cobre |
+| **MS** | ✅ validado c/ captcha | form JSF `dfe.ms.gov.br/nfce/consulta` (campo `formListar:j_idt26`, botão `formListar:enter`) + reCAPTCHA v2 resolvido → DANFE completo com itens |
+| **PE** | ✅ validado c/ captcha | form `nfce-web/consultarNFCe` + reCAPTCHA v2 → **XML completo** (itens, EAN quando há). MAS: SEFAZ-PE bloqueia IP de datacenter — só de IP residencial/on-device |
+| **SP** | 🟡 não validado | `ConsultaPublica.aspx` (WebForms) + captcha de **imagem** (`RandomImageHandler.ashx`) — o handler devolve HTML pra cliente não-browser (WAF); precisa headless/on-device. Fallback: Infosimples (R$0,24) |
+| **RJ** | 🔴 p/ NFC-e 65 | `consultaDFe…consultaChaveAcesso.faces` é público e SEM captcha, mas só acha **NF-e 55** — 3 chaves 65 frescas (set/2026) todas "NF-e inexistente". NFC-e 65 → `consultaQRCode.faces` com reCAPTCHA invisível (sitekey via JS) — investigação dedicada |
+| **PR** | 🔴 | `fazenda.pr.gov.br/nfce/qrcode?p=<chave>` → "Erro interno" (4 chaves frescas, com/sem sufixo de versão) — exige QR assinado. Fallback: Infosimples |
+| **SC** | 🔴 | Turnstile do `SecurityVerify` RESOLVIDO com CapSolver (sessão anônima validada — **não exige login**), mas `consulta?p=<chave pura>` → BusinessError "inconsistência nos dados": exige o payload **assinado** do QR, como PR |
+
+**Onda 2 (mesmo dia)** — as 13 UFs restantes com chave no banco (seeds do dev
+são reais mas antigas, 2018–2026; prod fresco só BA/MG):
+
+| UF | Chave pura → itens? | Como / bloqueio |
+|---|---|---|
+| **AM** | ✅ **GRÁTIS, sem captcha** | `sistemas.sefaz.am.gov.br/nfceweb/consultarNFCe.jsp?p=<chave>` → DANFE completo com itens. Validado com nota de **2023** (nem expurgo tem). Novo "RS" |
+| **BA** | ✅ validado c/ captcha imagem | `NFCEC_consulta_chave_acesso.aspx` (campos `txt_chave_acesso`, `txt_cod_antirobo`, botão `btn_consulta_completa`; imagem em `../AntiRobo/NFCEC_anti_robo.aspx`) → DANFE completo. Usar **http://** (cadeia TLS quebrada) |
+| **PI** | 🟡 provável | `webas.sefaz.pi.gov.br/nfce/<chave>` renderiza form público de consulta por chave com captcha de imagem — mesmo padrão do BA, falta validar o POST |
+| **AC** | 🟡 | aceita chave pura mas redireciona a `dfe.sefaz.ac.gov.br/resolve-captcha?fluxo=nfce&chave=…` (SPA "Portal DFe") — investigação dedicada |
+| **DF** | 🟡 precisa chave fresca | DECVisualizador processa chave pura mas "chave não encontrada" p/ nota 2021 (expurgo?) — sem chave DF fresca no banco |
+| **ES** | 🟡 precisa chave fresca | página ASP.NET com captcha-token; nota 2021 não renderizou — inconclusivo |
+| **MT** | 🔴 | "Inconsistência de Informações no QRCode" — exige assinatura |
+| **CE** | 🔴 (QR) | "Inconsistência de Informações no QR Code" — exige assinatura (browser, chave 2026). Infosimples já cobre CE |
+| **RN** | 🔴 (QR) | idem CE |
+| **MG** | ⚪ portal fora do ar | `portalsped` inacessível hoje (reset no script E error page no Chrome) — retestar; temos chave fresca (set/2026) |
+| **MA** | ⚪ | host `nfce.sefaz.ma.gov.br` não resolve mais (DNS) — URL mudou, redescobrir |
+| **RO** | ⚪ | `consultanfce/consulta.jsp` → HTTP 500 — retestar/URL alternativa |
+
+Consequência (consolidada): import por chaves pode expandir **RS+GO+AM de
+graça**, **MS+BA (+PE on-device, +PI provável) por centavos de captcha**; SP
+fica no Infosimples até resolver o WAF; PR/SC/CE/RN/MT exigem QR assinado.
+Chaves de teste: `SELECT` por `substring(chave_acesso,1,2)` em `receipts`
+(dev tem seeds de 21 UFs; prod fresco = RS/SC/PR/RJ/SP/MS/GO/BA/MG).
+
 ## TL;DR
 
 - **End-to-end ingestion verified for 1 UF**: **RS**, via the SVRS shared

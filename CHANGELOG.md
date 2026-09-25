@@ -16,6 +16,18 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-24 — Import de notas aceita Excel e PDF (além de CSV) + preview de chaves
+
+- **`POST /receipts/import/nfg-csv` agora é agnóstico de formato**: o `file` pode
+  ser CSV/TXT, **Excel (xlsx/xls)** ou **PDF** — os botões clássicos de export dos
+  portais estaduais (Copiar/CSV/Excel/PDF). O formato é detectado pelo conteúdo
+  (magic bytes), não pelo nome. Rota mantida por compatibilidade.
+- **Novo `POST /receipts/import/extract-chaves`** (multipart `file`, mesmos
+  formatos): só extrai e devolve `{ "chaves": [...] }`, **sem importar nada** —
+  serve pro FE preencher o textarea e o usuário revisar a contagem antes de
+  confirmar via `POST /receipts/import`. Arquivo ilegível → 400
+  `receipt.import.file.unreadable` (localizado).
+
 ## 2026-09-24 — Camada de IA (Fase 1): varredura com revisão humana + painel de gastos
 
 IA como **professora com humano no circuito** — nada é aplicado sem aprovação do admin:
