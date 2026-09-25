@@ -101,6 +101,9 @@ economizaai:
     # Hard daily cap on AI calls — a bug can never run up a surprise bill.
     daily-request-cap: ${ECONOMIZAAI_AI_DAILY_REQUEST_CAP:300}
     timeout-seconds: ${ECONOMIZAAI_AI_TIMEOUT_SECONDS:60}
+    # Prepaid credit budget in USD — shown in the spend panel as "saldo estimado".
+    # Set to 0 to hide the balance indicator.
+    budget-usd: ${ECONOMIZAAI_AI_BUDGET_USD:0}
   ingestion:
     # Async-ingest safety net: PROCESSING receipts older than this are failed by
     # the sweeper so the FE never polls forever. Must exceed the worst-case
