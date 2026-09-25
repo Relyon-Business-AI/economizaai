@@ -15,6 +15,10 @@ public interface StateIngestionAttemptRepository extends JpaRepository<StateInge
 
     boolean existsByUfAndOutcome(UnidadeFederativa uf, StateIngestionOutcome outcome);
 
+    /** How many terminal captures (evidence samples) we already have for a UF — drives the
+     * experimental spend cap: once we have enough, stop attempting/paying for that state. */
+    long countByUfAndOutcome(UnidadeFederativa uf, StateIngestionOutcome outcome);
+
     boolean existsByUfAndAdminNotifiedTrueAndCreatedAtGreaterThanEqual(UnidadeFederativa uf, OffsetDateTime since);
 
     long countByUfAndStrategyAndOutcomeAndCreatedAtGreaterThanEqual(

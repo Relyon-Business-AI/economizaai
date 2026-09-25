@@ -13,6 +13,7 @@ import com.relyon.economizaai.exception.ReceiptItemNotFoundException;
 import com.relyon.economizaai.exception.ReceiptNotEditableException;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
 import com.relyon.economizaai.exception.UnsupportedMerchantException;
+import com.relyon.economizaai.exception.UnsupportedStateException;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.dto.response.ReceiptItemResponse;
 import com.relyon.economizaai.model.Product;
@@ -41,6 +42,7 @@ import com.relyon.economizaai.service.sefaz.ParsedReceiptItem;
 import com.relyon.economizaai.service.sefaz.PrefetchPolicy;
 import com.relyon.economizaai.service.sefaz.ReceiptIngestionService;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
+import com.relyon.economizaai.service.sefaz.StateCoverageService;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -85,6 +87,7 @@ class ReceiptServiceTest {
     @Mock private ReceiptRepository receiptRepository;
     @Mock private ReceiptItemRepository receiptItemRepository;
     @Mock private SefazIngestionService sefazIngestionService;
+    @Mock private StateCoverageService stateCoverageService;
     @Mock private ReceiptIngestionService receiptIngestionService;
     @Mock private CanonicalizationService canonicalizationService;
     @Mock private PriceIndexService priceIndexService;
@@ -311,6 +314,21 @@ class ReceiptServiceTest {
         when(merchantSupportGate.isKnownBlockedCnpj("12345678000190")).thenReturn(true);
 
         assertThrows(UnsupportedMerchantException.class,
+                () -> receiptService.submit(user, new SubmitReceiptRequest(QR_RS)));
+
+        verify(receiptRepository, never()).save(any());
+        verify(receiptIngestionService, never()).ingest(any(), any());
+    }
+
+    @Test
+    void submit_experimentalStateAtEvidenceCap_rejectsWithoutStoringOrSpending() {
+        var user = buildUser();
+        // Experimental UF that already gave us enough failing samples: stop attempting/spending,
+        // fail fast (option B cap). Under the cap it would proceed (covered by the happy-path tests).
+        when(sefazIngestionService.isExperimental(any())).thenReturn(true);
+        when(stateCoverageService.hasEnoughEvidence(any())).thenReturn(true);
+
+        assertThrows(UnsupportedStateException.class,
                 () -> receiptService.submit(user, new SubmitReceiptRequest(QR_RS)));
 
         verify(receiptRepository, never()).save(any());

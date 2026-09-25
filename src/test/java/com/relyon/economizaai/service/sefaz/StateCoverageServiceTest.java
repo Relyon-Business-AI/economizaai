@@ -41,8 +41,22 @@ class StateCoverageServiceTest {
 
     @org.junit.jupiter.api.BeforeEach
     void setUp() {
-        // min-failures=5, window-hours=6 (mirrors the config defaults)
-        service = new StateCoverageService(repository, contactService, 5, 6);
+        // min-failures=5, window-hours=6, max-evidence-per-uf=3 (mirrors the config defaults)
+        service = new StateCoverageService(repository, contactService, 5, 6, 3);
+    }
+
+    @Test
+    void hasEnoughEvidence_trueOnceExhaustedCountReachesCap() {
+        when(repository.countByUfAndOutcome(UnidadeFederativa.BA, StateIngestionOutcome.EXHAUSTED))
+                .thenReturn(3L);
+        assertTrue(service.hasEnoughEvidence(UnidadeFederativa.BA));
+    }
+
+    @Test
+    void hasEnoughEvidence_falseWhileBelowCap() {
+        when(repository.countByUfAndOutcome(UnidadeFederativa.BA, StateIngestionOutcome.EXHAUSTED))
+                .thenReturn(2L);
+        assertFalse(service.hasEnoughEvidence(UnidadeFederativa.BA));
     }
 
     @Test

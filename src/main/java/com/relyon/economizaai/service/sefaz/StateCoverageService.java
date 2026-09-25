@@ -54,16 +54,30 @@ public class StateCoverageService {
     private final ContactService contactService;
     private final int regressionMinFailures;
     private final long regressionWindowHours;
+    private final int maxEvidencePerUf;
 
     public StateCoverageService(
             StateIngestionAttemptRepository repository,
             ContactService contactService,
             @Value("${economizaai.ingestion.sefaz.regression.min-failures:5}") int regressionMinFailures,
-            @Value("${economizaai.ingestion.sefaz.regression.window-hours:6}") long regressionWindowHours) {
+            @Value("${economizaai.ingestion.sefaz.regression.window-hours:6}") long regressionWindowHours,
+            @Value("${economizaai.ingestion.sefaz.experimental.max-evidence-per-uf:3}") int maxEvidencePerUf) {
         this.repository = repository;
         this.contactService = contactService;
         this.regressionMinFailures = regressionMinFailures;
         this.regressionWindowHours = regressionWindowHours;
+        this.maxEvidencePerUf = maxEvidencePerUf;
+    }
+
+    /**
+     * Spend cap for the experimental rollout (option B): we keep attempting — and paying for
+     * captcha/fetch on — an unproven UF only until we've captured enough terminal-failure samples
+     * (EXHAUSTED rows, each carrying the nota's evidence). Past that we have what we need to build
+     * support later, so further scans of that UF fail fast without spending. Threshold configurable
+     * via {@code economizaai.ingestion.sefaz.experimental.max-evidence-per-uf} (default 3).
+     */
+    public boolean hasEnoughEvidence(UnidadeFederativa uf) {
+        return repository.countByUfAndOutcome(uf, StateIngestionOutcome.EXHAUSTED) >= maxEvidencePerUf;
     }
 
     /** Records a successful layer; the first-ever success for the UF alerts the admin. */

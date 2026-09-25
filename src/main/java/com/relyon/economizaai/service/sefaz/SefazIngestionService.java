@@ -91,6 +91,12 @@ public class SefazIngestionService {
         return adapter instanceof GenericQrPortalAdapter;
     }
 
+    /** True when the UF is served ONLY by the experimental fallback (unproven — no dedicated adapter). */
+    public boolean isExperimental(UnidadeFederativa uf) {
+        var adapter = adapters.get(uf);
+        return adapter != null && isExperimental(adapter);
+    }
+
     public ParsedReceipt ingest(String qrPayload) {
         var fetched = fetch(qrPayload);
         return parse(fetched);
