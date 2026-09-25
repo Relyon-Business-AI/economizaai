@@ -22,6 +22,7 @@ import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.ReceiptExportService;
+import com.relyon.economizaai.service.ImportFileTextExtractor;
 import com.relyon.economizaai.service.ReceiptImportService;
 import com.relyon.economizaai.service.ReceiptService;
 import com.relyon.economizaai.service.llm.PhotoReceiptExtractionService;
@@ -80,6 +81,9 @@ class ReceiptControllerTest {
 
     @MockitoBean
     private ReceiptImportService receiptImportService;
+
+    @MockitoBean
+    private ImportFileTextExtractor importFileTextExtractor;
 
     @MockitoBean
     private ReceiptExportService receiptExportService;

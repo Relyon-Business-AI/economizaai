@@ -156,8 +156,13 @@ e-commerce). Isso reverte o antigo "RS rende zero itens".
   CNPJ na chave) — só ingerir supermercado/farmácia + e-commerce; descartar
   restaurante/posto/etc. (segmentos não suportados).
 - **Deduplicação:** cruzar com receipts já existentes por chave antes de reingerir.
-- **Fora do RS:** ainda depende do portal da UF (SP/PR/CE via Infosimples pago;
-  demais conforme cobertura). Revisitar SAE-SP (2026) para SP.
+- **Fora do RS (recon 2026-09-24, ver `MULTI_STATE_RECON.md`):** **GO e AM
+  funcionam hoje de graça** (chave pura, sem captcha; AM validado até com nota
+  de 2023); **MS, PE e BA validados** com captcha resolvido (~R$0,004–0,005/nota;
+  PE só de IP residencial/on-device; BA via http); **PI provável** (mesmo padrão
+  do BA); SP travado num WAF (captcha de imagem só p/ browser real) →
+  Infosimples; PR/SC/CE/RN/MT/RJ-65 exigem QR assinado; MG/MA/RO portais
+  indisponíveis no teste — retestar.
 - **Implementação:** ver as duas rotas no achado validado (adapter server-side
   Tier-2 vs on-device PE-style).
 

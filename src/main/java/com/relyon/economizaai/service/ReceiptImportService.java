@@ -118,7 +118,7 @@ public class ReceiptImportService {
         return requeued;
     }
 
-    static List<String> extractChaves(String csv) {
+    public static List<String> extractChaves(String csv) {
         var found = new LinkedHashSet<String>();
         if (csv != null) {
             var twoBlock = TWO_BLOCK_CHAVE.matcher(csv);

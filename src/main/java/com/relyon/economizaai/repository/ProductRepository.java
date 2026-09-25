@@ -18,6 +18,20 @@ import java.util.UUID;
 
 public interface ProductRepository extends JpaRepository<Product, UUID> {
 
+    // AI sweep inputs: bounded samples of products the deterministic layers left wanting.
+    List<Product> findTop40ByBrandIsNullOrderByCreatedAtDesc();
+
+    // "Fila aguardando IA" counters (status panel): what the next sweep will cover.
+    long countByBrandIsNull();
+
+    long countByGenericNameIsNull();
+
+    long countByCategory(ProductCategory category);
+
+    List<Product> findTop40ByGenericNameIsNullOrderByCreatedAtDesc();
+
+    List<Product> findTop40ByCategoryOrderByCreatedAtDesc(ProductCategory category);
+
     /**
      * Products the strong (free) layers left wanting: unmatched/weak category
      * source, category OTHER, or missing brand/pack — the LLM teacher queue.

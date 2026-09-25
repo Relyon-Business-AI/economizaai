@@ -170,6 +170,15 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
     """)
     List<ReceiptItem> findUnmatchedConfirmed(Pageable pageable);
 
+    // AI anomaly scan input: latest confirmed items with their receipt (market name/prices).
+    @Query("""
+        SELECT ri FROM ReceiptItem ri
+        JOIN FETCH ri.receipt r
+        WHERE r.status = 'CONFIRMED' AND ri.excluded = false
+        ORDER BY ri.createdAt DESC
+    """)
+    List<ReceiptItem> findRecentConfirmedWithReceipt(Pageable pageable);
+
     List<ReceiptItem> findAllByProductIdOrderByReceiptIssuedAtAsc(UUID productId);
 
     /** Same intent as the method above but fetches receipt + household up front,

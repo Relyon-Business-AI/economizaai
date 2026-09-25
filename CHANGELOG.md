@@ -16,6 +16,53 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-24 — IA: garantia de crédito esgotado + fila pendente no status
+
+- **`GET /categorizer/ai/status` agora inclui `pendingQueue`**:
+  `{ itensNaoCasados, produtosSemMarca, produtosSemNome, produtosOutros }` —
+  tudo que o pipeline determinístico deixou pra IA. Nada se perde: itens pulados
+  por uma varredura que falhou (ex.: crédito esgotado) continuam contados aqui
+  até uma varredura cobri-los.
+- **Crédito da API de IA esgotado agora tem tratamento explícito**: a varredura
+  aborta os módulos restantes (não queima tempo sem crédito), os achados já
+  salvos permanecem, a run termina `FAILED` com mensagem clara em PT
+  ("Créditos da API de IA esgotados — recarregue…") visível em
+  `lastSweep.error`. O scan do usuário NUNCA é afetado — o resultado
+  determinístico fica valendo e o item permanece na fila para a próxima
+  varredura após a recarga.
+
+## 2026-09-24 — Import de notas aceita Excel e PDF (além de CSV) + preview de chaves
+
+- **`POST /receipts/import/nfg-csv` agora é agnóstico de formato**: o `file` pode
+  ser CSV/TXT, **Excel (xlsx/xls)** ou **PDF** — os botões clássicos de export dos
+  portais estaduais (Copiar/CSV/Excel/PDF). O formato é detectado pelo conteúdo
+  (magic bytes), não pelo nome. Rota mantida por compatibilidade.
+- **Novo `POST /receipts/import/extract-chaves`** (multipart `file`, mesmos
+  formatos): só extrai e devolve `{ "chaves": [...] }`, **sem importar nada** —
+  serve pro FE preencher o textarea e o usuário revisar a contagem antes de
+  confirmar via `POST /receipts/import`. Arquivo ilegível → 400
+  `receipt.import.file.unreadable` (localizado).
+
+## 2026-09-24 — Camada de IA (Fase 1): varredura com revisão humana + painel de gastos
+
+IA como **professora com humano no circuito** — nada é aplicado sem aprovação do admin:
+
+- **`POST /categorizer/ai/sweep`** (ADMIN, assíncrono): a IA varre órfãos, produtos sem
+  marca/OTHER/sem nome, duplicatas, graduações de consenso, mercados e anomalias de nota,
+  e grava **achados** (`ai_findings`, migração V84) com título, proposta e confiança.
+- **Revisão:** `GET /categorizer/ai/findings` + `approve`/`reject`/`approve-bulk`. Aprovar
+  APLICA via os serviços já existentes (regra curada → import + re-canonização; marca →
+  registro + produto; categoria → patch; duplicata → merge; nome amigável → produto).
+  Consenso/mercado/anomalia são informativos (aprovar = reconhecer).
+- **Painel de gastos:** `GET /categorizer/ai/usage?days=30` — chamadas, tokens e custo
+  estimado (USD), **por atividade** e por dia. Toda chamada de IA é logada (`ai_usage_log`).
+- **Toggle IA na tela Testar:** `GET /categorizer/ai/classify?description=` — o LLM
+  classifica uma descrição (compare com o motor determinístico).
+- **Guardas:** fail-closed sem `ANTHROPIC_API_KEY`; cap diário de chamadas
+  (`ECONOMIZAAI_AI_DAILY_REQUEST_CAP`, default 300); modelos configuráveis
+  (extrator=Haiku 4.5, curador=Sonnet 4.6); 1 varredura por vez; chamadas de IA nunca
+  dentro de transação de banco.
+
 ## 2026-09-24 — Robustez do motor (batch 2): sweeper noturno + auditoria de consenso
 
 - **Sweeper noturno de órfãos:** a manutenção agora re-tenta os itens **não-casados** contra as

@@ -101,6 +101,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
             new RateLimitPolicy("import", 5, Duration.ofHours(1));
 
     /**
+     * 30 extraction previews per hour per user. Extraction is side-effect-free
+     * local parsing (no SEFAZ fetch), and the client sends ONE request per
+     * Excel/PDF picked — sharing the 5/h import budget would let a handful of
+     * files starve the actual import. The expensive work stays on IMPORT_POLICY.
+     */
+    private static final RateLimitPolicy EXTRACT_POLICY =
+            new RateLimitPolicy("import-extract", 30, Duration.ofHours(1));
+
+    /**
      * 3 verification-email resends per hour per user — without a cadence an
      * attacker who registered a victim's address could loop resend into an
      * email bomb (and burn our SMTP reputation).
@@ -134,6 +143,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final Set<String> IMPORT_PATHS = Set.of(
             "/api/v1/receipts/import", "/api/v1/receipts/import/nfg-csv");
 
+    private static final String EXTRACT_PATH = "/api/v1/receipts/import/extract-chaves";
+
     private static final Set<String> EXPORT_PATHS = Set.of(
             "/api/v1/receipts/export", "/api/v1/users/me/export");
 
@@ -155,6 +166,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
             new Rule(
                     IMPORT_POLICY,
                     req -> "POST".equals(req.getMethod()) && IMPORT_PATHS.contains(req.getRequestURI()),
+                    KeyStrategy.USER_OR_IP),
+            new Rule(
+                    EXTRACT_POLICY,
+                    req -> "POST".equals(req.getMethod()) && EXTRACT_PATH.equals(req.getRequestURI()),
                     KeyStrategy.USER_OR_IP),
             new Rule(
                     RESEND_POLICY,

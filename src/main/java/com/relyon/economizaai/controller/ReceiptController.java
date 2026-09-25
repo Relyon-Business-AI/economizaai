@@ -14,6 +14,7 @@ import com.relyon.economizaai.dto.response.ChaveExtractionResponse;
 import com.relyon.economizaai.exception.InvalidExportFormatException;
 import com.relyon.economizaai.dto.response.BatchResultResponse;
 import com.relyon.economizaai.dto.response.ConfirmReceiptResponse;
+import com.relyon.economizaai.dto.response.ExtractedChavesResponse;
 import com.relyon.economizaai.dto.response.ReceiptImportResponse;
 import com.relyon.economizaai.dto.response.ReceiptResponse;
 import com.relyon.economizaai.dto.response.ReceiptSummaryResponse;
@@ -21,6 +22,7 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.MarketScope;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
+import com.relyon.economizaai.service.ImportFileTextExtractor;
 import com.relyon.economizaai.service.ReceiptExportService;
 import com.relyon.economizaai.service.ReceiptImportService;
 import com.relyon.economizaai.service.ReceiptService;
@@ -55,7 +57,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -70,6 +71,7 @@ public class ReceiptController {
 
     private final ReceiptService receiptService;
     private final ReceiptImportService receiptImportService;
+    private final ImportFileTextExtractor importFileTextExtractor;
     private final ReceiptExportService receiptExportService;
     private final ReportEmailService reportEmailService;
     private final PhotoReceiptExtractionService photoReceiptExtractionService;
@@ -124,14 +126,30 @@ public class ReceiptController {
     }
 
     /**
-     * As {@link #importChaves} but takes the raw Nota Fiscal Gaúcha CSV export
-     * directly (multipart {@code file}); the chaves are extracted from it server-side.
+     * As {@link #importChaves} but takes a state-program export file directly
+     * (multipart {@code file}); the chaves are extracted from it server-side.
+     * Accepts CSV/TXT, Excel and PDF — format detected by content, not name
+     * (route kept as {@code nfg-csv} for app compatibility).
      */
     @PostMapping("/import/nfg-csv")
     public ResponseEntity<ReceiptImportResponse> importFromNfgCsv(@AuthenticationPrincipal User user,
                                                                   @RequestParam("file") MultipartFile file) throws IOException {
-        var csv = new String(file.getBytes(), StandardCharsets.UTF_8);
-        return ResponseEntity.accepted().body(receiptImportService.importFromNfgCsv(user, csv));
+        var text = importFileTextExtractor.extractText(file.getBytes());
+        return ResponseEntity.accepted().body(receiptImportService.importFromNfgCsv(user, text));
+    }
+
+    /**
+     * Extraction-only preview for the import screen: finds the chaves in an
+     * uploaded export file (CSV/TXT, Excel or PDF) WITHOUT importing anything,
+     * so the client can show what was detected before the user confirms.
+     */
+    @PostMapping("/import/extract-chaves")
+    public ResponseEntity<ExtractedChavesResponse> extractChavesFromFile(@RequestParam("file") MultipartFile file)
+            throws IOException {
+        var text = importFileTextExtractor.extractText(file.getBytes());
+        var chaves = ReceiptImportService.extractChaves(text);
+        log.info("import.extract_chaves fileBytes={} found={}", file.getSize(), chaves.size());
+        return ResponseEntity.ok(new ExtractedChavesResponse(chaves));
     }
 
     /**
