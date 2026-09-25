@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service;
 
+import com.relyon.economizaai.exception.PaywallException;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.User;
@@ -21,6 +22,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -30,6 +33,8 @@ import static org.mockito.Mockito.when;
 class ReceiptImportServiceTest {
 
     private static final String RS_CHAVE = "43260593015006005182651200000076311055456577"; // RS, model 65, valid DV
+    private static final String RS_CHAVE_55 = "43260915436940001177550010445204901195759810"; // RS, model 55, valid DV
+    private static final String SP_CHAVE = "35260593015006005182651200000076311055456575"; // SP (35), valid DV, NOT reconsultable
 
     @Mock private ReceiptRepository receiptRepository;
     @Mock private ReceiptService receiptService;
@@ -77,6 +82,33 @@ class ReceiptImportServiceTest {
         assertThat(response.queued()).isEqualTo(1);
         assertThat(response.rejected()).isZero();
         verify(receiptRepository).delete(stale);
+    }
+
+    @Test
+    void rejectsSupportedFormatButUnsupportedState() {
+        // Valid 44-digit chave with a good check digit, but UF=SP → not reconsultable (RS-only import).
+        // Fail-fast at classify, before any queue/spend.
+        var response = service.importChaves(user, List.of(SP_CHAVE));
+
+        assertThat(response.queued()).isZero();
+        assertThat(response.rejected()).isEqualTo(1);
+        assertThat(response.rejectedChaves().get(0).reason()).isEqualTo("receipt.import.unsupported");
+        verify(receiptRepository, never()).save(any(Receipt.class));
+    }
+
+    @Test
+    void stopsQueuingOnceMonthlyCapReached() {
+        when(merchantSupportGate.isKnownBlockedCnpj(any())).thenReturn(false);
+        when(receiptRepository.findByHouseholdIdAndChaveAcesso(eq(householdId), any())).thenReturn(Optional.empty());
+        doThrow(new PaywallException("receipt.cap.monthly")).when(receiptService).enforceMonthlyReceiptCap(user);
+
+        var response = service.importChaves(user, List.of(RS_CHAVE, RS_CHAVE_55));
+
+        assertThat(response.queued()).isZero();
+        assertThat(response.rejected()).isEqualTo(2);
+        assertThat(response.rejectedChaves()).allSatisfy(rejected ->
+                assertThat(rejected.reason()).isEqualTo("receipt.import.cap_reached"));
+        verify(receiptRepository, never()).save(any(Receipt.class));
     }
 
     @Test
