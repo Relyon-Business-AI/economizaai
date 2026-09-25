@@ -23,6 +23,14 @@ public interface AiUsageLogRepository extends JpaRepository<AiUsageLog, UUID> {
     """)
     List<Object[]> summarizeByActivity(@Param("since") LocalDateTime since);
 
+    @Query("""
+        SELECT u.activity, count(u), coalesce(sum(u.inputTokens),0), coalesce(sum(u.outputTokens),0), coalesce(sum(u.costUsd),0)
+        FROM AiUsageLog u
+        GROUP BY u.activity
+        ORDER BY sum(u.costUsd) DESC
+    """)
+    List<Object[]> summarizeByActivityAllTime();
+
     /** day, calls, costUsd — daily trend line. */
     @Query(value = """
         SELECT to_char(created_at, 'YYYY-MM-DD') AS day, count(*), coalesce(sum(cost_usd),0)
@@ -31,4 +39,14 @@ public interface AiUsageLogRepository extends JpaRepository<AiUsageLog, UUID> {
         GROUP BY 1 ORDER BY 1
     """, nativeQuery = true)
     List<Object[]> summarizeByDay(@Param("since") LocalDateTime since);
+
+    @Query(value = """
+        SELECT to_char(created_at, 'YYYY-MM-DD') AS day, count(*), coalesce(sum(cost_usd),0)
+        FROM ai_usage_log
+        GROUP BY 1 ORDER BY 1
+    """, nativeQuery = true)
+    List<Object[]> summarizeByDayAllTime();
+
+    @Query("SELECT coalesce(sum(u.costUsd), 0) FROM AiUsageLog u")
+    java.math.BigDecimal totalCostAllTime();
 }

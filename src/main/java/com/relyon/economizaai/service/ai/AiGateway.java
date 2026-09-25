@@ -50,6 +50,9 @@ public class AiGateway {
     @Value("${economizaai.ai.daily-request-cap:300}")
     private int dailyRequestCap;
 
+    @Value("${economizaai.ai.budget-usd:0}")
+    private double budgetUsd;
+
     public boolean isEnabled() {
         return chatAdapter.isConfigured();
     }
@@ -60,6 +63,10 @@ public class AiGateway {
 
     public String curatorModel() {
         return curatorModel;
+    }
+
+    public double budgetUsd() {
+        return budgetUsd;
     }
 
     /**

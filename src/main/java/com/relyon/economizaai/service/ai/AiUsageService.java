@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -15,11 +16,25 @@ import java.util.List;
 public class AiUsageService {
 
     private final AiUsageLogRepository usageRepository;
+    private final AiGateway aiGateway;
 
+    /**
+     * Usage summary for the given period.
+     * days=0 → all time (no date filter).
+     */
     @Transactional(readOnly = true)
     public UsageSummary summary(int days) {
-        var since = LocalDateTime.now().minusDays(Math.max(1, Math.min(days, 365)));
-        var byActivity = usageRepository.summarizeByActivity(since).stream()
+        List<Object[]> byActivityRows;
+        List<Object[]> byDayRows;
+        if (days == 0) {
+            byActivityRows = usageRepository.summarizeByActivityAllTime();
+            byDayRows = usageRepository.summarizeByDayAllTime();
+        } else {
+            var since = LocalDateTime.now().minusDays(Math.max(1, Math.min(days, 3650)));
+            byActivityRows = usageRepository.summarizeByActivity(since);
+            byDayRows = usageRepository.summarizeByDay(since);
+        }
+        var byActivity = byActivityRows.stream()
                 .map(row -> new ActivityUsage(
                         String.valueOf(row[0]),
                         ((Number) row[1]).longValue(),
@@ -27,7 +42,7 @@ public class AiUsageService {
                         ((Number) row[3]).longValue(),
                         (BigDecimal) row[4]))
                 .toList();
-        var byDay = usageRepository.summarizeByDay(since).stream()
+        var byDay = byDayRows.stream()
                 .map(row -> new DailyUsage(
                         String.valueOf(row[0]),
                         ((Number) row[1]).longValue(),
@@ -38,7 +53,14 @@ public class AiUsageService {
         var totalOutput = byActivity.stream().mapToLong(ActivityUsage::outputTokens).sum();
         var totalCost = byActivity.stream().map(ActivityUsage::costUsd)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        return new UsageSummary(days, totalCalls, totalInput, totalOutput, totalCost, byActivity, byDay);
+        var allTimeCost = usageRepository.totalCostAllTime();
+        var budgetUsd = aiGateway.budgetUsd();
+        var estimatedBalance = budgetUsd > 0
+                ? BigDecimal.valueOf(budgetUsd).subtract(allTimeCost).setScale(4, RoundingMode.HALF_UP)
+                : null;
+        return new UsageSummary(days, totalCalls, totalInput, totalOutput, totalCost,
+                allTimeCost, budgetUsd > 0 ? BigDecimal.valueOf(budgetUsd).setScale(2, RoundingMode.HALF_UP) : null,
+                estimatedBalance, byActivity, byDay);
     }
 
     public record ActivityUsage(String activity, long calls, long inputTokens, long outputTokens, BigDecimal costUsd) {}
@@ -46,5 +68,7 @@ public class AiUsageService {
     public record DailyUsage(String day, long calls, BigDecimal costUsd) {}
 
     public record UsageSummary(int days, long totalCalls, long totalInputTokens, long totalOutputTokens,
-                               BigDecimal totalCostUsd, List<ActivityUsage> byActivity, List<DailyUsage> byDay) {}
+                               BigDecimal totalCostUsd, BigDecimal allTimeCostUsd,
+                               BigDecimal budgetUsd, BigDecimal estimatedBalanceUsd,
+                               List<ActivityUsage> byActivity, List<DailyUsage> byDay) {}
 }
