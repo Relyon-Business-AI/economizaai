@@ -5,7 +5,6 @@ import com.relyon.economizaai.dto.response.CategorizationExplanation;
 import com.relyon.economizaai.dto.response.CategorizationQualitySnapshotResponse;
 import com.relyon.economizaai.dto.response.CuratedEntryResponse;
 import com.relyon.economizaai.dto.response.LearnedEntryResponse;
-import com.relyon.economizaai.dto.response.MlClassificationResponse;
 import com.relyon.economizaai.dto.response.PhraseTokenSimulationResponse;
 import com.relyon.economizaai.model.ConsensusGraduationAudit;
 import com.relyon.economizaai.model.enums.CategorizationQualityTrigger;
@@ -18,7 +17,6 @@ import com.relyon.economizaai.service.extraction.CategorizationDebugService;
 import com.relyon.economizaai.service.extraction.CategorizationQualityService;
 import com.relyon.economizaai.service.extraction.EanCatalogService;
 import com.relyon.economizaai.service.extraction.PhraseTokenSimulationService;
-import com.relyon.economizaai.service.extraction.ml.MlClassifierService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -36,9 +34,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -52,12 +48,11 @@ import java.util.UUID;
 @RequestMapping("/api/v1/categorizer")
 @RequiredArgsConstructor
 @Validated
-@Tag(name = "Categorizer", description = "ML classifier status and pipeline operational endpoints")
+@Tag(name = "Categorizer", description = "Pipeline operational endpoints for the extraction cascade")
 public class CategorizerController {
 
     static final int MAX_IMPORT_BATCH = 5000;
 
-    private final MlClassifierService mlClassifier;
     private final AutoPromotionService autoPromotionService;
     private final CategorizationDebugService categorizationDebugService;
     private final CategorizationBenchmarkService categorizationBenchmarkService;
@@ -111,17 +106,6 @@ public class CategorizerController {
     }
 
     /**
-     * ML-ONLY view (dev): the model's raw prediction for each term, ignoring the
-     * dictionary and the apply gate. Use to inspect/improve the model in isolation.
-     * The full chain (dictionary + ML + final decision) is {@code /classify}.
-     */
-    @GetMapping("/ml/predict")
-    public ResponseEntity<List<MlClassificationResponse>> mlPredict(
-            @RequestParam(required = false, defaultValue = "") List<String> description) {
-        return ResponseEntity.ok(categorizationDebugService.mlPredictAll(description));
-    }
-
-    /**
      * What-if: simulate the dictionary/brand phrase-window size over the real
      * unmatched backlog (coverage) and the golden set (accuracy), for each N in
      * [minTokens, maxTokens]. Read-only — to adopt a window, set the env var
@@ -134,20 +118,6 @@ public class CategorizerController {
             @RequestParam(defaultValue = "2000") int sampleSize) {
         return ResponseEntity.ok(
                 phraseTokenSimulationService.simulate(minTokens, maxTokens, sampleSize));
-    }
-
-    @GetMapping("/status")
-    public ResponseEntity<Map<String, Object>> status() {
-        var body = new LinkedHashMap<String, Object>();
-        body.put("ready", mlClassifier.isReady());
-        body.put("lastTrainedAt", mlClassifier.getLastTrainedAt());
-        body.put("confidenceThreshold", mlClassifier.getConfidenceThreshold());
-        return ResponseEntity.ok(body);
-    }
-
-    @PostMapping("/retrain")
-    public ResponseEntity<MlClassifierService.RetrainOutcome> retrain() {
-        return ResponseEntity.ok(mlClassifier.retrain());
     }
 
     @PostMapping("/auto-promote")

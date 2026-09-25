@@ -6,7 +6,6 @@ import com.relyon.economizaai.model.CategorizationQualitySnapshot;
 import com.relyon.economizaai.model.enums.CategorizationQualityTrigger;
 import com.relyon.economizaai.repository.CategorizationQualitySnapshotRepository;
 import com.relyon.economizaai.repository.ProductRepository;
-import com.relyon.economizaai.service.extraction.ml.MlClassifierService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -32,16 +31,13 @@ public class CategorizationQualityService {
 
     private final CategorizationBenchmarkService benchmarkService;
     private final ProductRepository productRepository;
-    private final MlClassifierService mlClassifier;
     private final CategorizationQualitySnapshotRepository snapshotRepository;
 
-    /** Run the benchmark and record a snapshot (used by the backfill flow). */
     @Transactional
     public CategorizationQualitySnapshotResponse measureAndRecord(CategorizationQualityTrigger trigger) {
         return record(trigger, benchmarkService.run());
     }
 
-    /** Record a snapshot from an already-computed benchmark report (avoids re-running it). */
     @Transactional
     public CategorizationQualitySnapshotResponse record(CategorizationQualityTrigger trigger,
                                                         CategorizationBenchmarkResponse report) {
@@ -61,12 +57,10 @@ public class CategorizationQualityService {
                 .catalogCoveragePct(coveragePct)
                 .brandAccuracyPct(BigDecimal.valueOf(report.brandAccuracyPct()).setScale(2, RoundingMode.HALF_UP))
                 .quantityAccuracyPct(BigDecimal.valueOf(report.quantityAccuracyPct()).setScale(2, RoundingMode.HALF_UP))
-                .mlAccuracyPct(BigDecimal.valueOf(report.mlCategoryAccuracyPct()).setScale(2, RoundingMode.HALF_UP))
-                .mlReady(mlClassifier.isReady())
                 .build();
         var saved = snapshotRepository.save(snapshot);
-        log.info("categorizer.quality.snapshot trigger={} accuracyPct={} coveragePct={} catalog={}/{} mlReady={}",
-                trigger, snapshot.getAccuracyPct(), coveragePct, catalogCategorized, catalogProducts, snapshot.isMlReady());
+        log.info("categorizer.quality.snapshot trigger={} accuracyPct={} coveragePct={} catalog={}/{}",
+                trigger, snapshot.getAccuracyPct(), coveragePct, catalogCategorized, catalogProducts);
         return CategorizationQualitySnapshotResponse.from(saved);
     }
 

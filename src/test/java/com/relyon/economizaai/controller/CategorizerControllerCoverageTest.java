@@ -4,9 +4,7 @@ import com.relyon.economizaai.config.SecurityConfig;
 import com.relyon.economizaai.dto.response.CategorizationBenchmarkResponse;
 import com.relyon.economizaai.dto.response.CategorizationExplanation;
 import com.relyon.economizaai.dto.response.CategorizationExplanation.DictionaryHit;
-import com.relyon.economizaai.dto.response.CategorizationExplanation.MlGuess;
 import com.relyon.economizaai.dto.response.CategorizationQualitySnapshotResponse;
-import com.relyon.economizaai.dto.response.MlClassificationResponse;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.CategorizationSource;
@@ -24,7 +22,6 @@ import com.relyon.economizaai.service.extraction.CategorizerAdminService;
 import com.relyon.economizaai.service.extraction.ConsensusPromotionService;
 import com.relyon.economizaai.service.extraction.EanCatalogService;
 import com.relyon.economizaai.service.extraction.PhraseTokenSimulationService;
-import com.relyon.economizaai.service.extraction.ml.MlClassifierService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -38,6 +35,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -54,7 +52,6 @@ class CategorizerControllerCoverageTest {
 
     @Autowired private MockMvc mockMvc;
 
-    @MockitoBean private MlClassifierService mlClassifier;
     @MockitoBean private AutoPromotionService autoPromotionService;
     @MockitoBean private CategorizationDebugService categorizationDebugService;
     @MockitoBean private CategorizationBenchmarkService categorizationBenchmarkService;
@@ -102,9 +99,9 @@ class CategorizerControllerCoverageTest {
     @Test
     void benchmark_returnsReportAndRecordsSnapshot() throws Exception {
         var report = new CategorizationBenchmarkResponse(
-                10, 8, 80.0, 2, 0, 5, 5, 100.0, 4, 4, 100.0, 10, 7, 70.0,
+                10, 8, 80.0, 2, 0, 5, 5, 100.0, 4, 4, 100.0,
                 List.of(new CategorizationBenchmarkResponse.Failure(
-                        "Leite", "category", "MEAT_DAIRY", "OTHER", "ML")));
+                        "Leite", "category", "MEAT_DAIRY", "OTHER", "DICTIONARY")));
         when(categorizationBenchmarkService.run()).thenReturn(report);
 
         mockMvc.perform(post("/api/v1/categorizer/benchmark")
@@ -123,7 +120,7 @@ class CategorizerControllerCoverageTest {
         var snapshot = new CategorizationQualitySnapshotResponse(
                 LocalDateTime.now(), "BENCHMARK", new BigDecimal("82.50"),
                 10, 8, 100, 90, new BigDecimal("90.00"),
-                new BigDecimal("100.00"), new BigDecimal("100.00"), new BigDecimal("70.00"), true);
+                new BigDecimal("100.00"), new BigDecimal("100.00"));
         when(categorizationQualityService.history(5)).thenReturn(List.of(snapshot));
 
         mockMvc.perform(get("/api/v1/categorizer/quality/history")
@@ -131,8 +128,7 @@ class CategorizerControllerCoverageTest {
                         .with(SecurityMockMvcRequestPostProcessors.user(principal())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].trigger").value("BENCHMARK"))
-                .andExpect(jsonPath("$[0].benchmarkTotal").value(10))
-                .andExpect(jsonPath("$[0].mlReady").value(true));
+                .andExpect(jsonPath("$[0].benchmarkTotal").value(10));
     }
 
     @Test
@@ -152,10 +148,7 @@ class CategorizerControllerCoverageTest {
         var explanation = new CategorizationExplanation(
                 "Leite Integral", ProductCategory.MEAT_DAIRY, "Leite", "Italac",
                 new BigDecimal("1"), "L", CategorizationSource.DICTIONARY,
-                new DictionaryHit("Leite", ProductCategory.MEAT_DAIRY, CategorizationSource.DICTIONARY),
-                new MlGuess("MEAT_DAIRY", 0.92, true),
-                new MlGuess("Leite", 0.88, true),
-                true, true, 0.75);
+                new DictionaryHit("Leite", ProductCategory.MEAT_DAIRY, CategorizationSource.DICTIONARY));
         when(categorizationDebugService.explainAll(anyList())).thenReturn(List.of(explanation));
 
         mockMvc.perform(get("/api/v1/categorizer/classify")
@@ -171,12 +164,10 @@ class CategorizerControllerCoverageTest {
     void classify_multipleDescriptions_arePassedThrough() throws Exception {
         var first = new CategorizationExplanation(
                 "Milho", ProductCategory.GROCERIES, "Milho", null,
-                null, null, CategorizationSource.DICTIONARY,
-                null, null, null, false, false, 0.75);
+                null, null, CategorizationSource.DICTIONARY, null);
         var second = new CategorizationExplanation(
                 "Lays", ProductCategory.GROCERIES, "Batata", "Lays",
-                null, null, CategorizationSource.ML,
-                null, null, null, true, true, 0.75);
+                null, null, CategorizationSource.DICTIONARY, null);
         when(categorizationDebugService.explainAll(anyList())).thenReturn(List.of(first, second));
 
         mockMvc.perform(get("/api/v1/categorizer/classify")
@@ -186,36 +177,6 @@ class CategorizerControllerCoverageTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[1].input").value("Lays"));
-    }
-
-    @Test
-    void mlPredict_returnsPredictions() throws Exception {
-        var prediction = new MlClassificationResponse(
-                "Lays", new MlClassificationResponse.Guess("GROCERIES", 0.81, true),
-                new MlClassificationResponse.Guess("Batata Frita", 0.65, false),
-                true, 0.75);
-        when(categorizationDebugService.mlPredictAll(anyList())).thenReturn(List.of(prediction));
-
-        mockMvc.perform(get("/api/v1/categorizer/ml/predict")
-                        .param("description", "Lays")
-                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].input").value("Lays"))
-                .andExpect(jsonPath("$[0].category.label").value("GROCERIES"))
-                .andExpect(jsonPath("$[0].ready").value(true));
-    }
-
-    @Test
-    void status_notReady_returnsState() throws Exception {
-        when(mlClassifier.isReady()).thenReturn(false);
-        when(mlClassifier.getLastTrainedAt()).thenReturn(null);
-        when(mlClassifier.getConfidenceThreshold()).thenReturn(0.5);
-
-        mockMvc.perform(get("/api/v1/categorizer/status")
-                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.ready").value(false))
-                .andExpect(jsonPath("$.confidenceThreshold").value(0.5));
     }
 
     @Test

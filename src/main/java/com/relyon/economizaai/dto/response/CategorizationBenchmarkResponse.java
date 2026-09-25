@@ -9,9 +9,6 @@ import java.util.List;
  *
  * <p>{@code accuracyPct} is the headline (category). Brand/quantity are checked
  * only on the golden rows that declare a truth for them ({@code *Checked}).
- * {@code mlCategory*} is a SHADOW measurement of the ML model alone (even while
- * it's gated out of the live cascade) so we can tell when it's good enough to
- * re-enable.
  */
 public record CategorizationBenchmarkResponse(
         int total,
@@ -25,9 +22,6 @@ public record CategorizationBenchmarkResponse(
         int quantityChecked,
         int quantityCorrect,
         double quantityAccuracyPct,
-        int mlCategoryChecked,
-        int mlCategoryCorrect,
-        double mlCategoryAccuracyPct,
         List<Failure> failures
 ) {
     public record Failure(String description, String field, String expected, String got, String source) {}

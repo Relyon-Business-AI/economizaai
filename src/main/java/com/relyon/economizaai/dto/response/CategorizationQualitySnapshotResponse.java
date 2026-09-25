@@ -16,9 +16,7 @@ public record CategorizationQualitySnapshotResponse(
         int catalogCategorized,
         BigDecimal catalogCoveragePct,
         BigDecimal brandAccuracyPct,
-        BigDecimal quantityAccuracyPct,
-        BigDecimal mlAccuracyPct,
-        boolean mlReady
+        BigDecimal quantityAccuracyPct
 ) {
     public static CategorizationQualitySnapshotResponse from(CategorizationQualitySnapshot snapshot) {
         return new CategorizationQualitySnapshotResponse(
@@ -31,8 +29,6 @@ public record CategorizationQualitySnapshotResponse(
                 snapshot.getCatalogCategorized(),
                 snapshot.getCatalogCoveragePct(),
                 snapshot.getBrandAccuracyPct(),
-                snapshot.getQuantityAccuracyPct(),
-                snapshot.getMlAccuracyPct(),
-                snapshot.isMlReady());
+                snapshot.getQuantityAccuracyPct());
     }
 }

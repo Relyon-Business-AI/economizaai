@@ -15,7 +15,6 @@ import com.relyon.economizaai.service.extraction.CategorizerAdminService;
 import com.relyon.economizaai.service.extraction.ConsensusPromotionService;
 import com.relyon.economizaai.service.extraction.EanCatalogService;
 import com.relyon.economizaai.service.extraction.PhraseTokenSimulationService;
-import com.relyon.economizaai.service.extraction.ml.MlClassifierService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,8 +25,6 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -45,7 +42,6 @@ class CategorizerControllerTest {
 
     @Autowired private MockMvc mockMvc;
 
-    @MockitoBean private MlClassifierService mlClassifier;
     @MockitoBean private AutoPromotionService autoPromotionService;
     @MockitoBean private CategorizationDebugService categorizationDebugService;
     @MockitoBean private CategorizationBenchmarkService categorizationBenchmarkService;
@@ -91,38 +87,6 @@ class CategorizerControllerTest {
         var captor = ArgumentCaptor.forClass(List.class);
         verify(categorizationDebugService).explainAll(captor.capture());
         assertThat(captor.getValue()).isEmpty();
-    }
-
-    @Test
-    void status_returnsClassifierState() throws Exception {
-        when(mlClassifier.isReady()).thenReturn(true);
-        when(mlClassifier.getLastTrainedAt()).thenReturn(Instant.now());
-        when(mlClassifier.getConfidenceThreshold()).thenReturn(0.75);
-
-        mockMvc.perform(get("/api/v1/categorizer/status")
-                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.ready").value(true))
-                .andExpect(jsonPath("$.confidenceThreshold").value(0.75));
-    }
-
-    @Test
-    void retrain_returnsOutcome() throws Exception {
-        when(mlClassifier.retrain()).thenReturn(
-                new MlClassifierService.RetrainOutcome(true, 100, 80, Duration.ofMillis(45)));
-
-        mockMvc.perform(post("/api/v1/categorizer/retrain")
-                        .with(SecurityMockMvcRequestPostProcessors.user(adminPrincipal())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.trained").value(true))
-                .andExpect(jsonPath("$.categoryExamples").value(100));
-    }
-
-    @Test
-    void retrain_forbiddenForNonAdmin() throws Exception {
-        mockMvc.perform(post("/api/v1/categorizer/retrain")
-                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
-                .andExpect(status().isForbidden());
     }
 
     @Test

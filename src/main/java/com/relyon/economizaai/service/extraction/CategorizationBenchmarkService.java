@@ -5,7 +5,6 @@ import com.relyon.economizaai.dto.response.CategorizationBenchmarkResponse.Failu
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.CategorizationBenchmarkEntryRepository;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
-import com.relyon.economizaai.service.extraction.ml.MlClassifierService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -18,9 +17,7 @@ import java.util.List;
  * Measures extraction quality against the golden set in the
  * categorization_benchmark_entries table (description → true
  * category/brand/quantity, grown at runtime via the admin import endpoint).
- * Runs the same cascade as ingestion and reports per-field accuracy, plus a
- * SHADOW measurement of the ML model alone (so we keep validating it even
- * while it's gated out of the live cascade).
+ * Runs the same cascade as ingestion and reports per-field accuracy.
  */
 @Slf4j
 @Service
@@ -28,14 +25,12 @@ import java.util.List;
 public class CategorizationBenchmarkService {
 
     private final ProductExtractor productExtractor;
-    private final MlClassifierService mlClassifier;
     private final CategorizationBenchmarkEntryRepository benchmarkRepository;
 
     public CategorizationBenchmarkResponse run() {
         var rows = benchmarkRepository.findAll();
         var total = rows.size();
         var tally = new Tally();
-        var threshold = mlClassifier.getConfidenceThreshold();
 
         for (var row : rows) {
             var description = row.getDescription();
@@ -45,22 +40,18 @@ public class CategorizationBenchmarkService {
             scoreCategory(tally, description, expectedCategory, extraction);
             scoreBrand(tally, description, row.getExpectedBrand(), extraction);
             scoreQuantity(tally, description, row.getExpectedPackSize(), row.getExpectedPackUnit(), extraction);
-            scoreMlShadow(tally, description, expectedCategory, threshold);
         }
 
         var response = new CategorizationBenchmarkResponse(
                 total, tally.categoryCorrect, pct(tally.categoryCorrect, total), total - tally.categoryCorrect, tally.uncategorized,
                 tally.brandChecked, tally.brandCorrect, pct(tally.brandCorrect, tally.brandChecked),
                 tally.quantityChecked, tally.quantityCorrect, pct(tally.quantityCorrect, tally.quantityChecked),
-                total, tally.mlCorrect, pct(tally.mlCorrect, total),
                 tally.failures);
-        log.info("categorizer.benchmark categoryPct={} brandPct={} quantityPct={} mlShadowPct={}",
-                response.accuracyPct(), response.brandAccuracyPct(), response.quantityAccuracyPct(),
-                response.mlCategoryAccuracyPct());
+        log.info("categorizer.benchmark categoryPct={} brandPct={} quantityPct={}",
+                response.accuracyPct(), response.brandAccuracyPct(), response.quantityAccuracyPct());
         return response;
     }
 
-    /** Category via the applied cascade. */
     private void scoreCategory(Tally tally, String description, ProductCategory expectedCategory, ProductExtraction extraction) {
         var actualCategory = extraction.category();
         if (actualCategory == expectedCategory) {
@@ -73,7 +64,6 @@ public class CategorizationBenchmarkService {
                 extraction.categorizationSource().name()));
     }
 
-    /** Brand — only when the golden row declares one. */
     private void scoreBrand(Tally tally, String description, String expectedBrand, ProductExtraction extraction) {
         if (expectedBrand == null || expectedBrand.isEmpty()) return;
         tally.brandChecked++;
@@ -84,7 +74,6 @@ public class CategorizationBenchmarkService {
         }
     }
 
-    /** Quantity (pack size + unit) — only when the golden row declares one. */
     private void scoreQuantity(Tally tally, String description, BigDecimal expectedPackSize, String expectedPackUnit,
                                ProductExtraction extraction) {
         if (expectedPackSize == null) return;
@@ -97,14 +86,6 @@ public class CategorizationBenchmarkService {
         }
     }
 
-    /** ML shadow — the model alone, regardless of whether it's applied live. */
-    private void scoreMlShadow(Tally tally, String description, ProductCategory expectedCategory, double threshold) {
-        var mlPrediction = mlClassifier.predictCategory(description);
-        if (mlPrediction.isConfident(threshold) && mlPrediction.label() == expectedCategory) {
-            tally.mlCorrect++;
-        }
-    }
-
     private static final class Tally {
         private int categoryCorrect;
         private int uncategorized;
@@ -112,7 +93,6 @@ public class CategorizationBenchmarkService {
         private int brandCorrect;
         private int quantityChecked;
         private int quantityCorrect;
-        private int mlCorrect;
         private final List<Failure> failures = new ArrayList<>();
     }
 

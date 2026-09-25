@@ -200,7 +200,6 @@ public class AdminProductService {
         var products = productRepository.findAll();
         var mismatches = new ArrayList<RecategorizeReportResponse.Row>();
         var applicableFromDictionary = 0;
-        var mlSuggestions = 0;
         var skippedUser = 0;
         for (var product : products) {
             var suggested = productExtractor.extract(product.getNormalizedName());
@@ -213,8 +212,6 @@ public class AdminProductService {
                 skippedUser++;
             } else if (isTrusted(suggested.categorizationSource())) {
                 applicableFromDictionary++;
-            } else {
-                mlSuggestions++;
             }
             mismatches.add(new RecategorizeReportResponse.Row(
                     product.getId(), product.getNormalizedName(), product.getEan(),
@@ -222,25 +219,22 @@ public class AdminProductService {
                     suggestedCategory, suggested.categorizationSource(),
                     userOverride));
         }
-        log.info("admin.product.recategorize.report total={} mismatches={} dict={} ml={} skippedUser={}",
-                products.size(), mismatches.size(), applicableFromDictionary, mlSuggestions, skippedUser);
+        log.info("admin.product.recategorize.report total={} mismatches={} dict={} skippedUser={}",
+                products.size(), mismatches.size(), applicableFromDictionary, skippedUser);
         return new RecategorizeReportResponse(products.size(), mismatches.size(),
-                applicableFromDictionary, mlSuggestions, skippedUser, mismatches);
+                applicableFromDictionary, skippedUser, mismatches);
     }
 
     /**
-     * Apply re-categorization. By default only **trusted** suggestions
-     * (DICTIONARY / LEARNED_DICTIONARY) are applied — the ML layer is currently
-     * unreliable, so its suggestions are reported but skipped unless
-     * {@code includeMl} is true. Never clobbers a manual category (source=USER)
-     * and never downgrades to no-category (null suggestion).
+     * Apply re-categorization. Only trusted suggestions (DICTIONARY / LEARNED_DICTIONARY)
+     * are applied. Never clobbers a manual category (source=USER) and never
+     * downgrades to no-category (null suggestion).
      */
     @Transactional
-    public RecategorizeResultResponse recategorizeApply(boolean includeMl) {
+    public RecategorizeResultResponse recategorizeApply() {
         var products = productRepository.findAll();
         var updated = 0;
         var skippedUser = 0;
-        var skippedMl = 0;
         var unchanged = 0;
         for (var product : products) {
             var suggested = productExtractor.extract(product.getNormalizedName());
@@ -257,17 +251,17 @@ public class AdminProductService {
                 skippedUser++;
                 continue;
             }
-            if (!isTrusted(suggested.categorizationSource()) && !includeMl) {
-                skippedMl++;
+            if (!isTrusted(suggested.categorizationSource())) {
+                unchanged++;
                 continue;
             }
             product.setCategory(suggestedCategory);
             product.setCategorizationSource(suggested.categorizationSource());
             updated++;
         }
-        log.info("admin.product.recategorize.applied total={} updated={} skippedUser={} skippedMl={} unchanged={} includeMl={}",
-                products.size(), updated, skippedUser, skippedMl, unchanged, includeMl);
-        return new RecategorizeResultResponse(products.size(), updated, skippedUser, skippedMl, unchanged);
+        log.info("admin.product.recategorize.applied total={} updated={} skippedUser={} unchanged={}",
+                products.size(), updated, skippedUser, unchanged);
+        return new RecategorizeResultResponse(products.size(), updated, skippedUser, unchanged);
     }
 
     /**
