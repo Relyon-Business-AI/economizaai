@@ -73,7 +73,15 @@ A rollback looks like:
 
 <!-- AUTONOMOUS ENTRIES BELOW - newest first. The watchdog inserts here. -->
 
-### [2026-09-25 10:45:52] [NEEDS-HUMAN] NO-REPRO - E2E: 22. Categorizer status
+### [2026-09-25] FIX 94e4ece - Postman E2E step 22: retired /categorizer/status → /categorizer/ai/status
+- **Trigger:** [NEEDS-HUMAN] entry from 2026-09-25 10:45:52 (E2E nightly step 22 getting 404)
+- **Root cause:** Postman E2E step 22 called retired `/api/v1/categorizer/status` (removed in ef159a2); correct endpoint is `/categorizer/ai/status` (ADMIN-only, different response shape)
+- **Fix:** Updated E2E step 22 (name, URL, auth header, test assertions) and the reference entry in the non-E2E section of the Postman collection. FE: also removed dead `getStatus`/`ModelStatus` from `categorizationService.ts` and updated `AdminCategorizationScreen` overview tab to use `latest?.mlReady` from quality history instead of the retired call.
+- **Build:** No Java code changed. FE TypeScript passes `npx tsc --noEmit`.
+- **Deploy:** Postman collection pushed to `development` (94e4ece). FE pushed to `master` (be64617).
+- **Outcome:** RESOLVED — E2E step 22 will use correct endpoint on next nightly run.
+
+### [2026-09-25 10:45:52] ~~[NEEDS-HUMAN]~~ RESOLVED - E2E: 22. Categorizer status
 - **Detected:**
 ```
 A daily E2E run against the live dev server FAILED (2/230 assertions).
