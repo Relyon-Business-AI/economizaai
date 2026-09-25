@@ -16,6 +16,21 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-24 — IA: garantia de crédito esgotado + fila pendente no status
+
+- **`GET /categorizer/ai/status` agora inclui `pendingQueue`**:
+  `{ itensNaoCasados, produtosSemMarca, produtosSemNome, produtosOutros }` —
+  tudo que o pipeline determinístico deixou pra IA. Nada se perde: itens pulados
+  por uma varredura que falhou (ex.: crédito esgotado) continuam contados aqui
+  até uma varredura cobri-los.
+- **Crédito da API de IA esgotado agora tem tratamento explícito**: a varredura
+  aborta os módulos restantes (não queima tempo sem crédito), os achados já
+  salvos permanecem, a run termina `FAILED` com mensagem clara em PT
+  ("Créditos da API de IA esgotados — recarregue…") visível em
+  `lastSweep.error`. O scan do usuário NUNCA é afetado — o resultado
+  determinístico fica valendo e o item permanece na fila para a próxima
+  varredura após a recarga.
+
 ## 2026-09-24 — Import de notas aceita Excel e PDF (além de CSV) + preview de chaves
 
 - **`POST /receipts/import/nfg-csv` agora é agnóstico de formato**: o `file` pode

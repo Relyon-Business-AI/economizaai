@@ -88,8 +88,23 @@ public class AiGateway {
         } catch (RuntimeException ex) {
             recordUsage(activity, model, 0, 0, false);
             log.warn("ai.call_failed activity={} model={} reason={}", activity, model, ex.getMessage());
+            if (isCreditExhausted(ex)) {
+                // NOTHING is lost: the deterministic result stands and the pending
+                // items stay in their queues (não-casados / sem marca / OTHER) —
+                // the next sweep after a recharge covers them all.
+                throw new AiUnavailableException(
+                        "Créditos da API de IA esgotados — recarregue em console.anthropic.com. "
+                        + "Os itens pendentes continuam na fila e serão cobertos na próxima varredura.");
+            }
             throw new AiUnavailableException("Falha na chamada de IA: " + ex.getMessage());
         }
+    }
+
+    /** Anthropic billing/credit failures ("credit balance is too low", billing_error). */
+    static boolean isCreditExhausted(RuntimeException ex) {
+        var message = String.valueOf(ex.getMessage()).toLowerCase();
+        return message.contains("credit balance") || message.contains("billing")
+                || message.contains("purchase credits") || message.contains("insufficient credit");
     }
 
     private void recordUsage(AiActivity activity, String model, long inputTokens, long outputTokens, boolean success) {

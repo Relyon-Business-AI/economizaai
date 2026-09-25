@@ -26,6 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -120,6 +122,27 @@ class AiSweepServiceTest {
 
         assertEquals(AiSweepRun.STATUS_DONE, run.getStatus());
         assertEquals(1, run.getFindings());
+    }
+
+    @Test
+    void creditExhaustionAbortsRemainingModulesButKeepsRun() {
+        // 1º módulo estoura crédito → módulos restantes NÃO são chamados
+        // (verificado por só 1 chamada ao gateway) e a run termina FAILED com o motivo.
+        var run = AiSweepRun.builder().id(UUID.randomUUID()).status(AiSweepRun.STATUS_RUNNING).findings(0).build();
+        when(sweepRunRepository.findById(run.getId())).thenReturn(Optional.of(run));
+        lenient().when(sweepRunRepository.save(any(AiSweepRun.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(receiptItemRepository.topUnmatchedDescriptions(any()))
+                .thenReturn(List.<Object[]>of(new Object[]{"x", 1L}));
+        when(aiGateway.extractorModel()).thenReturn("claude-haiku-4-5");
+        when(aiGateway.complete(any(), any(), any(), any(), anyInt()))
+                .thenThrow(new AiGateway.AiUnavailableException("Créditos da API de IA esgotados — fila coberta na próxima varredura."));
+
+        service.runSweep(run.getId());
+
+        assertEquals(AiSweepRun.STATUS_FAILED, run.getStatus());
+        assertTrue(run.getError().contains("Créditos"));
+        verify(aiGateway, times(1))
+                .complete(any(), any(), any(), any(), anyInt());
     }
 
     @Test

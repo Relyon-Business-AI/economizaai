@@ -8,6 +8,8 @@ import com.relyon.economizaai.model.enums.AiFindingStatus;
 import com.relyon.economizaai.model.enums.AiFindingType;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.AiSweepRunRepository;
+import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.service.ai.AiFindingService;
 import com.relyon.economizaai.service.ai.AiGateway;
 import com.relyon.economizaai.service.ai.AiSweepService;
@@ -50,17 +52,30 @@ public class AiController {
     private final AiUsageService aiUsageService;
     private final AiGateway aiGateway;
     private final AiSweepRunRepository sweepRunRepository;
+    private final ReceiptItemRepository receiptItemRepository;
+    private final ProductRepository productRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    /** Whether the AI layer is configured (drives FE affordances). */
+    /**
+     * Whether the AI layer is configured (drives FE affordances) + the PENDING
+     * QUEUE: everything the deterministic pipeline left for AI. This is the
+     * "nothing is lost" guarantee made visible — items skipped by a failed/
+     * credit-exhausted sweep stay counted here until a sweep covers them.
+     */
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> status() {
         var latest = sweepRunRepository.findTopByOrderByCreatedAtDesc().orElse(null);
+        var pendingQueue = Map.of(
+                "itensNaoCasados", receiptItemRepository.countUnmatched(),
+                "produtosSemMarca", productRepository.countByBrandIsNull(),
+                "produtosSemNome", productRepository.countByGenericNameIsNull(),
+                "produtosOutros", productRepository.countByCategory(ProductCategory.OTHER));
         return ResponseEntity.ok(Map.of(
                 "enabled", aiGateway.isEnabled(),
                 "extractorModel", aiGateway.extractorModel(),
                 "curatorModel", aiGateway.curatorModel(),
+                "pendingQueue", pendingQueue,
                 "lastSweep", latest == null ? Map.of() : Map.of(
                         "id", latest.getId(),
                         "status", latest.getStatus(),

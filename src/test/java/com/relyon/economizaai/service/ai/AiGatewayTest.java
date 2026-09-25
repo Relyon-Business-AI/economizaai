@@ -92,6 +92,21 @@ class AiGatewayTest {
     }
 
     @Test
+    void creditExhaustionGetsAClearMessage() {
+        when(chatAdapter.isConfigured()).thenReturn(true);
+        when(usageRepository.countByCreatedAtAfter(any(LocalDateTime.class))).thenReturn(0L);
+        when(chatAdapter.complete(anyString(), anyString(), anyString(), anyInt()))
+                .thenThrow(new RuntimeException("Your credit balance is too low to access the Anthropic API"));
+
+        var thrown = assertThrows(AiGateway.AiUnavailableException.class,
+                () -> gateway.complete(AiActivity.RULE_SUGGESTION, "claude-haiku-4-5", "s", "u", 100));
+
+        // Mensagem clara + garantia de que nada se perde (fila cobre depois).
+        assertEquals(true, thrown.getMessage().contains("Créditos"));
+        assertEquals(true, thrown.getMessage().contains("fila"));
+    }
+
+    @Test
     void costEstimateFallsBackForUnknownModel() {
         // Unknown model → default $3/$15 pricing.
         assertEquals(0, AiGateway.estimateCostUsd("mystery-model", 1_000_000, 0)

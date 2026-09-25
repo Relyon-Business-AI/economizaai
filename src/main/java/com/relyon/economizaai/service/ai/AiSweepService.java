@@ -98,12 +98,21 @@ public class AiSweepService {
         }
     }
 
-    /** A module failure (e.g. budget cap mid-run) must not kill the whole sweep. */
+    /**
+     * A module's PARSE/data failure must not kill the whole sweep — but an
+     * unavailability (créditos esgotados / cap diário) must ABORT the remaining
+     * modules: calling 7 more times without credit only burns time. Findings
+     * already saved stay saved; the pending items remain in their queues and the
+     * next sweep after a recharge covers them.
+     */
     private int runModule(String name, Supplier<Integer> module) {
         try {
             var created = module.get();
             log.info("ai.sweep.module module={} findings={}", name, created);
             return created;
+        } catch (AiGateway.AiUnavailableException unavailable) {
+            log.warn("ai.sweep.aborted module={} reason={}", name, unavailable.getMessage());
+            throw unavailable;
         } catch (RuntimeException ex) {
             log.warn("ai.sweep.module_failed module={} reason={}", name, ex.getMessage());
             return 0;
