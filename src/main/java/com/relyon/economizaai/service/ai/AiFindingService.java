@@ -215,8 +215,8 @@ public class AiFindingService {
             var product = productRepository.findById(UUID.fromString(productIdStr)).orElse(null);
             if (product == null) return false;
             merged.put("normalizedName", product.getNormalizedName());
-            if (product.getBrand() != null) merged.put("productBrand", product.getBrand());
-            if (product.getCategory() != null) merged.put("productCategory", product.getCategory().name());
+            merged.put("productBrand", product.getBrand() != null ? product.getBrand() : "");
+            merged.put("productCategory", product.getCategory() != null ? product.getCategory().name() : "");
             var newTitle = switch (finding.getType()) {
                 case FRIENDLY_NAME -> "Nome: \"" + product.getNormalizedName() + "\" → \"" + payload.path("genericName").asText("?") + "\"";
                 case SUSPECT_CATEGORY -> "Categoria: \"" + product.getNormalizedName() + "\" → " + payload.path("category").asText("?");
