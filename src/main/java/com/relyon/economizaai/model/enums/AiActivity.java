@@ -10,5 +10,6 @@ public enum AiActivity {
     MERCHANT_CLASSIFY,
     FRIENDLY_NAMES,
     ANOMALY_SCAN,
-    TEST_CLASSIFY
+    TEST_CLASSIFY,
+    ITEM_CLASSIFY   // real-time fallback when the deterministic categorizer misses an item at scan time
 }

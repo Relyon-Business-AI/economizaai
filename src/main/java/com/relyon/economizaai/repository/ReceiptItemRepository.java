@@ -223,4 +223,7 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
         ORDER BY r.issuedAt ASC NULLS FIRST, ri.lineNumber ASC
     """)
     List<ReceiptItem> findConfirmedHistoryForHousehold(@Param("householdId") UUID householdId);
+
+    @Query("SELECT ri FROM ReceiptItem ri WHERE ri.receipt.id = :receiptId AND ri.product IS NULL AND ri.excluded = false")
+    List<ReceiptItem> findUnmatchedByReceiptId(@Param("receiptId") UUID receiptId);
 }

@@ -26,6 +26,7 @@ import com.relyon.economizaai.service.ImportFileTextExtractor;
 import com.relyon.economizaai.service.ReceiptExportService;
 import com.relyon.economizaai.service.ReceiptImportService;
 import com.relyon.economizaai.service.ReceiptService;
+import com.relyon.economizaai.service.ai.AiItemFallbackService;
 import com.relyon.economizaai.service.llm.PhotoReceiptExtractionService;
 import com.relyon.economizaai.service.report.ReportEmailService;
 import com.relyon.economizaai.service.scan.ChaveAcessoOcrService;
@@ -72,6 +73,7 @@ import java.util.UUID;
 public class ReceiptController {
 
     private final ReceiptService receiptService;
+    private final AiItemFallbackService aiItemFallbackService;
     private final ReceiptImportService receiptImportService;
     private final ImportFileTextExtractor importFileTextExtractor;
     private final ReceiptExportService receiptExportService;
@@ -377,7 +379,11 @@ public class ReceiptController {
     public ResponseEntity<ConfirmReceiptResponse> confirm(@AuthenticationPrincipal User user,
                                                           @PathVariable UUID id,
                                                           @RequestBody(required = false) ConfirmReceiptRequest request) {
-        return ResponseEntity.ok(receiptService.confirm(user, id, request));
+        var response = receiptService.confirm(user, id, request);
+        // AI fallback runs AFTER the confirm transaction commits — never holds a DB
+        // connection across the outbound HTTP call (see CLAUDE.md transaction rules).
+        aiItemFallbackService.applyFallback(id);
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/{id}/reject")
