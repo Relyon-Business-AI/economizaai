@@ -16,6 +16,24 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-25 — import de e-commerce por XML (upload) — `POST /receipts/xml`
+
+Caminho novo pra trazer notas de **e-commerce/marketplace** (Amazon, Mercado Livre, Shopee):
+o usuário sobe o(s) **XML(s) da NF-e** que baixou do site do pedido.
+
+- **Novo endpoint:** `POST /api/v1/receipts/xml` (multipart, campo **`files`**, aceita **vários** de
+  uma vez) → `202` **ReceiptImportResponse** (`received/queued/queuedReceiptIds/rejected/rejectedChaves`).
+  **User-facing** (autenticado, **NÃO** admin — fora do `/import/**`, que é admin-only).
+- **Auto-contido:** a chave é lida de dentro do XML e o conteúdo é parseado direto (`NfceXmlParser`),
+  **sem fetch na SEFAZ** → funciona pra **qualquer estado** (o vendedor de marketplace costuma
+  emitir de outro estado, não reconsultável). CPF é removido antes de persistir.
+- **Idempotente / não perde nota:** dedup por chave (CONFIRMED rejeita; stale é substituído no
+  reenvio), guarda de cap mensal, e **resposta por-item** com motivo — nada é descartado em silêncio.
+- Reconhece a chave via `<infNFe Id="NFe…">` ou `<chNFe>`, valida o dígito verificador.
+
+> Observação: o parser lê EAN, itens, qtd, preço e canal (indPres→ONLINE), mas **ainda não captura
+> frete (`vFrete`)** — item pendente pra o preço "entregue" de e-commerce ficar exato.
+
 ## 2026-09-25 — estados suportados: endpoint + rollout com teto de evidência
 
 Preparo pra abrir o scan/import pra mais estados sem prometer o que ainda não funciona.

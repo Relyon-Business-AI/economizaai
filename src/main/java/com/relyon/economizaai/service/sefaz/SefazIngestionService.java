@@ -376,6 +376,21 @@ public class SefazIngestionService {
     }
 
     /**
+     * Build a pre-parsed {@link FetchedDocument} from a raw NFe XML the user uploaded (e-commerce
+     * import — Amazon/ML/Shopee). The XML is self-contained, so it's parsed DIRECTLY with
+     * {@link NfceXmlParser} (no per-UF adapter, no SEFAZ fetch) after CPF stripping — which is why
+     * this works for any state, unlike the reconsult path. The result rides as {@code preParsed}
+     * so {@link #parse} returns it as-is.
+     */
+    public FetchedDocument fromXml(String xmlContent, String chave, String sourceUrl) {
+        var sanitized = CpfMasker.strip(xmlContent == null ? "" : xmlContent);
+        var uf = ChaveAcessoParser.extractUf(chave);
+        var parsed = NfceXmlParser.parse(sanitized, chave, sourceUrl);
+        log.info("sefaz.xml_upload.parsed uf={} chave={} items={}", uf, abbrev(chave), parsed.items().size());
+        return new FetchedDocument(null, sanitized, chave, uf, sourceUrl, parsed);
+    }
+
+    /**
      * Re-runs parsing on already-stored HTML — used by the admin reparse
      * endpoint when a parser fix lands and we want to re-process old
      * receipts without hitting SEFAZ again.

@@ -414,6 +414,22 @@ POST /api/v1/receipts/import/extract-chaves   (multipart/form-data, field "file"
   food-retail) feed the collaborative price index and our algorithms/metrics; everything else is
   "GREY" (kept in personal history, out of the shared index).
 
+### Upload e-commerce receipts by XML — Amazon / Mercado Livre / Shopee
+
+```
+POST /api/v1/receipts/xml   (multipart/form-data, field "files" — accepts several)
+```
+- **User-facing** (any authenticated user; NOT admin). For marketplace/e-commerce NF-e that
+  have **no QR to scan** — the user downloads the nota's XML from the order page and uploads it.
+- Send one or more `.xml` parts under **`files`**. Response `202` is the same
+  **ReceiptImportResponse** as bulk import (`received`, `queued`, `queuedReceiptIds`,
+  `rejected`, `rejectedChaves[{chave, reason, reasonMessage}]`).
+- **Self-contained:** the chave and every line item are read from the XML itself — **no SEFAZ
+  fetch** — so it works for **any UF** (unlike chave re-consult, which is RS-only). CPF is stripped
+  before persist.
+- Same dedup + monthly cap + per-item rejection semantics as bulk import; nothing is dropped
+  silently. Reason keys reuse `receipt.import.*` (`invalid_chave`, `duplicate`, `cap_reached`).
+
 **Persistent staging.** Imported notas carry `origin: "IMPORT"` and stay in a staging
 list until the user acts on them — the import screen rehydrates from the server, so
 nothing is lost on refresh/navigation.
