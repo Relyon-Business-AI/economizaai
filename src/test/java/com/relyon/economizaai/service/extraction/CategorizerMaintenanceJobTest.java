@@ -4,7 +4,6 @@ import com.relyon.economizaai.dto.response.RecategorizeResultResponse;
 import com.relyon.economizaai.model.enums.CategorizationQualityTrigger;
 import com.relyon.economizaai.service.admin.AdminProductService;
 import com.relyon.economizaai.service.canonicalization.CanonicalizationService;
-import com.relyon.economizaai.service.extraction.ml.MlClassifierService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -20,7 +19,6 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class CategorizerMaintenanceJobTest {
 
-    @Mock private MlClassifierService mlClassifierService;
     @Mock private AdminProductService adminProductService;
     @Mock private CategorizationQualityService categorizationQualityService;
     @Mock private CategorizerAdminService categorizerAdminService;
@@ -28,7 +26,7 @@ class CategorizerMaintenanceJobTest {
     @Mock private CanonicalizationService canonicalizationService;
 
     private CategorizerMaintenanceJob job(boolean enabled) {
-        var j = new CategorizerMaintenanceJob(mlClassifierService, adminProductService,
+        var j = new CategorizerMaintenanceJob(adminProductService,
                 categorizationQualityService, categorizerAdminService, brandAliasPromotionService,
                 canonicalizationService);
         ReflectionTestUtils.setField(j, "enabled", enabled);
@@ -45,14 +43,13 @@ class CategorizerMaintenanceJobTest {
     }
 
     @Test
-    void maintain_whenEnabled_retrainsRecategorizesAndSnapshots() {
-        when(adminProductService.recategorizeApply(false)).thenReturn(new RecategorizeResultResponse(10, 2, 0, 0, 8));
+    void maintain_whenEnabled_recategorizesAndSnapshots() {
+        when(adminProductService.recategorizeApply()).thenReturn(new RecategorizeResultResponse(10, 2, 0, 8));
         stubBrandMaintenance();
 
         job(true).maintain();
 
-        verify(mlClassifierService).retrain();
-        verify(adminProductService).recategorizeApply(false);
+        verify(adminProductService).recategorizeApply();
         verify(categorizationQualityService).measureAndRecord(eq(CategorizationQualityTrigger.BACKFILL));
         verify(categorizerAdminService).deriveBrandsFromEanCatalog(0, true);
         verify(brandAliasPromotionService).promoteFromKnownBrands();
@@ -62,19 +59,40 @@ class CategorizerMaintenanceJobTest {
     void maintain_whenDisabled_doesNothing() {
         job(false).maintain();
 
-        verifyNoInteractions(mlClassifierService, adminProductService, categorizationQualityService,
+        verifyNoInteractions(adminProductService, categorizationQualityService,
                 categorizerAdminService, brandAliasPromotionService);
     }
 
     @Test
-    void maintain_swallowsFailures_soTheSchedulerKeepsRunning() {
-        when(mlClassifierService.retrain()).thenThrow(new RuntimeException("boom"));
+    void maintain_swallowsRecategorizeFailure_soSchedulerKeepsRunning() {
+        when(adminProductService.recategorizeApply()).thenThrow(new RuntimeException("boom"));
         stubBrandMaintenance();
 
         job(true).maintain(); // must not throw
 
-        verify(adminProductService, never()).recategorizeApply(false);
-        // Brand maintenance is isolated — a retrain failure must not block it.
+        verify(adminProductService).recategorizeApply();
+        // Brand maintenance is isolated — a recategorize failure must not block it.
         verify(categorizerAdminService).deriveBrandsFromEanCatalog(0, true);
+    }
+
+    @Test
+    void maintain_swallowsBrandMaintenanceFailure_andContinues() {
+        when(adminProductService.recategorizeApply()).thenReturn(new RecategorizeResultResponse(10, 2, 0, 8));
+        when(categorizerAdminService.deriveBrandsFromEanCatalog(0, true))
+                .thenThrow(new RuntimeException("brand boom"));
+
+        job(true).maintain(); // must not throw
+
+        verify(adminProductService).recategorizeApply();
+    }
+
+    @Test
+    void maintain_whenEnabled_callsUnmatchedRetry() {
+        when(adminProductService.recategorizeApply()).thenReturn(new RecategorizeResultResponse(10, 2, 0, 8));
+        stubBrandMaintenance();
+
+        job(true).maintain();
+
+        verify(canonicalizationService).retryUnmatched(0);
     }
 }

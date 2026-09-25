@@ -6,6 +6,8 @@
 
 <!-- LESSONS BELOW -->
 
+- [2026-09-25 10:45:52] [[NEEDS-HUMAN] NO-REPRO] When an endpoint-removal commit doesn't update the Postman E2E collection (CLAUDE.md requires it), the resulting E2E failure has no Java-side reproduction — it's a docs/test-config gap, fixed by updating `postman/economizai.postman_collection.json` (URL + assertions + auth role) to the replacement endpoint, not by editing source.
+
 - [2026-08-05 08:22:42] [FIX f7f4fa7] Since the test profile uses `ddl-auto: create-drop` (Flyway disabled), entity/migration schema drift can't be caught by a normal @DataJpaTest — reproduce it by letting Hibernate create the entity-correct schema, then using a native `ALTER TABLE ... DROP COLUMN` to force the table back to the actual migration's shape before asserting the query throws.
 
 - [2026-07-29 08:21:53] [[NEEDS-HUMAN] NO-REPRO] When an E2E "export/list" assertion fails right after a receipt-submission step, check whether the submission step's own log shows a validation/skip condition (e.g. blank required payload) before assuming the export/report code is broken — an empty upstream secret (like `E2E_QR_PAYLOAD`) starves every downstream step of data and produces a chain of "no data found" failures that look like separate bugs.

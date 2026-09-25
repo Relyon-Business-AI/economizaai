@@ -492,15 +492,13 @@ public class AdminController {
     }
 
     /**
-     * Apply re-categorization. Default applies only trusted (dictionary)
-     * suggestions; pass {@code includeMl=true} to also apply ML suggestions.
-     * Always skips USER-locked categories and null suggestions. Records a
+     * Apply re-categorization: trusted (dictionary) suggestions are applied;
+     * USER-locked categories and null suggestions are always skipped. Records a
      * quality snapshot afterwards so the backfill shows up in the trend.
      */
     @PostMapping("/products/recategorize")
-    public ResponseEntity<RecategorizeResultResponse> recategorizeApply(
-            @RequestParam(defaultValue = "false") boolean includeMl) {
-        var result = adminProductService.recategorizeApply(includeMl);
+    public ResponseEntity<RecategorizeResultResponse> recategorizeApply() {
+        var result = adminProductService.recategorizeApply();
         categorizationQualityService.measureAndRecord(CategorizationQualityTrigger.BACKFILL);
         return ResponseEntity.ok(result);
     }

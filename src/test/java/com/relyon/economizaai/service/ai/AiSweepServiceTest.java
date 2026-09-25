@@ -79,9 +79,6 @@ class AiSweepServiceTest {
         var run = AiSweepRun.builder().id(UUID.randomUUID()).status(AiSweepRun.STATUS_RUNNING).findings(0).build();
         when(sweepRunRepository.findById(run.getId())).thenReturn(Optional.of(run));
         when(receiptItemRepository.topUnmatchedDescriptions(any())).thenReturn(List.of());
-        when(productRepository.findTop40ByBrandIsNullOrderByCreatedAtDesc()).thenReturn(List.of());
-        when(productRepository.findTop40ByCategoryOrderByCreatedAtDesc(any())).thenReturn(List.of());
-        when(productRepository.findTop40ByGenericNameIsNullOrderByCreatedAtDesc()).thenReturn(List.of());
         when(adminProductService.listDuplicateGroups()).thenReturn(List.of());
         when(consensusAuditRepository.findAllByOrderByCreatedAtDesc(any())).thenReturn(List.of());
         when(receiptRepository.findDistinctMerchants(any())).thenReturn(List.of());
@@ -101,10 +98,7 @@ class AiSweepServiceTest {
         lenient().when(sweepRunRepository.save(any(AiSweepRun.class))).thenAnswer(inv -> inv.getArgument(0));
         when(receiptItemRepository.topUnmatchedDescriptions(any()))
                 .thenReturn(List.<Object[]>of(new Object[]{"p.palito salgado kg", 9L}));
-        // Other modules empty:
-        when(productRepository.findTop40ByBrandIsNullOrderByCreatedAtDesc()).thenReturn(List.of());
-        when(productRepository.findTop40ByCategoryOrderByCreatedAtDesc(any())).thenReturn(List.of());
-        when(productRepository.findTop40ByGenericNameIsNullOrderByCreatedAtDesc()).thenReturn(List.of());
+        // Other modules empty (paginated methods default to empty list):
         when(adminProductService.listDuplicateGroups()).thenReturn(List.of());
         when(consensusAuditRepository.findAllByOrderByCreatedAtDesc(any())).thenReturn(List.of());
         when(receiptRepository.findDistinctMerchants(any())).thenReturn(List.of());
@@ -152,9 +146,6 @@ class AiSweepServiceTest {
         lenient().when(sweepRunRepository.save(any(AiSweepRun.class))).thenAnswer(inv -> inv.getArgument(0));
         when(receiptItemRepository.topUnmatchedDescriptions(any()))
                 .thenReturn(List.<Object[]>of(new Object[]{"x", 1L}));
-        when(productRepository.findTop40ByBrandIsNullOrderByCreatedAtDesc()).thenReturn(List.of());
-        when(productRepository.findTop40ByCategoryOrderByCreatedAtDesc(any())).thenReturn(List.of());
-        when(productRepository.findTop40ByGenericNameIsNullOrderByCreatedAtDesc()).thenReturn(List.of());
         when(adminProductService.listDuplicateGroups()).thenReturn(List.of());
         when(consensusAuditRepository.findAllByOrderByCreatedAtDesc(any())).thenReturn(List.of());
         when(receiptRepository.findDistinctMerchants(any())).thenReturn(List.of());

@@ -1,11 +1,8 @@
 package com.relyon.economizaai.service.extraction;
 
 import com.relyon.economizaai.model.enums.ProductCategory;
-import com.relyon.economizaai.service.extraction.ml.MlClassifierService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
-
 import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -19,9 +16,7 @@ class ProductExtractorTest {
     void setUp() {
         var brandExtractor = SeedFixtures.loadedBrandExtractor();
         var dictionaryClassifier = SeedFixtures.loadedDictionaryClassifier();
-        var mlClassifier = Mockito.mock(MlClassifierService.class);
-        Mockito.when(mlClassifier.isReady()).thenReturn(false);
-        extractor = new ProductExtractor(brandExtractor, dictionaryClassifier, mlClassifier);
+        extractor = new ProductExtractor(brandExtractor, dictionaryClassifier);
     }
 
     @Test

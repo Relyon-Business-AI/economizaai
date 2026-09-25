@@ -69,6 +69,5 @@ class CategorizerClassifyMissingParamTest {
         assertThat(statusFor(token, "/api/v1/categorizer/classify?description")).isEqualTo(200);   // key, no '='
         assertThat(statusFor(token, "/api/v1/categorizer/classify?description=")).isEqualTo(200);  // key, empty value
         assertThat(statusFor(token, "/api/v1/categorizer/classify?other=x")).isEqualTo(200);   // unrelated param only
-        assertThat(statusFor(token, "/api/v1/categorizer/ml/predict")).isEqualTo(200);         // sibling endpoint, no param
     }
 }

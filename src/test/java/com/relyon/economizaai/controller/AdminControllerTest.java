@@ -724,7 +724,7 @@ class AdminControllerTest {
     @Test
     void recategorizeReport_returnsDryRunReport() throws Exception {
         when(adminProductService.recategorizeReport())
-                .thenReturn(new RecategorizeReportResponse(100L, 3, 1, 1, 1, List.of()));
+                .thenReturn(new RecategorizeReportResponse(100L, 3, 1, 1, List.of()));
 
         mockMvc.perform(get("/api/v1/admin/products/recategorize")
                         .with(SecurityMockMvcRequestPostProcessors.user(adminUser())))
@@ -736,32 +736,17 @@ class AdminControllerTest {
     // --- products/recategorize apply (POST) ---
 
     @Test
-    void recategorizeApply_default_appliesAndRecordsQualitySnapshot() throws Exception {
-        when(adminProductService.recategorizeApply(false))
-                .thenReturn(new RecategorizeResultResponse(100L, 5, 1, 2, 92));
+    void recategorizeApply_appliesAndRecordsQualitySnapshot() throws Exception {
+        when(adminProductService.recategorizeApply())
+                .thenReturn(new RecategorizeResultResponse(100L, 5, 1, 94));
 
         mockMvc.perform(post("/api/v1/admin/products/recategorize")
                         .with(SecurityMockMvcRequestPostProcessors.user(adminUser())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.updated").value(5))
-                .andExpect(jsonPath("$.skippedMl").value(2));
+                .andExpect(jsonPath("$.updated").value(5));
 
-        verify(adminProductService).recategorizeApply(false);
+        verify(adminProductService).recategorizeApply();
         verify(categorizationQualityService).measureAndRecord(CategorizationQualityTrigger.BACKFILL);
-    }
-
-    @Test
-    void recategorizeApply_includeMl_passesFlag() throws Exception {
-        when(adminProductService.recategorizeApply(true))
-                .thenReturn(new RecategorizeResultResponse(100L, 8, 1, 0, 91));
-
-        mockMvc.perform(post("/api/v1/admin/products/recategorize")
-                        .param("includeMl", "true")
-                        .with(SecurityMockMvcRequestPostProcessors.user(adminUser())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.updated").value(8));
-
-        verify(adminProductService).recategorizeApply(true);
     }
 
     @Test
@@ -769,6 +754,6 @@ class AdminControllerTest {
         mockMvc.perform(post("/api/v1/admin/products/recategorize")
                         .with(SecurityMockMvcRequestPostProcessors.user(regularUser())))
                 .andExpect(status().isForbidden());
-        verify(adminProductService, never()).recategorizeApply(anyBoolean());
+        verify(adminProductService, never()).recategorizeApply();
     }
 }

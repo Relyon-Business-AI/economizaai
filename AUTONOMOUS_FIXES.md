@@ -73,6 +73,32 @@ A rollback looks like:
 
 <!-- AUTONOMOUS ENTRIES BELOW - newest first. The watchdog inserts here. -->
 
+### [2026-09-25] FIX 94e4ece - Postman E2E step 22: retired /categorizer/status → /categorizer/ai/status
+- **Trigger:** [NEEDS-HUMAN] entry from 2026-09-25 10:45:52 (E2E nightly step 22 getting 404)
+- **Root cause:** Postman E2E step 22 called retired `/api/v1/categorizer/status` (removed in ef159a2); correct endpoint is `/categorizer/ai/status` (ADMIN-only, different response shape)
+- **Fix:** Updated E2E step 22 (name, URL, auth header, test assertions) and the reference entry in the non-E2E section of the Postman collection. FE: also removed dead `getStatus`/`ModelStatus` from `categorizationService.ts` and updated `AdminCategorizationScreen` overview tab to use `latest?.mlReady` from quality history instead of the retired call.
+- **Build:** No Java code changed. FE TypeScript passes `npx tsc --noEmit`.
+- **Deploy:** Postman collection pushed to `development` (94e4ece). FE pushed to `master` (be64617).
+- **Outcome:** RESOLVED — E2E step 22 will use correct endpoint on next nightly run.
+
+### [2026-09-25 10:45:52] ~~[NEEDS-HUMAN]~~ RESOLVED - E2E: 22. Categorizer status
+- **Detected:**
+```
+A daily E2E run against the live dev server FAILED (2/230 assertions).
+Failing steps:
+- 22. Categorizer status: AssertionError: expected response to have status code 200 but got 404
+- 22. Categorizer status: AssertionError: expected { status: 404, …(3) } to have property 'ready'
+
+Server-side errors during the run (the likely root cause):
+```
+2026-09-25 10:43:46.320 WARN  [req=c592d2c3 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Type mismatch for parameter 'id': Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.util.UUID'; Invalid UUID string: {{e2eShoppingListId}}
+2026-09-25 10:43:46.442 WARN  [req=3b1a4b93 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Type mismatch for parameter 'id': Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.util.UUID'; Invalid UUID string: {{e2eShoppingListId}}
+2026-09-25 10:43:46.552 WARN  [req=e0886dd7 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Type mismatch for parameter 'id': Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.util.UUID'; Invalid UUID string: {{e2eShoppingListId}}
+2026-09-25 10:43:46.662 WARN  [req=e4020c4b user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Type mismatch for parameter 'id': Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.uti
+```
+- **Outcome:** could not reproduce with a failing test; no code changed.
+- **Detail:** No Java test references the old endpoint either — it was cleanly removed from source (commit ef159a2) along with its own controller test. The E2E failure is purely because the Postman collection's E2E flow (step 22) still points at the retired `/api/v1/categorizer/status`, which was intentionally removed and replaced by `/api/v1/categorizer/ai/status` — a different, ADMIN-gated endpoint with a different response shape (`enabled`/`pendingQueue`, no `ready`/`confidenceThreshold`). There's no Java 
+
 ### [2026-09-08] FIX 8f06da8 - ReceiptListCategoryFilterIntegrationTest: Table "HOUSEHOLDS" not found
 - **Trigger:** Operator proactive pass; Sonar CI failing on `development` branch (commit a8ff49a).
 - **Error:** `Table "HOUSEHOLDS" not found (this database is empty)` — H2 error 42104 in all 3 tests of `ReceiptListCategoryFilterIntegrationTest`.
