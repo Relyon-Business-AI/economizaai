@@ -73,6 +73,25 @@ A rollback looks like:
 
 <!-- AUTONOMOUS ENTRIES BELOW - newest first. The watchdog inserts here. -->
 
+### [2026-09-26 10:31:50] [NEEDS-HUMAN] NO-REPRO - E2E: 22. Categorizer AI status (admin)
+- **Detected:**
+```
+A daily E2E run against the live dev server FAILED (2/230 assertions).
+Failing steps:
+- 22. Categorizer AI status (admin): AssertionError: expected response to have status code 200 but got 403
+- 22. Categorizer AI status (admin): AssertionError: expected { status: 403, message: 'Forbidden' } to have property 'enabled'
+
+Server-side errors during the run (the likely root cause):
+```
+2026-09-26 10:26:30.235 WARN  [req=265df7cd user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Type mismatch for parameter 'id': Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.util.UUID'; Invalid UUID string: {{e2eShoppingListId}}
+2026-09-26 10:26:30.354 WARN  [req=b84c42e0 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Type mismatch for parameter 'id': Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.util.UUID'; Invalid UUID string: {{e2eShoppingListId}}
+2026-09-26 10:26:30.470 WARN  [req=2a0a26a0 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Type mismatch for parameter 'id': Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.util.UUID'; Invalid UUID string: {{e2eShoppingListId}}
+2026-09-26 10:26:30.587 WARN  [req=0fd42d05 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Type mismatch for parameter 'id': Method parameter 'id': Failed to convert value of type 'java
+```
+- **Outcome:** could not reproduce with a failing test; no code changed.
+- **Detail:** REPRO_FAIL admin-gating on /api/v1/categorizer/ai/** works exactly as coded (JWT→role round-trip verified end-to-end, no caching/case-mismatch bug); the 403 means the E2E `E2E_ADMIN_EMAIL` account's `role` column isn't ADMIN in the target dev DB — a credentials/environment/data issue, not a code defect.
+LESSON When an admin-only-endpoint E2E step gets 403 right after its own login step returned 200, first check whether that login step's test script actually asserts the returned user's `role` is 
+
 ### [2026-09-25] FIX 94e4ece - Postman E2E step 22: retired /categorizer/status → /categorizer/ai/status
 - **Trigger:** [NEEDS-HUMAN] entry from 2026-09-25 10:45:52 (E2E nightly step 22 getting 404)
 - **Root cause:** Postman E2E step 22 called retired `/api/v1/categorizer/status` (removed in ef159a2); correct endpoint is `/categorizer/ai/status` (ADMIN-only, different response shape)

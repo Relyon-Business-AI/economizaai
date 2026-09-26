@@ -6,6 +6,8 @@
 
 <!-- LESSONS BELOW -->
 
+- [2026-09-26 10:31:50] [[NEEDS-HUMAN] NO-REPRO] When an admin-only-endpoint E2E step gets 403 right after its own login step returned 200, first check whether that login step's test script actually asserts the returned user's `role` is ADMIN (not just HTTP 200) — a valid-but-non-admin account produces exactly this symptom with zero code involved; trace the full JWT/authorities round-trip (token claims → filter → UserDetailsService → getAuthorities()) before assuming a code bug, since Spring Security JWT setups typically re-derive authorities fresh from the DB on every request rather than caching them in the token.
+
 - [2026-09-25 10:45:52] [[NEEDS-HUMAN] NO-REPRO] When an endpoint-removal commit doesn't update the Postman E2E collection (CLAUDE.md requires it), the resulting E2E failure has no Java-side reproduction — it's a docs/test-config gap, fixed by updating `postman/economizai.postman_collection.json` (URL + assertions + auth role) to the replacement endpoint, not by editing source.
 
 - [2026-08-05 08:22:42] [FIX f7f4fa7] Since the test profile uses `ddl-auto: create-drop` (Flyway disabled), entity/migration schema drift can't be caught by a normal @DataJpaTest — reproduce it by letting Hibernate create the entity-correct schema, then using a native `ALTER TABLE ... DROP COLUMN` to force the table back to the actual migration's shape before asserting the query throws.
