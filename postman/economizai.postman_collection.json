@@ -11123,9 +11123,12 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
-									"    pm.expect(pm.response.code).to.be.below(500);",
-									"});"
+									"pm.test(pm.info.requestName + ' — 201 created', function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"var d = pm.response.json();",
+									"pm.test('response has id', function () { pm.expect(d.id).to.be.a('string'); });",
+									"pm.collectionVariables.set('e2eShoppingListId', d.id);"
 								]
 							}
 						}
@@ -11292,9 +11295,13 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
-									"    pm.expect(pm.response.code).to.be.below(500);",
-									"});"
+									"pm.test(pm.info.requestName + ' — 200/201', function () {",
+									"    pm.expect(pm.response.code).to.be.below(300);",
+									"});",
+									"var d = pm.response.json();",
+									"if (d && d.items && d.items.length > 0) {",
+									"    pm.collectionVariables.set('e2eShoppingListItemId', d.items[d.items.length - 1].id);",
+									"}"
 								]
 							}
 						}
