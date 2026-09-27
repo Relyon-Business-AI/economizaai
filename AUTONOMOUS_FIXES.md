@@ -73,6 +73,27 @@ A rollback looks like:
 
 <!-- AUTONOMOUS ENTRIES BELOW - newest first. The watchdog inserts here. -->
 
+### [2026-09-27 11:01:09] [NEEDS-HUMAN] NO-REPRO - E2E: 22. Categorizer AI status (admin)
+- **Detected:**
+```
+A daily E2E run against the live dev server FAILED (2/226 assertions).
+Failing steps:
+- 22. Categorizer AI status (admin): AssertionError: expected response to have status code 200 but got 403
+- 22. Categorizer AI status (admin): AssertionError: expected { status: 403, message: 'Forbidden' } to have property 'enabled'
+
+Server-side errors during the run (the likely root cause):
+```
+2026-09-27 10:57:29.549 WARN  [req=8aa186dc user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - No handler for request: api/v1/categorizer/ml/predict
+2026-09-27 10:57:30.100 WARN  [req=22e45e4e user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Entity not found: Lista de compras não encontrada.
+2026-09-27 10:57:30.288 WARN  [req=180d8941 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Type mismatch for parameter 'id': Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.util.UUID'; Invalid UUID string: {{e2eShoppingListId}}
+2026-09-27 10:57:30.381 WARN  [req=16603eeb user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Type mismatch for parameter 'id': Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.util.UUID'; Invalid UUID string: {{e2eShoppingListId}}
+2026-09-27 10:57:30.473 WARN  [req=67112c2e user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Type mismatch for parameter 'id': Method parameter 'id': Fa
+```
+- **Outcome:** could not reproduce with a failing test; no code changed.
+- **Detail:** REPRO_FAIL environment/credentials issue — not a code bug
+
+LESSON Verified end-to-end: controller mapping (`/api/v1/categorizer/ai/status`, `AiController.java:68`), SecurityConfig rule (`.requestMatchers("/api/v1/categorizer/ai/**").hasRole("ADMIN")`, `SecurityConfig.java:103`), and the Postman URL for step 22 all match character-for-character — no path/typo/order bug in code. `JwtAuthenticationFilter` reloads the user fresh from DB on every request (not cached in the JWT), so a 403 here means t
+
 ### [2026-09-26 10:31:50] [NEEDS-HUMAN] NO-REPRO - E2E: 22. Categorizer AI status (admin)
 - **Detected:**
 ```
