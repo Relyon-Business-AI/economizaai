@@ -73,6 +73,27 @@ A rollback looks like:
 
 <!-- AUTONOMOUS ENTRIES BELOW - newest first. The watchdog inserts here. -->
 
+### [2026-09-28 12:14:21] [NEEDS-HUMAN] NO-REPRO - E2E: 22. Categorizer AI status (admin)
+- **Detected:**
+```
+A daily E2E run against the live dev server FAILED (3/226 assertions).
+Failing steps:
+- 22. Categorizer AI status (admin): AssertionError: expected response to have status code 200 but got 403
+- 22. Categorizer AI status (admin): AssertionError: expected { status: 403, message: 'Forbidden' } to have property 'enabled'
+- COV: Add item: AssertionError: expected 404 to be below 300
+
+Server-side errors during the run (the likely root cause):
+```
+2026-09-28 12:12:48.402 WARN  [req=417bab1a user=a***@economizaai.app rcpt=83ae5daa item=] c.r.e.e.GlobalExceptionHandler - Bad request: Nota fiscal no estado CONFIRMED não pode mais ser editada.
+2026-09-28 12:12:48.531 WARN  [req=bc914b8c user=a***@economizaai.app rcpt=83ae5daa item=] c.r.e.e.GlobalExceptionHandler - Bad request: Nota fiscal no estado CONFIRMED não pode mais ser editada.
+2026-09-28 12:12:49.338 WARN  [req=34197453 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - No handler for request: api/v1/categorizer/ml/predict
+2026-09-28 12:12:49.672 WARN  [req=0182d5df user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Entity not found: Lista de compras não encontrada.
+2026-09-28 12:12:50.391 WARN  [req=08519412 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Entity not found: Lista de compras não encontrada.
+2026-09-28 12:12:50.450 WARN  [req=0aee6715 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Type mismatch for parameter 'itemId': Meth
+```
+- **Outcome:** could not reproduce with a failing test; no code changed.
+- **Detail:** REPRO_FAIL both failing steps are non-code: (1) the admin-status 403 is the same E2E-account/ADMIN_EMAILS config gap already confirmed NO-REPRO twice (controller mapping, SecurityConfig rule, and JWT role-reload all verified correct); (2) the "COV: Add item" 404 is a Postman ordering bug, not an app defect — in the "E2E Flow" folder, "COV: Delete" runs *before* "COV: Add item"/"Toggle item checked"/"Remove item", all of which still target the same `{{e2eShoppingListId}}`, so by the time "Add ite
+
 ### [2026-09-27 11:01:09] [NEEDS-HUMAN] NO-REPRO - E2E: 22. Categorizer AI status (admin)
 - **Detected:**
 ```
