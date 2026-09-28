@@ -11,5 +11,6 @@ public enum AiActivity {
     FRIENDLY_NAMES,
     ANOMALY_SCAN,
     TEST_CLASSIFY,
-    ITEM_CLASSIFY   // real-time fallback when the deterministic categorizer misses an item at scan time
+    ITEM_CLASSIFY,  // real-time fallback when the deterministic categorizer misses an item at scan time
+    ITEM_CORRECTION // user-triggered correction of a misclassified receipt item
 }

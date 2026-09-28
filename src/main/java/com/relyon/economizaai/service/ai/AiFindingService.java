@@ -160,7 +160,11 @@ public class AiFindingService {
     }
 
     private void applyFriendlyName(JsonNode payload) {
-        var product = productRepository.findById(UUID.fromString(payload.path("productId").asText()))
+        var productIdStr = payload.path("productId").asText("");
+        if (productIdStr.isBlank()) {
+            throw new IllegalStateException("Achado sem productId — rode 'Corrigir nomes nos achados antigos' antes de aprovar");
+        }
+        var product = productRepository.findById(UUID.fromString(productIdStr))
                 .orElseThrow(() -> new IllegalArgumentException("Produto do achado não existe mais"));
         var name = payload.path("genericName").asText();
         product.setGenericName(name);

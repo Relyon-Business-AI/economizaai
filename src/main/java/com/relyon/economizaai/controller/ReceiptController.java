@@ -4,6 +4,7 @@ import com.relyon.economizaai.dto.request.AddReceiptItemRequest;
 import com.relyon.economizaai.dto.request.ConfirmReceiptRequest;
 import com.relyon.economizaai.dto.request.DeviceContentRequest;
 import com.relyon.economizaai.dto.request.ImportChavesRequest;
+import com.relyon.economizaai.dto.request.ItemCorrectionRequest;
 import com.relyon.economizaai.dto.request.PrefetchedReceiptRequest;
 import com.relyon.economizaai.dto.request.ReceiptIdsRequest;
 import com.relyon.economizaai.dto.request.SubmitReceiptRequest;
@@ -26,6 +27,7 @@ import com.relyon.economizaai.service.ImportFileTextExtractor;
 import com.relyon.economizaai.service.ReceiptExportService;
 import com.relyon.economizaai.service.ReceiptImportService;
 import com.relyon.economizaai.service.ReceiptService;
+import com.relyon.economizaai.service.ai.AiItemCorrectionService;
 import com.relyon.economizaai.service.ai.AiItemFallbackService;
 import com.relyon.economizaai.service.llm.PhotoReceiptExtractionService;
 import com.relyon.economizaai.service.report.ReportEmailService;
@@ -74,6 +76,7 @@ public class ReceiptController {
 
     private final ReceiptService receiptService;
     private final AiItemFallbackService aiItemFallbackService;
+    private final AiItemCorrectionService aiItemCorrectionService;
     private final ReceiptImportService receiptImportService;
     private final ImportFileTextExtractor importFileTextExtractor;
     private final ReceiptExportService receiptExportService;
@@ -373,6 +376,21 @@ public class ReceiptController {
                                                               @PathVariable UUID itemId,
                                                               @Valid @RequestBody UpdateItemCategoryRequest request) {
         return ResponseEntity.ok(receiptService.updateItemCategory(user, id, itemId, request.category()));
+    }
+
+    /**
+     * User correction of a misclassified item: the user tells us what the product
+     * actually is; the AI re-classifies with that hint and updates the product.
+     * Creates a MISSING_RULE finding for admin review — if approved, it becomes a
+     * curated dictionary entry so future notas with the same description match directly.
+     */
+    @PostMapping("/{id}/items/{itemId}/correction")
+    public ResponseEntity<ReceiptResponse> correctItem(@AuthenticationPrincipal User user,
+                                                       @PathVariable UUID id,
+                                                       @PathVariable UUID itemId,
+                                                       @Valid @RequestBody ItemCorrectionRequest request) {
+        aiItemCorrectionService.correct(id, itemId, user.getHousehold().getId(), request.hint());
+        return ResponseEntity.ok(receiptService.get(user, id));
     }
 
     @PostMapping("/{id}/confirm")
