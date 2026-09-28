@@ -3,6 +3,7 @@ package com.relyon.economizaai.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.relyon.economizaai.config.SecurityConfig;
 import com.relyon.economizaai.dto.request.ChangePasswordRequest;
+import com.relyon.economizaai.dto.request.SetPasswordRequest;
 import com.relyon.economizaai.dto.request.UpdateContributionRequest;
 import com.relyon.economizaai.dto.request.UpdateDigestPreferencesRequest;
 import com.relyon.economizaai.dto.request.UpdateUserRequest;
@@ -13,7 +14,9 @@ import com.relyon.economizaai.dto.response.SubscriptionStatusResponse;
 import com.relyon.economizaai.dto.response.UserDataExportResponse;
 import com.relyon.economizaai.dto.response.UserResponse;
 import com.relyon.economizaai.exception.InvalidCurrentPasswordException;
+import com.relyon.economizaai.exception.PasswordAlreadySetException;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.AuthProvider;
 import com.relyon.economizaai.model.enums.DigestFrequency;
 import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.model.enums.SubscriptionStatus;
@@ -132,7 +135,9 @@ class UserControllerTest {
                 user.getLastWebLoginAt(),
                 user.getLastAndroidLoginAt(),
                 user.getLastIosLoginAt(),
-                user.getCreatedAt()
+                user.getCreatedAt(),
+                user.getAuthProvider(),
+                user.getPassword() != null
         );
     }
 
@@ -211,12 +216,53 @@ class UserControllerTest {
     }
 
     @Test
+    void setPassword_shouldReturn200OnSuccess() throws Exception {
+        var user = buildUser();
+        var request = new SetPasswordRequest("newPassword123");
+        when(localizedMessageService.translate("user.password.set"))
+                .thenReturn("Password set successfully.");
+
+        mockMvc.perform(post("/api/v1/users/me/password")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Password set successfully."));
+    }
+
+    @Test
+    void setPassword_shouldReturn409WhenPasswordAlreadySet() throws Exception {
+        var user = buildUser();
+        var request = new SetPasswordRequest("newPassword123");
+        doThrow(new PasswordAlreadySetException()).when(userService).setPassword(any(User.class), any(SetPasswordRequest.class));
+
+        mockMvc.perform(post("/api/v1/users/me/password")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void setPassword_shouldReturn400ForShortPassword() throws Exception {
+        var user = buildUser();
+        var request = new SetPasswordRequest("short");
+
+        mockMvc.perform(post("/api/v1/users/me/password")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void updateContribution_returns200() throws Exception {
         var user = buildUser();
         var request = new UpdateContributionRequest(false);
         var response = new UserResponse(user.getId(), user.getName(), user.getEmail(),
                 user.getRole(), user.getSubscriptionTier(), false, true, user.getEmailVerifiedAt(),
-                null, null, null, null, null, null, null, user.getCreatedAt());
+                null, null, null, null, null, null, null, user.getCreatedAt(),
+                AuthProvider.LOCAL, true);
         when(userService.updateContribution(any(User.class), any(UpdateContributionRequest.class)))
                 .thenReturn(response);
 
@@ -233,7 +279,8 @@ class UserControllerTest {
         var user = buildUser();
         var ur = new UserResponse(user.getId(), user.getName(), user.getEmail(),
                 user.getRole(), user.getSubscriptionTier(), true, true, user.getEmailVerifiedAt(),
-                null, null, null, null, null, null, null, user.getCreatedAt());
+                null, null, null, null, null, null, null, user.getCreatedAt(),
+                AuthProvider.LOCAL, true);
         var hr = new HouseholdResponse(
                 UUID.randomUUID(), "ABC123", LocalDateTime.now().plusHours(48),
                 List.of(new HouseholdResponse.HouseholdMember(user.getId(), user.getName(), user.getEmail())),

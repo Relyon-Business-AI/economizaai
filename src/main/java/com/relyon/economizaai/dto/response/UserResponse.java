@@ -1,6 +1,7 @@
 package com.relyon.economizaai.dto.response;
 
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.AuthProvider;
 import com.relyon.economizaai.model.enums.Platform;
 import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.model.enums.SubscriptionTier;
@@ -26,7 +27,9 @@ public record UserResponse(
         OffsetDateTime lastWebLoginAt,
         OffsetDateTime lastAndroidLoginAt,
         OffsetDateTime lastIosLoginAt,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        AuthProvider authProvider,
+        boolean hasPassword
 ) {
     public static UserResponse from(User user) {
         return new UserResponse(
@@ -45,7 +48,9 @@ public record UserResponse(
                 user.getLastWebLoginAt(),
                 user.getLastAndroidLoginAt(),
                 user.getLastIosLoginAt(),
-                user.getCreatedAt()
+                user.getCreatedAt(),
+                user.getAuthProvider(),
+                user.getPassword() != null
         );
     }
 }

@@ -30,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -94,6 +95,21 @@ class PasswordResetServiceTest {
 
         verify(tokenRepository, never()).save(any());
         verifyNoInteractions(emailSender);
+    }
+
+    @Test
+    void requestResetForSocialAccountWithPasswordIssuesCode() {
+        var googleUserWithPassword = User.builder().id(UUID.randomUUID())
+                .email("maria@example.com")
+                .password("set-hash")
+                .authProvider(AuthProvider.GOOGLE)
+                .build();
+        when(userRepository.findByEmail("maria@example.com")).thenReturn(Optional.of(googleUserWithPassword));
+
+        passwordResetService.requestReset(new ForgotPasswordRequest("maria@example.com"));
+
+        verify(tokenRepository).save(any(PasswordResetToken.class));
+        verify(emailSender).sendPasswordResetCode(eq("maria@example.com"), any(), anyString(), anyInt());
     }
 
     @Test

@@ -16,6 +16,26 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-28 — conta Google/Apple pode criar senha — `POST /users/me/password`
+
+Usuário que entrou com Google/Apple agora pode **criar uma senha** e passar a
+logar também com e-mail+senha (o login social continua funcionando normalmente).
+
+- **Novo endpoint:** `POST /api/v1/users/me/password` (autenticado) com
+  `{ "newPassword": "..." }` (8–100 chars) → `200 { "message": ... }`.
+  Se a conta **já tem** senha → `409 user.password.already.set` (use o
+  `PUT /users/me/password` de troca, que continua igual).
+- **`UserResponse` ganhou 2 campos:** `authProvider` (`LOCAL|GOOGLE|APPLE`) e
+  `hasPassword` (boolean) — use pra decidir entre mostrar "Criar senha"
+  (social sem senha) vs "Alterar senha" (já tem). Vale em `/users/me` e no
+  `user` do login/registro.
+- **Forgot password destravado pra social com senha:** o fluxo de
+  `forgot-password` agora funciona pra conta social que criou senha (antes era
+  no-op silencioso pra qualquer conta social). Social **sem** senha segue no-op.
+- Criar a senha **não** derruba as sessões existentes (não é recuperação).
+
+---
+
 ## 2026-09-25 — import de e-commerce por XML (upload) — `POST /receipts/xml`
 
 Caminho novo pra trazer notas de **e-commerce/marketplace** (Amazon, Mercado Livre, Shopee):

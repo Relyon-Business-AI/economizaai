@@ -66,6 +66,11 @@ public class GlobalExceptionHandler {
         return respond(ex, HttpStatus.BAD_REQUEST, "Invalid current password");
     }
 
+    @ExceptionHandler(PasswordAlreadySetException.class)
+    public ResponseEntity<ErrorResponse> handlePasswordAlreadySet(PasswordAlreadySetException ex) {
+        return respond(ex, HttpStatus.CONFLICT, "Set-password attempt on account that already has one");
+    }
+
     @ExceptionHandler(UserNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleUserNotFound(UserNotFoundException ex) {
         return respond(ex, HttpStatus.NOT_FOUND, "User not found");

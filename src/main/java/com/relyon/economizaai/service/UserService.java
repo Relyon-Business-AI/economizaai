@@ -3,6 +3,7 @@ package com.relyon.economizaai.service;
 import com.relyon.economizaai.dto.request.ChangePasswordRequest;
 import com.relyon.economizaai.dto.request.LoginRequest;
 import com.relyon.economizaai.dto.request.RegisterRequest;
+import com.relyon.economizaai.dto.request.SetPasswordRequest;
 import com.relyon.economizaai.dto.request.UpdateContributionRequest;
 import com.relyon.economizaai.dto.request.UpdateHomeLocationRequest;
 import com.relyon.economizaai.dto.request.UpdateUserRequest;
@@ -34,6 +35,7 @@ import com.relyon.economizaai.exception.InvalidCredentialsException;
 import com.relyon.economizaai.exception.SocialAccountLoginException;
 import com.relyon.economizaai.model.enums.AuthProvider;
 import com.relyon.economizaai.exception.InvalidCurrentPasswordException;
+import com.relyon.economizaai.exception.PasswordAlreadySetException;
 import com.relyon.economizaai.exception.InvalidLegalVersionException;
 import com.relyon.economizaai.legal.LegalDocuments;
 import com.relyon.economizaai.model.HouseholdProductAlias;
@@ -210,6 +212,20 @@ public class UserService {
         // possibly-stolen refresh token alive for 30 more days.
         refreshTokenService.revokeAllForUser(user);
         log.info("User {} changed password", LogMasker.email(user.getEmail()));
+    }
+
+    @Transactional
+    public void setPassword(User user, SetPasswordRequest request) {
+        if (user.getPassword() != null) {
+            throw new PasswordAlreadySetException();
+        }
+
+        user.setPassword(passwordEncoder.encode(request.newPassword()));
+        userRepository.save(user);
+        // No refresh-token revocation here: the user is ADDING a login method,
+        // not recovering from a possibly-compromised password, so existing
+        // sessions stay valid.
+        log.info("User {} set a password (provider {})", LogMasker.email(user.getEmail()), user.getAuthProvider());
     }
 
     @Transactional

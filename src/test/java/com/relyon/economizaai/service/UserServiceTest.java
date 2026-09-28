@@ -3,6 +3,7 @@ package com.relyon.economizaai.service;
 import com.relyon.economizaai.dto.request.ChangePasswordRequest;
 import com.relyon.economizaai.dto.request.LoginRequest;
 import com.relyon.economizaai.dto.request.RegisterRequest;
+import com.relyon.economizaai.dto.request.SetPasswordRequest;
 import com.relyon.economizaai.dto.request.UpdateContributionRequest;
 import com.relyon.economizaai.dto.request.UpdateUserRequest;
 import com.relyon.economizaai.exception.EmailAlreadyExistsException;
@@ -10,6 +11,7 @@ import com.relyon.economizaai.exception.InvalidCredentialsException;
 import com.relyon.economizaai.exception.SocialAccountLoginException;
 import com.relyon.economizaai.exception.InvalidCurrentPasswordException;
 import com.relyon.economizaai.exception.InvalidLegalVersionException;
+import com.relyon.economizaai.exception.PasswordAlreadySetException;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.HouseholdCustomCategory;
 import com.relyon.economizaai.model.HouseholdMarketAlias;
@@ -389,6 +391,32 @@ class UserServiceTest {
         when(passwordEncoder.matches("wrongPass", user.getPassword())).thenReturn(false);
 
         assertThrows(InvalidCurrentPasswordException.class, () -> userService.changePassword(user, request));
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void setPassword_shouldSetPasswordForSocialUserWithoutOne() {
+        var user = buildUser();
+        user.setPassword(null);
+        user.setAuthProvider(AuthProvider.GOOGLE);
+        var request = new SetPasswordRequest("newPassword123");
+        when(passwordEncoder.encode("newPassword123")).thenReturn("newEncoded");
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        userService.setPassword(user, request);
+
+        assertEquals("newEncoded", user.getPassword());
+        verify(userRepository).save(user);
+        // Adding a login method is not a recovery — existing sessions stay valid.
+        verify(refreshTokenService, never()).revokeAllForUser(any());
+    }
+
+    @Test
+    void setPassword_shouldThrowWhenPasswordAlreadySet() {
+        var user = buildUser();
+        var request = new SetPasswordRequest("newPassword123");
+
+        assertThrows(PasswordAlreadySetException.class, () -> userService.setPassword(user, request));
         verify(userRepository, never()).save(any());
     }
 

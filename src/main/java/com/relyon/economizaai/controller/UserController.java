@@ -1,6 +1,7 @@
 package com.relyon.economizaai.controller;
 
 import com.relyon.economizaai.dto.request.ChangePasswordRequest;
+import com.relyon.economizaai.dto.request.SetPasswordRequest;
 import com.relyon.economizaai.dto.request.UpdateContributionRequest;
 import com.relyon.economizaai.dto.request.UpdateDigestPreferencesRequest;
 import com.relyon.economizaai.dto.request.UpdateHomeLocationRequest;
@@ -75,6 +76,13 @@ public class UserController {
                                                               @Valid @RequestBody ChangePasswordRequest request) {
         userService.changePassword(user, request);
         return ResponseEntity.ok(Map.of("message", messageService.translate("user.password.changed")));
+    }
+
+    @PostMapping("/me/password")
+    public ResponseEntity<Map<String, String>> setPassword(@AuthenticationPrincipal User user,
+                                                           @Valid @RequestBody SetPasswordRequest request) {
+        userService.setPassword(user, request);
+        return ResponseEntity.ok(Map.of("message", messageService.translate("user.password.set")));
     }
 
     @PatchMapping("/me/contribution")
