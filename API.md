@@ -198,6 +198,7 @@ The refresh token is **single-use** — every `/refresh` call returns a new pair
 GET    /api/v1/users/me                 → current user
 PUT    /api/v1/users/me                 { "name": "..." }
 PUT    /api/v1/users/me/password        { "currentPassword": "...", "newPassword": "..." }
+POST   /api/v1/users/me/password        { "newPassword": "..." }   ← set a FIRST password (social account); 409 if one exists
 DELETE /api/v1/users/me                 → LGPD account deletion (cascades all data)
 GET    /api/v1/users/me/export          → LGPD data export (ALL personal data: user + accountExtras + household + receipts + notificationRules + watchedMarketCnpjs + subscription + marketAliases + customCategories + categoryOverrides + manualPurchases + shoppingLists + notifications)
 PATCH  /api/v1/users/me/contribution    { "contributionOptIn": false }   ← LGPD opt-out from collaborative panel
@@ -220,6 +221,8 @@ POST   /api/v1/users/me/profile-picture   ← multipart form, field name "file"
 GET    /api/v1/users/me/profile-picture   ← returns the bytes (Content-Type matches the upload)
 DELETE /api/v1/users/me/profile-picture
 ```
+
+**Set password (social accounts)**: a Google/Apple user has no local password. `POST /users/me/password` (authenticated) creates one, enabling email+password login **in addition to** the social login (which keeps working). Returns `200 { "message": ... }`; `409 user.password.already.set` when the account already has a password (use the `PUT` instead). `UserResponse` exposes `authProvider` (`LOCAL|GOOGLE|APPLE`) and `hasPassword` so the FE can decide between "create password" and "change password" UI. After setting one, `forgot-password` also works for that account.
 
 **Profile picture**: standard multipart upload. The response is JSON `{ "status": "ok" }` on success.
 

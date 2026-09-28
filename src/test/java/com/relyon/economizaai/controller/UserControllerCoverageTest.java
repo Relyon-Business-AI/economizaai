@@ -9,6 +9,7 @@ import com.relyon.economizaai.dto.response.NotificationPreferenceResponse;
 import com.relyon.economizaai.dto.response.UserResponse;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.AuthProvider;
 import com.relyon.economizaai.model.enums.NotificationChannel;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.model.enums.Role;
@@ -86,7 +87,8 @@ class UserControllerCoverageTest {
         return new UserResponse(UUID.randomUUID(), "John Doe", "john@test.com",
                 Role.USER, SubscriptionTier.FREE, true, true, LocalDateTime.now(),
                 new BigDecimal("-30.0277"), new BigDecimal("-51.2287"),
-                null, null, null, null, null, LocalDateTime.now());
+                null, null, null, null, null, LocalDateTime.now(),
+                AuthProvider.LOCAL, true);
     }
 
     @Test

@@ -712,6 +712,40 @@
 					"response": []
 				},
 				{
+					"name": "Set password (social account without one)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/password",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"password"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"newPassword\": \"newPassword123\"\n}"
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "Set home location (lat/lng)",
 					"request": {
 						"method": "PATCH",
@@ -6376,6 +6410,51 @@
 								"type": "text/javascript",
 								"exec": [
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "5b. Set password should conflict (account already has one)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/password",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"password"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"newPassword\": \"anotherPassword123\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Set password on account with one returns 409', function () { pm.response.to.have.status(409); });"
 								]
 							}
 						}
