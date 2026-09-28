@@ -342,6 +342,31 @@ class CanonicalizationServiceTest {
     }
 
     @Test
+    void recanonicalizeUnmatchedForKeyword_matchesPunctuatedDescription() {
+        // "pres mag" deve casar "PRES.MAG.SADI.SOLT.2": o pré-filtro LIKE agora usa só
+        // o primeiro token ("%pres%"), então os pontos não eliminam o item antes da
+        // checagem de frase normalizada. Antes, o LIKE "%pres mag%" descartava o item.
+        var receipt = buildReceipt(item("PRES.MAG.SADI.SOLT.2", null));
+        var presItem = receipt.getItems().get(0);
+        when(receiptItemRepository.findUnmatchedConfirmedByDescriptionLike(anyString()))
+                .thenReturn(List.of(presItem));
+        when(aliasRepository.findByNormalizedDescription(anyString())).thenReturn(Optional.empty());
+        when(productExtractor.extract(any())).thenReturn(ProductExtraction.EMPTY);
+        when(aliasRepository.existsByNormalizedDescription(anyString())).thenReturn(false);
+        when(productRepository.save(any(Product.class))).thenAnswer(inv -> {
+            var savedProduct = inv.<Product>getArgument(0);
+            savedProduct.setId(UUID.randomUUID());
+            return savedProduct;
+        });
+
+        var relinked = service.recanonicalizeUnmatchedForKeyword("pres mag");
+
+        assertEquals(1, relinked);
+        assertNotNull(presItem.getProduct());
+        verify(receiptItemRepository).findUnmatchedConfirmedByDescriptionLike("%pres%");
+    }
+
+    @Test
     void recanonicalizeUnmatchedForKeyword_blankKeywordReturnsZero() {
         assertEquals(0, service.recanonicalizeUnmatchedForKeyword("  "));
         verify(receiptItemRepository, never()).findUnmatchedConfirmedByDescriptionLike(anyString());

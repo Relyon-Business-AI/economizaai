@@ -121,16 +121,30 @@ public class CanonicalizationService {
         if (keyword == null || keyword.isBlank()) return 0;
         var normalizedKeyword = DescriptionNormalizer.normalize(keyword);
         if (normalizedKeyword.isBlank()) return 0;
-        var candidates = receiptItemRepository.findUnmatchedConfirmedByDescriptionLike(
-                "%" + keyword.trim().toLowerCase() + "%");
+        // Pre-filter só pelo PRIMEIRO token do keyword. Um LIKE com o keyword inteiro
+        // ("pres mag") falha em descrições pontuadas ("pres.mag.sadi.solt.2") porque o
+        // ponto não é espaço — e o item é descartado antes da checagem precisa.
+        // descriptionContainsPhrase() abaixo (que normaliza) é o filtro real e exato.
+        var firstToken = firstAlphanumericToken(keyword);
+        if (firstToken.isBlank()) return 0;
+        var candidates = receiptItemRepository.findUnmatchedConfirmedByDescriptionLike("%" + firstToken + "%");
         var relinked = 0;
         for (var item : candidates) {
             if (!descriptionContainsPhrase(item.getRawDescription(), normalizedKeyword)) continue;
             linkOrCreateProduct(item.getReceipt(), item);
             if (item.getProduct() != null) relinked++;
         }
-        log.info("recanonicalize.keyword keyword='{}' candidates={} relinked={}", keyword, candidates.size(), relinked);
+        log.info("recanonicalize.keyword keyword='{}' firstToken='{}' candidates={} relinked={}",
+                keyword, firstToken, candidates.size(), relinked);
         return relinked;
+    }
+
+    /** Primeiro token alfanumérico do keyword em minúsculas (ignora pontuação/espaços). */
+    private static String firstAlphanumericToken(String keyword) {
+        for (var token : keyword.trim().toLowerCase().split("[^a-z0-9]+")) {
+            if (!token.isBlank()) return token;
+        }
+        return "";
     }
 
     /**
