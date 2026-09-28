@@ -105,10 +105,19 @@ public class AiController {
         return ResponseEntity.ok(aiFindingService.list(status, type, page, size));
     }
 
+    /**
+     * Aceita o corpo como {@code Map} (que o Jackson 3 do Spring Boot 4 desserializa
+     * nativamente) e converte para {@code JsonNode} com o ObjectMapper local — receber
+     * o {@code com.fasterxml...JsonNode} direto no corpo quebra, pois o conversor HTTP
+     * do Boot 4 é Jackson 3 e não constrói o tipo abstrato do Jackson 2.
+     */
     @PostMapping("/findings/{id}/approve")
     public ResponseEntity<AiFinding> approve(@PathVariable UUID id,
-            @RequestBody(required = false) JsonNode overrides) {
-        return ResponseEntity.ok(aiFindingService.approve(id, overrides));
+            @RequestBody(required = false) Map<String, Object> overrides) {
+        var overridesNode = (overrides == null || overrides.isEmpty())
+                ? null
+                : (JsonNode) objectMapper.valueToTree(overrides);
+        return ResponseEntity.ok(aiFindingService.approve(id, overridesNode));
     }
 
     @PostMapping("/findings/{id}/reject")
