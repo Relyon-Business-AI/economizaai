@@ -58,4 +58,19 @@ class PackSizeExtractorTest {
         assertNull(p.size());
         assertNull(p.unit());
     }
+
+    @Test
+    void picksLastMeasurementForPharmaceuticalWithDualUnit() {
+        // Dosage comes first (0,50MG), real container volume comes last (2ML).
+        var p = PackSizeExtractor.extract("PULMICORT 0,50MG CX 5 FR X 2ML");
+        assertEquals(new BigDecimal("2"), p.size());
+        assertEquals("ML", p.unit());
+    }
+
+    @Test
+    void singleMeasurementStillReturnsCorrectly() {
+        var p = PackSizeExtractor.extract("QUEIJO MINAS FRESCAL 500G");
+        assertEquals(new BigDecimal("500"), p.size());
+        assertEquals("G", p.unit());
+    }
 }
