@@ -26,6 +26,8 @@ public final class UnitConverter {
     public record NormalizedPrice(BaseUnit baseUnit, BigDecimal pricePerBaseUnit) {}
 
     private static final BigDecimal MILLI = new BigDecimal("0.001");
+    // NUMERIC(12,4) max — values above this indicate a bad packUnit (e.g. dosage in mg mistaken for pack size)
+    private static final BigDecimal MAX_NORMALIZED_PRICE = new BigDecimal("9999999.9999");
 
     private static final Map<String, UnitFactor> CONVERSIONS = Map.ofEntries(
             // Mass
@@ -89,8 +91,9 @@ public final class UnitConverter {
         if (itemFactor.isPresent() && itemFactor.get().baseUnit() != BaseUnit.UN) {
             var totalInBase = quantity.multiply(itemFactor.get().multiplier());
             if (totalInBase.signum() <= 0) return Optional.empty();
-            return Optional.of(new NormalizedPrice(itemFactor.get().baseUnit(),
-                    totalPrice.divide(totalInBase, 4, RoundingMode.HALF_UP)));
+            var price = totalPrice.divide(totalInBase, 4, RoundingMode.HALF_UP);
+            if (price.compareTo(MAX_NORMALIZED_PRICE) > 0) return Optional.empty();
+            return Optional.of(new NormalizedPrice(itemFactor.get().baseUnit(), price));
         }
         // Path 2: item is a discrete count — need product packSize × packUnit.
         if (packSize == null || packSize.signum() <= 0) return Optional.empty();
@@ -98,7 +101,10 @@ public final class UnitConverter {
         if (packFactor.isEmpty()) return Optional.empty();
         var totalInBase = quantity.multiply(packSize).multiply(packFactor.get().multiplier());
         if (totalInBase.signum() <= 0) return Optional.empty();
-        return Optional.of(new NormalizedPrice(packFactor.get().baseUnit(),
-                totalPrice.divide(totalInBase, 4, RoundingMode.HALF_UP)));
+        var price = totalPrice.divide(totalInBase, 4, RoundingMode.HALF_UP);
+        // Guard against tiny packSize (e.g. pharmaceutical dosage in mg mistaken for pack size)
+        // producing a normalizedUnitPrice that overflows NUMERIC(12,4).
+        if (price.compareTo(MAX_NORMALIZED_PRICE) > 0) return Optional.empty();
+        return Optional.of(new NormalizedPrice(packFactor.get().baseUnit(), price));
     }
 }
