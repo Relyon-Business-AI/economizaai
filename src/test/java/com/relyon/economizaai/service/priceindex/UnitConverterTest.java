@@ -89,4 +89,24 @@ class UnitConverterTest {
                 new BigDecimal("1"), "KG", null, null, new BigDecimal("10"));
         assertEquals(lower, upper);
     }
+
+    @Test
+    void emptyWhenPharmaceuticalDosageExtractedAsPackSize() {
+        // PackSizeExtractor can still return 0.5 MG if it is the only measurement
+        // in the description (no container volume to fall back to).
+        // totalInBase = 1 × 0.5 × 0.000001 = 0.0000005 KG < MIN_TOTAL_BASE → empty.
+        var result = UnitConverter.normalizeItemPrice(
+                new BigDecimal("1"), "UN", new BigDecimal("0.5"), "MG", new BigDecimal("74.19"));
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void normalizesPharmaceuticalByVolumeWhenExtractorPicksVolume() {
+        // After the PackSizeExtractor fix, dual-unit pharma descriptions yield the real volume.
+        // 1 UN with pack 2 ML at R$74.19 → R$37,095/L — extreme but storable in NUMERIC(12,4).
+        var result = UnitConverter.normalizeItemPrice(
+                new BigDecimal("1"), "UN", new BigDecimal("2"), "ML", new BigDecimal("74.19"));
+        assertTrue(result.isPresent());
+        assertEquals(BaseUnit.L, result.get().baseUnit());
+    }
 }

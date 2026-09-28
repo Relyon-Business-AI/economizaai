@@ -18,10 +18,18 @@ public final class PackSizeExtractor {
     public static PackSize extract(String text) {
         if (text == null || text.isBlank()) return PackSize.EMPTY;
         var weightMatch = WEIGHT_VOLUME.matcher(text);
-        if (weightMatch.find()) {
-            var size = new BigDecimal(weightMatch.group(1).replace(',', '.'));
-            var unit = weightMatch.group(2).toUpperCase();
-            return new PackSize(size, unit);
+        // Scan ALL matches and keep the LAST one. Pharmaceutical descriptions often put the
+        // dosage/concentration first and the actual container volume second
+        // (e.g. "PULMICORT 0,50MG CX 5 FR X 2ML" — 0,50MG is dosage, 2ML is the real pack size).
+        // For grocery items, there is normally only one measurement so first == last.
+        BigDecimal lastSize = null;
+        String lastUnit = null;
+        while (weightMatch.find()) {
+            lastSize = new BigDecimal(weightMatch.group(1).replace(',', '.'));
+            lastUnit = weightMatch.group(2).toUpperCase();
+        }
+        if (lastSize != null) {
+            return new PackSize(lastSize, lastUnit);
         }
         var packMatch = PACK_COUNT.matcher(text);
         if (packMatch.find()) {

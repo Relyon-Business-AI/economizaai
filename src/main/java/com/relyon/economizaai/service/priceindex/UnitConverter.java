@@ -26,7 +26,14 @@ public final class UnitConverter {
     public record NormalizedPrice(BaseUnit baseUnit, BigDecimal pricePerBaseUnit) {}
 
     private static final BigDecimal MILLI = new BigDecimal("0.001");
-    // NUMERIC(12,4) max — values above this indicate a bad packUnit (e.g. dosage in mg mistaken for pack size)
+    // If the total physical quantity (qty × packSize × multiplier) is below this, the extracted
+    // unit is almost certainly a pharmaceutical dosage/concentration (e.g. "0,50MG" in
+    // "PULMICORT 0,50MG CX 5 FR X 2ML"), not the container size. PackSizeExtractor already
+    // picks the last measurement to prefer the real volume, but this guard catches cases
+    // where there is only a dosage in MG and no actual volume in the description.
+    private static final BigDecimal MIN_TOTAL_BASE = new BigDecimal("0.0001"); // 0.1 g or 0.1 ml
+    // Secondary cap: the per-base-unit price must also fit in NUMERIC(12,4). If it doesn't,
+    // something slipped through (very extreme concentration or bad data) — return empty.
     private static final BigDecimal MAX_NORMALIZED_PRICE = new BigDecimal("9999999.9999");
 
     private static final Map<String, UnitFactor> CONVERSIONS = Map.ofEntries(
@@ -101,9 +108,8 @@ public final class UnitConverter {
         if (packFactor.isEmpty()) return Optional.empty();
         var totalInBase = quantity.multiply(packSize).multiply(packFactor.get().multiplier());
         if (totalInBase.signum() <= 0) return Optional.empty();
+        if (totalInBase.compareTo(MIN_TOTAL_BASE) < 0) return Optional.empty();
         var price = totalPrice.divide(totalInBase, 4, RoundingMode.HALF_UP);
-        // Guard against tiny packSize (e.g. pharmaceutical dosage in mg mistaken for pack size)
-        // producing a normalizedUnitPrice that overflows NUMERIC(12,4).
         if (price.compareTo(MAX_NORMALIZED_PRICE) > 0) return Optional.empty();
         return Optional.of(new NormalizedPrice(packFactor.get().baseUnit(), price));
     }
