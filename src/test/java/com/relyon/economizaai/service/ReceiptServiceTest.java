@@ -51,6 +51,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -102,6 +104,7 @@ class ReceiptServiceTest {
     @Mock private LocalizedMessageService localizedMessageService;
     @Mock private MerchantSupportGate merchantSupportGate;
     @Mock private PrefetchPolicy prefetchPolicy;
+    @Mock private TransactionTemplate transactionTemplate;
 
     @InjectMocks private ReceiptService receiptService;
 
@@ -117,6 +120,9 @@ class ReceiptServiceTest {
         lenient().when(sefazIngestionService.resolveChave(any()))
                 .thenAnswer(invocation -> ChaveAcessoParser.extractChave(invocation.getArgument(0)));
         lenient().when(canonicalizationService.previewCategory(any())).thenReturn(Optional.empty());
+        // The persist half of reparse runs inside a TransactionTemplate — execute the callback inline.
+        lenient().when(transactionTemplate.execute(any()))
+                .thenAnswer(invocation -> invocation.<TransactionCallback<Object>>getArgument(0).doInTransaction(null));
     }
 
     @Test
@@ -178,6 +184,41 @@ class ReceiptServiceTest {
         verify(categoryOverrideService).setOverride(user, product, ProductCategory.GROCERIES);
         assertEquals("GROCERIES", response.items().get(0).category(), "household override shown, global stays OTHER");
         assertEquals(ProductCategory.OTHER, product.getCategory(), "global product untouched");
+    }
+
+    @Test
+    void reparse_appliesParsedDataAndSwapsEvidenceWhenRescued() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        receipt.setRawHtml("<html>rejection page</html>");
+        receipt.setParseErrorReason("receipt.contingency.pending:227");
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        // The rescue produced items from the reconsulted SAT-WEB DANFE, not the stored page.
+        var sample = sampleParsed();
+        var rescued = ParsedReceipt.builder()
+                .chaveAcesso(sample.chaveAcesso())
+                .cnpjEmitente(sample.cnpjEmitente())
+                .marketName(sample.marketName())
+                .marketAddress(sample.marketAddress())
+                .issuedAt(sample.issuedAt())
+                .totalAmount(sample.totalAmount())
+                .rawHtml("<html>satweb danfe</html>")
+                .sourceUrl("https://www.sefaz.rs.gov.br/NFCE (reconsulta chave 65)")
+                .items(sample.items())
+                .build();
+        when(sefazIngestionService.reparseStored(UnidadeFederativa.RS, "<html>rejection page</html>",
+                CHAVE_RS, null)).thenReturn(rescued);
+        when(receiptRepository.save(any(Receipt.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = receiptService.reparse(receipt.getId());
+
+        assertEquals(ReceiptStatus.PENDING_CONFIRMATION, receipt.getStatus());
+        assertNull(receipt.getParseErrorReason());
+        assertEquals("<html>satweb danfe</html>", receipt.getRawHtml(),
+                "stored evidence must be the HTML that produced the items");
+        assertEquals("https://www.sefaz.rs.gov.br/NFCE (reconsulta chave 65)", receipt.getSourceUrl());
+        assertEquals(1, response.items().size());
+        verify(transactionTemplate).execute(any());
     }
 
     private User buildUser() {

@@ -67,6 +67,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -108,6 +109,7 @@ public class ReceiptService {
     private final SubscriptionGateService subscriptionGate;
     private final SavingsAttributionService savingsAttributionService;
     private final ReceiptIngestionService receiptIngestionService;
+    private final TransactionTemplate transactionTemplate;
 
     /**
      * Ingest a receipt from a scanned QR code. Returns IMMEDIATELY with a
@@ -729,9 +731,12 @@ public class ReceiptService {
      * the user re-confirms. Acceptable at admin scale; revisit if this
      * endpoint ever gets bulk usage.
      */
-    @Transactional
     public ReceiptResponse reparse(UUID receiptId) {
         MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
+        // Deliberately NOT @Transactional: reparseStored may consult SEFAZ over
+        // HTTP (stored rejection page → RS bare-chave rescue), and a transaction
+        // must never be held across an outbound call. Plain read → untransacted
+        // parse → short TransactionTemplate persist, same as ReceiptIngestionService.
         var receipt = receiptRepository.findById(receiptId).orElseThrow(ReceiptNotFoundException::new);
         if (receipt.getRawHtml() == null || receipt.getRawHtml().isBlank()) {
             throw new ReceiptNotEditableException("RAW_HTML_MISSING");
@@ -742,24 +747,36 @@ public class ReceiptService {
         var parsed = sefazIngestionService.reparseStored(
                 receipt.getUf(), receipt.getRawHtml(), receipt.getChaveAcesso(), receipt.getSourceUrl());
 
-        receipt.getItems().clear();
-        parsed.items().forEach(parsedItem -> receipt.addItem(toReceiptItem(parsedItem)));
-        receipt.setMarketName(parsed.marketName());
-        receipt.setMarketAddress(parsed.marketAddress());
-        receipt.setIssuedAt(parsed.issuedAt());
-        receipt.setTotalAmount(parsed.totalAmount());
-        receipt.setDiscountTotal(parsed.discountTotal());
-        receipt.setApproxTaxFederal(parsed.approxTaxFederal());
-        receipt.setApproxTaxEstadual(parsed.approxTaxEstadual());
-        receipt.setCnpjEmitente(parsed.cnpjEmitente());
-        receipt.setStatus(ReceiptStatus.PENDING_CONFIRMATION);
-        receipt.setConfirmedAt(null);
-        receipt.setParseErrorReason(null);
-        var saved = receiptRepository.save(receipt);
-        householdCacheGen.bump(receipt.getHousehold().getId());
-        log.info("reparse ok items={} total={} market='{}'",
-                saved.getItems().size(), saved.getTotalAmount(), saved.getMarketName());
-        return withFriendlyName(saved.getHousehold().getId(), saved, ReceiptResponse.from(saved));
+        return transactionTemplate.execute(txStatus -> {
+            var managed = receiptRepository.findById(receiptId).orElseThrow(ReceiptNotFoundException::new);
+            managed.getItems().clear();
+            parsed.items().forEach(parsedItem -> managed.addItem(toReceiptItem(parsedItem)));
+            managed.setMarketName(parsed.marketName());
+            managed.setMarketAddress(parsed.marketAddress());
+            managed.setIssuedAt(parsed.issuedAt());
+            managed.setTotalAmount(parsed.totalAmount());
+            managed.setDiscountTotal(parsed.discountTotal());
+            managed.setApproxTaxFederal(parsed.approxTaxFederal());
+            managed.setApproxTaxEstadual(parsed.approxTaxEstadual());
+            managed.setCnpjEmitente(parsed.cnpjEmitente());
+            // A rescue swaps the evidence: the items came from the reconsulted
+            // DANFE, not the stored rejection page — persist the HTML that
+            // actually produced them so a future reparse is deterministic.
+            if (parsed.rawHtml() != null && !parsed.rawHtml().isBlank()) {
+                managed.setRawHtml(parsed.rawHtml());
+            }
+            if (parsed.sourceUrl() != null) {
+                managed.setSourceUrl(parsed.sourceUrl());
+            }
+            managed.setStatus(ReceiptStatus.PENDING_CONFIRMATION);
+            managed.setConfirmedAt(null);
+            managed.setParseErrorReason(null);
+            var saved = receiptRepository.save(managed);
+            householdCacheGen.bump(managed.getHousehold().getId());
+            log.info("reparse ok items={} total={} market='{}'",
+                    saved.getItems().size(), saved.getTotalAmount(), saved.getMarketName());
+            return withFriendlyName(saved.getHousehold().getId(), saved, ReceiptResponse.from(saved));
+        });
     }
 
     @Transactional

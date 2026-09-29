@@ -16,6 +16,19 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-29 (4) — resgate de nota RS com QR defeituoso (rejeição 227)
+
+- Alguns mercados imprimem o QR com DigestValue inconsistente — o portal SVRS
+  rejeita a consulta pra sempre (cStat 227) mesmo com a nota autorizada na
+  SEFAZ. Agora, quando o portal devolve página de rejeição para chave RS, o
+  backend re-consulta pela **chave pura** no portal legado (grátis); se o DANFE
+  renderiza, a nota é ingerida normalmente. Se a rejeição for real (contingência
+  ainda não transmitida), o erro original continua sendo propagado.
+- Vale para o scan normal E para o reparse admin (`POST /admin/receipts/{id}/reparse`),
+  que agora resgata notas antigas presas em `contingency.pending`/`rejected_qr`.
+  No resgate, `rawHtml`/`sourceUrl` passam a apontar pro DANFE reconsultado.
+- Sem mudança de contrato pro FE — só menos notas falhando.
+
 ## 2026-09-29 (3) — lista admin de notas com contexto de triagem (BREAKING no shape)
 
 - **`GET /api/v1/admin/receipts` mudou o shape da resposta**: cada elemento de
