@@ -261,6 +261,37 @@ public class ReceiptService {
     }
 
     /**
+     * User-facing "tentar novamente" for a FAILED_PARSE nota: flips the row back
+     * to PROCESSING and re-runs the standard QR ingestion with the STORED
+     * qrPayload — no rescan of the paper needed. Rescues transient failures
+     * (portal down) and anything a since-shipped fallback now handles (e.g. the
+     * RS bare-chave rescue for broken printed QRs). Non-SCAN rows (import/photo)
+     * return {@code false} so the controller re-queues them through the paced
+     * import reconsult instead — their payload is a bare chave, not a signed QR.
+     */
+    @Transactional
+    public boolean retryFailedScan(User user, UUID receiptId, boolean deviceCapable) {
+        var receipt = loadOwned(user, receiptId);
+        if (receipt.getOrigin() != ReceiptOrigin.SCAN) {
+            return false;
+        }
+        if (receipt.getStatus() != ReceiptStatus.FAILED_PARSE) {
+            throw new ReceiptNotEditableException(receipt.getStatus().name());
+        }
+        var qrPayload = receipt.getQrPayload();
+        if (qrPayload == null || qrPayload.isBlank()) {
+            throw new ReceiptNotEditableException("QR_PAYLOAD_MISSING");
+        }
+        receipt.setStatus(ReceiptStatus.PROCESSING);
+        receipt.setParseErrorReason(null);
+        receiptRepository.save(receipt);
+        MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
+        log.info("retry ok origin=SCAN status=PROCESSING (re-ingestion dispatched)");
+        dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload, deviceCapable));
+        return true;
+    }
+
+    /**
      * Shared submit path: everything decidable synchronously (unsupported UF,
      * manual-chave-without-fallback, blocked merchant, monthly cap, stale/dup
      * replacement) fails fast with a localized 4xx, then the receipt is persisted

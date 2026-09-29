@@ -69,6 +69,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
@@ -184,6 +185,44 @@ class ReceiptServiceTest {
         verify(categoryOverrideService).setOverride(user, product, ProductCategory.GROCERIES);
         assertEquals("GROCERIES", response.items().get(0).category(), "household override shown, global stays OTHER");
         assertEquals(ProductCategory.OTHER, product.getCategory(), "global product untouched");
+    }
+
+    @Test
+    void retryFailedScan_flipsToProcessingAndReingestsStoredQr() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        receipt.setParseErrorReason("receipt.contingency.pending:227");
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        var retried = receiptService.retryFailedScan(user, receipt.getId(), true);
+
+        assertTrue(retried);
+        assertEquals(ReceiptStatus.PROCESSING, receipt.getStatus());
+        assertNull(receipt.getParseErrorReason());
+        verify(receiptIngestionService).ingest(receipt.getId(), CHAVE_RS, true);
+    }
+
+    @Test
+    void retryFailedScan_importOrigin_returnsFalseUntouched() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        receipt.setOrigin(ReceiptOrigin.IMPORT);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        assertFalse(receiptService.retryFailedScan(user, receipt.getId(), false));
+
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+        verify(receiptIngestionService, never()).ingest(any(), any(), anyBoolean());
+    }
+
+    @Test
+    void retryFailedScan_nonFailedScan_throws() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.CONFIRMED);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        assertThrows(ReceiptNotEditableException.class,
+                () -> receiptService.retryFailedScan(user, receipt.getId(), false));
     }
 
     @Test
