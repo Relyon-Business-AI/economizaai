@@ -26,11 +26,11 @@ public class MercadoPagoSignatureVerifier {
     private final MercadoPagoProperties properties;
 
     public boolean isValid(String xSignature, String xRequestId, String dataId) {
-        var secret = properties.getWebhookSecret();
-        if (secret == null || secret.isBlank()) {
+        if (!properties.isWebhookConfigured()) {
             log.warn("mercadopago.webhook.auth not_configured rejecting");
             return false;
         }
+        var secret = properties.getWebhookSecret();
         if (xSignature == null || xSignature.isBlank()) {
             return false;
         }

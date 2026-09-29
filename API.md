@@ -234,11 +234,15 @@ DELETE /api/v1/users/me/profile-picture
 ### Subscription checkout (web)
 
 ```
+GET  /api/v1/subscriptions/plan            → 200 { "monthlyAmount": 9.90, "currency": "BRL", "webCheckoutAvailable": false }
 POST /api/v1/subscriptions/checkout        → 200 { "checkoutUrl": "<Mercado Pago init_point>" }
                                              503 billing.not.configured (provider not credentialed yet)
                                              502 billing.checkout.failed (MP API down/refused)
 POST /api/v1/webhooks/mercadopago          ← Mercado Pago only (x-signature HMAC, fail-closed)
 ```
+
+`webCheckoutAvailable` flips to `true` the moment the MP credentials land in the
+env — gate the subscribe button on it (no app release needed for the switch-on).
 
 The FE opens `checkoutUrl` (browser/webview) and the user authorizes the monthly
 subscription there. Entitlement flips **only via the webhook** (preapproval
