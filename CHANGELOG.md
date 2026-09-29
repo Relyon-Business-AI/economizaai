@@ -16,6 +16,19 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-29 (3) — lista admin de notas com contexto de triagem (BREAKING no shape)
+
+- **`GET /api/v1/admin/receipts` mudou o shape da resposta**: cada elemento de
+  `content` agora é `AdminReceiptSummaryResponse` = `{ receipt:
+  ReceiptSummaryResponse, owner: {id,name,email}|null, uf, createdAt,
+  parseErrorReason, parseErrorMessage }` (antes era o `ReceiptSummaryResponse`
+  direto). Motivo: a lista admin mostrar dono, UF, data do scan e o motivo da
+  falha sem precisar abrir o detalhe.
+- **FE (dashboard admin):** tela Notas exibe `UF · dono` na linha meta, data do
+  scan (`createdAt`) quando a nota falhou sem `issuedAt`, e o
+  `parseErrorReason` em vermelho nas notas com falha. Drill-down de Operações
+  ajustado ao novo shape.
+
 ## 2026-09-29 (2) — `GET /subscriptions/plan` + tela Premium no app
 
 - **Novo endpoint `GET /api/v1/subscriptions/plan`** → `{ monthlyAmount, currency,

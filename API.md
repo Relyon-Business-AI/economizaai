@@ -1373,7 +1373,7 @@ GET    /api/v1/admin/users?q=&page=&size=&sort=   → Page<AdminUserSummaryRespo
 GET    /api/v1/admin/users/{id}              → AdminUserDetailResponse
 DELETE /api/v1/admin/users/{id}              → 204 (deletes account + data; 400 for ADMIN accounts)
 GET    /api/v1/admin/receipts?from=&to=&marketCnpj=&category=&q=&householdId=&uf=&status=&parseErrorReason=&page=&size=
-                                              → Page<ReceiptSummaryResponse>
+                                              → Page<AdminReceiptSummaryResponse> — { receipt: ReceiptSummaryResponse, owner: {id,name,email}|null, uf, createdAt, parseErrorReason, parseErrorMessage }
 GET    /api/v1/admin/receipts/{id}            → ReceiptResponse
 POST   /api/v1/admin/receipts/{id}/reparse    → 200 ReceiptResponse
 POST   /api/v1/admin/notifications/test       → 202 Accepted

@@ -2,8 +2,8 @@ package com.relyon.economizaai.service.admin;
 
 import com.relyon.economizaai.dto.response.AdminReceiptDetailResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptStatsResponse;
+import com.relyon.economizaai.dto.response.AdminReceiptSummaryResponse;
 import com.relyon.economizaai.dto.response.ReceiptResponse;
-import com.relyon.economizaai.dto.response.ReceiptSummaryResponse;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.enums.ProductCategory;
@@ -50,7 +50,7 @@ public class AdminReceiptService {
     private final LocalizedMessageService localizedMessageService;
 
     @Transactional(readOnly = true)
-    public Page<ReceiptSummaryResponse> list(LocalDateTime from,
+    public Page<AdminReceiptSummaryResponse> list(LocalDateTime from,
                                              LocalDateTime to,
                                              String marketCnpj,
                                              List<ProductCategory> categories,
@@ -66,7 +66,8 @@ public class AdminReceiptService {
                 : pageable;
         var spec = buildSearchSpec(from, to, marketCnpj, categories, search, householdId, uf, status,
                 parseErrorReason, includeInternal);
-        return receiptRepository.findAll(spec, sortedPageable).map(ReceiptSummaryResponse::from);
+        return receiptRepository.findAll(spec, sortedPageable)
+                .map(receipt -> AdminReceiptSummaryResponse.of(receipt, localizedParseError(receipt)));
     }
 
     /** Count + total value of the notes matching the same filters as {@link #list} — the list header total. */

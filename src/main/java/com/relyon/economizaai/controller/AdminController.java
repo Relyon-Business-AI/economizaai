@@ -11,6 +11,7 @@ import com.relyon.economizaai.dto.response.AcquisitionReportResponse;
 import com.relyon.economizaai.dto.response.AdminNotificationSummaryResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptDetailResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptStatsResponse;
+import com.relyon.economizaai.dto.response.AdminReceiptSummaryResponse;
 import com.relyon.economizaai.dto.response.AdminUserDetailResponse;
 import com.relyon.economizaai.dto.response.BrandBackfillResponse;
 import com.relyon.economizaai.dto.response.RetentionCohortResponse;
@@ -36,7 +37,6 @@ import com.relyon.economizaai.dto.response.RelevanceReportResponse;
 import com.relyon.economizaai.dto.response.StateCoverageResponse;
 import com.relyon.economizaai.dto.response.ProductResponse;
 import com.relyon.economizaai.dto.response.ReceiptResponse;
-import com.relyon.economizaai.dto.response.ReceiptSummaryResponse;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.CategorizationQualityTrigger;
 import com.relyon.economizaai.model.enums.CategorizationSource;
@@ -170,7 +170,7 @@ public class AdminController {
     }
 
     @GetMapping("/receipts")
-    public ResponseEntity<Page<ReceiptSummaryResponse>> listReceipts(
+    public ResponseEntity<Page<AdminReceiptSummaryResponse>> listReceipts(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
             @RequestParam(required = false) String marketCnpj,
