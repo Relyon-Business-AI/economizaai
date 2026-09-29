@@ -13,6 +13,8 @@ import org.springframework.stereotype.Component;
  * Keeps the catalog in sync with dictionary changes WITHOUT a manual run.
  * Once a night it:
  * <ol>
+ *   <li>auto-promotes stable classifications into the learned dictionary (self-healing
+ *       loop) so recurring patterns become free/instant rules without human approval;</li>
  *   <li>applies TRUSTED (dictionary/learned) category corrections to existing products;</li>
  *   <li>records a quality snapshot so any drift/regression surfaces in the trend;</li>
  *   <li>derives new Brazilian brands from the EAN catalog and promotes brand aliases;</li>
@@ -29,6 +31,7 @@ public class CategorizerMaintenanceJob {
     private final CategorizerAdminService categorizerAdminService;
     private final BrandAliasPromotionService brandAliasPromotionService;
     private final CanonicalizationService canonicalizationService;
+    private final AutoPromotionService autoPromotionService;
 
     @Value("${economizaai.categorizer.maintenance.enabled:true}")
     private boolean enabled;
@@ -46,6 +49,7 @@ public class CategorizerMaintenanceJob {
             log.debug("categorizer.maintenance.skipped reason=disabled");
             return;
         }
+        autoPromote();
         try {
             var recategorized = adminProductService.recategorizeApply();
             categorizationQualityService.measureAndRecord(CategorizationQualityTrigger.BACKFILL);
@@ -55,6 +59,19 @@ public class CategorizerMaintenanceJob {
             log.error("categorizer.maintenance.failed", ex);
         }
         maintainBrands();
+    }
+
+    /** Self-healing loop: consolidate stable classifications into learned rules. Isolated
+     *  in its own try/catch so a failure here never blocks recategorize/brands/retry. */
+    private void autoPromote() {
+        try {
+            var promotion = autoPromotionService.promote();
+            log.info("categorizer.maintenance.auto_promote promoted={} skippedHuman={} skippedAgreement={} skippedSamples={} learnedTotal={}",
+                    promotion.promoted(), promotion.skippedDueToHuman(), promotion.skippedDueToAgreement(),
+                    promotion.skippedDueToSamples(), promotion.learnedTotal());
+        } catch (RuntimeException ex) {
+            log.error("categorizer.maintenance.auto_promote_failed", ex);
+        }
     }
 
     private void maintainBrands() {

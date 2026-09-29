@@ -70,7 +70,10 @@ public class AutoPromotionService {
     @Autowired
     private AutoPromotionService self = this;
 
-    @Value("${economizaai.ml.auto-promote.min-samples:30}")
+    // 7 amostras + 90% de concordância = na prática exige unanimidade em 7 ocorrências
+    // (6/7 = 85% reprova). Baixo o bastante pra ter efeito no volume atual, seguro o
+    // bastante pra não promover padrão instável. Suba conforme o volume crescer.
+    @Value("${economizaai.ml.auto-promote.min-samples:7}")
     private int minSamples;
 
     @Value("${economizaai.ml.auto-promote.min-agreement:0.90}")
