@@ -55,6 +55,12 @@ class MercadoPagoSignatureVerifierTest {
     }
 
     @Test
+    void rejectsWhenSecretIsTheRenderPlaceholder() {
+        assertFalse(verifierWithSecret("CHANGEME")
+                .isValid("ts=1700000000,v1=deadbeef", "req-9", "pre_1"));
+    }
+
+    @Test
     void rejectsAMissingOrMalformedHeader() {
         var verifier = verifierWithSecret(SECRET);
 

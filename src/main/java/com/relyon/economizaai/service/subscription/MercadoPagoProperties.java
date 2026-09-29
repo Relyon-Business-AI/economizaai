@@ -17,6 +17,9 @@ import java.math.BigDecimal;
 @ConfigurationProperties(prefix = "economizaai.billing.mercadopago")
 public class MercadoPagoProperties {
 
+    /** Placeholder used on Render (which rejects empty env values) — treated as unset. */
+    private static final String PLACEHOLDER = "CHANGEME";
+
     private String accessToken = "";
     private String webhookSecret = "";
     private BigDecimal planAmount = new BigDecimal("9.90");
@@ -25,7 +28,15 @@ public class MercadoPagoProperties {
     private String apiBaseUrl = "https://api.mercadopago.com";
 
     public boolean isCheckoutConfigured() {
-        return accessToken != null && !accessToken.isBlank();
+        return isSet(accessToken);
+    }
+
+    public boolean isWebhookConfigured() {
+        return isSet(webhookSecret);
+    }
+
+    private static boolean isSet(String value) {
+        return value != null && !value.isBlank() && !PLACEHOLDER.equalsIgnoreCase(value.trim());
     }
 
     public String getAccessToken() { return accessToken; }

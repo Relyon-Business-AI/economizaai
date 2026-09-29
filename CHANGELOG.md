@@ -16,6 +16,18 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-29 (2) — `GET /subscriptions/plan` + tela Premium no app
+
+- **Novo endpoint `GET /api/v1/subscriptions/plan`** → `{ monthlyAmount, currency,
+  webCheckoutAvailable }`. O flag vira `true` sozinho quando as credenciais MP
+  entrarem no env — o FE liga o botão de assinar sem release.
+- **FE:** tela "Premium" nos Ajustes (benefícios + status da assinatura + área de
+  compra por plataforma: web = botão de checkout MP; iOS = menção em texto puro ao
+  site (regra do acordo CADE: texto = 0% de taxa, link clicável = 15%); Android =
+  sem menção a canal externo, mas quem assina na web vira Premium no app).
+- Env vars `MP_*` já criadas nos serviços dev/prod com sentinel `CHANGEME`
+  (Render não aceita valor vazio) — o backend trata `CHANGEME` como não-configurado.
+
 ## 2026-09-29 — checkout web de assinatura (Mercado Pago) — INERTE até credenciar
 
 Nasce o caminho de cobrança web: `POST /api/v1/subscriptions/checkout` cria uma

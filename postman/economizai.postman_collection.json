@@ -1261,6 +1261,35 @@
 			"name": "Subscriptions",
 			"item": [
 				{
+					"name": "Get premium plan",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/subscriptions/plan",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"subscriptions",
+								"plan"
+							]
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "Create web checkout (Mercado Pago)",
 					"request": {
 						"method": "POST",
@@ -6570,6 +6599,52 @@
 								"type": "text/javascript",
 								"exec": [
 									"pm.test('Checkout without billing provider returns 503', function () { pm.response.to.have.status(503); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "5d. Get premium plan",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/subscriptions/plan",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"subscriptions",
+								"plan"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Plan returns amount and availability flag', function () {",
+									"  pm.response.to.have.status(200);",
+									"  const plan = pm.response.json();",
+									"  pm.expect(plan.monthlyAmount).to.be.a('number');",
+									"  pm.expect(plan.currency).to.eql('BRL');",
+									"  pm.expect(plan.webCheckoutAvailable).to.be.a('boolean');",
+									"});"
 								]
 							}
 						}
