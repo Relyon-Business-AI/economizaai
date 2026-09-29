@@ -51,7 +51,10 @@ public class RevenueCatWebhookController {
     }
 
     private void verifyAuthHeader(String provided) {
-        if (authHeaderSecret == null || authHeaderSecret.isBlank()) {
+        // "CHANGEME" is the Render placeholder (empty values are rejected there) —
+        // treated as unset so the placeholder can never authenticate a forged call.
+        if (authHeaderSecret == null || authHeaderSecret.isBlank()
+                || "CHANGEME".equalsIgnoreCase(authHeaderSecret.trim())) {
             log.warn("revenuecat.webhook.auth not_configured rejecting");
             throw new InvalidWebhookSecretException();
         }
