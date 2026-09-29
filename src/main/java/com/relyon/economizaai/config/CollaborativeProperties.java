@@ -3,6 +3,8 @@ package com.relyon.economizaai.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.LocalDate;
+
 @Configuration
 @ConfigurationProperties(prefix = "economizaai")
 public class CollaborativeProperties {
@@ -56,18 +58,24 @@ public class CollaborativeProperties {
 
         /**
          * Signup promo (2026-09-02, "até segunda ordem"): every new user is
-         * granted PRO for {@code months} from their own registration date.
-         * Toggle {@code enabled} off via {@code SUBSCRIPTION_PROMO_ENABLED=false}
-         * to end the promo without a code change/revert.
+         * granted PRO. Since 2026-09-29 the grant runs until the FIXED date
+         * {@code until} (launch promo, one synchronized cutover for the whole
+         * base); when {@code until} is unset it falls back to {@code months}
+         * from the registration date. Once {@code until} passes, new signups
+         * stop being granted — no code change needed. Toggle {@code enabled}
+         * off via {@code SUBSCRIPTION_PROMO_ENABLED=false} to end it earlier.
          */
         public static class Promo {
             private boolean enabled = true;
             private int months = 3;
+            private LocalDate until;
 
             public boolean isEnabled() { return enabled; }
             public void setEnabled(boolean v) { this.enabled = v; }
             public int getMonths() { return months; }
             public void setMonths(int v) { this.months = v; }
+            public LocalDate getUntil() { return until; }
+            public void setUntil(LocalDate v) { this.until = v; }
         }
 
         public static class Free {

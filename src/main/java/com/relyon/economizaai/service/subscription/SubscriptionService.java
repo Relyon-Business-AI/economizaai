@@ -69,14 +69,15 @@ public class SubscriptionService {
     }
 
     /**
-     * Signup promo hook ("até segunda ordem"): grants a freshly-registered user
-     * PRO for {@code economizaai.subscription.promo.months} from today, when the
-     * promo is enabled. Called right after user creation by both the
+     * Signup promo hook (launch promo): grants a freshly-registered user PRO
+     * until the FIXED {@code economizaai.subscription.promo.until} date (whole
+     * base expires together), falling back to {@code months} from today when no
+     * fixed date is configured. Called right after user creation by both the
      * email/password and social registration flows.
      *
      * @return the granted period end, or {@code null} when the promo is
-     * disabled (no grant happened) — callers use this to tell the FE whether
-     * to show the signup-promo banner.
+     * disabled or the fixed date has already passed (no grant happened) —
+     * callers use this to tell the FE whether to show the signup-promo banner.
      */
     @Transactional
     public LocalDateTime grantSignupPromoIfEnabled(User user) {
@@ -84,11 +85,25 @@ public class SubscriptionService {
         if (!promo.isEnabled()) {
             return null;
         }
-        var periodEnd = LocalDateTime.now().plusMonths(promo.getMonths());
+        var periodEnd = resolvePromoPeriodEnd(promo);
+        if (periodEnd == null) {
+            log.info("subscription.signup_promo_over user={} until={}",
+                    LogMasker.email(user.getEmail()), promo.getUntil());
+            return null;
+        }
         activatePro(user, "manual", null, periodEnd);
-        log.info("subscription.signup_promo_granted user={} months={}",
-                LogMasker.email(user.getEmail()), promo.getMonths());
+        log.info("subscription.signup_promo_granted user={} periodEnd={}",
+                LogMasker.email(user.getEmail()), periodEnd);
         return periodEnd;
+    }
+
+    /** Fixed launch-promo date (end of day) when configured and still ahead; months-based fallback otherwise. */
+    private LocalDateTime resolvePromoPeriodEnd(CollaborativeProperties.Subscription.Promo promo) {
+        if (promo.getUntil() == null) {
+            return LocalDateTime.now().plusMonths(promo.getMonths());
+        }
+        var fixedEnd = promo.getUntil().atTime(23, 59, 59);
+        return fixedEnd.isAfter(LocalDateTime.now()) ? fixedEnd : null;
     }
 
     /** Current tier + provider lifecycle for the self-serve status endpoint. */

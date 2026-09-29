@@ -16,6 +16,23 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-29 — promo de lançamento vira DATA FIXA (31/12/2026)
+
+O Premium promocional deixou de ser "3 meses a partir do cadastro" e passou a ser
+**até 31/12/2026 para toda a base** — um único evento de virada em vez de expirações
+contínuas por usuário (sem checkout ainda, expirar um a um seria o pior choque).
+
+- **Backend:** cadastro novo ganha PRO até a data fixa (`SUBSCRIPTION_PROMO_UNTIL`,
+  default 2026-12-31); migration V85 estendeu todos os grants manuais existentes pra
+  mesma data (grant de admin sem expiração e assinatura de provider real não são tocados).
+  Depois da data, cadastros novos param de ganhar o promo automaticamente.
+- **FE:** o modal "Sua conta virou Premium até X" volta a aparecer **uma vez** no
+  próximo login de quem já tinha visto — o flag de "já vi" agora guarda a data de
+  expiração, então qualquer extensão futura re-anuncia sozinha com a data nova.
+- `signupPromoValidUntil` no register agora vem com a data fixa.
+
+---
+
 ## 2026-09-28 — conta Google/Apple pode criar senha — `POST /users/me/password`
 
 Usuário que entrou com Google/Apple agora pode **criar uma senha** e passar a

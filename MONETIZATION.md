@@ -37,6 +37,14 @@ their area, even if the actual paywall is unenforced for months.
   muros, um a um, com **A/B**. Isso depende do **feature-flag service (⬜)** — é **pré-requisito**
   da própria metodologia "cada gate é um A/B", não um nice-to-have.
 
+**2b. Promo de lançamento em DATA FIXA (decisão 2026-09-29):** o Premium promocional deixou
+de ser rolling ("3 meses do cadastro") e passou a valer **até 31/12/2026 pra base inteira**
+(`SUBSCRIPTION_PROMO_UNTIL`, migration V85 estendeu os grants existentes). Racional: sem
+checkout, expirações contínuas por usuário = downgrade sem botão de upgrade (pior choque
+possível); data única = um evento de "pricing launch" orquestrável (anúncio 30d antes,
+preço de fundador pra base atual, campanha). O Q4/2026 é a janela pra integrar o provedor
+de pagamento e medir retenção antes da virada.
+
 **3. Acesso antecipado como valor contínuo do PRO (novo perk):** PRO recebe features primeiro
 (exclusividade temporária), entregue pela mesma infra de flags. Reduz churn sem capar o free.
 

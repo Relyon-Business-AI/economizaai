@@ -256,12 +256,16 @@ economizaai:
     # Safety-net sweep: downgrades a PRO whose paid period elapsed without a renewal.
     expiry-interval-ms: ${SUBSCRIPTION_EXPIRY_INTERVAL_MS:3600000}   # hourly
     expiry-initial-delay-ms: 120000
-    # Signup promo ("até segunda ordem", 2026-09-02): every new registration is granted
-    # PRO for `months` from its own signup date. Set SUBSCRIPTION_PROMO_ENABLED=false to end it.
+    # Launch promo (2026-09-29): every registration is granted PRO until the FIXED date
+    # `until` — one synchronized cutover for the whole base instead of per-user rolling
+    # expiries (see V85, which extended existing grants to the same date). When `until`
+    # is unset, falls back to `months` from the signup date (pre-2026-09-29 behavior).
+    # After `until` passes, signups stop being granted. SUBSCRIPTION_PROMO_ENABLED=false ends it earlier.
     # (Existing accounts got a separate one-off 6-month grant via V68__grant_premium_promo.sql.)
     promo:
       enabled: ${SUBSCRIPTION_PROMO_ENABLED:true}
       months: ${SUBSCRIPTION_PROMO_MONTHS:3}
+      until: ${SUBSCRIPTION_PROMO_UNTIL:2026-12-31}
     free:
       watched-markets: 3                       # FREE: max pinned markets (PRO unlimited)
       history-days: 90                         # FREE: rolling analytics/history window (PRO unlimited)

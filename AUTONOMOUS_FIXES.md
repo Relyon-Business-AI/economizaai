@@ -73,6 +73,26 @@ A rollback looks like:
 
 <!-- AUTONOMOUS ENTRIES BELOW - newest first. The watchdog inserts here. -->
 
+### [2026-09-29 11:44:33] [NEEDS-HUMAN] NO-REPRO - E2E: 22. Categorizer AI status (admin)
+- **Detected:**
+```
+A daily E2E run against the live dev server FAILED (3/233 assertions).
+Failing steps:
+- 22. Categorizer AI status (admin): AssertionError: expected response to have status code 200 but got 403
+- 22. Categorizer AI status (admin): AssertionError: expected { status: 403, message: 'Forbidden' } to have property 'enabled'
+- COV: Add item: AssertionError: expected 404 to be below 300
+
+Server-side errors during the run (the likely root cause):
+```
+2026-09-29 11:43:24.037 WARN  [req=39c001c3 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - No handler for request: api/v1/categorizer/ml/predict
+2026-09-29 11:43:24.780 WARN  [req=a9cb6ddd user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Entity not found: Lista de compras não encontrada.
+2026-09-29 11:43:25.445 WARN  [req=04b0f445 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Entity not found: Lista de compras não encontrada.
+2026-09-29 11:43:25.570 WARN  [req=90afb06c user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Type mismatch for parameter 'itemId': Method parameter 'itemId': Failed to convert value of type 'java.lang.String' to required type 'java.util.UUID'; Invalid UUID string: {{e2eShoppingListItemId}}
+2026-09-29 11:43:25.686 WARN  [req=895b97a5 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Type mismatch for parameter 'itemId': Method parameter 'itemId': Failed to convert value of type 'java.lang.String' to r
+```
+- **Outcome:** could not reproduce with a failing test; no code changed.
+- **Detail:** Confirmed: `COV: Delete` (DELETE `/api/v1/shopping-lists/{{e2eShoppingListId}}`) runs immediately before `COV: Add item` (POST to the same now-deleted list id) in `postman/economizai.postman_collection.json`, causing the 404 — same collection-ordering defect already logged as NO-REPRO for the "E2E Flow" copy of this sequence. This is a Postman collection ordering issue, not Java code, so no unit/integration test can reproduce it. The admin-status 403 is the same previously-confirmed env/secrets 
+
 ### [2026-09-28 12:14:21] [NEEDS-HUMAN] NO-REPRO - E2E: 22. Categorizer AI status (admin)
 - **Detected:**
 ```
