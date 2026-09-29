@@ -16,6 +16,14 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-29 (6) — RJ via Infosimples corrigido (slug nfce-completa)
+
+- RJ não tem o serviço `sefaz/rj/nfce` na Infosimples — toda chamada devolvia
+  602 "serviço não é válido" (5 consultas desperdiçadas). Agora RJ roteia para
+  `sefaz/rj/nfce-completa` (mesmo schema "completa"), configurável via
+  `SEFAZ_INFOSIMPLES_COMPLETA_STATES`. Como o portal da SEFAZ-RJ bloqueia IP de
+  datacenter, a Infosimples é o caminho que faz RJ funcionar no scan normal.
+
 ## 2026-09-29 (5) — retry de nota falhada sem re-escanear + saldo Infosimples
 
 - **`POST /receipts/{id}/retry` agora funciona pra nota ESCANEADA falhada** (antes

@@ -58,16 +58,23 @@ public class InfosimplesService {
     // default `.../sefaz/{uf}/nfce`. MG is the only one verified so far — the default
     // path returns code 602 "serviço informado na URL não é válido" for it.
     private final Set<UnidadeFederativa> resumidaStates;
+    // UFs that only exist under the `.../sefaz/{uf}/nfce-completa` slug (same
+    // "completa" schema as the default). RJ has NO plain `nfce` service — every
+    // call returned 602 until this routing (5 wasted queries, set 2026-09-29).
+    private final Set<UnidadeFederativa> completaStates;
 
     public InfosimplesService(
             RestClient.Builder builder,
             @Value("${economizaai.infosimples.api-key}") String apiKey,
             @Value("${economizaai.infosimples.base-url:https://api.infosimples.com}") String baseUrl,
-            @Value("${economizaai.infosimples.resumida-states:MG}") String resumidaStatesCsv) {
+            @Value("${economizaai.infosimples.resumida-states:MG}") String resumidaStatesCsv,
+            @Value("${economizaai.infosimples.completa-states:RJ}") String completaStatesCsv) {
         this.apiKey = apiKey;
         this.restClient = builder.baseUrl(baseUrl).build();
         this.resumidaStates = parseStates(resumidaStatesCsv);
-        log.info("infosimples.service enabled base-url={} resumida-states={}", baseUrl, resumidaStates);
+        this.completaStates = parseStates(completaStatesCsv);
+        log.info("infosimples.service enabled base-url={} resumida-states={} completa-states={}",
+                baseUrl, resumidaStates, completaStates);
     }
 
     private static Set<UnidadeFederativa> parseStates(String csv) {
@@ -95,7 +102,9 @@ public class InfosimplesService {
      */
     public ParsedReceipt fetchParsed(String chave, UnidadeFederativa uf) {
         var ufCode = uf.name().toLowerCase();
-        var resource = resumidaStates.contains(uf) ? "nfce-resumida" : "nfce";
+        var resource = resumidaStates.contains(uf) ? "nfce-resumida"
+                : completaStates.contains(uf) ? "nfce-completa"
+                : "nfce";
         log.info("infosimples.fetch chave={} uf={} resource={}", abbrev(chave), ufCode, resource);
         var response = restClient.get()
                 .uri("/api/v2/consultas/sefaz/{uf}/{resource}?token={token}&nfce={nfce}",
