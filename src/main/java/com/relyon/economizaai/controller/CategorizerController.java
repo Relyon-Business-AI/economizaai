@@ -1,6 +1,7 @@
 package com.relyon.economizaai.controller;
 
 import com.relyon.economizaai.dto.response.CategorizationBenchmarkResponse;
+import com.relyon.economizaai.dto.response.LiveAccuracyResponse;
 import com.relyon.economizaai.dto.response.CategorizationExplanation;
 import com.relyon.economizaai.dto.response.CategorizationQualitySnapshotResponse;
 import com.relyon.economizaai.dto.response.CuratedEntryResponse;
@@ -92,6 +93,16 @@ public class CategorizerController {
     public ResponseEntity<List<CategorizationQualitySnapshotResponse>> qualityHistory(
             @RequestParam(defaultValue = "50") int limit) {
         return ResponseEntity.ok(categorizationQualityService.history(limit));
+    }
+
+    /**
+     * Live accuracy against REAL human/community-validated products (not the fixed
+     * golden set) — reflects the actual incoming distribution and lists the cases
+     * where the engine disagrees with a human. Read-only.
+     */
+    @GetMapping("/live-accuracy")
+    public ResponseEntity<LiveAccuracyResponse> liveAccuracy() {
+        return ResponseEntity.ok(categorizationBenchmarkService.runLive());
     }
 
     /**
