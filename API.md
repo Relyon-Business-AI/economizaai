@@ -231,6 +231,22 @@ DELETE /api/v1/users/me/profile-picture
 - **WebP**: stored as-is (no resize). All other formats (JPEG/PNG) are normalized.
 - Storage is local-disk in dev (ephemeral on Render free tier — see `DEV_NOTES.md` for the prod plan); the API contract won't change when we swap backends.
 
+### Subscription checkout (web)
+
+```
+POST /api/v1/subscriptions/checkout        → 200 { "checkoutUrl": "<Mercado Pago init_point>" }
+                                             503 billing.not.configured (provider not credentialed yet)
+                                             502 billing.checkout.failed (MP API down/refused)
+POST /api/v1/webhooks/mercadopago          ← Mercado Pago only (x-signature HMAC, fail-closed)
+```
+
+The FE opens `checkoutUrl` (browser/webview) and the user authorizes the monthly
+subscription there. Entitlement flips **only via the webhook** (preapproval
+`authorized` → PRO until next payment date; `cancelled`/`paused` → FREE), so an
+abandoned checkout changes nothing. Poll `GET /users/me/subscription` after the
+back_url redirect to reflect the new tier. Inert until `MP_ACCESS_TOKEN` /
+`MP_WEBHOOK_SECRET` are set. Apps keep using RevenueCat (`/webhooks/revenuecat`).
+
 ### Password reset + email verification
 
 ```

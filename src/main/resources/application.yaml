@@ -318,6 +318,15 @@ economizaai:
       # (RevenueCat → Integrations → Webhooks → "Authorization header value").
       # Empty = the /api/v1/webhooks/revenuecat endpoint is disabled (fail-closed).
       auth-header: ${REVENUECAT_WEBHOOK_AUTH:}
+    mercadopago:
+      # Web checkout via assinatura (preapproval) do Mercado Pago — decisão 2026-09-29.
+      # Empty access-token = POST /subscriptions/checkout responde 503 (fail-closed).
+      # Empty webhook-secret = /api/v1/webhooks/mercadopago rejeita tudo (fail-closed).
+      access-token: ${MP_ACCESS_TOKEN:}
+      webhook-secret: ${MP_WEBHOOK_SECRET:}
+      plan-amount: ${MP_PLAN_AMOUNT:9.90}        # R$/mês da assinatura Premium
+      plan-reason: ${MP_PLAN_REASON:Economiza AI Premium}
+      back-url: ${MP_BACK_URL:https://economizaai.app/premium/obrigado}
   collaborative:
     enabled: true                              # master switch — disables all observation writes/reads
     min-households-for-public: 3               # k-anon: aggregate queries return empty until this many distinct households contributed

@@ -37,6 +37,12 @@ their area, even if the actual paywall is unenforced for months.
   muros, um a um, com **A/B**. Isso depende do **feature-flag service (⬜)** — é **pré-requisito**
   da própria metodologia "cada gate é um A/B", não um nice-to-have.
 
+**2a. Provider web escolhido: Mercado Pago (decisão 2026-09-29).** Checkout de assinatura
+mensal via preapproval (`POST /subscriptions/checkout` → `checkoutUrl`; webhook
+`/webhooks/mercadopago` HMAC fail-closed vira o tier). Código pronto e INERTE até
+`MP_ACCESS_TOKEN`/`MP_WEBHOOK_SECRET`. Apps seguem RevenueCat. Falta (owner): contas
+MP/RevenueCat + produtos nas lojas; (dev): paywall no FE (tela + `react-native-purchases`).
+
 **2b. Promo de lançamento em DATA FIXA (decisão 2026-09-29):** o Premium promocional deixou
 de ser rolling ("3 meses do cadastro") e passou a valer **até 31/12/2026 pra base inteira**
 (`SUBSCRIPTION_PROMO_UNTIL`, migration V85 estendeu os grants existentes). Racional: sem
