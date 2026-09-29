@@ -18,6 +18,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -44,6 +47,8 @@ public class InfosimplesService {
     private static final DateTimeFormatter DATE_TIME_FMT =
             DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
     private static final ParameterizedTypeReference<InfosimplesResponse> RESPONSE_TYPE =
+            new ParameterizedTypeReference<>() {};
+    private static final ParameterizedTypeReference<InfosimplesSaldoResponse> SALDO_RESPONSE_TYPE =
             new ParameterizedTypeReference<>() {};
 
     private final String apiKey;
@@ -269,7 +274,72 @@ public class InfosimplesService {
         return null;
     }
 
+    /**
+     * Account credit from {@code GET /api/v2/consultas/saldo} — a free management
+     * call (no consult is billed). The payload shape is undocumented, so the value
+     * is located defensively: first field in {@code data[0]} whose key contains
+     * "saldo" and parses as a number. Empty when the call or the parse fails —
+     * the dashboard shows "indisponível" instead of breaking the cost report.
+     */
+    public Optional<BigDecimal> fetchSaldo() {
+        try {
+            var response = restClient.get()
+                    .uri("/api/v2/consultas/saldo?token={token}", apiKey)
+                    .retrieve()
+                    .body(SALDO_RESPONSE_TYPE);
+            if (response == null || response.code() != 200 || response.data() == null) {
+                log.warn("infosimples.saldo.failed code={} message='{}'",
+                        response == null ? -1 : response.code(),
+                        response == null ? null : response.codeMessage());
+                return Optional.empty();
+            }
+            var saldo = response.data().stream().findFirst().flatMap(InfosimplesService::extractSaldo);
+            saldo.ifPresentOrElse(
+                    value -> log.info("infosimples.saldo.ok saldo={}", value),
+                    () -> log.warn("infosimples.saldo.unrecognized_shape keys={}",
+                            response.data().isEmpty() ? List.of() : response.data().get(0).keySet()));
+            return saldo;
+        } catch (RuntimeException ex) {
+            log.warn("infosimples.saldo.error reason={}", ex.getClass().getSimpleName());
+            return Optional.empty();
+        }
+    }
+
+    private static Optional<BigDecimal> extractSaldo(Map<String, Object> entry) {
+        return entry.entrySet().stream()
+                .filter(field -> field.getKey().toLowerCase().contains("saldo"))
+                .map(field -> toDecimal(field.getValue()))
+                .filter(Objects::nonNull)
+                .findFirst();
+    }
+
+    private static BigDecimal toDecimal(Object value) {
+        if (value instanceof Number number) {
+            return new BigDecimal(number.toString());
+        }
+        if (value instanceof String text) {
+            // Accept both plain ("12.34") and BRL ("R$ 1.234,56") formats.
+            var cleaned = text.replaceAll("[^0-9,.\\-]", "");
+            if (cleaned.contains(",")) {
+                cleaned = cleaned.replace(".", "").replace(",", ".");
+            }
+            try {
+                return cleaned.isBlank() ? null : new BigDecimal(cleaned);
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
     // ── Internal JSON DTOs ─────────────────────────────────────────────────────
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record InfosimplesSaldoResponse(
+            int code,
+            @JsonProperty("code_message") String codeMessage,
+            List<Map<String, Object>> data
+    ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record InfosimplesResponse(
