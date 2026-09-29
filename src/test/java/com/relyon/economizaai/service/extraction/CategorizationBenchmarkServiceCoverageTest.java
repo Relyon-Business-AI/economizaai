@@ -1,9 +1,11 @@
 package com.relyon.economizaai.service.extraction;
 
 import com.relyon.economizaai.model.CategorizationBenchmarkEntry;
+import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.CategorizationBenchmarkEntryRepository;
+import com.relyon.economizaai.repository.ProductRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,7 +19,9 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 /**
@@ -30,11 +34,12 @@ class CategorizationBenchmarkServiceCoverageTest {
 
     @Mock private ProductExtractor productExtractor;
     @Mock private CategorizationBenchmarkEntryRepository benchmarkRepository;
+    @Mock private ProductRepository productRepository;
     @InjectMocks private CategorizationBenchmarkService service;
 
     @BeforeEach
     void seedGoldenSet() {
-        when(benchmarkRepository.findAll()).thenReturn(List.of(
+        lenient().when(benchmarkRepository.findAll()).thenReturn(List.of(
                 goldenRow("SAL REFINADO CISNE 1KG", ProductCategory.GROCERIES, "Cisne", new BigDecimal("1"), "KG"),
                 goldenRow("ARROZ TIO JOAO 5KG", ProductCategory.GROCERIES, "Tio João", new BigDecimal("5"), "KG"),
                 goldenRow("LEITE ITAMBE 1L", ProductCategory.MEAT_DAIRY, "Itambé", new BigDecimal("1"), "L"),
@@ -102,5 +107,31 @@ class CategorizationBenchmarkServiceCoverageTest {
         assertTrue(report.total() > 0);
         // At most the OTHER golden rows match; others will be wrong.
         assertTrue(report.wrong() > 0 || report.correct() > 0);
+    }
+
+    @Test
+    void runLive_scoresAgainstHumanValidatedProducts_andCollectsMismatches() {
+        var right = Product.builder().normalizedName("ARROZ TIO JOAO 5KG")
+                .category(ProductCategory.GROCERIES).categorizationSource(CategorizationSource.USER).build();
+        var wrong = Product.builder().normalizedName("FILME PVC ROLO")
+                .category(ProductCategory.GROCERIES).categorizationSource(CategorizationSource.CONSENSUS).build();
+        var skipped = Product.builder().normalizedName("SEM CATEGORIA")
+                .category(null).categorizationSource(CategorizationSource.USER).build();
+        when(productRepository.findByCategorizationSourceIn(any())).thenReturn(List.of(right, wrong, skipped));
+        when(productExtractor.extract("ARROZ TIO JOAO 5KG"))
+                .thenReturn(extraction(ProductCategory.GROCERIES, null, null, null));
+        when(productExtractor.extract("FILME PVC ROLO"))
+                .thenReturn(extraction(ProductCategory.CLEANING, null, null, null));
+
+        var result = service.runLive();
+
+        assertEquals(2, result.total(), "product with null category is skipped");
+        assertEquals(1, result.correct());
+        assertEquals(50.0, result.accuracyPct(), 0.01);
+        assertEquals(1, result.mismatches().size());
+        var mismatch = result.mismatches().get(0);
+        assertEquals("FILME PVC ROLO", mismatch.description());
+        assertEquals("GROCERIES", mismatch.expectedCategory());
+        assertEquals("CLEANING", mismatch.actualCategory());
     }
 }
