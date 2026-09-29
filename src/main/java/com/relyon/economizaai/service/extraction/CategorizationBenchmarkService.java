@@ -2,8 +2,11 @@ package com.relyon.economizaai.service.extraction;
 
 import com.relyon.economizaai.dto.response.CategorizationBenchmarkResponse;
 import com.relyon.economizaai.dto.response.CategorizationBenchmarkResponse.Failure;
+import com.relyon.economizaai.dto.response.LiveAccuracyResponse;
+import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.CategorizationBenchmarkEntryRepository;
+import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +29,46 @@ public class CategorizationBenchmarkService {
 
     private final ProductExtractor productExtractor;
     private final CategorizationBenchmarkEntryRepository benchmarkRepository;
+    private final ProductRepository productRepository;
+
+    /** Cap the mismatch sample so the response stays small even with many disagreements. */
+    private static final int MISMATCH_SAMPLE_CAP = 50;
+
+    /**
+     * Live accuracy: instead of the fixed golden set, score the engine against REAL
+     * human/community-validated products (source USER or CONSENSUS). For each, re-run
+     * the deterministic engine on its description and compare to the human truth. The
+     * number tracks the real incoming distribution; mismatches are genuine error cases.
+     *
+     * <p>Mild circularity caveat: if a curated/learned rule was created from the same
+     * correction, that product will match — so this leans optimistic. It still surfaces
+     * every case where the engine disagrees with a human, which is the useful signal.</p>
+     */
+    public LiveAccuracyResponse runLive() {
+        var products = productRepository.findByCategorizationSourceIn(
+                List.of(CategorizationSource.USER, CategorizationSource.CONSENSUS));
+        var total = 0;
+        var correct = 0;
+        var mismatches = new ArrayList<LiveAccuracyResponse.Mismatch>();
+        for (var product : products) {
+            var description = product.getNormalizedName();
+            var truth = product.getCategory();
+            if (description == null || description.isBlank() || truth == null) continue;
+            total++;
+            var extraction = productExtractor.extract(description);
+            if (extraction.category() == truth) {
+                correct++;
+            } else if (mismatches.size() < MISMATCH_SAMPLE_CAP) {
+                mismatches.add(new LiveAccuracyResponse.Mismatch(description, truth.name(),
+                        extraction.category() == null ? null : extraction.category().name(),
+                        extraction.categorizationSource().name()));
+            }
+        }
+        var accuracyPct = total == 0 ? 0.0 : pct(correct, total);
+        log.info("categorizer.live_accuracy total={} correct={} accuracyPct={} mismatchesSampled={}",
+                total, correct, accuracyPct, mismatches.size());
+        return new LiveAccuracyResponse(total, correct, accuracyPct, mismatches);
+    }
 
     public CategorizationBenchmarkResponse run() {
         var rows = benchmarkRepository.findAll();

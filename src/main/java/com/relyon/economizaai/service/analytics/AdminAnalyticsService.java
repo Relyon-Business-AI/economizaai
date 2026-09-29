@@ -146,14 +146,20 @@ public class AdminAnalyticsService {
     }
 
     private List<ChannelLine> buildChannelLines(LocalDateTime since, boolean includeInternal) {
-        var lines = new ArrayList<ChannelLine>();
+        // JPQL GROUP BY treats NULL and UNKNOWN enum as separate groups — both map to "UNKNOWN"
+        // in channelName(), so we merge them here to avoid duplicate "Desconhecido" rows.
+        var merged = new LinkedHashMap<String, long[]>();
         for (var row : userRepository.channelBreakdownSince(since, includeInternal)) {
-            lines.add(new ChannelLine(channelName(row[0]),
-                    ((Number) row[1]).longValue(),
-                    toLong(row[2]),
-                    toLong(row[3])));
+            var channel = channelName(row[0]);
+            var acc = merged.computeIfAbsent(channel, ignored -> new long[3]);
+            acc[0] += ((Number) row[1]).longValue();
+            acc[1] += toLong(row[2]);
+            acc[2] += toLong(row[3]);
         }
-        lines.sort((left, right) -> Long.compare(right.signups(), left.signups()));
+        var lines = merged.entrySet().stream()
+                .map(entry -> new ChannelLine(entry.getKey(), entry.getValue()[0], entry.getValue()[1], entry.getValue()[2]))
+                .sorted((left, right) -> Long.compare(right.signups(), left.signups()))
+                .collect(Collectors.toCollection(ArrayList::new));
         return lines;
     }
 

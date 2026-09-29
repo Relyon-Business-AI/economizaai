@@ -180,12 +180,18 @@ public class ReceiptController {
     }
 
     /**
-     * Re-queue a failed import nota for another paced reconsult (e.g. one that hit
-     * {@code receipt.processing.timeout}). Re-queues the receipt; poll {@code GET /receipts/{id}}.
+     * "Tentar novamente" on a failed nota — no rescan of the paper needed.
+     * Scanned notas re-run the full QR ingestion with the stored payload;
+     * import-origin notas are re-queued for the paced bare-chave reconsult
+     * (previous behavior). Poll {@code GET /receipts/{id}} for the outcome.
      */
     @PostMapping("/{id}/retry")
-    public ResponseEntity<Void> retry(@AuthenticationPrincipal User user, @PathVariable UUID id) {
-        receiptImportService.retry(user, List.of(id));
+    public ResponseEntity<Void> retry(@AuthenticationPrincipal User user,
+                                      @RequestHeader(value = "X-Device-Fetch", required = false) String deviceFetch,
+                                      @PathVariable UUID id) {
+        if (!receiptService.retryFailedScan(user, id, deviceFetch != null)) {
+            receiptImportService.retry(user, List.of(id));
+        }
         return ResponseEntity.accepted().build();
     }
 

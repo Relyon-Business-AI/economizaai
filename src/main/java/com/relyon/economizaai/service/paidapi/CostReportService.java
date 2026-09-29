@@ -5,6 +5,7 @@ import com.relyon.economizaai.dto.response.CostReportResponse;
 import com.relyon.economizaai.dto.response.CostReportResponse.ServiceSpendLine;
 import com.relyon.economizaai.dto.response.CostReportResponse.StateSpendLine;
 import com.relyon.economizaai.repository.PaidApiCallRepository;
+import com.relyon.economizaai.service.sefaz.InfosimplesService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -13,6 +14,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Optional;
 
 /**
  * Reads the {@code paid_api_call} ledger into an admin-facing cost report — the
@@ -25,6 +27,7 @@ public class CostReportService {
 
     private final PaidApiCallRepository repository;
     private final PaidApiGuardProperties properties;
+    private final Optional<InfosimplesService> infosimples;
     private final Clock clock = Clock.systemUTC();
 
     public CostReportResponse report(int windowDays) {
@@ -43,9 +46,13 @@ public class CostReportService {
         var totalCalls = byService.stream().mapToLong(ServiceSpendLine::calls).sum();
         var totalCents = byService.stream().mapToLong(ServiceSpendLine::costCents).sum();
         var spentTodayCents = repository.sumCostCentsSince(startOfTodayUtc());
+        // Live provider credit so the admin sees the runway next to the spend.
+        // A free management call; null (hidden in the FE) when disabled/unreachable.
+        var infosimplesSaldo = infosimples.flatMap(InfosimplesService::fetchSaldo).orElse(null);
 
         return new CostReportResponse(days, totalCalls, totalCents, reais(totalCents),
-                properties.getDailyGlobalBudgetCents(), reais(spentTodayCents), byService, byState);
+                properties.getDailyGlobalBudgetCents(), reais(spentTodayCents), infosimplesSaldo,
+                byService, byState);
     }
 
     private static BigDecimal reais(long cents) {

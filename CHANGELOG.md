@@ -16,6 +16,33 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-29 (5) — retry de nota falhada sem re-escanear + saldo Infosimples
+
+- **`POST /receipts/{id}/retry` agora funciona pra nota ESCANEADA falhada** (antes
+  era só import): re-roda a ingestão completa com o `qrPayload` guardado — sem
+  precisar do papel. Aproveita qualquer fallback novo (ex.: resgate RS 227).
+  Import continua re-enfileirando a reconsulta por chave. 202 + poll.
+- **FE:** diálogo da nota falhada ganhou **"Tentar novamente"** (server-side);
+  "Escanear novamente" continua. ("Fechar" virou toque-fora — limite de 3 botões
+  do Android.)
+- **`GET /admin/costs` ganhou `infosimplesSaldo`** — crédito vivo na conta
+  Infosimples (R$; null se desabilitado/indisponível). FE: card na aba Custos.
+- **FE (admin):** aba Ingestão ganhou o card **"Falhas sem correção"** — total de
+  notas ainda em FAILED_PARSE em todo o histórico (backlog real, não a janela).
+
+## 2026-09-29 (4) — resgate de nota RS com QR defeituoso (rejeição 227)
+
+- Alguns mercados imprimem o QR com DigestValue inconsistente — o portal SVRS
+  rejeita a consulta pra sempre (cStat 227) mesmo com a nota autorizada na
+  SEFAZ. Agora, quando o portal devolve página de rejeição para chave RS, o
+  backend re-consulta pela **chave pura** no portal legado (grátis); se o DANFE
+  renderiza, a nota é ingerida normalmente. Se a rejeição for real (contingência
+  ainda não transmitida), o erro original continua sendo propagado.
+- Vale para o scan normal E para o reparse admin (`POST /admin/receipts/{id}/reparse`),
+  que agora resgata notas antigas presas em `contingency.pending`/`rejected_qr`.
+  No resgate, `rawHtml`/`sourceUrl` passam a apontar pro DANFE reconsultado.
+- Sem mudança de contrato pro FE — só menos notas falhando.
+
 ## 2026-09-29 (3) — lista admin de notas com contexto de triagem (BREAKING no shape)
 
 - **`GET /api/v1/admin/receipts` mudou o shape da resposta**: cada elemento de

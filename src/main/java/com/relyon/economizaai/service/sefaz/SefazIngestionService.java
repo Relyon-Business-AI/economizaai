@@ -10,6 +10,7 @@ import com.relyon.economizaai.exception.PaidApiQuotaExceededException;
 import com.relyon.economizaai.exception.PaidApiUnavailableException;
 import com.relyon.economizaai.exception.ReceiptParseException;
 import com.relyon.economizaai.exception.SefazFetchException;
+import com.relyon.economizaai.exception.SefazPortalRejectionException;
 import com.relyon.economizaai.exception.UnsupportedStateException;
 import com.relyon.economizaai.model.enums.PaidApiService;
 import com.relyon.economizaai.model.enums.StateIngestionOutcome;
@@ -36,11 +37,13 @@ public class SefazIngestionService {
     private final Optional<InfosimplesService> infosimples;
     private final PaidApiGuardService paidApiGuard;
     private final StateCoverageService stateCoverage;
+    private final RsChaveReconsultService rsChaveReconsult;
 
     public SefazIngestionService(List<SefazAdapter> adapters,
                                  Optional<InfosimplesService> infosimples,
                                  PaidApiGuardService paidApiGuard,
-                                 StateCoverageService stateCoverage) {
+                                 StateCoverageService stateCoverage,
+                                 RsChaveReconsultService rsChaveReconsult) {
         var byState = new EnumMap<UnidadeFederativa, SefazAdapter>(UnidadeFederativa.class);
         for (var adapter : adapters) {
             for (var uf : adapter.supportedStates()) {
@@ -69,6 +72,7 @@ public class SefazIngestionService {
         this.infosimples = infosimples;
         this.paidApiGuard = paidApiGuard;
         this.stateCoverage = stateCoverage;
+        this.rsChaveReconsult = rsChaveReconsult;
         log.info("Registered SEFAZ adapters: verified={} experimental={} infosimples-fallback={}",
                 verifiedStates, experimentalStates(), infosimples.isPresent());
     }
@@ -299,6 +303,10 @@ public class SefazIngestionService {
             }
             return parsed;
         } catch (ReceiptParseException parseEx) {
+            if (parseEx instanceof SefazPortalRejectionException) {
+                var rescued = rescueRejectionViaChaveReconsult(fetched);
+                if (rescued != null) return rescued;
+            }
             if (!experimental) {
                 // A verified state's parser failed on real HTML — the regression
                 // signature (portal changed its DANFE format). Record it; a burst
@@ -328,6 +336,33 @@ public class SefazIngestionService {
             throw experimentalExhausted(fetched.uf(), fetched.chave(), fetched.sourceUrl(),
                     "QR_PORTAL (parse): " + describe(parseEx) + "; INFOSIMPLES: " + infosimplesNote,
                     fetched.html());
+        }
+    }
+
+    /**
+     * A portal rejection page sometimes lies: the QR printed by the merchant
+     * carries a broken DigestValue (cStat 227), so the QR consult is rejected
+     * forever while the nota itself is authorized at SEFAZ. For RS the bare-chave
+     * legacy portal is a free arbiter — if it renders the DANFE, the rejection
+     * didn't reflect reality and the nota is rescued; any reconsult failure means
+     * the rejection was real (e.g. contingency truly not transmitted yet), so the
+     * caller propagates the ORIGINAL rejection untouched. No paid API involved.
+     */
+    private ParsedReceipt rescueRejectionViaChaveReconsult(FetchedDocument fetched) {
+        if (!RsChaveReconsultService.isReconsultable(fetched.chave())) {
+            return null;
+        }
+        try {
+            var reconsulted = rsChaveReconsult.reconsult(fetched.chave());
+            var parsed = reconsulted.adapter()
+                    .parseHtml(reconsulted.html(), reconsulted.chave(), reconsulted.sourceUrl());
+            log.info("sefaz.parse.rejection_rescued_by_chave uf={} chave={} items={}",
+                    fetched.uf(), abbrev(fetched.chave()), parsed.items().size());
+            return parsed;
+        } catch (RuntimeException reconsultEx) {
+            log.info("sefaz.parse.chave_reconsult_failed chave={} reason={} — keeping original rejection",
+                    abbrev(fetched.chave()), describe(reconsultEx));
+            return null;
         }
     }
 
@@ -393,14 +428,24 @@ public class SefazIngestionService {
     /**
      * Re-runs parsing on already-stored HTML — used by the admin reparse
      * endpoint when a parser fix lands and we want to re-process old
-     * receipts without hitting SEFAZ again.
+     * receipts without hitting SEFAZ again. One exception to "no SEFAZ":
+     * when the stored HTML is a portal REJECTION page, the RS bare-chave
+     * arbiter is consulted (see {@link #rescueRejectionViaChaveReconsult}) —
+     * that's how failed notas with a broken printed QR get rescued in place.
+     * Callers must therefore NOT hold a DB transaction across this call.
      */
     public ParsedReceipt reparseStored(UnidadeFederativa uf, String html, String chave, String sourceUrl) {
         var adapter = adapters.get(uf);
         if (adapter == null) {
             throw new UnsupportedStateException(uf.name());
         }
-        return adapter.parseHtml(html, chave, sourceUrl);
+        try {
+            return adapter.parseHtml(html, chave, sourceUrl);
+        } catch (SefazPortalRejectionException rejectionEx) {
+            var rescued = rescueRejectionViaChaveReconsult(new FetchedDocument(adapter, html, chave, uf, sourceUrl));
+            if (rescued != null) return rescued;
+            throw rejectionEx;
+        }
     }
 
     private static String abbrev(String chave) {
