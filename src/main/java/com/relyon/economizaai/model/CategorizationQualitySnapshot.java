@@ -58,12 +58,4 @@ public class CategorizationQualitySnapshot extends BaseEntity {
     @Column(name = "quantity_accuracy_pct", nullable = false, precision = 5, scale = 2)
     @lombok.Builder.Default
     private BigDecimal quantityAccuracyPct = BigDecimal.ZERO;
-
-    // Kept for DB column compatibility — no longer populated.
-    @Column(name = "ml_accuracy_pct", nullable = false, precision = 5, scale = 2)
-    @lombok.Builder.Default
-    private BigDecimal mlAccuracyPct = BigDecimal.ZERO;
-
-    @Column(name = "ml_ready", nullable = false)
-    private boolean mlReady;
 }
