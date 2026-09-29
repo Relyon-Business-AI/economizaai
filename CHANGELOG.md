@@ -16,6 +16,21 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-29 — checkout web de assinatura (Mercado Pago) — INERTE até credenciar
+
+Nasce o caminho de cobrança web: `POST /api/v1/subscriptions/checkout` cria uma
+assinatura mensal no Mercado Pago e devolve `{ "checkoutUrl" }` pro app abrir.
+O tier só vira PRO via webhook (`/webhooks/mercadopago`, HMAC fail-closed) quando
+o MP confirma `authorized`; `cancelled`/`paused` derruba pra FREE.
+
+- **Hoje responde `503 billing.not.configured`** (sem `MP_ACCESS_TOKEN`) — o FE já
+  pode tratar esse estado ("assinatura pelo site em breve").
+- Depois do redirect pro `back_url`, consulte `GET /users/me/subscription` pra
+  refletir o tier novo.
+- Apps seguem no caminho RevenueCat (inalterado).
+
+---
+
 ## 2026-09-29 — promo de lançamento vira DATA FIXA (31/12/2026)
 
 O Premium promocional deixou de ser "3 meses a partir do cadastro" e passou a ser

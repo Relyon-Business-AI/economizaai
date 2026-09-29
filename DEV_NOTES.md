@@ -234,12 +234,12 @@ mirror entries here.
 
 ---
 
-## Billing: apps ready (RevenueCat), web still pending
-- **Now**: two webhook paths feed the same entitlement engine. **RevenueCat** (`POST /webhooks/revenuecat`, Authorization header == `REVENUECAT_WEBHOOK_AUTH`) covers iOS/Android IAP; the generic `POST /webhooks/subscription` (`BILLING_WEBHOOK_SECRET`, `X-Webhook-Secret`) is the seam for a web provider. Both **fail closed** when their secret is blank (constant-time compare). A scheduled `SubscriptionExpiryService` downgrades lapsed PRO hourly.
-- **Why OK for dev**: dev grants PRO via the admin set-tier endpoint; webhooks aren't needed locally.
-- **Before prod**:
-  - **Apps:** set `REVENUECAT_WEBHOOK_AUTH`, and the app must set RevenueCat `app_user_id` = our user UUID (or email). That's it — env-var ready.
-  - **Web:** NOT built yet — needs a Mercado Pago/Stripe **create-checkout endpoint** + a provider-specific webhook adapter (signature verify + event→activate/cancel mapping). Pending the provider choice (PIX-recurring vs one-off).
+## Billing: apps ready (RevenueCat), web built (Mercado Pago) — both inert on env vars
+- **Now**: three webhook paths feed the same entitlement engine. **RevenueCat** (`POST /webhooks/revenuecat`, Authorization header == `REVENUECAT_WEBHOOK_AUTH`) covers iOS/Android IAP; **Mercado Pago** (`POST /webhooks/mercadopago`, `x-signature` HMAC == `MP_WEBHOOK_SECRET`) covers the web assinatura created by `POST /subscriptions/checkout` (2026-09-29, provider decision: MP); the generic `POST /webhooks/subscription` (`BILLING_WEBHOOK_SECRET`) stays as a spare seam. All **fail closed** when their secret is blank (constant-time compare). A scheduled `SubscriptionExpiryService` downgrades lapsed PRO hourly.
+- **Why OK for dev**: dev grants PRO via the admin set-tier endpoint; checkout returns a localized 503 until credentialed.
+- **Before charging (owner setup, all env-var only):**
+  - **Apps:** RevenueCat account + store products, set `REVENUECAT_WEBHOOK_AUTH`; the app must set `app_user_id` = our user UUID (or email). FE still needs the `react-native-purchases` paywall.
+  - **Web:** MP account → `MP_ACCESS_TOKEN` + `MP_WEBHOOK_SECRET` (+ optionally `MP_PLAN_AMOUNT`, default 9.90) and point the MP webhook at `/api/v1/webhooks/mercadopago`. **Verify the x-signature manifest against a real sandbox event before trusting it** (implemented from docs: `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`, id lowercased). FE needs a "Assinar Premium" screen opening `checkoutUrl`.
 
 ## Relevance filter rollout — first telemetry CONSUMER (2026-06-12, in SHADOW)
 

@@ -71,6 +71,16 @@ public class GlobalExceptionHandler {
         return respond(ex, HttpStatus.CONFLICT, "Set-password attempt on account that already has one");
     }
 
+    @ExceptionHandler(BillingNotConfiguredException.class)
+    public ResponseEntity<ErrorResponse> handleBillingNotConfigured(BillingNotConfiguredException ex) {
+        return respond(ex, HttpStatus.SERVICE_UNAVAILABLE, "Checkout requested but billing provider not configured");
+    }
+
+    @ExceptionHandler(BillingCheckoutException.class)
+    public ResponseEntity<ErrorResponse> handleBillingCheckout(BillingCheckoutException ex) {
+        return respond(ex, HttpStatus.BAD_GATEWAY, "Billing provider checkout creation failed");
+    }
+
     @ExceptionHandler(UserNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleUserNotFound(UserNotFoundException ex) {
         return respond(ex, HttpStatus.NOT_FOUND, "User not found");
