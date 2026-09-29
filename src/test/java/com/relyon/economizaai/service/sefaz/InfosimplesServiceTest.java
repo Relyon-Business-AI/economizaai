@@ -35,7 +35,21 @@ class InfosimplesServiceTest {
     void setUp() {
         var builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
-        service = new InfosimplesService(builder, API_KEY, BASE_URL, "MG");
+        service = new InfosimplesService(builder, API_KEY, BASE_URL, "MG", "RJ");
+    }
+
+    @Test
+    void fetchParsed_rjRoutesToNfceCompletaSlug() {
+        // RJ has NO plain `nfce` service at Infosimples (every call 602'd) — only
+        // `nfce-completa`, which returns the same "completa" schema.
+        var rjChave = "33260900063960000117650120000156031234567890";
+        server.expect(requestTo(BASE_URL + "/api/v2/consultas/sefaz/rj/nfce-completa?token=test-key&nfce=" + rjChave))
+                .andRespond(withSuccess(FULL_RESPONSE_JSON, MediaType.APPLICATION_JSON));
+
+        var parsed = service.fetchParsed(rjChave, UnidadeFederativa.RJ);
+
+        assertEquals(rjChave, parsed.chaveAcesso());
+        assertEquals(2, parsed.items().size());
     }
 
     @Test
