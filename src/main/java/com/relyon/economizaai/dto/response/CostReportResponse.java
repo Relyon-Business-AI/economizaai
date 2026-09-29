@@ -15,6 +15,9 @@ public record CostReportResponse(
         BigDecimal totalCostReais,
         long dailyGlobalBudgetCents,
         BigDecimal spentTodayReais,
+        // Live Infosimples account credit (R$) — null when the provider is
+        // disabled or its saldo endpoint didn't answer.
+        BigDecimal infosimplesSaldo,
         List<ServiceSpendLine> byService,
         List<StateSpendLine> byState) {
 

@@ -5,6 +5,7 @@ import com.relyon.economizaai.model.enums.PaidApiService;
 import com.relyon.economizaai.repository.PaidApiCallRepository;
 import com.relyon.economizaai.repository.PaidApiCallRepository.ServiceSpend;
 import com.relyon.economizaai.repository.PaidApiCallRepository.StateSpend;
+import com.relyon.economizaai.service.sefaz.InfosimplesService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,8 +14,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -23,13 +26,14 @@ import static org.mockito.Mockito.when;
 class CostReportServiceTest {
 
     @Mock private PaidApiCallRepository repository;
+    @Mock private InfosimplesService infosimples;
     private CostReportService service;
 
     @BeforeEach
     void setUp() {
         var properties = new PaidApiGuardProperties();
         properties.setDailyGlobalBudgetCents(5000);
-        service = new CostReportService(repository, properties);
+        service = new CostReportService(repository, properties, Optional.of(infosimples));
     }
 
     @Test
@@ -43,6 +47,7 @@ class CostReportServiceTest {
         when(repository.spendByService(any())).thenReturn(services);
         when(repository.spendByState(any())).thenReturn(states);
         when(repository.sumCostCentsSince(any())).thenReturn(120L);
+        when(infosimples.fetchSaldo()).thenReturn(Optional.of(new BigDecimal("87.52")));
 
         var report = service.report(30);
 
@@ -52,6 +57,7 @@ class CostReportServiceTest {
         assertEquals(new BigDecimal("3.30"), report.totalCostReais());
         assertEquals(5000, report.dailyGlobalBudgetCents());
         assertEquals(new BigDecimal("1.20"), report.spentTodayReais());
+        assertEquals(new BigDecimal("87.52"), report.infosimplesSaldo());
         assertEquals(2, report.byService().size());
         assertEquals(new BigDecimal("2.40"), report.byService().get(0).costReais());
         assertEquals("CE", report.byState().get(0).uf());
@@ -62,8 +68,25 @@ class CostReportServiceTest {
         when(repository.spendByService(any())).thenReturn(List.of());
         when(repository.spendByState(any())).thenReturn(List.of());
         when(repository.sumCostCentsSince(any())).thenReturn(0L);
+        when(infosimples.fetchSaldo()).thenReturn(Optional.empty());
 
         assertEquals(1, service.report(0).windowDays());
+    }
+
+    @Test
+    void report_nullSaldoWhenInfosimplesDisabled() {
+        when(repository.spendByService(any())).thenReturn(List.of());
+        when(repository.spendByState(any())).thenReturn(List.of());
+        when(repository.sumCostCentsSince(any())).thenReturn(0L);
+        var withoutProvider = new CostReportService(repository, propertiesWithBudget(), Optional.empty());
+
+        assertNull(withoutProvider.report(30).infosimplesSaldo());
+    }
+
+    private static PaidApiGuardProperties propertiesWithBudget() {
+        var properties = new PaidApiGuardProperties();
+        properties.setDailyGlobalBudgetCents(5000);
+        return properties;
     }
 
     private static ServiceSpend serviceSpend(PaidApiService service, long calls, long cents, long failures) {

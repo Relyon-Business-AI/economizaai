@@ -12212,7 +12212,7 @@
 								}
 							]
 						},
-						"description": "Paid-API spend report (captcha + Infosimples): total cost/calls over the window, plus breakdown byService and byState, and today's spend vs the global daily budget. Reads the paid_api_call ledger. ADMIN only.",
+						"description": "Paid-API spend report (captcha + Infosimples): total cost/calls over the window, plus breakdown byService and byState, and today's spend vs the global daily budget. Reads the paid_api_call ledger. ADMIN only.\n\nResposta inclui infosimplesSaldo — crédito vivo na conta Infosimples (R$; null se indisponível).",
 						"auth": {
 							"type": "bearer",
 							"bearer": [
@@ -14316,7 +14316,7 @@
 								}
 							]
 						},
-						"description": "Paid-API spend report (captcha + Infosimples): total cost/calls over the window, plus breakdown byService and byState, and today's spend vs the global daily budget. Reads the paid_api_call ledger. ADMIN only."
+						"description": "Paid-API spend report (captcha + Infosimples): total cost/calls over the window, plus breakdown byService and byState, and today's spend vs the global daily budget. Reads the paid_api_call ledger. ADMIN only.\n\nResposta inclui infosimplesSaldo — crédito vivo na conta Infosimples (R$; null se indisponível)."
 					},
 					"response": []
 				},

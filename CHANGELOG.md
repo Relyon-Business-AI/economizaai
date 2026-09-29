@@ -16,6 +16,20 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-29 (5) — retry de nota falhada sem re-escanear + saldo Infosimples
+
+- **`POST /receipts/{id}/retry` agora funciona pra nota ESCANEADA falhada** (antes
+  era só import): re-roda a ingestão completa com o `qrPayload` guardado — sem
+  precisar do papel. Aproveita qualquer fallback novo (ex.: resgate RS 227).
+  Import continua re-enfileirando a reconsulta por chave. 202 + poll.
+- **FE:** diálogo da nota falhada ganhou **"Tentar novamente"** (server-side);
+  "Escanear novamente" continua. ("Fechar" virou toque-fora — limite de 3 botões
+  do Android.)
+- **`GET /admin/costs` ganhou `infosimplesSaldo`** — crédito vivo na conta
+  Infosimples (R$; null se desabilitado/indisponível). FE: card na aba Custos.
+- **FE (admin):** aba Ingestão ganhou o card **"Falhas sem correção"** — total de
+  notas ainda em FAILED_PARSE em todo o histórico (backlog real, não a janela).
+
 ## 2026-09-29 (4) — resgate de nota RS com QR defeituoso (rejeição 227)
 
 - Alguns mercados imprimem o QR com DigestValue inconsistente — o portal SVRS
