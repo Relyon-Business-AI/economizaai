@@ -14,6 +14,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
@@ -154,6 +155,38 @@ class SubscriptionServiceTest {
         assertEquals("manual", saved.getProvider());
         assertTrue(!saved.getCurrentPeriodEnd().isBefore(before) && !saved.getCurrentPeriodEnd().isAfter(after));
         assertEquals(saved.getCurrentPeriodEnd(), returned);
+    }
+
+    @Test
+    void grantSignupPromoIfEnabled_grantsUntilFixedDateWhenConfigured() {
+        var user = freeUser();
+        var subscription = new CollaborativeProperties.Subscription();
+        subscription.getPromo().setEnabled(true);
+        var fixedDate = LocalDate.now().plusDays(45);
+        subscription.getPromo().setUntil(fixedDate);
+        when(collaborativeProperties.getSubscription()).thenReturn(subscription);
+        when(subscriptionRepository.findByUserId(user.getId())).thenReturn(Optional.empty());
+        when(subscriptionRepository.save(any(Subscription.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        var returned = service.grantSignupPromoIfEnabled(user);
+
+        assertEquals(fixedDate.atTime(23, 59, 59), returned);
+        assertEquals(SubscriptionTier.PRO, user.getSubscriptionTier());
+    }
+
+    @Test
+    void grantSignupPromoIfEnabled_doesNothingWhenFixedDateHasPassed() {
+        var user = freeUser();
+        var subscription = new CollaborativeProperties.Subscription();
+        subscription.getPromo().setEnabled(true);
+        subscription.getPromo().setUntil(LocalDate.now().minusDays(1));
+        when(collaborativeProperties.getSubscription()).thenReturn(subscription);
+
+        var returned = service.grantSignupPromoIfEnabled(user);
+
+        assertEquals(null, returned);
+        assertEquals(SubscriptionTier.FREE, user.getSubscriptionTier());
+        verify(subscriptionRepository, never()).save(any());
     }
 
     @Test
