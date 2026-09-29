@@ -43,13 +43,13 @@ class AutoPromotionServiceTest {
         ReflectionTestUtils.setField(service, "minAgreement", 0.90);
     }
 
-    private Product mlProduct(String name, ProductCategory cat, String genericName) {
+    private Product llmProduct(String name, ProductCategory cat, String genericName) {
         return Product.builder()
                 .id(UUID.randomUUID())
                 .normalizedName(name)
                 .category(cat)
                 .genericName(genericName)
-                .categorizationSource(CategorizationSource.ML)
+                .categorizationSource(CategorizationSource.LLM)
                 .build();
     }
 
@@ -63,9 +63,9 @@ class AutoPromotionServiceTest {
     }
 
     @Test
-    void promotesTokenWith30AgreeingMlSamplesAndNoUserOverride() {
+    void promotesTokenWith30AgreeingLlmSamplesAndNoUserOverride() {
         var products = IntStream.range(0, 30)
-                .mapToObj(i -> mlProduct("RACAO PEDIGREE FILHOTE " + i, ProductCategory.OTHER, "Ração"))
+                .mapToObj(i -> llmProduct("RACAO PEDIGREE FILHOTE " + i, ProductCategory.OTHER, "Ração"))
                 .toList();
         when(productRepository.findByCategorizationSourceIn(any())).thenReturn(products);
         when(learnedRepository.findByNormalizedTokenIn(any())).thenReturn(List.of());
@@ -84,7 +84,7 @@ class AutoPromotionServiceTest {
     @Test
     void userOverrideBlocksPromotionOfThatExactToken() {
         var products = new ArrayList<Product>(IntStream.range(0, 50)
-                .mapToObj(i -> mlProduct("RACAO " + i, ProductCategory.OTHER, "Ração"))
+                .mapToObj(i -> llmProduct("RACAO " + i, ProductCategory.OTHER, "Ração"))
                 .toList());
         products.add(userProduct("RACAO", ProductCategory.GROCERIES));
         when(productRepository.findByCategorizationSourceIn(any())).thenReturn(products);
@@ -101,9 +101,9 @@ class AutoPromotionServiceTest {
     @Test
     void blocksPromotionWhenAgreementBelowThreshold() {
         var groceries = IntStream.range(0, 20)
-                .mapToObj(i -> mlProduct("FOO " + i, ProductCategory.GROCERIES, "X"));
+                .mapToObj(i -> llmProduct("FOO " + i, ProductCategory.GROCERIES, "X"));
         var cleaning = IntStream.range(0, 15)
-                .mapToObj(i -> mlProduct("FOO " + i, ProductCategory.CLEANING, "X"));
+                .mapToObj(i -> llmProduct("FOO " + i, ProductCategory.CLEANING, "X"));
         var products = Stream.concat(groceries, cleaning).toList();
         when(productRepository.findByCategorizationSourceIn(any())).thenReturn(products);
         when(learnedRepository.findAll()).thenReturn(List.of());
@@ -117,7 +117,7 @@ class AutoPromotionServiceTest {
     @Test
     void skipsTokensBelow30Samples() {
         var products = IntStream.range(0, 10)
-                .mapToObj(i -> mlProduct("BAR " + i, ProductCategory.OTHER, "Y"))
+                .mapToObj(i -> llmProduct("BAR " + i, ProductCategory.OTHER, "Y"))
                 .toList();
         when(productRepository.findByCategorizationSourceIn(any())).thenReturn(products);
         when(learnedRepository.findAll()).thenReturn(List.of());

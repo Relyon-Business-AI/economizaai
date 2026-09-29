@@ -242,6 +242,17 @@ B2B channel.
 - **Not** optimizing for "most contributions" leaderboards. Gamification in
   this space attracts spammers more than it attracts good signal.
 - **Not** building user-to-user features (chat, comments). Same reason.
+- **Not** running a trained ML classifier for categorization (RETIRED 2026-09-29).
+  We scaffolded one (a char-n-gram feature extractor, a "shadow" accuracy metric,
+  an `ml_ready` flag, dashboard cards) but **never trained or activated it** — the
+  metric always read "—" / "Não". It was fully removed to stop confusing ops.
+  What actually does the work: the **deterministic engine** (curated + learned
+  dictionary + brand + EAN + fuzzy n-gram matching) plus the **LLM fallback
+  (Anthropic/Claude)** for items it can't place — that LLM is the real "AI" and
+  stays. The self-improving loop is `AutoPromotionService` (consolidates
+  consistently-classified products into the learned dictionary), which is
+  statistical, not ML, despite the legacy name. A trained model remains a *future*
+  scale option (to cut LLM cost), not something currently in the codebase.
 
 ### Cold-start strategy
 

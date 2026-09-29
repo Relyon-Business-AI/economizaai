@@ -10,10 +10,7 @@ import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,30 +25,26 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Auto-promotes stable ML predictions into the learned-dictionary so the
- * faster, deterministic dictionary path catches them next time.
+ * Consolidates consistently-classified products into the LEARNED dictionary so the
+ * fast deterministic path catches them next time — a self-healing loop that reduces
+ * how often the LLM fallback is needed. NOTE: this is NOT a trained ML model; that
+ * layer was scaffolded but never trained and has been retired (see DEV_NOTES.md).
+ * The {@code economizaai.categorizer.auto-promote.*} config drives it.
  *
- * <p>Promotion criteria (all must hold for a token, thresholds tunable via
- * {@code economizaai.ml.auto-promote.*}):</p>
+ * <p>Promotion criteria (all must hold for a token):</p>
  * <ul>
- *   <li>at least <i>min-samples</i> ML-categorized Products contain the token</li>
- *   <li>at least <i>min-agreement</i> share of those Products share the same
- *       category as the majority class</li>
- *   <li>zero USER-corrected Products contain the token — any human override
- *       blocks promotion</li>
+ *   <li>at least <i>min-samples</i> auto-classified Products contain the token;</li>
+ *   <li>at least <i>min-agreement</i> share of them share the majority category;</li>
+ *   <li>zero USER-corrected Products contain the token — any human override blocks it.</li>
  * </ul>
  *
- * <p>Tokens are 1- to 3-word phrases extracted from each Product's
- * normalizedName, same way DictionaryClassifier looks them up. Curated CSV
- * always wins over learned, so promoting an entry that the curated CSV
- * already has is a no-op at lookup time.</p>
+ * <p>Tokens are 1- to 3-word phrases from each Product's normalizedName, the same way
+ * DictionaryClassifier looks them up. Curated entries always win over learned, so
+ * promoting something the curated set already has is a no-op at lookup time. LLM,
+ * USER and CONSENSUS products are fetched: LLM ones are the promotable samples,
+ * USER/CONSENSUS ones block promotion of their token.</p>
  *
- * <p>Only ML and USER products are fetched — DICTIONARY and LEARNED_DICTIONARY
- * products carry no token stats we need here, and skipping them avoids loading
- * unrelated rows on large catalogs.</p>
- *
- * <p>Runs on app startup (after MlClassifierService training) and on a
- * fixed schedule (default daily). Manual trigger: POST /categorizer/auto-promote.</p>
+ * <p>Triggered daily by {@code CategorizerMaintenanceJob}; manual: POST /categorizer/auto-promote.</p>
  */
 @Slf4j
 @Service
@@ -64,19 +57,13 @@ public class AutoPromotionService {
     private final LearnedDictionaryRepository learnedRepository;
     private final DictionaryClassifier dictionaryClassifier;
 
-    // Self-reference so the scheduled trigger's call to @Transactional promote()
-    // goes through the Spring proxy. Defaults to `this` for plain unit tests.
-    @Lazy
-    @Autowired
-    private AutoPromotionService self = this;
-
     // 7 amostras + 90% de concordância = na prática exige unanimidade em 7 ocorrências
     // (6/7 = 85% reprova). Baixo o bastante pra ter efeito no volume atual, seguro o
     // bastante pra não promover padrão instável. Suba conforme o volume crescer.
-    @Value("${economizaai.ml.auto-promote.min-samples:7}")
+    @Value("${economizaai.categorizer.auto-promote.min-samples:7}")
     private int minSamples;
 
-    @Value("${economizaai.ml.auto-promote.min-agreement:0.90}")
+    @Value("${economizaai.categorizer.auto-promote.min-agreement:0.90}")
     private double minAgreement;
 
     @PostConstruct
@@ -84,17 +71,11 @@ public class AutoPromotionService {
         refreshClassifierMemory();
     }
 
-    @Scheduled(fixedDelayString = "${economizaai.ml.auto-promote-interval-ms:86400000}",
-               initialDelayString = "${economizaai.ml.auto-promote-initial-delay-ms:86400000}")
-    public void scheduledPromote() {
-        log.info("auto_promote.scheduled");
-        self.promote();
-    }
-
     @Transactional
     public synchronized PromotionOutcome promote() {
-        // Only ML and human-validated products carry stats relevant to this pass.
-        var relevantSources = List.of(CategorizationSource.ML, CategorizationSource.USER, CategorizationSource.CONSENSUS);
+        // LLM-classified products are the promotable samples; USER/CONSENSUS are the
+        // human/consensus-validated ones that BLOCK auto-promotion of their token.
+        var relevantSources = List.of(CategorizationSource.LLM, CategorizationSource.USER, CategorizationSource.CONSENSUS);
         var byToken = aggregateTokenStats(productRepository.findByCategorizationSourceIn(relevantSources));
 
         var toUpsert = new LinkedHashMap<String, TokenUpsertRequest>();
@@ -126,33 +107,33 @@ public class AutoPromotionService {
      *   <li>any USER override blocks promotion outright — reported as
      *       SKIPPED_HUMAN only if it otherwise had enough samples (an override
      *       on a token below the sample floor is just IGNORED, not a near-miss);</li>
-     *   <li>below the ML sample floor → SKIPPED_SAMPLES;</li>
+     *   <li>below the sample floor → SKIPPED_SAMPLES;</li>
      *   <li>majority-class agreement below threshold → SKIPPED_AGREEMENT;</li>
      *   <li>otherwise add to toUpsert for batch save → PROMOTED.</li>
      * </ol>
      */
     private TokenDecision evaluateToken(String token, TokenStats stats, Map<String, TokenUpsertRequest> toUpsert) {
         if (stats.userOverrides > 0) {
-            return stats.mlSamples >= minSamples ? TokenDecision.SKIPPED_HUMAN : TokenDecision.IGNORED;
+            return stats.autoSamples >= minSamples ? TokenDecision.SKIPPED_HUMAN : TokenDecision.IGNORED;
         }
-        if (stats.mlSamples < minSamples) {
+        if (stats.autoSamples < minSamples) {
             return TokenDecision.SKIPPED_SAMPLES;
         }
         var topCategory = stats.topCategory();
-        var agreement = (double) stats.categoryCounts.get(topCategory) / stats.mlSamples;
+        var agreement = (double) stats.categoryCounts.get(topCategory) / stats.autoSamples;
         if (agreement < minAgreement) {
             return TokenDecision.SKIPPED_AGREEMENT;
         }
         var topGeneric = stats.topGenericName();
-        toUpsert.put(token, new TokenUpsertRequest(topGeneric, topCategory, stats.mlSamples));
+        toUpsert.put(token, new TokenUpsertRequest(topGeneric, topCategory, stats.autoSamples));
         log.info("auto_promote.promoted token='{}' category={} genericName='{}' samples={} agreement={}",
-                token, topCategory, topGeneric, stats.mlSamples, String.format("%.2f", agreement));
+                token, topCategory, topGeneric, stats.autoSamples, String.format("%.2f", agreement));
         return TokenDecision.PROMOTED;
     }
 
     /**
-     * Aggregate per-token stats across all relevant products: user-override counts and ML
-     * sample/category/genericName tallies.
+     * Aggregate per-token stats across all relevant products: user/consensus-override
+     * counts and LLM-classified sample/category/genericName tallies.
      */
     private HashMap<String, TokenStats> aggregateTokenStats(List<Product> products) {
         var byToken = new HashMap<String, TokenStats>();
@@ -162,10 +143,10 @@ public class AutoPromotionService {
                 var stats = byToken.computeIfAbsent(token, key -> new TokenStats());
                 var src = product.getCategorizationSource();
                 if (src == CategorizationSource.USER || src == CategorizationSource.CONSENSUS) {
-                    stats.userOverrides++; // human-validated — blocks auto-promotion for this token
-                } else if (src == CategorizationSource.ML
+                    stats.userOverrides++; // human/consensus-validated — blocks auto-promotion for this token
+                } else if (src == CategorizationSource.LLM
                         && product.getCategory() != null) {
-                    stats.mlSamples++;
+                    stats.autoSamples++;
                     stats.categoryCounts.merge(product.getCategory(), 1, Integer::sum);
                     if (product.getGenericName() != null) {
                         stats.genericNameCounts.merge(product.getGenericName(), 1, Integer::sum);
@@ -232,7 +213,7 @@ public class AutoPromotionService {
     }
 
     private static class TokenStats {
-        int mlSamples = 0;
+        int autoSamples = 0;
         int userOverrides = 0;
         Map<ProductCategory, Integer> categoryCounts = new HashMap<>();
         Map<String, Integer> genericNameCounts = new HashMap<>();
