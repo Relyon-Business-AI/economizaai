@@ -77,7 +77,7 @@ class AdminReceiptServiceTest {
         var page = service.list(null, null, null, null, null, null, null, null, null, false, PageRequest.of(0, 20));
 
         assertEquals(1, page.getTotalElements());
-        assertEquals("Mercado X", page.getContent().get(0).marketName());
+        assertEquals("Mercado X", page.getContent().get(0).receipt().marketName());
 
         verify(receiptRepository)
                 .findAll(any(Specification.class), sortedPageableCaptor.capture());
@@ -98,6 +98,28 @@ class AdminReceiptServiceTest {
         verify(receiptRepository)
                 .findAll(any(Specification.class), sortedPageableCaptor.capture());
         assertEquals(requested, sortedPageableCaptor.getValue());
+    }
+
+    @Test
+    void list_mapsOwnerUfAndLocalizedFailureForFailedParse() {
+        var failed = receipt(ReceiptStatus.FAILED_PARSE);
+        failed.setParseErrorReason("receipt.parse.failed:no-items-found");
+        var owner = User.builder().id(UUID.randomUUID()).name("Francyni").email("francyni@economizaai.app").build();
+        failed.setUser(owner);
+        when(receiptRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(failed)));
+        when(localizedMessageService.translate("receipt.parse.failed", "no-items-found"))
+                .thenReturn("Não foi possível extrair os dados da NFC-e.");
+
+        var row = service.list(null, null, null, null, null, null, null, null, null, false, PageRequest.of(0, 20))
+                .getContent().get(0);
+
+        assertEquals(owner.getId(), row.owner().id());
+        assertEquals("Francyni", row.owner().name());
+        assertEquals(UnidadeFederativa.RS, row.uf());
+        assertEquals(failed.getCreatedAt(), row.createdAt());
+        assertEquals("receipt.parse.failed:no-items-found", row.parseErrorReason());
+        assertEquals("Não foi possível extrair os dados da NFC-e.", row.parseErrorMessage());
     }
 
     @Test

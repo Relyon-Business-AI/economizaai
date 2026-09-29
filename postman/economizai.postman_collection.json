@@ -12014,7 +12014,7 @@
 								}
 							]
 						},
-						"description": "Same content-search semantics as GET /receipts but cross-household. Includes FAILED_PARSE rows for parser triage.",
+						"description": "Same content-search semantics as GET /receipts but cross-household. Includes FAILED_PARSE rows for parser triage.\n\nResponse: Page<AdminReceiptSummaryResponse> — cada linha = { receipt: ReceiptSummaryResponse, owner: {id,name,email}|null, uf, createdAt, parseErrorReason, parseErrorMessage } (contexto de triagem já na lista).",
 						"auth": {
 							"type": "bearer",
 							"bearer": [
@@ -14149,7 +14149,7 @@
 								}
 							]
 						},
-						"description": "Same content-search semantics as GET /receipts but cross-household. Includes FAILED_PARSE rows for parser triage."
+						"description": "Same content-search semantics as GET /receipts but cross-household. Includes FAILED_PARSE rows for parser triage.\n\nResponse: Page<AdminReceiptSummaryResponse> — cada linha = { receipt: ReceiptSummaryResponse, owner: {id,name,email}|null, uf, createdAt, parseErrorReason, parseErrorMessage } (contexto de triagem já na lista)."
 					},
 					"response": []
 				},

@@ -20,6 +20,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
+import org.hibernate.annotations.BatchSize;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -32,6 +33,9 @@ import java.util.List;
 
 @Entity
 @Table(name = "users")
+// BatchSize: list endpoints that expose the owning user per row (admin receipts)
+// initialize the lazy proxies in one IN query instead of one query per row.
+@BatchSize(size = 50)
 @Getter
 @Setter
 @NoArgsConstructor

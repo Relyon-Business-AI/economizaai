@@ -16,6 +16,7 @@ import com.relyon.economizaai.dto.response.ProductMergeResultResponse;
 import com.relyon.economizaai.dto.response.ProductResponse;
 import com.relyon.economizaai.dto.response.ReceiptItemResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptDetailResponse;
+import com.relyon.economizaai.dto.response.AdminReceiptSummaryResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptStatsResponse;
 import com.relyon.economizaai.dto.response.ReceiptResponse;
 import com.relyon.economizaai.dto.response.ReceiptSummaryResponse;
@@ -378,7 +379,10 @@ class AdminControllerTest {
     void listReceipts_returnsPagedSummaries() throws Exception {
         var summary = new ReceiptSummaryResponse(UUID.randomUUID(), "Mercado X", "Mercado X", LocalDateTime.now(),
                 new BigDecimal("57.80"), new BigDecimal("57.80"), null, null, 1, ReceiptStatus.CONFIRMED);
-        Page<ReceiptSummaryResponse> page = new PageImpl<>(List.of(summary));
+        var owner = new AdminReceiptDetailResponse.Owner(UUID.randomUUID(), "Robson", "robson@economizaai.app");
+        var row = new AdminReceiptSummaryResponse(summary, owner, UnidadeFederativa.RS, LocalDateTime.now(),
+                "receipt.parse.failed:no-items-found", "Não foi possível extrair os dados da NFC-e.");
+        Page<AdminReceiptSummaryResponse> page = new PageImpl<>(List.of(row));
         when(adminReceiptService.list(any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(Pageable.class)))
                 .thenReturn(page);
 
@@ -386,7 +390,10 @@ class AdminControllerTest {
                         .param("q", "arroz")
                         .with(SecurityMockMvcRequestPostProcessors.user(adminUser())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].marketName").value("Mercado X"));
+                .andExpect(jsonPath("$.content[0].receipt.marketName").value("Mercado X"))
+                .andExpect(jsonPath("$.content[0].owner.name").value("Robson"))
+                .andExpect(jsonPath("$.content[0].uf").value("RS"))
+                .andExpect(jsonPath("$.content[0].parseErrorReason").value("receipt.parse.failed:no-items-found"));
     }
 
     @Test
