@@ -22,7 +22,9 @@ public interface DealSurfaceStateRepository extends JpaRepository<DealSurfaceSta
      * Attribution candidates (Phase D): surface rows for any of the buyer's
      * household users for this (product, market) that are still un-attributed
      * ({@code convertedAt IS NULL}) and were surfaced within the attribution
-     * window ({@code lastSurfacedAt >= since}). Newest surfacing first.
+     * window ({@code lastSurfacedAt >= since}) AND before the purchase itself
+     * ({@code lastSurfacedAt <= until}) — a deal surfaced only AFTER the user
+     * already bought cannot have caused the purchase. Newest surfacing first.
      */
     @Query("""
         SELECT state FROM DealSurfaceState state
@@ -31,10 +33,12 @@ public interface DealSurfaceStateRepository extends JpaRepository<DealSurfaceSta
           AND state.marketCnpj = :marketCnpj
           AND state.convertedAt IS NULL
           AND state.lastSurfacedAt >= :since
+          AND state.lastSurfacedAt <= :until
         ORDER BY state.lastSurfacedAt DESC
     """)
     List<DealSurfaceState> findAttributable(@Param("userIds") Collection<UUID> userIds,
                                             @Param("productId") UUID productId,
                                             @Param("marketCnpj") String marketCnpj,
-                                            @Param("since") OffsetDateTime since);
+                                            @Param("since") OffsetDateTime since,
+                                            @Param("until") OffsetDateTime until);
 }

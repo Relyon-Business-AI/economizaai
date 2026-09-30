@@ -88,7 +88,7 @@ public class SavingsAttributionService {
         var conversions = 0;
         var savedTotal = BigDecimal.ZERO;
         for (var item : receipt.getItems()) {
-            var saved = attributeItem(receipt, item, householdUserIds, windowStart);
+            var saved = attributeItem(receipt, item, householdUserIds, windowStart, purchaseInstant);
             if (saved != null) {
                 conversions++;
                 savedTotal = savedTotal.add(saved);
@@ -100,14 +100,17 @@ public class SavingsAttributionService {
 
     /** Returns the realized savings when this item converted a surfaced deal, else null. */
     private BigDecimal attributeItem(Receipt receipt, ReceiptItem item,
-                                     List<UUID> householdUserIds, OffsetDateTime windowStart) {
+                                     List<UUID> householdUserIds, OffsetDateTime windowStart,
+                                     OffsetDateTime purchaseInstant) {
         if (item.isExcluded() || item.isExcludedFromPersonal() || item.getProduct() == null
                 || item.getUnitPrice() == null || item.getQuantity() == null) {
             return null;
         }
         var productId = item.getProduct().getId();
+        // Bounded on BOTH sides: within the attribution window AND surfaced at or
+        // before the purchase — a deal aired after the buy earns no credit.
         var candidates = surfaceStateRepository.findAttributable(
-                householdUserIds, productId, receipt.getCnpjEmitente(), windowStart);
+                householdUserIds, productId, receipt.getCnpjEmitente(), windowStart, purchaseInstant);
         if (candidates.isEmpty()) return null;
 
         var surface = candidates.get(0); // newest qualifying surfacing
