@@ -153,9 +153,9 @@ public class MsDfePortalAdapter implements SefazAdapter {
             try {
                 return fetchOnce(qrPayload, chave, attempt);
             } catch (HttpClientErrorException ex) {
-                // 4xx — deterministic (bad/unknown chave): retrying won't help.
+                // 4xx — retrying won't help; 403/429 stay rescuable, the rest is deterministic.
                 log.warn("ms.fetch.client_error status={} chave={}", ex.getStatusCode(), LogMasker.chave(chave));
-                throw new SefazFetchException(UnidadeFederativa.MS.name());
+                throw PortalClientErrorClassifier.classify(ex, UnidadeFederativa.MS.name());
             } catch (RestClientException ex) {
                 // 5xx, read/connect timeouts, IO errors, captcha-rejected — transient.
                 if (attempt >= maxAttempts || System.nanoTime() >= deadlineNanos) break;

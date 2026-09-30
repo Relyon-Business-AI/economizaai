@@ -1,12 +1,15 @@
 package com.relyon.economizaai.service.sefaz;
 
 import com.relyon.economizaai.exception.CaptchaUnavailableException;
+import com.relyon.economizaai.exception.SefazDeterministicFetchException;
 import com.relyon.economizaai.exception.SefazFetchException;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.sefaz.captcha.CaptchaSolver;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.ResourceAccessException;
 
@@ -256,5 +259,32 @@ class MsDfePortalAdapterTest {
 
         assertThrows(SefazFetchException.class, () -> adapter.fetchHtml(MS_CHAVE));
         assertEquals(1, getCalls.get(), "time budget must stop retries well before maxAttempts");
+    }
+
+    @Test
+    void fetchHtml_404IsDeterministic_noRetryNoPaidFallback() throws Exception {
+        var getCalls = new AtomicInteger();
+        var adapter = new MsDfePortalAdapter(RestClient.builder(), solver(true, "tok"), "MS", 5000, 3, 0L, 60000L, "test") {
+            @Override protected ResponseEntity<String> httpGetResponse(String url) {
+                getCalls.incrementAndGet();
+                throw new HttpClientErrorException(HttpStatus.NOT_FOUND);
+            }
+        };
+
+        assertThrows(SefazDeterministicFetchException.class, () -> adapter.fetchHtml(MS_CHAVE));
+        assertEquals(1, getCalls.get(), "deterministic 4xx must not be retried");
+    }
+
+    @Test
+    void fetchHtml_403StaysRescuable_plainSefazFetchException() throws Exception {
+        var adapter = new MsDfePortalAdapter(RestClient.builder(), solver(true, "tok"), "MS", 5000, 3, 0L, 60000L, "test") {
+            @Override protected ResponseEntity<String> httpGetResponse(String url) {
+                throw new HttpClientErrorException(HttpStatus.FORBIDDEN);
+            }
+        };
+
+        var thrown = assertThrows(SefazFetchException.class, () -> adapter.fetchHtml(MS_CHAVE));
+        assertTrue(!(thrown instanceof SefazDeterministicFetchException),
+                "IP-block (403) must stay rescuable by the paid fallback");
     }
 }
