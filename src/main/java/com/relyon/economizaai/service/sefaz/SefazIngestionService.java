@@ -101,11 +101,6 @@ public class SefazIngestionService {
         return adapter != null && isExperimental(adapter);
     }
 
-    public ParsedReceipt ingest(String qrPayload) {
-        var fetched = fetch(qrPayload);
-        return parse(fetched);
-    }
-
     /**
      * Throws {@link UnsupportedStateException} when no adapter covers the UF.
      * Called synchronously at submit time so users in unsupported states get an
@@ -158,16 +153,10 @@ public class SefazIngestionService {
      * the receipt is fetched via Infosimples instead (paid, ~R$0.24/query).
      * The resulting {@link FetchedDocument} carries a pre-parsed
      * {@link ParsedReceipt} so {@link #parse} returns it directly.
-     */
-    public FetchedDocument fetch(String qrPayload) {
-        return fetch(qrPayload, null);
-    }
-
-    /**
-     * As {@link #fetch(String)}, but attributes the paid calls it makes (captcha
-     * solves, Infosimples queries) to {@code userId} for the per-user daily cap
-     * and the reconciliation ledger. A null {@code userId} (admin reparse, tests)
-     * skips the cap but is still logged.
+     *
+     * <p>Paid calls (captcha solves, Infosimples queries) are attributed to
+     * {@code userId} for the per-user daily cap and the reconciliation ledger.
+     * A null {@code userId} (admin reparse, tests) skips the cap but is still logged.
      */
     public FetchedDocument fetch(String qrPayload, UUID userId) {
         var chave = resolveChave(qrPayload);
@@ -279,16 +268,9 @@ public class SefazIngestionService {
     }
 
     /**
-     * Step 2: parse the fetched HTML. Returns the pre-parsed receipt immediately
-     * when the fetch was served by the Infosimples fallback.
-     */
-    public ParsedReceipt parse(FetchedDocument fetched) {
-        return parse(fetched, null);
-    }
-
-    /**
-     * As {@link #parse(FetchedDocument)}, attributing any paid rescue to
-     * {@code userId}. For experimental states an unparseable layout (portal
+     * Step 2: parse the fetched HTML, attributing any paid rescue to {@code userId}.
+     * Returns the pre-parsed receipt immediately when the fetch was served by the
+     * Infosimples fallback. For experimental states an unparseable layout (portal
      * responded but not with the responsive DANFE) is retried via Infosimples
      * before giving up — the last chain layer.
      */

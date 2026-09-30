@@ -13,15 +13,17 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * "Caçador de descontos" leaderboard. Full paths per method so the public + opt-in
- * endpoints and the admin one live together (admin path is ADMIN-gated by SecurityConfig).
+ * "Caçador de descontos" leaderboard. The public + opt-in endpoints and the admin
+ * one live together (the admin path is ADMIN-gated by SecurityConfig).
  */
 @Tag(name = "Leaderboard")
 @RestController
+@RequestMapping("/api/v1")
 @RequiredArgsConstructor
 public class LeaderboardController {
 
@@ -30,7 +32,7 @@ public class LeaderboardController {
     @Operation(summary = "Discount-hunters leaderboard (public)",
             description = "Households ranked by items bought below the community average. Public view lists only "
                     + "opted-in households; the caller always sees their own standing under `me`.")
-    @GetMapping("/api/v1/leaderboard/discount-hunters")
+    @GetMapping("/leaderboard/discount-hunters")
     public ResponseEntity<LeaderboardResponse> discountHunters(@AuthenticationPrincipal User user,
                                                                @RequestParam(defaultValue = "30") int days) {
         var householdId = user.getHousehold() == null ? null : user.getHousehold().getId();
@@ -38,7 +40,7 @@ public class LeaderboardController {
     }
 
     @Operation(summary = "Opt in/out of the public leaderboard")
-    @PatchMapping("/api/v1/leaderboard/opt-in")
+    @PatchMapping("/leaderboard/opt-in")
     public ResponseEntity<Void> setOptIn(@AuthenticationPrincipal User user,
                                          @Valid @RequestBody LeaderboardOptInRequest request) {
         leaderboardService.setOptIn(user, request.optIn());
@@ -47,7 +49,7 @@ public class LeaderboardController {
 
     @Operation(summary = "Discount-hunters leaderboard (admin)",
             description = "All households (opted in or not), handles are emails. ADMIN only.")
-    @GetMapping("/api/v1/admin/leaderboard/discount-hunters")
+    @GetMapping("/admin/leaderboard/discount-hunters")
     public ResponseEntity<LeaderboardResponse> discountHuntersAdmin(@RequestParam(defaultValue = "30") int days) {
         return ResponseEntity.ok(leaderboardService.discountHuntersAdmin(days));
     }

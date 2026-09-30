@@ -179,8 +179,6 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
     """)
     List<ReceiptItem> findRecentConfirmedWithReceipt(Pageable pageable);
 
-    List<ReceiptItem> findAllByProductIdOrderByReceiptIssuedAtAsc(UUID productId);
-
     /** Same intent as the method above but fetches receipt + household up front,
      *  used by promo detection where we filter by household + receipt status per row.
      *  Excludes items the household marked as not-mine. */

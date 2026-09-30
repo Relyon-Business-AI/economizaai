@@ -15,10 +15,6 @@ public interface PasswordResetTokenRepository extends JpaRepository<PasswordRese
 
     Optional<PasswordResetToken> findByToken(String token);
 
-    // The reset code is only unique per user (6 digits), so look it up scoped to the
-    // user. Newest first so a re-request supersedes an older still-valid code.
-    Optional<PasswordResetToken> findFirstByUserAndTokenOrderByCreatedAtDesc(User user, String token);
-
     // Brute-force guard: load the user's single ACTIVE code regardless of what code
     // the caller typed, so failed attempts can be counted against it (a lookup by
     // the typed code would never find the row to increment on a wrong guess).

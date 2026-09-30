@@ -24,6 +24,7 @@ class LeaderboardServiceTest {
 
     @Mock private ReceiptItemRepository receiptItemRepository;
     @Mock private UserRepository userRepository;
+    @Mock private LocalizedMessageService localizedMessageService;
     @InjectMocks private LeaderboardService service;
 
     private final UUID householdA = UUID.randomUUID();
@@ -42,6 +43,8 @@ class LeaderboardServiceTest {
                 new Object[]{householdB, 8L, new BigDecimal("40.00")}));
         when(userRepository.findByShareInLeaderboardTrue())
                 .thenReturn(List.of(userIn(householdA, "Ana Silva", "ana@e", true)));
+        when(localizedMessageService.translate("leaderboard.handle.anonymous")).thenReturn("Caçador");
+        when(localizedMessageService.translate("leaderboard.handle.me")).thenReturn("Você");
 
         // Viewer is household B — has finds but did NOT opt in.
         var response = service.discountHunters(30, householdB);

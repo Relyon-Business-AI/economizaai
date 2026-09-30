@@ -293,7 +293,7 @@ class ReceiptIngestionServiceTest {
 
         service.ingest(receipt.getId(), QR);
 
-        verify(sefazIngestionService, never()).fetch(any());
+        verify(sefazIngestionService, never()).fetch(any(), any());
         verify(receiptRepository, never()).save(any());
     }
 

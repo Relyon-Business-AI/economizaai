@@ -1,13 +1,21 @@
 package com.relyon.economizaai.service.sefaz;
 
+import com.relyon.economizaai.exception.SefazFetchException;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClient;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -117,5 +125,36 @@ class RealGoiasFixtureTest {
         var crafted = "https://evilsefaz.go.gov.br.attacker.example/?p=" + CHAVE;
         assertEquals("https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe?p=" + CHAVE + "|3|1",
                 GoiasNfcePortalAdapter.shellUrl(crafted, CHAVE));
+    }
+
+    @Test
+    void fetchHtml_4xxIsDeterministic_neverRetried() {
+        var attempts = new AtomicInteger();
+        var adapter = new GoiasNfcePortalAdapter(RestClient.builder(), 1000, 5, 0L, "test") {
+            @Override
+            protected String fetchOnce(String shellUrl, String chave) {
+                attempts.incrementAndGet();
+                throw HttpClientErrorException.create(
+                        HttpStatus.NOT_FOUND, "not found", HttpHeaders.EMPTY, new byte[0], null);
+            }
+        };
+
+        assertThrows(SefazFetchException.class, () -> adapter.fetchHtml(CHAVE));
+        assertEquals(1, attempts.get(), "a 4xx (bad chave) must fail fast, not burn retries");
+    }
+
+    @Test
+    void fetchHtml_transientIoErrorIsRetriedUpToMaxAttempts() {
+        var attempts = new AtomicInteger();
+        var adapter = new GoiasNfcePortalAdapter(RestClient.builder(), 1000, 3, 0L, "test") {
+            @Override
+            protected String fetchOnce(String shellUrl, String chave) {
+                attempts.incrementAndGet();
+                throw new ResourceAccessException("I/O error: nfeweb.sefaz.go.gov.br");
+            }
+        };
+
+        assertThrows(SefazFetchException.class, () -> adapter.fetchHtml(CHAVE));
+        assertEquals(3, attempts.get(), "transient failures keep retrying up to maxAttempts");
     }
 }

@@ -319,7 +319,10 @@ public class ReceiptService {
             receipt.setParseErrorReason(null);
             receiptRepository.save(receipt);
             var receiptId = receipt.getId();
-            dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload, false));
+            // 2-arg ingest: an admin retry is not the owner's app, so a blocked state
+            // must record the honest "state not supported" reason — the 3-arg overload
+            // with canDeviceRetry=false would stamp app_update_required, misleading here.
+            dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload));
             retried++;
         }
         log.info("admin.retry_failed_scans requested={} retried={}",

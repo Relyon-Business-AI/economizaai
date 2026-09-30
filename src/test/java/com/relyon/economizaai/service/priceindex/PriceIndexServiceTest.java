@@ -355,6 +355,25 @@ class PriceIndexServiceTest {
     }
 
     @Test
+    void referencePrice_evenSampleMedianComesBackAtScale2() {
+        var productId = UUID.randomUUID();
+        // Even count: median = (10.05 + 10.10) / 2 = 10.075 — the API must round
+        // to 2 decimals (R$), never leak a scale-4 half-cent value.
+        var observations = List.of(
+                obs(productId, new BigDecimal("10.00")), obs(productId, new BigDecimal("10.05")),
+                obs(productId, new BigDecimal("10.10")), obs(productId, new BigDecimal("10.20"))
+        );
+        when(observationRepository.findRecentByProductAndMarket(eq(productId), eq("123"), any()))
+                .thenReturn(observations);
+        when(auditRepository.countDistinctHouseholdsForProductMarket(eq(productId), eq("123"), any()))
+                .thenReturn(3L);
+
+        var ref = service.referencePrice(productId, "123");
+
+        assertEquals(new BigDecimal("10.08"), ref.medianPrice());
+    }
+
+    @Test
     void bestMarkets_filtersOutMarketsBelowThresholds() {
         var productId = UUID.randomUUID();
         // market A: 5 obs from 3 households (passes) median 10

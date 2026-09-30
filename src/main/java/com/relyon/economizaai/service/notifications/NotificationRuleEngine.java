@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -121,8 +122,8 @@ public class NotificationRuleEngine {
 
     private void notifyPriceRule(NotificationRule rule, PriceObservation observation) {
         var productName = observation.getProduct().getNormalizedName();
-        var marketName = friendlyMarketName(rule, observation);
         var locale = LocalizedMessageService.toLocale(rule.getUser().getLocale());
+        var marketName = friendlyMarketName(rule, observation, locale);
         var title = messageService.translate("notification.price_drop.title", locale, productName);
         var body = messageService.translate("notification.price_drop.body", locale,
                 productName, observation.getUnitPrice().toString(), marketName, rule.getThresholdPrice().toString());
@@ -156,14 +157,16 @@ public class NotificationRuleEngine {
         return km <= radiusKm;
     }
 
-    private String marketName(PriceObservation observation) {
-        return observation.getMarketName() != null ? observation.getMarketName() : "um mercado próximo";
+    private String marketName(PriceObservation observation, Locale locale) {
+        return observation.getMarketName() != null
+                ? observation.getMarketName()
+                : messageService.translate("notification.market.nearby_fallback", locale);
     }
 
     /** The rule owner's household custom name for the market, falling back to the observation's display name. */
-    private String friendlyMarketName(NotificationRule rule, PriceObservation observation) {
+    private String friendlyMarketName(NotificationRule rule, PriceObservation observation, Locale locale) {
         var householdId = rule.getUser().getHousehold() != null ? rule.getUser().getHousehold().getId() : null;
-        return marketNameService.resolve(householdId, observation.getMarketCnpj(), marketName(observation));
+        return marketNameService.resolve(householdId, observation.getMarketCnpj(), marketName(observation, locale));
     }
 
     private Map<String, Object> baseExtras(NotificationRule rule, PriceObservation observation) {

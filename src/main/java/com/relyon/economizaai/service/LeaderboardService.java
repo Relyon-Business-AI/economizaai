@@ -38,6 +38,7 @@ public class LeaderboardService {
 
     private final ReceiptItemRepository receiptItemRepository;
     private final UserRepository userRepository;
+    private final LocalizedMessageService localizedMessageService;
 
     /** Public leaderboard: opted-in households only, plus the caller's own standing. */
     @Transactional(readOnly = true)
@@ -47,7 +48,8 @@ public class LeaderboardService {
         var optedInUsers = userRepository.findByShareInLeaderboardTrue();
         var optedInHouseholds = optedInUsers.stream()
                 .map(this::householdId).filter(Objects::nonNull).collect(Collectors.toSet());
-        var handleByHousehold = firstNameByHousehold(optedInUsers);
+        var anonymousHandle = localizedMessageService.translate("leaderboard.handle.anonymous");
+        var handleByHousehold = firstNameByHousehold(optedInUsers, anonymousHandle);
 
         var publicRows = ranked.stream()
                 .filter(row -> optedInHouseholds.contains(row.householdId()))
@@ -56,7 +58,7 @@ public class LeaderboardService {
         var rank = 0;
         for (var row : publicRows) {
             rank++;
-            entries.add(new Entry(rank, handleByHousehold.getOrDefault(row.householdId(), "Caçador"),
+            entries.add(new Entry(rank, handleByHousehold.getOrDefault(row.householdId(), anonymousHandle),
                     row.finds(), row.savings(), row.householdId().equals(viewerHouseholdId)));
         }
         return new LeaderboardResponse(window, entries, buildMe(ranked, publicRows, viewerHouseholdId));
@@ -100,7 +102,8 @@ public class LeaderboardService {
                 break;
             }
         }
-        return new Entry(publicRank, "Você", finds, savings, true);
+        return new Entry(publicRank, localizedMessageService.translate("leaderboard.handle.me"),
+                finds, savings, true);
     }
 
     private List<Row> ranked(int windowDays) {
@@ -113,12 +116,12 @@ public class LeaderboardService {
     }
 
     /** householdId -> first name (privacy-safe handle) for opted-in members. */
-    private Map<UUID, String> firstNameByHousehold(List<User> optedInUsers) {
+    private Map<UUID, String> firstNameByHousehold(List<User> optedInUsers, String anonymousHandle) {
         var handles = new HashMap<UUID, String>();
         for (var user : optedInUsers) {
             var household = householdId(user);
             if (household != null) {
-                handles.putIfAbsent(household, firstName(user.getName()));
+                handles.putIfAbsent(household, firstName(user.getName(), anonymousHandle));
             }
         }
         return handles;
@@ -142,9 +145,9 @@ public class LeaderboardService {
         return user.getHousehold() == null ? null : user.getHousehold().getId();
     }
 
-    private static String firstName(String name) {
+    private static String firstName(String name, String anonymousHandle) {
         if (name == null || name.isBlank()) {
-            return "Caçador";
+            return anonymousHandle;
         }
         return name.trim().split("\\s+")[0];
     }

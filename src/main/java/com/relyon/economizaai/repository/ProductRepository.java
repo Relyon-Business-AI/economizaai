@@ -18,11 +18,6 @@ import java.util.UUID;
 
 public interface ProductRepository extends JpaRepository<Product, UUID> {
 
-    // AI sweep inputs: bounded samples (normal sweep) — kept for tests/compat.
-    List<Product> findTop40ByBrandIsNullOrderByCreatedAtDesc();
-    List<Product> findTop40ByGenericNameIsNullOrderByCreatedAtDesc();
-    List<Product> findTop40ByCategoryOrderByCreatedAtDesc(ProductCategory category);
-
     // Paginado: usado pelo modo full-sweep (percorre toda a fila).
     List<Product> findByBrandIsNullOrderByCreatedAtDesc(Pageable pageable);
     List<Product> findByGenericNameIsNullOrderByCreatedAtDesc(Pageable pageable);

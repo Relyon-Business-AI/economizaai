@@ -240,8 +240,11 @@ class ReceiptServiceTest {
         assertEquals(1, retried);
         assertEquals(ReceiptStatus.PROCESSING, failedScan.getStatus());
         assertEquals(ReceiptStatus.FAILED_PARSE, failedImport.getStatus());
-        verify(receiptIngestionService).ingest(failedScan.getId(), CHAVE_RS, false);
-        verify(receiptIngestionService, never()).ingest(eq(failedImport.getId()), any(), anyBoolean());
+        // 2-arg ingest — blocked states record the honest "not supported" reason,
+        // never app_update_required (an admin retry is not the owner's app).
+        verify(receiptIngestionService).ingest(failedScan.getId(), CHAVE_RS);
+        verify(receiptIngestionService, never()).ingest(any(), any(), anyBoolean());
+        verify(receiptIngestionService, never()).ingest(eq(failedImport.getId()), any());
     }
 
     @Test
@@ -352,7 +355,7 @@ class ReceiptServiceTest {
         // submit returns immediately as PROCESSING (no SEFAZ work on the request thread)
         assertNotNull(response.id());
         assertEquals(ReceiptStatus.PROCESSING, response.status());
-        verify(sefazIngestionService, never()).fetch(any());
+        verify(sefazIngestionService, never()).fetch(any(), any());
         // the slow ingestion is handed off to the background service
         verify(receiptIngestionService).ingest(eq(response.id()), eq(QR_RS));
     }

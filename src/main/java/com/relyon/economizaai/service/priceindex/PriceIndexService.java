@@ -227,7 +227,7 @@ public class PriceIndexService {
             return new ReferencePrice(null, null, null, observations.size(), distinctHouseholds, null, true);
         }
         var prices = observations.stream().map(PriceObservation::getUnitPrice).toList();
-        return new ReferencePrice(median(prices), min(prices), max(prices),
+        return new ReferencePrice(medianForApi(prices), min(prices), max(prices),
                 observations.size(), distinctHouseholds, observations.get(0).getObservedAt(), false);
     }
 
@@ -252,7 +252,7 @@ public class PriceIndexService {
             return new ReferencePrice(null, null, null, observations.size(), distinctHouseholds, null, true);
         }
         var prices = observations.stream().map(PriceObservation::getUnitPrice).toList();
-        return new ReferencePrice(median(prices), min(prices), max(prices),
+        return new ReferencePrice(medianForApi(prices), min(prices), max(prices),
                 observations.size(), distinctHouseholds, observations.get(0).getObservedAt(), false);
     }
 
@@ -314,8 +314,14 @@ public class PriceIndexService {
         // stays as the "usual price" baseline (deals). Most recent by observedAt.
         var mostRecent = rows.stream().max(Comparator.comparing(PriceObservation::getObservedAt)).orElse(rows.get(0));
         return new MarketPriceRow(cnpj, cnpjRoot(cnpj), mostRecent.getMarketName(),
-                median(prices), min(prices), mostRecent.getUnitPrice(), mostRecent.getObservedAt(),
+                medianForApi(prices), min(prices), mostRecent.getUnitPrice(), mostRecent.getObservedAt(),
                 rows.size(), distinct, distanceKm, isWatched);
+    }
+
+    /** Median rounded to 2 decimals (R$) for API responses — mirror of DealsService. */
+    private static BigDecimal medianForApi(List<BigDecimal> values) {
+        var medianValue = median(values);
+        return medianValue == null ? null : medianValue.setScale(2, RoundingMode.HALF_UP);
     }
 
     /** Median (50th percentile) of a price list. Returns null on empty. */

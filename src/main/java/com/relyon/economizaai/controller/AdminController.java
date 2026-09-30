@@ -21,6 +21,7 @@ import com.relyon.economizaai.dto.response.SubscriptionReportResponse;
 import com.relyon.economizaai.dto.response.BrandCoverageReportResponse;
 import com.relyon.economizaai.dto.response.AdminOverviewResponse;
 import com.relyon.economizaai.dto.response.CostReportResponse;
+import com.relyon.economizaai.dto.response.InfosimplesFinanceResponse;
 import com.relyon.economizaai.dto.response.IngestionHealthResponse;
 import com.relyon.economizaai.dto.response.MarketIntelResponse;
 import com.relyon.economizaai.dto.response.UnmatchedReportResponse;
@@ -63,6 +64,7 @@ import com.relyon.economizaai.service.admin.AdminOverviewService;
 import com.relyon.economizaai.service.admin.IngestionHealthService;
 import com.relyon.economizaai.service.admin.MarketIntelService;
 import com.relyon.economizaai.service.paidapi.CostReportService;
+import com.relyon.economizaai.service.paidapi.InfosimplesFinanceService;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
 import com.relyon.economizaai.service.sefaz.StateCoverageService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -114,6 +116,7 @@ public class AdminController {
     private final MarketLocationService marketLocationService;
     private final RelevanceReportService relevanceReportService;
     private final CostReportService costReportService;
+    private final InfosimplesFinanceService infosimplesFinanceService;
     private final IngestionHealthService ingestionHealthService;
     private final AdminOverviewService adminOverviewService;
     private final MarketIntelService marketIntelService;
@@ -298,6 +301,16 @@ public class AdminController {
      * Infosimples) and by state over the last {@code days}, plus today's spend
      * against the global daily budget. Reads the paid_api_call ledger.
      */
+    /**
+     * Financial panel of the Infosimples prepaid account: live saldo/consumo/
+     * franquia, next franchise sweep, lifetime totals and the month ledger
+     * (seeded from the painel; kept current by scheduled snapshots).
+     */
+    @GetMapping("/costs/infosimples")
+    public ResponseEntity<InfosimplesFinanceResponse> infosimplesFinance() {
+        return ResponseEntity.ok(infosimplesFinanceService.finance());
+    }
+
     @GetMapping("/costs")
     public ResponseEntity<CostReportResponse> costReport(@RequestParam(defaultValue = "30") int days) {
         return ResponseEntity.ok(costReportService.report(days));

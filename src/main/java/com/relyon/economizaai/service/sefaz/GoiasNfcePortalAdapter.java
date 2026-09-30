@@ -9,6 +9,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -89,6 +90,10 @@ public class GoiasNfcePortalAdapter implements SefazAdapter {
         for (var attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
                 return fetchOnce(shellUrl, chave);
+            } catch (HttpClientErrorException ex) {
+                // 4xx — deterministic (bad/unknown chave): retrying won't help.
+                log.warn("go.fetch.client_error status={} chave={}", ex.getStatusCode(), LogMasker.chave(chave));
+                throw new SefazFetchException(UnidadeFederativa.GO.name());
             } catch (SefazFetchException | RestClientException ex) {
                 lastTransient = ex;
                 log.warn("go.fetch transient attempt={}/{} chave={} reason={}: {}",
@@ -132,7 +137,8 @@ public class GoiasNfcePortalAdapter implements SefazAdapter {
         return host.equals("sefaz.go.gov.br") || host.endsWith(".sefaz.go.gov.br");
     }
 
-    private String fetchOnce(String shellUrl, String chave) {
+    /** One shell+render round-trip. Protected: the retry-classification test overrides it. */
+    protected String fetchOnce(String shellUrl, String chave) {
         var shellResponse = restClient.get()
                 .uri(shellUrl)
                 .retrieve()

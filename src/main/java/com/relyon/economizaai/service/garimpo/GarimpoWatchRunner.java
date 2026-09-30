@@ -142,8 +142,15 @@ public class GarimpoWatchRunner {
 
     private boolean alreadyAlertedAtOrBelow(GarimpoWatch watch, GarimpoPriceSnapshot latest,
                                             ProviderProduct product) {
-        return qualifies(watch, latest.getPrice(), latest.getDiscountPercent())
-                && latest.getPrice().compareTo(product.price()) <= 0;
+        if (!qualifies(watch, latest.getPrice(), latest.getDiscountPercent())) {
+            return false;
+        }
+        if (latest.getPrice() == null || product.price() == null) {
+            // Discount-only qualification (a hit can carry no price): a further price
+            // drop can't be established, so don't re-fire the same deal every sweep.
+            return true;
+        }
+        return latest.getPrice().compareTo(product.price()) <= 0;
     }
 
     private static String abbrev(GarimpoWatch watch) {

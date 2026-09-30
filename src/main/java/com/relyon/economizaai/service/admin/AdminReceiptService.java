@@ -91,9 +91,9 @@ public class AdminReceiptService {
                                                    List<ProductCategory> categories, String search, UUID householdId,
                                                    UnidadeFederativa uf, ReceiptStatus status, String parseErrorReason,
                                                    boolean includeInternal) {
-        var trimmedCnpj = Optional.ofNullable(marketCnpj).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
-        var trimmedSearch = Optional.ofNullable(search).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
-        var trimmedError = Optional.ofNullable(parseErrorReason).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
+        var trimmedCnpj = Optional.ofNullable(marketCnpj).map(String::trim).filter(trimmed -> !trimmed.isBlank()).orElse(null);
+        var trimmedSearch = Optional.ofNullable(search).map(String::trim).filter(trimmed -> !trimmed.isBlank()).orElse(null);
+        var trimmedError = Optional.ofNullable(parseErrorReason).map(String::trim).filter(trimmed -> !trimmed.isBlank()).orElse(null);
         // Admin sees FAILED_PARSE rows too (useful for parser triage) — but an
         // explicit status filter narrows to one bucket when passed.
         var spec = ReceiptSpecifications.forSearch(

@@ -10,7 +10,5 @@ public interface LlmDisagreementRepository extends JpaRepository<LlmDisagreement
 
     List<LlmDisagreement> findTop100ByResolvedAtIsNullOrderByCreatedAtDesc();
 
-    long countByResolvedAtIsNull();
-
     boolean existsByProductIdAndFieldAndResolvedAtIsNull(UUID productId, String field);
 }

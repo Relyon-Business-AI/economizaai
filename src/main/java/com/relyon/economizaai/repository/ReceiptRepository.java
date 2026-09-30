@@ -19,8 +19,6 @@ import java.util.UUID;
 public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpecificationExecutor<Receipt>,
         ReceiptAggregationRepository {
 
-    Optional<Receipt> findByChaveAcesso(String chaveAcesso);
-
     // AI merchant-review input: the distinct merchants we've seen (bounded sample).
     @Query("SELECT DISTINCT r.cnpjEmitente, r.marketName FROM Receipt r WHERE r.marketName IS NOT NULL")
     List<Object[]> findDistinctMerchants(Pageable pageable);
@@ -48,10 +46,6 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
     long countByUserIdAndOriginAndStatusIn(UUID userId, ReceiptOrigin origin, Collection<ReceiptStatus> statuses);
 
     long countByUserIdAndOriginAndStatus(UUID userId, ReceiptOrigin origin, ReceiptStatus status);
-
-    boolean existsByChaveAcesso(String chaveAcesso);
-
-    boolean existsByHouseholdIdAndChaveAcesso(UUID householdId, String chaveAcesso);
 
     // Deletion guard: a household must NOT be deleted while any receipt still points
     // at it as current home OR as origin (parked data awaiting restore on split).
