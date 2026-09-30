@@ -10,6 +10,21 @@ mirror entries here.
 
 ---
 
+## OOM hardening: flags da JVM + watchdog de heap (2026-09-30)
+- **Now**: depois do OOM de prod (2026-09-30 15:09 UTC, serviço ficou meio-morto até
+  redeploy manual), o ENTRYPOINT do `Dockerfile` ganhou `-XX:+ExitOnOutOfMemoryError`
+  (OOM mata o processo → Render reinicia na hora) e `-XX:MaxRAMPercentage=75.0` (heap
+  limitado a 75% da RAM do container; não havia `-Xmx`). Além disso, o
+  `HeapPressureMonitor` checa o heap a cada 60s e, acima de 90% por 3 ticks
+  consecutivos, loga `heap.pressure` em ERROR e manda UM e-mail de alerta ao admin
+  (cooldown 6h). Config em `economizaai.monitoring.*` (`HEAP_ALERT_THRESHOLD`,
+  `HEAP_ALERT_CONSECUTIVE_TICKS`, `HEAP_ALERT_COOLDOWN_MINUTES`, `HEAP_CHECK_DELAY_MS`).
+- **OK for dev**: alerta vai para a caixa de contato; sem métricas externas ainda.
+- **Before prod**: nada a aplicar à mão — o start command vive no `Dockerfile` do repo
+  (Render roda `runtime: docker`), então o deploy normal já leva as flags. Quando houver
+  Prometheus/Grafana, considerar alertas de heap por métrica em vez de e-mail.
+- **Effort**: feito.
+
 ## ForceUpdateGate do app ainda lê o gist do polyf (2026-09-30)
 - **Now**: o backend já serve `GET /api/v1/app-config` (mesmo shape do gist), mas o app
   DISTRIBUÍDO ainda busca `gist.githubusercontent.com/polyf/…/app-config.json` — conta
