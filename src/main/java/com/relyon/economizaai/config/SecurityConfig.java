@@ -101,11 +101,10 @@ public class SecurityConfig {
                         // AI assist layer: sweep, findings review, spend panel, AI test-classify —
                         // all mutate global state or spend money, so ADMIN-only as a block.
                         .requestMatchers("/api/v1/categorizer/ai/**").hasRole("ADMIN")
-                        // Model-training / catalog-mutating categorizer endpoints are ADMIN-only.
-                        // The read/debug ones (classify, ml/predict, status, quality) stay open to
+                        // Catalog-mutating categorizer endpoints are ADMIN-only.
+                        // The read/debug ones (classify, status, quality) stay open to
                         // authenticated users. benchmark is a POST here because it records a snapshot.
                         .requestMatchers(HttpMethod.POST,
-                                "/api/v1/categorizer/retrain",
                                 "/api/v1/categorizer/auto-promote",
                                 "/api/v1/categorizer/promote-consensus",
                                 "/api/v1/categorizer/ean-catalog/import",

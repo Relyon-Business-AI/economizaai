@@ -355,7 +355,7 @@ class ReceiptServiceTest {
         // submit returns immediately as PROCESSING (no SEFAZ work on the request thread)
         assertNotNull(response.id());
         assertEquals(ReceiptStatus.PROCESSING, response.status());
-        verify(sefazIngestionService, never()).fetch(any());
+        verify(sefazIngestionService, never()).fetch(any(), any());
         // the slow ingestion is handed off to the background service
         verify(receiptIngestionService).ingest(eq(response.id()), eq(QR_RS));
     }

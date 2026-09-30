@@ -20,8 +20,5 @@ public interface AiFindingRepository extends JpaRepository<AiFinding, UUID> {
 
     long countByStatus(AiFindingStatus status);
 
-    // Dedup guard: don't re-propose something identical that's still pending or was already reviewed.
-    boolean existsByTypeAndTitleAndStatus(AiFindingType type, String title, AiFindingStatus status);
-
     boolean existsByTypeAndTitle(AiFindingType type, String title);
 }

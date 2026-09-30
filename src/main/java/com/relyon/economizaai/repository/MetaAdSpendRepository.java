@@ -15,8 +15,6 @@ public interface MetaAdSpendRepository extends JpaRepository<MetaAdSpend, UUID> 
     /** Used by the sync job to upsert one campaign/day row. */
     Optional<MetaAdSpend> findByCampaignIdAndSpendDate(String campaignId, LocalDate spendDate);
 
-    List<MetaAdSpend> findBySpendDateBetweenOrderBySpendDateAsc(LocalDate from, LocalDate to);
-
     @Query("select coalesce(sum(spend.spend), 0) from MetaAdSpend spend "
             + "where spend.spendDate between :from and :to")
     BigDecimal totalSpendBetween(LocalDate from, LocalDate to);
