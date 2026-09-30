@@ -1852,11 +1852,13 @@
               ]
             },
             "url": {
-              "raw": "{{baseUrl}}/receipts/import/extract-chaves",
+              "raw": "{{baseUrl}}/api/v1/receipts/import/extract-chaves",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
+                "api",
+                "v1",
                 "receipts",
                 "import",
                 "extract-chaves"
@@ -1886,11 +1888,13 @@
               ]
             },
             "url": {
-              "raw": "{{baseUrl}}/receipts/import/extract-chaves",
+              "raw": "{{baseUrl}}/api/v1/receipts/import/extract-chaves",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
+                "api",
+                "v1",
                 "receipts",
                 "import",
                 "extract-chaves"
@@ -3533,43 +3537,6 @@
           "response": []
         },
         {
-          "name": "ML-only predict (dev, model alone)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept-Language",
-                "value": "pt"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/categorizer/ml/predict?description=Milho&description=Lays",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "categorizer",
-                "ml",
-                "predict"
-              ],
-              "query": [
-                {
-                  "key": "description",
-                  "value": "Milho"
-                },
-                {
-                  "key": "description",
-                  "value": "Lays"
-                }
-              ]
-            },
-            "description": "The ML model's raw prediction per term (category + genericName + confidence), ignoring the dictionary and the apply gate. Dev tool to inspect/improve the model in isolation."
-          },
-          "response": []
-        },
-        {
           "name": "Benchmark (categorization accuracy %)",
           "request": {
             "method": "POST",
@@ -3696,31 +3663,6 @@
               ]
             },
             "description": "ADMIN. Read-only what-if: for each phrase-window size N in [minTokens, maxTokens], reports dictionary coverage over the unmatched backlog + category/brand accuracy over the golden set. Adopt a window via env var ECONOMIZAAI_CATEGORIZATION_MAX_PHRASE_TOKENS; nothing is persisted."
-          },
-          "response": []
-        },
-        {
-          "name": "Retrain ML now",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept-Language",
-                "value": "pt"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/categorizer/retrain",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "categorizer",
-                "retrain"
-              ]
-            }
           },
           "response": []
         },
@@ -7854,42 +7796,6 @@
           ]
         },
         {
-          "name": "23. ML retrain is ADMIN-only (403 for normal user)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept-Language",
-                "value": "pt"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/categorizer/retrain",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "categorizer",
-                "retrain"
-              ]
-            }
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Forbidden for non-admin (training endpoint is ADMIN-only)', function () { pm.response.to.have.status(403); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
           "name": "24. Auto-promotion is ADMIN-only (403 for normal user)",
           "request": {
             "method": "POST",
@@ -11051,56 +10957,6 @@
               ]
             },
             "description": "Dry-run / full chain: how each term would be categorized, with per-layer breakdown (dictionary vs ML), the deciding source, and mlApplied. Nothing is persisted."
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
-                  "    pm.expect(pm.response.code).to.be.below(500);",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "COV: ML-only predict (dev, model alone)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept-Language",
-                "value": "pt"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/categorizer/ml/predict?description=Milho&description=Lays",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "categorizer",
-                "ml",
-                "predict"
-              ],
-              "query": [
-                {
-                  "key": "description",
-                  "value": "Milho"
-                },
-                {
-                  "key": "description",
-                  "value": "Lays"
-                }
-              ]
-            },
-            "description": "The ML model's raw prediction per term (category + genericName + confidence), ignoring the dictionary and the apply gate. Dev tool to inspect/improve the model in isolation."
           },
           "response": [],
           "event": [
