@@ -58,6 +58,15 @@ economizaai:
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:8081}
   default-locale: pt
+  app-config:
+    # Remote config do ForceUpdateGate do app (GET /api/v1/app-config, público).
+    # Defaults tornam o gate um NO-OP — min-version 0.0.0 nunca bloqueia nenhuma
+    # versão instalada — então prod funciona sem env var nova; setar no Render
+    # só quando for puxar a alavanca de força de atualização.
+    min-version: ${APP_CONFIG_MIN_VERSION:0.0.0}
+    android-url: ${APP_CONFIG_ANDROID_URL:}
+    ios-url: ${APP_CONFIG_IOS_URL:}
+    message: ${APP_CONFIG_MESSAGE:}
   metrics:
     # HTTP Basic credentials for GET /actuator/prometheus. Password BLANK by
     # default → endpoint is fail-closed (every request 401), so metrics are

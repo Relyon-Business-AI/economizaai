@@ -205,6 +205,21 @@ class RateLimitFilterTest {
     }
 
     @Test
+    void appConfigAllowsSixtyReadsPerIpThenBlocks() throws Exception {
+        for (var attempt = 0; attempt < 60; attempt++) {
+            var response = invokeAppConfigRequest("3.3.3.3");
+            assertEquals(200, response.getStatus(), "read " + (attempt + 1) + " should pass");
+        }
+        var blocked = invokeAppConfigRequest("3.3.3.3");
+        assertEquals(429, blocked.getStatus());
+        assertNotNull(blocked.getHeader("Retry-After"));
+
+        var otherIp = invokeAppConfigRequest("3.3.3.4");
+        assertEquals(200, otherIp.getStatus(),
+                "second IP should not be throttled by the first IP's exhausted bucket");
+    }
+
+    @Test
     void successfulMatchedRequestExposesRemainingHeader() throws Exception {
         var response = invokeAuthRequest("6.6.6.6");
         assertEquals("4", response.getHeader("X-RateLimit-Remaining"));
@@ -229,6 +244,14 @@ class RateLimitFilterTest {
 
     private MockHttpServletResponse invokeHouseholdJoinRequest(String ip) throws Exception {
         var request = new MockHttpServletRequest("POST", "/api/v1/households/join");
+        request.setRemoteAddr(ip);
+        var response = new MockHttpServletResponse();
+        filter.doFilterInternal(request, response, chain);
+        return response;
+    }
+
+    private MockHttpServletResponse invokeAppConfigRequest(String ip) throws Exception {
+        var request = new MockHttpServletRequest("GET", "/api/v1/app-config");
         request.setRemoteAddr(ip);
         var response = new MockHttpServletResponse();
         filter.doFilterInternal(request, response, chain);
