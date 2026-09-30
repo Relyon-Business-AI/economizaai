@@ -265,7 +265,7 @@ class AdminControllerTest {
     @Test
     void costReport_returnsSpendBreakdown() throws Exception {
         var report = new CostReportResponse(30, 40L, 330L, new BigDecimal("3.30"),
-                5000L, new BigDecimal("1.20"), new BigDecimal("87.52"),
+                5000L, new BigDecimal("1.20"), new BigDecimal("87.52"), new BigDecimal("7.68"), new BigDecimal("100"),
                 List.of(new CostReportResponse.ServiceSpendLine("INFOSIMPLES", 10L, 2L, 240L, new BigDecimal("2.40"))),
                 List.of(new CostReportResponse.StateSpendLine("CE", 10L, 240L, new BigDecimal("2.40"))));
         when(costReportService.report(30)).thenReturn(report);

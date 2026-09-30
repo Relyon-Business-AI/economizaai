@@ -16,6 +16,17 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-30 — card Infosimples completo (saldo + consumo cobrado + franquia)
+
+- `GET /admin/costs` agora traz também `infosimplesConsumoMes` (o que o mês
+  realmente COBROU — falhas não executadas não cobram) e
+  `infosimplesFranquiaMinima` (mínimo mensal que varre o crédito não usado),
+  direto do endpoint gratuito `GET /api/admin/account` da Infosimples.
+- **FE (admin):** aba Custos ganhou o card "Infosimples (conta, valores reais)"
+  com saldo, consumo do mês e barra de progresso contra a franquia de R$ 100
+  (abaixo dela, consulta extra efetivamente não custa nada). O card "Por
+  serviço" foi rotulado como estimado pelo ledger.
+
 ## 2026-09-29 (9) — saldo Infosimples de verdade (endpoint documentado)
 
 - O card de saldo agora usa o endpoint oficial `GET /api/admin/account` (grátis,

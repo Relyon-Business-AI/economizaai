@@ -47,7 +47,8 @@ class CostReportServiceTest {
         when(repository.spendByService(any())).thenReturn(services);
         when(repository.spendByState(any())).thenReturn(states);
         when(repository.sumCostCentsSince(any())).thenReturn(120L);
-        when(infosimples.fetchSaldo()).thenReturn(Optional.of(new BigDecimal("87.52")));
+        when(infosimples.fetchAccount()).thenReturn(Optional.of(new InfosimplesService.InfosimplesAccount(
+                new BigDecimal("87.52"), new BigDecimal("7.68"), new BigDecimal("100"))));
 
         var report = service.report(30);
 
@@ -58,6 +59,8 @@ class CostReportServiceTest {
         assertEquals(5000, report.dailyGlobalBudgetCents());
         assertEquals(new BigDecimal("1.20"), report.spentTodayReais());
         assertEquals(new BigDecimal("87.52"), report.infosimplesSaldo());
+        assertEquals(new BigDecimal("7.68"), report.infosimplesConsumoMes());
+        assertEquals(new BigDecimal("100"), report.infosimplesFranquiaMinima());
         assertEquals(2, report.byService().size());
         assertEquals(new BigDecimal("2.40"), report.byService().get(0).costReais());
         assertEquals("CE", report.byState().get(0).uf());
@@ -68,7 +71,7 @@ class CostReportServiceTest {
         when(repository.spendByService(any())).thenReturn(List.of());
         when(repository.spendByState(any())).thenReturn(List.of());
         when(repository.sumCostCentsSince(any())).thenReturn(0L);
-        when(infosimples.fetchSaldo()).thenReturn(Optional.empty());
+        when(infosimples.fetchAccount()).thenReturn(Optional.empty());
 
         assertEquals(1, service.report(0).windowDays());
     }

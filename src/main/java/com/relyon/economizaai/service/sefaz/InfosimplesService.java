@@ -283,39 +283,43 @@ public class InfosimplesService {
     }
 
     /**
-     * Account credit from the documented {@code GET /api/admin/account} endpoint
-     * (free — "este endpoint não tem custo"; spec at
-     * {@code api.infosimples.com/consultas/docs/conta}). For a prepaid account
-     * {@code data[0].balance} is the saldo in R$. Empty when the call fails —
+     * Live account status from the documented {@code GET /api/admin/account}
+     * endpoint (free — "este endpoint não tem custo"; spec at
+     * {@code api.infosimples.com/consultas/docs/conta}): prepaid {@code balance},
+     * {@code current_usage} (what the month has actually BILLED — failures the
+     * automation never ran are not charged) and {@code min_bill} (the monthly
+     * minimum franchise that sweeps unused credit). Empty when the call fails —
      * the dashboard shows "indisponível" instead of breaking the cost report.
      */
-    public Optional<BigDecimal> fetchSaldo() {
+    public Optional<InfosimplesAccount> fetchAccount() {
         try {
             var response = restClient.get()
                     .uri("/api/admin/account?token={token}", apiKey)
                     .retrieve()
                     .body(SALDO_RESPONSE_TYPE);
-            if (response == null || response.code() != 200 || response.data() == null) {
-                log.warn("infosimples.saldo.failed code={} message='{}'",
+            if (response == null || response.code() != 200
+                    || response.data() == null || response.data().isEmpty()) {
+                log.warn("infosimples.account.failed code={} message='{}'",
                         response == null ? -1 : response.code(),
                         response == null ? null : response.codeMessage());
                 return Optional.empty();
             }
-            var saldo = response.data().stream().findFirst().flatMap(InfosimplesService::extractSaldo);
-            saldo.ifPresentOrElse(
-                    value -> log.info("infosimples.saldo.ok saldo={}", value),
-                    () -> log.warn("infosimples.saldo.unrecognized_shape keys={}",
-                            response.data().isEmpty() ? List.of() : response.data().get(0).keySet()));
-            return saldo;
+            var entry = response.data().get(0);
+            var account = new InfosimplesAccount(
+                    toDecimal(entry.get("balance")),
+                    toDecimal(entry.get("current_usage")),
+                    toDecimal(entry.get("min_bill")));
+            log.info("infosimples.account.ok saldo={} consumoMes={} franquia={}",
+                    account.balance(), account.currentUsage(), account.minBill());
+            return Optional.of(account);
         } catch (RuntimeException ex) {
-            log.warn("infosimples.saldo.error reason={}", ex.getClass().getSimpleName());
+            log.warn("infosimples.account.error reason={}", ex.getClass().getSimpleName());
             return Optional.empty();
         }
     }
 
-    private static Optional<BigDecimal> extractSaldo(Map<String, Object> entry) {
-        return Optional.ofNullable(toDecimal(entry.get("balance")));
-    }
+    /** Prepaid saldo, billed month usage and monthly minimum franchise, in R$ (fields null when absent). */
+    public record InfosimplesAccount(BigDecimal balance, BigDecimal currentUsage, BigDecimal minBill) {}
 
     private static BigDecimal toDecimal(Object value) {
         if (value instanceof Number number) {

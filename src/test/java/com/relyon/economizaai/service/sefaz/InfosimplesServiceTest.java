@@ -40,7 +40,7 @@ class InfosimplesServiceTest {
     }
 
     @Test
-    void fetchSaldo_readsPrepaidBalanceFromAccountEndpoint() {
+    void fetchAccount_readsPrepaidBalanceUsageAndFranchise() {
         // Documented shape (api.infosimples.com/consultas/docs/conta) — free call.
         server.expect(requestTo(BASE_URL + "/api/admin/account?token=test-key"))
                 .andRespond(withSuccess("""
@@ -49,19 +49,21 @@ class InfosimplesServiceTest {
                           "balance_threshold":10.0,"min_bill":100,"current_usage":11.5}]}
                         """, MediaType.APPLICATION_JSON));
 
-        var saldo = service.fetchSaldo();
+        var account = service.fetchAccount().orElseThrow();
 
-        assertEquals(0, new BigDecimal("92.32").compareTo(saldo.orElseThrow()));
+        assertEquals(0, new BigDecimal("92.32").compareTo(account.balance()));
+        assertEquals(0, new BigDecimal("11.5").compareTo(account.currentUsage()));
+        assertEquals(0, new BigDecimal("100").compareTo(account.minBill()));
     }
 
     @Test
-    void fetchSaldo_emptyOnApiError() {
+    void fetchAccount_emptyOnApiError() {
         server.expect(requestTo(BASE_URL + "/api/admin/account?token=test-key"))
                 .andRespond(withSuccess("""
                         {"code":601,"code_message":"token inválido","data":null}
                         """, MediaType.APPLICATION_JSON));
 
-        assertEquals(Optional.empty(), service.fetchSaldo());
+        assertEquals(Optional.empty(), service.fetchAccount());
     }
 
     @Test
