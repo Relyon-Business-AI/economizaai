@@ -22,7 +22,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import static com.relyon.economizaai.config.AsyncConfig.AI_SWEEP_EXECUTOR;
 
 import java.math.BigDecimal;
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -102,9 +101,9 @@ public class AiItemFallbackService {
         final var resolvedGenericName = genericName;
         final var resolvedBrand = brand;
 
-        transactionTemplate.execute(txStatus -> {
+        var classified = transactionTemplate.execute(txStatus -> {
             var item = receiptItemRepository.findById(itemId).orElse(null);
-            if (item == null || item.getProduct() != null) return null;
+            if (item == null || item.getProduct() != null) return false;
 
             var product = Product.builder()
                     .normalizedName(resolvedGenericName.toUpperCase())
@@ -121,26 +120,27 @@ public class AiItemFallbackService {
                 item.setCategoryAtConfirmation(resolvedCategory);
             }
             receiptItemRepository.save(item);
-            log.info("ai.item_fallback.matched rcpt={} item={} name='{}' category={} confidence={}",
-                    abbrev(receiptId), abbrev(itemId), resolvedGenericName, resolvedCategory, confidence);
-
-            createFindingIfAbsent(rawDescription, resolvedGenericName, resolvedBrand, resolvedCategory, confidence);
-            return null;
+            return true;
         });
+        if (!Boolean.TRUE.equals(classified)) return;
+        log.info("ai.item_fallback.matched rcpt={} item={} name='{}' category={} confidence={}",
+                abbrev(receiptId), abbrev(itemId), resolvedGenericName, resolvedCategory, confidence);
+
+        // The finding is only the admin suggestion card — its failure must never
+        // undo the classification, which is already committed above.
+        try {
+            createFindingIfAbsent(rawDescription, resolvedGenericName, resolvedBrand, resolvedCategory, confidence);
+        } catch (RuntimeException ex) {
+            log.warn("ai.item_fallback.finding_failed rcpt={} item={} description='{}' reason={}",
+                    abbrev(receiptId), abbrev(itemId), rawDescription, ex.getMessage());
+        }
     }
 
     private void createFindingIfAbsent(String description, String genericName, String brand,
                                        ProductCategory category, double confidence) {
-        var alreadyPending = findingRepository.findByStatus(AiFindingStatus.PENDING).stream()
-                .filter(finding -> finding.getType() == AiFindingType.MISSING_RULE)
-                .anyMatch(finding -> {
-                    try {
-                        return objectMapper.readTree(finding.getPayload())
-                                .path("description").asText("").equalsIgnoreCase(description);
-                    } catch (Exception ex) {
-                        return false;
-                    }
-                });
+        var titlePrefix = "Regra: \"" + description + "\" →";
+        var alreadyPending = findingRepository.existsByTypeAndStatusAndTitleStartingWith(
+                AiFindingType.MISSING_RULE, AiFindingStatus.PENDING, titlePrefix);
         if (alreadyPending) return;
 
         var payload = objectMapper.createObjectNode();

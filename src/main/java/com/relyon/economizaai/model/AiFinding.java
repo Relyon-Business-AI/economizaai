@@ -33,7 +33,8 @@ import java.util.UUID;
 @SuperBuilder
 public class AiFinding extends BaseEntity {
 
-    @Column(name = "sweep_run_id", nullable = false)
+    /** Null for findings born from the real-time scan fallback — they belong to no sweep run. */
+    @Column(name = "sweep_run_id")
     private UUID sweepRunId;
 
     @Enumerated(EnumType.STRING)

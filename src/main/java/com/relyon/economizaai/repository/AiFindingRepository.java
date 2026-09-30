@@ -21,4 +21,6 @@ public interface AiFindingRepository extends JpaRepository<AiFinding, UUID> {
     long countByStatus(AiFindingStatus status);
 
     boolean existsByTypeAndTitle(AiFindingType type, String title);
+
+    boolean existsByTypeAndStatusAndTitleStartingWith(AiFindingType type, AiFindingStatus status, String titlePrefix);
 }
