@@ -6,6 +6,7 @@ import com.relyon.economizaai.dto.request.GoogleLoginRequest;
 import com.relyon.economizaai.dto.response.AuthResponse;
 import com.relyon.economizaai.dto.response.UserResponse;
 import com.relyon.economizaai.exception.InvalidOAuthTokenException;
+import com.relyon.economizaai.exception.SocialEmailUnverifiedException;
 import com.relyon.economizaai.legal.LegalDocuments;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.AuthProvider;
@@ -122,6 +123,16 @@ public class SocialLoginService {
             user = userRepository.save(user);
             log.info("social.login linked_by_email provider={} user={}", provider, LogMasker.email(user.getEmail()));
         } else {
+            // Existing SOCIAL account matched by e-mail only (cross-provider, or same
+            // provider under a different subject). The same takeover guard applies:
+            // without a verified e-mail claim, anyone who registers this address at
+            // the provider could log into the account. A VERIFIED cross-provider
+            // match stays valid (created with Google, signing in with Apple).
+            if (!emailVerified) {
+                log.warn("social_login.rejected_unverified_email provider={} user={}",
+                        provider, LogMasker.email(user.getEmail()));
+                throw new SocialEmailUnverifiedException(provider);
+            }
             log.info("social.login matched_by_email provider={} user={}", provider, LogMasker.email(user.getEmail()));
         }
         return user;
