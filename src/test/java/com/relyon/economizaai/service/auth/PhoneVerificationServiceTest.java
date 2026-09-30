@@ -31,8 +31,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -191,10 +193,19 @@ class PhoneVerificationServiceTest {
         verify(userRepository, never()).save(any());
     }
 
+    /** Mirrors the atomic UPDATE so the in-memory token reflects the persisted count. */
+    private void stubAtomicIncrement(PhoneVerificationToken token) {
+        doAnswer(invocation -> {
+            token.setAttempts(token.getAttempts() + 1);
+            return null;
+        }).when(tokenRepository).incrementAttempts(token.getId());
+    }
+
     @Test
     void verify_wrongCodeIncrementsAttemptsCounter() {
         var user = user();
         var token = PhoneVerificationToken.builder()
+                .id(UUID.randomUUID())
                 .user(user)
                 .phoneNumber("+5551999999999")
                 .codeHash(passwordEncoder.encode("123456"))
@@ -202,11 +213,40 @@ class PhoneVerificationServiceTest {
                 .build();
         when(tokenRepository.findFirstByUserIdAndConsumedAtIsNullOrderByCreatedAtDesc(user.getId()))
                 .thenReturn(Optional.of(token));
+        stubAtomicIncrement(token);
 
         assertThrows(InvalidPhoneVerificationException.class, () -> service.verify(user, "000000"));
 
         assertEquals(1, token.getAttempts());
-        verify(tokenRepository).save(token);
+        // atomic in-DB increment, never a read-modify-write save (would roll back)
+        verify(tokenRepository).incrementAttempts(token.getId());
+        verify(tokenRepository, never()).save(any());
+    }
+
+    @Test
+    void verify_locksAfterMaxFailedAttemptsEvenIfGuessedRightAfterwards() {
+        var user = user();
+        var token = PhoneVerificationToken.builder()
+                .id(UUID.randomUUID())
+                .user(user)
+                .phoneNumber("+5551999999999")
+                .codeHash(passwordEncoder.encode("123456"))
+                .expiresAt(LocalDateTime.now().plusMinutes(10))
+                .build();
+        when(tokenRepository.findFirstByUserIdAndConsumedAtIsNullOrderByCreatedAtDesc(user.getId()))
+                .thenReturn(Optional.of(token));
+        stubAtomicIncrement(token);
+
+        for (var attempt = 0; attempt < 5; attempt++) {
+            assertThrows(InvalidPhoneVerificationException.class, () -> service.verify(user, "000000"));
+        }
+        assertEquals(5, token.getAttempts());
+        verify(tokenRepository, times(5)).incrementAttempts(token.getId());
+
+        // the CORRECT code is now rejected — the attacker exhausted the budget
+        assertThrows(InvalidPhoneVerificationException.class, () -> service.verify(user, "123456"));
+        assertFalse(user.isPhoneVerified());
+        verify(userRepository, never()).save(any());
     }
 
     @Test

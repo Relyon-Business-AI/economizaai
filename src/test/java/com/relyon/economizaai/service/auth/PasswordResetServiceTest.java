@@ -33,7 +33,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -55,6 +57,7 @@ class PasswordResetServiceTest {
 
     private PasswordResetToken activeCode(User user, String code) {
         return PasswordResetToken.builder()
+                .id(UUID.randomUUID())
                 .user(user).token(sha256(code))
                 .expiresAt(LocalDateTime.now().plusMinutes(30)).build();
     }
@@ -71,6 +74,14 @@ class PasswordResetServiceTest {
     private void stubActiveCode(User user, PasswordResetToken token) {
         when(tokenRepository.findFirstByUserAndConsumedAtIsNullOrderByCreatedAtDesc(user))
                 .thenReturn(Optional.of(token));
+    }
+
+    /** Mirrors the atomic UPDATE so the in-memory token reflects the persisted count. */
+    private void stubAtomicIncrement(PasswordResetToken token) {
+        doAnswer(invocation -> {
+            token.setAttempts(token.getAttempts() + 1);
+            return null;
+        }).when(tokenRepository).incrementAttempts(token.getId());
     }
 
     @Test
@@ -157,12 +168,15 @@ class PasswordResetServiceTest {
         var code = activeCode(user, "123456");
         when(userRepository.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
         stubActiveCode(user, code);
+        stubAtomicIncrement(code);
 
         assertThrows(InvalidAuthTokenException.class, () ->
                 passwordResetService.verifyCode(new VerifyResetCodeRequest(user.getEmail(), "000000")));
 
         assertEquals(1, code.getAttempts());
-        verify(tokenRepository).save(code);
+        // atomic in-DB increment, never a read-modify-write save (would roll back)
+        verify(tokenRepository).incrementAttempts(code.getId());
+        verify(tokenRepository, never()).save(any());
     }
 
     @Test
@@ -182,12 +196,14 @@ class PasswordResetServiceTest {
         var code = activeCode(user, "123456");
         when(userRepository.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
         stubActiveCode(user, code);
+        stubAtomicIncrement(code);
 
         for (var attempt = 0; attempt < 5; attempt++) {
             assertThrows(InvalidAuthTokenException.class, () ->
                     passwordResetService.verifyCode(new VerifyResetCodeRequest(user.getEmail(), "000000")));
         }
         assertEquals(5, code.getAttempts());
+        verify(tokenRepository, times(5)).incrementAttempts(code.getId());
 
         // the CORRECT code is now rejected — the attacker exhausted the budget
         assertThrows(InvalidAuthTokenException.class, () ->
@@ -223,11 +239,13 @@ class PasswordResetServiceTest {
         var code = activeCode(user, "654321");
         when(userRepository.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
         stubActiveCode(user, code);
+        stubAtomicIncrement(code);
 
         assertThrows(InvalidAuthTokenException.class, () ->
                 passwordResetService.resetPassword(new ResetPasswordRequest(user.getEmail(), "999999", "brand-new-password")));
 
         assertEquals(1, code.getAttempts());
+        verify(tokenRepository).incrementAttempts(code.getId());
         verify(userRepository, never()).save(any());
         verify(passwordEncoder, never()).encode(anyString());
     }

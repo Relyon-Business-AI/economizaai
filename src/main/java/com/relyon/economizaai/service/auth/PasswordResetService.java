@@ -77,16 +77,17 @@ public class PasswordResetService {
      * Validate a code WITHOUT consuming it, so the app can gate the new-password
      * screen on a correct code before the user types anything. Throws on a bad /
      * expired / consumed code; returns quietly on success. Not readOnly: failed
-     * guesses increment the attempt counter.
+     * guesses increment the attempt counter. noRollbackFor: the increment must
+     * COMMIT despite the thrown exception, or the attempt budget never fills.
      */
-    @Transactional
+    @Transactional(noRollbackFor = InvalidAuthTokenException.class)
     public void verifyCode(VerifyResetCodeRequest request) {
         var user = userRepository.findByEmail(request.email()).orElseThrow(InvalidAuthTokenException::new);
         findValidCode(user, request.code());   // throws if invalid
         log.info("password_reset.code_verified user={}", LogMasker.email(user.getEmail()));
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = InvalidAuthTokenException.class)
     public void resetPassword(ResetPasswordRequest request) {
         var user = userRepository.findByEmail(request.email()).orElseThrow(InvalidAuthTokenException::new);
         var token = findValidCode(user, request.code());
@@ -113,10 +114,10 @@ public class PasswordResetService {
             throw new InvalidAuthTokenException();
         }
         if (!CodeHasher.matches(code, token.getToken())) {
-            token.setAttempts(token.getAttempts() + 1);
-            tokenRepository.save(token);
+            var attemptsAfterFailure = token.getAttempts() + 1;
+            tokenRepository.incrementAttempts(token.getId());
             log.warn("password_reset.wrong_code user={} attempts={}/{}",
-                    LogMasker.email(user.getEmail()), token.getAttempts(), MAX_VERIFY_ATTEMPTS);
+                    LogMasker.email(user.getEmail()), attemptsAfterFailure, MAX_VERIFY_ATTEMPTS);
             throw new InvalidAuthTokenException();
         }
         return token;
