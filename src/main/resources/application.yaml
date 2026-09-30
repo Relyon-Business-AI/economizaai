@@ -74,6 +74,15 @@ economizaai:
     # point Prometheus at it with basic_auth { username, password }.
     username: ${METRICS_USERNAME:metrics}
     password: ${METRICS_PASSWORD:}
+  monitoring:
+    # Watchdog de heap (HeapPressureMonitor): uso acima do threshold por N ticks
+    # consecutivos → ERROR `heap.pressure` no log + UM e-mail de alerta ao admin,
+    # com cooldown para não inundar a caixa durante um incidente longo. Complementa
+    # o -XX:+ExitOnOutOfMemoryError do Dockerfile (o watchdog avisa ANTES do OOM).
+    heap-alert-threshold: ${HEAP_ALERT_THRESHOLD:0.90}
+    heap-alert-consecutive-ticks: ${HEAP_ALERT_CONSECUTIVE_TICKS:3}
+    heap-alert-cooldown-minutes: ${HEAP_ALERT_COOLDOWN_MINUTES:360}
+    heap-check-delay-ms: ${HEAP_CHECK_DELAY_MS:60000}
   admin:
     # Comma-separated emails promoted to ROLE_ADMIN on startup (idempotent).
     # The account must already exist (registered via the app); empty = no-op.
