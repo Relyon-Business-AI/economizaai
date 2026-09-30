@@ -201,6 +201,35 @@ class DealsDigestSchedulerTest {
     }
 
     @Test
+    void thresholdStepCrossedWithNullLastPaidPrice_isNewsworthy() {
+        // User never bought the product (lastPaidPrice null): the stricter-bar
+        // re-notification must still fire — the formula only needs unit prices.
+        var user = dueUser(DigestFrequency.DAILY, null);
+        when(userRepository.findDigestCandidates(DigestFrequency.OFF)).thenReturn(List.of(user));
+        when(scheduleService.effectiveSendHour(user)).thenReturn(currentHour);
+        var neverBoughtDeal = new DealResponse(productId, "Café", null, "GROCERY",
+                "12345678000199", "Mercado X", new BigDecimal("7.00"), null,
+                new BigDecimal("2.00"), new BigDecimal("20.00"), new BigDecimal("0.22"),
+                3L, null, false, LocalDateTime.now());
+        when(dealsService.findDeals(eq(user), anyBoolean(), isNull(), eq(50)))
+                .thenReturn(List.of(neverBoughtDeal));
+        // Discount improved only 2 p.p. (< 5 p.p. step), but the price dropped from
+        // R$8.00 to R$7.00 -> the required-drop bar got stricter and was still cleared.
+        when(surfaceStateRepository.findByUserIdAndProductIdAndMarketCnpj(any(), eq(productId), any()))
+                .thenReturn(Optional.of(DealSurfaceState.builder()
+                        .lastDiscountFraction(new BigDecimal("0.2000"))
+                        .lastUnitPrice(new BigDecimal("8.00"))
+                        .lastSurfacedAt(OffsetDateTime.now())
+                        .build()));
+        when(notificationService.notify(any(NotificationPayload.class)))
+                .thenReturn(Notification.builder().id(UUID.randomUUID()).build());
+
+        scheduler.run();
+
+        verify(notificationService, times(1)).notify(any());
+    }
+
+    @Test
     void lapsedDealBeyondLookback_isNewsworthy() {
         var user = dueUser(DigestFrequency.DAILY, null);
         when(userRepository.findDigestCandidates(DigestFrequency.OFF)).thenReturn(List.of(user));
