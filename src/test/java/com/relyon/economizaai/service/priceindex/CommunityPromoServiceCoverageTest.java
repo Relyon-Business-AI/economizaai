@@ -5,6 +5,7 @@ import com.relyon.economizaai.model.MarketLocation;
 import com.relyon.economizaai.model.PriceObservation;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
+import com.relyon.economizaai.repository.PriceObservationAuditRepository.ProductMarketHouseholdCount;
 import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -103,12 +105,20 @@ class CommunityPromoServiceCoverageTest {
         return observations;
     }
 
+    private ProductMarketHouseholdCount groupCount(UUID groupProductId, String groupCnpj, long households) {
+        return new ProductMarketHouseholdCount() {
+            @Override public UUID getProductId() { return groupProductId; }
+            @Override public String getCnpj() { return groupCnpj; }
+            @Override public long getHouseholds() { return households; }
+        };
+    }
+
     @Test
     void emptyObservations_returnsEmptyWithoutAudit() {
         when(observationRepository.findRecent(any())).thenReturn(List.of());
 
         assertTrue(service.detectAll().isEmpty());
-        verify(auditRepository, never()).countDistinctHouseholdsForProductMarket(any(), any(), any());
+        verify(auditRepository, never()).countDistinctHouseholdsPerProductMarket(any(), anyLong());
     }
 
     @Test
@@ -117,7 +127,6 @@ class CommunityPromoServiceCoverageTest {
         when(observationRepository.findRecent(any())).thenReturn(promoShapedRaw());
 
         assertTrue(service.detectAll().isEmpty());
-        verify(auditRepository, never()).countDistinctHouseholdsForProductMarket(any(), any(), any());
     }
 
     @Test
@@ -129,8 +138,8 @@ class CommunityPromoServiceCoverageTest {
         for (var index = 0; index < 5; index++) observations.add(rawObservation(new BigDecimal("22"), now.minusDays(2)));
 
         when(observationRepository.findRecent(any())).thenReturn(observations);
-        when(auditRepository.countDistinctHouseholdsForProductMarket(eq(productId), eq(marketCnpj), any()))
-                .thenReturn(5L);
+        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(3L)))
+                .thenReturn(List.of(groupCount(productId, marketCnpj, 5L)));
 
         assertTrue(service.detectAll().isEmpty());
     }
@@ -143,8 +152,8 @@ class CommunityPromoServiceCoverageTest {
         for (var index = 0; index < 6; index++) observations.add(rawObservation(new BigDecimal("28"), now.minusDays(30)));
 
         when(observationRepository.findRecent(any())).thenReturn(observations);
-        when(auditRepository.countDistinctHouseholdsForProductMarket(eq(productId), eq(marketCnpj), any()))
-                .thenReturn(5L);
+        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(3L)))
+                .thenReturn(List.of(groupCount(productId, marketCnpj, 5L)));
 
         assertTrue(service.detectAll().isEmpty());
     }
@@ -163,8 +172,8 @@ class CommunityPromoServiceCoverageTest {
         for (var index = 0; index < 5; index++) observations.add(rawObservation(new BigDecimal("22"), now.minusDays(2)));
 
         when(observationRepository.findRecent(any())).thenReturn(observations);
-        when(auditRepository.countDistinctHouseholdsForProductMarket(eq(productId), eq(marketCnpj), any()))
-                .thenReturn(5L);
+        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(3L)))
+                .thenReturn(List.of(groupCount(productId, marketCnpj, 5L)));
 
         assertTrue(service.detectAll().isEmpty());
     }
@@ -182,8 +191,8 @@ class CommunityPromoServiceCoverageTest {
         }
 
         when(observationRepository.findRecent(any())).thenReturn(observations);
-        when(auditRepository.countDistinctHouseholdsForProductMarket(eq(productId), eq(marketCnpj), any()))
-                .thenReturn(5L);
+        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(3L)))
+                .thenReturn(List.of(groupCount(productId, marketCnpj, 5L)));
 
         var promos = service.detectAll();
 
@@ -197,8 +206,8 @@ class CommunityPromoServiceCoverageTest {
     @Test
     void withinRadius_promoCarriesDistance() {
         when(observationRepository.findRecent(any())).thenReturn(promoShapedRaw());
-        when(auditRepository.countDistinctHouseholdsForProductMarket(eq(productId), eq(marketCnpj), any()))
-                .thenReturn(5L);
+        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(3L)))
+                .thenReturn(List.of(groupCount(productId, marketCnpj, 5L)));
         // market essentially at the user location → ~0 km, inside any radius
         when(marketLocationService.findByCnpjs(anyList()))
                 .thenReturn(Map.of(marketCnpj, marketAt(portoAlegreLat, portoAlegreLng)));
@@ -214,8 +223,8 @@ class CommunityPromoServiceCoverageTest {
     @Test
     void outsideRadiusAndNotWatched_filteredOut() {
         when(observationRepository.findRecent(any())).thenReturn(promoShapedRaw());
-        lenient().when(auditRepository.countDistinctHouseholdsForProductMarket(eq(productId), eq(marketCnpj), any()))
-                .thenReturn(5L);
+        lenient().when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(3L)))
+                .thenReturn(List.of(groupCount(productId, marketCnpj, 5L)));
         when(marketLocationService.findByCnpjs(anyList()))
                 .thenReturn(Map.of(marketCnpj, marketAt(saoPauloLat, saoPauloLng)));
 
@@ -227,8 +236,8 @@ class CommunityPromoServiceCoverageTest {
     @Test
     void outsideRadiusButWatched_keptAndMarkedWatching() {
         when(observationRepository.findRecent(any())).thenReturn(promoShapedRaw());
-        when(auditRepository.countDistinctHouseholdsForProductMarket(eq(productId), eq(marketCnpj), any()))
-                .thenReturn(5L);
+        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(3L)))
+                .thenReturn(List.of(groupCount(productId, marketCnpj, 5L)));
         when(marketLocationService.findByCnpjs(anyList()))
                 .thenReturn(Map.of(marketCnpj, marketAt(saoPauloLat, saoPauloLng)));
 
@@ -242,8 +251,8 @@ class CommunityPromoServiceCoverageTest {
     @Test
     void noCoordinatesWithRadius_filteredOutUnlessWatched() {
         when(observationRepository.findRecent(any())).thenReturn(promoShapedRaw());
-        lenient().when(auditRepository.countDistinctHouseholdsForProductMarket(eq(productId), eq(marketCnpj), any()))
-                .thenReturn(5L);
+        lenient().when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(3L)))
+                .thenReturn(List.of(groupCount(productId, marketCnpj, 5L)));
         when(marketLocationService.findByCnpjs(anyList())).thenReturn(Map.of()); // unknown location
 
         var promos = service.detectAll(portoAlegreLat, portoAlegreLng, 5.0, Set.of());
@@ -254,8 +263,8 @@ class CommunityPromoServiceCoverageTest {
     @Test
     void noCoordinatesNoRadiusFilter_keptWithNullDistance() {
         when(observationRepository.findRecent(any())).thenReturn(promoShapedRaw());
-        when(auditRepository.countDistinctHouseholdsForProductMarket(eq(productId), eq(marketCnpj), any()))
-                .thenReturn(5L);
+        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(3L)))
+                .thenReturn(List.of(groupCount(productId, marketCnpj, 5L)));
         when(marketLocationService.findByCnpjs(anyList())).thenReturn(Map.of()); // unknown location
 
         var promos = service.detectAll(portoAlegreLat, portoAlegreLng, null, Set.of());
@@ -267,8 +276,8 @@ class CommunityPromoServiceCoverageTest {
     @Test
     void nullWatchedCnpjs_treatedAsEmptySet() {
         when(observationRepository.findRecent(any())).thenReturn(promoShapedRaw());
-        when(auditRepository.countDistinctHouseholdsForProductMarket(eq(productId), eq(marketCnpj), any()))
-                .thenReturn(5L);
+        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(3L)))
+                .thenReturn(List.of(groupCount(productId, marketCnpj, 5L)));
         // no user coordinates → no location lookup, distance stays null
         var promos = service.detectAll(null, null, null, null);
 

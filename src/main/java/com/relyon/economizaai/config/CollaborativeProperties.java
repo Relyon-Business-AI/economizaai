@@ -121,6 +121,13 @@ public class CollaborativeProperties {
         private int communityPromoThresholdPct = 15;
         private int lookbackDays = 90;
         private int communityPromoRecentWindowDays = 7;
+        /**
+         * TTL of the SHARED community-promo cache (seconds). Detection scans every
+         * recent observation, so it runs at most once per TTL for the whole user
+         * base — per-viewer geo/watched filtering is applied on top of the cached
+         * list. 0 disables caching (each call recomputes).
+         */
+        private int communityPromoCacheSeconds = 300;
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -136,6 +143,8 @@ public class CollaborativeProperties {
         public void setLookbackDays(int v) { this.lookbackDays = v; }
         public int getCommunityPromoRecentWindowDays() { return communityPromoRecentWindowDays; }
         public void setCommunityPromoRecentWindowDays(int v) { this.communityPromoRecentWindowDays = v; }
+        public int getCommunityPromoCacheSeconds() { return communityPromoCacheSeconds; }
+        public void setCommunityPromoCacheSeconds(int v) { this.communityPromoCacheSeconds = v; }
     }
 
     public static class PersonalPromo {

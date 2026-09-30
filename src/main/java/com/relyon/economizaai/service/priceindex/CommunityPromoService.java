@@ -5,6 +5,7 @@ import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.model.MarketLocation;
 import com.relyon.economizaai.model.PriceObservation;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
+import com.relyon.economizaai.repository.PriceObservationAuditRepository.ProductMarketHouseholdCount;
 import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.service.geo.DistanceCalculator;
 import com.relyon.economizaai.service.geo.MarketLocationService;
@@ -17,8 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -54,6 +57,9 @@ public class CommunityPromoService {
     private final CollaborativeProperties properties;
     private final MarketLocationService marketLocationService;
 
+    /** Shared (NOT per-user) cache of the viewer-independent promo list. */
+    private final AtomicReference<SharedPromoCache> sharedPromoCache = new AtomicReference<>();
+
     // Self-reference so the no-arg overload's call to the @Transactional
     // detectAll(...) goes through the Spring proxy. Defaults to `this` for tests.
     @Lazy
@@ -65,6 +71,12 @@ public class CommunityPromoService {
         return self.detectAll(null, null, null, Set.of());
     }
 
+    /**
+     * Viewer-facing detection: the expensive part (full observation scan + batched
+     * household counts) is computed ONCE per cache TTL and shared across every
+     * user; only the cheap per-viewer context (geo radius, watched markets) is
+     * applied per call — exact same output as the old per-call computation.
+     */
     @Transactional(readOnly = true)
     public List<CommunityPromo> detectAll(BigDecimal userLatitude,
                                           BigDecimal userLongitude,
@@ -72,20 +84,56 @@ public class CommunityPromoService {
                                           Set<String> watchedCnpjs) {
         if (!properties.getCollaborative().isEnabled()) return List.of();
         var watched = watchedCnpjs == null ? Set.<String>of() : watchedCnpjs;
+        var sharedPromos = cachedOrComputedSharedPromos();
+        if (sharedPromos.isEmpty()) return List.of();
 
+        var locations = (userLatitude != null && userLongitude != null)
+                ? marketLocationService.findByCnpjs(sharedPromos.stream()
+                        .map(CommunityPromo::marketCnpj).distinct().toList())
+                : Map.<String, MarketLocation>of();
+
+        var visiblePromos = new ArrayList<CommunityPromo>();
+        for (var promo : sharedPromos) {
+            var isWatched = watched.contains(promo.marketCnpj());
+            var geoEligibility = checkGeoEligibility(promo.marketCnpj(), locations, isWatched,
+                    userLatitude, userLongitude, radiusKm);
+            if (geoEligibility == null) continue;
+            visiblePromos.add(promo.withViewerContext(geoEligibility.distanceKm(), isWatched));
+        }
+        return visiblePromos;
+    }
+
+    /** Returns the shared promo list, recomputing only when the TTL expired (0 = no caching). */
+    private List<CommunityPromo> cachedOrComputedSharedPromos() {
+        var ttlSeconds = properties.getCollaborative().getCommunityPromoCacheSeconds();
+        var cached = sharedPromoCache.get();
+        if (cached != null && ttlSeconds > 0
+                && cached.computedAt().plusSeconds(ttlSeconds).isAfter(Instant.now())) {
+            return cached.promos();
+        }
+        var computed = detectSharedPromos();
+        sharedPromoCache.set(new SharedPromoCache(Instant.now(), computed));
+        return computed;
+    }
+
+    /** The viewer-independent detection pass: one observation scan + ONE aggregated household-count query. */
+    private List<CommunityPromo> detectSharedPromos() {
         var since = BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getLookbackDays());
         var observations = observationRepository.findRecent(since);
         if (observations.isEmpty()) return List.of();
 
-        var locations = (userLatitude != null && userLongitude != null)
-                ? marketLocationService.findByCnpjs(observations.stream()
-                        .map(PriceObservation::getMarketCnpj).distinct().toList())
-                : Map.<String, MarketLocation>of();
+        // K-gate resolved in ONE GROUP BY query (HAVING >= K) instead of one
+        // count-query per (product, market) group.
+        var householdsByGroup = auditRepository.countDistinctHouseholdsPerProductMarket(
+                        since, properties.getCollaborative().getMinHouseholdsForPublic()).stream()
+                .collect(Collectors.toMap(
+                        row -> new ProductMarket(row.getProductId(), row.getCnpj()),
+                        ProductMarketHouseholdCount::getHouseholds));
 
         // Group by (productId, marketCnpj)
         Map<UUID, Map<String, List<PriceObservation>>> byProductMarket = observations.stream()
                 .collect(Collectors.groupingBy(
-                        po -> po.getProduct().getId(),
+                        observation -> observation.getProduct().getId(),
                         Collectors.groupingBy(PriceObservation::getMarketCnpj)));
 
         var promos = new ArrayList<CommunityPromo>();
@@ -95,30 +143,26 @@ public class CommunityPromoService {
             var productId = productEntry.getKey();
             for (var marketEntry : productEntry.getValue().entrySet()) {
                 var promo = detectPromoForMarket(productId, marketEntry.getKey(), marketEntry.getValue(),
-                        since, recentCutoff, locations, watched, userLatitude, userLongitude, radiusKm);
+                        householdsByGroup, recentCutoff);
                 if (promo != null) promos.add(promo);
             }
         }
         promos.sort(Comparator.comparing(CommunityPromo::dropPct).reversed());
-        return promos;
+        return List.copyOf(promos);
     }
 
     /**
      * Detect a community promo for one (product, market) group, or null if it
-     * doesn't qualify (too few observations, fails k-anonymity, out of radius, or
-     * the recent median isn't below the baseline threshold). Extracted from
-     * detectAll to keep that method's cognitive complexity within bounds (S3776).
+     * doesn't qualify (too few observations, fails k-anonymity, or the recent
+     * median isn't below the baseline threshold). Viewer context (distance,
+     * watched flag) is applied later, on top of the shared result.
      */
     private CommunityPromo detectPromoForMarket(UUID productId, String marketCnpj, List<PriceObservation> rows,
-                                                LocalDateTime since, LocalDateTime recentCutoff,
-                                                Map<String, MarketLocation> locations, Set<String> watched,
-                                                BigDecimal userLatitude, BigDecimal userLongitude, Double radiusKm) {
-        var distinctHouseholds = distinctHouseholdsIfSampleGatePasses(productId, marketCnpj, rows, since);
-        if (distinctHouseholds == null) return null;
-
-        var isWatched = watched.contains(marketCnpj);
-        var geoEligibility = checkGeoEligibility(marketCnpj, locations, isWatched, userLatitude, userLongitude, radiusKm);
-        if (geoEligibility == null) return null;
+                                                Map<ProductMarket, Long> householdsByGroup,
+                                                LocalDateTime recentCutoff) {
+        if (rows.size() < properties.getCollaborative().getMinObservationsForCommunityPromo()) return null;
+        var distinctHouseholds = householdsByGroup.get(new ProductMarket(productId, marketCnpj));
+        if (distinctHouseholds == null) return null; // failed the K-gate (HAVING) in the database
 
         var priceDrop = computePriceDrop(rows, recentCutoff);
         if (priceDrop == null) return null;
@@ -139,18 +183,9 @@ public class CommunityPromoService {
                 priceDrop.dropPct(),
                 priceDrop.recentSampleCount(),
                 distinctHouseholds,
-                geoEligibility.distanceKm(),
-                isWatched
+                null,
+                false
         );
-    }
-
-    /** K-anonymity/sample gate: distinct households when the group qualifies, null otherwise. */
-    private Long distinctHouseholdsIfSampleGatePasses(UUID productId, String marketCnpj,
-                                                      List<PriceObservation> rows, LocalDateTime since) {
-        if (rows.size() < properties.getCollaborative().getMinObservationsForCommunityPromo()) return null;
-        var distinctHouseholds = auditRepository.countDistinctHouseholdsForProductMarket(productId, marketCnpj, since);
-        if (distinctHouseholds < properties.getCollaborative().getMinHouseholdsForPublic()) return null;
-        return distinctHouseholds;
     }
 
     /** Geo-radius eligibility: distance (possibly null when not computable) when eligible, null record on rejection. */
@@ -215,6 +250,10 @@ public class CommunityPromoService {
 
     private record GeoEligibility(Double distanceKm) {}
 
+    private record ProductMarket(UUID productId, String marketCnpj) {}
+
+    private record SharedPromoCache(Instant computedAt, List<CommunityPromo> promos) {}
+
     private record PriceDrop(BigDecimal recentMedian, BigDecimal baselineMedian,
                              BigDecimal dropPct, int recentSampleCount) {}
 
@@ -235,6 +274,13 @@ public class CommunityPromoService {
     ) {
         /** Copy with the household's custom display name applied; leaves the original {@code marketName} intact. */
         public CommunityPromo withMarketFriendlyName(String marketFriendlyName) {
+            return new CommunityPromo(productId, productName, marketCnpj, marketCnpjRoot, marketName,
+                    marketFriendlyName, currentMedianPrice, baselineMedianPrice, dropPct,
+                    recentSampleCount, distinctHouseholds, distanceKm, watching);
+        }
+
+        /** Copy with the VIEWER's context (distance from their location, watched flag) applied. */
+        public CommunityPromo withViewerContext(Double distanceKm, boolean watching) {
             return new CommunityPromo(productId, productName, marketCnpj, marketCnpjRoot, marketName,
                     marketFriendlyName, currentMedianPrice, baselineMedianPrice, dropPct,
                     recentSampleCount, distinctHouseholds, distanceKm, watching);
