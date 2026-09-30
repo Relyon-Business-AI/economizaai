@@ -30,14 +30,14 @@ class SantaCatarinaNfcePortalAdapterTest {
 
     @Test
     void supportedStates_containsSc() {
-        var adapter = new SantaCatarinaNfcePortalAdapter(RestClient.builder(), solver(true), 30000, 1, 0L, "test");
+        var adapter = new SantaCatarinaNfcePortalAdapter(RestClient.builder(), solver(true), 30000, 1, 0L, 60000L, "test");
 
         assertEquals(Set.of(UnidadeFederativa.SC), adapter.supportedStates());
     }
 
     @Test
     void resolveUrl_encodesScPipeSeparatorsForHttpClients() {
-        var adapter = new SantaCatarinaNfcePortalAdapter(RestClient.builder(), solver(true), 30000, 1, 0L, "test");
+        var adapter = new SantaCatarinaNfcePortalAdapter(RestClient.builder(), solver(true), 30000, 1, 0L, 60000L, "test");
 
         assertEquals(
                 "https://sat.sef.sc.gov.br/tax.NET/Sat.DFe.NFCe.Web/Consultas/ConsultaPublicaNFCe.aspx?p="
@@ -179,6 +179,19 @@ class SantaCatarinaNfcePortalAdapterTest {
     }
 
     @Test
+    void fetchHtml_stopsAtTimeBudgetBeforeExhaustingAttempts() {
+        var solver = solver(true);
+        // maxAttempts=10 but maxTotalMs=0 → the deadline is already passed after the
+        // first rejected token, so it must give up immediately (1 POST), not 10.
+        var adapter = new TestScAdapter(solver, 10, 0L);
+        adapter.getResponses.put(SECURITY_URL, ResponseEntity.ok(securityHtml()));
+        adapter.postResponse = ResponseEntity.ok(securityHtml()); // portal keeps rejecting
+
+        assertThrows(SefazFetchException.class, () -> adapter.fetchHtml(SECURITY_URL));
+        assertEquals(1, adapter.postCount, "time budget must stop retries well before maxAttempts");
+    }
+
+    @Test
     void fetchHtml_withoutConfiguredSolverThrowsUnavailable() {
         var adapter = new TestScAdapter(solver(false));
         adapter.getResponses.put(SECURITY_URL, ResponseEntity.ok(securityHtml()));
@@ -188,7 +201,7 @@ class SantaCatarinaNfcePortalAdapterTest {
 
     @Test
     void parseHtml_parsesScDetailsPage() {
-        var adapter = new SantaCatarinaNfcePortalAdapter(RestClient.builder(), solver(false), 30000, 1, 0L, "test");
+        var adapter = new SantaCatarinaNfcePortalAdapter(RestClient.builder(), solver(false), 30000, 1, 0L, 60000L, "test");
 
         var parsed = adapter.parseHtml(scDanfeHtml(), CHAVE_SC, FINAL_URL);
 
@@ -209,7 +222,7 @@ class SantaCatarinaNfcePortalAdapterTest {
 
     @Test
     void parseHtml_parsesScItemsSplitAcrossTextLines() {
-        var adapter = new SantaCatarinaNfcePortalAdapter(RestClient.builder(), solver(false), 30000, 1, 0L, "test");
+        var adapter = new SantaCatarinaNfcePortalAdapter(RestClient.builder(), solver(false), 30000, 1, 0L, 60000L, "test");
 
         var parsed = adapter.parseHtml(scDanfeHtmlWithSplitItems(), CHAVE_SC, FINAL_URL);
 
@@ -222,7 +235,7 @@ class SantaCatarinaNfcePortalAdapterTest {
 
     @Test
     void parseHtml_parsesScItemsFromFlattenedText() {
-        var adapter = new SantaCatarinaNfcePortalAdapter(RestClient.builder(), solver(false), 30000, 1, 0L, "test");
+        var adapter = new SantaCatarinaNfcePortalAdapter(RestClient.builder(), solver(false), 30000, 1, 0L, 60000L, "test");
 
         var parsed = adapter.parseHtml(scDanfeHtmlWithFlattenedItems(), CHAVE_SC, FINAL_URL);
 
@@ -354,7 +367,11 @@ class SantaCatarinaNfcePortalAdapterTest {
         }
 
         private TestScAdapter(CaptchaSolver solver, int maxAttempts) {
-            super(RestClient.builder(), solver, 30000, maxAttempts, 0L, "test");
+            this(solver, maxAttempts, 60000L);
+        }
+
+        private TestScAdapter(CaptchaSolver solver, int maxAttempts, long maxTotalMs) {
+            super(RestClient.builder(), solver, 30000, maxAttempts, 0L, maxTotalMs, "test");
         }
 
         @Override

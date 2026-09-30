@@ -56,7 +56,16 @@ class MgNfcePortalAdapterTest {
                                                Function<String, String> get,
                                                Function<String, String> post,
                                                AtomicReference<MultiValueMap<String, Object>> capturedBody) {
-        return new MgNfcePortalAdapter(RestClient.builder(), solver, 1000, 3, 0, "test") {
+        return adapter(solver, get, post, capturedBody, 60000L, null);
+    }
+
+    private static MgNfcePortalAdapter adapter(CaptchaSolver solver,
+                                               Function<String, String> get,
+                                               Function<String, String> post,
+                                               AtomicReference<MultiValueMap<String, Object>> capturedBody,
+                                               long maxTotalMs,
+                                               AtomicReference<Integer> postCount) {
+        return new MgNfcePortalAdapter(RestClient.builder(), solver, 1000, 3, 0, maxTotalMs, "test") {
             @Override
             protected PortalPage httpGet(String url) {
                 return new PortalPage(get.apply(url), "JSESSIONID=abc123");
@@ -65,6 +74,7 @@ class MgNfcePortalAdapterTest {
             @Override
             protected String httpPostMultipart(String url, MultiValueMap<String, Object> body, String cookieHeader) {
                 if (capturedBody != null) capturedBody.set(body);
+                if (postCount != null) postCount.set(postCount.get() + 1);
                 return post.apply(url);
             }
         };
@@ -128,6 +138,18 @@ class MgNfcePortalAdapterTest {
         var adapter = adapter(TOKEN_SOLVER, url -> fixture("challenge.html"), url -> fixture("challenge.html"), null);
 
         assertThrows(SefazFetchException.class, () -> adapter.fetchHtml(QR_URL));
+    }
+
+    @Test
+    void fetchHtml_stopsAtTimeBudgetBeforeExhaustingAttempts() {
+        // maxAttempts=3 but maxTotalMs=0 → the deadline is already passed after the
+        // first rejected token, so it must give up immediately (1 POST), not 3.
+        var postCount = new AtomicReference<>(0);
+        var adapter = adapter(TOKEN_SOLVER, url -> fixture("challenge.html"),
+                url -> fixture("challenge.html"), null, 0L, postCount);
+
+        assertThrows(SefazFetchException.class, () -> adapter.fetchHtml(QR_URL));
+        assertEquals(1, postCount.get(), "time budget must stop retries well before maxAttempts");
     }
 
     @Test

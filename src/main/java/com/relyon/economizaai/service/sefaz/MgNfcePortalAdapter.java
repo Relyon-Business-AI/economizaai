@@ -58,16 +58,19 @@ public class MgNfcePortalAdapter implements SefazAdapter {
     private final RestClient restClient;
     private final int maxAttempts;
     private final long retryDelayMs;
+    private final long maxTotalMs;
 
     public MgNfcePortalAdapter(RestClient.Builder builder,
                                CaptchaSolver captchaSolver,
                                @Value("${economizaai.ingestion.sefaz.timeout-ms:30000}") int timeoutMs,
                                @Value("${economizaai.ingestion.sefaz.retry.mg-max-attempts:3}") int maxAttempts,
                                @Value("${economizaai.ingestion.sefaz.retry.delay-ms:5000}") long retryDelayMs,
+                               @Value("${economizaai.ingestion.sefaz.retry.mg-max-total-ms:180000}") long maxTotalMs,
                                @Value("${economizaai.ingestion.sefaz.user-agent:economizai}") String userAgent) {
         this.captchaSolver = captchaSolver;
         this.maxAttempts = Math.max(1, maxAttempts);
         this.retryDelayMs = Math.max(0, retryDelayMs);
+        this.maxTotalMs = Math.max(0, maxTotalMs);
         var requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Math.min(timeoutMs, 10000));
         requestFactory.setReadTimeout(timeoutMs);
@@ -76,8 +79,8 @@ public class MgNfcePortalAdapter implements SefazAdapter {
                 .defaultHeader("Accept", "text/html,application/xhtml+xml")
                 .requestFactory(requestFactory)
                 .build();
-        log.info("MgNfcePortalAdapter active retry maxAttempts={} delayMs={} captchaSolver configured={}",
-                this.maxAttempts, this.retryDelayMs, captchaSolver.isConfigured());
+        log.info("MgNfcePortalAdapter active retry maxAttempts={} delayMs={} maxTotalMs={} captchaSolver configured={}",
+                this.maxAttempts, this.retryDelayMs, this.maxTotalMs, captchaSolver.isConfigured());
     }
 
     @Override
@@ -95,13 +98,19 @@ public class MgNfcePortalAdapter implements SefazAdapter {
     @Override
     public String fetchHtml(String qrPayload) {
         var url = resolveUrl(qrPayload);
+        // Wall-clock deadline on top of maxAttempts: each attempt can hold the ingest
+        // thread for a full captcha solve (up to minutes), so without it the adapter
+        // outlives the ProcessingReceiptSweeper timeout. Mirrors MsDfePortalAdapter.
+        var deadlineNanos = System.nanoTime() + maxTotalMs * 1_000_000L;
         for (var attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
                 return fetchOnce(url, attempt);
             } catch (CaptchaSolveFailedException | RestClientException ex) {
                 // Turnstile token rejected or transient network/5xx — re-solve and retry.
-                if (attempt >= maxAttempts) break;
+                if (attempt >= maxAttempts || System.nanoTime() >= deadlineNanos) break;
                 var delay = attempt == 1 ? 0 : retryDelayMs;
+                // Don't sleep past the deadline.
+                if (System.nanoTime() + delay * 1_000_000L >= deadlineNanos) break;
                 log.warn("mg.fetch.retry attempt={}/{} reason={} nextDelayMs={}",
                         attempt, maxAttempts, ex.getClass().getSimpleName(), delay);
                 sleep(delay);
@@ -109,7 +118,7 @@ public class MgNfcePortalAdapter implements SefazAdapter {
             // CaptchaUnavailableException / ReceiptParseException / InvalidQrPayloadException
             // are deterministic — they propagate without being caught here.
         }
-        log.warn("mg.fetch.exhausted attempts={}", maxAttempts);
+        log.warn("mg.fetch.exhausted attempts<={} maxTotalMs={}", maxAttempts, maxTotalMs);
         throw new SefazFetchException(UnidadeFederativa.MG.name());
     }
 
