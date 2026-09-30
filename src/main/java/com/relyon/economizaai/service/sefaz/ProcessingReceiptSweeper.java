@@ -30,14 +30,17 @@ public class ProcessingReceiptSweeper {
     private final ReceiptRepository receiptRepository;
     private final int timeoutMinutes;
     private final int deviceFetchTimeoutMinutes;
+    private final int importQueuedTimeoutMinutes;
 
     public ProcessingReceiptSweeper(
             ReceiptRepository receiptRepository,
             @Value("${economizaai.ingestion.processing-timeout-minutes:10}") int timeoutMinutes,
-            @Value("${economizaai.ingestion.device-fetch-timeout-minutes:15}") int deviceFetchTimeoutMinutes) {
+            @Value("${economizaai.ingestion.device-fetch-timeout-minutes:15}") int deviceFetchTimeoutMinutes,
+            @Value("${economizaai.ingestion.import-queued-timeout-minutes:1440}") int importQueuedTimeoutMinutes) {
         this.receiptRepository = receiptRepository;
         this.timeoutMinutes = Math.max(1, timeoutMinutes);
         this.deviceFetchTimeoutMinutes = Math.max(1, deviceFetchTimeoutMinutes);
+        this.importQueuedTimeoutMinutes = Math.max(1, importQueuedTimeoutMinutes);
     }
 
     @Scheduled(fixedDelayString = "${economizaai.ingestion.sweeper-delay-ms:60000}")
@@ -50,6 +53,11 @@ public class ProcessingReceiptSweeper {
         // and can't even render the status), so fail it so the user gets a terminal state.
         failStale(ReceiptStatus.NEEDS_DEVICE_FETCH, deviceFetchTimeoutMinutes,
                 "receipt.device_fetch.timeout", "stuck_device_fetch");
+        // IMPORT_QUEUED rows drain slowly BY DESIGN (paced worker), so the timeout is
+        // generous (24h default). But with the worker disabled — or a chave that stops
+        // being reconsultable — they'd strand forever; fail them honestly instead.
+        failStale(ReceiptStatus.IMPORT_QUEUED, importQueuedTimeoutMinutes,
+                "receipt.import_queued.timeout", "stuck_import_queue");
     }
 
     private void failStale(ReceiptStatus status, int olderThanMinutes, String reasonKey, String event) {

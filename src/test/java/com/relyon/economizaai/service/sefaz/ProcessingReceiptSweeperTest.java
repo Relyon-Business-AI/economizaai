@@ -35,7 +35,7 @@ class ProcessingReceiptSweeperTest {
 
     @Test
     void sweep_failsStuckProcessingReceipts() {
-        var sweeper = new ProcessingReceiptSweeper(receiptRepository, 10, 15);
+        var sweeper = new ProcessingReceiptSweeper(receiptRepository, 10, 15, 1440);
         var first = stuckReceipt();
         var second = stuckReceipt();
         when(receiptRepository.findByStatusAndUpdatedAtBefore(eq(ReceiptStatus.PROCESSING), any(LocalDateTime.class)))
@@ -53,7 +53,7 @@ class ProcessingReceiptSweeperTest {
 
     @Test
     void sweep_failsStrandedNeedsDeviceFetchReceipts() {
-        var sweeper = new ProcessingReceiptSweeper(receiptRepository, 10, 15);
+        var sweeper = new ProcessingReceiptSweeper(receiptRepository, 10, 15, 1440);
         var stranded = Receipt.builder().id(UUID.randomUUID()).status(ReceiptStatus.NEEDS_DEVICE_FETCH).build();
         when(receiptRepository.findByStatusAndUpdatedAtBefore(eq(ReceiptStatus.PROCESSING), any(LocalDateTime.class)))
                 .thenReturn(List.of());
@@ -68,8 +68,45 @@ class ProcessingReceiptSweeperTest {
     }
 
     @Test
+    void sweep_failsStrandedImportQueuedReceiptsWithHonestReason() {
+        // 24h default: the queue drains slowly BY DESIGN, but a disabled worker (or a
+        // chave that stopped being reconsultable) must not strand rows forever.
+        var sweeper = new ProcessingReceiptSweeper(receiptRepository, 10, 15, 1440);
+        var stranded = Receipt.builder().id(UUID.randomUUID()).status(ReceiptStatus.IMPORT_QUEUED).build();
+        when(receiptRepository.findByStatusAndUpdatedAtBefore(eq(ReceiptStatus.PROCESSING), any(LocalDateTime.class)))
+                .thenReturn(List.of());
+        when(receiptRepository.findByStatusAndUpdatedAtBefore(eq(ReceiptStatus.NEEDS_DEVICE_FETCH), any(LocalDateTime.class)))
+                .thenReturn(List.of());
+        when(receiptRepository.findByStatusAndUpdatedAtBefore(eq(ReceiptStatus.IMPORT_QUEUED), any(LocalDateTime.class)))
+                .thenReturn(List.of(stranded));
+
+        sweeper.sweep();
+
+        assertEquals(ReceiptStatus.FAILED_PARSE, stranded.getStatus());
+        assertEquals("receipt.import_queued.timeout", stranded.getParseErrorReason());
+        verify(receiptRepository).saveAll(List.of(stranded));
+    }
+
+    @Test
+    void sweep_importQueuedCutoffIsGenerous() {
+        var sweeper = new ProcessingReceiptSweeper(receiptRepository, 10, 15, 1440);
+        var cutoffCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+        when(receiptRepository.findByStatusAndUpdatedAtBefore(eq(ReceiptStatus.PROCESSING), any(LocalDateTime.class)))
+                .thenReturn(List.of());
+        when(receiptRepository.findByStatusAndUpdatedAtBefore(eq(ReceiptStatus.NEEDS_DEVICE_FETCH), any(LocalDateTime.class)))
+                .thenReturn(List.of());
+        when(receiptRepository.findByStatusAndUpdatedAtBefore(eq(ReceiptStatus.IMPORT_QUEUED), cutoffCaptor.capture()))
+                .thenReturn(List.of());
+
+        sweeper.sweep();
+
+        assertTrue(cutoffCaptor.getValue().isBefore(LocalDateTime.now().minusHours(23)),
+                "IMPORT_QUEUED must only be swept after the generous 24h window");
+    }
+
+    @Test
     void sweep_noopWhenNothingStuck() {
-        var sweeper = new ProcessingReceiptSweeper(receiptRepository, 10, 15);
+        var sweeper = new ProcessingReceiptSweeper(receiptRepository, 10, 15, 1440);
         when(receiptRepository.findByStatusAndUpdatedAtBefore(any(ReceiptStatus.class), any(LocalDateTime.class)))
                 .thenReturn(List.of());
 
@@ -80,7 +117,7 @@ class ProcessingReceiptSweeperTest {
 
     @Test
     void sweep_usesCutoffOlderThanTimeout() {
-        var sweeper = new ProcessingReceiptSweeper(receiptRepository, 10, 15);
+        var sweeper = new ProcessingReceiptSweeper(receiptRepository, 10, 15, 1440);
         var cutoffCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
         when(receiptRepository.findByStatusAndUpdatedAtBefore(eq(ReceiptStatus.PROCESSING), cutoffCaptor.capture()))
                 .thenReturn(List.of());
