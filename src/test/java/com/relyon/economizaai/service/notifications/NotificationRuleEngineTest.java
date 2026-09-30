@@ -129,6 +129,26 @@ class NotificationRuleEngineTest {
     }
 
     @Test
+    void priceDrop_marketNameFallbackLocalizedToUserLocale_en() {
+        var enUser = owner(null, null);
+        enUser.setLocale("en");
+        var rule = priceRule(NotificationType.PRICE_DROP, new BigDecimal("6.00"), null, null, enUser);
+        when(ruleRepository.findActiveProductRules(any(), any())).thenReturn(List.of(rule));
+        lenient().when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
+        var namelessMarket = PriceObservation.builder()
+                .product(product()).marketCnpj(CNPJ).marketCnpjRoot("12345678")
+                .marketName(null).unitPrice(new BigDecimal("5.49")).quantity(BigDecimal.ONE)
+                .observedAt(LocalDateTime.now()).build();
+
+        engine.evaluate(List.of(namelessMarket), CONTRIBUTOR_HOUSEHOLD);
+
+        var captor = ArgumentCaptor.forClass(NotificationPayload.class);
+        verify(notificationService).notify(captor.capture());
+        // The fallback market name follows the recipient's locale — never hardcoded pt.
+        assertTrue(captor.getValue().body().contains("a nearby market"), captor.getValue().body());
+    }
+
+    @Test
     void priceDrop_doesNotFireAboveThreshold() {
         var rule = priceRule(NotificationType.PRICE_DROP, new BigDecimal("6.00"), null, null, owner(null, null));
         when(ruleRepository.findActiveProductRules(any(), any())).thenReturn(List.of(rule));
