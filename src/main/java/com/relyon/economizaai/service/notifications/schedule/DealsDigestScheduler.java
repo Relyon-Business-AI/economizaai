@@ -199,7 +199,7 @@ public class DealsDigestScheduler {
 
     /** True when the deal now clears a stricter relevance bar than the price we last surfaced did. */
     private boolean crossedHigherThresholdStep(BigDecimal previousUnitPrice, DealResponse deal) {
-        if (previousUnitPrice == null || deal.lastPaidPrice() == null) return false;
+        if (previousUnitPrice == null) return false;
         var previousRequired = RelevanceThreshold.requiredDropFraction(previousUnitPrice);
         var currentRequired = RelevanceThreshold.requiredDropFraction(deal.currentPrice());
         return currentRequired > previousRequired;

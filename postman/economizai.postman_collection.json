@@ -186,6 +186,35 @@
 			]
 		},
 		{
+			"name": "App config (public)",
+			"description": "Public endpoint — no auth needed. Remote config for the mobile force-update gate (replaces the legacy GitHub gist).",
+			"item": [
+				{
+					"name": "Get app config (force-update gate)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/app-config",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"app-config"
+							]
+						},
+						"auth": {
+							"type": "noauth"
+						},
+						"description": "Remote config the mobile ForceUpdateGate fetches on launch. Public (no auth), Cache-Control max-age=60. Shape mirrors the legacy gist JSON: minVersion (always present; 0.0.0 = gate NO-OP), androidUrl/iosUrl/message (omitted when unset). Values come from APP_CONFIG_* env vars. Rate-limited 60/min per IP."
+					},
+					"response": []
+				}
+			]
+		},
+		{
 			"name": "Auth",
 			"item": [
 				{
@@ -6570,6 +6599,43 @@
 			"name": "E2E Flow",
 			"description": "Sequential test suite — run top to bottom. Each step seeds variables for the next. Steps 9+ require a real NFC-e QR payload in the {{qrPayload}} collection variable; otherwise they will report parsing/fetch errors but won't break the auth/household flow.",
 			"item": [
+				{
+					"name": "0. App config is public (force-update gate)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/app-config",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"app-config"
+							]
+						},
+						"auth": {
+							"type": "noauth"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('App config returns 200 without auth', function () { pm.response.to.have.status(200); });",
+									"pm.test('minVersion is a string (gate contract)', function () {",
+									"    var d = pm.response.json();",
+									"    pm.expect(d.minVersion).to.be.a('string');",
+									"});"
+								]
+							}
+						}
+					]
+				},
 				{
 					"name": "1. Register new user",
 					"request": {

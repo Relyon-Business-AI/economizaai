@@ -10,6 +10,38 @@ mirror entries here.
 
 ---
 
+## ForceUpdateGate do app ainda lê o gist do polyf (2026-09-30)
+- **Now**: o backend já serve `GET /api/v1/app-config` (mesmo shape do gist), mas o app
+  DISTRIBUÍDO ainda busca `gist.githubusercontent.com/polyf/…/app-config.json` — conta
+  polyf morta, ninguém consegue editar o gist (o kill-switch atual é inoperante).
+- **OK for dev**: o gist segue servindo o JSON estático (gate NO-OP); o endpoint novo
+  está pronto esperando o release do FE trocar a URL.
+- **Before prod**: publicar o release do app apontando `APP_CONFIG_URL` para
+  `https://api.economizaai.app/api/v1/app-config` e SÓ ENTÃO considerar o gist
+  descartável — **o gist precisa continuar vivo (não deletar a conta/arquivo) até a base
+  instalada migrar**. Depois disso, setar as env vars `APP_CONFIG_*` no Render quando for
+  puxar a alavanca. Effort: troca de 1 constante no FE + release.
+
+## RevenueCat webhook persiste provider genérico "revenuecat" (2026-09-30)
+- **Now**: o `RevenueCatWebhookService` grava `provider="revenuecat"` fixo em toda
+  assinatura de loja — o `RevenueCatWebhookRequest` nem captura o campo `store` do payload
+  (APP_STORE/PLAY_STORE). O FE agora roteia o botão "Gerenciar assinatura" pelo provider
+  (APPLE/APP_STORE → App Store, GOOGLE/PLAY → Play, desconhecido → **oculto**) — com o
+  valor genérico, assinante real de loja não veria o botão.
+- **OK for dev**: billing de loja está INERTE (sentinel CHANGEME); nenhum assinante real
+  passa pelo webhook ainda.
+- **Before prod (ativar billing de loja)**: mapear o campo `store` do RevenueCat para o
+  provider persistido (APP_STORE/PLAY_STORE) no webhook antes de credenciar as lojas.
+  Effort: campo no DTO + mapeamento + teste, ~1h.
+
+## Sign in with Apple JS (web) — item futuro deliberado (2026-09-30)
+- **Now**: login com Apple existe só no app nativo; o web não oferece "Sign in with
+  Apple JS". Decisão do owner (2026-09-30): fica para depois, não é gap esquecido.
+- **OK for dev**: o web tem login local + Google; Apple é exigência de App Store
+  (nativo), não do web.
+- **Before prod (quando priorizar)**: integrar Apple JS no FE web + validar o
+  `id_token` no endpoint social existente (client-id web próprio no portal Apple).
+
 ## Aliases globais criáveis por qualquer usuário (poisoning residual) (2026-09-22)
 - **Now**: `POST /products/{id}/aliases` (fluxo de mapear item não reconhecido no app) cria
   um `ProductAlias` **GLOBAL** — a canonicalização de TODAS as households passa a usar o

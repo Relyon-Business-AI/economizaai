@@ -96,7 +96,8 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/v1/auth/**", "/api/v1/legal/**", "/api/v1/webhooks/**", "/api/v1/contact", "/api/v1/beta-signup", "/api/v1/visits", "/swagger-ui/**", "/v3/api-docs/**", "/actuator/health").permitAll()
+                        // /app-config is the mobile force-update gate: fetched BEFORE login, so it must be public.
+                        .requestMatchers("/api/v1/auth/**", "/api/v1/legal/**", "/api/v1/webhooks/**", "/api/v1/contact", "/api/v1/beta-signup", "/api/v1/visits", "/api/v1/app-config", "/swagger-ui/**", "/v3/api-docs/**", "/actuator/health").permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         // AI assist layer: sweep, findings review, spend panel, AI test-classify —
                         // all mutate global state or spend money, so ADMIN-only as a block.

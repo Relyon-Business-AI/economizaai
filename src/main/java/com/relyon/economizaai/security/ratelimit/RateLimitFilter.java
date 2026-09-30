@@ -81,6 +81,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
             new RateLimitPolicy("visit", 60, Duration.ofMinutes(1));
 
     /**
+     * 60 app-config reads per minute per IP. The mobile force-update gate
+     * fetches once per app launch — generous for real devices (incl. NAT'd
+     * networks sharing one IP) while capping a bot from hammering a public,
+     * unauthenticated GET.
+     */
+    private static final RateLimitPolicy APP_CONFIG_POLICY =
+            new RateLimitPolicy("app-config", 60, Duration.ofMinutes(1));
+
+    /**
      * 10 phone-OTP operations (set number / verify) per hour per user. The
      * verify code additionally locks after 5 wrong guesses, so this is a
      * second fence: it caps bcrypt-compare CPU burn and paid SMS churn from
@@ -205,6 +214,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
             new Rule(
                     VISIT_POLICY,
                     req -> "POST".equals(req.getMethod()) && "/api/v1/visits".equals(req.getRequestURI()),
+                    KeyStrategy.IP),
+            new Rule(
+                    APP_CONFIG_POLICY,
+                    req -> "GET".equals(req.getMethod()) && "/api/v1/app-config".equals(req.getRequestURI()),
                     KeyStrategy.IP),
             new Rule(
                     PHONE_OTP_POLICY,
