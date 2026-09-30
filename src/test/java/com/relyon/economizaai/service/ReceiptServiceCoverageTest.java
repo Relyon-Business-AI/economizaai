@@ -325,7 +325,7 @@ class ReceiptServiceCoverageTest {
 
         assertEquals(1, response.personalPromos().size());
         var payloadCaptor = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationService).notify(payloadCaptor.capture());
+        verify(notificationService).notifyAfterCommit(payloadCaptor.capture());
         var payload = payloadCaptor.getValue();
         assertEquals(NotificationType.PROMO_PERSONAL, payload.type());
         assertEquals(user, payload.user());

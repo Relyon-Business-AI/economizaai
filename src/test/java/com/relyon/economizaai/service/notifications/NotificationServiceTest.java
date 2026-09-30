@@ -15,6 +15,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.ArrayList;
 
@@ -23,6 +25,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -160,6 +163,51 @@ class NotificationServiceTest {
         assertEquals(false, captor.getValue().isDelivered());
         assertEquals("free_tier_inbox_only", captor.getValue().getFailureReason());
         assertEquals(NotificationChannel.PUSH, captor.getValue().getChannel());
+    }
+
+    @Test
+    void notifyAfterCommit_withoutActiveTransaction_dispatchesImmediately() {
+        var user = userWithPushToken();
+        when(preferenceRepository.findByUserIdAndType(any(), any())).thenReturn(Optional.empty());
+        when(pushDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.ok());
+        var svc = service(true, true);
+
+        svc.notifyAfterCommit(payload(user, NotificationType.PROMO_PERSONAL));
+
+        verify(pushDispatcher).dispatch(any());
+        verify(notificationRepository).save(any());
+    }
+
+    @Test
+    void notifyAfterCommit_withActiveTransaction_dispatchesOnlyAfterCommit() {
+        var user = userWithPushToken();
+        var svc = service(true, true);
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            svc.notifyAfterCommit(payload(user, NotificationType.PROMO_PERSONAL));
+            verify(pushDispatcher, never()).dispatch(any());
+            verify(notificationRepository, never()).save(any());
+
+            when(preferenceRepository.findByUserIdAndType(any(), any())).thenReturn(Optional.empty());
+            when(pushDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.ok());
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+
+        verify(pushDispatcher).dispatch(any());
+        verify(notificationRepository).save(any());
+    }
+
+    @Test
+    void notifyAfterCommit_dispatchFailureIsSwallowed() {
+        var user = userWithPushToken();
+        when(preferenceRepository.findByUserIdAndType(any(), any())).thenReturn(Optional.empty());
+        when(pushDispatcher.dispatch(any())).thenThrow(new IllegalStateException("expo down"));
+        var svc = service(true, true);
+
+        assertDoesNotThrow(() -> svc.notifyAfterCommit(payload(user, NotificationType.PROMO_PERSONAL)));
     }
 
     @Test

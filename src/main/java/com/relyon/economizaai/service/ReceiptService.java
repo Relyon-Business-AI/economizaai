@@ -120,11 +120,18 @@ public class ReceiptService {
      *
      * <p>Validation (monthly cap, per-household uniqueness) still happens
      * synchronously here so the caller gets those errors up front.
+     *
+     * <p>Deliberately NOT {@code @Transactional}: resolving the chave may need a
+     * portal preflight over HTTP (e.g. SC SecurityVerify URLs walk the adapter
+     * chain), and a transaction must never span an outbound call. The chave is
+     * resolved untransacted first; the validation reads and the PROCESSING
+     * persist are short repository transactions — same shape as
+     * {@link #submitPrefetched}.
      */
-    @Transactional
     public ReceiptResponse submit(User user, SubmitReceiptRequest request) {
         var qrPayload = request.qrPayload();
-        var receipt = validateAndPersistProcessing(user, qrPayload);
+        var chave = sefazIngestionService.resolveChave(qrPayload);
+        var receipt = validateAndPersistProcessing(user, qrPayload, chave);
         var receiptId = receipt.getId();
         dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload));
         return withFriendlyName(user.getHousehold().getId(), receipt, ReceiptResponse.from(receipt));
@@ -135,12 +142,13 @@ public class ReceiptService {
      * whether the app can resolve a blocked-state receipt on-device (it sent the
      * X-Device-Fetch header). Only such clients may be handed the NEEDS_DEVICE_FETCH
      * status; older apps that don't know it would crash rendering it, so they get
-     * FAILED_PARSE instead.
+     * FAILED_PARSE instead. Untransacted for the same reason as
+     * {@link #submit(User, SubmitReceiptRequest)} — chave resolution can hit HTTP.
      */
-    @Transactional
     public ReceiptResponse submit(User user, SubmitReceiptRequest request, boolean deviceCapable) {
         var qrPayload = request.qrPayload();
-        var receipt = validateAndPersistProcessing(user, qrPayload);
+        var chave = sefazIngestionService.resolveChave(qrPayload);
+        var receipt = validateAndPersistProcessing(user, qrPayload, chave);
         var receiptId = receipt.getId();
         dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload, deviceCapable));
         return withFriendlyName(user.getHousehold().getId(), receipt, ReceiptResponse.from(receipt));
@@ -155,10 +163,11 @@ public class ReceiptService {
     public ReceiptResponse submitPrefetched(User user, PrefetchedReceiptRequest request) {
         var qrPayload = request.qrPayload();
         var rawContent = request.rawContent();
+        var chave = sefazIngestionService.resolveChave(qrPayload);
         // Client-authored content is only trusted for UFs the server cannot
         // fetch itself — everywhere else the server fetch is the integrity check.
-        prefetchPolicy.requireAllowed(ChaveAcessoParser.extractUf(sefazIngestionService.resolveChave(qrPayload)));
-        var receipt = validateAndPersistProcessing(user, qrPayload);
+        prefetchPolicy.requireAllowed(ChaveAcessoParser.extractUf(chave));
+        var receipt = validateAndPersistProcessing(user, qrPayload, chave);
         var receiptId = receipt.getId();
         dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingestPrefetched(receiptId, qrPayload, rawContent));
         return withFriendlyName(user.getHousehold().getId(), receipt, ReceiptResponse.from(receipt));
@@ -334,10 +343,11 @@ public class ReceiptService {
      * Shared submit path: everything decidable synchronously (unsupported UF,
      * manual-chave-without-fallback, blocked merchant, monthly cap, stale/dup
      * replacement) fails fast with a localized 4xx, then the receipt is persisted
-     * PROCESSING for the async ingestion to fill in.
+     * PROCESSING for the async ingestion to fill in. The chave must arrive
+     * already resolved (see {@link #submit}) — resolution can hit HTTP and never
+     * belongs anywhere near a transaction.
      */
-    private Receipt validateAndPersistProcessing(User user, String qrPayload) {
-        var chave = sefazIngestionService.resolveChave(qrPayload);
+    private Receipt validateAndPersistProcessing(User user, String qrPayload, String chave) {
         log.info("submit chave={}", LogMasker.chave(chave));
 
         // Fail unsupported UFs up front with a localized 400 — the async path
@@ -685,6 +695,12 @@ public class ReceiptService {
         }
     }
 
+    /**
+     * Collects the personal-promo payloads inside the confirm transaction and hands
+     * them to {@link NotificationService#notifyAfterCommit} — the outbound dispatch
+     * (Expo/SMTP) runs only after the confirm commits, and a rolled-back confirm
+     * notifies nobody.
+     */
     private void notifyPersonalPromos(User user, Receipt receipt, List<PromoDetector.PersonalPromo> promos) {
         if (!promos.isEmpty() && !notificationRuleService.isEnabled(user, NotificationType.PROMO_PERSONAL)) {
             log.debug("personal_promo.skipped user_disabled count={}", promos.size());
@@ -694,7 +710,7 @@ public class ReceiptService {
             var title = "Você economizou em " + promo.productName();
             var body = String.format("No %s você pagou R$ %s no %s — %s%% abaixo do que normalmente paga.",
                     promo.productName(), promo.paidPrice(), receipt.getMarketName(), promo.savingsPct());
-            notificationService.notify(new NotificationPayload(
+            notificationService.notifyAfterCommit(new NotificationPayload(
                     user,
                     NotificationType.PROMO_PERSONAL,
                     title, body,

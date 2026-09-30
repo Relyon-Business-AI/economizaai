@@ -120,6 +120,12 @@ public class NotificationRuleEngine {
         return unitPrice.compareTo(threshold) <= 0;
     }
 
+    /**
+     * Builds the payload inside the caller's transaction (the price-index write)
+     * but defers the outbound dispatch to after commit — a rolled-back
+     * contribution must not fire another household's alert, and the Expo/SMTP
+     * round-trip must never pin the write transaction's connection.
+     */
     private void notifyPriceRule(NotificationRule rule, PriceObservation observation) {
         var productName = observation.getProduct().getNormalizedName();
         var locale = LocalizedMessageService.toLocale(rule.getUser().getLocale());
@@ -127,7 +133,7 @@ public class NotificationRuleEngine {
         var title = messageService.translate("notification.price_drop.title", locale, productName);
         var body = messageService.translate("notification.price_drop.body", locale,
                 productName, observation.getUnitPrice().toString(), marketName, rule.getThresholdPrice().toString());
-        notificationService.notify(new NotificationPayload(
+        notificationService.notifyAfterCommit(new NotificationPayload(
                 rule.getUser(), rule.getType(), title, body, baseExtras(rule, observation)));
     }
 

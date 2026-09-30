@@ -33,6 +33,7 @@ class DataShareConsentServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private HouseholdMergeService mergeService;
     @Mock private NotificationService notificationService;
+    @Mock private LocalizedMessageService messageService;
 
     @InjectMocks private DataShareConsentService consentService;
 
@@ -64,7 +65,21 @@ class DataShareConsentServiceTest {
 
         assertEquals(ConsentStatus.PENDING, consent.getStatus());
         assertEquals(grantor, consent.getGrantor());
-        verify(notificationService).notify(any());
+        verify(notificationService).notifyAfterCommit(any());
+    }
+
+    @Test
+    void request_localizesNotificationInGrantorLocale() {
+        var requester = user("ana");
+        var grantor = user("bob");
+        grantor.setLocale("en");
+        when(consentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        consentService.request(requester, grantor, household(), household(), LeaveScope.BOTH);
+
+        var grantorLocale = LocalizedMessageService.toLocale("en");
+        verify(messageService).translate("consent.requested.title", grantorLocale);
+        verify(messageService).translate("consent.requested.body", grantorLocale, requester.getName());
     }
 
     @Test
@@ -91,7 +106,7 @@ class DataShareConsentServiceTest {
 
         assertEquals(ConsentStatus.APPROVED, result.getStatus());
         verify(mergeService).copyUserData(grantor.getId(), shared, dest);
-        verify(notificationService).notify(any());
+        verify(notificationService).notifyAfterCommit(any());
     }
 
     @Test
@@ -134,6 +149,6 @@ class DataShareConsentServiceTest {
 
         assertEquals(ConsentStatus.DENIED, result.getStatus());
         verify(mergeService, never()).copyUserData(any(), any(), any());
-        verify(notificationService).notify(any());
+        verify(notificationService).notifyAfterCommit(any());
     }
 }
