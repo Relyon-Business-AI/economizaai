@@ -1,5 +1,6 @@
 package com.relyon.economizaai.dto.response;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.model.ShoppingList;
 import com.relyon.economizaai.model.ShoppingListItem;
 
@@ -92,8 +93,8 @@ public record ShoppingListResponse(
                 list.getId(),
                 list.getName(),
                 list.getCreatedBy().getId(),
-                list.getCreatedAt(),
-                list.getUpdatedAt(),
+                BrazilClock.fromUtc(list.getCreatedAt()),
+                BrazilClock.fromUtc(list.getUpdatedAt()),
                 items.size(),
                 checked,
                 items

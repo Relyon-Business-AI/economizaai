@@ -1,5 +1,6 @@
 package com.relyon.economizaai.dto.response;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.model.NotificationRule;
 
 import java.math.BigDecimal;
@@ -32,6 +33,6 @@ public record PriceAlertResponse(
                 rule.getRadiusKm(),
                 rule.isActive(),
                 rule.getLastFiredAt(),
-                rule.getCreatedAt());
+                BrazilClock.fromUtc(rule.getCreatedAt()));
     }
 }

@@ -1,5 +1,6 @@
 package com.relyon.economizaai.dto.response;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.Platform;
 import com.relyon.economizaai.model.enums.Role;
@@ -59,7 +60,7 @@ public record AdminUserDetailResponse(
                 householdMemberCount,
                 receipts,
                 spendLast30Days == null ? BigDecimal.ZERO : spendLast30Days,
-                user.getCreatedAt(),
+                BrazilClock.fromUtc(user.getCreatedAt()),
                 user.getRegistrationPlatform(),
                 user.getLastPlatform(),
                 lastAccessAt(user)

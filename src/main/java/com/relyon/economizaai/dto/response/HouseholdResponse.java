@@ -1,5 +1,6 @@
 package com.relyon.economizaai.dto.response;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
 
@@ -26,7 +27,7 @@ public record HouseholdResponse(
                 household.getInviteCode(),
                 household.getInviteCodeExpiresAt(),
                 members.stream().map(HouseholdMember::from).toList(),
-                household.getCreatedAt()
+                BrazilClock.fromUtc(household.getCreatedAt())
         );
     }
 }

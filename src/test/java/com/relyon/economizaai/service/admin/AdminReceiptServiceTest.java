@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.admin;
 
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.model.PriceObservation;
 import com.relyon.economizaai.model.PriceObservationAudit;
 import com.relyon.economizaai.model.Receipt;
@@ -117,7 +118,8 @@ class AdminReceiptServiceTest {
         assertEquals(owner.getId(), row.owner().id());
         assertEquals("Francyni", row.owner().name());
         assertEquals(UnidadeFederativa.RS, row.uf());
-        assertEquals(failed.getCreatedAt(), row.createdAt());
+        // Display timestamps leave the API in Brasília wall-clock (storage is UTC).
+        assertEquals(BrazilClock.fromUtc(failed.getCreatedAt()), row.createdAt());
         assertEquals("receipt.parse.failed:no-items-found", row.parseErrorReason());
         assertEquals("Não foi possível extrair os dados da NFC-e.", row.parseErrorMessage());
     }

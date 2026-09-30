@@ -1,5 +1,6 @@
 package com.relyon.economizaai.dto.response;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.model.MarketLocation;
 import com.relyon.economizaai.model.enums.MerchantSegment;
 import com.relyon.economizaai.model.enums.MerchantSupportOverride;
@@ -32,6 +33,6 @@ public record GreyMerchantResponse(
                 market.getCnaeCodes(),
                 market.getSupportOverride(),
                 receiptCount,
-                market.getCreatedAt());
+                BrazilClock.fromUtc(market.getCreatedAt()));
     }
 }

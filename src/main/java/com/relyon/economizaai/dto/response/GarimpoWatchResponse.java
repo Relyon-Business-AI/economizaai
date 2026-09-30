@@ -1,5 +1,6 @@
 package com.relyon.economizaai.dto.response;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.model.GarimpoWatch;
 
 import java.math.BigDecimal;
@@ -27,6 +28,6 @@ public record GarimpoWatchResponse(
                 watch.isActive(),
                 watch.getLastRunAt(),
                 watch.getCreatedBy(),
-                watch.getCreatedAt());
+                BrazilClock.fromUtc(watch.getCreatedAt()));
     }
 }

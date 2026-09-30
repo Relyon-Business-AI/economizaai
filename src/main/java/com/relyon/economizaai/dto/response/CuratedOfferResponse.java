@@ -1,5 +1,6 @@
 package com.relyon.economizaai.dto.response;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.model.EcommerceOffer;
 
 import java.math.BigDecimal;
@@ -42,6 +43,6 @@ public record CuratedOfferResponse(
                 offer.isActive(),
                 offer.isCurated(),
                 offer.getCuratedBy(),
-                offer.getUpdatedAt());
+                BrazilClock.fromUtc(offer.getUpdatedAt()));
     }
 }

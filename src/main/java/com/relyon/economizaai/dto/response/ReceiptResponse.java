@@ -1,5 +1,6 @@
 package com.relyon.economizaai.dto.response;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
@@ -77,8 +78,8 @@ public record ReceiptResponse(
                 receipt.getStatus(),
                 receipt.getParseErrorReason(),
                 null,
-                receipt.getConfirmedAt(),
-                receipt.getCreatedAt(),
+                BrazilClock.fromUtc(receipt.getConfirmedAt()),
+                BrazilClock.fromUtc(receipt.getCreatedAt()),
                 receipt.getItems().stream()
                         .map(item -> {
                             var label = labelFor(item, categoryOverrides, suggestionsByItemId);
