@@ -16,6 +16,27 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-30 (3) — fuso de Brasília nas janelas, login social mais estrito e aviso de importação
+
+- **Janelas de dia/mês agora seguem o horário de Brasília** (servidor roda em UTC e
+  virava o dia às 21h): cap mensal de notas do plano FREE, snapshot mensal do
+  dashboard, janela do leaderboard, histórico FREE (`clampFrom`), lookbacks do
+  índice colaborativo/ofertas, orçamento mensal, previsões de consumo e relatórios
+  admin. Perto da meia-noite os números podem mudar de "dia" em relação ao
+  comportamento antigo — é o esperado.
+- **Login social:** entrar por e-mail numa conta social existente (Google↔Apple, ou
+  mesmo provider com outro id) agora EXIGE e-mail verificado no token. Sem isso →
+  **401** com a nova chave `auth.social.email_unverified` ("O e-mail da sua conta
+  {provider} ainda não foi verificado…"). Cross-provider com e-mail verificado
+  segue logando normalmente; conta LOCAL não mudou.
+- **Aviso "importação concluída" agora dispara de verdade:** o push/e-mail
+  (`receipt.import.complete.*`) sai quando a leva inteira termina (sem notas
+  queued/processing), uma única vez por leva — antes nunca saía em produção.
+- **PE destravado no submit:** UFs de device-fetch não são mais bloqueadas pelo cap
+  de evidência experimental (scans abandonados não "queimam" mais o estado).
+- **Economia atribuída mais honesta:** oferta exibida DEPOIS da compra não ganha
+  mais crédito — o total de R$ atribuídos tende a cair.
+
 ## 2026-09-30 (2) — lote de correções de auditoria (deltas visíveis pro FE)
 
 - **Mediana da comunidade em 2 casas:** `medianPrice` (reference-price, online-reference,
