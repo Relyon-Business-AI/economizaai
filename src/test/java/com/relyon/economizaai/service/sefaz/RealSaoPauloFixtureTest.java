@@ -41,7 +41,7 @@ class RealSaoPauloFixtureTest {
     };
 
     private final SvrsSharedPortalAdapter adapter = new SvrsSharedPortalAdapter(
-            RestClient.builder(), NO_CAPTCHA, 5000, "test-agent", "RS,PR,SP", 5, 0L,
+            RestClient.builder(), NO_CAPTCHA, 5000, "test-agent", "RS,PR,SP", 5, 3, 0L,
             "svrs.rs.gov.br,sefaz.rs.gov.br,fazenda.pr.gov.br,fazenda.sp.gov.br");
 
     @Test
