@@ -172,6 +172,28 @@ class RateLimitFilterTest {
     }
 
     @Test
+    void allowsTenHouseholdJoinAttemptsThenBlocksTheEleventh() throws Exception {
+        authenticateAs("guesser@test.com");
+        for (var attempt = 0; attempt < 10; attempt++) {
+            var response = invokeHouseholdJoinRequest("1.2.3.4");
+            assertEquals(200, response.getStatus(), "join attempt " + (attempt + 1) + " should pass");
+        }
+        var blocked = invokeHouseholdJoinRequest("1.2.3.4");
+        assertEquals(429, blocked.getStatus());
+        assertNotNull(blocked.getHeader("Retry-After"));
+    }
+
+    @Test
+    void householdJoinBucketsAreKeyedByUserNotIp() throws Exception {
+        authenticateAs("heavy-joiner@test.com");
+        for (var attempt = 0; attempt < 10; attempt++) invokeHouseholdJoinRequest("1.2.3.4");
+
+        authenticateAs("light-joiner@test.com");
+        var otherUser = invokeHouseholdJoinRequest("1.2.3.4");
+        assertEquals(200, otherUser.getStatus());
+    }
+
+    @Test
     void getOnReceiptsRouteIsNotLimited() throws Exception {
         for (var attempt = 0; attempt < 40; attempt++) {
             var request = new MockHttpServletRequest("GET", "/api/v1/receipts");
@@ -199,6 +221,14 @@ class RateLimitFilterTest {
 
     private MockHttpServletResponse invokeSubmitRequest(String ip, String path) throws Exception {
         var request = new MockHttpServletRequest("POST", path);
+        request.setRemoteAddr(ip);
+        var response = new MockHttpServletResponse();
+        filter.doFilterInternal(request, response, chain);
+        return response;
+    }
+
+    private MockHttpServletResponse invokeHouseholdJoinRequest(String ip) throws Exception {
+        var request = new MockHttpServletRequest("POST", "/api/v1/households/join");
         request.setRemoteAddr(ip);
         var response = new MockHttpServletResponse();
         filter.doFilterInternal(request, response, chain);

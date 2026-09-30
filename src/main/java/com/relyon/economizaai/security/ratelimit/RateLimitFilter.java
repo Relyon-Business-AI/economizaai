@@ -110,6 +110,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
             new RateLimitPolicy("import-extract", 30, Duration.ofHours(1));
 
     /**
+     * 10 household-join attempts per hour per user. The invite code is only
+     * 6 chars — unthrottled guessing would let an attacker walk into random
+     * households; 10/h keeps typo retries painless while making the code
+     * space (32^6) unbrute-forceable.
+     */
+    private static final RateLimitPolicy HOUSEHOLD_JOIN_POLICY =
+            new RateLimitPolicy("household-join", 10, Duration.ofHours(1));
+
+    /**
      * 3 verification-email resends per hour per user — without a cadence an
      * attacker who registered a victim's address could loop resend into an
      * email bomb (and burn our SMTP reputation).
@@ -170,6 +179,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
             new Rule(
                     EXTRACT_POLICY,
                     req -> "POST".equals(req.getMethod()) && EXTRACT_PATH.equals(req.getRequestURI()),
+                    KeyStrategy.USER_OR_IP),
+            new Rule(
+                    HOUSEHOLD_JOIN_POLICY,
+                    req -> "POST".equals(req.getMethod())
+                            && "/api/v1/households/join".equals(req.getRequestURI()),
                     KeyStrategy.USER_OR_IP),
             new Rule(
                     RESEND_POLICY,
