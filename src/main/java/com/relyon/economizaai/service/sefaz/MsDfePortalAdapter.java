@@ -202,7 +202,11 @@ public class MsDfePortalAdapter implements SefazAdapter {
             if (sessionId != null) cookieHeader = "JSESSIONID=" + sessionId;
         }
         var danfe = fetchAuthorizedDanfe(chave, html, token, cookieHeader);
-        if (danfe != null && looksLikeCaptcha(danfe)) {
+        if (danfe == null || danfe.isBlank()) {
+            // Empty post-captcha body — transient, let the retry loop re-solve.
+            throw new RestClientException("empty-danfe-body");
+        }
+        if (looksLikeCaptcha(danfe)) {
             log.warn("ms.captcha.rejected chave={}", LogMasker.chave(chave));
             throw new RestClientException("captcha-rejected-by-portal");
         }
