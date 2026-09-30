@@ -60,6 +60,7 @@ import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -434,7 +435,17 @@ public class ReceiptService {
                 .origin(origin)
                 .status(ReceiptStatus.PROCESSING)
                 .build();
-        return receiptRepository.save(receipt);
+        try {
+            return receiptRepository.save(receipt);
+        } catch (DataIntegrityViolationException raceEx) {
+            // Two concurrent submits of the same chave both passed the exists-check;
+            // the loser trips the (household, chave) unique constraint right here.
+            // Surface the SAME localized duplicate error the exists-check throws
+            // instead of a generic 500.
+            log.info("submit duplicate_race chave={} household={}",
+                    LogMasker.chave(chave), user.getHousehold().getId());
+            throw new ReceiptAlreadyIngestedException(chave);
+        }
     }
 
     /**

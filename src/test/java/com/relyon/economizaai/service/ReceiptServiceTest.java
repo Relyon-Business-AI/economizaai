@@ -51,6 +51,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -264,6 +265,21 @@ class ReceiptServiceTest {
 
         assertEquals(80, retried);
         assertTrue(backlog.stream().allMatch(receipt -> receipt.getStatus() == ReceiptStatus.IMPORT_QUEUED));
+        verify(receiptIngestionService, never()).ingest(any(), any());
+    }
+
+    @Test
+    void submit_duplicateRaceOnUniqueConstraint_surfacesLocalizedDuplicateError() {
+        var user = buildUser();
+        when(receiptRepository.findByHouseholdIdAndChaveAcesso(any(), eq(CHAVE_RS))).thenReturn(Optional.empty());
+        // The concurrent loser: exists-check passed, but the winner committed first
+        // and the (household, chave) unique constraint fires at persist time.
+        when(receiptRepository.save(any(Receipt.class)))
+                .thenThrow(new DataIntegrityViolationException("uk_receipts_household_chave"));
+
+        assertThrows(ReceiptAlreadyIngestedException.class,
+                () -> receiptService.submit(user, new SubmitReceiptRequest(QR_RS)));
+
         verify(receiptIngestionService, never()).ingest(any(), any());
     }
 
