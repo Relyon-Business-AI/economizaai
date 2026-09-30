@@ -27,6 +27,9 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
 
     // Sweeper: PROCESSING rows older than the ingest timeout are stuck (commit-time
     // failure, app restart mid-ingest, or pool rejection) and must be failed.
+    // updatedAt, not createdAt: retried rows are old by creation but fresh by flip.
+    List<Receipt> findByStatusAndUpdatedAtBefore(ReceiptStatus status, LocalDateTime cutoff);
+
     List<Receipt> findByStatusAndCreatedAtBefore(ReceiptStatus status, LocalDateTime cutoff);
 
     // Paced import worker: oldest IMPORT_QUEUED first, a small page at a time, and a

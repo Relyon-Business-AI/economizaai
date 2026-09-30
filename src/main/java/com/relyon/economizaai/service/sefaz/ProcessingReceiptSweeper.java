@@ -54,7 +54,11 @@ public class ProcessingReceiptSweeper {
 
     private void failStale(ReceiptStatus status, int olderThanMinutes, String reasonKey, String event) {
         var cutoff = LocalDateTime.now().minusMinutes(olderThanMinutes);
-        var stuck = receiptRepository.findByStatusAndCreatedAtBefore(status, cutoff);
+        // Keyed on updatedAt, NOT createdAt: a RETRY flips a weeks-old row back to
+        // PROCESSING, and by createdAt the sweeper would kill it instantly (it did —
+        // 13 notas do primeiro retry-batch morreram assim). updatedAt is bumped by
+        // the status flip, so the timeout counts from when processing actually began.
+        var stuck = receiptRepository.findByStatusAndUpdatedAtBefore(status, cutoff);
         if (stuck.isEmpty()) return;
         stuck.forEach(receipt -> {
             receipt.setParseErrorReason(reasonKey);
