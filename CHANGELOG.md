@@ -16,6 +16,19 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-30 (5) — `GET /app-config`: kill-switch de força de atualização sai do gist
+
+- **Novo endpoint público `GET /api/v1/app-config`** — o JSON que o
+  ForceUpdateGate do app lia do gist do GitHub (conta polyf, morta) agora é
+  servido pelo backend. **Mesmo shape, é só trocar a URL no
+  `appConfigService.ts`**: `{ minVersion, androidUrl?, iosUrl?, message? }` —
+  `minVersion` sempre presente (default `0.0.0` = gate NO-OP); os opcionais são
+  OMITIDOS quando não configurados (os fallbacks de store URL do app se
+  aplicam). Sem auth, `Cache-Control: max-age=60`, rate limit 60/min por IP. Os
+  valores vêm das env vars `APP_CONFIG_MIN_VERSION` / `APP_CONFIG_ANDROID_URL` /
+  `APP_CONFIG_IOS_URL` / `APP_CONFIG_MESSAGE` no Render — sem nada setado o gate
+  nunca bloqueia. O gist continua vivo até o release do app apontar pra cá.
+
 ## 2026-09-30 (4) — timestamps em Brasília, retry honesto e 409 no submit duplicado
 
 - **Timestamps EXIBIDOS agora saem em horário de Brasília (-3h vs antes):** os

@@ -81,6 +81,17 @@ required (`email` must be valid), `phone` optional (max 30 chars, free-form); **
 with no body on success.
 
 ```
+GET /api/v1/app-config   → 200 (public, no auth)
+```
+
+Remote config for the mobile **ForceUpdateGate** (replaces the legacy GitHub
+gist — same JSON shape, just swap the URL). Returns
+`{ "minVersion", "androidUrl"?, "iosUrl"?, "message"? }` — `minVersion` always
+present (`0.0.0` = gate is a NO-OP, nothing blocked); the optional fields are
+omitted when unset so the app's store-URL fallbacks apply. Served with
+`Cache-Control: max-age=60`, **rate-limited to 60/min per IP**.
+
+```
 GET /actuator/health   → public, returns `{"status":"UP"}` — for uptime monitors
 ```
 
