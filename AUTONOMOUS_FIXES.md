@@ -73,6 +73,26 @@ A rollback looks like:
 
 <!-- AUTONOMOUS ENTRIES BELOW - newest first. The watchdog inserts here. -->
 
+### [2026-09-30 11:30:32] [NEEDS-HUMAN] NO-REPRO - E2E: 22. Categorizer AI status (admin)
+- **Detected:**
+```
+A daily E2E run against the live dev server FAILED (2/229 assertions).
+Failing steps:
+- 22. Categorizer AI status (admin): AssertionError: expected response to have status code 200 but got 403
+- 22. Categorizer AI status (admin): AssertionError: expected { status: 403, message: 'Forbidden' } to have property 'enabled'
+
+Server-side errors during the run (the likely root cause):
+```
+2026-09-30 11:29:49.971 WARN  [req=ab2663f1 user=a***@economizaai.app rcpt=d1e431ed item=] c.r.e.e.GlobalExceptionHandler - Bad request: Nota fiscal no estado CONFIRMED não pode mais ser editada.
+2026-09-30 11:29:50.219 WARN  [req=91fe552f user=a***@economizaai.app rcpt=d1e431ed item=] c.r.e.e.GlobalExceptionHandler - Bad request: Nota fiscal no estado CONFIRMED não pode mais ser editada.
+2026-09-30 11:29:51.596 WARN  [req=2b1fa9a8 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - No handler for request: api/v1/categorizer/ml/predict
+2026-09-30 11:29:52.227 WARN  [req=4260f030 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Entity not found: Lista de compras não encontrada.
+2026-09-30 11:29:53.154 WARN  [req=a0d3da7d user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Type mismatch for parameter 'id': Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.util.UUID'; Invalid UUID string: {{e2eNotificationId}}
+2026-09-30 11:29:57.120 WARN  [req=fdee5378 user=a***@economizaai.app rcpt= item=] c.
+```
+- **Outcome:** could not reproduce with a failing test; no code changed.
+- **Detail:** Confirmed identical to the 2026-09-27 investigation: controller mapping, `SecurityConfig` ADMIN rule, and admin bootstrap all unchanged and correct. This is the 5th run of the exact same failure, and four prior deep investigations independently confirmed it's not a code defect — the E2E account simply lacks `Role.ADMIN` at request time (an env/secrets mismatch between `E2E_ADMIN_EMAIL` and `ADMIN_EMAILS` on the target deployment), not something reproducible in a unit/integration test. Making no 
+
 ### [2026-09-29 11:44:33] [NEEDS-HUMAN] NO-REPRO - E2E: 22. Categorizer AI status (admin)
 - **Detected:**
 ```
