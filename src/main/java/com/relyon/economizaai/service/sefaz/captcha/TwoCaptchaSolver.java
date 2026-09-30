@@ -70,6 +70,7 @@ public class TwoCaptchaSolver implements CaptchaSolver {
             var token = pollAndReadToken(captchaId);
             if (token != null) {
                 log.info("captcha.solve.ok id={} tokenLen={}", captchaId, token.length());
+                CaptchaSolveTracker.recordSolve();
                 return token;
             }
         }

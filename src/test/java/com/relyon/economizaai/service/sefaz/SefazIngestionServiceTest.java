@@ -1,16 +1,20 @@
 package com.relyon.economizaai.service.sefaz;
 
 import com.relyon.economizaai.exception.CaptchaUnavailableException;
+import com.relyon.economizaai.exception.ExperimentalCaptchaWallException;
 import com.relyon.economizaai.exception.ExperimentalStateFailedException;
 import com.relyon.economizaai.exception.InvalidQrPayloadException;
 import com.relyon.economizaai.exception.ReceiptParseException;
+import com.relyon.economizaai.exception.SefazDeterministicFetchException;
 import com.relyon.economizaai.exception.SefazFetchException;
 import com.relyon.economizaai.exception.SefazPortalRejectionException;
 import com.relyon.economizaai.exception.UnsupportedStateException;
+import com.relyon.economizaai.model.enums.PaidApiService;
 import com.relyon.economizaai.model.enums.StateIngestionOutcome;
 import com.relyon.economizaai.model.enums.StateIngestionStrategy;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.paidapi.PaidApiGuardService;
+import com.relyon.economizaai.service.sefaz.captcha.CaptchaSolveTracker;
 import com.relyon.economizaai.service.sefaz.captcha.CaptchaSolver;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService.FetchedDocument;
 import org.junit.jupiter.api.Test;
@@ -38,6 +42,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -798,5 +803,102 @@ class SefazIngestionServiceTest {
 
         assertNotNull(doc.adapter());
         assertNull(doc.preParsed());
+    }
+
+    // ── Captcha cost ledger: charge ONLY real solves ─────────────────────────
+
+    @Test
+    void fetch_captchaFreeScrape_recordsNoCaptchaCost() {
+        var rsAdapter = mockAdapterFor(UnidadeFederativa.RS);
+        when(rsAdapter.fetchHtml(anyString())).thenReturn("<html>ok</html>");
+        var service = new SefazIngestionService(List.of(rsAdapter), Optional.empty(), paidApiGuard, stateCoverage, rsChaveReconsult, prefetchPolicy);
+
+        service.fetch(CHAVE_RS, null);
+
+        verify(paidApiGuard, never()).recordSuccess(any(), eq(PaidApiService.CAPTCHA_SOLVE), any(), any());
+        verify(paidApiGuard, never()).recordFailure(any(), eq(PaidApiService.CAPTCHA_SOLVE), any(), any());
+    }
+
+    @Test
+    void fetch_realSolves_recordOneLedgerEntryPerToken() {
+        var chaveMs = "50260777863223012709650180004455861342485537";
+        var msAdapter = mockAdapterFor(UnidadeFederativa.MS);
+        when(msAdapter.fetchHtml(anyString())).thenAnswer(invocation -> {
+            CaptchaSolveTracker.recordSolve();
+            CaptchaSolveTracker.recordSolve(); // first token rejected, re-solved
+            return "<html>danfe</html>";
+        });
+        var service = new SefazIngestionService(List.of(msAdapter), Optional.empty(), paidApiGuard, stateCoverage, rsChaveReconsult, prefetchPolicy);
+
+        service.fetch(chaveMs, null);
+
+        verify(paidApiGuard, times(2)).recordSuccess(null, PaidApiService.CAPTCHA_SOLVE, "MS", null);
+        verify(paidApiGuard, never()).recordFailure(any(), eq(PaidApiService.CAPTCHA_SOLVE), any(), any());
+    }
+
+    @Test
+    void fetch_experimentalCaptchaWallAfterPaidSolve_recordsTheSolveAsFailure() {
+        var generic = new GenericQrPortalAdapter(RestClient.builder(), NO_CAPTCHA, 1000, "test", true, 1, 0, "gov.br") {
+            @Override
+            public String fetchHtml(String qrPayload) {
+                CaptchaSolveTracker.recordSolve(); // token was bought, portal rejected it
+                throw new ExperimentalCaptchaWallException("BA", "RECAPTCHA_V2", "site-key", "<html/>");
+            }
+        };
+        var infosimples = mock(InfosimplesService.class);
+        when(infosimples.fetchParsed(eq(CHAVE_BA), eq(UnidadeFederativa.BA))).thenReturn(sampleParsed());
+        var service = new SefazIngestionService(List.of(generic), Optional.of(infosimples), paidApiGuard, stateCoverage, rsChaveReconsult, prefetchPolicy);
+
+        service.fetch(QR_URL_BA, null);
+
+        verify(paidApiGuard).recordFailure(null, PaidApiService.CAPTCHA_SOLVE, "BA", null);
+    }
+
+    @Test
+    void fetch_infosimplesOnlyAdapterImmediateThrow_recordsNoCaptchaFailure() {
+        // The CE adapter throws without ever solving — its "failure" must not
+        // feed the captcha breaker with noise.
+        var ceAdapter = mockAdapterFor(UnidadeFederativa.CE);
+        var chaveCe = "23260412345678000190650010000123451123456780";
+        when(ceAdapter.fetchHtml(anyString())).thenThrow(new SefazFetchException("CE"));
+        var infosimples = mock(InfosimplesService.class);
+        when(infosimples.fetchParsed(eq(chaveCe), eq(UnidadeFederativa.CE))).thenReturn(sampleParsed());
+        var service = new SefazIngestionService(List.of(ceAdapter), Optional.of(infosimples), paidApiGuard, stateCoverage, rsChaveReconsult, prefetchPolicy);
+
+        service.fetch(chaveCe, null);
+
+        verify(paidApiGuard, never()).recordFailure(any(), eq(PaidApiService.CAPTCHA_SOLVE), any(), any());
+        verify(paidApiGuard, never()).recordSuccess(any(), eq(PaidApiService.CAPTCHA_SOLVE), any(), any());
+    }
+
+    @Test
+    void fetch_deterministicFailureAfterPaidSolve_stillLedgersTheSolve() {
+        var chaveMs = "50260777863223012709650180004455861342485537";
+        var msAdapter = mockAdapterFor(UnidadeFederativa.MS);
+        when(msAdapter.fetchHtml(anyString())).thenAnswer(invocation -> {
+            CaptchaSolveTracker.recordSolve(); // solve happened, then viewstate was missing
+            throw new ReceiptParseException("captcha-viewstate-missing");
+        });
+        var service = new SefazIngestionService(List.of(msAdapter), Optional.empty(), paidApiGuard, stateCoverage, rsChaveReconsult, prefetchPolicy);
+
+        assertThrows(ReceiptParseException.class, () -> service.fetch(chaveMs, null));
+
+        verify(paidApiGuard).recordFailure(null, PaidApiService.CAPTCHA_SOLVE, "MS", null);
+    }
+
+    // ── Deterministic portal 4xx: never spend Infosimples ────────────────────
+
+    @Test
+    void fetch_deterministic4xx_propagatesWithoutSpendingInfosimples() {
+        var rsAdapter = mockAdapterFor(UnidadeFederativa.RS);
+        var deterministicEx = new SefazDeterministicFetchException("RS");
+        when(rsAdapter.fetchHtml(anyString())).thenThrow(deterministicEx);
+        var infosimples = mock(InfosimplesService.class);
+        var service = new SefazIngestionService(List.of(rsAdapter), Optional.of(infosimples), paidApiGuard, stateCoverage, rsChaveReconsult, prefetchPolicy);
+
+        var thrown = assertThrows(SefazDeterministicFetchException.class, () -> service.fetch(CHAVE_RS, null));
+
+        assertSame(deterministicEx, thrown);
+        verify(infosimples, never()).fetchParsed(any(), any());
     }
 }
