@@ -20,9 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Real GO NFC-e captured 2026-07-22 from an organic user scan (Cencosud
- * Goiânia, 6 items, R$94,14). Two fixtures: the render page as the portal
- * serves it (DANFE embedded as an escaped JS string) and the extracted
- * standard-layout DANFE — proving both the extraction seam and the parse.
+ * Goiânia, 6 items, R$94,14). The render-page fixture carries the DANFE
+ * embedded as an escaped JS string — proving both the extraction seam and
+ * the parse in one pass.
  */
 class RealGoiasFixtureTest {
 
