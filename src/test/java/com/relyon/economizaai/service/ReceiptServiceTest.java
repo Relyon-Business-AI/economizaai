@@ -284,6 +284,39 @@ class ReceiptServiceTest {
     }
 
     @Test
+    void retryFromStoredXml_reParsesStoredXmlWithoutAnyFetch() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        receipt.setOrigin(ReceiptOrigin.IMPORT);
+        receipt.setParseErrorReason("no-items-found:");
+        var storedXml = "<?xml version=\"1.0\"?><nfeProc><NFe><infNFe Id=\"NFe" + CHAVE_RS + "\"/></NFe></nfeProc>";
+        receipt.setRawHtml(storedXml);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        var retried = receiptService.retryFromStoredXml(user, receipt.getId());
+
+        assertTrue(retried);
+        assertEquals(ReceiptStatus.PROCESSING, receipt.getStatus());
+        assertNull(receipt.getParseErrorReason());
+        verify(receiptIngestionService).ingestXml(receipt.getId(), storedXml);
+        verify(receiptIngestionService, never()).ingest(any(), any());
+    }
+
+    @Test
+    void retryFromStoredXml_noStoredXml_returnsFalseUntouched() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        receipt.setOrigin(ReceiptOrigin.IMPORT);
+        receipt.setRawHtml("<html>a portal error page, not a nota</html>");
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        assertFalse(receiptService.retryFromStoredXml(user, receipt.getId()));
+
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+        verify(receiptIngestionService, never()).ingestXml(any(), any());
+    }
+
+    @Test
     void reparse_appliesParsedDataAndSwapsEvidenceWhenRescued() {
         var user = buildUser();
         var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);

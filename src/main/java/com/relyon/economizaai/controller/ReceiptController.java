@@ -14,6 +14,7 @@ import com.relyon.economizaai.dto.request.UpdateItemPersonalRequest;
 import com.relyon.economizaai.dto.request.UpdateReceiptItemRequest;
 import com.relyon.economizaai.dto.response.ChaveExtractionResponse;
 import com.relyon.economizaai.exception.InvalidExportFormatException;
+import com.relyon.economizaai.exception.ReceiptRetryUnavailableException;
 import com.relyon.economizaai.dto.response.BatchResultResponse;
 import com.relyon.economizaai.dto.response.ConfirmReceiptResponse;
 import com.relyon.economizaai.dto.response.ExtractedChavesResponse;
@@ -182,15 +183,20 @@ public class ReceiptController {
     /**
      * "Tentar novamente" on a failed nota — no rescan of the paper needed.
      * Scanned notas re-run the full QR ingestion with the stored payload;
-     * import-origin notas are re-queued for the paced bare-chave reconsult
-     * (previous behavior). Poll {@code GET /receipts/{id}} for the outcome.
+     * import-origin notas are re-queued for the paced bare-chave reconsult;
+     * XML-origin notas re-parse the STORED XML. A nota with no retryable source
+     * (photo, XML never persisted) gets a localized 4xx instead of a lying 202.
+     * Poll {@code GET /receipts/{id}} for the outcome.
      */
     @PostMapping("/{id}/retry")
     public ResponseEntity<Void> retry(@AuthenticationPrincipal User user,
                                       @RequestHeader(value = "X-Device-Fetch", required = false) String deviceFetch,
                                       @PathVariable UUID id) {
-        if (!receiptService.retryFailedScan(user, id, deviceFetch != null)) {
-            receiptImportService.retry(user, List.of(id));
+        var retried = receiptService.retryFailedScan(user, id, deviceFetch != null)
+                || receiptImportService.retry(user, List.of(id)) > 0
+                || receiptService.retryFromStoredXml(user, id);
+        if (!retried) {
+            throw new ReceiptRetryUnavailableException();
         }
         return ResponseEntity.accepted().build();
     }

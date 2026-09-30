@@ -49,6 +49,7 @@ import com.relyon.economizaai.service.priceindex.PriceIndexService;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import com.relyon.economizaai.service.priceindex.PromoDetector;
 import com.relyon.economizaai.service.sefaz.ChaveAcessoParser;
+import com.relyon.economizaai.service.sefaz.NfceXmlParser;
 import com.relyon.economizaai.service.sefaz.ParsedReceipt;
 import com.relyon.economizaai.service.sefaz.ParsedReceiptItem;
 import com.relyon.economizaai.service.sefaz.PrefetchPolicy;
@@ -302,6 +303,32 @@ public class ReceiptService {
         MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
         log.info("retry ok origin=SCAN status=PROCESSING (re-ingestion dispatched)");
         dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload, deviceCapable));
+        return true;
+    }
+
+    /**
+     * Honest retry for notas whose source is a stored, self-contained XML
+     * (e-commerce import): re-parses the STORED content — no SEFAZ fetch, no
+     * reconsult. Returns {@code false} when there's no re-parseable stored XML
+     * (photo receipts, or an XML that never got far enough to be persisted), so
+     * the controller can fail honestly instead of returning a lying 202.
+     */
+    @Transactional
+    public boolean retryFromStoredXml(User user, UUID receiptId) {
+        var receipt = loadOwned(user, receiptId);
+        if (receipt.getStatus() != ReceiptStatus.FAILED_PARSE) {
+            return false;
+        }
+        var storedXml = receipt.getRawHtml();
+        if (storedXml == null || !NfceXmlParser.looksLikeNfeXml(storedXml)) {
+            return false;
+        }
+        receipt.setStatus(ReceiptStatus.PROCESSING);
+        receipt.setParseErrorReason(null);
+        receiptRepository.save(receipt);
+        MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
+        log.info("retry ok origin={} source=stored_xml status=PROCESSING (re-parse dispatched)", receipt.getOrigin());
+        dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingestXml(receiptId, storedXml));
         return true;
     }
 
