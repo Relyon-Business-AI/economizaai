@@ -120,6 +120,23 @@ class GarimpoWatchRunnerTest {
     }
 
     @Test
+    void discountOnlyHitWithoutPriceDoesNotThrowNorRefire() {
+        // qualifies() tolerates a null price when the discount qualifies — the
+        // already-alerted comparison must not NPE on it, and must not re-fire.
+        var priceless = new ProviderProduct("mercadolivre", "MLB111", "Produto MLB111",
+                null, null, 40, "BRL", "https://ml/MLB111", null, null, "LOJA", false);
+        providerReturns(priceless);
+        when(snapshotRecorder.latestSnapshot("mercadolivre", "MLB111"))
+                .thenReturn(Optional.of(GarimpoPriceSnapshot.builder()
+                        .price(null).discountPercent(40).build()));
+
+        var outcome = runner.run(watch(null, 30));
+
+        assertThat(outcome.hits()).isEmpty();
+        verify(webhookClient, never()).notifyHits(any(), anyList());
+    }
+
+    @Test
     void furtherPriceDropRefires() {
         providerReturns(product("MLB111", "220.00", null));
         when(snapshotRecorder.latestSnapshot("mercadolivre", "MLB111"))
