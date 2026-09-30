@@ -144,4 +144,24 @@ class ReceiptImportServiceTest {
         assertThat(failed.getStatus()).isEqualTo(ReceiptStatus.IMPORT_QUEUED);
         assertThat(failed.getParseErrorReason()).isNull();
     }
+
+    @Test
+    void retrySkipsPendingConfirmationReceipt() {
+        // A row that already parsed has items — a reconsult would parse them AGAIN
+        // and duplicate every line, so retry must be restricted to FAILED_PARSE.
+        var receiptId = UUID.randomUUID();
+        var pending = Receipt.builder()
+                .id(receiptId)
+                .household(user.getHousehold())
+                .chaveAcesso(RS_CHAVE)
+                .status(ReceiptStatus.PENDING_CONFIRMATION)
+                .build();
+        when(receiptRepository.findById(receiptId)).thenReturn(Optional.of(pending));
+
+        var requeued = service.retry(user, List.of(receiptId));
+
+        assertThat(requeued).isZero();
+        assertThat(pending.getStatus()).isEqualTo(ReceiptStatus.PENDING_CONFIRMATION);
+        verify(receiptRepository, never()).save(any(Receipt.class));
+    }
 }
