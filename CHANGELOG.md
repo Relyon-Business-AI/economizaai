@@ -16,6 +16,24 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-30 (2) — lote de correções de auditoria (deltas visíveis pro FE)
+
+- **Mediana da comunidade em 2 casas:** `medianPrice` (reference-price, online-reference,
+  best-markets) agora vem arredondado em R$ (antes podia vazar escala 4, ex. `10.075`).
+- **Retry de importação restrito a FAILED_PARSE:** `POST /receipts/import/retry` pula
+  qualquer outra situação (re-parse de PENDING_CONFIRMATION duplicava os itens da nota).
+- **409 de nota duplicada com chave mascarada:** a mensagem `receipt.already.ingested`
+  agora carrega `****<últimos 4>` em vez da chave completa.
+- **Throttle novo:** `POST /households/join` limitado a 10/h por usuário (429 depois) —
+  proteção contra brute-force do código de convite.
+- **E-mails de reset/verificação assíncronos:** o 204 volta na hora; o e-mail sai em
+  background (sem mudança de contrato).
+- **Auto-confirm de PENDING conta do `updatedAt`:** nota antiga resgatada por retry
+  ganha a janela cheia de 6h de revisão antes do auto-confirm.
+- **Postman:** "Extract chaves" corrigido (faltava `/api/v1`); requests e passo E2E de
+  `GET /categorizer/ml/predict` e `POST /categorizer/retrain` removidos (endpoints
+  não existem).
+
 ## 2026-09-30 — card Infosimples completo (saldo + consumo cobrado + franquia)
 
 - `GET /admin/costs` agora traz também `infosimplesConsumoMes` (o que o mês
