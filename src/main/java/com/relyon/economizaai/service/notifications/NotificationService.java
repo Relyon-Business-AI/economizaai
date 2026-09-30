@@ -11,6 +11,8 @@ import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.EnumMap;
@@ -96,6 +98,38 @@ public class NotificationService {
         notification.setDeliveredAt(result.delivered() ? LocalDateTime.now() : null);
         notification.setFailureReason(result.failureReason());
         return notificationRepository.save(notification);
+    }
+
+    /**
+     * Defer {@link #notify} to AFTER the surrounding transaction commits, so the
+     * outbound dispatch (SMTP/Expo/Twilio) never runs inside a DB transaction —
+     * and a rolled-back business operation never notifies anyone. Callers build
+     * the payload inside their transaction (the COLLECT half); the dispatch and
+     * the Notification row land after commit in their own short transactions.
+     * Without an active transaction it dispatches immediately. Fire-and-forget:
+     * callers that need the saved row must call {@link #notify} directly.
+     */
+    public void notifyAfterCommit(NotificationPayload payload) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    dispatchDeferred(payload);
+                }
+            });
+        } else {
+            dispatchDeferred(payload);
+        }
+    }
+
+    /** After-commit dispatch never propagates — the business result is already committed. */
+    private void dispatchDeferred(NotificationPayload payload) {
+        try {
+            notify(payload);
+        } catch (RuntimeException ex) {
+            log.warn("notification.after_commit_failed user={} type={} reason={}",
+                    payload.user().getEmail(), payload.type(), ex.getMessage());
+        }
     }
 
     private NotificationChannel resolveChannel(User user, NotificationType type) {

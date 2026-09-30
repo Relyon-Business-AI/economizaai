@@ -41,4 +41,13 @@ public class PrefetchPolicy {
             throw new PrefetchedUnsupportedException(uf.name());
         }
     }
+
+    /**
+     * True when the UF is served by on-device fetch (its portal blocks our
+     * datacenter IP by design). Such UFs never record server-side EXHAUSTED
+     * evidence and are exempt from the experimental evidence cap at submit.
+     */
+    public boolean isDeviceFetchUf(UnidadeFederativa uf) {
+        return allowedUfs.contains(uf);
+    }
 }

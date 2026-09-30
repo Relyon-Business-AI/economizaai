@@ -7148,6 +7148,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
+									"if (!pm.collectionVariables.get('e2eReceiptId')) { pm.test.skip('No receipt id — skipping'); return; }",
 									"pm.test('GET /receipts/export -> 200 text/csv', function () {",
 									"    pm.response.to.have.status(200);",
 									"    pm.expect(pm.response.headers.get('Content-Type')).to.include('text/csv');",
@@ -9685,6 +9686,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
+									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id — skipping'); return; }",
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"var d = pm.response.json();",
 									"pm.test('Migrated one product', function () { pm.expect(d.migrated).to.eql(1); });"
@@ -11382,6 +11384,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
+									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id — skipping'); return; }",
 									"pm.test(pm.info.requestName + ' — 200/201', function () {",
 									"    pm.expect(pm.response.code).to.be.below(300);",
 									"});",

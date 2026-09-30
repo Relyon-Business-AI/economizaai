@@ -56,6 +56,11 @@ public class GlobalExceptionHandler {
         return respond(ex, HttpStatus.UNAUTHORIZED, "Invalid social-login token");
     }
 
+    @ExceptionHandler(SocialEmailUnverifiedException.class)
+    public ResponseEntity<ErrorResponse> handleSocialEmailUnverified(SocialEmailUnverifiedException ex) {
+        return respond(ex, HttpStatus.UNAUTHORIZED, "Social login with unverified provider e-mail");
+    }
+
     @ExceptionHandler(InvalidWebhookSecretException.class)
     public ResponseEntity<ErrorResponse> handleInvalidWebhookSecret(InvalidWebhookSecretException ex) {
         return respond(ex, HttpStatus.UNAUTHORIZED, "Invalid webhook secret");

@@ -15,12 +15,28 @@ public interface StateIngestionAttemptRepository extends JpaRepository<StateInge
 
     boolean existsByUfAndOutcome(UnidadeFederativa uf, StateIngestionOutcome outcome);
 
-    /** How many terminal captures (evidence samples) we already have for a UF — drives the
-     * experimental spend cap: once we have enough, stop attempting/paying for that state. */
-    long countByUfAndOutcome(UnidadeFederativa uf, StateIngestionOutcome outcome);
+    /** The UF's terminal captures (evidence samples) — drive the experimental spend cap:
+     * enough failures spread across distinct users and days stop the spending on that state. */
+    @Query("""
+            select attempt.userId as userId, attempt.createdAt as createdAt
+            from StateIngestionAttempt attempt
+            where attempt.uf = :uf and attempt.outcome = 'EXHAUSTED'
+            """)
+    List<ExhaustedEvidenceSample> findExhaustedEvidence(UnidadeFederativa uf);
 
-    long countByUfAndOutcomeAndCreatedAtGreaterThan(
-            UnidadeFederativa uf, StateIngestionOutcome outcome, OffsetDateTime after);
+    /** As {@link #findExhaustedEvidence} but only samples recorded after {@code after}
+     * (the UF's most recent success — older evidence is voided). */
+    @Query("""
+            select attempt.userId as userId, attempt.createdAt as createdAt
+            from StateIngestionAttempt attempt
+            where attempt.uf = :uf and attempt.outcome = 'EXHAUSTED' and attempt.createdAt > :after
+            """)
+    List<ExhaustedEvidenceSample> findExhaustedEvidenceAfter(UnidadeFederativa uf, OffsetDateTime after);
+
+    interface ExhaustedEvidenceSample {
+        UUID getUserId();
+        OffsetDateTime getCreatedAt();
+    }
 
     /** When the UF last succeeded through any layer — a success voids older failure evidence. */
     @Query("""

@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.notifications;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.model.DealSurfaceState;
 import com.relyon.economizaai.model.Receipt;
@@ -19,7 +20,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -81,13 +81,14 @@ public class SavingsAttributionService {
                 .toList();
         if (householdUserIds.isEmpty()) return;
 
-        var purchaseInstant = receipt.getIssuedAt().atOffset(ZoneOffset.UTC);
+        // issuedAt is Brazil-local wall clock (SEFAZ) — anchor it in the product zone.
+        var purchaseInstant = receipt.getIssuedAt().atZone(BrazilClock.ZONE).toOffsetDateTime();
         var windowStart = purchaseInstant.minusDays(properties.getAttribution().getWindowDays());
 
         var conversions = 0;
         var savedTotal = BigDecimal.ZERO;
         for (var item : receipt.getItems()) {
-            var saved = attributeItem(receipt, item, householdUserIds, windowStart);
+            var saved = attributeItem(receipt, item, householdUserIds, windowStart, purchaseInstant);
             if (saved != null) {
                 conversions++;
                 savedTotal = savedTotal.add(saved);
@@ -99,14 +100,17 @@ public class SavingsAttributionService {
 
     /** Returns the realized savings when this item converted a surfaced deal, else null. */
     private BigDecimal attributeItem(Receipt receipt, ReceiptItem item,
-                                     List<UUID> householdUserIds, OffsetDateTime windowStart) {
+                                     List<UUID> householdUserIds, OffsetDateTime windowStart,
+                                     OffsetDateTime purchaseInstant) {
         if (item.isExcluded() || item.isExcludedFromPersonal() || item.getProduct() == null
                 || item.getUnitPrice() == null || item.getQuantity() == null) {
             return null;
         }
         var productId = item.getProduct().getId();
+        // Bounded on BOTH sides: within the attribution window AND surfaced at or
+        // before the purchase — a deal aired after the buy earns no credit.
         var candidates = surfaceStateRepository.findAttributable(
-                householdUserIds, productId, receipt.getCnpjEmitente(), windowStart);
+                householdUserIds, productId, receipt.getCnpjEmitente(), windowStart, purchaseInstant);
         if (candidates.isEmpty()) return null;
 
         var surface = candidates.get(0); // newest qualifying surfacing

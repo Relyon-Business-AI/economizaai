@@ -105,7 +105,7 @@ class NotificationRuleEngineTest {
         engine.evaluate(List.of(observation(new BigDecimal("5.49"))), CONTRIBUTOR_HOUSEHOLD);
 
         var captor = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationService).notify(captor.capture());
+        verify(notificationService).notifyAfterCommit(captor.capture());
         assertEquals(NotificationType.PRICE_DROP, captor.getValue().type());
         // localized to the recipient's default (pt) locale
         assertTrue(captor.getValue().title().startsWith("Preço baixou:"), captor.getValue().title());
@@ -123,7 +123,7 @@ class NotificationRuleEngineTest {
         engine.evaluate(List.of(observation(new BigDecimal("5.49"))), CONTRIBUTOR_HOUSEHOLD);
 
         var captor = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationService).notify(captor.capture());
+        verify(notificationService).notifyAfterCommit(captor.capture());
         assertTrue(captor.getValue().title().startsWith("Price drop:"), captor.getValue().title());
         assertTrue(captor.getValue().body().contains("You asked to be alerted below"), captor.getValue().body());
     }
@@ -143,7 +143,7 @@ class NotificationRuleEngineTest {
         engine.evaluate(List.of(namelessMarket), CONTRIBUTOR_HOUSEHOLD);
 
         var captor = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationService).notify(captor.capture());
+        verify(notificationService).notifyAfterCommit(captor.capture());
         // The fallback market name follows the recipient's locale — never hardcoded pt.
         assertTrue(captor.getValue().body().contains("a nearby market"), captor.getValue().body());
     }
@@ -156,7 +156,7 @@ class NotificationRuleEngineTest {
 
         engine.evaluate(List.of(observation(new BigDecimal("6.50"))), CONTRIBUTOR_HOUSEHOLD);
 
-        verify(notificationService, never()).notify(any());
+        verify(notificationService, never()).notifyAfterCommit(any());
     }
 
     @Test
@@ -168,7 +168,7 @@ class NotificationRuleEngineTest {
 
         engine.evaluate(List.of(observation(new BigDecimal("5.00"))), CONTRIBUTOR_HOUSEHOLD);
 
-        verify(notificationService, never()).notify(any());
+        verify(notificationService, never()).notifyAfterCommit(any());
     }
 
     @Test
@@ -179,7 +179,7 @@ class NotificationRuleEngineTest {
 
         engine.evaluate(List.of(observation(new BigDecimal("5.00"))), OWNER_HOUSEHOLD);
 
-        verify(notificationService, never()).notify(any());
+        verify(notificationService, never()).notifyAfterCommit(any());
     }
 
     @Test
@@ -193,6 +193,6 @@ class NotificationRuleEngineTest {
 
         engine.evaluate(List.of(observation(new BigDecimal("5.00"))), CONTRIBUTOR_HOUSEHOLD);
 
-        verify(notificationService, never()).notify(any());
+        verify(notificationService, never()).notifyAfterCommit(any());
     }
 }

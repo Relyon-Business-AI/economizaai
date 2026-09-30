@@ -12,6 +12,7 @@ import com.relyon.economizaai.repository.DealSurfaceStateRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.notifications.NotificationEventService.RecordContext;
+import com.relyon.economizaai.time.BrazilClock;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,6 +34,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -66,7 +68,7 @@ class SavingsAttributionServiceTest {
     void recordsConvertedEventWithPositiveSavingsAndStampsSurfaceRow() {
         var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("2"));
         var surface = surfaceRow(OffsetDateTime.now().minusDays(2), new BigDecimal("10.00"));
-        when(surfaceStateRepository.findAttributable(anyList(), eq(PRODUCT_ID), eq(CNPJ), any()))
+        when(surfaceStateRepository.findAttributable(anyList(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
                 .thenReturn(List.of(surface));
         // Prior purchase at 10.00 → savings = (10.00 - 8.00) * 2 = 4.00.
         when(receiptItemRepository.findHouseholdHistoryForProduct(eq(PRODUCT_ID), any()))
@@ -89,7 +91,7 @@ class SavingsAttributionServiceTest {
     void fallsBackToSurfaceBaselineWhenNoPriorPurchase() {
         var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
         var surface = surfaceRow(OffsetDateTime.now().minusDays(1), new BigDecimal("12.00"));
-        when(surfaceStateRepository.findAttributable(anyList(), eq(PRODUCT_ID), eq(CNPJ), any()))
+        when(surfaceStateRepository.findAttributable(anyList(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
                 .thenReturn(List.of(surface));
         when(receiptItemRepository.findHouseholdHistoryForProduct(eq(PRODUCT_ID), any()))
                 .thenReturn(List.of());
@@ -105,7 +107,7 @@ class SavingsAttributionServiceTest {
     @Test
     void noSurfaceRow_recordsNothing() {
         var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
-        when(surfaceStateRepository.findAttributable(anyList(), eq(PRODUCT_ID), eq(CNPJ), any()))
+        when(surfaceStateRepository.findAttributable(anyList(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
                 .thenReturn(List.of());
 
         service.attribute(receipt);
@@ -119,7 +121,7 @@ class SavingsAttributionServiceTest {
         // The repository query enforces the window; an outside-window surfacing simply
         // isn't returned, so attribution finds nothing.
         var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
-        when(surfaceStateRepository.findAttributable(anyList(), eq(PRODUCT_ID), eq(CNPJ), any()))
+        when(surfaceStateRepository.findAttributable(anyList(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
                 .thenReturn(List.of());
 
         service.attribute(receipt);
@@ -131,7 +133,7 @@ class SavingsAttributionServiceTest {
     void paidNotBelowPrevious_recordsNothing() {
         var receipt = receiptWithItem(new BigDecimal("10.00"), new BigDecimal("1"));
         var surface = surfaceRow(OffsetDateTime.now().minusDays(1), new BigDecimal("9.00"));
-        when(surfaceStateRepository.findAttributable(anyList(), eq(PRODUCT_ID), eq(CNPJ), any()))
+        when(surfaceStateRepository.findAttributable(anyList(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
                 .thenReturn(List.of(surface));
         // Prior paid 10.00, now paying 10.00 → no savings.
         when(receiptItemRepository.findHouseholdHistoryForProduct(eq(PRODUCT_ID), any()))
@@ -147,7 +149,7 @@ class SavingsAttributionServiceTest {
     void usesLatestPriorPurchaseAndIgnoresThisReceipt() {
         var receipt = receiptWithItem(new BigDecimal("7.00"), new BigDecimal("1"));
         var surface = surfaceRow(OffsetDateTime.now().minusDays(1), new BigDecimal("99.00"));
-        when(surfaceStateRepository.findAttributable(anyList(), eq(PRODUCT_ID), eq(CNPJ), any()))
+        when(surfaceStateRepository.findAttributable(anyList(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
                 .thenReturn(List.of(surface));
         // Two prior purchases + a row that is THIS receipt's date (must be ignored).
         when(receiptItemRepository.findHouseholdHistoryForProduct(eq(PRODUCT_ID), any()))
@@ -165,13 +167,61 @@ class SavingsAttributionServiceTest {
     }
 
     @Test
+    void boundsCandidatesToSurfacingsAtOrBeforeThePurchaseInstant() {
+        // The no-post-purchase-credit rule: the query upper bound must be the
+        // purchase instant (issuedAt anchored in the Brasília zone), so a deal
+        // surfaced AFTER the buy can never be credited. The lower bound stays
+        // the attribution window before it.
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        when(surfaceStateRepository.findAttributable(anyList(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of());
+
+        service.attribute(receipt);
+
+        var sinceCaptor = ArgumentCaptor.forClass(OffsetDateTime.class);
+        var untilCaptor = ArgumentCaptor.forClass(OffsetDateTime.class);
+        verify(surfaceStateRepository).findAttributable(
+                anyList(), eq(PRODUCT_ID), eq(CNPJ), sinceCaptor.capture(), untilCaptor.capture());
+        var expectedPurchaseInstant = receipt.getIssuedAt().atZone(BrazilClock.ZONE).toOffsetDateTime();
+        assertEquals(expectedPurchaseInstant, untilCaptor.getValue());
+        assertEquals(expectedPurchaseInstant.minusDays(14), sinceCaptor.getValue());
+    }
+
+    @Test
+    void surfacingBeforePurchase_isCredited_afterPurchaseIsNot() {
+        // Contract test over the query result: only rows the bounded query returns
+        // (surfaced at/before purchase) convert; when it returns none — the
+        // post-purchase surfacing case — nothing is credited.
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        var surfacedBeforePurchase = surfaceRow(
+                receipt.getIssuedAt().atZone(BrazilClock.ZONE).toOffsetDateTime().minusHours(4),
+                new BigDecimal("12.00"));
+        when(surfaceStateRepository.findAttributable(anyList(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of(surfacedBeforePurchase));
+        when(receiptItemRepository.findHouseholdHistoryForProduct(eq(PRODUCT_ID), any()))
+                .thenReturn(List.of());
+
+        service.attribute(receipt);
+        verify(eventService).record(eq(buyer), eq(NotificationEventType.CONVERTED), any());
+
+        // Post-purchase surfacing: excluded by the query's upper bound → empty result.
+        var laterReceipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        when(surfaceStateRepository.findAttributable(anyList(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of());
+
+        service.attribute(laterReceipt);
+
+        verify(eventService, times(1)).record(any(), any(), any());
+    }
+
+    @Test
     void excludedItem_recordsNothing() {
         var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
         receipt.getItems().get(0).setExcluded(true);
 
         service.attribute(receipt);
 
-        verify(surfaceStateRepository, never()).findAttributable(any(), any(), any(), any());
+        verify(surfaceStateRepository, never()).findAttributable(any(), any(), any(), any(), any());
         verify(eventService, never()).record(any(), any(), any());
     }
 

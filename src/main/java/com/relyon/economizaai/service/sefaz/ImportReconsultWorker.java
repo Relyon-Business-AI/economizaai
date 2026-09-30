@@ -52,6 +52,15 @@ public class ImportReconsultWorker {
     @Scheduled(fixedDelayString = "${economizaai.import.worker.delay-ms:8000}")
     public void processQueue() {
         if (!enabled) return;
+        dispatchQueuedBatch();
+        // Completion sweep on the TICK, not per-nota: the reconsults run
+        // asynchronously, so a check fired right after dispatch always saw the
+        // row still PROCESSING and the "import finished" ping never went out.
+        // The sweep also catches notas finished off-worker (XML import, sweeper).
+        importCompletionNotifier.notifyCompletedBatches();
+    }
+
+    private void dispatchQueuedBatch() {
         var inFlight = receiptRepository.countByStatus(ReceiptStatus.PROCESSING);
         var slots = (int) (maxInFlight - inFlight);
         if (slots <= 0) return;
@@ -77,8 +86,6 @@ public class ImportReconsultWorker {
             } catch (RuntimeException ex) {
                 receiptIngestionService.markFailed(receiptId, ex);
             }
-            // Ping the user once their whole batch is done (no more in-flight import notas).
-            importCompletionNotifier.notifyIfBatchComplete(userId);
         }
         if (dispatched > 0) {
             log.info("import.worker dispatched={} inFlightBefore={}", dispatched, inFlight);

@@ -29,6 +29,12 @@ import java.util.UUID;
  * (grantor) and notify them. If they APPROVE, the grantor's data is copied into the
  * requester's destination household; if DENIED/EXPIRED, nothing crosses over. The
  * leave itself never blocks — the leaver always gets their OWN data right away.
+ *
+ * <p>Notifications are collected inside the transaction but dispatched only after
+ * it commits ({@link NotificationService#notifyAfterCommit}) — the outbound
+ * Expo/SMTP call never pins the transaction's connection, and a rolled-back
+ * decision notifies nobody. Texts are localized off-request via the recipient's
+ * {@code User.locale}.
  */
 @Slf4j
 @Service
@@ -41,6 +47,7 @@ public class DataShareConsentService {
     private final UserRepository userRepository;
     private final HouseholdMergeService mergeService;
     private final NotificationService notificationService;
+    private final LocalizedMessageService messageService;
 
     /**
      * Record a request for {@code requester} to take {@code grantor}'s data from
@@ -62,10 +69,10 @@ public class DataShareConsentService {
                 .status(ConsentStatus.PENDING)
                 .expiresAt(LocalDateTime.now().plusDays(CONSENT_TTL_DAYS))
                 .build());
-        notificationService.notify(new NotificationPayload(grantor, NotificationType.SYSTEM,
-                "Pedido de dados compartilhados",
-                requester.getName() + " quer levar uma cópia dos seus dados ao sair do domicílio. "
-                        + "Você pode permitir ou recusar.", null));
+        var grantorLocale = LocalizedMessageService.toLocale(grantor.getLocale());
+        notificationService.notifyAfterCommit(new NotificationPayload(grantor, NotificationType.SYSTEM,
+                messageService.translate("consent.requested.title", grantorLocale),
+                messageService.translate("consent.requested.body", grantorLocale, requester.getName()), null));
         log.info("consent.requested id={} requester={} grantor={} scope={}",
                 consent.getId(), LogMasker.email(requester.getEmail()), LogMasker.email(grantor.getEmail()), scope);
         return consent;
@@ -87,9 +94,11 @@ public class DataShareConsentService {
         // destination. The grantor keeps their originals (copy, not move).
         var copied = mergeService.copyUserData(
                 consent.getGrantor().getId(), consent.getHousehold(), consent.getDestinationHousehold());
-        notificationService.notify(new NotificationPayload(consent.getRequester(), NotificationType.SYSTEM,
-                "Dados compartilhados aprovados",
-                consent.getGrantor().getName() + " permitiu que você levasse uma cópia dos dados.", null));
+        var requesterLocale = LocalizedMessageService.toLocale(consent.getRequester().getLocale());
+        notificationService.notifyAfterCommit(new NotificationPayload(consent.getRequester(), NotificationType.SYSTEM,
+                messageService.translate("consent.approved.title", requesterLocale),
+                messageService.translate("consent.approved.body", requesterLocale, consent.getGrantor().getName()),
+                null));
         log.info("consent.approved id={} copied={}", consent.getId(), copied);
         return consent;
     }
@@ -100,9 +109,11 @@ public class DataShareConsentService {
         consent.setStatus(ConsentStatus.DENIED);
         consent.setResolvedAt(LocalDateTime.now());
         consentRepository.save(consent);
-        notificationService.notify(new NotificationPayload(consent.getRequester(), NotificationType.SYSTEM,
-                "Pedido de dados recusado",
-                consent.getGrantor().getName() + " não permitiu o compartilhamento dos dados.", null));
+        var requesterLocale = LocalizedMessageService.toLocale(consent.getRequester().getLocale());
+        notificationService.notifyAfterCommit(new NotificationPayload(consent.getRequester(), NotificationType.SYSTEM,
+                messageService.translate("consent.denied.title", requesterLocale),
+                messageService.translate("consent.denied.body", requesterLocale, consent.getGrantor().getName()),
+                null));
         log.info("consent.denied id={}", consent.getId());
         return consent;
     }

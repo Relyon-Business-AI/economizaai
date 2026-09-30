@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.dto.response.LeaderboardResponse;
 import com.relyon.economizaai.dto.response.LeaderboardResponse.Entry;
 import com.relyon.economizaai.model.User;
@@ -12,8 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -107,7 +106,7 @@ public class LeaderboardService {
     }
 
     private List<Row> ranked(int windowDays) {
-        var since = LocalDate.now().minusDays(windowDays - 1L).atStartOfDay();
+        var since = BrazilClock.today().minusDays(windowDays - 1L).atStartOfDay();
         var rows = new ArrayList<Row>();
         for (var raw : receiptItemRepository.discountHuntersSince(since)) {
             rows.add(new Row(toUuid(raw[0]), ((Number) raw[1]).longValue(), scale((BigDecimal) raw[2])));

@@ -3,6 +3,7 @@ package com.relyon.economizaai.service.auth.oauth;
 import com.relyon.economizaai.dto.request.AppleLoginRequest;
 import com.relyon.economizaai.dto.request.GoogleLoginRequest;
 import com.relyon.economizaai.exception.InvalidOAuthTokenException;
+import com.relyon.economizaai.exception.SocialEmailUnverifiedException;
 import com.relyon.economizaai.legal.LegalDocuments;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
@@ -239,6 +240,80 @@ class SocialLoginServiceTest {
                 () -> socialLoginService.loginWithApple(request));
 
         assertEquals(AuthProvider.LOCAL, local.getAuthProvider());
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void loginWithApple_unverifiedEmailMatchingExistingGoogleAccount_rejected() {
+        // Cross-provider email match WITHOUT a verified e-mail claim = takeover
+        // vector — anyone registering the address at Apple could log into the
+        // Google-created account. Must be refused with the localized error.
+        var googleAccount = User.builder()
+                .id(UUID.randomUUID())
+                .name("Maria")
+                .email("maria@example.com")
+                .authProvider(AuthProvider.GOOGLE)
+                .providerSubject("google-sub-1")
+                .build();
+        when(appleTokenVerifier.verify("identity-token", "Maria"))
+                .thenReturn(new AppleTokenVerifier.AppleClaims("apple-sub-9", "maria@example.com", false, "Maria"));
+        when(userRepository.findByAuthProviderAndProviderSubject(AuthProvider.APPLE, "apple-sub-9"))
+                .thenReturn(Optional.empty());
+        when(userRepository.findByEmail("maria@example.com")).thenReturn(Optional.of(googleAccount));
+        var request = new AppleLoginRequest("identity-token", "Maria", null);
+
+        assertThrows(SocialEmailUnverifiedException.class,
+                () -> socialLoginService.loginWithApple(request));
+
+        assertEquals(AuthProvider.GOOGLE, googleAccount.getAuthProvider());
+        assertEquals("google-sub-1", googleAccount.getProviderSubject());
+        verify(userRepository, never()).save(any(User.class));
+        verify(loginActivityRecorder, never()).recordLogin(any(), any());
+    }
+
+    @Test
+    void loginWithApple_verifiedEmailMatchingExistingGoogleAccount_logsIn() {
+        // The legit "created with Google, signing in with Apple" case keeps working.
+        var googleAccount = User.builder()
+                .id(UUID.randomUUID())
+                .name("Maria")
+                .email("maria@example.com")
+                .authProvider(AuthProvider.GOOGLE)
+                .providerSubject("google-sub-1")
+                .build();
+        when(appleTokenVerifier.verify("identity-token", "Maria"))
+                .thenReturn(new AppleTokenVerifier.AppleClaims("apple-sub-9", "maria@example.com", true, "Maria"));
+        when(userRepository.findByAuthProviderAndProviderSubject(AuthProvider.APPLE, "apple-sub-9"))
+                .thenReturn(Optional.empty());
+        when(userRepository.findByEmail("maria@example.com")).thenReturn(Optional.of(googleAccount));
+        stubTokenIssue();
+
+        var response = socialLoginService.loginWithApple(new AppleLoginRequest("identity-token", "Maria", null));
+
+        assertEquals("jwt-token", response.token());
+        verify(householdService, never()).createSoloHousehold();
+        verify(loginActivityRecorder).recordLogin(googleAccount, null);
+    }
+
+    @Test
+    void loginWithGoogle_unverifiedEmailMatchingSameProviderDifferentSubject_rejected() {
+        var googleAccount = User.builder()
+                .id(UUID.randomUUID())
+                .name("Maria")
+                .email("maria@example.com")
+                .authProvider(AuthProvider.GOOGLE)
+                .providerSubject("google-sub-1")
+                .build();
+        when(googleTokenVerifier.verify("id-token"))
+                .thenReturn(new GoogleTokenVerifier.GoogleClaims("google-sub-2", "maria@example.com", false, "Maria"));
+        when(userRepository.findByAuthProviderAndProviderSubject(AuthProvider.GOOGLE, "google-sub-2"))
+                .thenReturn(Optional.empty());
+        when(userRepository.findByEmail("maria@example.com")).thenReturn(Optional.of(googleAccount));
+        var request = new GoogleLoginRequest("id-token", null);
+
+        assertThrows(SocialEmailUnverifiedException.class,
+                () -> socialLoginService.loginWithGoogle(request));
+
         verify(userRepository, never()).save(any(User.class));
     }
 

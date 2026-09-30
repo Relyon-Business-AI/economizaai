@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.consumption;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.dto.request.LogManualPurchaseRequest;
 import com.relyon.economizaai.dto.request.SnoozeProductRequest;
@@ -78,7 +79,7 @@ public class ConsumptionIntelligenceService {
         if (!consumption.isEnabled()) return List.of();
 
         var householdId = user.getHousehold().getId();
-        var lookbackCutoff = LocalDateTime.now().minusDays(consumption.getHistoryLookbackDays());
+        var lookbackCutoff = BrazilClock.nowDateTime().minusDays(consumption.getHistoryLookbackDays());
         var byProduct = collectPurchases(householdId, lookbackCutoff);
         if (byProduct.isEmpty()) {
             log.debug("consumption.predict.empty reason=no_history household={}", householdId);
@@ -125,7 +126,7 @@ public class ConsumptionIntelligenceService {
     public void snooze(User user, UUID productId, SnoozeProductRequest request) {
         var product = productRepository.findById(productId).orElseThrow(ProductNotFoundException::new);
         var householdId = user.getHousehold().getId();
-        var until = LocalDateTime.now().plusDays(request.days());
+        var until = BrazilClock.nowDateTime().plusDays(request.days());
         var snooze = snoozeRepository.findByHouseholdIdAndProductId(householdId, productId)
                 .orElseGet(() -> ConsumptionSnooze.builder()
                         .household(user.getHousehold())
@@ -146,7 +147,7 @@ public class ConsumptionIntelligenceService {
     @Transactional
     public void logManualPurchase(User user, LogManualPurchaseRequest request) {
         var product = productRepository.findById(request.productId()).orElseThrow(ProductNotFoundException::new);
-        var purchasedAt = request.purchasedAt() != null ? request.purchasedAt() : LocalDateTime.now();
+        var purchasedAt = request.purchasedAt() != null ? request.purchasedAt() : BrazilClock.nowDateTime();
         manualPurchaseRepository.save(ManualPurchase.builder()
                 .household(user.getHousehold())
                 .user(user)
@@ -210,7 +211,7 @@ public class ConsumptionIntelligenceService {
         var adjustedIntervalDays = avgIntervalDays * quantityMultiplier(lastEvent.quantity(), avgQty);
 
         var nextPurchase = lastEvent.date().plusDays(Math.round(adjustedIntervalDays));
-        var daysUntilNextPurchase = ChronoUnit.DAYS.between(LocalDate.now(), nextPurchase);
+        var daysUntilNextPurchase = ChronoUnit.DAYS.between(BrazilClock.today(), nextPurchase);
 
         return new ConsumptionPredictionResponse(
                 lastEvent.product().getId(),

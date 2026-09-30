@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.priceindex;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.model.MarketLocation;
 import com.relyon.economizaai.model.PriceObservation;
@@ -187,7 +188,7 @@ public class PriceIndexService {
                 .quantity(item.getQuantity())
                 .packSize(product.getPackSize())
                 .packUnit(product.getPackUnit())
-                .observedAt(receipt.getIssuedAt() != null ? receipt.getIssuedAt() : LocalDateTime.now())
+                .observedAt(receipt.getIssuedAt() != null ? receipt.getIssuedAt() : BrazilClock.nowDateTime())
                 .promoFlag(item.isNfcePromoFlag())
                 .normalizedUnitPrice(normalized.map(UnitConverter.NormalizedPrice::pricePerBaseUnit).orElse(null))
                 .normalizedUnit(normalized.map(n -> n.baseUnit().name()).orElse(null))
@@ -211,7 +212,7 @@ public class PriceIndexService {
     @Transactional(readOnly = true)
     public ReferencePrice referencePrice(UUID productId, String marketCnpj) {
         if (!properties.getCollaborative().isEnabled()) return ReferencePrice.empty();
-        var since = LocalDateTime.now().minusDays(properties.getCollaborative().getLookbackDays());
+        var since = BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getLookbackDays());
         var observations = observationRepository.findRecentByProductAndMarket(productId, marketCnpj, since);
         var distinctHouseholds = observations.isEmpty()
                 ? 0L
@@ -239,7 +240,7 @@ public class PriceIndexService {
     @Transactional(readOnly = true)
     public ReferencePrice onlineReferencePrice(UUID productId) {
         if (!properties.getCollaborative().isEnabled()) return ReferencePrice.empty();
-        var since = LocalDateTime.now().minusDays(properties.getCollaborative().getLookbackDays());
+        var since = BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getLookbackDays());
         var observations = observationRepository.findRecentOnlineByProduct(productId, since);
         var distinctHouseholds = observations.isEmpty()
                 ? 0L
@@ -261,7 +262,7 @@ public class PriceIndexService {
                                             BigDecimal userLatitude, BigDecimal userLongitude, Double radiusKm,
                                             Set<String> watchedCnpjs) {
         if (!properties.getCollaborative().isEnabled()) return List.of();
-        var since = LocalDateTime.now().minusDays(properties.getCollaborative().getLookbackDays());
+        var since = BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getLookbackDays());
         var observations = observationRepository.findRecentByProduct(productId, since);
         if (observations.isEmpty()) return List.of();
 

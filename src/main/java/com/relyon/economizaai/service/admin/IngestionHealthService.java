@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.admin;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.dto.response.IngestionHealthResponse;
 import com.relyon.economizaai.dto.response.IngestionHealthResponse.ErrorLine;
 import com.relyon.economizaai.dto.response.IngestionHealthResponse.UfOutcomeLine;
@@ -13,7 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -39,7 +39,7 @@ public class IngestionHealthService {
     @Transactional(readOnly = true)
     public IngestionHealthResponse report(int days, boolean includeInternal) {
         var windowDays = Math.max(1, days);
-        var since = LocalDate.now().minusDays(windowDays - 1L).atStartOfDay();
+        var since = BrazilClock.today().minusDays(windowDays - 1L).atStartOfDay();
 
         var byStatus = new LinkedHashMap<String, Long>();
         for (var row : receiptRepository.statusBreakdownSince(since, includeInternal)) {

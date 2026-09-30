@@ -47,6 +47,30 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
 
     long countByUserIdAndOriginAndStatus(UUID userId, ReceiptOrigin origin, ReceiptStatus status);
 
+    /**
+     * Users with import results newer than their completion-notification claim —
+     * the candidates the worker's completion sweep checks each tick. The per-user
+     * "batch really finished" (no in-flight rows) check happens afterwards, in the
+     * claim transaction.
+     */
+    @Query("""
+        SELECT DISTINCT r.user.id FROM Receipt r
+        WHERE r.origin = 'IMPORT'
+          AND r.status IN ('PENDING_CONFIRMATION', 'FAILED_PARSE')
+          AND (r.user.importCompletionNotifiedAt IS NULL
+               OR r.updatedAt > r.user.importCompletionNotifiedAt)
+    """)
+    List<UUID> findUsersWithUnnotifiedImportResults();
+
+    /** updatedAt of the user's newest terminal import nota — the completion claim value. */
+    @Query("""
+        SELECT MAX(r.updatedAt) FROM Receipt r
+        WHERE r.user.id = :userId
+          AND r.origin = 'IMPORT'
+          AND r.status IN ('PENDING_CONFIRMATION', 'FAILED_PARSE')
+    """)
+    LocalDateTime latestTerminalImportUpdatedAt(@Param("userId") UUID userId);
+
     // Deletion guard: a household must NOT be deleted while any receipt still points
     // at it as current home OR as origin (parked data awaiting restore on split).
     boolean existsByHouseholdId(UUID householdId);

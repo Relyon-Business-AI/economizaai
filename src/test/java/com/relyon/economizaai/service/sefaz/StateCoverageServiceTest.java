@@ -6,6 +6,7 @@ import com.relyon.economizaai.model.enums.StateIngestionStrategy;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.StateIngestionAttemptRepository;
 import com.relyon.economizaai.service.ContactService;
+import com.relyon.economizaai.time.BrazilClock;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -16,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -41,35 +43,73 @@ class StateCoverageServiceTest {
 
     @org.junit.jupiter.api.BeforeEach
     void setUp() {
-        // min-failures=5, window-hours=6, max-evidence-per-uf=3 (mirrors the config defaults)
-        service = new StateCoverageService(repository, contactService, 5, 6, 3);
+        // min-failures=5, window-hours=6, evidence rule 5 user-days / 2 users / 2 days
+        // (mirrors the config defaults)
+        service = new StateCoverageService(repository, contactService, 5, 6, 5, 2, 2);
+    }
+
+    private static final UUID USER_A = UUID.randomUUID();
+    private static final UUID USER_B = UUID.randomUUID();
+
+    /** An EXHAUSTED evidence sample at {@code daysAgo} Brasília days in the past. */
+    private StateIngestionAttemptRepository.ExhaustedEvidenceSample sample(UUID userId, int daysAgo) {
+        var createdAt = OffsetDateTime.now(BrazilClock.ZONE).minusDays(daysAgo).withHour(12);
+        return new StateIngestionAttemptRepository.ExhaustedEvidenceSample() {
+            @Override public UUID getUserId() { return userId; }
+            @Override public OffsetDateTime getCreatedAt() { return createdAt; }
+        };
     }
 
     @Test
-    void hasEnoughEvidence_trueOnceExhaustedCountReachesCap() {
-        when(repository.countByUfAndOutcome(UnidadeFederativa.BA, StateIngestionOutcome.EXHAUSTED))
-                .thenReturn(3L);
+    void hasEnoughEvidence_blocksAtFiveUserDaysAcrossTwoUsersAndTwoDays() {
+        when(repository.findExhaustedEvidence(UnidadeFederativa.BA)).thenReturn(List.of(
+                sample(USER_A, 0), sample(USER_A, 1), sample(USER_A, 2),
+                sample(USER_B, 0), sample(USER_B, 1)));
         assertTrue(service.hasEnoughEvidence(UnidadeFederativa.BA));
     }
 
     @Test
-    void hasEnoughEvidence_falseWhileBelowCap() {
-        when(repository.countByUfAndOutcome(UnidadeFederativa.BA, StateIngestionOutcome.EXHAUSTED))
-                .thenReturn(2L);
+    void hasEnoughEvidence_fourUserDays_noBlock() {
+        when(repository.findExhaustedEvidence(UnidadeFederativa.BA)).thenReturn(List.of(
+                sample(USER_A, 0), sample(USER_A, 1), sample(USER_B, 0), sample(USER_B, 1)));
+        assertFalse(service.hasEnoughEvidence(UnidadeFederativa.BA));
+    }
+
+    @Test
+    void hasEnoughEvidence_oneUserRetryingForFiveDays_noBlock() {
+        when(repository.findExhaustedEvidence(UnidadeFederativa.BA)).thenReturn(List.of(
+                sample(USER_A, 0), sample(USER_A, 1), sample(USER_A, 2),
+                sample(USER_A, 3), sample(USER_A, 4)));
+        assertFalse(service.hasEnoughEvidence(UnidadeFederativa.BA));
+    }
+
+    @Test
+    void hasEnoughEvidence_singleDayOutageAcrossFiveUsers_noBlock() {
+        when(repository.findExhaustedEvidence(UnidadeFederativa.BA)).thenReturn(List.of(
+                sample(UUID.randomUUID(), 0), sample(UUID.randomUUID(), 0), sample(UUID.randomUUID(), 0),
+                sample(UUID.randomUUID(), 0), sample(UUID.randomUUID(), 0)));
+        assertFalse(service.hasEnoughEvidence(UnidadeFederativa.BA));
+    }
+
+    @Test
+    void hasEnoughEvidence_oneUserRetryingAllDayIsOneEvidenceUnit() {
+        // 10 failures but all from USER_A on the same day → a single (user, day) pair.
+        when(repository.findExhaustedEvidence(UnidadeFederativa.BA)).thenReturn(List.of(
+                sample(USER_A, 0), sample(USER_A, 0), sample(USER_A, 0), sample(USER_A, 0), sample(USER_A, 0),
+                sample(USER_A, 0), sample(USER_A, 0), sample(USER_A, 0), sample(USER_A, 0), sample(USER_A, 0)));
         assertFalse(service.hasEnoughEvidence(UnidadeFederativa.BA));
     }
 
     @Test
     void hasEnoughEvidence_successVoidsOlderFailureEvidence() {
-        // 3 EXHAUSTED samples exist, but the UF succeeded after them (e.g. the paid
-        // fallback got re-funded) — only post-success failures may lock the state.
+        // Plenty of EXHAUSTED samples exist, but the UF succeeded after them (e.g. the
+        // paid fallback got re-funded) — only post-success failures may lock the state.
         var lastSuccess = OffsetDateTime.now();
         when(repository.lastSuccessAt(UnidadeFederativa.BA)).thenReturn(lastSuccess);
-        when(repository.countByUfAndOutcomeAndCreatedAtGreaterThan(
-                UnidadeFederativa.BA, StateIngestionOutcome.EXHAUSTED, lastSuccess)).thenReturn(0L);
+        when(repository.findExhaustedEvidenceAfter(UnidadeFederativa.BA, lastSuccess)).thenReturn(List.of());
 
         assertFalse(service.hasEnoughEvidence(UnidadeFederativa.BA));
-        verify(repository, never()).countByUfAndOutcome(UnidadeFederativa.BA, StateIngestionOutcome.EXHAUSTED);
+        verify(repository, never()).findExhaustedEvidence(UnidadeFederativa.BA);
     }
 
     @Test
@@ -99,13 +139,14 @@ class StateCoverageServiceTest {
         when(repository.existsByUfAndAdminNotifiedTrueAndCreatedAtGreaterThanEqual(eq(UnidadeFederativa.BA), any()))
                 .thenReturn(false);
 
-        service.reportExhausted(UnidadeFederativa.BA, "29260412345678000190650010000123451123456780",
+        service.reportExhausted(UnidadeFederativa.BA, USER_A, "29260412345678000190650010000123451123456780",
                 "https://nfe.sefaz.ba.gov.br/qrcode?p=x", "QR_PORTAL: down; INFOSIMPLES: desabilitado",
                 "<html>portal said no</html>");
 
         var captor = ArgumentCaptor.forClass(StateIngestionAttempt.class);
         verify(repository).save(captor.capture());
         assertEquals(StateIngestionOutcome.EXHAUSTED, captor.getValue().getOutcome());
+        assertEquals(USER_A, captor.getValue().getUserId());
         assertTrue(captor.getValue().isAdminNotified());
         var bodyCaptor = ArgumentCaptor.forClass(String.class);
         verify(contactService).notifyAdmin(contains("BA"), bodyCaptor.capture());
@@ -118,7 +159,7 @@ class StateCoverageServiceTest {
         when(repository.existsByUfAndAdminNotifiedTrueAndCreatedAtGreaterThanEqual(eq(UnidadeFederativa.BA), any()))
                 .thenReturn(true);
 
-        service.reportExhausted(UnidadeFederativa.BA, "chave", null, "summary", null);
+        service.reportExhausted(UnidadeFederativa.BA, USER_A, "chave", null, "summary", null);
 
         var captor = ArgumentCaptor.forClass(StateIngestionAttempt.class);
         verify(repository).save(captor.capture());
@@ -134,7 +175,7 @@ class StateCoverageServiceTest {
         assertDoesNotThrow(() -> service.recordSuccess(UnidadeFederativa.BA, StateIngestionStrategy.QR_PORTAL, null));
         assertDoesNotThrow(() -> service.recordFailure(UnidadeFederativa.BA, StateIngestionStrategy.QR_PORTAL,
                 StateIngestionOutcome.FETCH_FAILED, null, "x"));
-        assertDoesNotThrow(() -> service.reportExhausted(UnidadeFederativa.BA, "chave", null, "summary", null));
+        assertDoesNotThrow(() -> service.reportExhausted(UnidadeFederativa.BA, USER_A, "chave", null, "summary", null));
     }
 
     @Test

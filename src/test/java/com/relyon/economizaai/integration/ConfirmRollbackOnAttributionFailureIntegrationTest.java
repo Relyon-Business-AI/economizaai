@@ -80,7 +80,7 @@ class ConfirmRollbackOnAttributionFailureIntegrationTest {
         // Force the best-effort attribution pass to blow up from INSIDE its own
         // @Transactional method, so the shared confirm transaction gets marked
         // rollback-only.
-        when(surfaceStateRepository.findAttributable(anyList(), any(), any(), any()))
+        when(surfaceStateRepository.findAttributable(anyList(), any(), any(), any(), any()))
                 .thenThrow(new RuntimeException("attribution query exploded"));
     }
 

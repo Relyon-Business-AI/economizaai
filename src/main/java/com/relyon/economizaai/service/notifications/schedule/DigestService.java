@@ -1,4 +1,5 @@
 package com.relyon.economizaai.service.notifications.schedule;
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.service.LocalizedMessageService;
 
 import com.relyon.economizaai.model.enums.NotificationType;
@@ -12,7 +13,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
 import java.util.Map;
 
 /**
@@ -43,7 +43,7 @@ public class DigestService {
     public void run() {
         var rules = ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.DIGEST);
         if (rules.isEmpty()) return;
-        var since = LocalDateTime.now().minusDays(WINDOW_DAYS);
+        var since = BrazilClock.nowDateTime().minusDays(WINDOW_DAYS);
         var sent = 0;
         for (var rule : rules) {
             var household = rule.getUser().getHousehold();

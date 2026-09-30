@@ -150,6 +150,19 @@ class CategoryControllerTest {
     }
 
     @Test
+    void migrate_nullProductId_returns400() throws Exception {
+        // Postman/FE com variável vazia manda "" que o Jackson converte em null —
+        // tem que ser 400 de validação, nunca 500 no findById(null).
+        var body = "{\"productIds\":[\"\"],\"targetCustomCategoryId\":\"" + UUID.randomUUID() + "\"}";
+        when(localizedMessageService.translate("validation.failed")).thenReturn("Validation failed");
+
+        mockMvc.perform(post("/api/v1/categories/migrate")
+                        .contentType(MediaType.APPLICATION_JSON).content(body)
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void migrate_invalidTarget_returns400() throws Exception {
         var productId = UUID.randomUUID();
         when(customCategoryService.migrate(any(User.class), anyList(), any(), any()))

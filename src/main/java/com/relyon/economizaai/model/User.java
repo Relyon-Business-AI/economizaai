@@ -149,6 +149,13 @@ public class User extends BaseEntity implements UserDetails {
     @Column(name = "last_digest_sent_at")
     private OffsetDateTime lastDigestSentAt;
 
+    /**
+     * Idempotency claim for the "import finished" ping: {@code updatedAt} of the
+     * newest terminal IMPORT receipt already notified (see ImportCompletionNotifier).
+     */
+    @Column(name = "import_completion_notified_at")
+    private LocalDateTime importCompletionNotifiedAt;
+
     @Column(name = "profile_picture_key", length = 255)
     private String profilePictureKey;
 
