@@ -34,6 +34,17 @@ says `economizai-app-prod`):
   `GET /categorizer/ml/predict` e `POST /categorizer/retrain` removidos (endpoints
   não existem).
 
+## 2026-09-30 (2) — painel financeiro Infosimples com histórico e fechamento
+
+- **`GET /admin/costs/infosimples`**: saldo/consumo/franquia ao vivo, **quanto a
+  franquia vai varrer e quando** (dia 1º ~06h — "a ser debitado ao término do
+  mês"), totais históricos (recarregado / usado / varrido) e o ledger mensal.
+  Jul-set/2026 semeados do extrato do painel (V87); daqui em diante um snapshot
+  diário detecta recargas e um job no dia 1º fecha o mês sozinho.
+- **FE (admin):** o card Infosimples da aba Custos virou painel completo:
+  4 stats + totais + tabela mensal (recarga/consumo/varrido, "aberto" no mês
+  corrente).
+
 ## 2026-09-30 — card Infosimples completo (saldo + consumo cobrado + franquia)
 
 - `GET /admin/costs` agora traz também `infosimplesConsumoMes` (o que o mês

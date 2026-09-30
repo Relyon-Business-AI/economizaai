@@ -56,9 +56,11 @@ import com.relyon.economizaai.service.admin.AdminOverviewService;
 import com.relyon.economizaai.service.admin.IngestionHealthService;
 import com.relyon.economizaai.service.admin.MarketIntelService;
 import com.relyon.economizaai.service.paidapi.CostReportService;
+import com.relyon.economizaai.service.paidapi.InfosimplesFinanceService;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
 import com.relyon.economizaai.service.sefaz.StateCoverageService;
 import com.relyon.economizaai.dto.response.CostReportResponse;
+import com.relyon.economizaai.dto.response.InfosimplesFinanceResponse;
 import com.relyon.economizaai.dto.response.StateCoverageResponse;
 import com.relyon.economizaai.service.geo.MarketLocationService.SegmentClassificationSummary;
 import org.junit.jupiter.api.Test;
@@ -75,6 +77,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -119,6 +122,7 @@ class AdminControllerTest {
     @MockitoBean private MarketLocationService marketLocationService;
     @MockitoBean private RelevanceReportService relevanceReportService;
     @MockitoBean private CostReportService costReportService;
+    @MockitoBean private InfosimplesFinanceService infosimplesFinanceService;
     @MockitoBean private IngestionHealthService ingestionHealthService;
     @MockitoBean private AdminOverviewService adminOverviewService;
     @MockitoBean private MarketIntelService marketIntelService;
@@ -179,6 +183,23 @@ class AdminControllerTest {
         mockMvc.perform(post("/api/v1/admin/receipts/" + UUID.randomUUID() + "/reparse")
                         .with(SecurityMockMvcRequestPostProcessors.user(regularUser())))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void infosimplesFinance_returnsAccountPanel() throws Exception {
+        when(infosimplesFinanceService.finance()).thenReturn(new InfosimplesFinanceResponse(
+                new BigDecimal("92.32"), new BigDecimal("7.68"), new BigDecimal("100"),
+                new BigDecimal("92.32"), LocalDate.of(2026, 10, 1),
+                new BigDecimal("200.00"), new BigDecimal("19.04"), new BigDecimal("88.64"),
+                List.of(new InfosimplesFinanceResponse.MonthLine(
+                        "2026-09", new BigDecimal("100.00"), null, null, false))));
+
+        mockMvc.perform(get("/api/v1/admin/costs/infosimples")
+                        .with(SecurityMockMvcRequestPostProcessors.user(adminUser())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.saldo").value(92.32))
+                .andExpect(jsonPath("$.proximoFechamento").value("2026-10-01"))
+                .andExpect(jsonPath("$.historico[0].month").value("2026-09"));
     }
 
     @Test
