@@ -4,6 +4,8 @@ import com.relyon.economizaai.exception.CaptchaUnavailableException;
 import com.relyon.economizaai.exception.SefazFetchException;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.sefaz.captcha.CaptchaSolver;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Element;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.MultiValueMap;
@@ -249,6 +251,66 @@ class SantaCatarinaNfcePortalAdapterTest {
     @Test
     void extractChaveFromHtml_parsesPrintedChave() {
         assertEquals(CHAVE_SC, SantaCatarinaNfcePortalAdapter.extractChaveFromHtml(scDanfeHtml()).orElseThrow());
+    }
+
+    // ── Stable Validar-button locator (ASP.NET renumbers _ctl0$… without notice) ──
+
+    private static Element formOf(String html) {
+        return Jsoup.parse(html, "https://sat.sef.sc.gov.br").selectFirst("form");
+    }
+
+    @Test
+    void validateEventTarget_readsDoPostBackTargetFromTheLivePage() {
+        // The fixture's LinkButton carries the current control name — must be read, not assumed.
+        assertEquals("_ctl0$_ctl0$Body$Main$ButtonValidar",
+                SantaCatarinaNfcePortalAdapter.validateEventTarget(formOf(securityHtml())));
+    }
+
+    @Test
+    void validateEventTarget_followsARenumberedControlTree() {
+        var renumbered = """
+                <form action="/tax.NET/SecurityVerify.aspx">
+                  <a href="javascript:__doPostBack('_ctl3$_ctl1$Body$Main$ButtonValidar','')">Validar</a>
+                </form>
+                """;
+        assertEquals("_ctl3$_ctl1$Body$Main$ButtonValidar",
+                SantaCatarinaNfcePortalAdapter.validateEventTarget(formOf(renumbered)));
+    }
+
+    @Test
+    void validateEventTarget_findsSubmitButtonByNameOrLabel() {
+        var namedSubmit = """
+                <form><input type="submit" name="_ctl9$Body$ButtonValidar" value="Avançar"/></form>
+                """;
+        assertEquals("_ctl9$Body$ButtonValidar",
+                SantaCatarinaNfcePortalAdapter.validateEventTarget(formOf(namedSubmit)));
+
+        var labelledSubmit = """
+                <form><input type="submit" name="btnSeguranca" value="Validar acesso"/></form>
+                """;
+        assertEquals("btnSeguranca",
+                SantaCatarinaNfcePortalAdapter.validateEventTarget(formOf(labelledSubmit)));
+    }
+
+    @Test
+    void validateEventTarget_fallsBackToHistoricalLiteralWhenPageHasNoMarker() {
+        var bare = "<form><input type=\"hidden\" name=\"__VIEWSTATE\" value=\"x\"/></form>";
+        assertEquals("_ctl0$_ctl0$Body$Main$ButtonValidar",
+                SantaCatarinaNfcePortalAdapter.validateEventTarget(formOf(bare)));
+    }
+
+    @Test
+    void fetchHtml_postsTheEventTargetReadFromTheSecurityPage() {
+        var solver = solver(true);
+        var adapter = new TestScAdapter(solver);
+        adapter.getResponses.put(SECURITY_URL, ResponseEntity.ok(
+                securityHtml().replace("_ctl0$_ctl0$Body$Main$ButtonValidar", "_ctl7$_ctl2$Body$Main$ButtonValidar")));
+        adapter.postResponse = ResponseEntity.status(302).header("Location", FINAL_URL).build();
+        adapter.getResponses.put(FINAL_URL, ResponseEntity.ok(scDanfeHtml()));
+
+        adapter.fetchHtml(SECURITY_URL);
+
+        assertEquals("_ctl7$_ctl2$Body$Main$ButtonValidar", adapter.postedBody.getFirst("__EVENTTARGET"));
     }
 
     private static TestCaptchaSolver solver(boolean configured) {
