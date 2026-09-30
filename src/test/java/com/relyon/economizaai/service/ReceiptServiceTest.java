@@ -72,6 +72,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -452,6 +453,31 @@ class ReceiptServiceTest {
         assertEquals(1, response.rejected());
         assertEquals("receipt.import.duplicate", response.rejectedChaves().get(0).reason());
         verify(receiptIngestionService, never()).ingestXml(any(), any());
+    }
+
+    @Test
+    void importXmlBatch_staleRow_deletedAndFlushedBeforeReinsert() {
+        var user = buildUser();
+        var xml = "<NFe><infNFe Id=\"NFe" + XML_CHAVE + "\"></infNFe></NFe>";
+        var stale = Receipt.builder().id(UUID.randomUUID()).status(ReceiptStatus.FAILED_PARSE).build();
+        when(receiptRepository.findByHouseholdIdAndChaveAcesso(any(), eq(XML_CHAVE))).thenReturn(Optional.of(stale));
+        when(receiptRepository.save(any(Receipt.class))).thenAnswer(inv -> {
+            var receipt = inv.<Receipt>getArgument(0);
+            receipt.setId(UUID.randomUUID());
+            return receipt;
+        });
+
+        var response = receiptService.importXmlBatch(user, List.of(xml));
+
+        assertEquals(1, response.queued());
+        // Flush must land the DELETE before the replacement INSERT — Hibernate
+        // orders INSERTs first at commit, tripping the (household, chave) unique.
+        var deleteThenFlushThenInsert = inOrder(receiptRepository);
+        var deletedCaptor = ArgumentCaptor.forClass(Receipt.class);
+        deleteThenFlushThenInsert.verify(receiptRepository).delete(deletedCaptor.capture());
+        deleteThenFlushThenInsert.verify(receiptRepository).flush();
+        deleteThenFlushThenInsert.verify(receiptRepository).save(any(Receipt.class));
+        assertEquals(stale.getId(), deletedCaptor.getValue().getId());
     }
 
     @Test

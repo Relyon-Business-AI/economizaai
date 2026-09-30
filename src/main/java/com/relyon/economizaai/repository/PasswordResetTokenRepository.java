@@ -30,4 +30,10 @@ public interface PasswordResetTokenRepository extends JpaRepository<PasswordRese
     @Query("update PasswordResetToken t set t.consumedAt = :now " +
            "where t.user = :user and t.consumedAt is null")
     void consumeAllActiveForUser(@Param("user") User user, @Param("now") LocalDateTime now);
+
+    // Atomic in-database increment — concurrent wrong guesses can't lose a count
+    // to a read-modify-write race, and the caller commits it via noRollbackFor.
+    @Modifying
+    @Query("update PasswordResetToken t set t.attempts = t.attempts + 1 where t.id = :id")
+    void incrementAttempts(@Param("id") UUID id);
 }

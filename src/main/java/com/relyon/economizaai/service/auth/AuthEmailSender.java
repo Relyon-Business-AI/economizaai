@@ -1,9 +1,11 @@
 package com.relyon.economizaai.service.auth;
 
+import com.relyon.economizaai.config.AsyncConfig;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import jakarta.mail.internet.MimeMessage;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -12,12 +14,18 @@ import org.springframework.stereotype.Component;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * Sends auth-flow emails (password reset, verification) directly — these
  * MUST go out regardless of the per-user notification preferences. If
  * SMTP isn't configured (dev), logs the content with a clear DEV-MODE
  * marker so the developer can copy it from the logs and finish the flow.
+ *
+ * <p>The SMTP send runs on the async pool: the callers are @Transactional,
+ * and a synchronous send would pin a Hikari connection for the SMTP
+ * round-trip AND leak a known-email timing oracle on forgot-password.
  *
  * <p>All copy comes from the message bundle in the RECIPIENT's locale (their
  * stored {@code User.locale}), not the request's — the email is the user's,
@@ -30,17 +38,20 @@ public class AuthEmailSender {
 
     private final Optional<JavaMailSender> mailSender;
     private final LocalizedMessageService messageService;
+    private final Executor executor;
     private final String from;
     private final boolean smtpConfigured;
     private final boolean devCodeLogEnabled;
 
     public AuthEmailSender(Optional<JavaMailSender> mailSender,
                            LocalizedMessageService messageService,
+                           @Qualifier(AsyncConfig.RECEIPT_INGEST_EXECUTOR) Executor executor,
                            @Value("${economizaai.notifications.email.from:noreply@economizaai.app}") String from,
                            @Value("${spring.mail.username:}") String smtpUsername,
                            @Value("${economizaai.auth.dev-code-log-enabled:true}") boolean devCodeLogEnabled) {
         this.mailSender = mailSender;
         this.messageService = messageService;
+        this.executor = executor;
         this.from = from;
         this.smtpConfigured = mailSender.isPresent() && smtpUsername != null && !smtpUsername.isBlank();
         this.devCodeLogEnabled = devCodeLogEnabled;
@@ -54,7 +65,7 @@ public class AuthEmailSender {
                 code,
                 messageService.translate("auth.email.reset.validity", locale, ttlMinutes),
                 messageService.translate("auth.email.reset.disclaimer", locale));
-        send(email, messageService.translate("auth.email.reset.subject", locale), text, html, "password-reset");
+        dispatch(email, messageService.translate("auth.email.reset.subject", locale), text, html, "password-reset");
     }
 
     public void sendEmailVerification(String email, Locale locale, String code, int ttlHours) {
@@ -65,7 +76,20 @@ public class AuthEmailSender {
                 code,
                 messageService.translate("auth.email.verify.validity", locale, ttlHours),
                 messageService.translate("auth.email.verify.disclaimer", locale));
-        send(email, messageService.translate("auth.email.verify.subject", locale), text, html, "email-verification");
+        dispatch(email, messageService.translate("auth.email.verify.subject", locale), text, html, "email-verification");
+    }
+
+    /**
+     * Hands the SMTP send to the async pool (SignupAlertService pattern) so the
+     * caller's transaction never waits on SMTP. Advisory on rejection: the code
+     * is already persisted, the user can request another email.
+     */
+    private void dispatch(String to, String subject, String text, String html, String purpose) {
+        try {
+            executor.execute(() -> send(to, subject, text, html, purpose));
+        } catch (RejectedExecutionException ex) {
+            log.warn("auth_email.dispatch_rejected purpose={} to={}", purpose, LogMasker.email(to));
+        }
     }
 
     private void send(String to, String subject, String text, String html, String purpose) {

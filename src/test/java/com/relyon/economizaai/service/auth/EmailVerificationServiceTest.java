@@ -25,7 +25,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -45,6 +47,7 @@ class EmailVerificationServiceTest {
 
     private EmailVerificationToken activeCode(User user, String code) {
         return EmailVerificationToken.builder()
+                .id(UUID.randomUUID())
                 .user(user)
                 .token(CodeHasher.sha256(code))
                 .expiresAt(LocalDateTime.now().plusHours(1))
@@ -54,6 +57,14 @@ class EmailVerificationServiceTest {
     private void stubActiveCode(User user, EmailVerificationToken token) {
         when(tokenRepository.findFirstByUserAndConsumedAtIsNullOrderByCreatedAtDesc(user))
                 .thenReturn(Optional.of(token));
+    }
+
+    /** Mirrors the atomic UPDATE so the in-memory token reflects the persisted count. */
+    private void stubAtomicIncrement(EmailVerificationToken token) {
+        doAnswer(invocation -> {
+            token.setAttempts(token.getAttempts() + 1);
+            return null;
+        }).when(tokenRepository).incrementAttempts(token.getId());
     }
 
     @Test
@@ -166,12 +177,15 @@ class EmailVerificationServiceTest {
         var token = activeCode(user, "123456");
         when(userRepository.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
         stubActiveCode(user, token);
+        stubAtomicIncrement(token);
 
         assertThrows(InvalidAuthTokenException.class,
                 () -> emailVerificationService.verify(user.getEmail(), "000000"));
 
         assertEquals(1, token.getAttempts());
-        verify(tokenRepository).save(token);
+        // atomic in-DB increment, never a read-modify-write save (would roll back)
+        verify(tokenRepository).incrementAttempts(token.getId());
+        verify(tokenRepository, never()).save(any());
         assertFalse(user.isEmailVerified());
         verify(userRepository, never()).save(any());
     }
@@ -182,12 +196,14 @@ class EmailVerificationServiceTest {
         var token = activeCode(user, "123456");
         when(userRepository.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
         stubActiveCode(user, token);
+        stubAtomicIncrement(token);
 
         for (var attempt = 0; attempt < 5; attempt++) {
             assertThrows(InvalidAuthTokenException.class,
                     () -> emailVerificationService.verify(user.getEmail(), "000000"));
         }
         assertEquals(5, token.getAttempts());
+        verify(tokenRepository, times(5)).incrementAttempts(token.getId());
 
         // the CORRECT code is now rejected — the attacker exhausted the budget
         assertThrows(InvalidAuthTokenException.class,

@@ -66,8 +66,10 @@ public class EmailVerificationService {
      * Verifies the typed code against the user's active one, counting every
      * wrong guess. After {@link #MAX_VERIFY_ATTEMPTS} failures the code is dead
      * even if subsequently guessed right — the user must request a resend.
+     * noRollbackFor: the attempt increment must COMMIT despite the thrown
+     * exception, or the attempt budget never fills.
      */
-    @Transactional
+    @Transactional(noRollbackFor = InvalidAuthTokenException.class)
     public void verify(String email, String code) {
         var user = userRepository.findByEmail(email).orElseThrow(InvalidAuthTokenException::new);
         if (user.isEmailVerified()) return;   // idempotent — a second tap isn't an error
@@ -87,10 +89,10 @@ public class EmailVerificationService {
             throw new InvalidAuthTokenException();
         }
         if (!CodeHasher.matches(code, token.getToken())) {
-            token.setAttempts(token.getAttempts() + 1);
-            tokenRepository.save(token);
+            var attemptsAfterFailure = token.getAttempts() + 1;
+            tokenRepository.incrementAttempts(token.getId());
             log.warn("email_verification.wrong_code user={} attempts={}/{}",
-                    LogMasker.email(user.getEmail()), token.getAttempts(), MAX_VERIFY_ATTEMPTS);
+                    LogMasker.email(user.getEmail()), attemptsAfterFailure, MAX_VERIFY_ATTEMPTS);
             throw new InvalidAuthTokenException();
         }
         return token;

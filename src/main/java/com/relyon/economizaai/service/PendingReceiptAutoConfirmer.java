@@ -48,7 +48,10 @@ public class PendingReceiptAutoConfirmer {
             return;
         }
         var cutoff = LocalDateTime.now().minusHours(afterHours);
-        var stale = receiptRepository.findByStatusAndCreatedAtBefore(ReceiptStatus.PENDING_CONFIRMATION, cutoff)
+        // updatedAt, not createdAt: a nota rescued by retry is old by creation but
+        // fresh by the flip to PENDING — it deserves the full review window (same
+        // rationale as the ProcessingReceiptSweeper).
+        var stale = receiptRepository.findByStatusAndUpdatedAtBefore(ReceiptStatus.PENDING_CONFIRMATION, cutoff)
                 .stream().map(Receipt::getId).toList();
         if (stale.isEmpty()) {
             return;

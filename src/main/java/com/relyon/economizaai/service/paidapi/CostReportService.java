@@ -46,12 +46,16 @@ public class CostReportService {
         var totalCalls = byService.stream().mapToLong(ServiceSpendLine::calls).sum();
         var totalCents = byService.stream().mapToLong(ServiceSpendLine::costCents).sum();
         var spentTodayCents = repository.sumCostCentsSince(startOfTodayUtc());
-        // Live provider credit so the admin sees the runway next to the spend.
-        // A free management call; null (hidden in the FE) when disabled/unreachable.
-        var infosimplesSaldo = infosimples.flatMap(InfosimplesService::fetchSaldo).orElse(null);
+        // Live provider account so the admin sees the runway next to the spend:
+        // saldo, billed month usage and the monthly minimum franchise. A free
+        // management call; nulls (hidden in the FE) when disabled/unreachable.
+        var account = infosimples.flatMap(InfosimplesService::fetchAccount).orElse(null);
 
         return new CostReportResponse(days, totalCalls, totalCents, reais(totalCents),
-                properties.getDailyGlobalBudgetCents(), reais(spentTodayCents), infosimplesSaldo,
+                properties.getDailyGlobalBudgetCents(), reais(spentTodayCents),
+                account == null ? null : account.balance(),
+                account == null ? null : account.currentUsage(),
+                account == null ? null : account.minBill(),
                 byService, byState);
     }
 

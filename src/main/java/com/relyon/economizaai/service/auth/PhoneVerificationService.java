@@ -98,9 +98,10 @@ public class PhoneVerificationService {
      * guess counts against the active code; after {@link #MAX_VERIFY_ATTEMPTS}
      * failures the code is dead even if subsequently guessed right — the user
      * must request a new one. On success the user's phone is marked verified
-     * and the OTP consumed.
+     * and the OTP consumed. noRollbackFor: the attempt increment must COMMIT
+     * despite the thrown exception, or the attempt budget never fills.
      */
-    @Transactional
+    @Transactional(noRollbackFor = InvalidPhoneVerificationException.class)
     public void verify(User user, String code) {
         var token = tokenRepository
                 .findFirstByUserIdAndConsumedAtIsNullOrderByCreatedAtDesc(user.getId())
@@ -112,10 +113,10 @@ public class PhoneVerificationService {
             throw new InvalidPhoneVerificationException();
         }
         if (code == null || !passwordEncoder.matches(code, token.getCodeHash())) {
-            token.setAttempts(token.getAttempts() + 1);
-            tokenRepository.save(token);
+            var attemptsAfterFailure = token.getAttempts() + 1;
+            tokenRepository.incrementAttempts(token.getId());
             log.warn("phone_verification.wrong_code user={} attempts={}/{}",
-                    LogMasker.email(user.getEmail()), token.getAttempts(), MAX_VERIFY_ATTEMPTS);
+                    LogMasker.email(user.getEmail()), attemptsAfterFailure, MAX_VERIFY_ATTEMPTS);
             throw new InvalidPhoneVerificationException();
         }
         user.setPhoneVerified(true);

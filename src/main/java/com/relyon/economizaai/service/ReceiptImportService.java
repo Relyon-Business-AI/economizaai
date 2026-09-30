@@ -95,9 +95,10 @@ public class ReceiptImportService {
     }
 
     /**
-     * Re-queue failed/stale import receipts for another reconsult (individual or batch).
-     * Household-scoped; CONFIRMED and non-reconsultable receipts are skipped. Returns how
-     * many were actually re-queued.
+     * Re-queue FAILED_PARSE import receipts for another reconsult (individual or
+     * batch). Household-scoped; any other status is skipped — a row that already
+     * parsed (PENDING_CONFIRMATION/CONFIRMED) would get its items parsed AGAIN on
+     * reconsult, duplicating every line. Returns how many were actually re-queued.
      */
     @Transactional
     public int retry(User user, List<UUID> receiptIds) {
@@ -106,7 +107,7 @@ public class ReceiptImportService {
         for (var receiptId : receiptIds) {
             var receipt = receiptRepository.findById(receiptId).orElse(null);
             if (receipt == null || !receipt.getHousehold().getId().equals(householdId)) continue;
-            if (receipt.getStatus() == ReceiptStatus.CONFIRMED) continue;
+            if (receipt.getStatus() != ReceiptStatus.FAILED_PARSE) continue;
             var chave = receipt.getChaveAcesso();
             if (chave == null || !RsChaveReconsultService.isReconsultable(chave)) continue;
             receipt.setStatus(ReceiptStatus.IMPORT_QUEUED);

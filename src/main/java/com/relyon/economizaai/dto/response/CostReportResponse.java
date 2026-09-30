@@ -15,9 +15,13 @@ public record CostReportResponse(
         BigDecimal totalCostReais,
         long dailyGlobalBudgetCents,
         BigDecimal spentTodayReais,
-        // Live Infosimples account credit (R$) — null when the provider is
-        // disabled or its saldo endpoint didn't answer.
+        // Live Infosimples account status (R$) — null when the provider is
+        // disabled or its account endpoint didn't answer. consumoMes is what the
+        // month actually BILLED (unexecuted failures aren't charged); franquia is
+        // the monthly minimum that sweeps unused credit.
         BigDecimal infosimplesSaldo,
+        BigDecimal infosimplesConsumoMes,
+        BigDecimal infosimplesFranquiaMinima,
         List<ServiceSpendLine> byService,
         List<StateSpendLine> byState) {
 

@@ -189,6 +189,29 @@ class MsDfePortalAdapterTest {
     }
 
     @Test
+    void fetchHtml_nullDanfeBody_treatedAsTransientAndRetried() throws Exception {
+        var captchaHtml = captchaPage();
+        var danfe = rsDanfe();
+        var solveCalls = new AtomicInteger();
+        // First post-captcha fetch returns a null body (portal hiccup) — must be
+        // retried like the empty-body case, never returned (NPE at the parser).
+        var adapter = new MsDfePortalAdapter(RestClient.builder(), solver(true, "tok"), "MS", 5000, 3, 0L, 60000L, "test") {
+            @Override protected ResponseEntity<String> httpGetResponse(String url) {
+                return ResponseEntity.ok(captchaHtml);
+            }
+            @Override protected String fetchAuthorizedDanfe(String chave, String captchaPageHtml,
+                                                            String recaptchaToken, String cookieHeader) {
+                return solveCalls.incrementAndGet() == 1 ? null : danfe;
+            }
+        };
+
+        var html = adapter.fetchHtml(MS_CHAVE);
+
+        assertEquals(danfe, html);
+        assertEquals(2, solveCalls.get(), "should retry once after the null body");
+    }
+
+    @Test
     void fetchHtml_captchaRejectedByPortal_exhaustsRetriesThenThrowsSefazFetch() throws Exception {
         var captchaHtml = captchaPage();
         // Always returns captcha HTML (portal always rejects) — should exhaust maxAttempts.
