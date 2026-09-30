@@ -198,6 +198,10 @@ public class ReceiptService {
                     continue;
                 }
                 receiptRepository.delete(existing); // stale (FAILED/PENDING/…) → replace on re-upload
+                // Flush now: Hibernate orders INSERTs before DELETEs at commit, so
+                // without it the replacement insert trips the (household, chave)
+                // unique constraint (same as the other two replace sites).
+                receiptRepository.flush();
             }
             try {
                 enforceMonthlyReceiptCap(user);
