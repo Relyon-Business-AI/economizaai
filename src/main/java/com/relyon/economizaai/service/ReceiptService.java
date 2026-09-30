@@ -357,7 +357,10 @@ public class ReceiptService {
         // Experimental (unproven) states are attempted so we CAPTURE their nota data — but only up
         // to the evidence cap. Once we have enough failing samples to build support later, stop
         // spending (captcha/fetch) on that state and fail fast with the honest "not supported yet".
-        if (sefazIngestionService.isExperimental(uf) && stateCoverageService.hasEnoughEvidence(uf)) {
+        // Device-fetch UFs (PE) are exempt: their server-side failure is expected by design — the
+        // nota resolves on the user's device, so old EXHAUSTED evidence must not block submits.
+        if (sefazIngestionService.isExperimental(uf) && !prefetchPolicy.isDeviceFetchUf(uf)
+                && stateCoverageService.hasEnoughEvidence(uf)) {
             log.info("submit rejected reason=experimental_evidence_cap uf={}", uf);
             throw new UnsupportedStateException(uf.name());
         }

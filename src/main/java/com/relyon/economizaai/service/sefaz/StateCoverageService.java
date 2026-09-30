@@ -9,10 +9,12 @@ import com.relyon.economizaai.model.enums.StateIngestionStrategy;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.StateIngestionAttemptRepository;
 import com.relyon.economizaai.service.ContactService;
+import com.relyon.economizaai.time.BrazilClock;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -22,7 +24,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * On-demand learning for the experimental multi-state rollout: records every
@@ -54,27 +58,34 @@ public class StateCoverageService {
     private final ContactService contactService;
     private final int regressionMinFailures;
     private final long regressionWindowHours;
-    private final int maxEvidencePerUf;
+    private final int minEvidenceUserDays;
+    private final int minEvidenceUsers;
+    private final int minEvidenceDays;
 
     public StateCoverageService(
             StateIngestionAttemptRepository repository,
             ContactService contactService,
             @Value("${economizaai.ingestion.sefaz.regression.min-failures:5}") int regressionMinFailures,
             @Value("${economizaai.ingestion.sefaz.regression.window-hours:6}") long regressionWindowHours,
-            @Value("${economizaai.ingestion.sefaz.experimental.max-evidence-per-uf:3}") int maxEvidencePerUf) {
+            @Value("${economizaai.ingestion.sefaz.experimental.min-evidence-user-days:5}") int minEvidenceUserDays,
+            @Value("${economizaai.ingestion.sefaz.experimental.min-evidence-users:2}") int minEvidenceUsers,
+            @Value("${economizaai.ingestion.sefaz.experimental.min-evidence-days:2}") int minEvidenceDays) {
         this.repository = repository;
         this.contactService = contactService;
         this.regressionMinFailures = regressionMinFailures;
         this.regressionWindowHours = regressionWindowHours;
-        this.maxEvidencePerUf = maxEvidencePerUf;
+        this.minEvidenceUserDays = minEvidenceUserDays;
+        this.minEvidenceUsers = minEvidenceUsers;
+        this.minEvidenceDays = minEvidenceDays;
     }
 
     /**
      * Spend cap for the experimental rollout (option B): we keep attempting — and paying for
-     * captcha/fetch on — an unproven UF only until we've captured enough terminal-failure samples
-     * (EXHAUSTED rows, each carrying the nota's evidence). Past that we have what we need to build
-     * support later, so further scans of that UF fail fast without spending. Threshold configurable
-     * via {@code economizaai.ingestion.sefaz.experimental.max-evidence-per-uf} (default 3).
+     * captcha/fetch on — an unproven UF until the terminal-failure samples (EXHAUSTED rows, each
+     * carrying the nota's evidence) prove the state is REALLY broken: at least
+     * {@code min-evidence-user-days} distinct (user, Brasília-day) pairs, spanning at least
+     * {@code min-evidence-users} users AND {@code min-evidence-days} days. One user retrying all
+     * day counts as a single evidence unit, and a single-day portal outage never locks the state.
      *
      * <p>Only failures AFTER the UF's most recent SUCCESS count: a success proves the chain
      * works again (e.g. the paid fallback got re-funded), so stale evidence from a broken era
@@ -82,12 +93,23 @@ public class StateCoverageService {
      */
     public boolean hasEnoughEvidence(UnidadeFederativa uf) {
         var lastSuccessAt = repository.lastSuccessAt(uf);
-        var exhaustedSamples = lastSuccessAt == null
-                ? repository.countByUfAndOutcome(uf, StateIngestionOutcome.EXHAUSTED)
-                : repository.countByUfAndOutcomeAndCreatedAtGreaterThan(
-                        uf, StateIngestionOutcome.EXHAUSTED, lastSuccessAt);
-        return exhaustedSamples >= maxEvidencePerUf;
+        var samples = lastSuccessAt == null
+                ? repository.findExhaustedEvidence(uf)
+                : repository.findExhaustedEvidenceAfter(uf, lastSuccessAt);
+        var userDayPairs = samples.stream()
+                .map(sample -> new EvidenceUserDay(
+                        sample.getUserId(),
+                        sample.getCreatedAt().atZoneSameInstant(BrazilClock.ZONE).toLocalDate()))
+                .collect(Collectors.toSet());
+        var distinctUsers = userDayPairs.stream().map(EvidenceUserDay::userId).distinct().count();
+        var distinctDays = userDayPairs.stream().map(EvidenceUserDay::day).distinct().count();
+        return userDayPairs.size() >= minEvidenceUserDays
+                && distinctUsers >= minEvidenceUsers
+                && distinctDays >= minEvidenceDays;
     }
+
+    /** One evidence unit for the spend cap: a user hitting the dead end on a given Brasília day. */
+    private record EvidenceUserDay(UUID userId, LocalDate day) {}
 
     /** Records a successful layer; the first-ever success for the UF alerts the admin. */
     public void recordSuccess(UnidadeFederativa uf, StateIngestionStrategy strategy, String qrHost) {
@@ -170,17 +192,18 @@ public class StateCoverageService {
     }
 
     /**
-     * Every layer failed for this receipt. Records the terminal EXHAUSTED row and
-     * emails the admin everything needed to implement the state — at most once per
-     * UF per day, so a broken portal doesn't flood the inbox.
+     * Every layer failed for this receipt. Records the terminal EXHAUSTED row
+     * (stamped with the scanning user — the spend cap counts distinct user-days)
+     * and emails the admin everything needed to implement the state — at most once
+     * per UF per day, so a broken portal doesn't flood the inbox.
      */
-    public void reportExhausted(UnidadeFederativa uf, String chave, String sourceUrl,
+    public void reportExhausted(UnidadeFederativa uf, UUID userId, String chave, String sourceUrl,
                                 String failureSummary, String htmlSnippet) {
         try {
             var alreadyNotifiedToday = repository.existsByUfAndAdminNotifiedTrueAndCreatedAtGreaterThanEqual(
                     uf, startOfTodayUtc());
             var detail = failureSummary + (htmlSnippet == null ? "" : "\n---\n" + truncate(htmlSnippet, SNIPPET_MAX_CHARS));
-            persist(uf, StateIngestionStrategy.QR_PORTAL, StateIngestionOutcome.EXHAUSTED,
+            persist(uf, userId, StateIngestionStrategy.QR_PORTAL, StateIngestionOutcome.EXHAUSTED,
                     hostOf(sourceUrl), truncate(detail, DETAIL_MAX_CHARS), !alreadyNotifiedToday);
             log.warn("state_coverage.exhausted uf={} notified={}", uf, !alreadyNotifiedToday);
             if (alreadyNotifiedToday) return;
@@ -269,8 +292,14 @@ public class StateCoverageService {
 
     private void persist(UnidadeFederativa uf, StateIngestionStrategy strategy, StateIngestionOutcome outcome,
                          String qrHost, String detail, boolean adminNotified) {
+        persist(uf, null, strategy, outcome, qrHost, detail, adminNotified);
+    }
+
+    private void persist(UnidadeFederativa uf, UUID userId, StateIngestionStrategy strategy,
+                         StateIngestionOutcome outcome, String qrHost, String detail, boolean adminNotified) {
         repository.save(StateIngestionAttempt.builder()
                 .uf(uf)
+                .userId(userId)
                 .strategy(strategy)
                 .outcome(outcome)
                 .qrHost(qrHost)

@@ -57,6 +57,14 @@ public class StateIngestionAttempt {
     @Column(name = "qr_host", length = 160)
     private String qrHost;
 
+    /**
+     * User whose scan produced this attempt — set on EXHAUSTED evidence rows so
+     * the spend cap can require failures spread over distinct users and days.
+     * Null on legacy rows and attempts without an owner (admin reparse, tests).
+     */
+    @Column(name = "user_id")
+    private UUID userId;
+
     /** Error summary and/or a sanitized HTML snippet of what the portal returned. */
     @Column(name = "detail", columnDefinition = "TEXT")
     private String detail;

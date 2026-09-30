@@ -519,6 +519,27 @@ class ReceiptServiceTest {
     }
 
     @Test
+    void submit_deviceFetchUfAtEvidenceCap_isExemptAndProceeds() {
+        var user = buildUser();
+        // A device-fetch UF (PE) fails server-side BY DESIGN, so piled-up evidence must
+        // never lock it at submit — the nota resolves on the user's device instead.
+        lenient().when(sefazIngestionService.isExperimental(any())).thenReturn(true);
+        lenient().when(stateCoverageService.hasEnoughEvidence(any())).thenReturn(true);
+        when(prefetchPolicy.isDeviceFetchUf(any())).thenReturn(true);
+        when(receiptRepository.findByHouseholdIdAndChaveAcesso(any(), any())).thenReturn(Optional.empty());
+        when(receiptRepository.save(any())).thenAnswer(invocation -> {
+            var receipt = invocation.<Receipt>getArgument(0);
+            receipt.setId(UUID.randomUUID());
+            return receipt;
+        });
+
+        var response = receiptService.submit(user, new SubmitReceiptRequest(QR_RS));
+
+        assertEquals(ReceiptStatus.PROCESSING, response.status());
+        verify(stateCoverageService, never()).hasEnoughEvidence(any());
+    }
+
+    @Test
     void submit_rejectsBareRsChaveWithLocalizedError() {
         var user = buildUser();
 

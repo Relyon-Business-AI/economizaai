@@ -38,12 +38,14 @@ public class SefazIngestionService {
     private final PaidApiGuardService paidApiGuard;
     private final StateCoverageService stateCoverage;
     private final RsChaveReconsultService rsChaveReconsult;
+    private final PrefetchPolicy prefetchPolicy;
 
     public SefazIngestionService(List<SefazAdapter> adapters,
                                  Optional<InfosimplesService> infosimples,
                                  PaidApiGuardService paidApiGuard,
                                  StateCoverageService stateCoverage,
-                                 RsChaveReconsultService rsChaveReconsult) {
+                                 RsChaveReconsultService rsChaveReconsult,
+                                 PrefetchPolicy prefetchPolicy) {
         var byState = new EnumMap<UnidadeFederativa, SefazAdapter>(UnidadeFederativa.class);
         for (var adapter : adapters) {
             for (var uf : adapter.supportedStates()) {
@@ -73,6 +75,7 @@ public class SefazIngestionService {
         this.paidApiGuard = paidApiGuard;
         this.stateCoverage = stateCoverage;
         this.rsChaveReconsult = rsChaveReconsult;
+        this.prefetchPolicy = prefetchPolicy;
         log.info("Registered SEFAZ adapters: verified={} experimental={} infosimples-fallback={}",
                 verifiedStates, experimentalStates(), infosimples.isPresent());
     }
@@ -212,7 +215,7 @@ public class SefazIngestionService {
             // QR, missing sitekey/viewstate) propagate without spending.
             if (infosimples.isEmpty()) {
                 if (experimental) {
-                    throw experimentalExhausted(uf, chave, sourceUrlOf(qrPayload),
+                    throw experimentalExhausted(uf, userId, chave, sourceUrlOf(qrPayload),
                             "QR_PORTAL: " + describe(primaryEx) + "; INFOSIMPLES: desabilitado", portalEvidence);
                 }
                 throw primaryEx;
@@ -233,7 +236,7 @@ public class SefazIngestionService {
                 if (experimental) {
                     stateCoverage.recordFailure(uf, StateIngestionStrategy.INFOSIMPLES,
                             StateIngestionOutcome.FETCH_FAILED, qrHost, describe(fallbackEx));
-                    throw experimentalExhausted(uf, chave, sourceUrlOf(qrPayload),
+                    throw experimentalExhausted(uf, userId, chave, sourceUrlOf(qrPayload),
                             "QR_PORTAL: " + describe(primaryEx) + "; INFOSIMPLES: " + describe(fallbackEx),
                             portalEvidence);
                 }
@@ -315,7 +318,7 @@ public class SefazIngestionService {
                     infosimplesNote = describe(fallbackEx);
                 }
             }
-            throw experimentalExhausted(fetched.uf(), fetched.chave(), fetched.sourceUrl(),
+            throw experimentalExhausted(fetched.uf(), userId, fetched.chave(), fetched.sourceUrl(),
                     "QR_PORTAL (parse): " + describe(parseEx) + "; INFOSIMPLES: " + infosimplesNote,
                     fetched.html());
         }
@@ -351,11 +354,20 @@ public class SefazIngestionService {
     /**
      * Terminal failure of the experimental chain: record + alert the admin with
      * the evidence, and surface the user-facing "not supported yet" key.
+     *
+     * <p>Device-fetch UFs ({@link PrefetchPolicy} — portals that block our
+     * datacenter IP by design, e.g. PE) record NO evidence: their server-side
+     * failure is expected and ends in the NEEDS_DEVICE_FETCH handoff, so counting
+     * it would let a few abandoned scans lock the state at submit forever.
      */
-    private ExperimentalStateFailedException experimentalExhausted(UnidadeFederativa uf, String chave,
+    private ExperimentalStateFailedException experimentalExhausted(UnidadeFederativa uf, UUID userId, String chave,
                                                                    String sourceUrl, String failureSummary,
                                                                    String htmlSnippet) {
-        stateCoverage.reportExhausted(uf, chave, sourceUrl, failureSummary, htmlSnippet);
+        if (prefetchPolicy.isDeviceFetchUf(uf)) {
+            log.info("state_coverage.exhausted_skipped uf={} reason=device_fetch_uf", uf);
+        } else {
+            stateCoverage.reportExhausted(uf, userId, chave, sourceUrl, failureSummary, htmlSnippet);
+        }
         return new ExperimentalStateFailedException(uf.name());
     }
 
