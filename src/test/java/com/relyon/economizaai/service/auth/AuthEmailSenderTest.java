@@ -13,9 +13,12 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.context.support.ResourceBundleMessageSource;
 import com.relyon.economizaai.service.LocalizedMessageService;
 
+import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -70,7 +73,7 @@ class AuthEmailSenderTest {
     @Test
     void sendsPasswordResetCodeWhenSmtpConfigured() throws Exception {
         var mailSender = mailSenderReturningRealMime();
-        var sender = new AuthEmailSender(Optional.of(mailSender), messageService(), FROM, "smtp-user", true);
+        var sender = new AuthEmailSender(Optional.of(mailSender), messageService(), Runnable::run, FROM, "smtp-user", true);
 
         sender.sendPasswordResetCode(RECIPIENT, PT, RESET_CODE, 60);
 
@@ -88,7 +91,7 @@ class AuthEmailSenderTest {
     @Test
     void resetEmail_localizedToRecipientLocale_en() throws Exception {
         var mailSender = mailSenderReturningRealMime();
-        var sender = new AuthEmailSender(Optional.of(mailSender), messageService(), FROM, "smtp-user", true);
+        var sender = new AuthEmailSender(Optional.of(mailSender), messageService(), Runnable::run, FROM, "smtp-user", true);
 
         sender.sendPasswordResetCode(RECIPIENT, Locale.ENGLISH, RESET_CODE, 60);
 
@@ -104,7 +107,7 @@ class AuthEmailSenderTest {
     @Test
     void sendsEmailVerificationCodeWhenSmtpConfigured() throws Exception {
         var mailSender = mailSenderReturningRealMime();
-        var sender = new AuthEmailSender(Optional.of(mailSender), messageService(), FROM, "smtp-user", true);
+        var sender = new AuthEmailSender(Optional.of(mailSender), messageService(), Runnable::run, FROM, "smtp-user", true);
 
         sender.sendEmailVerification(RECIPIENT, PT, VERIFY_CODE, 24);
 
@@ -120,7 +123,7 @@ class AuthEmailSenderTest {
     @Test
     void doesNotSendWhenSmtpUsernameBlank() {
         var mailSender = mock(JavaMailSender.class);
-        var sender = new AuthEmailSender(Optional.of(mailSender), messageService(), FROM, "   ", true);
+        var sender = new AuthEmailSender(Optional.of(mailSender), messageService(), Runnable::run, FROM, "   ", true);
 
         sender.sendPasswordResetCode(RECIPIENT, PT, RESET_CODE, 60);
 
@@ -130,7 +133,7 @@ class AuthEmailSenderTest {
     @Test
     void doesNotSendWhenSmtpUsernameNull() {
         var mailSender = mock(JavaMailSender.class);
-        var sender = new AuthEmailSender(Optional.of(mailSender), messageService(), FROM, null, true);
+        var sender = new AuthEmailSender(Optional.of(mailSender), messageService(), Runnable::run, FROM, null, true);
 
         sender.sendEmailVerification(RECIPIENT, PT, VERIFY_CODE, 24);
 
@@ -139,7 +142,7 @@ class AuthEmailSenderTest {
 
     @Test
     void doesNotSendWhenMailSenderAbsentEvenWithUsername() {
-        var sender = new AuthEmailSender(Optional.empty(), messageService(), FROM, "smtp-user", true);
+        var sender = new AuthEmailSender(Optional.empty(), messageService(), Runnable::run, FROM, "smtp-user", true);
 
         // No mailSender bean to send through; must be a silent no-op.
         assertDoesNotThrow(() -> sender.sendPasswordResetCode(RECIPIENT, PT, RESET_CODE, 60));
@@ -156,7 +159,7 @@ class AuthEmailSenderTest {
     @Test
     void devCodeLogEnabled_logsCodeWhenSmtpNotConfigured() {
         var appender = attachLogCapture();
-        var sender = new AuthEmailSender(Optional.empty(), messageService(), FROM, "", true);
+        var sender = new AuthEmailSender(Optional.empty(), messageService(), Runnable::run, FROM, "", true);
 
         sender.sendPasswordResetCode(RECIPIENT, PT, RESET_CODE, 60);
 
@@ -168,7 +171,7 @@ class AuthEmailSenderTest {
     @Test
     void devCodeLogDisabled_neverLogsCodeWhenSmtpNotConfigured() {
         var appender = attachLogCapture();
-        var sender = new AuthEmailSender(Optional.empty(), messageService(), FROM, "", false);
+        var sender = new AuthEmailSender(Optional.empty(), messageService(), Runnable::run, FROM, "", false);
 
         sender.sendPasswordResetCode(RECIPIENT, PT, RESET_CODE, 60);
         sender.sendEmailVerification(RECIPIENT, PT, VERIFY_CODE, 24);
@@ -180,10 +183,36 @@ class AuthEmailSenderTest {
     }
 
     @Test
+    void sendRunsOnTheProvidedExecutorNotTheCallingThread() {
+        var mailSender = mailSenderReturningRealMime();
+        var heldTasks = new ArrayList<Runnable>();
+        Executor deferringExecutor = heldTasks::add;
+        var sender = new AuthEmailSender(Optional.of(mailSender), messageService(), deferringExecutor, FROM, "smtp-user", true);
+
+        sender.sendPasswordResetCode(RECIPIENT, PT, RESET_CODE, 60);
+
+        // nothing sent until the executor actually runs the task
+        verify(mailSender, never()).send(any(MimeMessage.class));
+        assertEquals(1, heldTasks.size());
+        heldTasks.getFirst().run();
+        verify(mailSender).send(any(MimeMessage.class));
+    }
+
+    @Test
+    void poolRejectionIsSwallowedSoCallerNeverErrors() {
+        var mailSender = mock(JavaMailSender.class);
+        Executor rejectingExecutor = task -> { throw new RejectedExecutionException("pool full"); };
+        var sender = new AuthEmailSender(Optional.of(mailSender), messageService(), rejectingExecutor, FROM, "smtp-user", true);
+
+        assertDoesNotThrow(() -> sender.sendPasswordResetCode(RECIPIENT, PT, RESET_CODE, 60));
+        verify(mailSender, never()).send(any(MimeMessage.class));
+    }
+
+    @Test
     void swallowsExceptionFromMailSenderSoCallerNeverErrors() {
         var mailSender = mailSenderReturningRealMime();
         doThrow(new MailSendException("smtp down")).when(mailSender).send(any(MimeMessage.class));
-        var sender = new AuthEmailSender(Optional.of(mailSender), messageService(), FROM, "smtp-user", true);
+        var sender = new AuthEmailSender(Optional.of(mailSender), messageService(), Runnable::run, FROM, "smtp-user", true);
 
         assertDoesNotThrow(() -> sender.sendPasswordResetCode(RECIPIENT, PT, RESET_CODE, 60));
         verify(mailSender).send(any(MimeMessage.class));
