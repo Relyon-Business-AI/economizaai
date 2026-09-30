@@ -1,5 +1,6 @@
 package com.relyon.economizaai.controller;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.dto.request.AddReceiptItemRequest;
 import com.relyon.economizaai.dto.request.ConfirmReceiptRequest;
 import com.relyon.economizaai.dto.request.DeviceContentRequest;
@@ -62,7 +63,6 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -308,7 +308,7 @@ public class ReceiptController {
         var exportFormat = parseFormat(format);
         var exportDelivery = parseDelivery(delivery);
         var file = receiptExportService.exportPurchaseHistory(user, from, to, exportFormat);
-        var filename = "economizai-historico-" + LocalDate.now() + "." + file.fileExtension();
+        var filename = "economizai-historico-" + BrazilClock.today() + "." + file.fileExtension();
         if (exportDelivery == Delivery.EMAIL) {
             reportEmailService.sendToOwnEmail(user, file, filename);
             return ResponseEntity.accepted().build();

@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.analytics;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.dto.response.AcquisitionReportResponse;
 import com.relyon.economizaai.dto.response.AcquisitionReportResponse.AdSpendSummary;
 import com.relyon.economizaai.dto.response.AcquisitionReportResponse.CampaignLine;
@@ -66,7 +67,7 @@ public class AdminAnalyticsService {
     @Transactional(readOnly = true)
     public AcquisitionReportResponse acquisition(int days, boolean includeInternal) {
         var windowDays = Math.max(1, days);
-        var to = LocalDate.now();
+        var to = BrazilClock.today();
         var from = to.minusDays(windowDays - 1L);
         var since = from.atStartOfDay();
 

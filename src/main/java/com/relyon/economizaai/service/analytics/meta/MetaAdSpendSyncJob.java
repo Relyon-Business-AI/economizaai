@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.analytics.meta;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.model.MetaAdSpend;
 import com.relyon.economizaai.model.MetaCampaign;
 import com.relyon.economizaai.repository.MetaAdSpendRepository;
@@ -13,7 +14,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClientException;
 
-import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 
@@ -56,7 +56,7 @@ public class MetaAdSpendSyncJob {
             return 0;
         }
 
-        var until = LocalDate.now();
+        var until = BrazilClock.today();
         var since = until.minusDays(Math.max(1, properties.getSyncDays()));
         List<MetaAdInsight> insights;
         try {

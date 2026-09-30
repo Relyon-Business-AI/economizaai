@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.admin;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.dto.response.AdminOverviewResponse;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.SubscriptionStatus;
@@ -15,7 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.EnumMap;
 import java.util.Map;
@@ -37,7 +37,7 @@ public class AdminOverviewService {
 
     @Transactional(readOnly = true)
     public AdminOverviewResponse overview(boolean includeInternal) {
-        var today = LocalDate.now();
+        var today = BrazilClock.today();
         var startOfToday = today.atStartOfDay();
         var weekAgo = today.minusDays(6).atStartOfDay();
         var monthAgo = today.minusDays(29).atStartOfDay();

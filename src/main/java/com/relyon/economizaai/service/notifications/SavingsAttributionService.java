@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.notifications;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.model.DealSurfaceState;
 import com.relyon.economizaai.model.Receipt;
@@ -19,7 +20,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -81,7 +81,8 @@ public class SavingsAttributionService {
                 .toList();
         if (householdUserIds.isEmpty()) return;
 
-        var purchaseInstant = receipt.getIssuedAt().atOffset(ZoneOffset.UTC);
+        // issuedAt is Brazil-local wall clock (SEFAZ) — anchor it in the product zone.
+        var purchaseInstant = receipt.getIssuedAt().atZone(BrazilClock.ZONE).toOffsetDateTime();
         var windowStart = purchaseInstant.minusDays(properties.getAttribution().getWindowDays());
 
         var conversions = 0;

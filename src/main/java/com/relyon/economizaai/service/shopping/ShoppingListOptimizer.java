@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.shopping;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.dto.request.OptimizeShoppingListRequest;
 import com.relyon.economizaai.dto.response.ShoppingPlanResponse;
@@ -24,7 +25,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -127,7 +127,7 @@ public class ShoppingListOptimizer {
 
         // Community panel as fallback — median per market that local history misses.
         if (properties.getCollaborative().isEnabled()) {
-            var since = LocalDateTime.now().minusDays(properties.getCollaborative().getLookbackDays());
+            var since = BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getLookbackDays());
             var observations = observationRepository.findRecentByProduct(product.getId(), since);
             var byMarket = observations.stream()
                     .collect(Collectors.groupingBy(observation -> observation.getMarketCnpj()));

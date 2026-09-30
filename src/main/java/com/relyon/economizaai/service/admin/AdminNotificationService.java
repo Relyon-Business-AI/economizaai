@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.admin;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.dto.request.SendTestNotificationRequest;
 import com.relyon.economizaai.dto.response.AdminNotificationSummaryResponse;
 import com.relyon.economizaai.exception.UserNotFoundException;
@@ -16,7 +17,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
 import java.util.Map;
 
 /**
@@ -40,7 +40,7 @@ public class AdminNotificationService {
     /** Cross-user list of sent notifications over the window — the admin "enviadas" view. */
     @Transactional(readOnly = true)
     public Page<AdminNotificationSummaryResponse> listSent(int days, Pageable pageable) {
-        var since = LocalDate.now().minusDays(Math.max(1, days) - 1L).atStartOfDay();
+        var since = BrazilClock.today().minusDays(Math.max(1, days) - 1L).atStartOfDay();
         var page = notificationRepository.findSentSince(since, pageable);
         log.info("admin.notification.list_sent days={} total={}", days, page.getTotalElements());
         return page.map(AdminNotificationSummaryResponse::from);

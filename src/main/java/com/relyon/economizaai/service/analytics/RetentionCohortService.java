@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.analytics;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.dto.response.RetentionCohortResponse;
 import com.relyon.economizaai.dto.response.RetentionCohortResponse.ChannelCurve;
 import com.relyon.economizaai.dto.response.RetentionCohortResponse.CohortWeek;
@@ -18,7 +19,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -47,7 +47,7 @@ public class RetentionCohortService {
     @Transactional(readOnly = true)
     public RetentionCohortResponse cohorts(int weeks, boolean includeInternal) {
         var span = Math.min(MAX_WEEKS, Math.max(MIN_WEEKS, weeks));
-        var currentWeekStart = LocalDate.now().with(DayOfWeek.MONDAY);
+        var currentWeekStart = BrazilClock.today().with(DayOfWeek.MONDAY);
         var oldestCohort = currentWeekStart.minusWeeks(span - 1L);
         var since = oldestCohort.atStartOfDay();
 
@@ -172,7 +172,7 @@ public class RetentionCohortService {
             case LocalDate localDate -> localDate;
             case LocalDateTime dateTime -> dateTime.toLocalDate();
             case OffsetDateTime offset -> offset.toLocalDate();
-            case Instant instant -> instant.atZone(ZoneId.systemDefault()).toLocalDate();
+            case Instant instant -> instant.atZone(BrazilClock.ZONE).toLocalDate();
             default -> throw new IllegalStateException("Unexpected cohort_week type: " + value.getClass());
         };
     }

@@ -1,4 +1,5 @@
 package com.relyon.economizaai.service.notifications.schedule;
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.service.LocalizedMessageService;
 
 import com.relyon.economizaai.model.NotificationRule;
@@ -17,7 +18,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.format.TextStyle;
@@ -56,8 +56,8 @@ public class BudgetMonitorService {
     public void run() {
         var rules = ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.BUDGET);
         if (rules.isEmpty()) return;
-        var now = LocalDateTime.now();
-        var startOfMonth = YearMonth.now().atDay(1).atStartOfDay();
+        var now = BrazilClock.nowDateTime();
+        var startOfMonth = BrazilClock.currentYearMonth().atDay(1).atStartOfDay();
         var fired = 0;
         for (var rule : rules) {
             if (rule.getThresholdPrice() == null || rule.getUser().getHousehold() == null) continue;
@@ -86,7 +86,7 @@ public class BudgetMonitorService {
     private void notify(NotificationRule rule, BigDecimal spend) {
         var locale = LocalizedMessageService.toLocale(rule.getUser().getLocale());
         var title = messageService.translate("notification.budget.title", locale);
-        var monthName = LocalDate.now().getMonth().getDisplayName(TextStyle.FULL, locale);
+        var monthName = BrazilClock.today().getMonth().getDisplayName(TextStyle.FULL, locale);
         var body = messageService.translate("notification.budget.body", locale,
                 spend.toString(), monthName, rule.getThresholdPrice().toString());
         notificationService.notify(new NotificationPayload(

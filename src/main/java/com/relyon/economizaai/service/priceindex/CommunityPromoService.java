@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.priceindex;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.model.MarketLocation;
 import com.relyon.economizaai.model.PriceObservation;
@@ -72,7 +73,7 @@ public class CommunityPromoService {
         if (!properties.getCollaborative().isEnabled()) return List.of();
         var watched = watchedCnpjs == null ? Set.<String>of() : watchedCnpjs;
 
-        var since = LocalDateTime.now().minusDays(properties.getCollaborative().getLookbackDays());
+        var since = BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getLookbackDays());
         var observations = observationRepository.findRecent(since);
         if (observations.isEmpty()) return List.of();
 
@@ -88,7 +89,7 @@ public class CommunityPromoService {
                         Collectors.groupingBy(PriceObservation::getMarketCnpj)));
 
         var promos = new ArrayList<CommunityPromo>();
-        var recentCutoff = LocalDateTime.now().minusDays(properties.getCollaborative().getCommunityPromoRecentWindowDays());
+        var recentCutoff = BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getCommunityPromoRecentWindowDays());
 
         for (var productEntry : byProductMarket.entrySet()) {
             var productId = productEntry.getKey();

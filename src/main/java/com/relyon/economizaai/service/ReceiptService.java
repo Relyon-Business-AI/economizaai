@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.dto.request.AddReceiptItemRequest;
 import com.relyon.economizaai.dto.request.ConfirmReceiptRequest;
 import com.relyon.economizaai.dto.request.DeviceContentRequest;
@@ -72,7 +73,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -450,7 +450,7 @@ public class ReceiptService {
         if (monthlyLimit == Integer.MAX_VALUE) {
             return;
         }
-        var startOfMonth = YearMonth.now().atDay(1).atStartOfDay();
+        var startOfMonth = BrazilClock.currentYearMonth().atDay(1).atStartOfDay();
         var thisMonth = receiptRepository.countByUserIdAndCreatedAtGreaterThanEqual(user.getId(), startOfMonth);
         if (thisMonth >= monthlyLimit) {
             log.info("paywall.blocked user={} feature={} thisMonth={} limit={}",

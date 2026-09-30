@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.report;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.lowagie.text.Document;
 import com.lowagie.text.DocumentException;
 import com.lowagie.text.Element;
@@ -33,7 +34,6 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import javax.imageio.ImageIO;
@@ -88,7 +88,7 @@ public class PdfReportRenderer {
         title.setSpacingAfter(4);
         document.add(title);
         var subtitle = new Paragraph(
-                translate("report.generated-at", LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))),
+                translate("report.generated-at", BrazilClock.today().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))),
                 FontFactory.getFont(FontFactory.HELVETICA, 9, Color.DARK_GRAY));
         subtitle.setSpacingAfter(14);
         document.add(subtitle);

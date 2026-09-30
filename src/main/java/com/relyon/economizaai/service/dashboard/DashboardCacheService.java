@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.dashboard;
 
+import com.relyon.economizaai.time.BrazilClock;
 import java.util.Objects;
 
 import com.relyon.economizaai.config.CachingConfig;
@@ -31,7 +32,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.time.YearMonth;
 import java.util.List;
 import java.util.UUID;
 
@@ -89,7 +89,7 @@ public class DashboardCacheService {
     }
 
     private SpendSnapshot buildSpendSnapshot(User user, MarketScope scope) {
-        var ym = YearMonth.now();
+        var ym = BrazilClock.currentYearMonth();
         var monthStart = ym.atDay(1).atStartOfDay();
         var monthEnd = ym.atEndOfMonth().atTime(23, 59, 59);
 

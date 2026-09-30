@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.subscription;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.exception.PaywallException;
 import com.relyon.economizaai.model.User;
@@ -74,7 +75,7 @@ public class SubscriptionGateService {
     public LocalDateTime clampFrom(User user, LocalDateTime requestedFrom) {
         var windowDays = freeHistoryWindowDays(user);
         if (windowDays == null) return requestedFrom;
-        var floor = LocalDateTime.now().minusDays(windowDays);
+        var floor = BrazilClock.nowDateTime().minusDays(windowDays);
         if (requestedFrom == null || requestedFrom.isBefore(floor)) return floor;
         return requestedFrom;
     }
