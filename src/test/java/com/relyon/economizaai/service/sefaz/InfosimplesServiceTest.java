@@ -12,6 +12,7 @@ import org.springframework.web.client.RestClient;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -36,6 +37,31 @@ class InfosimplesServiceTest {
         var builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
         service = new InfosimplesService(builder, API_KEY, BASE_URL, "MG", "RJ");
+    }
+
+    @Test
+    void fetchSaldo_readsPrepaidBalanceFromAccountEndpoint() {
+        // Documented shape (api.infosimples.com/consultas/docs/conta) — free call.
+        server.expect(requestTo(BASE_URL + "/api/admin/account?token=test-key"))
+                .andRespond(withSuccess("""
+                        {"code":200,"code_message":"ok","data":[{
+                          "name":"Relyon","prepaid":true,"balance":92.32,
+                          "balance_threshold":10.0,"min_bill":100,"current_usage":11.5}]}
+                        """, MediaType.APPLICATION_JSON));
+
+        var saldo = service.fetchSaldo();
+
+        assertEquals(0, new BigDecimal("92.32").compareTo(saldo.orElseThrow()));
+    }
+
+    @Test
+    void fetchSaldo_emptyOnApiError() {
+        server.expect(requestTo(BASE_URL + "/api/admin/account?token=test-key"))
+                .andRespond(withSuccess("""
+                        {"code":601,"code_message":"token inválido","data":null}
+                        """, MediaType.APPLICATION_JSON));
+
+        assertEquals(Optional.empty(), service.fetchSaldo());
     }
 
     @Test

@@ -19,7 +19,6 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -284,16 +283,16 @@ public class InfosimplesService {
     }
 
     /**
-     * Account credit from {@code GET /api/v2/consultas/saldo} — a free management
-     * call (no consult is billed). The payload shape is undocumented, so the value
-     * is located defensively: first field in {@code data[0]} whose key contains
-     * "saldo" and parses as a number. Empty when the call or the parse fails —
+     * Account credit from the documented {@code GET /api/admin/account} endpoint
+     * (free — "este endpoint não tem custo"; spec at
+     * {@code api.infosimples.com/consultas/docs/conta}). For a prepaid account
+     * {@code data[0].balance} is the saldo in R$. Empty when the call fails —
      * the dashboard shows "indisponível" instead of breaking the cost report.
      */
     public Optional<BigDecimal> fetchSaldo() {
         try {
             var response = restClient.get()
-                    .uri("/api/v2/consultas/saldo?token={token}", apiKey)
+                    .uri("/api/admin/account?token={token}", apiKey)
                     .retrieve()
                     .body(SALDO_RESPONSE_TYPE);
             if (response == null || response.code() != 200 || response.data() == null) {
@@ -315,11 +314,7 @@ public class InfosimplesService {
     }
 
     private static Optional<BigDecimal> extractSaldo(Map<String, Object> entry) {
-        return entry.entrySet().stream()
-                .filter(field -> field.getKey().toLowerCase().contains("saldo"))
-                .map(field -> toDecimal(field.getValue()))
-                .filter(Objects::nonNull)
-                .findFirst();
+        return Optional.ofNullable(toDecimal(entry.get("balance")));
     }
 
     private static BigDecimal toDecimal(Object value) {

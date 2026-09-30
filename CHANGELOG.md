@@ -16,6 +16,12 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-29 (9) — saldo Infosimples de verdade (endpoint documentado)
+
+- O card de saldo agora usa o endpoint oficial `GET /api/admin/account` (grátis,
+  documentado em consultas/docs/conta) — retorna o `balance` da conta pré-paga.
+  Substitui o palpite `consultas/saldo`, que não existia (o card mostrava "—").
+
 ## 2026-09-29 (8) — sweeper de PROCESSING passa a contar do updatedAt
 
 - O sweeper matava por timeout qualquer nota RE-TENTADA (a linha é antiga por
