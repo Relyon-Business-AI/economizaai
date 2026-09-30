@@ -25,12 +25,10 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
     @Query("SELECT DISTINCT r.cnpjEmitente, r.marketName FROM Receipt r WHERE r.marketName IS NOT NULL")
     List<Object[]> findDistinctMerchants(Pageable pageable);
 
-    // Sweeper: PROCESSING rows older than the ingest timeout are stuck (commit-time
-    // failure, app restart mid-ingest, or pool rejection) and must be failed.
-    // updatedAt, not createdAt: retried rows are old by creation but fresh by flip.
+    // Sweepers (processing timeout + pending auto-confirm): rows older than the
+    // window are stuck/stale. updatedAt, not createdAt: retried/rescued rows are
+    // old by creation but fresh by the status flip.
     List<Receipt> findByStatusAndUpdatedAtBefore(ReceiptStatus status, LocalDateTime cutoff);
-
-    List<Receipt> findByStatusAndCreatedAtBefore(ReceiptStatus status, LocalDateTime cutoff);
 
     // Paced import worker: oldest IMPORT_QUEUED first, a small page at a time, and a
     // live count of in-flight PROCESSING rows so the worker yields to real scans.
