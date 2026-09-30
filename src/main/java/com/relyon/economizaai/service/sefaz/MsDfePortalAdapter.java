@@ -16,6 +16,8 @@ import org.springframework.web.client.RestClientException;
 
 import org.springframework.http.ResponseEntity;
 
+import java.io.IOException;
+import java.net.HttpURLConnection;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.EnumSet;
@@ -94,8 +96,8 @@ public class MsDfePortalAdapter implements SefazAdapter {
         // on this factory so we can manually follow with the session cookie.
         var noRedirectFactory = new SimpleClientHttpRequestFactory() {
             @Override
-            protected void prepareConnection(java.net.HttpURLConnection connection, String httpMethod)
-                    throws java.io.IOException {
+            protected void prepareConnection(HttpURLConnection connection, String httpMethod)
+                    throws IOException {
                 super.prepareConnection(connection, httpMethod);
                 connection.setInstanceFollowRedirects(false);
             }

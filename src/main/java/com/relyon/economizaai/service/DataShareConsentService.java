@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Mutual consent for taking/keeping another person's scanned data on split (Phase 2).
@@ -77,7 +78,7 @@ public class DataShareConsentService {
     }
 
     @Transactional
-    public DataShareConsent approve(User grantor, java.util.UUID consentId) {
+    public DataShareConsent approve(User grantor, UUID consentId) {
         var consent = loadDecidable(grantor, consentId);
         consent.setStatus(ConsentStatus.APPROVED);
         consent.setResolvedAt(LocalDateTime.now());
@@ -94,7 +95,7 @@ public class DataShareConsentService {
     }
 
     @Transactional
-    public DataShareConsent deny(User grantor, java.util.UUID consentId) {
+    public DataShareConsent deny(User grantor, UUID consentId) {
         var consent = loadDecidable(grantor, consentId);
         consent.setStatus(ConsentStatus.DENIED);
         consent.setResolvedAt(LocalDateTime.now());
@@ -108,7 +109,7 @@ public class DataShareConsentService {
 
     // Load a consent the grantor is allowed to decide: must be theirs, still PENDING,
     // and not expired (an expired one is flipped to EXPIRED and rejected).
-    private DataShareConsent loadDecidable(User grantor, java.util.UUID consentId) {
+    private DataShareConsent loadDecidable(User grantor, UUID consentId) {
         var consent = consentRepository.findByIdAndGrantorId(consentId, grantor.getId())
                 .orElseThrow(() -> new InvalidConsentRequestException("consent not found"));
         if (consent.getStatus() != ConsentStatus.PENDING) {

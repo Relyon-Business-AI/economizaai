@@ -347,7 +347,7 @@ public class CategorizerAdminService {
         var productWords = curatedRepository.findAll().stream()
                 .map(entry -> DescriptionNormalizer.normalize(entry.getKeyword()))
                 .filter(keyword -> !keyword.contains(" "))
-                .collect(java.util.stream.Collectors.toSet());
+                .collect(Collectors.toSet());
         var occurrences = onlyBrazil
                 ? eanCatalogRepository.countByBrandBrazilOnly()
                 : eanCatalogRepository.countByBrand();

@@ -14,7 +14,11 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Date;
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -166,9 +170,9 @@ public class RetentionCohortService {
         return switch (value) {
             case Date sqlDate -> sqlDate.toLocalDate();
             case LocalDate localDate -> localDate;
-            case java.time.LocalDateTime dateTime -> dateTime.toLocalDate();
-            case java.time.OffsetDateTime offset -> offset.toLocalDate();
-            case java.time.Instant instant -> instant.atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+            case LocalDateTime dateTime -> dateTime.toLocalDate();
+            case OffsetDateTime offset -> offset.toLocalDate();
+            case Instant instant -> instant.atZone(ZoneId.systemDefault()).toLocalDate();
             default -> throw new IllegalStateException("Unexpected cohort_week type: " + value.getClass());
         };
     }

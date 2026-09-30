@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.regex.Pattern;
 
 @Slf4j
@@ -82,14 +83,14 @@ public final class ScNfceDanfeParser {
         return !parseItems(Jsoup.parse(html)).isEmpty();
     }
 
-    static java.util.Optional<String> extractChave(Document document) {
+    static Optional<String> extractChave(Document document) {
         var text = document.text();
         var marker = text.toLowerCase().indexOf("chave de acesso");
         var search = marker >= 0 ? text.substring(marker) : text;
         var matcher = CHAVE.matcher(search);
-        if (!matcher.find()) return java.util.Optional.empty();
+        if (!matcher.find()) return Optional.empty();
         var digits = matcher.group(1).replaceAll("\\D", "");
-        return digits.length() == 44 ? java.util.Optional.of(digits) : java.util.Optional.empty();
+        return digits.length() == 44 ? Optional.of(digits) : Optional.empty();
     }
 
     private static List<ParsedReceiptItem> parseItems(Document document) {

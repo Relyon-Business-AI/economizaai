@@ -298,7 +298,7 @@ public class ProductService {
                             user.getHomeLatitude(), user.getHomeLongitude(),
                             row.getLatitude(), row.getLongitude()) <= PRODUCT_SEARCH_NEARBY_RADIUS_KM)
                     .map(PriceObservationRepository.ProductMarketCoordinates::getProductId)
-                    .collect(java.util.stream.Collectors.toSet());
+                    .collect(Collectors.toSet());
         }
 
         private Comparator<Product> comparator() {

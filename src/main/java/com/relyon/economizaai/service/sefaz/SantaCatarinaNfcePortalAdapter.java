@@ -10,6 +10,7 @@ import com.relyon.economizaai.service.privacy.LogMasker;
 import com.relyon.economizaai.service.sefaz.captcha.CaptchaSolver;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
+import org.jsoup.nodes.Element;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -20,11 +21,14 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.io.IOException;
+import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -71,8 +75,8 @@ public class SantaCatarinaNfcePortalAdapter implements SefazAdapter {
                 .build();
         var noRedirectFactory = new SimpleClientHttpRequestFactory() {
             @Override
-            protected void prepareConnection(java.net.HttpURLConnection connection, String httpMethod)
-                    throws java.io.IOException {
+            protected void prepareConnection(HttpURLConnection connection, String httpMethod)
+                    throws IOException {
                 super.prepareConnection(connection, httpMethod);
                 connection.setInstanceFollowRedirects(false);
             }
@@ -329,7 +333,7 @@ public class SantaCatarinaNfcePortalAdapter implements SefazAdapter {
         return absoluteUrl(form.attr("action"));
     }
 
-    private static String turnstileFieldName(org.jsoup.nodes.Element form) {
+    private static String turnstileFieldName(Element form) {
         var input = form.selectFirst("input[name$=cf-turnstile-response]");
         return input == null ? TURNSTILE_FALLBACK_FIELD : input.attr("name");
     }
@@ -369,7 +373,7 @@ public class SantaCatarinaNfcePortalAdapter implements SefazAdapter {
      * the server may pick the first (stale) one, invalidating the session.
      */
     private static String mergeCookies(String existingCookieHeader, List<String> setCookieHeaders) {
-        var byName = new java.util.LinkedHashMap<String, String>();
+        var byName = new LinkedHashMap<String, String>();
         putCookie(byName, existingCookieHeader == null ? null : existingCookieHeader.split(";\\s*"));
         if (setCookieHeaders != null) {
             setCookieHeaders.stream().map(cookie -> cookie.split(";")[0]).forEach(pair -> putCookie(byName, pair));
@@ -380,7 +384,7 @@ public class SantaCatarinaNfcePortalAdapter implements SefazAdapter {
                 .collect(Collectors.joining("; "));
     }
 
-    private static void putCookie(java.util.LinkedHashMap<String, String> byName, String... pairs) {
+    private static void putCookie(LinkedHashMap<String, String> byName, String... pairs) {
         if (pairs == null) return;
         for (var pair : pairs) {
             if (pair == null || pair.isBlank() || !pair.contains("=")) continue;
@@ -389,7 +393,7 @@ public class SantaCatarinaNfcePortalAdapter implements SefazAdapter {
         }
     }
 
-    private static void putCookie(java.util.LinkedHashMap<String, String> byName, String pair) {
+    private static void putCookie(LinkedHashMap<String, String> byName, String pair) {
         putCookie(byName, new String[]{pair});
     }
 
