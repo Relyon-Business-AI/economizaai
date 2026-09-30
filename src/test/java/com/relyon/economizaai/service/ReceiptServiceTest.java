@@ -51,12 +51,14 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.Month;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -227,9 +229,10 @@ class ReceiptServiceTest {
     }
 
     @Test
-    void adminRetryFailedScans_reingestsScanBacklogSkippingNonScanRows() {
+    void adminRetryFailedScans_queuesScanBacklogIntoPacedLaneSkippingNonScanRows() {
         var user = buildUser();
         var failedScan = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        failedScan.setParseErrorReason("receipt.contingency.pending:227");
         var failedImport = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
         failedImport.setOrigin(ReceiptOrigin.IMPORT);
         when(receiptRepository.findByStatusOrderByCreatedAtAsc(eq(ReceiptStatus.FAILED_PARSE), any()))
@@ -238,13 +241,79 @@ class ReceiptServiceTest {
         var retried = receiptService.adminRetryFailedScans(null);
 
         assertEquals(1, retried);
-        assertEquals(ReceiptStatus.PROCESSING, failedScan.getStatus());
+        // Paced through IMPORT_QUEUED — never dispatched straight into the ingest pool,
+        // so a 200-nota backlog can't overflow it and TaskReject itself back to failure.
+        assertEquals(ReceiptStatus.IMPORT_QUEUED, failedScan.getStatus());
         assertEquals(ReceiptStatus.FAILED_PARSE, failedImport.getStatus());
-        // 2-arg ingest — blocked states record the honest "not supported" reason,
-        // never app_update_required (an admin retry is not the owner's app).
-        verify(receiptIngestionService).ingest(failedScan.getId(), CHAVE_RS);
+        // The diagnostic reason survives until the worker actually re-runs the nota.
+        assertEquals("receipt.contingency.pending:227", failedScan.getParseErrorReason());
+        verify(receiptIngestionService, never()).ingest(any(), any());
         verify(receiptIngestionService, never()).ingest(any(), any(), anyBoolean());
-        verify(receiptIngestionService, never()).ingest(eq(failedImport.getId()), any());
+    }
+
+    @Test
+    void adminRetryFailedScans_backlogAboveOldPoolCapacityIsFullyQueued() {
+        var user = buildUser();
+        var backlog = new ArrayList<Receipt>();
+        for (var index = 0; index < 80; index++) { // > 8 threads + 50 queue slots
+            backlog.add(persistedReceipt(user, ReceiptStatus.FAILED_PARSE));
+        }
+        when(receiptRepository.findByStatusOrderByCreatedAtAsc(eq(ReceiptStatus.FAILED_PARSE), any()))
+                .thenReturn(backlog);
+
+        var retried = receiptService.adminRetryFailedScans(null);
+
+        assertEquals(80, retried);
+        assertTrue(backlog.stream().allMatch(receipt -> receipt.getStatus() == ReceiptStatus.IMPORT_QUEUED));
+        verify(receiptIngestionService, never()).ingest(any(), any());
+    }
+
+    @Test
+    void submit_duplicateRaceOnUniqueConstraint_surfacesLocalizedDuplicateError() {
+        var user = buildUser();
+        when(receiptRepository.findByHouseholdIdAndChaveAcesso(any(), eq(CHAVE_RS))).thenReturn(Optional.empty());
+        // The concurrent loser: exists-check passed, but the winner committed first
+        // and the (household, chave) unique constraint fires at persist time.
+        when(receiptRepository.save(any(Receipt.class)))
+                .thenThrow(new DataIntegrityViolationException("uk_receipts_household_chave"));
+
+        assertThrows(ReceiptAlreadyIngestedException.class,
+                () -> receiptService.submit(user, new SubmitReceiptRequest(QR_RS)));
+
+        verify(receiptIngestionService, never()).ingest(any(), any());
+    }
+
+    @Test
+    void retryFromStoredXml_reParsesStoredXmlWithoutAnyFetch() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        receipt.setOrigin(ReceiptOrigin.IMPORT);
+        receipt.setParseErrorReason("no-items-found:");
+        var storedXml = "<?xml version=\"1.0\"?><nfeProc><NFe><infNFe Id=\"NFe" + CHAVE_RS + "\"/></NFe></nfeProc>";
+        receipt.setRawHtml(storedXml);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        var retried = receiptService.retryFromStoredXml(user, receipt.getId());
+
+        assertTrue(retried);
+        assertEquals(ReceiptStatus.PROCESSING, receipt.getStatus());
+        assertNull(receipt.getParseErrorReason());
+        verify(receiptIngestionService).ingestXml(receipt.getId(), storedXml);
+        verify(receiptIngestionService, never()).ingest(any(), any());
+    }
+
+    @Test
+    void retryFromStoredXml_noStoredXml_returnsFalseUntouched() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        receipt.setOrigin(ReceiptOrigin.IMPORT);
+        receipt.setRawHtml("<html>a portal error page, not a nota</html>");
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        assertFalse(receiptService.retryFromStoredXml(user, receipt.getId()));
+
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+        verify(receiptIngestionService, never()).ingestXml(any(), any());
     }
 
     @Test

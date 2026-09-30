@@ -91,29 +91,16 @@ class HouseholdProductAliasServiceTest {
     }
 
     @Test
-    void upsert_createsWhenAbsent() {
-        var household = household();
-        var product = product();
-        when(repository.findByHouseholdIdAndProductId(household.getId(), product.getId()))
-                .thenReturn(Optional.empty());
-
-        service.upsert(household, product, "Feijao preto");
-
-        var captor = ArgumentCaptor.forClass(HouseholdProductAlias.class);
-        verify(repository).save(captor.capture());
-        assertEquals("Feijao preto", captor.getValue().getFriendlyName());
-    }
-
-    @Test
-    void upsert_updatesExisting() {
+    void rememberFromItem_existingAlias_isUpdatedNotDuplicated() {
         var household = household();
         var product = product();
         var existing = HouseholdProductAlias.builder()
                 .household(household).product(product).friendlyName("old name").build();
+        var item = ReceiptItem.builder().product(product).friendlyDescription("new name").build();
         when(repository.findByHouseholdIdAndProductId(household.getId(), product.getId()))
                 .thenReturn(Optional.of(existing));
 
-        service.upsert(household, product, "new name");
+        service.rememberFromItem(household, item);
 
         verify(repository).save(existing);
         assertEquals("new name", existing.getFriendlyName());

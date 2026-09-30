@@ -47,6 +47,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class DealsDigestSchedulerTest {
@@ -75,7 +76,7 @@ class DealsDigestSchedulerTest {
     @BeforeEach
     void setUp() {
         // @InjectMocks won't inject the concrete properties bean; set it directly.
-        org.springframework.test.util.ReflectionTestUtils.setField(scheduler, "properties", properties);
+        ReflectionTestUtils.setField(scheduler, "properties", properties);
     }
 
     private User dueUser(DigestFrequency frequency, OffsetDateTime lastSent) {

@@ -1,5 +1,6 @@
 package com.relyon.economizaai.dto.response;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.model.CategorizationQualitySnapshot;
 
 import java.math.BigDecimal;
@@ -20,7 +21,7 @@ public record CategorizationQualitySnapshotResponse(
 ) {
     public static CategorizationQualitySnapshotResponse from(CategorizationQualitySnapshot snapshot) {
         return new CategorizationQualitySnapshotResponse(
-                snapshot.getCreatedAt(),
+                BrazilClock.fromUtc(snapshot.getCreatedAt()),
                 snapshot.getTrigger().name(),
                 snapshot.getAccuracyPct(),
                 snapshot.getBenchmarkTotal(),

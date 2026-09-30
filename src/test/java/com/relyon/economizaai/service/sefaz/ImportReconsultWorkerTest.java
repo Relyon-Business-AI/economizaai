@@ -2,6 +2,7 @@ package com.relyon.economizaai.service.sefaz;
 
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import org.junit.jupiter.api.Test;
@@ -15,6 +16,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -62,9 +64,10 @@ class ImportReconsultWorkerTest {
     }
 
     @Test
-    void tick_dispatchesQueuedNotaThenSweeps() {
+    void tick_dispatchesQueuedImportNotaThenSweeps() {
         var user = User.builder().id(UUID.randomUUID()).email("test456@economizaai.app").build();
         var queued = Receipt.builder().user(user).chaveAcesso(CHAVE)
+                .origin(ReceiptOrigin.IMPORT)
                 .status(ReceiptStatus.IMPORT_QUEUED).build();
         queued.setId(UUID.randomUUID());
         when(receiptRepository.countByStatus(ReceiptStatus.PROCESSING)).thenReturn(0L);
@@ -74,7 +77,29 @@ class ImportReconsultWorkerTest {
         worker(true).processQueue();
 
         verify(receiptIngestionService).ingestReconsult(queued.getId(), CHAVE);
+        verify(receiptIngestionService, never()).ingest(any(), any());
         verify(importCompletionNotifier).notifyCompletedBatches();
+    }
+
+    @Test
+    void tick_queuedScanRetry_reRunsQrIngestionWithStoredPayload() {
+        // An admin-retried SCANNED nota rides the paced lane but must go through the
+        // full QR ingestion — its signed QR URL is not reconsultable by bare chave.
+        var user = User.builder().id(UUID.randomUUID()).email("test789@economizaai.app").build();
+        var signedQrUrl = "https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx?p=" + CHAVE + "|2|1|1|hash";
+        var queuedScan = Receipt.builder().user(user).chaveAcesso(CHAVE)
+                .qrPayload(signedQrUrl)
+                .status(ReceiptStatus.IMPORT_QUEUED).build(); // origin defaults to SCAN
+        queuedScan.setId(UUID.randomUUID());
+        when(receiptRepository.countByStatus(ReceiptStatus.PROCESSING)).thenReturn(0L);
+        when(receiptRepository.findByStatusOrderByCreatedAtAsc(any(), any())).thenReturn(List.of(queuedScan));
+        when(receiptRepository.findById(queuedScan.getId())).thenReturn(Optional.of(queuedScan));
+
+        worker(true).processQueue();
+
+        verify(receiptIngestionService).ingest(queuedScan.getId(), signedQrUrl);
+        verify(receiptIngestionService, never()).ingestReconsult(any(), any());
+        assertEquals(ReceiptStatus.PROCESSING, queuedScan.getStatus());
     }
 
     @Test

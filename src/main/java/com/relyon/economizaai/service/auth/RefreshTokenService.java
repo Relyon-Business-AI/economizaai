@@ -54,11 +54,21 @@ public class RefreshTokenService {
      * user it belonged to so the caller can mint a new access + refresh
      * pair. Throws {@link InvalidAuthTokenException} if the presented
      * token is unknown, expired, already consumed, or revoked.
+     *
+     * <p>Presenting an ALREADY-CONSUMED token is the classic replay signal —
+     * either the legitimate client or a thief holds a stolen copy of the chain.
+     * The only safe response is to revoke the whole family (all active refresh
+     * tokens of the user), forcing a fresh login on every device.
+     * {@code noRollbackFor} keeps that revocation committed despite the 401.
      */
-    @Transactional
+    @Transactional(noRollbackFor = InvalidAuthTokenException.class)
     public User rotate(String presented) {
         var stored = tokenRepository.findByToken(CodeHasher.sha256(presented))
                 .orElseThrow(InvalidAuthTokenException::new);
+        if (stored.getConsumedAt() != null) {
+            revokeFamilyOnReuse(stored);
+            throw new InvalidAuthTokenException();
+        }
         if (!stored.isUsable(LocalDateTime.now())) {
             throw new InvalidAuthTokenException();
         }
@@ -92,6 +102,12 @@ public class RefreshTokenService {
     public void revokeAllForUser(User user) {
         var revoked = tokenRepository.revokeAllActiveForUser(user);
         log.info("refresh.revoked_all user={} count={}", LogMasker.email(user.getEmail()), revoked);
+    }
+
+    private void revokeFamilyOnReuse(RefreshToken reused) {
+        var owner = reused.getUser();
+        var revoked = tokenRepository.revokeAllActiveForUser(owner);
+        log.warn("refresh_token.reuse_detected user={} revoked={}", LogMasker.email(owner.getEmail()), revoked);
     }
 
     private String generateToken() {

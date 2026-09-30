@@ -104,6 +104,22 @@
 		{
 			"key": "importChave",
 			"value": "43260593015006005182651200000076311055456577"
+		},
+		{
+			"key": "receiptId",
+			"value": ""
+		},
+		{
+			"key": "productId",
+			"value": ""
+		},
+		{
+			"key": "curatedEntryId",
+			"value": ""
+		},
+		{
+			"key": "learnedEntryId",
+			"value": ""
 		}
 	],
 	"item": [
@@ -2488,6 +2504,121 @@
 						"description": "Vision fallback: extracts items from a photographed receipt into a PENDING_CONFIRMATION receipt (origin=PHOTO, excluded from the collaborative index). 503 when the LLM layer is disabled."
 					},
 					"response": []
+				},
+				{
+					"name": "Retry failed receipt (scan re-ingest / import re-queue / stored-XML re-parse)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/receipts/{{e2eReceiptId}}/retry",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"receipts",
+								"{{e2eReceiptId}}",
+								"retry"
+							]
+						},
+						"description": "Tentar novamente uma nota FAILED_PARSE sem reescanear: SCAN re-roda a ingestão com o qrPayload guardado; IMPORT re-enfileira o reconsult; XML re-parseia o XML armazenado. 202; 400 receipt.retry.unavailable quando a nota não tem fonte reprocessável (ex.: foto). Header opcional X-Device-Fetch marca o cliente como device-capable."
+					},
+					"response": []
+				},
+				{
+					"name": "Retry failed import receipts (batch)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/receipts/retry",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"receipts",
+								"retry"
+							]
+						},
+						"description": "Re-enfileira notas de import FAILED_PARSE para novo reconsult (o \"tentar de novo\" da tela de import). Escopo do domicílio; status não-FAILED são pulados. 202 { affected }.",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ids\": [\"{{e2eReceiptId}}\"]\n}"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete receipts batch (import screen)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/receipts/delete-batch",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"receipts",
+								"delete-batch"
+							]
+						},
+						"description": "Apaga em lote as notas selecionadas do domicílio (o \"apagar selecionadas\" da tela de import). 200 { affected }.",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ids\": [\"{{e2eReceiptId}}\"]\n}"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Correct item with AI hint (user correction)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/receipts/{{e2eReceiptId}}/items/{{e2eReceiptItemId}}/correction",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"receipts",
+								"{{e2eReceiptId}}",
+								"items",
+								"{{e2eReceiptItemId}}",
+								"correction"
+							]
+						},
+						"description": "Correção de item mal classificado: o usuário diz o que o produto realmente é; a IA re-classifica com a dica, atualiza o produto e cria um finding MISSING_RULE para revisão do admin. 200 com a nota atualizada.",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"hint\": \"arroz integral 1kg\"\n}"
+						}
+					},
+					"response": []
 				}
 			]
 		},
@@ -4408,6 +4539,227 @@
 							]
 						},
 						"description": "[ADMIN] Classifica UMA descrição com o LLM (toggle IA da tela Testar). Custa 1 chamada pequena, logada como TEST_CLASSIFY no painel."
+					},
+					"response": []
+				},
+				{
+					"name": "Live accuracy vs validated products [ADMIN]",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/live-accuracy",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"live-accuracy"
+							]
+						},
+						"description": "Acurácia do motor contra produtos validados por humanos/consenso (dados REAIS, não o golden set) + lista dos casos em que o motor discorda de um humano. Read-only."
+					},
+					"response": []
+				},
+				{
+					"name": "List curated dictionary entries [ADMIN]",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/dictionary/curated?q=&page=0&size=50",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"dictionary",
+								"curated"
+							],
+							"query": [
+								{
+									"key": "q",
+									"value": ""
+								},
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "50"
+								}
+							]
+						},
+						"description": "Lista paginada do dicionário curado; q opcional (substring da keyword). Page<CuratedEntryResponse>."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete curated dictionary entry [ADMIN]",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/dictionary/curated/{{curatedEntryId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"dictionary",
+								"curated",
+								"{{curatedEntryId}}"
+							]
+						},
+						"description": "Remove UMA entrada curada (cirúrgico, diferente do reset que zera tudo) — hot-reload do dicionário. 204."
+					},
+					"response": []
+				},
+				{
+					"name": "List learned dictionary entries [ADMIN]",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/dictionary/learned?q=&page=0&size=50",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"dictionary",
+								"learned"
+							],
+							"query": [
+								{
+									"key": "q",
+									"value": ""
+								},
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "50"
+								}
+							]
+						},
+						"description": "Lista paginada do dicionário aprendido (auto-promovido); q opcional (substring do token). Page<LearnedEntryResponse>."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete learned dictionary entry [ADMIN]",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/dictionary/learned/{{learnedEntryId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"dictionary",
+								"learned",
+								"{{learnedEntryId}}"
+							]
+						},
+						"description": "Remove UMA entrada aprendida (cirúrgico) — hot-reload do dicionário. 204."
+					},
+					"response": []
+				},
+				{
+					"name": "Consensus graduation audit trail [ADMIN]",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/consensus/audit?limit=50",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"consensus",
+								"audit"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "50"
+								}
+							]
+						},
+						"description": "Trilha de auditoria da graduação por consenso — quais domicílios promoveram qual produto para qual categoria, mais recentes primeiro. Filtro opcional productId. Torna um consenso ruim rastreável e reversível."
+					},
+					"response": []
+				},
+				{
+					"name": "Bulk import Open Food Facts rows (EAN catalog) [ADMIN]",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/ean-catalog/import-off",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"ean-catalog",
+								"import-off"
+							]
+						},
+						"description": "Importa linhas cruas do Open Food Facts — as category tags são mapeadas para o enum no servidor. 200 BulkImportOutcome.",
+						"body": {
+							"mode": "raw",
+							"raw": "[\n  {\n    \"code\": \"7891234567890\",\n    \"productName\": \"Arroz Tio João 5kg\",\n    \"brands\": \"Tio João\",\n    \"categoryTags\": \"en:cereals,en:rices\"\n  }\n]"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "AI: re-enrich achados pendentes",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/ai/findings/re-enrich",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"ai",
+								"findings",
+								"re-enrich"
+							]
+						},
+						"description": "Re-enriquece os findings pendentes da IA (roda de novo a camada de enriquecimento sobre o backlog). 200 { enriched }."
 					},
 					"response": []
 				}
@@ -12547,6 +12899,395 @@
 					]
 				},
 				{
+					"name": "COV admin: Overview KPIs (admin)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/overview",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"overview"
+							]
+						},
+						"description": "Cross-area KPIs em uma chamada. ADMIN-only.",
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"    pm.expect(pm.response.code).to.be.below(500);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV admin: Market intelligence (admin)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/market-intel",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"market-intel"
+							]
+						},
+						"description": "Índice colaborativo + top produtos/mercados + gasto por categoria/UF. ADMIN-only.",
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"    pm.expect(pm.response.code).to.be.below(500);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV admin: Brand coverage report (admin)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/products/brand-coverage",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"products",
+								"brand-coverage"
+							]
+						},
+						"description": "Dry-run da cobertura do brand registry. ADMIN-only.",
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"    pm.expect(pm.response.code).to.be.below(500);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV admin: Unmatched report (admin)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/products/unmatched-report?topN=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"products",
+								"unmatched-report"
+							],
+							"query": [
+								{
+									"key": "topN",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Taxa UNMATCHED + descrições órfãs mais frequentes. ADMIN-only.",
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"    pm.expect(pm.response.code).to.be.below(500);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV admin: Live accuracy (categorizer)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/live-accuracy",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"live-accuracy"
+							]
+						},
+						"description": "Acurácia contra produtos validados por humanos (dados reais). ADMIN-only.",
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"    pm.expect(pm.response.code).to.be.below(500);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV admin: Consensus audit trail (categorizer)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/consensus/audit?limit=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"consensus",
+								"audit"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Trilha de auditoria da graduação por consenso. ADMIN-only.",
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"    pm.expect(pm.response.code).to.be.below(500);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV admin: List curated dictionary entries",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/dictionary/curated?page=0&size=20",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"dictionary",
+								"curated"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "20"
+								}
+							]
+						},
+						"description": "Dicionário curado paginado. ADMIN-only.",
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"    pm.expect(pm.response.code).to.be.below(500);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV admin: List learned dictionary entries",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/dictionary/learned?page=0&size=20",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"dictionary",
+								"learned"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "20"
+								}
+							]
+						},
+						"description": "Dicionário aprendido paginado. ADMIN-only.",
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"    pm.expect(pm.response.code).to.be.below(500);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
 					"name": "FUZZ: inverted date range (from>to)",
 					"request": {
 						"method": "GET",
@@ -14919,6 +15660,164 @@
 								}
 							]
 						}
+					},
+					"response": []
+				},
+				{
+					"name": "Admin home overview (KPIs)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/overview?includeInternal=false",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"overview"
+							],
+							"query": [
+								{
+									"key": "includeInternal",
+									"value": "false"
+								}
+							]
+						},
+						"description": "KPIs cross-área numa chamada: usuários (total/hoje/semana/PRO), notas (total/hoje + parse rate 30d), domicílios ativos 7d, gasto global confirmado e tamanho do índice. ADMIN."
+					},
+					"response": []
+				},
+				{
+					"name": "Market intelligence (admin)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/market-intel?includeInternal=false",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"market-intel"
+							],
+							"query": [
+								{
+									"key": "includeInternal",
+									"value": "false"
+								}
+							]
+						},
+						"description": "Tamanho do índice colaborativo + produtos/mercados mais escaneados, gasto por categoria e por UF, agregado entre todos os domicílios (dados confirmados, não excluídos). ADMIN."
+					},
+					"response": []
+				},
+				{
+					"name": "Brand coverage report (admin, dry-run)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/products/brand-coverage",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"products",
+								"brand-coverage"
+							]
+						},
+						"description": "Dry-run: mede quanto o brand registry cobre a base de produtos (nenhuma escrita). ADMIN."
+					},
+					"response": []
+				},
+				{
+					"name": "Unmatched report (admin)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/products/unmatched-report?topN=30",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"products",
+								"unmatched-report"
+							],
+							"query": [
+								{
+									"key": "topN",
+									"value": "30"
+								}
+							]
+						},
+						"description": "KPI de matching: taxa UNMATCHED + as descrições órfãs mais frequentes (o que curar primeiro). ADMIN."
+					},
+					"response": []
+				},
+				{
+					"name": "Set product GLOBAL category (admin)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/products/{{productId}}/category",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"products",
+								"{{productId}}",
+								"category"
+							]
+						},
+						"description": "Define a categoria GLOBAL do produto e trava como decisão manual (USER). 200 ProductResponse. ADMIN.",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"category\": \"GROCERIES\"\n}"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Purge orphaned observations (admin, dev-only)",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/observations/orphaned",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"observations",
+								"orphaned"
+							]
+						},
+						"description": "Limpeza dev-only: apaga em lote toda observação órfã (sobras de contas deletadas). 403 a menos que economizaai.admin.dev-cleanup-enabled=true — em prod são agregados anonimizados preservados por LGPD."
 					},
 					"response": []
 				}

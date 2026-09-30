@@ -22,6 +22,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.postgresql.util.PSQLException;
 import org.postgresql.util.PSQLState;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.dao.TransientDataAccessResourceException;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -338,5 +339,30 @@ class ReceiptIngestionServiceTest {
 
         assertEquals(ReceiptStatus.PENDING_CONFIRMATION, receipt.getStatus());
         verify(receiptRepository, never()).save(any());
+    }
+
+    @Test
+    void markFailed_poolRejection_preservesOriginalDiagnosticReason() {
+        var receipt = processingReceipt();
+        receipt.setParseErrorReason("receipt.contingency.pending:227");
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        service.markFailed(receipt.getId(), new TaskRejectedException("pool full"));
+
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+        // The infrastructure hiccup must not overwrite the original diagnosis.
+        assertEquals("receipt.contingency.pending:227", receipt.getParseErrorReason());
+        verify(receiptRepository).save(receipt);
+    }
+
+    @Test
+    void markFailed_poolRejectionWithoutPriorReason_recordsTheRejection() {
+        var receipt = processingReceipt();
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        service.markFailed(receipt.getId(), new TaskRejectedException("pool full"));
+
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+        assertTrue(receipt.getParseErrorReason().contains("TaskRejectedException"));
     }
 }

@@ -41,8 +41,12 @@ public class SantaCatarinaNfcePortalAdapter implements SefazAdapter {
 
     private static final String BASE_URL = "https://sat.sef.sc.gov.br";
     private static final String CONSULT_URL = BASE_URL + "/tax.NET/Sat.DFe.NFCe.Web/Consultas/ConsultaPublicaNFCe.aspx";
+    // Historical literals kept ONLY as last-resort fallbacks — ASP.NET renumbers the
+    // auto "_ctl0$…" control prefix without notice, so the live page is the source
+    // of truth (see validateEventTarget / turnstileFieldName).
     private static final String TURNSTILE_FALLBACK_FIELD = "_ctl0:_ctl0:Body:Main:cf-turnstile-response";
     private static final String VALIDATE_EVENT_TARGET = "_ctl0$_ctl0$Body$Main$ButtonValidar";
+    private static final Pattern DO_POSTBACK_TARGET = Pattern.compile("__doPostBack\\('([^']+)'");
     private static final Pattern URL_HOST = Pattern.compile(
             "^(https?)://([^/?#@\\\\]+?)(?::\\d+)?(?=[/?#]|$)", Pattern.CASE_INSENSITIVE);
     private static final Pattern CHAVE = Pattern.compile("\\d{44}");
@@ -289,7 +293,7 @@ public class SantaCatarinaNfcePortalAdapter implements SefazAdapter {
         for (var input : form.select("input[name]")) {
             body.add(input.attr("name"), input.attr("value"));
         }
-        body.set("__EVENTTARGET", VALIDATE_EVENT_TARGET);
+        body.set("__EVENTTARGET", validateEventTarget(form));
         body.set("__EVENTARGUMENT", "");
         body.set(turnstileFieldName(form), turnstileToken);
         body.set("cf-turnstile-response", turnstileToken);
@@ -333,9 +337,44 @@ public class SantaCatarinaNfcePortalAdapter implements SefazAdapter {
         return absoluteUrl(form.attr("action"));
     }
 
+    /**
+     * Locates the Validar button's postback target on the LIVE page instead of
+     * hardcoding the auto-numbered {@code _ctl0$…$ButtonValidar} — ASP.NET/JSF
+     * portals renumber those ids without notice and a hardcoded target silently
+     * posts a dead event (MS's portal did exactly this). Stable traits, in order:
+     * a submit control named {@code *ButtonValidar}, a {@code __doPostBack}
+     * LinkButton whose target ends in ButtonValidar (or whose text is "Validar"),
+     * any submit input labelled Validar. The historical literal is the last resort.
+     */
+    static String validateEventTarget(Element form) {
+        var namedButton = form.selectFirst("input[name$=ButtonValidar], button[name$=ButtonValidar]");
+        if (namedButton != null) {
+            return namedButton.attr("name");
+        }
+        for (var anchor : form.select("a[href*=__doPostBack]")) {
+            var matcher = DO_POSTBACK_TARGET.matcher(anchor.attr("href"));
+            if (matcher.find() && (matcher.group(1).endsWith("ButtonValidar")
+                    || anchor.text().trim().equalsIgnoreCase("Validar"))) {
+                return matcher.group(1);
+            }
+        }
+        var submitLabelledValidar = form.select("input[type=submit]").stream()
+                .filter(input -> input.attr("value").toLowerCase().contains("validar"))
+                .findFirst().orElse(null);
+        if (submitLabelledValidar != null && submitLabelledValidar.hasAttr("name")) {
+            return submitLabelledValidar.attr("name");
+        }
+        log.warn("sc.security.validar_target_not_found — using historical literal fallback");
+        return VALIDATE_EVENT_TARGET;
+    }
+
     private static String turnstileFieldName(Element form) {
         var input = form.selectFirst("input[name$=cf-turnstile-response]");
-        return input == null ? TURNSTILE_FALLBACK_FIELD : input.attr("name");
+        if (input != null) {
+            return input.attr("name");
+        }
+        log.warn("sc.security.turnstile_field_not_found — using historical literal fallback");
+        return TURNSTILE_FALLBACK_FIELD;
     }
 
     private static String decodeBase64Text(String value) {

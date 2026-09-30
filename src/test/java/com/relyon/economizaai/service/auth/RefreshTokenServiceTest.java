@@ -101,13 +101,26 @@ class RefreshTokenServiceTest {
     }
 
     @Test
-    void rotate_alreadyConsumedToken_throws_singleUse() {
+    void rotate_alreadyConsumedToken_throws_andRevokesWholeFamily() {
         var stored = usableToken("reused-token");
         stored.setConsumedAt(LocalDateTime.now().minusMinutes(5));
         when(tokenRepository.findByToken(CodeHasher.sha256("reused-token"))).thenReturn(Optional.of(stored));
+        when(tokenRepository.revokeAllActiveForUser(user)).thenReturn(2);
 
         assertThrows(InvalidAuthTokenException.class, () -> service.rotate("reused-token"));
+
+        verify(tokenRepository).revokeAllActiveForUser(user);
         verify(tokenRepository, never()).save(any());
+    }
+
+    @Test
+    void rotate_normalRotation_doesNotTouchTheFamily() {
+        var stored = usableToken("fresh-token");
+        when(tokenRepository.findByToken(CodeHasher.sha256("fresh-token"))).thenReturn(Optional.of(stored));
+
+        service.rotate("fresh-token");
+
+        verify(tokenRepository, never()).revokeAllActiveForUser(any());
     }
 
     @Test

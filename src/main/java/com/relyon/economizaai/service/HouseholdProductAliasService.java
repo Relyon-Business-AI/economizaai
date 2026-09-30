@@ -35,14 +35,11 @@ public class HouseholdProductAliasService {
     public void rememberFromItem(Household household, ReceiptItem item) {
         if (item.getProduct() == null) return;
         if (item.getFriendlyDescription() == null || item.getFriendlyDescription().isBlank()) return;
-        upsert(household, item.getProduct(), item.getFriendlyDescription());
-    }
-
-    @Transactional
-    public void upsert(Household household, Product product, String friendlyName) {
-        var existing = repository.findByHouseholdIdAndProductId(household.getId(), product.getId());
-        var alias = existing.orElseGet(() -> HouseholdProductAlias.builder()
-                .household(household).product(product).build());
+        var product = item.getProduct();
+        var friendlyName = item.getFriendlyDescription();
+        var alias = repository.findByHouseholdIdAndProductId(household.getId(), product.getId())
+                .orElseGet(() -> HouseholdProductAlias.builder()
+                        .household(household).product(product).build());
         alias.setFriendlyName(friendlyName);
         repository.save(alias);
         log.info("household_product_alias.upsert household={} product={} name='{}'",

@@ -70,6 +70,31 @@ public interface PriceObservationAuditRepository extends JpaRepository<PriceObse
         long getHouseholds();
     }
 
+    /** Batched k-anonymity helper for community-promo detection: distinct contributing
+     *  households per (product, market) in ONE aggregated query — the per-group count
+     *  used to be an N+1 over every (product, market) pair on each dashboard build.
+     *  {@code HAVING >= :minHouseholds} applies the K-gate in the database, so groups
+     *  that fail k-anonymity never even reach the service. */
+    @Query("""
+        SELECT a.observation.product.id AS productId, a.observation.marketCnpj AS cnpj,
+               COUNT(DISTINCT a.householdId) AS households
+        FROM PriceObservationAudit a
+        WHERE a.observation.channel = 'IN_STORE'
+          AND a.observation.outlier = false
+          AND a.observation.observedAt >= :since
+        GROUP BY a.observation.product.id, a.observation.marketCnpj
+        HAVING COUNT(DISTINCT a.householdId) >= :minHouseholds
+    """)
+    List<ProductMarketHouseholdCount> countDistinctHouseholdsPerProductMarket(@Param("since") LocalDateTime since,
+                                                                              @Param("minHouseholds") long minHouseholds);
+
+    /** Projection for {@link #countDistinctHouseholdsPerProductMarket}. */
+    interface ProductMarketHouseholdCount {
+        UUID getProductId();
+        String getCnpj();
+        long getHouseholds();
+    }
+
     /**
      * True when another household has already contributed observations for
      * a receipt sharing this fiscal chave. Used to keep the same NF from

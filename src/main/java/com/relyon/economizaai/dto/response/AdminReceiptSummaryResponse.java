@@ -1,5 +1,6 @@
 package com.relyon.economizaai.dto.response;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 
@@ -28,7 +29,7 @@ public record AdminReceiptSummaryResponse(
                 ReceiptSummaryResponse.from(receipt),
                 owner,
                 receipt.getUf(),
-                receipt.getCreatedAt(),
+                BrazilClock.fromUtc(receipt.getCreatedAt()),
                 receipt.getParseErrorReason(),
                 parseErrorMessage);
     }

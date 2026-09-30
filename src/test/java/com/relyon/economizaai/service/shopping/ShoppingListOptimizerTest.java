@@ -41,6 +41,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
 
 @ExtendWith(MockitoExtension.class)
 class ShoppingListOptimizerTest {
@@ -102,7 +103,7 @@ class ShoppingListOptimizerTest {
 
     @Test
     void optimize_throwsPaywallForFreeTier() {
-        org.mockito.Mockito.doThrow(new PaywallException(Feature.BASKET_OPTIMIZATION.name()))
+        doThrow(new PaywallException(Feature.BASKET_OPTIMIZATION.name()))
                 .when(subscriptionGate).require(user, Feature.BASKET_OPTIMIZATION);
 
         var request = request(UUID.randomUUID(), BigDecimal.ONE);

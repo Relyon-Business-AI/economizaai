@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service;
 
+import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
@@ -16,6 +18,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -25,6 +28,7 @@ class LeaderboardServiceTest {
     @Mock private ReceiptItemRepository receiptItemRepository;
     @Mock private UserRepository userRepository;
     @Mock private LocalizedMessageService localizedMessageService;
+    @Spy private CollaborativeProperties collaborativeProperties = new CollaborativeProperties();
     @InjectMocks private LeaderboardService service;
 
     private final UUID householdA = UUID.randomUUID();
@@ -38,7 +42,7 @@ class LeaderboardServiceTest {
 
     @Test
     void publicViewListsOnlyOptedInAndShowsViewerOwnStanding() {
-        when(receiptItemRepository.discountHuntersSince(any())).thenReturn(List.<Object[]>of(
+        when(receiptItemRepository.discountHuntersSince(any(), eq(3))).thenReturn(List.<Object[]>of(
                 new Object[]{householdA, 10L, new BigDecimal("50.00")},
                 new Object[]{householdB, 8L, new BigDecimal("40.00")}));
         when(userRepository.findByShareInLeaderboardTrue())
@@ -61,7 +65,7 @@ class LeaderboardServiceTest {
 
     @Test
     void adminViewRanksEveryoneWithEmailsAndNoMe() {
-        when(receiptItemRepository.discountHuntersSince(any())).thenReturn(List.<Object[]>of(
+        when(receiptItemRepository.discountHuntersSince(any(), eq(3))).thenReturn(List.<Object[]>of(
                 new Object[]{householdA, 10L, new BigDecimal("50.00")},
                 new Object[]{householdB, 8L, new BigDecimal("40.00")}));
         when(userRepository.findByHouseholdIdIn(any())).thenReturn(List.of(

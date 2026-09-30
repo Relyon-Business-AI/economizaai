@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service;
 
+import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.dto.response.LeaderboardResponse;
 import com.relyon.economizaai.dto.response.LeaderboardResponse.Entry;
@@ -38,6 +39,7 @@ public class LeaderboardService {
     private final ReceiptItemRepository receiptItemRepository;
     private final UserRepository userRepository;
     private final LocalizedMessageService localizedMessageService;
+    private final CollaborativeProperties collaborativeProperties;
 
     /** Public leaderboard: opted-in households only, plus the caller's own standing. */
     @Transactional(readOnly = true)
@@ -107,8 +109,9 @@ public class LeaderboardService {
 
     private List<Row> ranked(int windowDays) {
         var since = BrazilClock.today().minusDays(windowDays - 1L).atStartOfDay();
+        var minHouseholds = collaborativeProperties.getCollaborative().getMinHouseholdsForPublic();
         var rows = new ArrayList<Row>();
-        for (var raw : receiptItemRepository.discountHuntersSince(since)) {
+        for (var raw : receiptItemRepository.discountHuntersSince(since, minHouseholds)) {
             rows.add(new Row(toUuid(raw[0]), ((Number) raw[1]).longValue(), scale((BigDecimal) raw[2])));
         }
         return rows;

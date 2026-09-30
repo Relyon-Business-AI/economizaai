@@ -16,6 +16,31 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-30 (4) — timestamps em Brasília, retry honesto e 409 no submit duplicado
+
+- **Timestamps EXIBIDOS agora saem em horário de Brasília (-3h vs antes):** os
+  campos da família createdAt que o app mostra — inbox de notificações
+  (`createdAt`/`deliveredAt`/`readAt`), notas (`createdAt`/`confirmedAt`, user e
+  admin), perfil/household/shopping lists/price alerts/regras e telas admin —
+  eram devolvidos como wall-clock UTC e o app renderizava "3h atrás" em
+  notificação recém-chegada. O armazenamento não mudou; só a borda do DTO
+  converte (`issuedAt`/`purchasedAt` já eram Brasília e seguem iguais). Se o FE
+  aplicava algum ajuste manual de -3h, remover.
+- **`POST /receipts/{id}/retry` parou de mentir:** nota XML com fonte armazenada
+  agora re-parseia o XML de verdade; nota SEM fonte reprocessável (foto, XML não
+  retido) devolve **400** localizado com a nova chave `receipt.retry.unavailable`
+  em vez do 202 que não fazia nada. Trate o 400 mostrando a mensagem e oferecendo
+  reenvio da nota.
+- **Duplo-submit simultâneo da mesma chave agora é 409:** a corrida que passava
+  pelo exists-check e estourava a unique constraint virava 500 genérico; agora o
+  perdedor recebe o MESMO 409 `receipt.already.ingested` do fluxo normal de
+  duplicata.
+- **Retry em lote do admin não se auto-destrói mais:** o backlog re-tentado entra
+  na fila paced (IMPORT_QUEUED) em vez de inundar o pool — o `parseErrorReason`
+  original é preservado até o retry rodar (não é mais sobrescrito por
+  `TaskRejectedException`). Notas presas em IMPORT_QUEUED por mais de 24h agora
+  são falhadas com a chave `receipt.import_queued.timeout`.
+
 ## 2026-09-30 (3) — fuso de Brasília nas janelas, login social mais estrito e aviso de importação
 
 - **Janelas de dia/mês agora seguem o horário de Brasília** (servidor roda em UTC e

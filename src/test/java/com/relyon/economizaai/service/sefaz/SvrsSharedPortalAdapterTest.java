@@ -3,6 +3,7 @@ package com.relyon.economizaai.service.sefaz;
 import com.relyon.economizaai.exception.CaptchaUnavailableException;
 import com.relyon.economizaai.exception.InvalidQrPayloadException;
 import com.relyon.economizaai.exception.ReceiptParseException;
+import com.relyon.economizaai.exception.SefazDeterministicFetchException;
 import com.relyon.economizaai.exception.SefazFetchException;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.sefaz.captcha.CaptchaSolver;
@@ -38,7 +39,7 @@ class SvrsSharedPortalAdapterTest {
     };
 
     private final SvrsSharedPortalAdapter adapter = new SvrsSharedPortalAdapter(
-            RestClient.builder(), NO_CAPTCHA, 5000, "test-agent", "RS", 5, 0L, "svrs.rs.gov.br,sefaz.rs.gov.br");
+            RestClient.builder(), NO_CAPTCHA, 5000, "test-agent", "RS", 5, 3, 0L, "svrs.rs.gov.br,sefaz.rs.gov.br");
 
     private String loadFixture() throws Exception {
         return loadFixture("nfce-sample.html");
@@ -58,7 +59,7 @@ class SvrsSharedPortalAdapterTest {
 
     @Test
     void supportedStates_acceptsCsvOfMultipleUfs() {
-        var multi = new SvrsSharedPortalAdapter(RestClient.builder(), NO_CAPTCHA, 5000, "test", "RS, SC, RJ", 5, 0L, "svrs.rs.gov.br,sefaz.rs.gov.br");
+        var multi = new SvrsSharedPortalAdapter(RestClient.builder(), NO_CAPTCHA, 5000, "test", "RS, SC, RJ", 5, 3, 0L, "svrs.rs.gov.br,sefaz.rs.gov.br");
         assertEquals(3, multi.supportedStates().size());
         assertTrue(multi.supportedStates().contains(UnidadeFederativa.SC));
         assertTrue(multi.supportedStates().contains(UnidadeFederativa.RJ));
@@ -66,7 +67,7 @@ class SvrsSharedPortalAdapterTest {
 
     @Test
     void supportedStates_ignoresUnknownUfTokens() {
-        var partial = new SvrsSharedPortalAdapter(RestClient.builder(), NO_CAPTCHA, 5000, "test", "RS,XX,SC", 5, 0L, "svrs.rs.gov.br,sefaz.rs.gov.br");
+        var partial = new SvrsSharedPortalAdapter(RestClient.builder(), NO_CAPTCHA, 5000, "test", "RS,XX,SC", 5, 3, 0L, "svrs.rs.gov.br,sefaz.rs.gov.br");
         assertEquals(2, partial.supportedStates().size());
         assertTrue(partial.supportedStates().contains(UnidadeFederativa.RS));
         assertTrue(partial.supportedStates().contains(UnidadeFederativa.SC));
@@ -74,7 +75,7 @@ class SvrsSharedPortalAdapterTest {
 
     @Test
     void supportedStates_blankConfigFallsBackToRs() {
-        var fallback = new SvrsSharedPortalAdapter(RestClient.builder(), NO_CAPTCHA, 5000, "test", "", 5, 0L, "svrs.rs.gov.br,sefaz.rs.gov.br");
+        var fallback = new SvrsSharedPortalAdapter(RestClient.builder(), NO_CAPTCHA, 5000, "test", "", 5, 3, 0L, "svrs.rs.gov.br,sefaz.rs.gov.br");
         assertEquals(1, fallback.supportedStates().size());
         assertTrue(fallback.supportedStates().contains(UnidadeFederativa.RS));
     }
@@ -94,7 +95,7 @@ class SvrsSharedPortalAdapterTest {
     @Test
     void resolveUrl_acceptsSantaCatarinaSecurityVerifyUrl() {
         var scAdapter = new SvrsSharedPortalAdapter(RestClient.builder(), NO_CAPTCHA,
-                5000, "test", "SC", 5, 0L, "sef.sc.gov.br");
+                5000, "test", "SC", 5, 3, 0L, "sef.sc.gov.br");
         var url = "https://sat.sef.sc.gov.br/tax.NET/SecurityVerify.aspx?rq=encrypted-token";
         assertEquals(url, scAdapter.resolveUrl(url));
     }
@@ -244,7 +245,7 @@ class SvrsSharedPortalAdapterTest {
     /** Builds an adapter whose HTTP layer is driven by {@code behavior(callNumber)}. */
     private SvrsSharedPortalAdapter adapterWithHttp(int maxAttempts, AtomicInteger calls,
                                                     IntFunction<String> behavior) {
-        return new SvrsSharedPortalAdapter(RestClient.builder(), NO_CAPTCHA, 5000, "test", "RS", maxAttempts, 0L, "svrs.rs.gov.br,sefaz.rs.gov.br") {
+        return new SvrsSharedPortalAdapter(RestClient.builder(), NO_CAPTCHA, 5000, "test", "RS", maxAttempts, 3, 0L, "svrs.rs.gov.br,sefaz.rs.gov.br") {
             @Override
             protected String httpGet(String url) {
                 return behavior.apply(calls.incrementAndGet());
@@ -285,7 +286,7 @@ class SvrsSharedPortalAdapterTest {
     @Test
     void fetchHtml_scSecurityVerifyUrlThrowsCaptchaUnavailableBeforeChaveExtraction() {
         var scAdapter = new SvrsSharedPortalAdapter(RestClient.builder(), NO_CAPTCHA,
-                5000, "test", "SC", 5, 0L, "sef.sc.gov.br");
+                5000, "test", "SC", 5, 3, 0L, "sef.sc.gov.br");
         var url = "https://sat.sef.sc.gov.br/tax.NET/SecurityVerify.aspx?rq=encrypted-token";
 
         assertThrows(CaptchaUnavailableException.class, () -> scAdapter.fetchHtml(url));
@@ -295,7 +296,7 @@ class SvrsSharedPortalAdapterTest {
     void fetchHtml_scSecurityVerifyHtmlThrowsCaptchaUnavailable() {
         var calls = new AtomicInteger();
         var stub = new SvrsSharedPortalAdapter(RestClient.builder(), NO_CAPTCHA,
-                5000, "test", "SC", 5, 0L, "svrs.rs.gov.br") {
+                5000, "test", "SC", 5, 3, 0L, "svrs.rs.gov.br") {
             @Override
             protected String httpGet(String url) {
                 calls.incrementAndGet();
@@ -335,5 +336,96 @@ class SvrsSharedPortalAdapterTest {
         });
         assertThrows(SefazFetchException.class, () -> stub.fetchHtml(CHAVE_RS));
         assertEquals(1, calls.get());
+    }
+
+    @Test
+    void fetchHtml_404IsDeterministic_notRescuableByPaidFallback() {
+        var calls = new AtomicInteger();
+        var stub = adapterWithHttp(5, calls, call -> {
+            throw new HttpClientErrorException(HttpStatus.NOT_FOUND);
+        });
+        assertThrows(SefazDeterministicFetchException.class, () -> stub.fetchHtml(CHAVE_RS));
+    }
+
+    @Test
+    void fetchHtml_403StaysRescuable_plainSefazFetchException() {
+        var calls = new AtomicInteger();
+        var stub = adapterWithHttp(5, calls, call -> {
+            throw new HttpClientErrorException(HttpStatus.FORBIDDEN);
+        });
+        var thrown = assertThrows(SefazFetchException.class, () -> stub.fetchHtml(CHAVE_RS));
+        assertTrue(!(thrown instanceof SefazDeterministicFetchException),
+                "IP-block (403) must stay rescuable by the paid fallback");
+    }
+
+    // ── Captcha re-solve loop (latent hardening — SVRS is currently captcha-free) ──
+
+    private static final String CAPTCHA_PAGE =
+            "<html><div class=\"g-recaptcha\" data-sitekey=\"site-key-1234\"></div></html>";
+
+    private CaptchaSolver countingSolver(AtomicInteger solves) {
+        return new CaptchaSolver() {
+            @Override public boolean isConfigured() { return true; }
+            @Override public String solveRecaptchaV2(String siteKey, String pageUrl) {
+                return "token-" + solves.incrementAndGet();
+            }
+        };
+    }
+
+    @Test
+    void fetchHtml_captchaRejectedOnce_reSolvesFreshTokenAndSucceeds() {
+        var solves = new AtomicInteger();
+        var tokenFetches = new AtomicInteger();
+        var stub = new SvrsSharedPortalAdapter(RestClient.builder(), countingSolver(solves),
+                5000, "test", "RS", 5, 3, 0L, "svrs.rs.gov.br,sefaz.rs.gov.br") {
+            @Override protected String httpGet(String url) { return CAPTCHA_PAGE; }
+            @Override protected String fetchWithToken(String originalUrl, String token) {
+                return tokenFetches.incrementAndGet() == 1 ? CAPTCHA_PAGE : "<html>danfe</html>";
+            }
+        };
+
+        assertEquals("<html>danfe</html>", stub.fetchHtml(CHAVE_RS));
+        assertEquals(2, solves.get(), "a rejected token must trigger a FRESH solve");
+    }
+
+    @Test
+    void fetchHtml_captchaRejectedEveryTime_boundedByCaptchaMaxAttempts() {
+        var solves = new AtomicInteger();
+        var stub = new SvrsSharedPortalAdapter(RestClient.builder(), countingSolver(solves),
+                5000, "test", "RS", 1, 3, 0L, "svrs.rs.gov.br,sefaz.rs.gov.br") {
+            @Override protected String httpGet(String url) { return CAPTCHA_PAGE; }
+            @Override protected String fetchWithToken(String originalUrl, String token) {
+                return CAPTCHA_PAGE; // portal keeps rejecting
+            }
+        };
+
+        assertThrows(SefazFetchException.class, () -> stub.fetchHtml(CHAVE_RS));
+        assertEquals(3, solves.get(), "hostile portal must not grind past svrs-max-attempts");
+    }
+
+    @Test
+    void fetchHtml_captchaPageWithoutSitekey_propagatesWithoutSolving() {
+        var solves = new AtomicInteger();
+        var stub = new SvrsSharedPortalAdapter(RestClient.builder(), countingSolver(solves),
+                5000, "test", "RS", 1, 3, 0L, "svrs.rs.gov.br,sefaz.rs.gov.br") {
+            @Override protected String httpGet(String url) {
+                return "<html><script src=\"https://www.google.com/recaptcha/api.js\"></script></html>";
+            }
+        };
+
+        assertThrows(ReceiptParseException.class, () -> stub.fetchHtml(CHAVE_RS));
+        assertEquals(0, solves.get(), "deterministic failure must not spend a paid solve");
+    }
+
+    @Test
+    void fetchHtml_noCaptchaPage_neverTouchesSolver() {
+        var solves = new AtomicInteger();
+        var stub = new SvrsSharedPortalAdapter(RestClient.builder(), countingSolver(solves),
+                5000, "test", "RS", 1, 3, 0L, "svrs.rs.gov.br,sefaz.rs.gov.br") {
+            @Override protected String httpGet(String url) { return "<html>danfe direto</html>"; }
+        };
+
+        assertEquals("<html>danfe direto</html>", stub.fetchHtml(CHAVE_RS));
+        assertEquals(0, solves.get());
     }
 }

@@ -43,6 +43,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.springframework.data.domain.PageRequest;
+import static org.mockito.Mockito.mock;
 
 @ExtendWith(MockitoExtension.class)
 class ProductServiceSearchGetUpdateTest {
@@ -255,7 +256,7 @@ class ProductServiceSearchGetUpdateTest {
                 .thenReturn(List.of(visitedMarket.getId()));
         when(priceObservationRepository.findProductIdsObservedInHouseholdCities(anyList(), eq(HOUSEHOLD_ID)))
                 .thenReturn(List.of(city.getId()));
-        var row = org.mockito.Mockito.mock(PriceObservationRepository.ProductMarketCoordinates.class);
+        var row = mock(PriceObservationRepository.ProductMarketCoordinates.class);
         when(row.getProductId()).thenReturn(nearby.getId());
         when(row.getLatitude()).thenReturn(new BigDecimal("-30.0100000"));
         when(row.getLongitude()).thenReturn(new BigDecimal("-51.0100000"));

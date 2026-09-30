@@ -69,6 +69,7 @@ public class CapSolverCaptchaSolver implements CaptchaSolver {
                 log.info("captcha.task.created type={} attempt={}/{} taskId={}", taskType, attempt, MAX_RETRIES, taskId);
                 var token = pollForToken(taskId, solutionField);
                 log.info("captcha.task.solved type={} attempt={}/{}", taskType, attempt, MAX_RETRIES);
+                CaptchaSolveTracker.recordSolve();
                 return token;
             } catch (CaptchaSolveFailedException ex) {
                 if (attempt >= MAX_RETRIES) throw ex;

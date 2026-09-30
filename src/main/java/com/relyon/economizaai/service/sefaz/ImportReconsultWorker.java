@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.sefaz;
 
+import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -72,6 +73,11 @@ public class ImportReconsultWorker {
         for (var queued : batch) {
             var receiptId = queued.getId();
             var chave = queued.getChaveAcesso();
+            // Admin-retried SCANNED notas ride this same paced lane (so a 200-nota
+            // backlog can't flood the ingest pool) but re-run the full QR ingestion
+            // with their stored payload — a signed QR URL is not reconsultable by chave.
+            var scanRetry = queued.getOrigin() == ReceiptOrigin.SCAN;
+            var qrPayload = queued.getQrPayload();
             var userId = transactionTemplate.execute(status -> {
                 var receipt = receiptRepository.findById(receiptId).orElse(null);
                 if (receipt == null || receipt.getStatus() != ReceiptStatus.IMPORT_QUEUED) return null;
@@ -81,7 +87,11 @@ public class ImportReconsultWorker {
             });
             if (userId == null) continue;
             try {
-                receiptIngestionService.ingestReconsult(receiptId, chave);
+                if (scanRetry) {
+                    receiptIngestionService.ingest(receiptId, qrPayload);
+                } else {
+                    receiptIngestionService.ingestReconsult(receiptId, chave);
+                }
                 dispatched++;
             } catch (RuntimeException ex) {
                 receiptIngestionService.markFailed(receiptId, ex);

@@ -1,5 +1,6 @@
 package com.relyon.economizaai.dto.response;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.model.GarimpoPriceSnapshot;
 
 import java.math.BigDecimal;
@@ -27,6 +28,6 @@ public record GarimpoSnapshotResponse(
                 snapshot.getSellerName(),
                 snapshot.isFreeShipping(),
                 snapshot.getAffiliateUrl() != null ? snapshot.getAffiliateUrl() : snapshot.getExternalUrl(),
-                snapshot.getCreatedAt());
+                BrazilClock.fromUtc(snapshot.getCreatedAt()));
     }
 }

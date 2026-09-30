@@ -209,6 +209,28 @@ class ReceiptControllerTest {
     }
 
     @Test
+    void retry_noRetryableSource_returnsLocalized4xxInsteadOfLying202() throws Exception {
+        when(receiptService.retryFailedScan(any(User.class), any(UUID.class), anyBoolean())).thenReturn(false);
+        when(receiptImportService.retry(any(User.class), any())).thenReturn(0);
+        when(receiptService.retryFromStoredXml(any(User.class), any(UUID.class))).thenReturn(false);
+
+        mockMvc.perform(post("/api/v1/receipts/" + UUID.randomUUID() + "/retry")
+                        .with(SecurityMockMvcRequestPostProcessors.user(buildUser())))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void retry_storedXmlSource_returns202() throws Exception {
+        when(receiptService.retryFailedScan(any(User.class), any(UUID.class), anyBoolean())).thenReturn(false);
+        when(receiptImportService.retry(any(User.class), any())).thenReturn(0);
+        when(receiptService.retryFromStoredXml(any(User.class), any(UUID.class))).thenReturn(true);
+
+        mockMvc.perform(post("/api/v1/receipts/" + UUID.randomUUID() + "/retry")
+                        .with(SecurityMockMvcRequestPostProcessors.user(buildUser())))
+                .andExpect(status().isAccepted());
+    }
+
+    @Test
     void submit_returns201WithParsedReceipt() throws Exception {
         var user = buildUser();
         when(receiptService.submit(any(User.class), any(SubmitReceiptRequest.class), anyBoolean()))

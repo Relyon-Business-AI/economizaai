@@ -49,6 +49,7 @@ import com.relyon.economizaai.service.priceindex.PriceIndexService;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import com.relyon.economizaai.service.priceindex.PromoDetector;
 import com.relyon.economizaai.service.sefaz.ChaveAcessoParser;
+import com.relyon.economizaai.service.sefaz.NfceXmlParser;
 import com.relyon.economizaai.service.sefaz.ParsedReceipt;
 import com.relyon.economizaai.service.sefaz.ParsedReceiptItem;
 import com.relyon.economizaai.service.sefaz.PrefetchPolicy;
@@ -60,6 +61,7 @@ import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -305,12 +307,41 @@ public class ReceiptService {
     }
 
     /**
-     * Admin bulk rescue over the FAILED_PARSE backlog: re-ingests each SCANNED
-     * nota with its stored qrPayload — the same flow as the user-facing
-     * {@link #retryFailedScan}, minus the ownership check (cross-household, admin
-     * only at the endpoint). Null {@code receiptIds} means the whole backlog
-     * (bounded). Non-scan rows and rows without a payload are skipped, never
-     * failed. Paid rescues are attributed to each nota's owner as usual.
+     * Honest retry for notas whose source is a stored, self-contained XML
+     * (e-commerce import): re-parses the STORED content — no SEFAZ fetch, no
+     * reconsult. Returns {@code false} when there's no re-parseable stored XML
+     * (photo receipts, or an XML that never got far enough to be persisted), so
+     * the controller can fail honestly instead of returning a lying 202.
+     */
+    @Transactional
+    public boolean retryFromStoredXml(User user, UUID receiptId) {
+        var receipt = loadOwned(user, receiptId);
+        if (receipt.getStatus() != ReceiptStatus.FAILED_PARSE) {
+            return false;
+        }
+        var storedXml = receipt.getRawHtml();
+        if (storedXml == null || !NfceXmlParser.looksLikeNfeXml(storedXml)) {
+            return false;
+        }
+        receipt.setStatus(ReceiptStatus.PROCESSING);
+        receipt.setParseErrorReason(null);
+        receiptRepository.save(receipt);
+        MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
+        log.info("retry ok origin={} source=stored_xml status=PROCESSING (re-parse dispatched)", receipt.getOrigin());
+        dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingestXml(receiptId, storedXml));
+        return true;
+    }
+
+    /**
+     * Admin bulk rescue over the FAILED_PARSE backlog: re-queues each SCANNED
+     * nota into the paced IMPORT_QUEUED lane — the {@code ImportReconsultWorker}
+     * flips a few at a time to PROCESSING and re-runs the QR ingestion with the
+     * stored qrPayload, so a 200-nota backlog never floods the 8-thread ingest
+     * pool (direct dispatch used to TaskReject the overflow and instantly re-fail
+     * it with an infrastructure reason over the original diagnostic). Null
+     * {@code receiptIds} means the whole backlog (bounded). Non-scan rows and
+     * rows without a payload are skipped, never failed. The diagnostic
+     * parseErrorReason survives until the retry actually runs.
      */
     @Transactional
     public int adminRetryFailedScans(List<UUID> receiptIds) {
@@ -324,17 +355,11 @@ public class ReceiptService {
             if (receipt.getOrigin() != ReceiptOrigin.SCAN) continue;
             var qrPayload = receipt.getQrPayload();
             if (qrPayload == null || qrPayload.isBlank()) continue;
-            receipt.setStatus(ReceiptStatus.PROCESSING);
-            receipt.setParseErrorReason(null);
+            receipt.setStatus(ReceiptStatus.IMPORT_QUEUED);
             receiptRepository.save(receipt);
-            var receiptId = receipt.getId();
-            // 2-arg ingest: an admin retry is not the owner's app, so a blocked state
-            // must record the honest "state not supported" reason — the 3-arg overload
-            // with canDeviceRetry=false would stamp app_update_required, misleading here.
-            dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload));
             retried++;
         }
-        log.info("admin.retry_failed_scans requested={} retried={}",
+        log.info("admin.retry_failed_scans requested={} queued={}",
                 receiptIds == null ? "all" : receiptIds.size(), retried);
         return retried;
     }
@@ -437,7 +462,17 @@ public class ReceiptService {
                 .origin(origin)
                 .status(ReceiptStatus.PROCESSING)
                 .build();
-        return receiptRepository.save(receipt);
+        try {
+            return receiptRepository.save(receipt);
+        } catch (DataIntegrityViolationException raceEx) {
+            // Two concurrent submits of the same chave both passed the exists-check;
+            // the loser trips the (household, chave) unique constraint right here.
+            // Surface the SAME localized duplicate error the exists-check throws
+            // instead of a generic 500.
+            log.info("submit duplicate_race chave={} household={}",
+                    LogMasker.chave(chave), user.getHousehold().getId());
+            throw new ReceiptAlreadyIngestedException(chave);
+        }
     }
 
     /**

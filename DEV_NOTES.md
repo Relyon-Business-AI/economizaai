@@ -215,6 +215,9 @@ mirror entries here.
     per-membership `joined_at` to define the shared window (design Q2, not yet built).
   - Add endpoint-level tests for the consent controller + a join-with-merge flow once
     the flag is turned on.
+  - The DataShareConsent controller is LIVE but effectively inert (documented Phase 2
+    partial) — consents can be created/answered, yet nothing consumes them while the
+    merge flag is off. Intentional; revisit with Phase 2.
 
 ---
 

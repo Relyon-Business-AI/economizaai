@@ -34,7 +34,7 @@ public final class NfceXmlParser {
     }
 
     /** Cheap sniff so the adapter can route XML bodies here and HTML to the DANFE parser. */
-    static boolean looksLikeNfeXml(String body) {
+    public static boolean looksLikeNfeXml(String body) {
         if (body == null) return false;
         var head = body.stripLeading();
         return head.startsWith("<?xml") && (body.contains("<infNFe") || body.contains("<nfeProc"));

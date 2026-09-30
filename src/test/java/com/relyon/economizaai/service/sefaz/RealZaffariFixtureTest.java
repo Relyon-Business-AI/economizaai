@@ -23,7 +23,7 @@ class RealZaffariFixtureTest {
     };
 
     private final SvrsSharedPortalAdapter adapter = new SvrsSharedPortalAdapter(
-            RestClient.builder(), NO_CAPTCHA, 5000, "test-agent", "RS", 5, 0L, "svrs.rs.gov.br,sefaz.rs.gov.br");
+            RestClient.builder(), NO_CAPTCHA, 5000, "test-agent", "RS", 5, 3, 0L, "svrs.rs.gov.br,sefaz.rs.gov.br");
 
     @Test
     void parseRealZaffariReceipt() throws Exception {

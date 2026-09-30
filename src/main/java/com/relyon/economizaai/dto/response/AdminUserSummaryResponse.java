@@ -1,5 +1,6 @@
 package com.relyon.economizaai.dto.response;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.model.enums.SubscriptionTier;
@@ -46,7 +47,7 @@ public record AdminUserSummaryResponse(
                 user.isActive(),
                 user.isExcludedFromMetrics(),
                 user.getHousehold() == null ? null : user.getHousehold().getId(),
-                user.getCreatedAt(),
+                BrazilClock.fromUtc(user.getCreatedAt()),
                 receiptCount,
                 totalSpend == null ? BigDecimal.ZERO : totalSpend
         );

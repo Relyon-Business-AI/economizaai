@@ -9,6 +9,7 @@ import com.relyon.economizaai.exception.PaidApiBudgetExceededException;
 import com.relyon.economizaai.exception.PaidApiQuotaExceededException;
 import com.relyon.economizaai.exception.PaidApiUnavailableException;
 import com.relyon.economizaai.exception.ReceiptParseException;
+import com.relyon.economizaai.exception.SefazDeterministicFetchException;
 import com.relyon.economizaai.exception.SefazFetchException;
 import com.relyon.economizaai.exception.SefazPortalRejectionException;
 import com.relyon.economizaai.exception.UnsupportedStateException;
@@ -17,6 +18,7 @@ import com.relyon.economizaai.model.enums.StateIngestionOutcome;
 import com.relyon.economizaai.model.enums.StateIngestionStrategy;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.paidapi.PaidApiGuardService;
+import com.relyon.economizaai.service.sefaz.captcha.CaptchaSolveTracker;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -184,23 +186,23 @@ public class SefazIngestionService {
             }
             return rescued;
         }
-        // Every scrape solves at least one captcha (paid). Global kill-switch first,
-        // then the per-user cap, before spending.
+        // A scrape MAY solve captchas (paid, per token) — the solver tracks the
+        // actual solves and they're ledgered after the fetch. Global kill-switch
+        // first, then the per-user cap, before any potential spend.
         paidApiGuard.assertUnderGlobalBudget();
         paidApiGuard.assertWithinDailyCap(userId, PaidApiService.CAPTCHA_SOLVE);
+        CaptchaSolveTracker.drain(); // discard any stale count left on this pooled thread
         try {
             var html = adapter.fetchHtml(qrPayload);
-            paidApiGuard.recordSuccess(userId, PaidApiService.CAPTCHA_SOLVE, uf.name(), null);
+            recordCaptchaSolves(userId, uf, true);
             var sanitized = CpfMasker.strip(html);
             var sourceUrl = qrPayload.trim().toLowerCase().startsWith("http") ? qrPayload.trim() : null;
             return new FetchedDocument(adapter, sanitized, chave, uf, sourceUrl, null);
         } catch (SefazFetchException | CaptchaUnavailableException | CaptchaSolveFailedException primaryEx) {
-            // A CaptchaUnavailableException means no solver was configured — no money
-            // was spent, so don't record a captcha cost. Any other failure here means
-            // a solve was attempted (and billed) but the portal still failed.
-            if (!(primaryEx instanceof CaptchaUnavailableException)) {
-                paidApiGuard.recordFailure(userId, PaidApiService.CAPTCHA_SOLVE, uf.name(), null);
-            }
+            // Ledger exactly what was SPENT: one failure entry per token actually
+            // bought during this fetch. Captcha-free scrapes and immediate throws
+            // (e.g. the Infosimples-only adapter) record nothing — no breaker noise.
+            recordCaptchaSolves(userId, uf, false);
             var experimental = isExperimental(adapter);
             var qrHost = StateCoverageService.hostOf(qrPayload);
             var portalEvidence = primaryEx instanceof ExperimentalPortalEvidence evidenceCarrier
@@ -213,6 +215,10 @@ public class SefazIngestionService {
             // retries, no solver configured, or the solver itself failed. Every
             // query costs ~R$0.24, so deterministic failures (bad chave, invalid
             // QR, missing sitekey/viewstate) propagate without spending.
+            if (primaryEx instanceof SefazDeterministicFetchException) {
+                log.info("sefaz.fetch.deterministic_4xx uf={} chave={} — skipping paid fallback", uf, abbrev(chave));
+                throw primaryEx;
+            }
             if (infosimples.isEmpty()) {
                 if (experimental) {
                     throw experimentalExhausted(uf, userId, chave, sourceUrlOf(qrPayload),
@@ -241,6 +247,23 @@ public class SefazIngestionService {
                             portalEvidence);
                 }
                 throw fallbackEx;
+            }
+        } catch (RuntimeException deterministicEx) {
+            // Deterministic failures (invalid QR, missing viewstate/sitekey) skip the
+            // fallback — but any token bought before them was still paid for.
+            recordCaptchaSolves(userId, uf, false);
+            throw deterministicEx;
+        }
+    }
+
+    /** One ledger entry per PAID captcha solve performed during the fetch (see {@link CaptchaSolveTracker}). */
+    private void recordCaptchaSolves(UUID userId, UnidadeFederativa uf, boolean fetchSucceeded) {
+        var solves = CaptchaSolveTracker.drain();
+        for (var solve = 0; solve < solves; solve++) {
+            if (fetchSucceeded) {
+                paidApiGuard.recordSuccess(userId, PaidApiService.CAPTCHA_SOLVE, uf.name(), null);
+            } else {
+                paidApiGuard.recordFailure(userId, PaidApiService.CAPTCHA_SOLVE, uf.name(), null);
             }
         }
     }

@@ -35,6 +35,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mock;
+import java.util.Optional;
 
 /**
  * Branch coverage beyond {@link AdminUserServiceTest}: drives the search
@@ -52,18 +54,18 @@ class AdminUserServiceCoverageTest {
 
     @SuppressWarnings("unchecked")
     private Predicate runSpec(Specification<User> spec) {
-        var root = (Root<User>) org.mockito.Mockito.mock(Root.class);
-        var query = (CriteriaQuery<?>) org.mockito.Mockito.mock(CriteriaQuery.class);
-        var cb = org.mockito.Mockito.mock(CriteriaBuilder.class);
+        var root = (Root<User>) mock(Root.class);
+        var query = (CriteriaQuery<?>) mock(CriteriaQuery.class);
+        var cb = mock(CriteriaBuilder.class);
 
-        var emailPath = (Path<String>) org.mockito.Mockito.mock(Path.class);
-        var namePath = (Path<String>) org.mockito.Mockito.mock(Path.class);
-        var loweredEmail = (Expression<String>) org.mockito.Mockito.mock(Expression.class);
-        var loweredName = (Expression<String>) org.mockito.Mockito.mock(Expression.class);
-        var likeEmail = org.mockito.Mockito.mock(Predicate.class);
-        var likeName = org.mockito.Mockito.mock(Predicate.class);
-        var orPredicate = org.mockito.Mockito.mock(Predicate.class);
-        var andPredicate = org.mockito.Mockito.mock(Predicate.class);
+        var emailPath = (Path<String>) mock(Path.class);
+        var namePath = (Path<String>) mock(Path.class);
+        var loweredEmail = (Expression<String>) mock(Expression.class);
+        var loweredName = (Expression<String>) mock(Expression.class);
+        var likeEmail = mock(Predicate.class);
+        var likeName = mock(Predicate.class);
+        var orPredicate = mock(Predicate.class);
+        var andPredicate = mock(Predicate.class);
 
         lenient().when(root.<String>get("email")).thenReturn(emailPath);
         lenient().when(root.<String>get("name")).thenReturn(namePath);
@@ -93,22 +95,22 @@ class AdminUserServiceCoverageTest {
 
     @Test
     void searchSpec_withTerm_usesPercentWrappedLowercaseLike() {
-        var cb = org.mockito.Mockito.mock(CriteriaBuilder.class);
+        var cb = mock(CriteriaBuilder.class);
         @SuppressWarnings("unchecked")
-        var root = (Root<User>) org.mockito.Mockito.mock(Root.class);
-        var query = (CriteriaQuery<?>) org.mockito.Mockito.mock(CriteriaQuery.class);
+        var root = (Root<User>) mock(Root.class);
+        var query = (CriteriaQuery<?>) mock(CriteriaQuery.class);
 
         @SuppressWarnings("unchecked")
-        var emailPath = (Path<String>) org.mockito.Mockito.mock(Path.class);
+        var emailPath = (Path<String>) mock(Path.class);
         @SuppressWarnings("unchecked")
-        var namePath = (Path<String>) org.mockito.Mockito.mock(Path.class);
+        var namePath = (Path<String>) mock(Path.class);
         @SuppressWarnings("unchecked")
-        var loweredEmail = (Expression<String>) org.mockito.Mockito.mock(Expression.class);
+        var loweredEmail = (Expression<String>) mock(Expression.class);
         @SuppressWarnings("unchecked")
-        var loweredName = (Expression<String>) org.mockito.Mockito.mock(Expression.class);
-        var like = org.mockito.Mockito.mock(Predicate.class);
-        var or = org.mockito.Mockito.mock(Predicate.class);
-        var and = org.mockito.Mockito.mock(Predicate.class);
+        var loweredName = (Expression<String>) mock(Expression.class);
+        var like = mock(Predicate.class);
+        var or = mock(Predicate.class);
+        var and = mock(Predicate.class);
 
         lenient().when(root.<String>get("email")).thenReturn(emailPath);
         lenient().when(root.<String>get("name")).thenReturn(namePath);
@@ -135,11 +137,11 @@ class AdminUserServiceCoverageTest {
 
     @Test
     void searchSpec_blankSearch_normalizesToNull_andSkipsLikePredicate() {
-        var cb = org.mockito.Mockito.mock(CriteriaBuilder.class);
+        var cb = mock(CriteriaBuilder.class);
         @SuppressWarnings("unchecked")
-        var root = (Root<User>) org.mockito.Mockito.mock(Root.class);
-        var query = (CriteriaQuery<?>) org.mockito.Mockito.mock(CriteriaQuery.class);
-        var and = org.mockito.Mockito.mock(Predicate.class);
+        var root = (Root<User>) mock(Root.class);
+        var query = (CriteriaQuery<?>) mock(CriteriaQuery.class);
+        var and = mock(Predicate.class);
         when(cb.and(any(Predicate[].class))).thenReturn(and);
 
         var specCaptor = ArgumentCaptor.forClass(Specification.class);
@@ -159,11 +161,11 @@ class AdminUserServiceCoverageTest {
 
     @Test
     void searchSpec_nullSearch_skipsLikePredicate() {
-        var cb = org.mockito.Mockito.mock(CriteriaBuilder.class);
+        var cb = mock(CriteriaBuilder.class);
         @SuppressWarnings("unchecked")
-        var root = (Root<User>) org.mockito.Mockito.mock(Root.class);
-        var query = (CriteriaQuery<?>) org.mockito.Mockito.mock(CriteriaQuery.class);
-        var and = org.mockito.Mockito.mock(Predicate.class);
+        var root = (Root<User>) mock(Root.class);
+        var query = (CriteriaQuery<?>) mock(CriteriaQuery.class);
+        var and = mock(Predicate.class);
         when(cb.and(any(Predicate[].class))).thenReturn(and);
 
         var specCaptor = ArgumentCaptor.forClass(Specification.class);
@@ -185,7 +187,7 @@ class AdminUserServiceCoverageTest {
         var user = User.builder()
                 .id(java.util.UUID.randomUUID()).name("Ana").email("ana@test.com").household(household).build();
 
-        when(userRepository.findById(user.getId())).thenReturn(java.util.Optional.of(user));
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
         when(receiptRepository.countByHouseholdIdAndStatus(householdId, ReceiptStatus.PENDING_CONFIRMATION)).thenReturn(1L);
         when(receiptRepository.countByHouseholdIdAndStatus(householdId, ReceiptStatus.CONFIRMED)).thenReturn(2L);
         when(receiptRepository.countByHouseholdIdAndStatus(householdId, ReceiptStatus.REJECTED)).thenReturn(3L);

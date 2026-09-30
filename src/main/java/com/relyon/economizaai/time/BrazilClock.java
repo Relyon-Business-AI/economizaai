@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 
 /**
@@ -44,5 +45,16 @@ public final class BrazilClock {
     /** Current zoned date-time in Brasília. */
     public static ZonedDateTime now() {
         return ZonedDateTime.now(ZONE);
+    }
+
+    /**
+     * Converts a UTC wall-clock {@link LocalDateTime} (the storage basis for
+     * createdAt/updatedAt-family fields) to Brasília wall-clock. Applied at
+     * DTO-MAPPING sites for timestamps the FE DISPLAYS — otherwise a fresh
+     * notification renders as "3h atrás". Null-safe for optional fields.
+     */
+    public static LocalDateTime fromUtc(LocalDateTime utcDateTime) {
+        if (utcDateTime == null) return null;
+        return utcDateTime.atOffset(ZoneOffset.UTC).atZoneSameInstant(ZONE).toLocalDateTime();
     }
 }

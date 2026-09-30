@@ -17,6 +17,7 @@ import com.relyon.economizaai.service.geo.MerchantSupportGate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.dao.RecoverableDataAccessException;
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.scheduling.annotation.Async;
@@ -243,6 +244,9 @@ public class ReceiptIngestionService {
             var receipt = loadIfProcessing(receiptId);
             if (receipt == null) return;
             applyParsed(receipt, parsed);
+            // A successful parse supersedes any prior failure diagnostic (retried notas
+            // keep their original reason until the retry actually resolves them).
+            receipt.setParseErrorReason(null);
             receipt.setStatus(ReceiptStatus.PENDING_CONFIRMATION);
             receiptRepository.save(receipt);
             log.info("ingest ok status=PENDING_CONFIRMATION items={} total={} market='{}'",
@@ -327,7 +331,9 @@ public class ReceiptIngestionService {
             transactionTemplate.executeWithoutResult(txStatus ->
                     receiptRepository.findById(receiptId).ifPresent(receipt -> {
                         if (receipt.getStatus() == ReceiptStatus.PROCESSING) {
-                            receipt.setParseErrorReason(failureReason(ex));
+                            if (shouldOverwriteReason(receipt, ex)) {
+                                receipt.setParseErrorReason(failureReason(ex));
+                            }
                             receipt.setStatus(ReceiptStatus.FAILED_PARSE);
                             receiptRepository.save(receipt);
                         }
@@ -336,6 +342,15 @@ public class ReceiptIngestionService {
             log.error("ingest failed AND could not mark FAILED_PARSE for receipt {}", abbrev(receiptId), inner);
         }
         log.warn("ingest fetch/solve failed status=FAILED_PARSE reason={}", ex.getMessage(), ex);
+    }
+
+    /**
+     * A pool rejection is an infrastructure hiccup, not a diagnosis — it must
+     * never overwrite the ORIGINAL failure reason of a retried nota with
+     * {@code receipt.sefaz.fetch.failed:TaskRejectedException}.
+     */
+    private static boolean shouldOverwriteReason(Receipt receipt, RuntimeException ex) {
+        return !(ex instanceof TaskRejectedException) || receipt.getParseErrorReason() == null;
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.relyon.economizaai.dto.response;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.AuthProvider;
 import com.relyon.economizaai.model.enums.Platform;
@@ -48,7 +49,7 @@ public record UserResponse(
                 user.getLastWebLoginAt(),
                 user.getLastAndroidLoginAt(),
                 user.getLastIosLoginAt(),
-                user.getCreatedAt(),
+                BrazilClock.fromUtc(user.getCreatedAt()),
                 user.getAuthProvider(),
                 user.getPassword() != null
         );

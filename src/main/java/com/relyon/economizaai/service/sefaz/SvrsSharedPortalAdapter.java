@@ -52,6 +52,7 @@ public class SvrsSharedPortalAdapter implements SefazAdapter {
     private final RestClient restClient;
     private final Set<UnidadeFederativa> supportedStates;
     private final int maxAttempts;
+    private final int captchaMaxAttempts;
     private final long retryDelayMs;
     private final Set<String> allowedUrlHosts;
 
@@ -61,6 +62,7 @@ public class SvrsSharedPortalAdapter implements SefazAdapter {
                                    @Value("${economizaai.ingestion.sefaz.user-agent:economizai}") String userAgent,
                                    @Value("${economizaai.ingestion.sefaz.svrs.states:RS,PR,SP}") String svrsStates,
                                    @Value("${economizaai.ingestion.sefaz.retry.max-attempts:5}") int maxAttempts,
+                                   @Value("${economizaai.ingestion.sefaz.retry.svrs-max-attempts:3}") int captchaMaxAttempts,
                                    @Value("${economizaai.ingestion.sefaz.retry.delay-ms:5000}") long retryDelayMs,
                                    @Value("${economizaai.ingestion.sefaz.allowed-url-hosts:svrs.rs.gov.br,sefaz.rs.gov.br,fazenda.pr.gov.br,sef.sc.gov.br,fazenda.sp.gov.br}") String allowedUrlHosts) {
         var requestFactory = new SimpleClientHttpRequestFactory();
@@ -74,6 +76,7 @@ public class SvrsSharedPortalAdapter implements SefazAdapter {
         this.captchaSolver = captchaSolver;
         this.supportedStates = parseStates(svrsStates);
         this.maxAttempts = Math.max(1, maxAttempts);
+        this.captchaMaxAttempts = Math.max(1, captchaMaxAttempts);
         this.retryDelayMs = Math.max(0, retryDelayMs);
         this.allowedUrlHosts = parseAllowedHosts(allowedUrlHosts);
         log.info("SvrsSharedPortalAdapter active for UFs: {} (retry maxAttempts={} delayMs={} allowedUrlHosts={} captchaSolver configured={})",
@@ -157,9 +160,9 @@ public class SvrsSharedPortalAdapter implements SefazAdapter {
             log.info("sefaz.fetch.ok bytes={} attempt={}", html.length(), attempt);
             return html;
         } catch (HttpClientErrorException ex) {
-            // 4xx — deterministic (bad/unknown chave): retrying won't help.
+            // 4xx — retrying won't help; 403/429 stay rescuable, the rest is deterministic.
             log.warn("sefaz.fetch.client_error status={} url={}", ex.getStatusCode(), url);
-            throw new SefazFetchException(uf.name());
+            throw PortalClientErrorClassifier.classify(ex, uf.name());
         } catch (RestClientException ex) {
             // 5xx, read/connect timeouts, IO errors — transient, worth retrying.
             throw new TransientSefazFetchException(ex.getClass().getSimpleName());
@@ -171,6 +174,13 @@ public class SvrsSharedPortalAdapter implements SefazAdapter {
         return restClient.get().uri(url).retrieve().body(String.class);
     }
 
+    /**
+     * A solved token is occasionally rejected by the portal, so the fetch is a
+     * bounded retry loop that RE-SOLVES a fresh token when the response is still
+     * the captcha page (the MS/SC pattern; {@code svrs-max-attempts}, default 3 —
+     * each attempt is a paid solve). Deterministic failures (no solver, missing
+     * sitekey) propagate immediately, before any money is spent.
+     */
     private String handleCaptcha(String captchaPageHtml, String url, UnidadeFederativa uf) {
         var ufName = uf.name();
         if (!captchaSolver.isConfigured()) {
@@ -182,9 +192,17 @@ public class SvrsSharedPortalAdapter implements SefazAdapter {
             log.warn("sefaz.fetch.captcha_no_sitekey uf={}", ufName);
             throw new ReceiptParseException("captcha-sitekey-missing");
         }
-        log.info("sefaz.fetch.captcha_solving uf={}", ufName);
-        var token = captchaSolver.solveRecaptchaV2(siteKey, url);
-        return fetchWithToken(url, token);
+        for (var attempt = 1; attempt <= captchaMaxAttempts; attempt++) {
+            log.info("sefaz.fetch.captcha_solving uf={} attempt={}/{}", ufName, attempt, captchaMaxAttempts);
+            var token = captchaSolver.solveRecaptchaV2(siteKey, url);
+            var body = fetchWithToken(url, token);
+            if (body != null && !body.isBlank() && !CAPTCHA_MARKER.matcher(body).find()) {
+                return body;
+            }
+            log.warn("sefaz.fetch.captcha_rejected uf={} attempt={}/{}", ufName, attempt, captchaMaxAttempts);
+        }
+        log.warn("sefaz.fetch.captcha_exhausted uf={} attempts={}", ufName, captchaMaxAttempts);
+        throw new SefazFetchException(ufName);
     }
 
     static String extractSiteKey(String html) {

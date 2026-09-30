@@ -21,8 +21,9 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
     /**
      * "Caçador de descontos" ranking: per household, how many confirmed items were bought
      * BELOW the community average unit price for that product in the window, and the total
-     * R$ under that average. The community average only counts products bought by ≥2
-     * households (so you can't beat your own average). Native (CTE + window). Returns
+     * R$ under that average. The community average only counts products bought by at least
+     * K distinct households (the k-anonymity threshold, so you can't beat your own average
+     * nor infer a single household's price). Native (CTE + window). Returns
      * (householdId, discountFinds, savings). Newest window is applied by the service.
      */
     @Query(value = """
@@ -33,7 +34,7 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
                 WHERE r.status = 'CONFIRMED' AND ri.paid_unit_price IS NOT NULL
                   AND ri.product_id IS NOT NULL AND r.created_at >= :since
                 GROUP BY ri.product_id
-                HAVING count(DISTINCT r.household_id) >= 2
+                HAVING count(DISTINCT r.household_id) >= :minHouseholds
             )
             SELECT r.household_id AS household_id,
                    count(*) AS finds,
@@ -46,7 +47,8 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
             GROUP BY r.household_id
             ORDER BY finds DESC, savings DESC
             """, nativeQuery = true)
-    List<Object[]> discountHuntersSince(@Param("since") LocalDateTime since);
+    List<Object[]> discountHuntersSince(@Param("since") LocalDateTime since,
+                                        @Param("minHouseholds") int minHouseholds);
 
     // --- Market intelligence (admin) ---
     // Same internal-account filter as ReceiptRepository, joined through the item's

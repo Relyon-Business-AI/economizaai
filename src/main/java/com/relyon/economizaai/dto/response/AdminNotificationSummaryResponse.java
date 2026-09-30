@@ -1,5 +1,6 @@
 package com.relyon.economizaai.dto.response;
 
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.model.Notification;
 import com.relyon.economizaai.model.enums.NotificationChannel;
 import com.relyon.economizaai.model.enums.NotificationType;
@@ -33,9 +34,9 @@ public record AdminNotificationSummaryResponse(
                 notification.getTitle(),
                 notification.getBody(),
                 notification.isDelivered(),
-                notification.getDeliveredAt(),
+                BrazilClock.fromUtc(notification.getDeliveredAt()),
                 notification.getFailureReason(),
                 notification.getReadAt() != null,
-                notification.getCreatedAt());
+                BrazilClock.fromUtc(notification.getCreatedAt()));
     }
 }
