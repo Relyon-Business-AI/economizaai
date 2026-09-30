@@ -253,12 +253,16 @@ public class ConsumptionIntelligenceService {
         return intervals.stream().mapToLong(Long::longValue).average().orElse(0);
     }
 
+    /** Average over the POSITIVE quantities only — dividing their sum by the total
+     * event count (incl. null/zero-qty lines) understated the usual basket size. */
     private BigDecimal averageQty(List<PurchaseEvent> events) {
-        var sum = events.stream()
+        var positiveQuantities = events.stream()
                 .map(PurchaseEvent::quantity)
-                .filter(q -> q != null && q.compareTo(BigDecimal.ZERO) > 0)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        return sum.divide(BigDecimal.valueOf(events.size()), 3, RoundingMode.HALF_UP);
+                .filter(quantity -> quantity != null && quantity.compareTo(BigDecimal.ZERO) > 0)
+                .toList();
+        if (positiveQuantities.isEmpty()) return null;
+        var sum = positiveQuantities.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        return sum.divide(BigDecimal.valueOf(positiveQuantities.size()), 3, RoundingMode.HALF_UP);
     }
 
     private ConsumptionPredictionResponse.Status classifyStatus(long daysUntil,

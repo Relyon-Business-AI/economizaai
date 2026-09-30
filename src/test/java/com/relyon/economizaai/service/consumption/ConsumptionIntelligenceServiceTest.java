@@ -139,6 +139,26 @@ class ConsumptionIntelligenceServiceTest {
     }
 
     @Test
+    void predict_averageQuantityIgnoresNullAndZeroQuantities() {
+        var product = product("Leite");
+        var now = LocalDateTime.now();
+        // Three purchases of 2 units plus one zero-qty line: the average must be
+        // 2.000 (sum/positive-count), not 6/4 — the old bug diluted it.
+        when(receiptItemRepository.findConfirmedHistoryForHousehold(any())).thenReturn(List.of(
+                purchase(product, now.minusDays(28), new BigDecimal("2")),
+                purchase(product, now.minusDays(21), new BigDecimal("2")),
+                purchase(product, now.minusDays(14), new BigDecimal("2")),
+                purchase(product, now.minusDays(7), BigDecimal.ZERO)
+        ));
+
+        var predictions = service.predict(user);
+
+        assertEquals(1, predictions.size());
+        assertEquals(0, predictions.get(0).averageQuantityPerPurchase()
+                .compareTo(new BigDecimal("2.000")));
+    }
+
+    @Test
     void predict_assignsHigherConfidenceWithMoreSamples() {
         var product = product("Pao");
         var now = LocalDateTime.now();
