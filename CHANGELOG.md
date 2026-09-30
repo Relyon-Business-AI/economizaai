@@ -16,6 +16,13 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-29 (8) — sweeper de PROCESSING passa a contar do updatedAt
+
+- O sweeper matava por timeout qualquer nota RE-TENTADA (a linha é antiga por
+  `createdAt`, mas o processamento tinha acabado de começar) — 13 notas do
+  primeiro retry em lote morreram assim com `processing.timeout`. Agora o corte
+  usa `updatedAt`, que é renovado quando a nota volta pra PROCESSING.
+
 ## 2026-09-29 (7) — retry admin em lote + destrave de estados experimentais
 
 - **`POST /admin/receipts/retry-batch`** (ADMIN): re-ingere o backlog de notas
