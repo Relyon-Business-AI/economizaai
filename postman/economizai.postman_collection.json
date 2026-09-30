@@ -13873,6 +13873,38 @@
 					"response": []
 				},
 				{
+					"name": "Retry failed backlog (batch, admin)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/receipts/retry-batch",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"receipts",
+								"retry-batch"
+							]
+						},
+						"description": "Re-ingere o backlog FAILED_PARSE de notas ESCANEADAS pelo qrPayload guardado (cross-household). Body opcional { ids: [uuid...] }; sem body = backlog inteiro (cap 200). 202 { affected }. Uso: após shippar um fallback novo ou o provedor pago voltar a ter saldo."
+					},
+					"response": []
+				},
+				{
 					"name": "Seed a discounted receipt (dev-only, admin)",
 					"request": {
 						"method": "POST",

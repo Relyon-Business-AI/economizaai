@@ -16,6 +16,17 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-09-29 (7) — retry admin em lote + destrave de estados experimentais
+
+- **`POST /admin/receipts/retry-batch`** (ADMIN): re-ingere o backlog de notas
+  escaneadas em FAILED_PARSE usando o `qrPayload` guardado — cross-household.
+  Body opcional `{ ids: [...] }`; sem body, o backlog inteiro (cap 200). Uso:
+  depois que um fallback novo shipa ou um provedor pago volta a ter saldo.
+- **Evidence cap de estado experimental agora destrava sozinho**: um SUCESSO da
+  UF anula as evidências de falha anteriores (só falhas DEPOIS do último sucesso
+  contam pro cap). Antes, BA/DF ficavam trancados pra sempre pelas falhas da era
+  sem saldo da Infosimples.
+
 ## 2026-09-29 (6) — RJ via Infosimples corrigido (slug nfce-completa)
 
 - RJ não tem o serviço `sefaz/rj/nfce` na Infosimples — toda chamada devolvia

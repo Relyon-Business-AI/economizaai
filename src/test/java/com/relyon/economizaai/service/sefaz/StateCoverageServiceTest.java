@@ -60,6 +60,19 @@ class StateCoverageServiceTest {
     }
 
     @Test
+    void hasEnoughEvidence_successVoidsOlderFailureEvidence() {
+        // 3 EXHAUSTED samples exist, but the UF succeeded after them (e.g. the paid
+        // fallback got re-funded) — only post-success failures may lock the state.
+        var lastSuccess = OffsetDateTime.now();
+        when(repository.lastSuccessAt(UnidadeFederativa.BA)).thenReturn(lastSuccess);
+        when(repository.countByUfAndOutcomeAndCreatedAtGreaterThan(
+                UnidadeFederativa.BA, StateIngestionOutcome.EXHAUSTED, lastSuccess)).thenReturn(0L);
+
+        assertFalse(service.hasEnoughEvidence(UnidadeFederativa.BA));
+        verify(repository, never()).countByUfAndOutcome(UnidadeFederativa.BA, StateIngestionOutcome.EXHAUSTED);
+    }
+
+    @Test
     void recordSuccess_firstEverForUf_alertsAdmin() {
         when(repository.existsByUfAndOutcome(UnidadeFederativa.BA, StateIngestionOutcome.SUCCESS)).thenReturn(false);
 

@@ -226,6 +226,24 @@ class ReceiptServiceTest {
     }
 
     @Test
+    void adminRetryFailedScans_reingestsScanBacklogSkippingNonScanRows() {
+        var user = buildUser();
+        var failedScan = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        var failedImport = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        failedImport.setOrigin(ReceiptOrigin.IMPORT);
+        when(receiptRepository.findByStatusOrderByCreatedAtAsc(eq(ReceiptStatus.FAILED_PARSE), any()))
+                .thenReturn(List.of(failedScan, failedImport));
+
+        var retried = receiptService.adminRetryFailedScans(null);
+
+        assertEquals(1, retried);
+        assertEquals(ReceiptStatus.PROCESSING, failedScan.getStatus());
+        assertEquals(ReceiptStatus.FAILED_PARSE, failedImport.getStatus());
+        verify(receiptIngestionService).ingest(failedScan.getId(), CHAVE_RS, false);
+        verify(receiptIngestionService, never()).ingest(eq(failedImport.getId()), any(), anyBoolean());
+    }
+
+    @Test
     void reparse_appliesParsedDataAndSwapsEvidenceWhenRescued() {
         var user = buildUser();
         var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);

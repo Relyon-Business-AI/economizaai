@@ -292,6 +292,38 @@ public class ReceiptService {
     }
 
     /**
+     * Admin bulk rescue over the FAILED_PARSE backlog: re-ingests each SCANNED
+     * nota with its stored qrPayload — the same flow as the user-facing
+     * {@link #retryFailedScan}, minus the ownership check (cross-household, admin
+     * only at the endpoint). Null {@code receiptIds} means the whole backlog
+     * (bounded). Non-scan rows and rows without a payload are skipped, never
+     * failed. Paid rescues are attributed to each nota's owner as usual.
+     */
+    @Transactional
+    public int adminRetryFailedScans(List<UUID> receiptIds) {
+        var candidates = receiptIds != null && !receiptIds.isEmpty()
+                ? receiptIds.stream().map(receiptRepository::findById).flatMap(Optional::stream).toList()
+                : receiptRepository.findByStatusOrderByCreatedAtAsc(
+                        ReceiptStatus.FAILED_PARSE, PageRequest.of(0, 200));
+        var retried = 0;
+        for (var receipt : candidates) {
+            if (receipt.getStatus() != ReceiptStatus.FAILED_PARSE) continue;
+            if (receipt.getOrigin() != ReceiptOrigin.SCAN) continue;
+            var qrPayload = receipt.getQrPayload();
+            if (qrPayload == null || qrPayload.isBlank()) continue;
+            receipt.setStatus(ReceiptStatus.PROCESSING);
+            receipt.setParseErrorReason(null);
+            receiptRepository.save(receipt);
+            var receiptId = receipt.getId();
+            dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload, false));
+            retried++;
+        }
+        log.info("admin.retry_failed_scans requested={} retried={}",
+                receiptIds == null ? "all" : receiptIds.size(), retried);
+        return retried;
+    }
+
+    /**
      * Shared submit path: everything decidable synchronously (unsupported UF,
      * manual-chave-without-fallback, blocked merchant, monthly cap, stale/dup
      * replacement) fails fast with a localized 4xx, then the receipt is persisted

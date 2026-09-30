@@ -1381,6 +1381,7 @@ GET    /api/v1/admin/receipts?from=&to=&marketCnpj=&category=&q=&householdId=&uf
                                               → Page<AdminReceiptSummaryResponse> — { receipt: ReceiptSummaryResponse, owner: {id,name,email}|null, uf, createdAt, parseErrorReason, parseErrorMessage }
 GET    /api/v1/admin/receipts/{id}            → ReceiptResponse
 POST   /api/v1/admin/receipts/{id}/reparse    → 200 ReceiptResponse
+POST   /api/v1/admin/receipts/retry-batch      → 202 { affected } — re-ingere o backlog FAILED_PARSE de notas escaneadas pelo qrPayload guardado (cross-household; body opcional { ids: [...] }, sem body = backlog inteiro, cap 200)
 POST   /api/v1/admin/notifications/test       → 202 Accepted
 GET    /api/v1/admin/notifications/sent?days=30&page=&size=  → Page<AdminNotificationSummaryResponse> (sent notifications, newest first)
 GET    /api/v1/admin/products?page=&size=&q=&category=&source= → Page<ProductResponse> (catalog; optional filters: name/EAN substring, category e.g. OTHER, categorizationSource)

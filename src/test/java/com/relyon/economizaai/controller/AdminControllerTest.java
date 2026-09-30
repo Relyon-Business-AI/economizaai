@@ -182,6 +182,23 @@ class AdminControllerTest {
     }
 
     @Test
+    void retryFailedBatch_withoutBodyRetriesWholeBacklog() throws Exception {
+        when(receiptService.adminRetryFailedScans(null)).thenReturn(14);
+
+        mockMvc.perform(post("/api/v1/admin/receipts/retry-batch")
+                        .with(SecurityMockMvcRequestPostProcessors.user(adminUser())))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.affected").value(14));
+    }
+
+    @Test
+    void retryFailedBatch_forbiddenForNonAdmin() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/receipts/retry-batch")
+                        .with(SecurityMockMvcRequestPostProcessors.user(regularUser())))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void seedDiscountedReceipt_forbiddenWhenDevSeedDisabled() throws Exception {
         // economizaai.admin.dev-seed-enabled defaults to false in the test context.
         mockMvc.perform(post("/api/v1/admin/dev/seed-discounted-receipt")
