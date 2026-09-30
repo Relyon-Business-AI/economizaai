@@ -19,6 +19,17 @@ public interface StateIngestionAttemptRepository extends JpaRepository<StateInge
      * experimental spend cap: once we have enough, stop attempting/paying for that state. */
     long countByUfAndOutcome(UnidadeFederativa uf, StateIngestionOutcome outcome);
 
+    long countByUfAndOutcomeAndCreatedAtGreaterThan(
+            UnidadeFederativa uf, StateIngestionOutcome outcome, OffsetDateTime after);
+
+    /** When the UF last succeeded through any layer — a success voids older failure evidence. */
+    @Query("""
+            select max(attempt.createdAt)
+            from StateIngestionAttempt attempt
+            where attempt.uf = :uf and attempt.outcome = 'SUCCESS'
+            """)
+    OffsetDateTime lastSuccessAt(UnidadeFederativa uf);
+
     boolean existsByUfAndAdminNotifiedTrueAndCreatedAtGreaterThanEqual(UnidadeFederativa uf, OffsetDateTime since);
 
     long countByUfAndStrategyAndOutcomeAndCreatedAtGreaterThanEqual(

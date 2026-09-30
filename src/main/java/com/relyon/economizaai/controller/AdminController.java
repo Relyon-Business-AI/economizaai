@@ -2,6 +2,8 @@ package com.relyon.economizaai.controller;
 
 import com.relyon.economizaai.dto.request.MergeProductRequest;
 import com.relyon.economizaai.dto.request.MerchantSupportOverrideRequest;
+import com.relyon.economizaai.dto.request.ReceiptIdsRequest;
+import com.relyon.economizaai.dto.response.BatchResultResponse;
 import com.relyon.economizaai.dto.request.SendTestNotificationRequest;
 import com.relyon.economizaai.dto.request.SetProductBrandRequest;
 import com.relyon.economizaai.dto.request.SetMetricsExclusionRequest;
@@ -133,6 +135,18 @@ public class AdminController {
     @PostMapping("/receipts/{id}/reparse")
     public ResponseEntity<ReceiptResponse> reparseReceipt(@PathVariable UUID id) {
         return ResponseEntity.ok(receiptService.reparse(id));
+    }
+
+    /**
+     * Bulk rescue of the FAILED_PARSE backlog: re-ingests every scanned nota (or
+     * the given ids) with its stored qrPayload — cross-household. Use after a
+     * fallback ships or a paid provider comes back to life. 202 + count.
+     */
+    @PostMapping("/receipts/retry-batch")
+    public ResponseEntity<BatchResultResponse> retryFailedBatch(
+            @RequestBody(required = false) ReceiptIdsRequest request) {
+        var ids = request == null ? null : request.ids();
+        return ResponseEntity.accepted().body(new BatchResultResponse(receiptService.adminRetryFailedScans(ids)));
     }
 
     @GetMapping("/users")

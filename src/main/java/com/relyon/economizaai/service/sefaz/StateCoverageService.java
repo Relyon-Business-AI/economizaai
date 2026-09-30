@@ -75,9 +75,18 @@ public class StateCoverageService {
      * (EXHAUSTED rows, each carrying the nota's evidence). Past that we have what we need to build
      * support later, so further scans of that UF fail fast without spending. Threshold configurable
      * via {@code economizaai.ingestion.sefaz.experimental.max-evidence-per-uf} (default 3).
+     *
+     * <p>Only failures AFTER the UF's most recent SUCCESS count: a success proves the chain
+     * works again (e.g. the paid fallback got re-funded), so stale evidence from a broken era
+     * must not keep the state locked forever.
      */
     public boolean hasEnoughEvidence(UnidadeFederativa uf) {
-        return repository.countByUfAndOutcome(uf, StateIngestionOutcome.EXHAUSTED) >= maxEvidencePerUf;
+        var lastSuccessAt = repository.lastSuccessAt(uf);
+        var exhaustedSamples = lastSuccessAt == null
+                ? repository.countByUfAndOutcome(uf, StateIngestionOutcome.EXHAUSTED)
+                : repository.countByUfAndOutcomeAndCreatedAtGreaterThan(
+                        uf, StateIngestionOutcome.EXHAUSTED, lastSuccessAt);
+        return exhaustedSamples >= maxEvidencePerUf;
     }
 
     /** Records a successful layer; the first-ever success for the UF alerts the admin. */
