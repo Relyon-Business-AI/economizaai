@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
 
 @ExtendWith(MockitoExtension.class)
 class ContactServiceTest {
@@ -88,7 +89,7 @@ class ContactServiceTest {
 
         service.submit(new ContactRequest("John", "john@test.com", null, "oi"));
 
-        verify(mailSender, never()).send(org.mockito.ArgumentMatchers.any(MimeMessage.class));
+        verify(mailSender, never()).send(any(MimeMessage.class));
     }
 
     @Test
@@ -97,7 +98,7 @@ class ContactServiceTest {
 
         service.submit(new ContactRequest("John", "john@test.com", null, "oi"));
 
-        verify(mailSender, never()).send(org.mockito.ArgumentMatchers.any(MimeMessage.class));
+        verify(mailSender, never()).send(any(MimeMessage.class));
     }
 
     @Test

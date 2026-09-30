@@ -17,6 +17,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.ArgumentMatchers.any;
 
 @WebMvcTest(BetaSignupController.class)
 @Import(SecurityConfig.class)
@@ -38,7 +39,7 @@ class BetaSignupControllerTest {
         mockMvc.perform(post("/api/v1/beta-signup").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isAccepted());
 
-        verify(contactService).submitBetaSignup(org.mockito.ArgumentMatchers.any());
+        verify(contactService).submitBetaSignup(any());
     }
 
     @Test
@@ -50,7 +51,7 @@ class BetaSignupControllerTest {
         mockMvc.perform(post("/api/v1/beta-signup").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isAccepted());
 
-        verify(contactService).submitBetaSignup(org.mockito.ArgumentMatchers.any());
+        verify(contactService).submitBetaSignup(any());
     }
 
     @Test
@@ -62,7 +63,7 @@ class BetaSignupControllerTest {
         mockMvc.perform(post("/api/v1/beta-signup").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest());
 
-        verify(contactService, never()).submitBetaSignup(org.mockito.ArgumentMatchers.any());
+        verify(contactService, never()).submitBetaSignup(any());
     }
 
     @Test
@@ -74,7 +75,7 @@ class BetaSignupControllerTest {
         mockMvc.perform(post("/api/v1/beta-signup").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest());
 
-        verify(contactService, never()).submitBetaSignup(org.mockito.ArgumentMatchers.any());
+        verify(contactService, never()).submitBetaSignup(any());
     }
 
     @Test

@@ -34,6 +34,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
 
 @ExtendWith(MockitoExtension.class)
 class ProfilePictureServiceTest {
@@ -215,7 +216,7 @@ class ProfilePictureServiceTest {
         var smallPng = pngBytes(50, 50);
         MultipartFile file = new MockMultipartFile("file", "avatar.png", "image/png", smallPng);
         when(storage.store(any(InputStream.class), eq("image/png"), anyLong())).thenReturn("new-key");
-        org.mockito.Mockito.doThrow(new IOException("boom")).when(storage).delete("old-key");
+        doThrow(new IOException("boom")).when(storage).delete("old-key");
 
         profilePictureService.upload(user, file);
 
@@ -375,7 +376,7 @@ class ProfilePictureServiceTest {
     void delete_swallowsStorageDeleteFailure() throws IOException {
         var user = buildUser();
         user.setProfilePictureKey("key-x");
-        org.mockito.Mockito.doThrow(new IOException("nope")).when(storage).delete("key-x");
+        doThrow(new IOException("nope")).when(storage).delete("key-x");
 
         profilePictureService.delete(user);
 

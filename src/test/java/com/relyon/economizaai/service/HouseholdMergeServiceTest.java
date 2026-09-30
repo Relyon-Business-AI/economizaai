@@ -32,6 +32,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
 
 @ExtendWith(MockitoExtension.class)
 class HouseholdMergeServiceTest {
@@ -60,15 +61,15 @@ class HouseholdMergeServiceTest {
     // Every category's "find by household" returns empty unless a test stubs it, so
     // merge(ALL) doesn't NPE iterating all nine categories. lenient = unused is fine.
     private void stubAllEmpty() {
-        lenient().when(receiptRepository.findAllByHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(shoppingListRepository.findAllByHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(manualPurchaseRepository.findAllByHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(consumptionSnoozeRepository.findAllByHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(categoryOverrideRepository.findAllByHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(customCategoryRepository.findAllByHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(productAliasRepository.findAllByHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(marketAliasRepository.findAllByHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(brandPreferenceRepository.findAllByHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
+        lenient().when(receiptRepository.findAllByHouseholdId(any())).thenReturn(List.of());
+        lenient().when(shoppingListRepository.findAllByHouseholdId(any())).thenReturn(List.of());
+        lenient().when(manualPurchaseRepository.findAllByHouseholdId(any())).thenReturn(List.of());
+        lenient().when(consumptionSnoozeRepository.findAllByHouseholdId(any())).thenReturn(List.of());
+        lenient().when(categoryOverrideRepository.findAllByHouseholdId(any())).thenReturn(List.of());
+        lenient().when(customCategoryRepository.findAllByHouseholdId(any())).thenReturn(List.of());
+        lenient().when(productAliasRepository.findAllByHouseholdId(any())).thenReturn(List.of());
+        lenient().when(marketAliasRepository.findAllByHouseholdId(any())).thenReturn(List.of());
+        lenient().when(brandPreferenceRepository.findAllByHouseholdId(any())).thenReturn(List.of());
     }
 
     @Test
@@ -170,14 +171,14 @@ class HouseholdMergeServiceTest {
         when(receiptRepository.findAllByOriginHouseholdId(home.getId()))
                 .thenReturn(List.of(parkedAway, alreadyHome));
         // other categories empty
-        lenient().when(shoppingListRepository.findAllByOriginHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(manualPurchaseRepository.findAllByOriginHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(consumptionSnoozeRepository.findAllByOriginHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(categoryOverrideRepository.findAllByOriginHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(customCategoryRepository.findAllByOriginHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(productAliasRepository.findAllByOriginHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(marketAliasRepository.findAllByOriginHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(brandPreferenceRepository.findAllByOriginHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
+        lenient().when(shoppingListRepository.findAllByOriginHouseholdId(any())).thenReturn(List.of());
+        lenient().when(manualPurchaseRepository.findAllByOriginHouseholdId(any())).thenReturn(List.of());
+        lenient().when(consumptionSnoozeRepository.findAllByOriginHouseholdId(any())).thenReturn(List.of());
+        lenient().when(categoryOverrideRepository.findAllByOriginHouseholdId(any())).thenReturn(List.of());
+        lenient().when(customCategoryRepository.findAllByOriginHouseholdId(any())).thenReturn(List.of());
+        lenient().when(productAliasRepository.findAllByOriginHouseholdId(any())).thenReturn(List.of());
+        lenient().when(marketAliasRepository.findAllByOriginHouseholdId(any())).thenReturn(List.of());
+        lenient().when(brandPreferenceRepository.findAllByOriginHouseholdId(any())).thenReturn(List.of());
 
         var result = mergeService.restoreOriginals(home);
 
@@ -203,15 +204,15 @@ class HouseholdMergeServiceTest {
 
         // --- restore to origin: both come home (origin still points at origin) ---
         when(receiptRepository.findAllByOriginHouseholdId(origin.getId())).thenReturn(brought);
-        lenient().when(shoppingListRepository.findAllByOriginHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(manualPurchaseRepository.findAllByOriginHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(consumptionSnoozeRepository.findAllByOriginHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(categoryOverrideRepository.findAllByOriginHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(customCategoryRepository.findAllByOriginHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(productAliasRepository.findAllByOriginHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(marketAliasRepository.findAllByOriginHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(marketAliasRepository.findAllByOriginHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
-        lenient().when(brandPreferenceRepository.findAllByOriginHouseholdId(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
+        lenient().when(shoppingListRepository.findAllByOriginHouseholdId(any())).thenReturn(List.of());
+        lenient().when(manualPurchaseRepository.findAllByOriginHouseholdId(any())).thenReturn(List.of());
+        lenient().when(consumptionSnoozeRepository.findAllByOriginHouseholdId(any())).thenReturn(List.of());
+        lenient().when(categoryOverrideRepository.findAllByOriginHouseholdId(any())).thenReturn(List.of());
+        lenient().when(customCategoryRepository.findAllByOriginHouseholdId(any())).thenReturn(List.of());
+        lenient().when(productAliasRepository.findAllByOriginHouseholdId(any())).thenReturn(List.of());
+        lenient().when(marketAliasRepository.findAllByOriginHouseholdId(any())).thenReturn(List.of());
+        lenient().when(marketAliasRepository.findAllByOriginHouseholdId(any())).thenReturn(List.of());
+        lenient().when(brandPreferenceRepository.findAllByOriginHouseholdId(any())).thenReturn(List.of());
 
         var restored = mergeService.restoreOriginals(origin);
 

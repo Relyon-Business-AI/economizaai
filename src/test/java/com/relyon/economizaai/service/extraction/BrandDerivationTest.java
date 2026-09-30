@@ -1,6 +1,8 @@
 package com.relyon.economizaai.service.extraction;
 
 import com.relyon.economizaai.model.BrandRegistryEntry;
+import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.model.CuratedDictionaryEntry;
 import com.relyon.economizaai.repository.BrandRegistryEntryRepository;
 import com.relyon.economizaai.repository.CategorizationBenchmarkEntryRepository;
 import com.relyon.economizaai.repository.CuratedDictionaryEntryRepository;
@@ -68,8 +70,8 @@ class BrandDerivationTest {
         // "tomate" is a curated dictionary keyword (a generic product term), so it
         // must never become a brand even if OFF lists it as one.
         when(curatedRepository.findAll()).thenReturn(List.of(
-                com.relyon.economizaai.model.CuratedDictionaryEntry.builder()
-                        .keyword("tomate").category(com.relyon.economizaai.model.enums.ProductCategory.PRODUCE).build()));
+                CuratedDictionaryEntry.builder()
+                        .keyword("tomate").category(ProductCategory.PRODUCE).build()));
         when(eanCatalogRepository.countByBrandBrazilOnly()).thenReturn(List.of(
                 occurrence("Tomate", 12),
                 occurrence("Piraquê", 8)));

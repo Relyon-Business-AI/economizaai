@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.util.List;
 
 /**
  * Locks that bean-validation FIELD errors are localized through our message
@@ -72,7 +73,7 @@ class I18nValidationMessagesTest {
     @Test
     void everyConstraintKeyResolvesInBothLocales() {
         // No raw {code} leaks: each key we added must exist in both bundles.
-        for (var key : java.util.List.of("NotBlank", "NotEmpty", "NotNull", "Email",
+        for (var key : List.of("NotBlank", "NotEmpty", "NotNull", "Email",
                 "Size", "Min", "Max", "DecimalMin", "DecimalMax", "Pattern")) {
             var pt = messages.getMessage(key, new Object[]{"", 0, 0}, PT);
             var en = messages.getMessage(key, new Object[]{"", 0, 0}, EN);
