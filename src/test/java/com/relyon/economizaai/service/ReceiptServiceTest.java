@@ -57,6 +57,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.Month;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -227,9 +228,10 @@ class ReceiptServiceTest {
     }
 
     @Test
-    void adminRetryFailedScans_reingestsScanBacklogSkippingNonScanRows() {
+    void adminRetryFailedScans_queuesScanBacklogIntoPacedLaneSkippingNonScanRows() {
         var user = buildUser();
         var failedScan = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        failedScan.setParseErrorReason("receipt.contingency.pending:227");
         var failedImport = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
         failedImport.setOrigin(ReceiptOrigin.IMPORT);
         when(receiptRepository.findByStatusOrderByCreatedAtAsc(eq(ReceiptStatus.FAILED_PARSE), any()))
@@ -238,13 +240,31 @@ class ReceiptServiceTest {
         var retried = receiptService.adminRetryFailedScans(null);
 
         assertEquals(1, retried);
-        assertEquals(ReceiptStatus.PROCESSING, failedScan.getStatus());
+        // Paced through IMPORT_QUEUED — never dispatched straight into the ingest pool,
+        // so a 200-nota backlog can't overflow it and TaskReject itself back to failure.
+        assertEquals(ReceiptStatus.IMPORT_QUEUED, failedScan.getStatus());
         assertEquals(ReceiptStatus.FAILED_PARSE, failedImport.getStatus());
-        // 2-arg ingest — blocked states record the honest "not supported" reason,
-        // never app_update_required (an admin retry is not the owner's app).
-        verify(receiptIngestionService).ingest(failedScan.getId(), CHAVE_RS);
+        // The diagnostic reason survives until the worker actually re-runs the nota.
+        assertEquals("receipt.contingency.pending:227", failedScan.getParseErrorReason());
+        verify(receiptIngestionService, never()).ingest(any(), any());
         verify(receiptIngestionService, never()).ingest(any(), any(), anyBoolean());
-        verify(receiptIngestionService, never()).ingest(eq(failedImport.getId()), any());
+    }
+
+    @Test
+    void adminRetryFailedScans_backlogAboveOldPoolCapacityIsFullyQueued() {
+        var user = buildUser();
+        var backlog = new ArrayList<Receipt>();
+        for (var index = 0; index < 80; index++) { // > 8 threads + 50 queue slots
+            backlog.add(persistedReceipt(user, ReceiptStatus.FAILED_PARSE));
+        }
+        when(receiptRepository.findByStatusOrderByCreatedAtAsc(eq(ReceiptStatus.FAILED_PARSE), any()))
+                .thenReturn(backlog);
+
+        var retried = receiptService.adminRetryFailedScans(null);
+
+        assertEquals(80, retried);
+        assertTrue(backlog.stream().allMatch(receipt -> receipt.getStatus() == ReceiptStatus.IMPORT_QUEUED));
+        verify(receiptIngestionService, never()).ingest(any(), any());
     }
 
     @Test

@@ -305,12 +305,15 @@ public class ReceiptService {
     }
 
     /**
-     * Admin bulk rescue over the FAILED_PARSE backlog: re-ingests each SCANNED
-     * nota with its stored qrPayload — the same flow as the user-facing
-     * {@link #retryFailedScan}, minus the ownership check (cross-household, admin
-     * only at the endpoint). Null {@code receiptIds} means the whole backlog
-     * (bounded). Non-scan rows and rows without a payload are skipped, never
-     * failed. Paid rescues are attributed to each nota's owner as usual.
+     * Admin bulk rescue over the FAILED_PARSE backlog: re-queues each SCANNED
+     * nota into the paced IMPORT_QUEUED lane — the {@code ImportReconsultWorker}
+     * flips a few at a time to PROCESSING and re-runs the QR ingestion with the
+     * stored qrPayload, so a 200-nota backlog never floods the 8-thread ingest
+     * pool (direct dispatch used to TaskReject the overflow and instantly re-fail
+     * it with an infrastructure reason over the original diagnostic). Null
+     * {@code receiptIds} means the whole backlog (bounded). Non-scan rows and
+     * rows without a payload are skipped, never failed. The diagnostic
+     * parseErrorReason survives until the retry actually runs.
      */
     @Transactional
     public int adminRetryFailedScans(List<UUID> receiptIds) {
@@ -324,17 +327,11 @@ public class ReceiptService {
             if (receipt.getOrigin() != ReceiptOrigin.SCAN) continue;
             var qrPayload = receipt.getQrPayload();
             if (qrPayload == null || qrPayload.isBlank()) continue;
-            receipt.setStatus(ReceiptStatus.PROCESSING);
-            receipt.setParseErrorReason(null);
+            receipt.setStatus(ReceiptStatus.IMPORT_QUEUED);
             receiptRepository.save(receipt);
-            var receiptId = receipt.getId();
-            // 2-arg ingest: an admin retry is not the owner's app, so a blocked state
-            // must record the honest "state not supported" reason — the 3-arg overload
-            // with canDeviceRetry=false would stamp app_update_required, misleading here.
-            dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload));
             retried++;
         }
-        log.info("admin.retry_failed_scans requested={} retried={}",
+        log.info("admin.retry_failed_scans requested={} queued={}",
                 receiptIds == null ? "all" : receiptIds.size(), retried);
         return retried;
     }
