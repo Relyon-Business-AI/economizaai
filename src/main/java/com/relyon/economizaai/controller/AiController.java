@@ -125,6 +125,12 @@ public class AiController {
         return ResponseEntity.ok(aiFindingService.reject(id));
     }
 
+    /** UFs where this finding's product/description was scanned — helps spot regional brands. */
+    @GetMapping("/findings/{id}/ufs")
+    public ResponseEntity<List<String>> findingUfs(@PathVariable UUID id) {
+        return ResponseEntity.ok(aiFindingService.resolveUfs(id));
+    }
+
     @PostMapping("/findings/approve-bulk")
     public ResponseEntity<AiFindingService.BulkOutcome> approveBulk(@RequestBody List<UUID> ids) {
         return ResponseEntity.ok(aiFindingService.approveBulk(ids));

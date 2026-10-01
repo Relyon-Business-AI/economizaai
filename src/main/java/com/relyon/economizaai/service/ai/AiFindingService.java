@@ -8,8 +8,10 @@ import com.relyon.economizaai.model.AiFinding;
 import com.relyon.economizaai.model.enums.AiFindingStatus;
 import com.relyon.economizaai.model.enums.AiFindingType;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.AiFindingRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.service.admin.AdminProductService;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import com.relyon.economizaai.service.extraction.CategorizerAdminService;
@@ -40,8 +42,32 @@ public class AiFindingService {
     private final CategorizerAdminService categorizerAdminService;
     private final AdminProductService adminProductService;
     private final ProductRepository productRepository;
+    private final ReceiptItemRepository receiptItemRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    /**
+     * UF(s) where this finding's product/description was actually scanned — so the
+     * reviewer can tell a regional brand from a national one. Resolves by productId
+     * when the finding carries one, else by the raw cupom description.
+     */
+    @Transactional(readOnly = true)
+    public List<String> resolveUfs(UUID id) {
+        var finding = findingRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Achado não encontrado: " + id));
+        var payload = parsePayload(finding.getPayload());
+        var productId = payload.path("productId").asText("");
+        if (productId.isBlank()) productId = payload.path("survivorId").asText("");
+
+        List<UnidadeFederativa> ufs;
+        if (!productId.isBlank()) {
+            ufs = receiptItemRepository.findDistinctUfByProductId(UUID.fromString(productId));
+        } else {
+            var description = payload.path("description").asText("");
+            ufs = description.isBlank() ? List.of() : receiptItemRepository.findDistinctUfByRawDescription(description);
+        }
+        return ufs.stream().map(Enum::name).sorted().toList();
+    }
 
     @Transactional
     public AiFinding approve(UUID id) {
