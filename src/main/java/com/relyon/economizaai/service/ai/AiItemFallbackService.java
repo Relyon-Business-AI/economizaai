@@ -109,7 +109,7 @@ public class AiItemFallbackService {
     }
 
     private static FallbackTally toTally(EnumMap<FallbackOutcome, Integer> counts) {
-        return new FallbackTally(
+        return new FallbackTally(1,
                 counts.getOrDefault(FallbackOutcome.MATCHED, 0),
                 counts.getOrDefault(FallbackOutcome.ALREADY_MATCHED, 0),
                 counts.getOrDefault(FallbackOutcome.PARSE_FAILED, 0),
@@ -121,10 +121,10 @@ public class AiItemFallbackService {
     /** Outcome of one fallback classification — tallied per receipt for observability. */
     private enum FallbackOutcome { MATCHED, ALREADY_MATCHED, PARSE_FAILED, BLANK_NAME, GONE, CALL_ERROR }
 
-    public record FallbackTally(int matched, int alreadyMatched, int parseFailed, int blankName, int gone, int callError) {
-        static final FallbackTally EMPTY = new FallbackTally(0, 0, 0, 0, 0, 0);
+    public record FallbackTally(int receipts, int matched, int alreadyMatched, int parseFailed, int blankName, int gone, int callError) {
+        static final FallbackTally EMPTY = new FallbackTally(0, 0, 0, 0, 0, 0, 0);
         FallbackTally plus(FallbackTally other) {
-            return new FallbackTally(matched + other.matched, alreadyMatched + other.alreadyMatched,
+            return new FallbackTally(receipts + other.receipts, matched + other.matched, alreadyMatched + other.alreadyMatched,
                     parseFailed + other.parseFailed, blankName + other.blankName, gone + other.gone, callError + other.callError);
         }
     }
