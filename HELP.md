@@ -802,7 +802,7 @@ These came up while structuring the project — open for discussion:
 - **Onboarding: scan em lote** — *intenção:* usuário enfileira várias notas e passa a câmera continuamente (cada QR decodificado on-device → pipeline atual), ou seleciona várias fotos da galeria de uma vez. Sem custo, funciona em toda UF suportada, 100% sob nosso controle. Design em [`docs/ONBOARDING_IMPORT.md`](./docs/ONBOARDING_IMPORT.md) (item 1).
 - **Onboarding: import de XML (a melhor aposta de import em massa)** — *intenção:* usuário sobe XML (avulso ou lote/zip) e parseamos os itens direto do arquivo, sem SEFAZ/captcha, para qualquer UF. É a ponte natural com e-commerce (NF-e 55 chega por e-mail na compra online); um endereço "email-in" (encaminhe a nota) é o funil de menor atrito. Design em [`docs/ONBOARDING_IMPORT.md`](./docs/ONBOARDING_IMPORT.md) (item 2).
 - **Auto-import de notas por CPF** — "CPF na nota" no caixa → compras aparecem sozinhas, sem scan. Spike feito (2026-07-07): viável só com credencial do titular (senha do portal estadual OU e-CPF), nunca com o CPF sozinho; polling não push; fragmentado por estado. Feature paga/"endgame" — achados e design em [`docs/ONBOARDING_IMPORT.md`](./docs/ONBOARDING_IMPORT.md) (item 4).
-- **Onboarding: importar export do portal estadual (CSV/Excel/PDF)** — *intenção:* usuário entra no programa estadual (Nota Fiscal Gaúcha / Paulista / etc.), exporta a lista das notas do CPF e sobe o arquivo → app extrai as chaves, filtra supermercado por CNAE (`MerchantSegment.SUPERMARKET`, CNPJ vem da chave) e busca os itens pra popular o histórico já no primeiro acesso. **Bloqueio (2026-07-09):** o export é **só cabeçalho** (chave, emitente, total, data — SEM itens), então os itens dependem de reconsulta por chave, que **só funciona nos estados consultáveis** (SP/PR/CE via Infosimples, pago). **RS não é reconsultável por chave** (muro gov.br; Infosimples também não resolve — ver `ReceiptService`), e o export da NFG traz **apenas notas RS** (toda chave começa com "43") → para usuário do RS rende **zero notas com itens**. Não vale a spike sem acesso a uma conta de outro estado. Revisitar quando: (a) tivermos credencial de outro estado pra testar, ou (b) massa de usuários fora do RS. Bônus regional — ver [`docs/ONBOARDING_IMPORT.md`](./docs/ONBOARDING_IMPORT.md) (item 3).
+- **Onboarding: importar export do portal estadual (CSV/Excel/PDF)** — *intenção:* usuário entra no programa estadual (Nota Fiscal Gaúcha / Paulista / etc.), exporta a lista das notas do CPF e sobe o arquivo → app extrai as chaves, filtra supermercado por CNAE (`MerchantSegment.SUPERMARKET`, CNPJ vem da chave) e busca os itens pra popular o histórico já no primeiro acesso. **Bloqueio (2026-07-09, SUPERADO em 2026-09-22):** o export é **só cabeçalho** (chave, emitente, total, data — SEM itens), então os itens dependem de reconsulta por chave. A premissa "RS não é reconsultável por chave" caiu: o portal legado SAT-WEB (`sefaz.rs.gov.br/ASP/AAE_ROOT/NFE/...`) **renderiza o DANFE completo (com itens) a partir da chave de 44 dígitos**, público e server-side — validado com nota real e já em prod no import por chave (ver `docs/MULTI_STATE_RECON.md` e `CLAUDE.md`). Ou seja, o import do export da NFG (todas chaves RS) **é viável hoje**; SP/PR/CE seguem via Infosimples (pago). Design em [`docs/ONBOARDING_IMPORT.md`](./docs/ONBOARDING_IMPORT.md) (item 3).
 - **Group/household budget split** — when a household has multiple members, allocate the receipt total across them.
 - **Brand loyalty / cashback awareness** — surface that retailer X has a cashback app the user isn't using.
 - **LGPD compliance plumbing** — data export, account deletion, anonymization audit trail. Non-negotiable for a public Brazilian app handling financial data.
@@ -1056,3 +1056,27 @@ classify OTHER (grey) unless they carry a conveniência CNAE.
   busca ao vivo exige credenciais `ECOMMERCE_MERCADOLIVRE_*` (App ID/Secret). Sem elas, 503
   localizado; CRUD de watches/marketplaces/histórico funcionam. Ver DEV_NOTES.
 - Postman: pasta "Garimpo (admin)" + passos 49b3–49b7 no E2E Flow (skip sem admin creds).
+
+### Session (2026-09-28 → 10-01) — criar senha p/ conta social, promo em data fixa, trilhos de cobrança
+
+- **Conta Google/Apple pode criar senha** (`POST /users/me/password`, 409 se já tem;
+  `UserResponse` ganhou `authProvider`/`hasPassword`): login social continua; e-mail+senha
+  passa a funcionar; forgot-password destravado pra social com senha. FE: EditProfile vira
+  "Criar senha" quando `hasPassword=false`. Validado ponta a ponta em dev (conta simulada
+  GOOGLE) e shipado em prod.
+- **Promo de lançamento virou DATA FIXA 31/12/2026** (`SUBSCRIPTION_PROMO_UNTIL` + V85;
+  coorte V68 de 47 early users mantém 07/03/2027 — nunca encurtar o prometido). Modal do FE
+  re-anuncia uma vez por mudança de data (flag guarda a data, não "1"). Racional em
+  MONETIZATION.md §2b.
+- **Trilhos de cobrança prontos e INERTES** (decisões: MP web como canal principal R$9,90;
+  IAP ~R$12,90 depois): checkout MP (`POST /subscriptions/checkout` + webhook HMAC
+  fail-closed + `GET /subscriptions/plan` com `webCheckoutAvailable`), tela Premium no FE
+  (web=botão; iOS=menção em TEXTO PURO ao site — acordo CADE: texto 0%, link 15%; Android=
+  sem menção), IAP RevenueCat pré-integrado invisível (`src/services/iap.ts`, gated em
+  `EXPO_PUBLIC_RC_*`). Env vars criadas nos 2 serviços com sentinel `CHANGEME` (tratado como
+  não-configurado — guard também no webhook RevenueCat). Falta só credenciar (CNPJ → MP;
+  contas RevenueCat/lojas).
+- **Infosimples: conta ATIVA** (verificado ao vivo: saldo R$91,84 em 01/10; dormência era
+  jul–ago). `InfosimplesAlertService` novo: e-mail admin em consulta paga falhando (CE!),
+  saldo < R$5 e conta inacessível. Modelo de "varrido" da franquia em observação (saldo de
+  setembro carregou pro mês novo, contrariando o fechamento) — ver DEV_NOTES.

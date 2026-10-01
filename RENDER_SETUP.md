@@ -83,7 +83,7 @@ Everything not listed here has a safe default baked into `application.yaml`.
 | `REVENUECAT_WEBHOOK_AUTH` / `BILLING_WEBHOOK_SECRET` | billing webhooks (secret) |
 
 ### Cost guards (already have defaults — tune per env)
-`PAID_API_GUARD_ENABLED=true`, `PAID_API_DAILY_BUDGET_CENTS` (R$50 default — raise/lower per env), `INFOSIMPLES_DAILY_CAP`, `CAPTCHA_DAILY_CAP`. In **dev**, consider `INFOSIMPLES_ENABLED=false` + `CAPTCHA_PROVIDER=none` so testing never spends money.
+`PAID_API_GUARD_ENABLED=true`, `PAID_API_DAILY_BUDGET_CENTS` (R$50 default — raise/lower per env), `INFOSIMPLES_DAILY_CAP`, `CAPTCHA_DAILY_CAP`. In **dev**, consider `INFOSIMPLES_ENABLED=false` + `CAPTCHA_PROVIDER=none` so testing never spends money. (Status quo 2026-10: BOTH envs run `INFOSIMPLES_ENABLED=true` on purpose — CE flows are testable in dev; the daily caps + budget guard bound the spend.)
 
 ### Behavior flags (defaults are fine; flip when ready)
 `SUBSCRIPTION_ENFORCE=false` (keep off during warm-up), `RELEVANCE_MODE=SHADOW`, `ML_CATEGORY_APPLY_ENABLED=false`, timezone crons already `America/Sao_Paulo`.
