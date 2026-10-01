@@ -22,6 +22,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import static com.relyon.economizaai.config.AsyncConfig.AI_SWEEP_EXECUTOR;
 
 import java.math.BigDecimal;
+import java.util.EnumMap;
 import java.util.UUID;
 
 /**
@@ -61,31 +62,62 @@ public class AiItemFallbackService {
         var unmatched = receiptItemRepository.findUnmatchedByReceiptId(receiptId);
         if (unmatched.isEmpty()) return;
         log.info("ai.item_fallback.start rcpt={} items={}", abbrev(receiptId), unmatched.size());
+        var tally = new EnumMap<FallbackOutcome, Integer>(FallbackOutcome.class);
         for (var item : unmatched) {
             try {
-                classifyOne(receiptId, item.getId(), item.getRawDescription());
+                tally.merge(classifyOne(receiptId, item.getId(), item.getRawDescription()), 1, Integer::sum);
             } catch (RuntimeException ex) {
+                tally.merge(FallbackOutcome.CALL_ERROR, 1, Integer::sum);
                 log.warn("ai.item_fallback.failed rcpt={} item={} description='{}' reason={}",
                         abbrev(receiptId), abbrev(item.getId()), item.getRawDescription(), ex.getMessage());
             }
         }
+        // One summary line per receipt so a single grep tells us WHY the fallback did/didn't
+        // persist — the discard reasons used to be silent (the 0-LLM-products mystery).
+        log.info("ai.item_fallback.done rcpt={} items={} matched={} already_matched={} parse_failed={} blank_name={} gone={} call_error={}",
+                abbrev(receiptId), unmatched.size(),
+                tally.getOrDefault(FallbackOutcome.MATCHED, 0),
+                tally.getOrDefault(FallbackOutcome.ALREADY_MATCHED, 0),
+                tally.getOrDefault(FallbackOutcome.PARSE_FAILED, 0),
+                tally.getOrDefault(FallbackOutcome.BLANK_NAME, 0),
+                tally.getOrDefault(FallbackOutcome.GONE, 0),
+                tally.getOrDefault(FallbackOutcome.CALL_ERROR, 0));
     }
 
-    private void classifyOne(UUID receiptId, UUID itemId, String rawDescription) {
+    /** Outcome of one fallback classification — tallied per receipt for observability. */
+    private enum FallbackOutcome { MATCHED, ALREADY_MATCHED, PARSE_FAILED, BLANK_NAME, GONE, CALL_ERROR }
+
+    private FallbackOutcome classifyOne(UUID receiptId, UUID itemId, String rawDescription) {
+        // Re-check BEFORE spending an LLM call: if the deterministic cascade (or a concurrent
+        // path) already gave this item a product, there's nothing to do — and we avoid paying
+        // for a call whose result we'd just discard.
+        var existing = receiptItemRepository.findById(itemId).orElse(null);
+        if (existing == null) return FallbackOutcome.GONE;
+        if (existing.getProduct() != null) {
+            log.info("ai.item_fallback.already_matched rcpt={} item={} stage=pre_llm", abbrev(receiptId), abbrev(itemId));
+            return FallbackOutcome.ALREADY_MATCHED;
+        }
+
         var raw = aiGateway.complete(AiActivity.ITEM_CLASSIFY, aiGateway.extractorModel(),
                 SYSTEM_PROMPT, "Item: \"" + rawDescription + "\"", 200);
 
         JsonNode result;
         try {
             var text = raw.trim();
-            result = objectMapper.readTree(text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1));
+            var start = text.indexOf('{');
+            var end = text.lastIndexOf('}');
+            if (start < 0 || end <= start) throw new IllegalStateException("no JSON object in response");
+            result = objectMapper.readTree(text.substring(start, end + 1));
         } catch (Exception ex) {
-            log.warn("ai.item_fallback.parse_failed item={} raw='{}'", abbrev(itemId), raw);
-            return;
+            log.warn("ai.item_fallback.parse_failed rcpt={} item={} raw='{}'", abbrev(receiptId), abbrev(itemId), raw);
+            return FallbackOutcome.PARSE_FAILED;
         }
 
         var genericName = result.path("genericName").asText("").strip();
-        if (genericName.isBlank()) return;
+        if (genericName.isBlank()) {
+            log.warn("ai.item_fallback.blank_name rcpt={} item={} raw='{}'", abbrev(receiptId), abbrev(itemId), raw);
+            return FallbackOutcome.BLANK_NAME;
+        }
 
         var brandText = result.path("brand").isNull() ? null : result.path("brand").asText(null);
         var brand = brandText != null && brandText.isBlank() ? null : brandText;
@@ -101,9 +133,10 @@ public class AiItemFallbackService {
         final var resolvedGenericName = genericName;
         final var resolvedBrand = brand;
 
-        var classified = transactionTemplate.execute(txStatus -> {
+        var outcome = transactionTemplate.execute(txStatus -> {
             var item = receiptItemRepository.findById(itemId).orElse(null);
-            if (item == null || item.getProduct() != null) return false;
+            if (item == null) return FallbackOutcome.GONE;
+            if (item.getProduct() != null) return FallbackOutcome.ALREADY_MATCHED;
 
             var product = Product.builder()
                     .normalizedName(resolvedGenericName.toUpperCase())
@@ -120,9 +153,15 @@ public class AiItemFallbackService {
                 item.setCategoryAtConfirmation(resolvedCategory);
             }
             receiptItemRepository.save(item);
-            return true;
+            return FallbackOutcome.MATCHED;
         });
-        if (!Boolean.TRUE.equals(classified)) return;
+
+        if (outcome == FallbackOutcome.ALREADY_MATCHED) {
+            log.info("ai.item_fallback.already_matched rcpt={} item={} stage=persist", abbrev(receiptId), abbrev(itemId));
+            return outcome;
+        }
+        if (outcome != FallbackOutcome.MATCHED) return outcome; // GONE
+
         log.info("ai.item_fallback.matched rcpt={} item={} name='{}' category={} confidence={}",
                 abbrev(receiptId), abbrev(itemId), resolvedGenericName, resolvedCategory, confidence);
 
@@ -134,6 +173,7 @@ public class AiItemFallbackService {
             log.warn("ai.item_fallback.finding_failed rcpt={} item={} description='{}' reason={}",
                     abbrev(receiptId), abbrev(itemId), rawDescription, ex.getMessage());
         }
+        return FallbackOutcome.MATCHED;
     }
 
     private void createFindingIfAbsent(String description, String genericName, String brand,
