@@ -2,6 +2,7 @@ package com.relyon.economizaai.repository;
 
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.ReceiptItem;
+import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -226,4 +227,12 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
 
     @Query("SELECT ri FROM ReceiptItem ri WHERE ri.receipt.id = :receiptId AND ri.product IS NULL AND ri.excluded = false")
     List<ReceiptItem> findUnmatchedByReceiptId(@Param("receiptId") UUID receiptId);
+
+    /** UFs where an item with this raw description was scanned — helps spot regional brands in review. */
+    @Query("SELECT DISTINCT r.uf FROM ReceiptItem ri JOIN ri.receipt r WHERE ri.rawDescription = :description AND r.uf IS NOT NULL")
+    List<UnidadeFederativa> findDistinctUfByRawDescription(@Param("description") String description);
+
+    /** UFs where this product was purchased — same purpose, for product-based findings. */
+    @Query("SELECT DISTINCT r.uf FROM ReceiptItem ri JOIN ri.receipt r WHERE ri.product.id = :productId AND r.uf IS NOT NULL")
+    List<UnidadeFederativa> findDistinctUfByProductId(@Param("productId") UUID productId);
 }

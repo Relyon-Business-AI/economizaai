@@ -6,8 +6,10 @@ import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.enums.AiFindingStatus;
 import com.relyon.economizaai.model.enums.AiFindingType;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.AiFindingRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.service.admin.AdminProductService;
 import com.relyon.economizaai.service.extraction.CategorizerAdminService;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,13 +39,14 @@ class AiFindingServiceTest {
     @Mock private CategorizerAdminService categorizerAdminService;
     @Mock private AdminProductService adminProductService;
     @Mock private ProductRepository productRepository;
+    @Mock private ReceiptItemRepository receiptItemRepository;
 
     private AiFindingService service;
 
     @BeforeEach
     void setUp() {
         service = new AiFindingService(findingRepository, categorizerAdminService,
-                adminProductService, productRepository);
+                adminProductService, productRepository, receiptItemRepository);
         lenient().when(findingRepository.save(any(AiFinding.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -54,6 +57,31 @@ class AiFindingServiceTest {
                 .title("t").payload(payload).build();
         when(findingRepository.findById(finding.getId())).thenReturn(Optional.of(finding));
         return finding;
+    }
+
+    @Test
+    void resolveUfs_byDescription_returnsSortedDistinctUfs() {
+        var finding = pending(AiFindingType.MISSING_RULE,
+                "{\"description\":\"LC BRASC TRADI 200ML\",\"keyword\":\"lc\",\"genericName\":\"Leite\",\"category\":\"GROCERIES\"}");
+        when(receiptItemRepository.findDistinctUfByRawDescription("LC BRASC TRADI 200ML"))
+                .thenReturn(List.of(UnidadeFederativa.SC, UnidadeFederativa.RS));
+
+        var ufs = service.resolveUfs(finding.getId());
+
+        assertEquals(List.of("RS", "SC"), ufs);
+    }
+
+    @Test
+    void resolveUfs_byProductId_whenPayloadHasProduct() {
+        var productId = UUID.randomUUID();
+        var finding = pending(AiFindingType.SUSPECT_CATEGORY,
+                "{\"productId\":\"" + productId + "\",\"category\":\"GROCERIES\"}");
+        when(receiptItemRepository.findDistinctUfByProductId(productId))
+                .thenReturn(List.of(UnidadeFederativa.PE));
+
+        var ufs = service.resolveUfs(finding.getId());
+
+        assertEquals(List.of("PE"), ufs);
     }
 
     @Test
