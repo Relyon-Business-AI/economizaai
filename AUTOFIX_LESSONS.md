@@ -6,6 +6,8 @@
 
 <!-- LESSONS BELOW -->
 
+- [2026-10-01 11:58:54] [[NEEDS-HUMAN] NO-TESTREF] Always end a FIXED reply with a real FQCN#method test reference.
+
 - [2026-09-30 11:30:32] [[NEEDS-HUMAN] NO-REPRO] This exact failure has now been independently re-diagnosed 5 times with identical results — stop re-investigating from scratch. A human must verify `E2E_ADMIN_EMAIL` matches `ADMIN_EMAILS` on the dev deployment; also implement the previously-recommended fix (assert `role === "ADMIN"` in the admin-login Postman test script) so the real cause surfaces immediately instead of a downstream 403.
 
 - [2026-09-29 11:44:33] [[NEEDS-HUMAN] NO-REPRO] The "COV" folder duplicates the "Shopping lists (persistent)" request sequence verbatim, so the Delete-before-Add-item ordering bug exists in two places — fixing only the "E2E Flow" copy leaves COV failing; both copies need the Delete step moved to the end.

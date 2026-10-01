@@ -120,6 +120,8 @@ class AiItemFallbackServiceTest {
 
         service.applyFallback(receiptId);
 
+        // Re-checks BEFORE the LLM call — must not even pay for the classification.
+        verify(aiGateway, never()).complete(any(), anyString(), anyString(), anyString(), anyInt());
         verify(productRepository, never()).save(any(Product.class));
         verify(findingRepository, never()).save(any(AiFinding.class));
     }

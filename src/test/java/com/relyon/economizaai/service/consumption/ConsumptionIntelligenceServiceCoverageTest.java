@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.consumption;
 
 import com.relyon.economizaai.config.CollaborativeProperties;
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.dto.request.LogManualPurchaseRequest;
 import com.relyon.economizaai.dto.request.SnoozeProductRequest;
 import com.relyon.economizaai.dto.response.ConsumptionPredictionResponse;
@@ -330,7 +331,7 @@ class ConsumptionIntelligenceServiceCoverageTest {
     void logManualPurchase_defaultsPurchasedAtToNowWhenAbsent() {
         var product = product("Sal");
         when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
-        var before = LocalDateTime.now().minusSeconds(1);
+        var before = BrazilClock.nowDateTime().minusSeconds(1);
 
         service.logManualPurchase(user,
                 new LogManualPurchaseRequest(product.getId(), BigDecimal.ONE, null));
