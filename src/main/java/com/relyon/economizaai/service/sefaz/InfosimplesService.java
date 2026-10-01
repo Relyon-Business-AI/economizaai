@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.relyon.economizaai.exception.ReceiptParseException;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
+import com.relyon.economizaai.service.paidapi.InfosimplesAlertService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -51,6 +52,7 @@ public class InfosimplesService {
             new ParameterizedTypeReference<>() {};
 
     private final String apiKey;
+    private final InfosimplesAlertService alertService;
     private final RestClient restClient;
     // UFs whose Infosimples NFC-e consultation lives at the `.../sefaz/{uf}/nfce-resumida`
     // slug and returns the "resumida" schema (produtos_servicos/valores) rather than the
@@ -64,11 +66,13 @@ public class InfosimplesService {
 
     public InfosimplesService(
             RestClient.Builder builder,
+            InfosimplesAlertService alertService,
             @Value("${economizaai.infosimples.api-key}") String apiKey,
             @Value("${economizaai.infosimples.base-url:https://api.infosimples.com}") String baseUrl,
             @Value("${economizaai.infosimples.resumida-states:MG}") String resumidaStatesCsv,
             @Value("${economizaai.infosimples.completa-states:RJ}") String completaStatesCsv) {
         this.apiKey = apiKey;
+        this.alertService = alertService;
         this.restClient = builder.baseUrl(baseUrl).build();
         this.resumidaStates = parseStates(resumidaStatesCsv);
         this.completaStates = parseStates(completaStatesCsv);
@@ -117,6 +121,9 @@ public class InfosimplesService {
             var errors = response == null ? null : response.errors();
             log.warn("infosimples.fetch.failed chave={} uf={} code={} message='{}' errors={}",
                     abbrev(chave), ufCode, code, message, errors);
+            // The owner must hear about a failing paid consult (esp. sem saldo) —
+            // throttled inside, never breaks the flow.
+            alertService.alertConsultFailure(ufCode, code, message);
             throw new ReceiptParseException("infosimples.error");
         }
         if (response.data() == null || response.data().isEmpty()) {

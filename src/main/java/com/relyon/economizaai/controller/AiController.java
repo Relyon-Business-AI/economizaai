@@ -13,6 +13,7 @@ import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.service.ai.AiFindingService;
 import com.relyon.economizaai.service.ai.AiGateway;
+import com.relyon.economizaai.service.ai.AiItemFallbackService;
 import com.relyon.economizaai.service.ai.AiSweepService;
 import com.relyon.economizaai.service.ai.AiUsageService;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -50,6 +51,7 @@ public class AiController {
 
     private final AiSweepService aiSweepService;
     private final AiFindingService aiFindingService;
+    private final AiItemFallbackService aiItemFallbackService;
     private final AiUsageService aiUsageService;
     private final AiGateway aiGateway;
     private final AiSweepRunRepository sweepRunRepository;
@@ -134,6 +136,17 @@ public class AiController {
     @PostMapping("/findings/approve-bulk")
     public ResponseEntity<AiFindingService.BulkOutcome> approveBulk(@RequestBody List<UUID> ids) {
         return ResponseEntity.ok(aiFindingService.approveBulk(ids));
+    }
+
+    /**
+     * Diagnostic: re-run the real-time fallback over receipts that still have unmatched items,
+     * returning a tally of outcomes (matched / parse_failed / blank_name / already_matched / …)
+     * so we can see WHY the fallback persists or discards. ADMIN-only.
+     */
+    @PostMapping("/reprocess-fallback")
+    public ResponseEntity<AiItemFallbackService.FallbackTally> reprocessFallback(
+            @RequestParam(defaultValue = "10") int limit) {
+        return ResponseEntity.ok(aiItemFallbackService.reprocessUnmatched(limit));
     }
 
     @PostMapping("/findings/re-enrich")

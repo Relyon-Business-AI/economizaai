@@ -15,6 +15,7 @@ import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -59,10 +60,32 @@ public class AiItemFallbackService {
     @Async(AI_SWEEP_EXECUTOR)
     public void applyFallback(UUID receiptId) {
         if (!aiGateway.isEnabled()) return;
-        var unmatched = receiptItemRepository.findUnmatchedByReceiptId(receiptId);
-        if (unmatched.isEmpty()) return;
-        log.info("ai.item_fallback.start rcpt={} items={}", abbrev(receiptId), unmatched.size());
+        runReceiptFallback(receiptId);
+    }
+
+    /**
+     * Admin diagnostic: synchronously re-run the fallback over the most recent confirmed
+     * receipts that STILL have unmatched items, returning a tally of outcomes. Lets us see
+     * WHY the fallback does/doesn't persist without waiting for organic traffic.
+     */
+    public FallbackTally reprocessUnmatched(int maxReceipts) {
+        if (!aiGateway.isEnabled()) return FallbackTally.EMPTY;
+        var receiptIds = receiptItemRepository.findReceiptIdsWithUnmatchedItems(
+                PageRequest.of(0, Math.max(1, Math.min(maxReceipts, 50))));
+        var total = FallbackTally.EMPTY;
+        for (var receiptId : receiptIds) {
+            total = total.plus(toTally(runReceiptFallback(receiptId)));
+        }
+        log.info("ai.item_fallback.reprocess receipts={} {}", receiptIds.size(), total);
+        return total;
+    }
+
+    /** Runs the fallback for one receipt's unmatched items; returns the per-outcome counts. */
+    private EnumMap<FallbackOutcome, Integer> runReceiptFallback(UUID receiptId) {
         var tally = new EnumMap<FallbackOutcome, Integer>(FallbackOutcome.class);
+        var unmatched = receiptItemRepository.findUnmatchedByReceiptId(receiptId);
+        if (unmatched.isEmpty()) return tally;
+        log.info("ai.item_fallback.start rcpt={} items={}", abbrev(receiptId), unmatched.size());
         for (var item : unmatched) {
             try {
                 tally.merge(classifyOne(receiptId, item.getId(), item.getRawDescription()), 1, Integer::sum);
@@ -82,10 +105,29 @@ public class AiItemFallbackService {
                 tally.getOrDefault(FallbackOutcome.BLANK_NAME, 0),
                 tally.getOrDefault(FallbackOutcome.GONE, 0),
                 tally.getOrDefault(FallbackOutcome.CALL_ERROR, 0));
+        return tally;
+    }
+
+    private static FallbackTally toTally(EnumMap<FallbackOutcome, Integer> counts) {
+        return new FallbackTally(
+                counts.getOrDefault(FallbackOutcome.MATCHED, 0),
+                counts.getOrDefault(FallbackOutcome.ALREADY_MATCHED, 0),
+                counts.getOrDefault(FallbackOutcome.PARSE_FAILED, 0),
+                counts.getOrDefault(FallbackOutcome.BLANK_NAME, 0),
+                counts.getOrDefault(FallbackOutcome.GONE, 0),
+                counts.getOrDefault(FallbackOutcome.CALL_ERROR, 0));
     }
 
     /** Outcome of one fallback classification — tallied per receipt for observability. */
     private enum FallbackOutcome { MATCHED, ALREADY_MATCHED, PARSE_FAILED, BLANK_NAME, GONE, CALL_ERROR }
+
+    public record FallbackTally(int matched, int alreadyMatched, int parseFailed, int blankName, int gone, int callError) {
+        static final FallbackTally EMPTY = new FallbackTally(0, 0, 0, 0, 0, 0);
+        FallbackTally plus(FallbackTally other) {
+            return new FallbackTally(matched + other.matched, alreadyMatched + other.alreadyMatched,
+                    parseFailed + other.parseFailed, blankName + other.blankName, gone + other.gone, callError + other.callError);
+        }
+    }
 
     private FallbackOutcome classifyOne(UUID receiptId, UUID itemId, String rawDescription) {
         // Re-check BEFORE spending an LLM call: if the deterministic cascade (or a concurrent

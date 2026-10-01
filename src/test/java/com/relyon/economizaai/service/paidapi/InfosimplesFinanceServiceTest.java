@@ -31,9 +31,11 @@ class InfosimplesFinanceServiceTest {
     @Mock private InfosimplesAccountSnapshotRepository snapshotRepository;
     @Mock private InfosimplesMonthHistoryRepository historyRepository;
     @Mock private InfosimplesService infosimples;
+    @Mock private InfosimplesAlertService alertService;
 
     private InfosimplesFinanceService service() {
-        return new InfosimplesFinanceService(snapshotRepository, historyRepository, Optional.of(infosimples));
+        return new InfosimplesFinanceService(snapshotRepository, historyRepository,
+                Optional.of(infosimples), alertService);
     }
 
     private static InfosimplesMonthHistory month(String month, String recarga, String consumo,
@@ -118,6 +120,28 @@ class InfosimplesFinanceServiceTest {
         service().takeDailySnapshot();
 
         verify(historyRepository, never()).save(any());
+    }
+
+    @Test
+    void takeDailySnapshot_alertsWhenAccountUnreachable() {
+        when(infosimples.fetchAccount()).thenReturn(Optional.empty());
+
+        service().takeDailySnapshot();
+
+        verify(alertService).alertAccountUnreachable();
+        verify(snapshotRepository, never()).save(any());
+    }
+
+    @Test
+    void takeDailySnapshot_handsBalanceToLowBalanceCheck() {
+        when(infosimples.fetchAccount()).thenReturn(Optional.of(new InfosimplesAccount(
+                new BigDecimal("3.50"), new BigDecimal("96.50"), new BigDecimal("100"))));
+        when(snapshotRepository.findTopByOrderByTakenAtDesc()).thenReturn(Optional.empty());
+        when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service().takeDailySnapshot();
+
+        verify(alertService).checkLowBalance(new BigDecimal("3.50"));
     }
 
     @Test

@@ -233,6 +233,10 @@ economizaai:
     enabled: ${INFOSIMPLES_ENABLED:false}
     api-key: ${INFOSIMPLES_API_KEY:}
     base-url: ${INFOSIMPLES_BASE_URL:https://api.infosimples.com}
+    # Admin alert (e-mail via ContactService) quando o snapshot diário encontra o
+    # saldo abaixo deste valor — CE (rota exclusiva Infosimples) para sem saldo.
+    # Falhas de consulta paga também alertam (throttle de 6h no código).
+    low-balance-threshold: ${INFOSIMPLES_LOW_BALANCE_THRESHOLD:5.00}
     # UFs whose NFC-e consultation lives at `.../sefaz/{uf}/nfce-resumida` (distinct
     # "resumida" schema) instead of the default `.../sefaz/{uf}/nfce`. MG only, so far
     # — the default endpoint returns code 602 "serviço não é válido" for it.

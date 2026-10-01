@@ -44,6 +44,7 @@ public class InfosimplesFinanceService {
     private final InfosimplesAccountSnapshotRepository snapshotRepository;
     private final InfosimplesMonthHistoryRepository historyRepository;
     private final Optional<InfosimplesService> infosimples;
+    private final InfosimplesAlertService alertService;
     private final Clock clock = Clock.system(BR);
 
     /** The admin panel payload: live account + month ledger + lifetime totals. */
@@ -87,8 +88,15 @@ public class InfosimplesFinanceService {
     @Scheduled(cron = "${economizaai.infosimples.snapshot-cron:0 40 23 * * *}", zone = "America/Sao_Paulo")
     @Transactional
     public void takeDailySnapshot() {
+        if (infosimples.isEmpty()) return; // integration disabled — nothing to watch
         var account = infosimples.flatMap(InfosimplesService::fetchAccount).orElse(null);
-        if (account == null) return;
+        if (account == null) {
+            // Enabled but unreadable (API down / token revogado) — a CE outage
+            // could hide behind this, so the owner hears about it.
+            alertService.alertAccountUnreachable();
+            return;
+        }
+        alertService.checkLowBalance(account.balance());
         var previous = snapshotRepository.findTopByOrderByTakenAtDesc().orElse(null);
         var snapshot = snapshotRepository.save(InfosimplesAccountSnapshot.builder()
                 .takenAt(OffsetDateTime.now(clock))
