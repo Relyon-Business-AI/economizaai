@@ -4,6 +4,7 @@ import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.exception.PaywallException;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.SubscriptionTier;
+import com.relyon.economizaai.time.BrazilClock;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -104,9 +105,9 @@ class SubscriptionGateServiceTest {
     @Test
     void clampFrom_freeFloorsEarlierRequests() {
         var free = user(SubscriptionTier.FREE);
-        var floor = LocalDateTime.now().minusDays(90);
+        var floor = BrazilClock.nowDateTime().minusDays(90);
 
-        var clampedOld = gate.clampFrom(free, LocalDateTime.now().minusYears(2));
+        var clampedOld = gate.clampFrom(free, BrazilClock.nowDateTime().minusYears(2));
         assertFalse(clampedOld.isBefore(floor.minusSeconds(2)));
         assertTrue(clampedOld.isAfter(floor.minusSeconds(2)));
 
