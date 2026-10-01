@@ -228,8 +228,9 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
     @Query("SELECT ri FROM ReceiptItem ri WHERE ri.receipt.id = :receiptId AND ri.product IS NULL AND ri.excluded = false")
     List<ReceiptItem> findUnmatchedByReceiptId(@Param("receiptId") UUID receiptId);
 
-    /** UFs where an item with this raw description was scanned — helps spot regional brands in review. */
-    @Query("SELECT DISTINCT r.uf FROM ReceiptItem ri JOIN ri.receipt r WHERE ri.rawDescription = :description AND r.uf IS NOT NULL")
+    /** UFs where an item with this raw description was scanned — helps spot regional brands in review.
+     *  Case-insensitive: findings store the description lowercased, receipts keep it as printed (UPPER). */
+    @Query("SELECT DISTINCT r.uf FROM ReceiptItem ri JOIN ri.receipt r WHERE LOWER(ri.rawDescription) = LOWER(:description) AND r.uf IS NOT NULL")
     List<UnidadeFederativa> findDistinctUfByRawDescription(@Param("description") String description);
 
     /** UFs where this product was purchased — same purpose, for product-based findings. */
