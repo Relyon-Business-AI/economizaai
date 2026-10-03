@@ -73,6 +73,21 @@ A rollback looks like:
 
 <!-- AUTONOMOUS ENTRIES BELOW - newest first. The watchdog inserts here. -->
 
+### [2026-10-03 10:45:29] [NEEDS-HUMAN] NO-TESTREF - E2E: 22. Categorizer AI status (admin)
+- **Detected:**
+```
+A daily E2E run against the live dev server FAILED (3/237 assertions).
+Failing steps:
+- 22. Categorizer AI status (admin): AssertionError: expected response to have status code 200 but got 403
+- 22. Categorizer AI status (admin): AssertionError: expected { status: 403, message: 'Forbidden' } to have property 'enabled'
+- 49a. Login com credenciais deletadas falha (conta apagada): AssertionError: expected response to have status code 401 but got 429
+
+No server exception was logged — this may be a contract mismatch (wrong status/shape) or a test-config gap. If it's not a real code bug, reply REPRO_FAIL.
+```
+- **Claude:** Failed to authenticate. API Error: 401 OAuth access token has been revoked.
+Ignoring 25 permissions.allow entries from .claude/settings.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog, or set projects["/home/runner/work/economizaai/economizaai"].hasTrustDialogAccepted: true in /home/runner/.claude.json.
+- **Outcome:** reply lacked a verifiable test reference; changes discarded.
+
 ### [2026-10-02 11:30:18] [NEEDS-HUMAN] NO-TESTREF - E2E: 22. Categorizer AI status (admin)
 - **Detected:**
 ```
