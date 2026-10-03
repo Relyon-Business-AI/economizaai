@@ -19,5 +19,8 @@ EXPOSE 10000
 # the self-hosted box + compose port-mapping unchanged). Shell form so $PORT expands.
 # ExitOnOutOfMemoryError: an OOM kills the process so the platform restarts it
 # immediately instead of limping with dead threads (prod sat half-dead on 2026-09-30).
-# MaxRAMPercentage caps the heap at 75% of the container's memory (no explicit -Xmx).
-ENTRYPOINT ["sh", "-c", "java -XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0 -jar app.jar --server.port=${PORT:-10000}"]
+# MaxRAMPercentage caps the heap at 50% of the container's memory (no explicit -Xmx).
+# 50% (not 75%) because on the 512Mi prod box the non-heap + native libs (OCR/ZXing)
+# need ~220MB; at 75% the total RSS exceeded 512Mi and the container was OOM-killed
+# ~15x/day (measured 2026-10-03 via Render RSS: floor 271MB, peak 527MB, ceiling 537MB).
+ENTRYPOINT ["sh", "-c", "java -XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=50.0 -jar app.jar --server.port=${PORT:-10000}"]
