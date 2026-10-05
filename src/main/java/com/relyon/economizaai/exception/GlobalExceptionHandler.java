@@ -1,6 +1,7 @@
 package com.relyon.economizaai.exception;
 
 import com.relyon.economizaai.service.LocalizedMessageService;
+import io.sentry.Sentry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -212,6 +213,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex) {
         var message = messageService.translate("error.internal");
         log.error("Unexpected error: {}: {}", ex.getClass().getName(), ex.getMessage(), ex);
+        Sentry.captureException(ex);   // no-op unless SENTRY_DSN is configured (SentryInitializer)
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR.value(), message, LocalDateTime.now()));
     }
