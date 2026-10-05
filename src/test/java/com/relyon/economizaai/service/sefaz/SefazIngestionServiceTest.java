@@ -532,9 +532,9 @@ class SefazIngestionServiceTest {
     private GenericQrPortalAdapter genericAdapter(String htmlOrNull) {
         return new GenericQrPortalAdapter(RestClient.builder(), NO_CAPTCHA, 1000, "test", true, 1, 0, "gov.br") {
             @Override
-            protected String httpGet(String url) {
+            protected PortalFetch httpFetch(String url) {
                 if (htmlOrNull == null) throw new RestClientException("portal down");
-                return htmlOrNull;
+                return new PortalFetch(htmlOrNull, url, null);
             }
         };
     }

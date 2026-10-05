@@ -3,6 +3,7 @@ package com.relyon.economizaai.service.sefaz;
 import com.relyon.economizaai.exception.CaptchaSolveFailedException;
 import com.relyon.economizaai.exception.CaptchaUnavailableException;
 import com.relyon.economizaai.exception.ExperimentalPortalEvidence;
+import com.relyon.economizaai.exception.ExperimentalCaptchaWallException;
 import com.relyon.economizaai.exception.ExperimentalStateFailedException;
 import com.relyon.economizaai.exception.InvalidQrPayloadException;
 import com.relyon.economizaai.exception.PaidApiBudgetExceededException;
@@ -222,7 +223,8 @@ public class SefazIngestionService {
             if (infosimples.isEmpty()) {
                 if (experimental) {
                     throw experimentalExhausted(uf, userId, chave, sourceUrlOf(qrPayload),
-                            "QR_PORTAL: " + describe(primaryEx) + "; INFOSIMPLES: desabilitado", portalEvidence);
+                            "QR_PORTAL: " + describe(primaryEx) + "; INFOSIMPLES: desabilitado", portalEvidence,
+                            primaryEx instanceof ExperimentalCaptchaWallException);
                 }
                 throw primaryEx;
             }
@@ -244,7 +246,7 @@ public class SefazIngestionService {
                             StateIngestionOutcome.FETCH_FAILED, qrHost, describe(fallbackEx));
                     throw experimentalExhausted(uf, userId, chave, sourceUrlOf(qrPayload),
                             "QR_PORTAL: " + describe(primaryEx) + "; INFOSIMPLES: " + describe(fallbackEx),
-                            portalEvidence);
+                            portalEvidence, primaryEx instanceof ExperimentalCaptchaWallException);
                 }
                 throw fallbackEx;
             }
@@ -343,7 +345,7 @@ public class SefazIngestionService {
             }
             throw experimentalExhausted(fetched.uf(), userId, fetched.chave(), fetched.sourceUrl(),
                     "QR_PORTAL (parse): " + describe(parseEx) + "; INFOSIMPLES: " + infosimplesNote,
-                    fetched.html());
+                    fetched.html(), false);
         }
     }
 
@@ -385,13 +387,13 @@ public class SefazIngestionService {
      */
     private ExperimentalStateFailedException experimentalExhausted(UnidadeFederativa uf, UUID userId, String chave,
                                                                    String sourceUrl, String failureSummary,
-                                                                   String htmlSnippet) {
+                                                                   String htmlSnippet, boolean captchaBlocked) {
         if (prefetchPolicy.isDeviceFetchUf(uf)) {
             log.info("state_coverage.exhausted_skipped uf={} reason=device_fetch_uf", uf);
         } else {
             stateCoverage.reportExhausted(uf, userId, chave, sourceUrl, failureSummary, htmlSnippet);
         }
-        return new ExperimentalStateFailedException(uf.name());
+        return new ExperimentalStateFailedException(uf.name(), captchaBlocked);
     }
 
     private static String describe(RuntimeException ex) {

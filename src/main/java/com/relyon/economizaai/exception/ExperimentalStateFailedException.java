@@ -10,7 +10,24 @@ package com.relyon.economizaai.exception;
  */
 public class ExperimentalStateFailedException extends ReceiptParseException {
 
+    /**
+     * True when the chain failed specifically at a CAPTCHA wall the server couldn't
+     * pass. A phone can't solve these either, so the ingest must NOT hand such a
+     * receipt to device-fetch — it would just time out. IP-block/fetch failures
+     * (captchaBlocked=false) are still device-fetch-eligible (e.g. PE).
+     */
+    private final boolean captchaBlocked;
+
     public ExperimentalStateFailedException(String state) {
+        this(state, false);
+    }
+
+    public ExperimentalStateFailedException(String state, boolean captchaBlocked) {
         super("receipt.state.experimental_failed", state);
+        this.captchaBlocked = captchaBlocked;
+    }
+
+    public boolean isCaptchaBlocked() {
+        return captchaBlocked;
     }
 }
