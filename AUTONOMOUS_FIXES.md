@@ -73,6 +73,81 @@ A rollback looks like:
 
 <!-- AUTONOMOUS ENTRIES BELOW - newest first. The watchdog inserts here. -->
 
+### [2026-10-05 12:53:13] [NEEDS-HUMAN] NO-TESTREF - E2E: 22. Categorizer AI status (admin)
+- **Detected:**
+```
+A daily E2E run against the live dev server FAILED (3/237 assertions).
+Failing steps:
+- 22. Categorizer AI status (admin): AssertionError: expected response to have status code 200 but got 403
+- 22. Categorizer AI status (admin): AssertionError: expected { status: 403, message: 'Forbidden' } to have property 'enabled'
+- 49a. Login com credenciais deletadas falha (conta apagada): AssertionError: expected response to have status code 401 but got 429
+
+Server-side errors during the run (the likely root cause):
+```
+2026-10-05 12:52:47.607 WARN  [req=bcf4edab user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Entity not found: Product not found.
+2026-10-05 12:52:47.665 WARN  [req=9d3cfdcd user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Type mismatch for parameter 'groupBy': Method parameter 'groupBy': Failed to convert value of type 'java.lang.String' to required type 'com.relyon.economizaai.model.enums.InsightsGroupBy'; Failed to convert from type [java.lang.String] to type [@org.springframework.web.bind.annotation.RequestParam com.relyon.economizaai.model.enums.InsightsGroupBy] for value [NONSENSE]
+2026-10-05 12:52:47.725 WARN  [req=5d48564e user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Validation failed: {name=must not be blank}
+2026-10-05 12:52:47.781 WARN  [req=c8612d9f user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Validation failed: {name=size must be between 0 and 120, items[0].f
+```
+- **Claude:** Failed to authenticate. API Error: 401 OAuth access token has been revoked.
+Ignoring 25 permissions.allow entries from .claude/settings.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog, or set projects["/home/runner/work/economizaai/economizaai"].hasTrustDialogAccepted: true in /home/runner/.claude.json.
+- **Outcome:** reply lacked a verifiable test reference; changes discarded.
+
+### [2026-10-04 11:27:25] [NEEDS-HUMAN] NO-TESTREF - E2E: 22. Categorizer AI status (admin)
+- **Detected:**
+```
+A daily E2E run against the live dev server FAILED (2/237 assertions).
+Failing steps:
+- 22. Categorizer AI status (admin): AssertionError: expected response to have status code 200 but got 403
+- 22. Categorizer AI status (admin): AssertionError: expected { status: 403, message: 'Forbidden' } to have property 'enabled'
+
+Server-side errors during the run (the likely root cause):
+```
+2026-10-04 11:26:58.578 WARN  [req=762575c3 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Entity not found: Product not found.
+2026-10-04 11:26:58.655 WARN  [req=5a75e74d user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Type mismatch for parameter 'groupBy': Method parameter 'groupBy': Failed to convert value of type 'java.lang.String' to required type 'com.relyon.economizaai.model.enums.InsightsGroupBy'; Failed to convert from type [java.lang.String] to type [@org.springframework.web.bind.annotation.RequestParam com.relyon.economizaai.model.enums.InsightsGroupBy] for value [NONSENSE]
+2026-10-04 11:26:58.757 WARN  [req=c8c011d6 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Validation failed: {name=must not be blank}
+2026-10-04 11:26:58.839 WARN  [req=ce266749 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Validation failed: {name=size must be between 0 and 120, items[0].freeText=size must be between 0 and 255}
+2026-10-04 11:26:59.001 WARN  [req=69667cb8 user=a***@economizaai.app rcpt= item=] c.r.e.e.G
+```
+- **Claude:** Failed to authenticate. API Error: 401 OAuth access token has been revoked.
+Ignoring 25 permissions.allow entries from .claude/settings.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog, or set projects["/home/runner/work/economizaai/economizaai"].hasTrustDialogAccepted: true in /home/runner/.claude.json.
+- **Outcome:** reply lacked a verifiable test reference; changes discarded.
+
+### [2026-10-03 10:45:29] [NEEDS-HUMAN] NO-TESTREF - E2E: 22. Categorizer AI status (admin)
+- **Detected:**
+```
+A daily E2E run against the live dev server FAILED (3/237 assertions).
+Failing steps:
+- 22. Categorizer AI status (admin): AssertionError: expected response to have status code 200 but got 403
+- 22. Categorizer AI status (admin): AssertionError: expected { status: 403, message: 'Forbidden' } to have property 'enabled'
+- 49a. Login com credenciais deletadas falha (conta apagada): AssertionError: expected response to have status code 401 but got 429
+
+No server exception was logged — this may be a contract mismatch (wrong status/shape) or a test-config gap. If it's not a real code bug, reply REPRO_FAIL.
+```
+- **Claude:** Failed to authenticate. API Error: 401 OAuth access token has been revoked.
+Ignoring 25 permissions.allow entries from .claude/settings.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog, or set projects["/home/runner/work/economizaai/economizaai"].hasTrustDialogAccepted: true in /home/runner/.claude.json.
+- **Outcome:** reply lacked a verifiable test reference; changes discarded.
+
+### [2026-10-02 11:30:18] [NEEDS-HUMAN] NO-TESTREF - E2E: 22. Categorizer AI status (admin)
+- **Detected:**
+```
+A daily E2E run against the live dev server FAILED (2/237 assertions).
+Failing steps:
+- 22. Categorizer AI status (admin): AssertionError: expected response to have status code 200 but got 403
+- 22. Categorizer AI status (admin): AssertionError: expected { status: 403, message: 'Forbidden' } to have property 'enabled'
+
+Server-side errors during the run (the likely root cause):
+```
+2026-10-02 11:29:53.213 WARN  [req=ba4492b0 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Entity not found: Product not found.
+2026-10-02 11:29:53.314 WARN  [req=85a64f45 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Type mismatch for parameter 'groupBy': Method parameter 'groupBy': Failed to convert value of type 'java.lang.String' to required type 'com.relyon.economizaai.model.enums.InsightsGroupBy'; Failed to convert from type [java.lang.String] to type [@org.springframework.web.bind.annotation.RequestParam com.relyon.economizaai.model.enums.InsightsGroupBy] for value [NONSENSE]
+2026-10-02 11:29:53.435 WARN  [req=44c67d7a user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Validation failed: {name=must not be blank}
+2026-10-02 11:29:53.547 WARN  [req=629d139a user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Validation failed: {name=size must be between 0 and 120, items[0].freeText=size must be between 0 and 255}
+2026-10-02 11:29:53.752 WARN  [req=6d0c13c6 user=a***@economizaai.app rcpt= item=] c.r.e.e.G
+```
+- **Claude:** Failed to authenticate. API Error: 401 OAuth access token has been revoked.
+Ignoring 25 permissions.allow entries from .claude/settings.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog, or set projects["/home/runner/work/economizaai/economizaai"].hasTrustDialogAccepted: true in /home/runner/.claude.json.
+- **Outcome:** reply lacked a verifiable test reference; changes discarded.
+
 ### [2026-10-01 11:58:54] [NEEDS-HUMAN] NO-TESTREF - E2E: 22. Categorizer AI status (admin)
 - **Detected:**
 ```

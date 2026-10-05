@@ -125,4 +125,16 @@ class AiItemFallbackServiceTest {
         verify(productRepository, never()).save(any(Product.class));
         verify(findingRepository, never()).save(any(AiFinding.class));
     }
+
+    @Test
+    void reprocessUnmatched_runsFallbackOverReceiptsAndTalliesOutcomes() {
+        when(findingRepository.existsByTypeAndStatusAndTitleStartingWith(
+                eq(AiFindingType.MISSING_RULE), eq(AiFindingStatus.PENDING), anyString())).thenReturn(false);
+        when(receiptItemRepository.findReceiptIdsWithUnmatchedItems(any())).thenReturn(List.of(receiptId));
+
+        var tally = service.reprocessUnmatched(10);
+
+        assertThat(tally.matched()).isEqualTo(1);
+        assertThat(item.getProduct()).isNotNull();
+    }
 }

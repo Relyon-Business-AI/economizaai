@@ -7,17 +7,23 @@ import com.relyon.economizaai.exception.SefazFetchException;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.sefaz.captcha.CaptchaSolver;
 import lombok.extern.slf4j.Slf4j;
+import org.jsoup.Jsoup;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -38,10 +44,14 @@ import java.util.stream.Collectors;
  * admin alert when every layer fails. Kill-switch:
  * {@code SEFAZ_EXPERIMENTAL_ENABLED}.
  *
- * <p>Captcha walls get ONE best-effort solve (reCAPTCHA v2 / Turnstile, token
- * resubmitted as a query param — a guess). If the portal rejects it, the
- * failure carries the captcha type + sitekey + page snippet as evidence for
- * building the dedicated adapter, and Infosimples rescues the receipt.
+ * <p>Captcha walls get ONE solve (reCAPTCHA v2 / Turnstile) whose token is then
+ * replayed TWO generic ways, best-effort, with that single token (no extra solve):
+ * (1) replaying the captcha page's own {@code <form>} as a POST with the token in
+ * both common field names + every hidden input preserved (the shape DF/MG/SC use),
+ * and (2) resubmitting the token as a URL query param. The first that returns a
+ * non-captcha page wins. If both fail, the failure carries the captcha type +
+ * sitekey + page snippet as evidence for building a dedicated adapter, and
+ * Infosimples rescues the receipt.
  *
  * <p>SSRF guard: only hosts under the configured suffixes (default
  * {@code gov.br} — every SEFAZ portal lives there) are fetched, so a crafted
@@ -137,15 +147,15 @@ public class GenericQrPortalAdapter implements SefazAdapter {
     private String fetchOnce(String url, int attempt, UnidadeFederativa uf) {
         log.info("sefaz.experimental.fetch uf={} attempt={}/{} url={}", uf, attempt, maxAttempts, url);
         try {
-            var html = httpGet(url);
-            if (html == null || html.isBlank()) {
+            var fetched = httpFetch(url);
+            if (fetched.body() == null || fetched.body().isBlank()) {
                 throw new TransientFetchException("empty-body");
             }
-            if (CAPTCHA_MARKER.matcher(html).find()) {
-                return handleCaptchaWall(html, url, uf);
+            if (CAPTCHA_MARKER.matcher(fetched.body()).find()) {
+                return handleCaptchaWall(fetched, uf);
             }
-            log.info("sefaz.experimental.fetch.ok uf={} bytes={}", uf, html.length());
-            return html;
+            log.info("sefaz.experimental.fetch.ok uf={} bytes={}", uf, fetched.body().length());
+            return fetched.body();
         } catch (HttpClientErrorException ex) {
             // 4xx — the portal exists but rejects this consult shape. Deterministic
             // for THIS layer; the chain may still rescue via Infosimples.
@@ -159,28 +169,34 @@ public class GenericQrPortalAdapter implements SefazAdapter {
     }
 
     /**
-     * Best-effort captcha attempt on an unknown portal: ONE solve (charged per
-     * token, ~R$0.03, even when the portal then rejects it) resubmitted as a
-     * query param — a guess, since only a dedicated adapter knows the portal's
-     * real form shape. Any failure falls through to the captcha-wall signal,
-     * which the chain rescues via Infosimples. Deliberately NOT the verified
-     * captcha adapters' re-solve retry loop: with an unverified resubmit shape,
-     * repeated solves would just burn money on a likely-wrong guess.
+     * Best-effort captcha on an unknown portal: ONE solve, then the token is replayed
+     * two generic ways with no extra solve — the page's own form as a POST first (the
+     * common shape), then as a URL query param. The first non-captcha response wins;
+     * if both are rejected the caller falls through to the rescuable wall signal.
      */
-    private String handleCaptchaWall(String captchaPageHtml, String url, UnidadeFederativa uf) {
+    private String handleCaptchaWall(PortalFetch fetched, UnidadeFederativa uf) {
+        var captchaPageHtml = fetched.body();
         var captchaType = detectCaptchaType(captchaPageHtml);
         var siteKey = extractSiteKey(captchaPageHtml, captchaType);
         if (captchaSolver.isConfigured() && siteKey != null && captchaType.solvable()) {
             try {
                 log.info("sefaz.experimental.captcha_solving uf={} type={}", uf, captchaType);
                 var token = captchaType == CaptchaType.RECAPTCHA_V2
-                        ? captchaSolver.solveRecaptchaV2(siteKey, url)
-                        : captchaSolver.solveCloudflareTurnstile(siteKey, url);
-                var separator = url.contains("?") ? "&" : "?";
-                var resubmitted = httpGet(url + separator + captchaType.responseParam() + "=" + token);
-                if (resubmitted != null && !resubmitted.isBlank() && !CAPTCHA_MARKER.matcher(resubmitted).find()) {
-                    log.info("sefaz.experimental.captcha_passed uf={} type={}", uf, captchaType);
-                    return resubmitted;
+                        ? captchaSolver.solveRecaptchaV2(siteKey, fetched.finalUrl())
+                        : captchaSolver.solveCloudflareTurnstile(siteKey, fetched.finalUrl());
+
+                // 1) Replay the captcha page's own <form> as a POST (DF/MG/SC shape).
+                var viaForm = tryFormReplay(fetched, token, uf);
+                if (isDanfe(viaForm)) {
+                    log.info("sefaz.experimental.captcha_passed uf={} type={} via=form_post", uf, captchaType);
+                    return viaForm;
+                }
+                // 2) Fallback: resubmit the token as a URL query param (older guess).
+                var separator = fetched.finalUrl().contains("?") ? "&" : "?";
+                var viaQuery = httpFetch(fetched.finalUrl() + separator + captchaType.responseParam() + "=" + token).body();
+                if (isDanfe(viaQuery)) {
+                    log.info("sefaz.experimental.captcha_passed uf={} type={} via=query_param", uf, captchaType);
+                    return viaQuery;
                 }
                 log.info("sefaz.experimental.captcha_resubmit_rejected uf={} type={}", uf, captchaType);
             } catch (RuntimeException solveEx) {
@@ -193,6 +209,47 @@ public class GenericQrPortalAdapter implements SefazAdapter {
         }
         throw new ExperimentalCaptchaWallException(uf.name(), captchaType.name(), siteKey,
                 snippet(captchaPageHtml));
+    }
+
+    /**
+     * Replays the captcha page's own {@code <form>} as a POST: every hidden input is
+     * preserved and the solved token is set under BOTH common field names
+     * ({@code cf-turnstile-response} + {@code g-recaptcha-response}) — Turnstile often
+     * runs in reCAPTCHA-compat mode, so the field name doesn't match the widget type.
+     * Returns null when there's no form or the POST didn't return a DANFE, so the
+     * caller falls through to the query-param guess.
+     */
+    private String tryFormReplay(PortalFetch fetched, String token, UnidadeFederativa uf) {
+        var document = Jsoup.parse(fetched.body(), fetched.finalUrl());
+        var form = document.selectFirst("form");
+        if (form == null) {
+            return null;
+        }
+        String action;
+        try {
+            var rawAction = form.hasAttr("action") && !form.attr("action").isBlank()
+                    ? form.absUrl("action") : fetched.finalUrl();
+            action = resolveUrl(rawAction); // SSRF re-check on the POST target
+        } catch (InvalidQrPayloadException rejected) {
+            return null;
+        }
+        var body = new LinkedMultiValueMap<String, String>();
+        for (var input : form.select("input[name]")) {
+            body.add(input.attr("name"), input.attr("value"));
+        }
+        body.set("cf-turnstile-response", token);
+        body.set("g-recaptcha-response", token);
+        try {
+            log.info("sefaz.experimental.form_replay uf={} action={}", uf, action);
+            return httpPostForm(action, body, fetched.cookieHeader());
+        } catch (RestClientException ex) {
+            log.warn("sefaz.experimental.form_replay_failed uf={} reason={}", uf, ex.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    private boolean isDanfe(String html) {
+        return html != null && !html.isBlank() && !CAPTCHA_MARKER.matcher(html).find();
     }
 
     private enum CaptchaType {
@@ -218,8 +275,13 @@ public class GenericQrPortalAdapter implements SefazAdapter {
 
     private static CaptchaType detectCaptchaType(String html) {
         var lower = html.toLowerCase();
+        // Check Turnstile FIRST: it can run in reCAPTCHA-compat mode (rendered into a
+        // .g-recaptcha div with a 0x… key), so the g-recaptcha class alone would
+        // misclassify it as reCAPTCHA (DF does exactly this).
+        if (lower.contains("cf-turnstile") || lower.contains("challenges.cloudflare.com/turnstile")) {
+            return CaptchaType.TURNSTILE;
+        }
         if (lower.contains("g-recaptcha") || lower.contains("recaptcha/api.js")) return CaptchaType.RECAPTCHA_V2;
-        if (lower.contains("cf-turnstile")) return CaptchaType.TURNSTILE;
         if (lower.contains("hcaptcha")) return CaptchaType.HCAPTCHA;
         return CaptchaType.UNKNOWN_CHALLENGE;
     }
@@ -262,29 +324,54 @@ public class GenericQrPortalAdapter implements SefazAdapter {
 
     /**
      * Raw HTTP GET that follows cross-scheme redirects the JDK client won't (see
-     * {@link #MAX_REDIRECTS}). Isolated as a seam so the retry loop is unit-testable.
-     * Every redirect hop is re-validated against the SSRF allowlist via
-     * {@link #resolveUrl}, so a portal can't bounce the server off {@code gov.br}.
+     * {@link #MAX_REDIRECTS}), returning the body + the FINAL url + accumulated
+     * cookies — the form replay needs the post-redirect url and session cookies.
+     * Isolated as a seam so the retry loop is unit-testable. Every redirect hop is
+     * re-validated against the SSRF allowlist via {@link #resolveUrl}, so a portal
+     * can't bounce the server off {@code gov.br}.
      */
-    protected String httpGet(String url) {
+    protected PortalFetch httpFetch(String url) {
         var current = url;
+        var cookies = new LinkedHashMap<String, String>();
         for (var hop = 0; hop <= MAX_REDIRECTS; hop++) {
             var response = exchange(current);
+            mergeCookies(cookies, response);
             if (!response.getStatusCode().is3xxRedirection()) {
-                return response.getBody();
+                return new PortalFetch(response.getBody(), current, cookieHeader(cookies));
             }
             var location = response.getHeaders().getFirst(HttpHeaders.LOCATION);
             if (location == null || location.isBlank()) {
-                return response.getBody();
+                return new PortalFetch(response.getBody(), current, cookieHeader(cookies));
             }
             current = resolveUrl(location);
         }
         throw new TransientFetchException("too-many-redirects");
     }
 
+    /** Body-only convenience over {@link #httpFetch}. */
+    protected String httpGet(String url) {
+        return httpFetch(url).body();
+    }
+
     /** Single HTTP GET returning status + headers + body — the seam the redirect loop (and tests) build on. */
     protected ResponseEntity<String> exchange(String url) {
         return restClient.get().uri(url).retrieve().toEntity(String.class);
+    }
+
+    /** Form-urlencoded POST (the captcha form replay), carrying the captcha page's cookies. */
+    protected String httpPostForm(String url, MultiValueMap<String, String> body, String cookieHeader) {
+        return restClient.post()
+                .uri(url)
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .headers(headers -> {
+                    if (cookieHeader != null && !cookieHeader.isBlank()) {
+                        headers.set("Cookie", cookieHeader);
+                    }
+                })
+                .body(body)
+                .retrieve()
+                .toEntity(String.class)
+                .getBody();
     }
 
     @Override
@@ -319,6 +406,25 @@ public class GenericQrPortalAdapter implements SefazAdapter {
         return trimmed;
     }
 
+    private static void mergeCookies(Map<String, String> jar, ResponseEntity<String> response) {
+        var setCookies = response.getHeaders().get("Set-Cookie");
+        if (setCookies == null) return;
+        for (var cookie : setCookies) {
+            var pair = cookie.split(";", 2)[0];
+            var eq = pair.indexOf('=');
+            if (eq > 0) {
+                jar.put(pair.substring(0, eq).trim(), pair.substring(eq + 1).trim());
+            }
+        }
+    }
+
+    private static String cookieHeader(Map<String, String> jar) {
+        if (jar.isEmpty()) return null;
+        return jar.entrySet().stream()
+                .map(entry -> entry.getKey() + "=" + entry.getValue())
+                .collect(Collectors.joining("; "));
+    }
+
     private void sleep(long ms, UnidadeFederativa uf) {
         if (ms <= 0) return;
         try {
@@ -336,6 +442,10 @@ public class GenericQrPortalAdapter implements SefazAdapter {
                 .map(String::toLowerCase)
                 .collect(Collectors.toUnmodifiableSet());
         return suffixes.isEmpty() ? Set.of("gov.br") : suffixes;
+    }
+
+    /** A portal page: body + the url after following redirects + accumulated cookies. */
+    protected record PortalFetch(String body, String finalUrl, String cookieHeader) {
     }
 
     private static class TransientFetchException extends RuntimeException {

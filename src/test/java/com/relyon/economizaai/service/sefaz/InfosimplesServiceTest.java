@@ -2,6 +2,7 @@ package com.relyon.economizaai.service.sefaz;
 
 import com.relyon.economizaai.exception.ReceiptParseException;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
+import com.relyon.economizaai.service.paidapi.InfosimplesAlertService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
@@ -19,6 +20,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
@@ -31,12 +36,14 @@ class InfosimplesServiceTest {
 
     private MockRestServiceServer server;
     private InfosimplesService service;
+    private InfosimplesAlertService alertService;
 
     @BeforeEach
     void setUp() {
         var builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
-        service = new InfosimplesService(builder, API_KEY, BASE_URL, "MG", "RJ");
+        alertService = mock(InfosimplesAlertService.class);
+        service = new InfosimplesService(builder, alertService, API_KEY, BASE_URL, "MG", "RJ");
     }
 
     @Test
@@ -144,6 +151,20 @@ class InfosimplesServiceTest {
 
         assertThrows(ReceiptParseException.class,
                 () -> service.fetchParsed(CHAVE, UnidadeFederativa.MS));
+        // the owner must hear about a failing paid consult
+        verify(alertService).alertConsultFailure(eq("ms"), eq(404), any());
+    }
+
+    @Test
+    void fetchParsed_alertsOnSemSaldoCode() {
+        server.expect(requestTo(BASE_URL + "/api/v2/consultas/sefaz/ce/nfce?token=test-key&nfce=" + CHAVE))
+                .andRespond(withSuccess(
+                        "{\"code\":603,\"code_message\":\"O token informado não tem autorização\",\"data\":[]}",
+                        MediaType.APPLICATION_JSON));
+
+        assertThrows(ReceiptParseException.class,
+                () -> service.fetchParsed(CHAVE, UnidadeFederativa.CE));
+        verify(alertService).alertConsultFailure("ce", 603, "O token informado não tem autorização");
     }
 
     @Test

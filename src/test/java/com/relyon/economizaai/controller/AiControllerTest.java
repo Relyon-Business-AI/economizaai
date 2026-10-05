@@ -14,6 +14,7 @@ import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.ai.AiFindingService;
+import com.relyon.economizaai.service.ai.AiItemFallbackService;
 import com.relyon.economizaai.service.ai.AiGateway;
 import com.relyon.economizaai.service.ai.AiSweepService;
 import com.relyon.economizaai.service.ai.AiUsageService;
@@ -46,6 +47,7 @@ class AiControllerTest {
 
     @MockitoBean private AiSweepService aiSweepService;
     @MockitoBean private AiFindingService aiFindingService;
+    @MockitoBean private AiItemFallbackService aiItemFallbackService;
     @MockitoBean private AiUsageService aiUsageService;
     @MockitoBean private AiGateway aiGateway;
     @MockitoBean private AiSweepRunRepository aiSweepRunRepository;

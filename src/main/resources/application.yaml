@@ -233,6 +233,10 @@ economizaai:
     enabled: ${INFOSIMPLES_ENABLED:false}
     api-key: ${INFOSIMPLES_API_KEY:}
     base-url: ${INFOSIMPLES_BASE_URL:https://api.infosimples.com}
+    # Admin alert (e-mail via ContactService) quando o snapshot diário encontra o
+    # saldo abaixo deste valor — CE (rota exclusiva Infosimples) para sem saldo.
+    # Falhas de consulta paga também alertam (throttle de 6h no código).
+    low-balance-threshold: ${INFOSIMPLES_LOW_BALANCE_THRESHOLD:5.00}
     # UFs whose NFC-e consultation lives at `.../sefaz/{uf}/nfce-resumida` (distinct
     # "resumida" schema) instead of the default `.../sefaz/{uf}/nfce`. MG only, so far
     # — the default endpoint returns code 602 "serviço não é válido" for it.
@@ -589,3 +593,12 @@ logging:
     # To deep-debug a flow: filter by receipt=<8-char-id> in your log viewer.
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [req=%X{requestId:-} user=%X{userId:-} rcpt=%X{receiptId:-} item=%X{itemId:-}] %logger{30} - %msg%n"
     file:    "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [req=%X{requestId:-} user=%X{userId:-} rcpt=%X{receiptId:-} item=%X{itemId:-}] %logger{30} - %msg%n"
+
+# Error tracking (Sentry). INERT until SENTRY_DSN is set: SentryInitializer skips
+# init on a blank DSN, so dev/CI/local are no-ops. Set SENTRY_DSN (+ SENTRY_ENVIRONMENT)
+# on the Render services to activate. Errors-only (no perf tracing) to stay in the free
+# tier; PII off for LGPD (we already mask CPF/JWT — don't let Sentry re-capture them).
+sentry:
+  dsn: ${SENTRY_DSN:}
+  environment: ${SENTRY_ENVIRONMENT:dev}
+  release: ${SENTRY_RELEASE:}

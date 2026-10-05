@@ -22,6 +22,7 @@
 		<tess4j.version>5.13.0</tess4j.version>
 		<springdoc.version>2.8.6</springdoc.version>
 		<bucket4j.version>8.14.0</bucket4j.version>
+		<sentry.version>8.16.0</sentry.version>
 		<!-- >=10.0.2: CVE-2025-53864 (DoS via deeply-nested JSON in attacker-supplied tokens) -->
 		<nimbus-jose-jwt.version>10.10</nimbus-jose-jwt.version>
 
@@ -102,6 +103,15 @@
 			<groupId>io.micrometer</groupId>
 			<artifactId>micrometer-registry-prometheus</artifactId>
 			<scope>runtime</scope>
+		</dependency>
+		<!-- Error tracking (Sentry) — core SDK only. The Spring Boot starter is NOT
+		     used: Sentry 8.x targets Boot 3 and its autoconfig needs classes removed in
+		     Boot 4 (RestClientCustomizer). We init the SDK manually and capture in the
+		     GlobalExceptionHandler. Inert until SENTRY_DSN is set (blank DSN = no-op). -->
+		<dependency>
+			<groupId>io.sentry</groupId>
+			<artifactId>sentry</artifactId>
+			<version>${sentry.version}</version>
 		</dependency>
 
 		<!-- Auth (JWT) -->

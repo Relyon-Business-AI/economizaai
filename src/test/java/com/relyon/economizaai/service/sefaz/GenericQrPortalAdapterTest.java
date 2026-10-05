@@ -12,6 +12,7 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -56,8 +57,8 @@ class GenericQrPortalAdapterTest {
                                            Function<String, String> http) {
         return new GenericQrPortalAdapter(RestClient.builder(), captchaSolver, 1000, "test", true, maxAttempts, 0, "gov.br") {
             @Override
-            protected String httpGet(String url) {
-                return http.apply(url);
+            protected PortalFetch httpFetch(String url) {
+                return new PortalFetch(http.apply(url), url, null);
             }
         };
     }
@@ -177,6 +178,40 @@ class GenericQrPortalAdapterTest {
 
         assertEquals("<html>danfe</html>", adapter.fetchHtml(QR_URL_BA));
         assertEquals(VALID_SITE_KEY, seenKey.get());
+    }
+
+    @Test
+    void fetchHtml_captchaWall_replaysFormPostGenerically_returnsDanfe() {
+        // The DF-style case the old query-param guess couldn't handle: a Turnstile in
+        // reCAPTCHA-compat mode (g-recaptcha class + 0x key + cloudflare script) behind a
+        // plain <form>. The generic form replay must solve it with NO dedicated adapter:
+        // detect Turnstile, POST the form with the token in both field names + the hidden Chave.
+        var captchaWithForm = "<html><form method=\"POST\" action=\"\">"
+                + "<input type=\"hidden\" name=\"Chave\" value=\"" + CHAVE_BA + "\"/>"
+                + "<div class=\"g-recaptcha\" data-sitekey=\"0x4AAAAAAAaOvnbOLak1uio1\"></div>"
+                + "</form><script src=\"https://challenges.cloudflare.com/turnstile/v0/api.js?compat=recaptcha\"></script></html>";
+        var postedBody = new AtomicReference<MultiValueMap<String, String>>();
+        var seenType = new AtomicReference<String>();
+        var solver = new CaptchaSolver() {
+            @Override public boolean isConfigured() { return true; }
+            @Override public String solveRecaptchaV2(String siteKey, String pageUrl) { seenType.set("recaptcha"); return "tok"; }
+            @Override public String solveCloudflareTurnstile(String siteKey, String pageUrl) { seenType.set("turnstile"); return "tok"; }
+        };
+        var adapter = new GenericQrPortalAdapter(RestClient.builder(), solver, 1000, "test", true, 1, 0, "gov.br") {
+            @Override protected PortalFetch httpFetch(String url) {
+                return new PortalFetch(captchaWithForm, url, "SESSION=1");
+            }
+            @Override protected String httpPostForm(String url, MultiValueMap<String, String> body, String cookieHeader) {
+                postedBody.set(body);
+                return "<html>danfe</html>";
+            }
+        };
+
+        assertEquals("<html>danfe</html>", adapter.fetchHtml(QR_URL_BA));
+        assertEquals("turnstile", seenType.get(), "compat-mode Turnstile must not be misread as reCAPTCHA");
+        assertEquals("tok", postedBody.get().getFirst("cf-turnstile-response"));
+        assertEquals("tok", postedBody.get().getFirst("g-recaptcha-response"));
+        assertEquals(CHAVE_BA, postedBody.get().getFirst("Chave"));
     }
 
     @Test

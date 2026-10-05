@@ -277,7 +277,12 @@ public class ReceiptIngestionService {
      */
     private void routeExperimentalFailure(UUID receiptId, ExperimentalStateFailedException ex,
                                           boolean canDeviceRetry, String blockedStateReasonKey) {
-        if (canDeviceRetry) {
+        if (ex.isCaptchaBlocked()) {
+            // A captcha wall the server couldn't pass — the user's phone can't solve it
+            // either, so device-fetch would just time out (how DF failed before it got a
+            // dedicated adapter). Fail with an honest reason instead of a doomed handoff.
+            markBlockedState(receiptId, "receipt.state.captcha_unsupported");
+        } else if (canDeviceRetry) {
             persistNeedsDeviceFetch(receiptId, ex);
         } else if (blockedStateReasonKey != null) {
             markBlockedState(receiptId, blockedStateReasonKey);

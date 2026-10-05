@@ -156,6 +156,25 @@ class ReceiptIngestionServiceTest {
     }
 
     @Test
+    void ingest_experimentalStateCaptchaBlocked_deviceCapableClient_marksFailedParseNotDeviceFetch() {
+        // Captcha-walled state with no adapter: a phone can't solve the captcha either,
+        // so device-fetch is futile (how DF failed before its adapter). Must FAIL_PARSE
+        // with an honest captcha reason instead of the doomed NEEDS_DEVICE_FETCH handoff.
+        var receipt = processingReceipt();
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any()))
+                .thenThrow(new ExperimentalStateFailedException("BA", true));
+
+        service.ingest(receipt.getId(), QR, true); // device-capable, but captcha is hopeless on-device
+
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+        assertEquals("receipt.state.captcha_unsupported", receipt.getParseErrorReason());
+        verify(receiptRepository).save(receipt);
+    }
+
+    @Test
     void ingest_experimentalStateBlocked_oldMobileApp_marksFailedParseWithAppUpdateReason() {
         // An older mobile app (didn't send X-Device-Fetch) can't resolve NEEDS_DEVICE_FETCH —
         // it gets FAILED_PARSE with an "update the app" reason, not a generic failure.

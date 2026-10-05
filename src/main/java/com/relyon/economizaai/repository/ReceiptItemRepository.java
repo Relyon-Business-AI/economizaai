@@ -236,4 +236,9 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
     /** UFs where this product was purchased — same purpose, for product-based findings. */
     @Query("SELECT DISTINCT r.uf FROM ReceiptItem ri JOIN ri.receipt r WHERE ri.product.id = :productId AND r.uf IS NOT NULL")
     List<UnidadeFederativa> findDistinctUfByProductId(@Param("productId") UUID productId);
+
+    /** Confirmed receipts that still have unmatched items — targets for the fallback diagnostic. */
+    @Query("SELECT DISTINCT ri.receipt.id FROM ReceiptItem ri WHERE ri.product IS NULL AND ri.excluded = false "
+            + "AND ri.receipt.status = 'CONFIRMED' ORDER BY ri.receipt.id")
+    List<UUID> findReceiptIdsWithUnmatchedItems(Pageable pageable);
 }
