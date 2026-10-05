@@ -1,0 +1,35 @@
+# Periodic PROD infra-event watch — ALERT-ONLY. Complements log-sweep-prod.yml:
+# that one reads application LOGS; this one reads the Render *events* API to catch
+# container-level failures (OOM-kill, eviction) that never appear as log lines.
+# This is the gap that let the 2026-10-03 OOM incident run unnoticed for days.
+name: event-watch-prod
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # every 30 min — infra failures are high-signal
+  workflow_dispatch:
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write   # opens the alert issue
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Watch prod Render events
+        id: watch
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          SERVICE_ID: srv-d7odp50k1i2s73ep8o5g
+          EVENT_WINDOW_MIN: '45'
+        run: python3 .github/scripts/event_watch.py
+      - name: Open alert issue
+        if: steps.watch.outputs.found == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SIGNATURE: ${{ steps.watch.outputs.signature }}
+          CONTEXT: ${{ steps.watch.outputs.context }}
+          SOURCE: event-watch-prod
+        run: python3 .github/scripts/prod_alert.py
