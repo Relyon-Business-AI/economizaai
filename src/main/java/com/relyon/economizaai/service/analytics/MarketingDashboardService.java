@@ -53,7 +53,7 @@ public class MarketingDashboardService {
 
     private MetaSection buildMetaSection(LocalDate from, LocalDate to) {
         if (!metaAdsProperties.isConfigured()) {
-            return new MetaSection(false, CURRENCY, BigDecimal.ZERO, 0L, 0L,
+            return new MetaSection(false, CURRENCY, BigDecimal.ZERO, 0L, 0L, 0L,
                     BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, Collections.emptyList());
         }
 
@@ -63,6 +63,7 @@ public class MarketingDashboardService {
         var campaignRows = new ArrayList<CampaignRow>();
         long totalImpressions = 0L;
         long totalClicks = 0L;
+        long totalReach = 0L;
         var totalSpend = BigDecimal.ZERO;
         var totalBudgetRemaining = BigDecimal.ZERO;
 
@@ -72,6 +73,7 @@ public class MarketingDashboardService {
             var spend = scale((BigDecimal) row[2]);
             var clicks = toLong(row[3]);
             var impressions = toLong(row[4]);
+            var reach = toLong(row[5]);
             var meta = campaignsById.get(campaignId);
             var status = meta == null ? null : meta.getStatus();
             var lifetimeBudget = meta == null ? null : meta.getLifetimeBudget();
@@ -87,11 +89,12 @@ public class MarketingDashboardService {
                     : BigDecimal.ZERO;
 
             campaignRows.add(new CampaignRow(campaignId, campaignName, status, spend,
-                    impressions, clicks, cpm, cpc, lifetimeBudget, budgetRemaining, endsAt, ended));
+                    impressions, clicks, reach, cpm, cpc, lifetimeBudget, budgetRemaining, endsAt, ended));
 
             totalSpend = totalSpend.add(spend);
             totalImpressions += impressions;
             totalClicks += clicks;
+            totalReach += reach;
             if (budgetRemaining != null) totalBudgetRemaining = totalBudgetRemaining.add(budgetRemaining);
         }
         campaignRows.sort((left, right) -> right.spend().compareTo(left.spend()));
@@ -103,7 +106,7 @@ public class MarketingDashboardService {
                 ? totalSpend.divide(BigDecimal.valueOf(totalClicks), 2, RoundingMode.HALF_UP)
                 : BigDecimal.ZERO;
 
-        return new MetaSection(true, CURRENCY, totalSpend, totalImpressions, totalClicks,
+        return new MetaSection(true, CURRENCY, totalSpend, totalImpressions, totalClicks, totalReach,
                 overallCpm, overallCpc, totalBudgetRemaining, campaignRows);
     }
 

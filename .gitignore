@@ -3,6 +3,18 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+# Credential files — never commit (defensivo; nenhum existe hoje)
+*.p8
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+*-adminsdk-*.json
+*service-account*.json
+google-services.json
+GoogleService-Info.plist
+
 # Python bytecode (from .github/scripts)
 __pycache__/
 *.pyc

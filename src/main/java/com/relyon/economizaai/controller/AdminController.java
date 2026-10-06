@@ -68,6 +68,8 @@ import com.relyon.economizaai.service.admin.AdminDevService;
 import com.relyon.economizaai.service.admin.AdminReceiptService;
 import com.relyon.economizaai.service.admin.AdminUserService;
 import com.relyon.economizaai.service.analytics.AdminAnalyticsService;
+import com.relyon.economizaai.dto.response.MarketingDashboardResponse;
+import com.relyon.economizaai.service.analytics.MarketingDashboardService;
 import com.relyon.economizaai.service.analytics.RetentionCohortService;
 import com.relyon.economizaai.service.analytics.meta.MetaAdSpendSyncJob;
 import com.relyon.economizaai.service.extraction.CategorizationQualityService;
@@ -140,6 +142,7 @@ public class AdminController {
     private final AdminAnalyticsService adminAnalyticsService;
     private final RetentionCohortService retentionCohortService;
     private final MetaAdSpendSyncJob metaAdSpendSyncJob;
+    private final MarketingDashboardService marketingDashboardService;
     private final StateCoverageService stateCoverageService;
     private final SefazIngestionService sefazIngestionService;
     private final AdminDevService adminDevService;
@@ -464,6 +467,13 @@ public class AdminController {
             @RequestParam(defaultValue = "8") int weeks,
             @RequestParam(defaultValue = "false") boolean includeInternal) {
         return ResponseEntity.ok(retentionCohortService.cohorts(weeks, includeInternal));
+    }
+
+    @Operation(summary = "Marketing dashboard — Meta Ads spend + Google Search Console organic metrics for the window. Both sections carry configured=false until their env vars are set.")
+    @GetMapping("/marketing/dashboard")
+    public ResponseEntity<MarketingDashboardResponse> marketingDashboard(
+            @RequestParam(defaultValue = "30") int days) {
+        return ResponseEntity.ok(marketingDashboardService.dashboard(days));
     }
 
     @Operation(summary = "Sync Meta ad spend now",
