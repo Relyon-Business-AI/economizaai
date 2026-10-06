@@ -158,4 +158,20 @@ Requests prontos na collection Postman (pasta **Merchant**).
 4. Painel: evolução temporal (minha mediana vs. região por semana), share de cupons na
    cidade, produtos onde estou mais caro (oportunidade de promo).
 5. Encarte PDF via OCR/LLM como canal extra de import (caro/impreciso — só com demanda).
-6. FE do portal do lojista (web) — todo o backend já responde.
+6. **FE do portal do lojista — DECIDIDO (dono, 2026-10-06), não construído:**
+   - **`merchant.economizaai.app`**, mesmo nível do `dashboard.economizaai.app`, mas
+     **micro-SPA SEPARADA** — repo novo `Relyon-Business-AI/economiza-ai-merchant`
+     (Vite + React + TS), servida como Cloudflare Worker na conta Relyon AI (mesmo
+     molde da landing; deploy via wrangler). Deliberadamente leve/descartável: ainda
+     não sabemos se algum mercado vai usar — nada de Expo/EAS/estrutura grande.
+   - **Por que NÃO dentro do `economiza-ai-front`**: bundle do app de consumidor é
+     pesado pro caso, tem dev humano ativo lá, e o deploy é acoplado ao `master` do
+     app. Se o portal vingar, migrar depois é barato (telas finas, lógica no backend).
+   - **~5 telas contra a API existente**: login → claim (CNPJ + código) → modal
+     "grátis até 31/12/2026" (status PROMO de `GET /merchant/subscription`) → painel
+     (lojas + comparação) → promos (lista/criar/upload CSV/XLSX).
+   - **Setup quando for construir**: DNS AAAA `100::` proxied + Worker custom domain
+     na CF (token em `~/.config/cloudflare/economizai.key`); apontar pra
+     `api-dev.economizaai.app` enquanto os endpoints não estiverem em prod; adicionar
+     `https://merchant.economizaai.app` no `CORS_ORIGINS` do backend; identidade git
+     XandiVieira (cobrir o path novo com `includeIf` — NÃO mudar o default global).
