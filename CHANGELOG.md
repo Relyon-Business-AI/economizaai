@@ -16,6 +16,33 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-06 — Merchant: claim self-serve, promos (manual/CSV/XLSX/API) e assinatura de marketing
+
+Segunda leva das contas de mercado (`docs/MERCHANT_ACCOUNTS.md`). **Nada muda pro
+app de consumidor**: o único endpoint consumer é inerte por flag.
+
+- **Claim "sou este mercado"** (`/api/v1/merchant-claims`, qualquer usuário logado):
+  `POST` {cnpj} → código de 6 dígitos vai pro e-mail da EMPRESA registrado na
+  Receita (BrasilAPI); `POST /{id}/verify` {code} aprova → usuário vira MERCHANT,
+  ganha a rede e a assinatura abre. CNPJ sem e-mail → fila do admin
+  (`GET /admin/merchant-claims` + `approve`/`reject`).
+- **Promos do lojista** (`/api/v1/merchant/promos`, role MERCHANT): CRUD manual,
+  upload CSV/XLSX (export de tabela de preço do ERP, colunas pt flexíveis) e batch
+  JSON — relatório por linha com mensagens localizadas. `verifiedByReceipts` em
+  cada promo = cupom NFC-e real confirma o preço anunciado.
+- **Assinatura de marketing** (`GET /merchant/subscription`): por REDE; todo claim
+  aprovado ganha status `PROMO` **grátis até 31/12/2026** (`freeUntil`) — o portal
+  do lojista deve mostrar o modal de lançamento quando status=PROMO. Writes de promo
+  sem assinatura ativa → **402** (`merchant.subscription.required`). Pagamento ainda
+  inerte.
+- **Feed patrocinado (INERTE)**: `GET /price-index/sponsored-promos` devolve []
+  até `MERCHANT_PROMOS_FEED_ENABLED=true`. Endpoint separado do `/promos` orgânico
+  de propósito — promo anunciada nunca entra no ranking; selo "Patrocinado"
+  obrigatório + flag `verified`.
+- Moderação admin: `GET /admin/merchant-promos`, `PATCH /admin/merchant-promos/{id}/active`.
+
+---
+
 ## 2026-10-06 — Contas de mercado (role MERCHANT) + mini-painel do lojista
 
 - **Novo role `MERCHANT`** (terceiro valor além de USER/ADMIN) — contas de lojista,

@@ -409,6 +409,13 @@ economizaai:
     geocode-initial-delay-ms: 30000            # wait this long after startup before first scan
     geocode-delay-ms: 1100                     # 1.1s between geocode calls — Nominatim policy is 1 req/sec/IP
   merchant:
+    # Marketing accounts (docs/MERCHANT_ACCOUNTS.md). promos-feed-enabled is the ONLY
+    # consumer-visible switch — everything else is merchant/admin-side and dark by role.
+    promos-feed-enabled: ${MERCHANT_PROMOS_FEED_ENABLED:false}
+    free-until: ${MERCHANT_FREE_UNTIL:2026-12-31}   # launch promo: marketing account free until this date
+    claim-code-ttl-hours: 24
+    claim-code-max-attempts: 5
+    import-max-rows: 500
     classify:
       enabled: ${MERCHANT_CLASSIFY_ENABLED:true}   # CNAE-based supermarket/pharmacy verification (best-effort)
       base-url: ${BRASILAPI_CNPJ_URL:https://brasilapi.com.br/api/cnpj/v1}

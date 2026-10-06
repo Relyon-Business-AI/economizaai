@@ -1374,6 +1374,11 @@ PATCH  /api/v1/admin/users/{id}/role          → AdminUserDetailResponse — bo
 GET    /api/v1/admin/users/{id}/merchant-access           → List<MerchantAccessResponse> {cnpjRoot, grantedAt}
 POST   /api/v1/admin/users/{id}/merchant-access           → 201 MerchantAccessResponse — body {"cnpjRoot":"93015006"} (8 digits = the chain); 409 if not MERCHANT or already granted
 DELETE /api/v1/admin/users/{id}/merchant-access/{cnpjRoot} → 204 (404 if the grant doesn't exist)
+GET    /api/v1/admin/merchant-claims          → List<AdminMerchantClaimResponse> (fila PENDING_REVIEW — claims sem e-mail utilizável na Receita)
+POST   /api/v1/admin/merchant-claims/{id}/approve → MerchantClaimResponse (promove a MERCHANT + grant + assinatura)
+POST   /api/v1/admin/merchant-claims/{id}/reject  → MerchantClaimResponse — body {reason?}
+GET    /api/v1/admin/merchant-promos?cnpjRoot=&page=&size= → Page<MerchantPromoResponse> (moderação das promos anunciadas)
+PATCH  /api/v1/admin/merchant-promos/{id}/active   → MerchantPromoResponse — body {"active":false} (tira de circulação sem apagar)
 GET    /api/v1/admin/receipts?from=&to=&marketCnpj=&category=&q=&householdId=&uf=&status=&parseErrorReason=&page=&size=
                                               → Page<AdminReceiptSummaryResponse> — { receipt: ReceiptSummaryResponse, owner: {id,name,email}|null, uf, createdAt, parseErrorReason, parseErrorMessage }
 GET    /api/v1/admin/receipts/{id}            → ReceiptResponse
@@ -1556,23 +1561,63 @@ DELETE /api/v1/notification-rules/{id}       → 204 (defaults can't be deleted 
 
 ---
 
-## 10g. Merchant panel (ROLE_MERCHANT — not consumed by the FE yet)
+## 10g. Merchant panel (ROLE_MERCHANT — not consumed by the consumer FE)
 
-Mini-painel do lojista (docs/MERCHANT_ACCOUNTS.md, Fase 1). Invisível pra usuários
-comuns: `/api/v1/merchant/**` responde 403 fora da role MERCHANT. Contas MERCHANT
-são criadas pelo admin (promote + grant em §10d). O escopo de tudo é a(s) rede(s)
-concedida(s) por `cnpjRoot` (8 primeiros dígitos do CNPJ).
+Portal do lojista (docs/MERCHANT_ACCOUNTS.md). Invisível pra usuários comuns:
+`/api/v1/merchant/**` responde 403 fora da role MERCHANT. Contas MERCHANT nascem
+pelo claim self-serve (§10h) ou pelo admin (promote + grant em §10d). O escopo de
+tudo é a(s) rede(s) concedida(s) por `cnpjRoot` (8 primeiros dígitos do CNPJ).
 
 ```
-GET /api/v1/merchant/profile          → MerchantProfileResponse { chains: [{ cnpjRoot, stores: [{cnpj, name, address, city, state, segment, receiptCount}] }] }
-GET /api/v1/merchant/price-comparison → MerchantPriceComparisonResponse { lookbackDays, products: [{productId, productName, state, chainMedianPrice, chainSampleCount, regionMedianPrice, regionSampleCount, deltaPercent}] }
+GET    /api/v1/merchant/profile          → MerchantProfileResponse { chains: [{ cnpjRoot, stores: [{cnpj, name, address, city, state, segment, receiptCount}] }] }
+GET    /api/v1/merchant/price-comparison → MerchantPriceComparisonResponse { lookbackDays, products: [{productId, productName, state, chainMedianPrice, chainSampleCount, regionMedianPrice, regionSampleCount, deltaPercent}] }
+GET    /api/v1/merchant/subscription     → List<MerchantSubscriptionResponse> {cnpjRoot, plan, status: PROMO|ACTIVE|EXPIRED, freeUntil, active}
+GET    /api/v1/merchant/promos?page=&size= → Page<MerchantPromoResponse> {id, cnpjRoot, ean, productId, productName, description, promoPrice, regularPrice, startsAt, endsAt, source, active, verifiedByReceipts}
+POST   /api/v1/merchant/promos           → 201 MerchantPromoResponse — body MerchantPromoRequest {cnpjRoot? (obrigatório só com >1 rede), ean, description?, promoPrice, regularPrice?, startsAt, endsAt}
+PUT    /api/v1/merchant/promos/{id}      → MerchantPromoResponse
+DELETE /api/v1/merchant/promos/{id}      → 204
+POST   /api/v1/merchant/promos/import    → MerchantPromoImportResponse — multipart file (CSV ou XLSX, export do ERP; colunas pt: ean, preco[_promocional], preco_normal?, inicio, fim, descricao?) + ?cnpjRoot=
+POST   /api/v1/merchant/promos/batch     → MerchantPromoImportResponse — body {promos: [MerchantPromoRequest]} (integração ERP/API) + ?cnpjRoot=
 ```
 
-- **K-anonimato nos dois lados:** uma linha só aparece quando rede E região passam
-  K=3 households distintos + mínimo de amostras (mesmos thresholds do índice
-  público). Abaixo disso a linha é omitida — nunca um preço sub-K.
+- **K-anonimato nos dois lados (price-comparison):** uma linha só aparece quando rede
+  E região passam K=3 households distintos + mínimo de amostras. Nunca um preço sub-K.
 - `deltaPercent` = (rede − região) / região em %, 1 casa; positivo = rede mais cara.
-- Região = mesmo estado, índice inteiro (inclui a própria rede), janela `lookbackDays`.
+- **Promos**: validação por linha (EAN 8–14 dígitos, preço > 0, fim ≥ início, janela
+  duplicada por rede+EAN → 409); import devolve `{received, imported, rejected,
+  errors:[{line, ean, reasonKey, reason}]}` (reason já localizado). Writes exigem
+  assinatura ativa → **402** `merchant.subscription.required` quando não há.
+- **Assinatura (modal do portal do lojista)**: status `PROMO` + `freeUntil` = mostrar
+  o modal "conta de marketing grátis até {freeUntil}" (promo de lançamento, 31/12/2026).
+- `verifiedByReceipts` = cupom NFC-e real da rede, dentro da janela, preço ≤ anunciado (±1%).
+
+## 10h. Merchant claims (qualquer usuário autenticado)
+
+Fluxo "sou este mercado" (docs/MERCHANT_ACCOUNTS.md §4b). Aprovação promove o
+usuário a MERCHANT, concede a rede e abre a assinatura de marketing.
+
+```
+POST /api/v1/merchant-claims             → 201 MerchantClaimResponse — body {cnpj (14 díg.), companyName?, contactPhone?}
+                                            → status AWAITING_CODE (código foi pro e-mail da EMPRESA registrado na Receita; e-mail volta mascarado)
+                                            → ou PENDING_REVIEW (CNPJ sem e-mail utilizável → fila do admin)
+GET  /api/v1/merchant-claims             → List<MerchantClaimResponse> (meus claims)
+POST /api/v1/merchant-claims/{id}/verify → MerchantClaimResponse — body {code}; sucesso = APPROVED (virou MERCHANT + grant + assinatura)
+```
+
+- Código: 6 dígitos, TTL 24h, 5 tentativas; expirado/estourado fecha o claim
+  (REJECTED, motivo `code_expired`/`code_attempts_exceeded`) — basta resubmeter.
+- 409 claim aberto duplicado ou rede já concedida; 400 código errado; 429 tentativas estouradas.
+
+### Feed patrocinado (consumer — INERTE por flag)
+
+```
+GET /api/v1/price-index/sponsored-promos → List<SponsoredPromoResponse> {promoId, cnpjRoot, chainName, ean, productId, productName, description, promoPrice, regularPrice, startsAt, endsAt, verified}
+```
+
+- Devolve **[] até `MERCHANT_PROMOS_FEED_ENABLED=true`**. Endpoint separado do
+  `/price-index/promos` orgânico DE PROPÓSITO: promo anunciada por lojista pagante
+  nunca entra no ranking orgânico. FE renderiza SEMPRE com selo "Patrocinado";
+  `verified` = cupons reais confirmam o preço.
 
 ---
 

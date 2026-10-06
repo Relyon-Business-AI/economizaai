@@ -9,6 +9,7 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.repository.MerchantAccessRepository;
 import com.relyon.economizaai.repository.UserRepository;
+import com.relyon.economizaai.service.merchant.MerchantSubscriptionService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -33,6 +34,7 @@ class AdminMerchantAccessServiceTest {
 
     @Mock private UserRepository userRepository;
     @Mock private MerchantAccessRepository merchantAccessRepository;
+    @Mock private MerchantSubscriptionService merchantSubscriptionService;
 
     @InjectMocks private AdminMerchantAccessService service;
 
@@ -53,6 +55,7 @@ class AdminMerchantAccessServiceTest {
 
         assertThat(granted.cnpjRoot()).isEqualTo(CHAIN_ROOT);
         verify(merchantAccessRepository).save(any(MerchantAccess.class));
+        verify(merchantSubscriptionService).ensureForChain(CHAIN_ROOT);
     }
 
     @Test

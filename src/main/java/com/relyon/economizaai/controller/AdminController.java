@@ -7,6 +7,11 @@ import com.relyon.economizaai.dto.response.BatchResultResponse;
 import com.relyon.economizaai.dto.request.SendTestNotificationRequest;
 import com.relyon.economizaai.dto.request.SetProductBrandRequest;
 import com.relyon.economizaai.dto.request.GrantMerchantAccessRequest;
+import com.relyon.economizaai.dto.request.RejectMerchantClaimRequest;
+import com.relyon.economizaai.dto.request.SetMerchantPromoActiveRequest;
+import com.relyon.economizaai.dto.response.AdminMerchantClaimResponse;
+import com.relyon.economizaai.dto.response.MerchantClaimResponse;
+import com.relyon.economizaai.dto.response.MerchantPromoResponse;
 import com.relyon.economizaai.dto.request.SetMetricsExclusionRequest;
 import com.relyon.economizaai.dto.request.SetProductCategoryRequest;
 import com.relyon.economizaai.dto.request.UpdateSubscriptionTierRequest;
@@ -53,7 +58,9 @@ import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.ReceiptService;
 import com.relyon.economizaai.service.admin.AdminLlmService;
 import com.relyon.economizaai.service.admin.AdminMerchantAccessService;
+import com.relyon.economizaai.service.admin.AdminMerchantPromoService;
 import com.relyon.economizaai.service.admin.AdminMerchantService;
+import com.relyon.economizaai.service.merchant.MerchantClaimService;
 import com.relyon.economizaai.service.admin.AdminNotificationEffectivenessService;
 import com.relyon.economizaai.service.admin.AdminNotificationService;
 import com.relyon.economizaai.service.admin.AdminProductService;
@@ -118,6 +125,8 @@ public class AdminController {
     private final AdminNotificationEffectivenessService adminNotificationEffectivenessService;
     private final AdminMerchantService adminMerchantService;
     private final AdminMerchantAccessService adminMerchantAccessService;
+    private final AdminMerchantPromoService adminMerchantPromoService;
+    private final MerchantClaimService merchantClaimService;
     private final AdminLlmService adminLlmService;
     private final AdminProductService adminProductService;
     private final CategorizationQualityService categorizationQualityService;
@@ -212,6 +221,44 @@ public class AdminController {
     public ResponseEntity<Void> revokeMerchantAccess(@PathVariable UUID id, @PathVariable String cnpjRoot) {
         adminMerchantAccessService.revoke(id, cnpjRoot);
         return ResponseEntity.noContent().build();
+    }
+
+    /** Claims the e-mail-code path couldn't auto-verify (CNPJ without a usable company e-mail). */
+    @GetMapping("/merchant-claims")
+    public ResponseEntity<List<AdminMerchantClaimResponse>> pendingMerchantClaims() {
+        return ResponseEntity.ok(merchantClaimService.pendingReview().stream()
+                .map(AdminMerchantClaimResponse::from)
+                .toList());
+    }
+
+    /** Approves a claim: promotes the user to MERCHANT, grants the chain, opens the subscription. */
+    @PostMapping("/merchant-claims/{id}/approve")
+    public ResponseEntity<MerchantClaimResponse> approveMerchantClaim(@PathVariable UUID id,
+                                                                      @AuthenticationPrincipal User admin) {
+        return ResponseEntity.ok(merchantClaimService.approveByAdmin(id, admin.getId()));
+    }
+
+    @PostMapping("/merchant-claims/{id}/reject")
+    public ResponseEntity<MerchantClaimResponse> rejectMerchantClaim(@PathVariable UUID id,
+                                                                     @AuthenticationPrincipal User admin,
+                                                                     @Valid @RequestBody(required = false) RejectMerchantClaimRequest request) {
+        var reason = request == null ? null : request.reason();
+        return ResponseEntity.ok(merchantClaimService.rejectByAdmin(id, admin.getId(), reason));
+    }
+
+    /** Moderation view of merchant-announced promos (optionally one chain). */
+    @GetMapping("/merchant-promos")
+    public ResponseEntity<Page<MerchantPromoResponse>> listMerchantPromos(
+            @RequestParam(required = false) String cnpjRoot,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(adminMerchantPromoService.list(cnpjRoot, pageable));
+    }
+
+    /** Pulls a promo from (or restores it to) circulation without deleting the merchant's record. */
+    @PatchMapping("/merchant-promos/{id}/active")
+    public ResponseEntity<MerchantPromoResponse> setMerchantPromoActive(
+            @PathVariable UUID id, @Valid @RequestBody SetMerchantPromoActiveRequest request) {
+        return ResponseEntity.ok(adminMerchantPromoService.setActive(id, request.active()));
     }
 
     /** Exclude/re-include a user from ALL metrics (hide store-review / robo test accounts) without deleting it. */

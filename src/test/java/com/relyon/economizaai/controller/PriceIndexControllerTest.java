@@ -6,6 +6,7 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.geo.WatchedMarketService;
+import com.relyon.economizaai.service.merchant.SponsoredPromoService;
 import com.relyon.economizaai.service.priceindex.CommunityPromoService;
 import com.relyon.economizaai.service.priceindex.PriceIndexService;
 import org.junit.jupiter.api.Test;
@@ -42,6 +43,7 @@ class PriceIndexControllerTest {
     @MockitoBean private PriceIndexService priceIndexService;
     @MockitoBean private CommunityPromoService communityPromoService;
     @MockitoBean private WatchedMarketService watchedMarketService;
+    @MockitoBean private SponsoredPromoService sponsoredPromoService;
     @MockitoBean private JwtService jwtService;
     @MockitoBean private UserDetailsService userDetailsService;
     @MockitoBean private LocalizedMessageService localizedMessageService;

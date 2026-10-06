@@ -80,17 +80,36 @@ public class CnpjActivityClient {
         try {
             var json = objectMapper.readTree(body);
             var cnaes = parseCnaes(json);
-            return new CnpjLookup(segmentFromCnae(cnaes), parseIbgeCityCode(json), cnaes);
+            return new CnpjLookup(segmentFromCnae(cnaes), parseIbgeCityCode(json), cnaes,
+                    parseText(json, "email"), parseText(json, "razao_social"));
         } catch (Exception ex) {
             log.warn("merchant.classify.parse_failed cnpj={} {}: {}", cnpj, ex.getClass().getSimpleName(), ex.getMessage());
             return CnpjLookup.empty();
         }
     }
 
-    public record CnpjLookup(MerchantSegment segment, String ibgeCityCode, List<String> cnaeCodes) {
+    public record CnpjLookup(MerchantSegment segment, String ibgeCityCode, List<String> cnaeCodes,
+                             String email, String razaoSocial) {
+
+        /** Segment/geo-only convenience — callers that don't care about registry contact data. */
+        public CnpjLookup(MerchantSegment segment, String ibgeCityCode, List<String> cnaeCodes) {
+            this(segment, ibgeCityCode, cnaeCodes, null, null);
+        }
+
         static CnpjLookup empty() {
             return new CnpjLookup(MerchantSegment.UNKNOWN, null, List.of());
         }
+
+        public boolean hasEmail() {
+            return email != null && email.contains("@");
+        }
+    }
+
+    private static String parseText(JsonNode json, String field) {
+        var node = json.get(field);
+        if (node == null || node.isNull()) return null;
+        var text = node.asText().trim();
+        return text.isEmpty() ? null : text;
     }
 
     /** Raw fetch with retry — isolated as a seam so classify()'s parse path is unit-testable. */

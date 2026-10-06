@@ -269,12 +269,17 @@ which only we have:
   customers.
 
 **Sequencing (chicken-and-egg: markets only pay with user density):**
-1. **Now (free, MVP in progress)**: claimable **Merchant Profile** — we already
-   have merchants by CNPJ from receipts. The market gets a mini-panel: how its
-   prices compare with the region (k-anonymous aggregates only). Lead-gen bait.
-2. **Later (paid — this model)**: marketing account — publish promos into the
-   community promos feed, "Patrocinado" + "verificado" badges, flat monthly.
-3. **Upsell**: promo-effectiveness report → bridge to the expensive B2B tier.
+1. **SHIPPED (free)**: claimable **Merchant Profile** — self-serve claim (code to
+   the company e-mail from the Receita, admin-queue fallback) + mini-panel
+   (k-anonymous price comparison vs. region). Lead-gen bait.
+2. **SHIPPED DARK (this model)**: marketing account — promo publishing (manual +
+   CSV/XLSX + JSON batch), "verificado"-by-receipts badge, per-chain subscription.
+   **Launch promo: free until 2026-12-31** (`MERCHANT_FREE_UNTIL`), mirroring the
+   consumer pricing-launch mechanic. The consumer-facing sponsored feed
+   (`/price-index/sponsored-promos`) ships INERT behind
+   `MERCHANT_PROMOS_FEED_ENABLED` (default false); payment integration INERT
+   (manual ACTIVE until Mercado Pago is wired — DEV_NOTES).
+3. **Upsell (not built)**: promo-effectiveness report → bridge to the expensive B2B tier.
 
 **Guardrails (non-negotiable):**
 - Paid promos NEVER alter the "cheapest" ranking (same constraint as §4).

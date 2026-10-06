@@ -669,6 +669,19 @@ Helper scripts at repo root (run each in an **Administrator** PowerShell once):
 
 ---
 
+## Merchant marketing accounts — payment is INERT (2026-10-06)
+
+- **Now**: every approved merchant claim opens a `merchant_subscriptions` row with
+  status `PROMO`, free until `MERCHANT_FREE_UNTIL` (2026-12-31). There is NO payment
+  integration: after the promo window those chains stop passing
+  `MerchantSubscriptionService.requirePublishing` (promo writes → 402) until an admin
+  manually sets status `ACTIVE` in the DB.
+- **Fix before charging merchants**: wire Mercado Pago (reuse the consumer
+  subscription webhook pattern) onto `merchant_subscriptions` + an admin endpoint to
+  flip status. Also decide dunning (EXPIRED sweep job).
+- Consumer-facing sponsored feed stays dark until `MERCHANT_PROMOS_FEED_ENABLED=true` —
+  flipping it on is a product decision, not a code task (needs FE "Patrocinado" section).
+
 ## Monitoring / ops
 
 ### ~~`/actuator/prometheus` is public (no auth)~~ — RESOLVED (2026-06-11)

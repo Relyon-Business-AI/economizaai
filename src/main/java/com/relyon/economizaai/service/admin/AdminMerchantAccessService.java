@@ -10,6 +10,7 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.repository.MerchantAccessRepository;
 import com.relyon.economizaai.repository.UserRepository;
+import com.relyon.economizaai.service.merchant.MerchantSubscriptionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -30,6 +31,7 @@ public class AdminMerchantAccessService {
 
     private final UserRepository userRepository;
     private final MerchantAccessRepository merchantAccessRepository;
+    private final MerchantSubscriptionService merchantSubscriptionService;
 
     @Transactional(readOnly = true)
     public List<MerchantAccessResponse> list(UUID userId) {
@@ -53,6 +55,9 @@ public class AdminMerchantAccessService {
                 .user(user)
                 .cnpjRoot(cnpjRoot)
                 .build());
+        // Any granted chain gets a marketing subscription (launch promo) — same as the
+        // claim path, so admin-created merchant accounts can publish promos right away.
+        merchantSubscriptionService.ensureForChain(cnpjRoot);
         log.info("admin.merchant_access.granted userId={} cnpjRoot={}", userId, cnpjRoot);
         return MerchantAccessResponse.from(access);
     }

@@ -1,8 +1,11 @@
 # Merchant Accounts — contas de mercado (design & estado)
 
-**Status (2026-10-06):** MVP da Fase 1 (perfil + mini-painel) implementado no backend,
-**invisível para usuários comuns** — nenhum FE, endpoints gated por role. Este doc é a
-fonte única: visão, decisões, o que existe e como continuar.
+**Status (2026-10-06, 2ª leva):** Fases 1, 1.5 e 2 implementadas no backend —
+perfil + mini-painel, **claim self-serve**, **promos (manual + CSV/XLSX + batch JSON)**
+e **assinatura de marketing** (grátis até 31/12/2026). Tudo **invisível para o
+consumidor**: o único touchpoint de usuário (feed patrocinado) está atrás de flag
+default OFF; o resto é gated por role. Pagamento segue INERTE (DEV_NOTES.md).
+Este doc é a fonte única: visão, decisões, o que existe e como continuar.
 
 ---
 
@@ -28,8 +31,9 @@ Mercado só paga com densidade de usuários na cidade dele. Então:
 
 | Fase | O quê | Cobra? | Estado |
 |---|---|---|---|
-| **1. Perfil do Mercado** | Conta MERCHANT vinculada à rede (cnpj_root); mini-painel: minhas lojas + meus preços vs. a região (agregados k-anônimos) | Grátis (isca/lead-gen) | **MVP shipado (este doc, §4)** |
-| 2. Conta de marketing | Publicar promos no feed da comunidade, selo "Patrocinado" + "verificado", flat mensal por loja (R$99–299, validar) | Mensalidade flat | Não construído |
+| **1. Perfil do Mercado** | Conta MERCHANT vinculada à rede (cnpj_root); mini-painel: minhas lojas + meus preços vs. a região (agregados k-anônimos) | Grátis (isca/lead-gen) | **Shipado (§4)** |
+| **1.5 Claim self-serve** | "Sou este mercado": código no e-mail do CNPJ (Receita/BrasilAPI) com fallback de fila admin | Grátis | **Shipado (§4b)** |
+| **2. Conta de marketing** | Publicar promos (manual/CSV/XLSX/API), selo "Patrocinado" + "verificado" no feed | Flat mensal por rede (R$99–299, validar) — **grátis até 31/12/2026 (promo de lançamento)** | **Shipado dark** (feed atrás de flag; pagamento INERTE) |
 | 3. Relatório de efetividade | "Sua promo gerou X compras verificadas" | Upsell → ponte pro B2B caro | Não construído |
 
 Sem CPC/leilão/ad-tech cedo — flat e simples.
@@ -84,6 +88,53 @@ padrão de mediana do `PriceIndexService`.
 exigência do CLAUDE.md), `AdminMerchantAccessServiceTest`, casos de `setRole` no
 `AdminUserServiceTest`.
 
+## 4b. O que existe (Fases 1.5 + 2, 2026-10-06 — 2ª leva)
+
+**Claim self-serve (`/api/v1/merchant-claims`, qualquer usuário autenticado):**
+- `POST /merchant-claims` {cnpj} → BrasilAPI (CNPJ da Receita). Com e-mail da empresa
+  registrado: código de 6 dígitos vai PRO E-MAIL DA EMPRESA (só quem controla a caixa
+  aprova) — status `AWAITING_CODE`. Sem e-mail utilizável: `PENDING_REVIEW` + alerta
+  pro admin. Segurança do código: só SHA-256 persiste, comparação constant-time
+  (`CodeHasher`), 5 tentativas, TTL 24h; expirado/estourado fecha o claim (REJECTED)
+  e o usuário resubmete.
+- `POST /merchant-claims/{id}/verify` {code} → aprova: promove a MERCHANT, cria o
+  grant da rede e abre a assinatura com a promo de lançamento.
+- `GET /merchant-claims` — meus claims.
+- Admin: `GET /admin/merchant-claims` (fila PENDING_REVIEW),
+  `POST /admin/merchant-claims/{id}/approve|reject`.
+- Infra estendida: `CnpjLookup` agora captura `email` + `razao_social` da BrasilAPI;
+  `AuthEmailSender.sendMerchantClaimCode` (e-mail brandado, async, fallback DEV-log).
+
+**Promos do lojista (`/api/v1/merchant/promos`, role MERCHANT):**
+- CRUD manual + `POST /promos/import` (multipart **CSV ou XLSX** — export de tabela
+  de preço do ERP, headers pt com aliases/acentos: ean, preco[_promocional],
+  preco_normal?, inicio, fim, descricao?; preços "R$ 4,99"/"4.99"; datas ISO ou
+  dd/MM/yyyy) + `POST /promos/batch` (JSON, integração ERP/API). Relatório por linha
+  (linha boa importa, linha ruim vira erro localizado). Cap 500 linhas
+  (`import-max-rows`). **Barcode ficou de fora de propósito**: lojista conhece os
+  próprios EANs; scanner físico é fluxo de corredor, não de publicação.
+- Validações: EAN 8–14 dígitos, preço > 0 (scale 2), fim ≥ início, janela duplicada
+  por (rede, EAN) → 409. Match EAN → produto canônico no write.
+- **`verifiedByReceipts`**: cupom NFC-e real da rede, dentro da janela, com preço ≤
+  anunciado (tolerância 1%) — o selo "verificado", nosso diferencial.
+- Moderação admin: `GET /admin/merchant-promos`, `PATCH /admin/merchant-promos/{id}/active`.
+
+**Assinatura de marketing (`merchant_subscriptions`, por REDE):**
+- Promo de lançamento: todo claim aprovado abre status `PROMO`, **grátis até
+  `economizaai.merchant.free-until` (31/12/2026)** — mesma mecânica de data fixa do
+  Premium consumer. `GET /merchant/subscription` devolve {status, freeUntil, active}
+  → o FE mostra o modal "grátis até 31/12/2026" quando status=PROMO.
+- Gate único `MerchantSubscriptionService.requirePublishing` em TODO write de promo
+  (402 sem assinatura ativa). Painel (perfil/comparação) continua grátis — é a isca.
+- **Pagamento INERTE**: pós-promo, ACTIVE é setado manualmente até plugar o Mercado
+  Pago (entrada no DEV_NOTES.md).
+
+**Feed patrocinado (único touchpoint de consumidor — INERTE):**
+- `GET /price-index/sponsored-promos` — endpoint SEPARADO do `/promos` orgânico de
+  propósito (guardrail estrutural: promo anunciada nunca entra no ranking orgânico).
+  Devolve [] até `MERCHANT_PROMOS_FEED_ENABLED=true`. Só redes com assinatura ativa;
+  cada item carrega `verified`. FE renderiza SEMPRE com selo "Patrocinado".
+
 ## 5. Como criar o perfil de teste da Economizaai (owner)
 
 1. Registrar um usuário normal (e-mail `@economizaai.app`, ex. `merchant-test@…` —
@@ -98,12 +149,13 @@ Requests prontos na collection Postman (pasta **Merchant**).
 
 ## 6. Próximos passos (não construídos)
 
-1. **Fase 1.5 — claim self-serve**: fluxo "sou este mercado" (verificação por e-mail de
-   domínio / código no CNPJ via BrasilAPI), fila de aprovação no admin.
-2. **Fase 2 — promos do lojista**: tabela `merchant_promos` (EAN + preço + validade +
-   loja(s)), CRUD no painel, exposição no feed `/price-index/promos` com flag
-   `sponsored=true` + selo verificado quando observações confirmarem o preço.
-   Gating de pagamento via o padrão de assinatura existente (Mercado Pago, INERTE).
-3. **Fase 3 — relatório de efetividade**: conversões atribuídas (k-anônimas) por promo.
+1. **Ligar o feed** quando houver densidade/lojistas reais: `MERCHANT_PROMOS_FEED_ENABLED=true`
+   + FE da seção "Patrocinado" no app.
+2. **Pagamento**: plugar Mercado Pago na assinatura merchant quando a promo de
+   lançamento acabar (31/12/2026) — hoje ACTIVE é manual (DEV_NOTES).
+3. **Fase 3 — relatório de efetividade**: conversões atribuídas (k-anônimas) por promo
+   ("sua promo gerou X compras verificadas") → ponte pro B2B.
 4. Painel: evolução temporal (minha mediana vs. região por semana), share de cupons na
    cidade, produtos onde estou mais caro (oportunidade de promo).
+5. Encarte PDF via OCR/LLM como canal extra de import (caro/impreciso — só com demanda).
+6. FE do portal do lojista (web) — todo o backend já responde.
