@@ -6,9 +6,12 @@ import com.relyon.economizaai.dto.request.ReceiptIdsRequest;
 import com.relyon.economizaai.dto.response.BatchResultResponse;
 import com.relyon.economizaai.dto.request.SendTestNotificationRequest;
 import com.relyon.economizaai.dto.request.SetProductBrandRequest;
+import com.relyon.economizaai.dto.request.GrantMerchantAccessRequest;
 import com.relyon.economizaai.dto.request.SetMetricsExclusionRequest;
 import com.relyon.economizaai.dto.request.SetProductCategoryRequest;
 import com.relyon.economizaai.dto.request.UpdateSubscriptionTierRequest;
+import com.relyon.economizaai.dto.request.UpdateUserRoleRequest;
+import com.relyon.economizaai.dto.response.MerchantAccessResponse;
 import com.relyon.economizaai.dto.response.AcquisitionReportResponse;
 import com.relyon.economizaai.dto.response.AdminNotificationSummaryResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptDetailResponse;
@@ -24,6 +27,7 @@ import com.relyon.economizaai.dto.response.CostReportResponse;
 import com.relyon.economizaai.dto.response.InfosimplesFinanceResponse;
 import com.relyon.economizaai.dto.response.IngestionHealthResponse;
 import com.relyon.economizaai.dto.response.MarketIntelResponse;
+import com.relyon.economizaai.dto.response.NotificationEffectivenessResponse;
 import com.relyon.economizaai.dto.response.UnmatchedReportResponse;
 import com.relyon.economizaai.dto.response.AdminUserSummaryResponse;
 import com.relyon.economizaai.dto.response.DuplicateProductGroupResponse;
@@ -48,7 +52,9 @@ import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.ReceiptService;
 import com.relyon.economizaai.service.admin.AdminLlmService;
+import com.relyon.economizaai.service.admin.AdminMerchantAccessService;
 import com.relyon.economizaai.service.admin.AdminMerchantService;
+import com.relyon.economizaai.service.admin.AdminNotificationEffectivenessService;
 import com.relyon.economizaai.service.admin.AdminNotificationService;
 import com.relyon.economizaai.service.admin.AdminProductService;
 import com.relyon.economizaai.service.admin.AdminDevService;
@@ -109,7 +115,9 @@ public class AdminController {
     private final AdminUserService adminUserService;
     private final AdminReceiptService adminReceiptService;
     private final AdminNotificationService adminNotificationService;
+    private final AdminNotificationEffectivenessService adminNotificationEffectivenessService;
     private final AdminMerchantService adminMerchantService;
+    private final AdminMerchantAccessService adminMerchantAccessService;
     private final AdminLlmService adminLlmService;
     private final AdminProductService adminProductService;
     private final CategorizationQualityService categorizationQualityService;
@@ -177,6 +185,33 @@ public class AdminController {
     public ResponseEntity<AdminUserDetailResponse> setSubscriptionTier(
             @PathVariable UUID id, @Valid @RequestBody UpdateSubscriptionTierRequest request) {
         return ResponseEntity.ok(adminUserService.setTier(id, request.tier()));
+    }
+
+    /** Change a user's role (USER ↔ MERCHANT only — anything touching ADMIN is refused). */
+    @PatchMapping("/users/{id}/role")
+    public ResponseEntity<AdminUserDetailResponse> setRole(
+            @PathVariable UUID id, @Valid @RequestBody UpdateUserRoleRequest request) {
+        return ResponseEntity.ok(adminUserService.setRole(id, request.role()));
+    }
+
+    /** Chains (cnpj_root) a MERCHANT user manages — the scope of its merchant panel. */
+    @GetMapping("/users/{id}/merchant-access")
+    public ResponseEntity<List<MerchantAccessResponse>> listMerchantAccess(@PathVariable UUID id) {
+        return ResponseEntity.ok(adminMerchantAccessService.list(id));
+    }
+
+    /** Grant a chain to a MERCHANT user (409 if not MERCHANT or already granted). */
+    @PostMapping("/users/{id}/merchant-access")
+    public ResponseEntity<MerchantAccessResponse> grantMerchantAccess(
+            @PathVariable UUID id, @Valid @RequestBody GrantMerchantAccessRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(adminMerchantAccessService.grant(id, request.cnpjRoot()));
+    }
+
+    @DeleteMapping("/users/{id}/merchant-access/{cnpjRoot}")
+    public ResponseEntity<Void> revokeMerchantAccess(@PathVariable UUID id, @PathVariable String cnpjRoot) {
+        adminMerchantAccessService.revoke(id, cnpjRoot);
+        return ResponseEntity.noContent().build();
     }
 
     /** Exclude/re-include a user from ALL metrics (hide store-review / robo test accounts) without deleting it. */
@@ -284,6 +319,17 @@ public class AdminController {
     public ResponseEntity<RelevanceReportResponse> relevanceReport(
             @RequestParam(defaultValue = "30") int days) {
         return ResponseEntity.ok(relevanceReportService.report(Math.max(1, days)));
+    }
+
+    @Operation(summary = "Notification effectiveness",
+            description = "Delivery/read performance of the notifications outbox over the window: per-type "
+                    + "sent/delivered/read with rates, send-vs-read volume by Brasília hour-of-day (24 buckets) "
+                    + "and ISO day-of-week (7 buckets), plus the top 15 titles by send volume. Complements the "
+                    + "relevance-report (telemetry-based). Reads the notifications table only.")
+    @GetMapping("/notifications/effectiveness")
+    public ResponseEntity<NotificationEffectivenessResponse> notificationEffectiveness(
+            @RequestParam(defaultValue = "30") int days) {
+        return ResponseEntity.ok(adminNotificationEffectivenessService.effectiveness(days));
     }
 
     @Operation(summary = "Sent notifications",

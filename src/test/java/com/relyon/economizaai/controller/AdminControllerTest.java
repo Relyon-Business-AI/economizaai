@@ -21,6 +21,7 @@ import com.relyon.economizaai.dto.response.AdminReceiptStatsResponse;
 import com.relyon.economizaai.dto.response.ReceiptResponse;
 import com.relyon.economizaai.dto.response.ReceiptSummaryResponse;
 import com.relyon.economizaai.dto.response.RecategorizeReportResponse;
+import com.relyon.economizaai.dto.response.NotificationEffectivenessResponse;
 import com.relyon.economizaai.dto.response.RelevanceReportResponse;
 import com.relyon.economizaai.dto.response.RecategorizeResultResponse;
 import com.relyon.economizaai.exception.ProductNotFoundException;
@@ -30,6 +31,7 @@ import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.CategorizationQualityTrigger;
 import com.relyon.economizaai.model.enums.CategorizationSource;
+import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.model.enums.Platform;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
@@ -41,6 +43,8 @@ import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.ReceiptService;
 import com.relyon.economizaai.service.admin.AdminLlmService;
 import com.relyon.economizaai.service.admin.AdminMerchantService;
+import com.relyon.economizaai.service.admin.AdminMerchantAccessService;
+import com.relyon.economizaai.service.admin.AdminNotificationEffectivenessService;
 import com.relyon.economizaai.service.admin.AdminNotificationService;
 import com.relyon.economizaai.service.admin.AdminProductService;
 import com.relyon.economizaai.service.admin.AdminDevService;
@@ -115,6 +119,8 @@ class AdminControllerTest {
     @MockitoBean private AdminUserService adminUserService;
     @MockitoBean private AdminReceiptService adminReceiptService;
     @MockitoBean private AdminNotificationService adminNotificationService;
+    @MockitoBean private AdminNotificationEffectivenessService adminNotificationEffectivenessService;
+    @MockitoBean private AdminMerchantAccessService adminMerchantAccessService;
     @MockitoBean private AdminMerchantService adminMerchantService;
     @MockitoBean private AdminLlmService adminLlmService;
     @MockitoBean private AdminProductService adminProductService;
@@ -522,6 +528,37 @@ class AdminControllerTest {
                 .andExpect(jsonPath("$.mode").value("SHADOW"))
                 .andExpect(jsonPath("$.engagement.dealViews").value(10))
                 .andExpect(jsonPath("$.suppression.regretEngagements").value(0));
+    }
+
+    // --- notification effectiveness ---
+
+    @Test
+    void notificationEffectiveness_returnsReportForAdmin() throws Exception {
+        when(adminNotificationEffectivenessService.effectiveness(30)).thenReturn(
+                new NotificationEffectivenessResponse(30,
+                        List.of(new NotificationEffectivenessResponse.TypeEffectiveness(
+                                NotificationType.PROMO_COMMUNITY, 10, 8, 4,
+                                new BigDecimal("0.8000"), new BigDecimal("0.4000"))),
+                        List.of(new NotificationEffectivenessResponse.HourBucket(9, 5, 2)),
+                        List.of(new NotificationEffectivenessResponse.DayOfWeekBucket(1, 7, 3)),
+                        List.of(new NotificationEffectivenessResponse.TextEffectiveness(
+                                "Oferta imperdível", 10, 4, new BigDecimal("0.4000")))));
+
+        mockMvc.perform(get("/api/v1/admin/notifications/effectiveness")
+                        .with(SecurityMockMvcRequestPostProcessors.user(adminUser())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.windowDays").value(30))
+                .andExpect(jsonPath("$.byType[0].type").value("PROMO_COMMUNITY"))
+                .andExpect(jsonPath("$.byType[0].deliveryRate").value(0.8))
+                .andExpect(jsonPath("$.byHour[0].hour").value(9))
+                .andExpect(jsonPath("$.topTexts[0].title").value("Oferta imperdível"));
+    }
+
+    @Test
+    void notificationEffectiveness_forbiddenForRegularUser() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/notifications/effectiveness")
+                        .with(SecurityMockMvcRequestPostProcessors.user(regularUser())))
+                .andExpect(status().isForbidden());
     }
 
     @Test

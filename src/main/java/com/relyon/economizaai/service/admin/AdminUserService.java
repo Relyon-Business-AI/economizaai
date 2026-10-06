@@ -3,6 +3,7 @@ package com.relyon.economizaai.service.admin;
 import com.relyon.economizaai.dto.response.AdminUserDetailResponse;
 import com.relyon.economizaai.dto.response.AdminUserDetailResponse.ReceiptCounts;
 import com.relyon.economizaai.dto.response.AdminUserSummaryResponse;
+import com.relyon.economizaai.exception.AdminRoleChangeException;
 import com.relyon.economizaai.exception.AdminUserDeletionException;
 import com.relyon.economizaai.exception.UserNotFoundException;
 import com.relyon.economizaai.model.User;
@@ -10,6 +11,7 @@ import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.model.enums.SubscriptionTier;
 import com.relyon.economizaai.repository.InsightsRepository;
+import com.relyon.economizaai.repository.MerchantAccessRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.UserService;
@@ -60,6 +62,7 @@ public class AdminUserService {
     private final InsightsRepository insightsRepository;
     private final SubscriptionService subscriptionService;
     private final UserService userService;
+    private final MerchantAccessRepository merchantAccessRepository;
 
     /** Sort keys that rank by a per-household aggregate (not a User column) — handled in memory. */
     private static final Set<String> AGGREGATE_SORTS = Set.of("receiptCount", "totalSpend");
@@ -172,6 +175,28 @@ public class AdminUserService {
             subscriptionService.cancel(user);
         }
         log.info("admin.user.set_tier userId={} tier={}", userId, tier);
+        return detail(user);
+    }
+
+    /**
+     * Change a user's role (USER ↔ MERCHANT). Anything touching ADMIN — demoting
+     * an admin or promoting to admin — is refused; admin promotion stays a manual
+     * DB operation. Demoting a MERCHANT revokes its chain grants so no stale
+     * access survives a later re-promotion. Idempotent on same-role calls.
+     */
+    @Transactional
+    public AdminUserDetailResponse setRole(UUID userId, Role role) {
+        var user = userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId.toString()));
+        if (user.getRole() == Role.ADMIN || role == Role.ADMIN) {
+            throw new AdminRoleChangeException();
+        }
+        if (user.getRole() == Role.MERCHANT && role != Role.MERCHANT) {
+            merchantAccessRepository.deleteAllByUserId(userId);
+            log.info("admin.user.merchant_access_revoked_on_demotion userId={}", userId);
+        }
+        user.setRole(role);
+        userRepository.save(user);
+        log.info("admin.user.set_role userId={} role={}", userId, role);
         return detail(user);
     }
 

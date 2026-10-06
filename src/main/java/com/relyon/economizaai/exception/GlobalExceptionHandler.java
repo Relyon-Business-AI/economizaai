@@ -167,6 +167,26 @@ public class GlobalExceptionHandler {
         return respond(ex, HttpStatus.SERVICE_UNAVAILABLE, "Paid-API global daily budget exhausted");
     }
 
+    @ExceptionHandler(MerchantAccessNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantAccessNotFound(MerchantAccessNotFoundException ex) {
+        return respond(ex, HttpStatus.NOT_FOUND, "Merchant access grant not found");
+    }
+
+    @ExceptionHandler(MerchantAccessAlreadyExistsException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantAccessAlreadyExists(MerchantAccessAlreadyExistsException ex) {
+        return respond(ex, HttpStatus.CONFLICT, "Merchant access grant already exists");
+    }
+
+    @ExceptionHandler(MerchantRoleRequiredException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantRoleRequired(MerchantRoleRequiredException ex) {
+        return respond(ex, HttpStatus.CONFLICT, "Merchant access grant on a non-MERCHANT user");
+    }
+
+    @ExceptionHandler(AdminRoleChangeException.class)
+    public ResponseEntity<ErrorResponse> handleAdminRoleChange(AdminRoleChangeException ex) {
+        return respond(ex, HttpStatus.CONFLICT, "Role change touching ADMIN refused");
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
         var errors = ex.getBindingResult().getFieldErrors().stream()

@@ -14,6 +14,9 @@ public interface MarketLocationRepository extends JpaRepository<MarketLocation, 
 
     List<MarketLocation> findAllByCnpjIn(List<String> cnpjs);
 
+    /** Every known store of a chain (merchant panel — stores appear as receipts are scanned). */
+    List<MarketLocation> findAllByCnpjRoot(String cnpjRoot);
+
     /** Markets we know about but haven't successfully geocoded yet (for the
      *  scheduled geocoding job). */
     List<MarketLocation> findAllByLatitudeIsNullAndGeocodeAttemptsLessThan(int maxAttempts);

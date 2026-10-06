@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.admin;
 
+import com.relyon.economizaai.exception.AdminRoleChangeException;
 import com.relyon.economizaai.exception.AdminUserDeletionException;
 import com.relyon.economizaai.exception.UserNotFoundException;
 import com.relyon.economizaai.model.Household;
@@ -8,6 +9,7 @@ import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.model.enums.SubscriptionTier;
 import com.relyon.economizaai.repository.InsightsRepository;
+import com.relyon.economizaai.repository.MerchantAccessRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.UserService;
@@ -48,6 +50,7 @@ class AdminUserServiceTest {
     @Mock private InsightsRepository insightsRepository;
     @Mock private SubscriptionService subscriptionService;
     @Mock private UserService userService;
+    @Mock private MerchantAccessRepository merchantAccessRepository;
 
     @InjectMocks private AdminUserService service;
 
@@ -139,6 +142,57 @@ class AdminUserServiceTest {
         assertTrue(user.isExcludedFromMetrics());
         assertTrue(detail.excludedFromMetrics());
         verify(userRepository).save(user);
+    }
+
+    @Test
+    void setRole_promoteToMerchant_savesAndReturnsDetail() {
+        var householdId = UUID.randomUUID();
+        var household = Household.builder().id(householdId).inviteCode("ABC123").build();
+        var user = User.builder().id(UUID.randomUUID()).name("Mercado Teste").email("merchant@economizaai.app")
+                .household(household).role(Role.USER).build();
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+        when(receiptRepository.countByHouseholdIdAndStatus(eq(householdId), any(ReceiptStatus.class))).thenReturn(0L);
+        when(insightsRepository.totalSpend(eq(householdId), any(LocalDateTime.class), any(LocalDateTime.class), any(), any()))
+                .thenReturn(BigDecimal.ZERO);
+        when(userRepository.countByHouseholdId(householdId)).thenReturn(1L);
+
+        service.setRole(user.getId(), Role.MERCHANT);
+
+        assertEquals(Role.MERCHANT, user.getRole());
+        verify(userRepository).save(user);
+        verify(merchantAccessRepository, never()).deleteAllByUserId(any());
+    }
+
+    @Test
+    void setRole_demoteMerchant_revokesChainGrants() {
+        var householdId = UUID.randomUUID();
+        var household = Household.builder().id(householdId).inviteCode("ABC123").build();
+        var user = User.builder().id(UUID.randomUUID()).name("Ex Mercado").email("exmerchant@economizaai.app")
+                .household(household).role(Role.MERCHANT).build();
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+        when(receiptRepository.countByHouseholdIdAndStatus(eq(householdId), any(ReceiptStatus.class))).thenReturn(0L);
+        when(insightsRepository.totalSpend(eq(householdId), any(LocalDateTime.class), any(LocalDateTime.class), any(), any()))
+                .thenReturn(BigDecimal.ZERO);
+        when(userRepository.countByHouseholdId(householdId)).thenReturn(1L);
+
+        service.setRole(user.getId(), Role.USER);
+
+        assertEquals(Role.USER, user.getRole());
+        verify(merchantAccessRepository).deleteAllByUserId(user.getId());
+    }
+
+    @Test
+    void setRole_touchingAdmin_refused() {
+        var admin = User.builder().id(UUID.randomUUID()).name("Admin").email("admin@test.com")
+                .role(Role.ADMIN).build();
+        var regular = User.builder().id(UUID.randomUUID()).name("User").email("user@test.com")
+                .role(Role.USER).build();
+        when(userRepository.findById(admin.getId())).thenReturn(Optional.of(admin));
+        when(userRepository.findById(regular.getId())).thenReturn(Optional.of(regular));
+
+        assertThrows(AdminRoleChangeException.class, () -> service.setRole(admin.getId(), Role.USER));
+        assertThrows(AdminRoleChangeException.class, () -> service.setRole(regular.getId(), Role.ADMIN));
+        verify(userRepository, never()).save(any());
     }
 
     @Test

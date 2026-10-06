@@ -326,7 +326,7 @@ public class PriceIndexService {
     }
 
     /** Median (50th percentile) of a price list. Returns null on empty. */
-    static BigDecimal median(List<BigDecimal> values) {
+    public static BigDecimal median(List<BigDecimal> values) {
         if (values == null || values.isEmpty()) return null;
         var sorted = values.stream().sorted().toList();
         var n = sorted.size();

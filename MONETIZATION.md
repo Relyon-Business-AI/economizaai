@@ -250,6 +250,40 @@ This trust is the entire product.
 - Disclosure UI ("Patrocinado") — never optional.
 - Pro users skip all sponsored placements.
 
+#### 4b. Merchant Marketing Accounts — self-serve (decisão 2026-10-06)
+
+The self-serve evolution of §4: the market itself holds an account (new role
+`MERCHANT`) and publishes its own promotions through a merchant portal, paying a
+**flat monthly fee per store** (ballpark R$99–R$299/month — validate). No
+CPC/auction ad-tech early; flat and simple.
+
+**The pitch to the market is NOT reach — it's verification + attribution,**
+which only we have:
+- **Verified promos**: the market announces "leite R$4,99" and real scanned
+  NFC-e receipts confirm it — "preço verificado" badge. No other channel in
+  Brazil can do this.
+- **Closed-loop attribution**: promo shown → user buys → scanned receipt proves
+  the conversion. "Your promo generated X verified purchases" justifies a
+  subscription in a way banners can't.
+- Same infra feeds the B2B "promo effectiveness" product (§2) — one build, two
+  customers.
+
+**Sequencing (chicken-and-egg: markets only pay with user density):**
+1. **Now (free, MVP in progress)**: claimable **Merchant Profile** — we already
+   have merchants by CNPJ from receipts. The market gets a mini-panel: how its
+   prices compare with the region (k-anonymous aggregates only). Lead-gen bait.
+2. **Later (paid — this model)**: marketing account — publish promos into the
+   community promos feed, "Patrocinado" + "verificado" badges, flat monthly.
+3. **Upsell**: promo-effectiveness report → bridge to the expensive B2B tier.
+
+**Guardrails (non-negotiable):**
+- Paid promos NEVER alter the "cheapest" ranking (same constraint as §4).
+- Announced promo ≠ observed price: separate tables; merchant claims never
+  enter the collaborative index as observations.
+- Merchant panel aggregates obey the same k-anonymity as public aggregates.
+
+> Full design + MVP state: **[`docs/MERCHANT_ACCOUNTS.md`](docs/MERCHANT_ACCOUNTS.md)**.
+
 ---
 
 ### 5. Premium Family / Business Plans (later)

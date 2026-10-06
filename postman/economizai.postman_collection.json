@@ -120,6 +120,21 @@
 		{
 			"key": "learnedEntryId",
 			"value": ""
+		},
+		{
+			"key": "merchantToken",
+			"value": "",
+			"description": "JWT de uma conta MERCHANT (preenchido pelo E2E ou manualmente)"
+		},
+		{
+			"key": "e2eMerchantUserId",
+			"value": "",
+			"description": "Id da conta merchant criada pelo fluxo E2E"
+		},
+		{
+			"key": "cnpjRoot",
+			"value": "93015006",
+			"description": "Primeiros 8 dígitos do CNPJ da rede (grants de merchant)"
 		}
 	],
 	"item": [
@@ -12462,6 +12477,62 @@
 					]
 				},
 				{
+					"name": "COV admin: Notification effectiveness (delivery/read)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/effectiveness?days=30",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"effectiveness"
+							],
+							"query": [
+								{
+									"key": "days",
+									"value": "30"
+								}
+							]
+						},
+						"description": "Delivery/read effectiveness from the notifications outbox over the window. byType = per NotificationType sent/delivered/read with deliveryRate+readRate (fractions 0..1). byHour = 24 buckets (Brasilia hour-of-day). byDayOfWeek = 7 buckets (1=Mon..7=Sun, ISO, Brasilia). topTexts = top 15 titles by send volume with readRate. Complements the relevance-report.",
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"    pm.expect(pm.response.code).to.be.below(500);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
 					"name": "COV admin: Cost report (paid-API spend)",
 					"request": {
 						"method": "GET",
@@ -14305,6 +14376,492 @@
 					]
 				},
 				{
+					"name": "49b8. Merchant: registrar conta de teste",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/register",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"register"
+							]
+						},
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var mailbox = pm.collectionVariables.get('testMailbox') || 'alexandre@economizaai.app'; var email = mailbox.replace('@', '+merchant-e2e-' + Date.now() + '@');",
+									"pm.request.body.raw = JSON.stringify({ name: 'E2E Merchant', email: email, password: 'password123', acceptedTermsVersion: '1.0', acceptedPrivacyVersion: '1.0' });"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Registro merchant 201', function () { pm.response.to.have.status(201); });",
+									"var d = pm.response.json();",
+									"pm.collectionVariables.set('merchantToken', d.token);",
+									"pm.collectionVariables.set('e2eMerchantUserId', d.user.id);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "49b9. Merchant: /merchant/** e 403 pra user comum",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{merchantToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merchant/profile",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"merchant",
+								"profile"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Painel merchant bloqueado antes da promocao (403)', function () { pm.response.to.have.status(403); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "49b10. Admin: grant em user comum e 409 (role required)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users/{{e2eMerchantUserId}}/merchant-access",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"users",
+								"{{e2eMerchantUserId}}",
+								"merchant-access"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"cnpjRoot\": \"93015006\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.variables.get('adminToken')) { pm.test.skip('Sem adminToken - pulando fluxo merchant'); return; }",
+									"pm.test('Grant sem role MERCHANT e 409', function () { pm.response.to.have.status(409); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "49b11. Admin: promover conta a MERCHANT",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users/{{e2eMerchantUserId}}/role",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"users",
+								"{{e2eMerchantUserId}}",
+								"role"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"role\": \"MERCHANT\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.variables.get('adminToken')) { pm.test.skip('Sem adminToken - pulando fluxo merchant'); return; }",
+									"pm.test('Promocao a MERCHANT 200', function () { pm.response.to.have.status(200); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "49b12. Admin: conceder acesso a rede",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users/{{e2eMerchantUserId}}/merchant-access",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"users",
+								"{{e2eMerchantUserId}}",
+								"merchant-access"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"cnpjRoot\": \"93015006\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.variables.get('adminToken')) { pm.test.skip('Sem adminToken - pulando fluxo merchant'); return; }",
+									"pm.test('Grant de rede 201', function () { pm.response.to.have.status(201); });",
+									"pm.test('Grant ecoa o cnpjRoot', function () { pm.expect(pm.response.json().cnpjRoot).to.eql('93015006'); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "49b13. Admin: grant duplicado e 409",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users/{{e2eMerchantUserId}}/merchant-access",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"users",
+								"{{e2eMerchantUserId}}",
+								"merchant-access"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"cnpjRoot\": \"93015006\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.variables.get('adminToken')) { pm.test.skip('Sem adminToken - pulando fluxo merchant'); return; }",
+									"pm.test('Grant duplicado e 409', function () { pm.response.to.have.status(409); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "49b14. Merchant: perfil responde 200 com a rede",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{merchantToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merchant/profile",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"merchant",
+								"profile"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.variables.get('adminToken')) { pm.test.skip('Sem adminToken - pulando fluxo merchant'); return; }",
+									"pm.test('Perfil merchant 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Perfil lista a rede concedida', function () {",
+									"    var chains = pm.response.json().chains;",
+									"    pm.expect(chains.map(function (chain) { return chain.cnpjRoot; })).to.include('93015006');",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "49b15. Merchant: comparacao de precos responde 200 (k-anon)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{merchantToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merchant/price-comparison",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"merchant",
+								"price-comparison"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.variables.get('adminToken')) { pm.test.skip('Sem adminToken - pulando fluxo merchant'); return; }",
+									"pm.test('Comparacao 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Resposta tem products (array) e lookbackDays', function () {",
+									"    var d = pm.response.json();",
+									"    pm.expect(d.products).to.be.an('array');",
+									"    pm.expect(d.lookbackDays).to.be.a('number');",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "49b16. Merchant: nao acessa endpoints de admin (403)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{merchantToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"users"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.variables.get('adminToken')) { pm.test.skip('Sem adminToken - pulando fluxo merchant'); return; }",
+									"pm.test('Merchant bloqueado no admin (403)', function () { pm.response.to.have.status(403); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "49b17. Admin: promover a ADMIN e recusado (409)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users/{{e2eMerchantUserId}}/role",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"users",
+								"{{e2eMerchantUserId}}",
+								"role"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"role\": \"ADMIN\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.variables.get('adminToken')) { pm.test.skip('Sem adminToken - pulando fluxo merchant'); return; }",
+									"pm.test('Promocao a ADMIN recusada (409)', function () { pm.response.to.have.status(409); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "49b18. Admin: deletar conta merchant de teste",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users/{{e2eMerchantUserId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"users",
+								"{{e2eMerchantUserId}}"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.variables.get('adminToken')) { pm.test.skip('Sem adminToken - pulando fluxo merchant'); return; }",
+									"pm.test('Conta merchant de teste deletada (204)', function () { pm.response.to.have.status(204); });"
+								]
+							}
+						}
+					]
+				},
+				{
 					"name": "49c. Admin: a conta deletada nao existe mais (404)",
 					"request": {
 						"method": "GET",
@@ -14840,6 +15397,135 @@
 					"response": []
 				},
 				{
+					"name": "Set user role (admin, USER <-> MERCHANT)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users/{{userId}}/role",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"users",
+								"{{userId}}",
+								"role"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"role\": \"MERCHANT\"\n}"
+						},
+						"description": "Muda o papel de um usuário (USER <-> MERCHANT). Qualquer mudança envolvendo ADMIN é recusada (409). Rebaixar um MERCHANT revoga todos os grants de rede. docs/MERCHANT_ACCOUNTS.md."
+					},
+					"response": []
+				},
+				{
+					"name": "List merchant access grants (admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users/{{userId}}/merchant-access",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"users",
+								"{{userId}}",
+								"merchant-access"
+							]
+						},
+						"description": "Redes (cnpj_root, 8 dígitos) que o usuário MERCHANT gerencia — o escopo do painel dele."
+					},
+					"response": []
+				},
+				{
+					"name": "Grant merchant access (admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users/{{userId}}/merchant-access",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"users",
+								"{{userId}}",
+								"merchant-access"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"cnpjRoot\": \"{{cnpjRoot}}\"\n}"
+						},
+						"description": "Concede uma rede (primeiros 8 dígitos do CNPJ) a um usuário MERCHANT. 409 se o usuário não é MERCHANT ou se o grant já existe. 201 no sucesso."
+					},
+					"response": []
+				},
+				{
+					"name": "Revoke merchant access (admin)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users/{{userId}}/merchant-access/{{cnpjRoot}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"users",
+								"{{userId}}",
+								"merchant-access",
+								"{{cnpjRoot}}"
+							]
+						},
+						"description": "Revoga o acesso do usuário MERCHANT à rede. 204 no sucesso, 404 se o grant não existe."
+					},
+					"response": []
+				},
+				{
 					"name": "List receipts cross-household (admin)",
 					"request": {
 						"method": "GET",
@@ -14974,6 +15660,49 @@
 							]
 						},
 						"description": "Validation report for the DISMISSED/MUTED relevance filter (SHADOW -> ON decision). engagement = volume + tapThroughRate/dismissalRate; suppression.regretEngagements = taps/adds/conversions the filter would have prevented (near-zero = safe to turn ON). regretSavings = R$ of conversions it would have blocked."
+					},
+					"response": []
+				},
+				{
+					"name": "Notification effectiveness (delivery/read)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/effectiveness?days=30",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"effectiveness"
+							],
+							"query": [
+								{
+									"key": "days",
+									"value": "30"
+								}
+							]
+						},
+						"description": "Delivery/read effectiveness from the notifications outbox over the window. byType = per NotificationType sent/delivered/read with deliveryRate+readRate (fractions 0..1). byHour = 24 buckets (Brasilia hour-of-day). byDayOfWeek = 7 buckets (1=Mon..7=Sun, ISO, Brasilia). topTexts = top 15 titles by send volume with readRate. Complements the relevance-report.",
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
 					},
 					"response": []
 				},
@@ -16433,6 +17162,64 @@
 							]
 						},
 						"description": "Hard delete; o historico de precos permanece."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Merchant (conta de mercado)",
+			"description": "Mini-painel do lojista (docs/MERCHANT_ACCOUNTS.md, Fase 1). Requer role MERCHANT (grant via Admin). Invisível pra usuários comuns — 403 fora da role.",
+			"item": [
+				{
+					"name": "Get merchant profile (chains + stores)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{merchantToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merchant/profile",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"merchant",
+								"profile"
+							]
+						},
+						"description": "Redes que o usuário logado gerencia + lojas conhecidas de cada rede (criadas a partir dos cupons escaneados) com contagem de notas."
+					},
+					"response": []
+				},
+				{
+					"name": "Get price comparison (chain vs region, k-anon)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{merchantToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merchant/price-comparison",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"merchant",
+								"price-comparison"
+							]
+						},
+						"description": "Por produto observado na rede: mediana da rede vs. mediana da região (mesmo estado). Só linhas que passam k-anonimato (K=3 households) + mínimo de amostras nos DOIS lados."
 					},
 					"response": []
 				}

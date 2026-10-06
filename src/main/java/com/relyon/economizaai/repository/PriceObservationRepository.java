@@ -86,6 +86,30 @@ public interface PriceObservationRepository extends JpaRepository<PriceObservati
     """)
     List<PriceObservation> findRecent(@Param("since") LocalDateTime since);
 
+    /** Merchant panel (chain side): recent IN_STORE observations across every store of a chain. */
+    @Query("""
+        SELECT po FROM PriceObservation po
+        WHERE po.marketCnpjRoot = :cnpjRoot
+          AND po.channel = 'IN_STORE'
+          AND po.outlier = false
+          AND po.observedAt >= :since
+    """)
+    List<PriceObservation> findRecentByMarketCnpjRoot(@Param("cnpjRoot") String cnpjRoot,
+                                                      @Param("since") LocalDateTime since);
+
+    /** Merchant panel (region side): recent observations for the given products in the given states. */
+    @Query("""
+        SELECT po FROM PriceObservation po
+        WHERE po.product.id IN :productIds
+          AND po.state IN :states
+          AND po.channel = 'IN_STORE'
+          AND po.outlier = false
+          AND po.observedAt >= :since
+    """)
+    List<PriceObservation> findRecentByProductIdsAndStates(@Param("productIds") List<UUID> productIds,
+                                                           @Param("states") List<String> states,
+                                                           @Param("since") LocalDateTime since);
+
     @Query("""
         SELECT DISTINCT po.product.id FROM PriceObservation po
         WHERE po.product.id IN :productIds

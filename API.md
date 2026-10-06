@@ -1370,6 +1370,10 @@ Each item is **either** linked to a canonical `Product` (auto-suggestion-friendl
 GET    /api/v1/admin/users?q=&page=&size=&sort=   → Page<AdminUserSummaryResponse> (sort: createdAt|name|subscriptionTier|receiptCount|totalSpend, e.g. receiptCount,desc)
 GET    /api/v1/admin/users/{id}              → AdminUserDetailResponse
 DELETE /api/v1/admin/users/{id}              → 204 (deletes account + data; 400 for ADMIN accounts)
+PATCH  /api/v1/admin/users/{id}/role          → AdminUserDetailResponse — body {"role":"MERCHANT"|"USER"}; anything touching ADMIN → 409; demoting a MERCHANT revokes its chain grants
+GET    /api/v1/admin/users/{id}/merchant-access           → List<MerchantAccessResponse> {cnpjRoot, grantedAt}
+POST   /api/v1/admin/users/{id}/merchant-access           → 201 MerchantAccessResponse — body {"cnpjRoot":"93015006"} (8 digits = the chain); 409 if not MERCHANT or already granted
+DELETE /api/v1/admin/users/{id}/merchant-access/{cnpjRoot} → 204 (404 if the grant doesn't exist)
 GET    /api/v1/admin/receipts?from=&to=&marketCnpj=&category=&q=&householdId=&uf=&status=&parseErrorReason=&page=&size=
                                               → Page<AdminReceiptSummaryResponse> — { receipt: ReceiptSummaryResponse, owner: {id,name,email}|null, uf, createdAt, parseErrorReason, parseErrorMessage }
 GET    /api/v1/admin/receipts/{id}            → ReceiptResponse
@@ -1549,6 +1553,26 @@ DELETE /api/v1/notification-rules/{id}       → 204 (defaults can't be deleted 
 - **Upsert:** `POST` of an existing `(type, productId)` updates it. Posting a default-scope type is rejected (`400`) — toggle it instead.
 - **Channel:** `channel` overrides the per-type preference (§10 preferences) for that one rule. Channels: `PUSH` (live), `EMAIL` (live once SMTP is wired), `ALEXA`/`SMS`/`WHATSAPP` (structure only — not yet functional), `NONE`.
 - **No self-notify / cooldown:** community rules never fire for the contributor's own household; at most one fire per rule per 24h.
+
+---
+
+## 10g. Merchant panel (ROLE_MERCHANT — not consumed by the FE yet)
+
+Mini-painel do lojista (docs/MERCHANT_ACCOUNTS.md, Fase 1). Invisível pra usuários
+comuns: `/api/v1/merchant/**` responde 403 fora da role MERCHANT. Contas MERCHANT
+são criadas pelo admin (promote + grant em §10d). O escopo de tudo é a(s) rede(s)
+concedida(s) por `cnpjRoot` (8 primeiros dígitos do CNPJ).
+
+```
+GET /api/v1/merchant/profile          → MerchantProfileResponse { chains: [{ cnpjRoot, stores: [{cnpj, name, address, city, state, segment, receiptCount}] }] }
+GET /api/v1/merchant/price-comparison → MerchantPriceComparisonResponse { lookbackDays, products: [{productId, productName, state, chainMedianPrice, chainSampleCount, regionMedianPrice, regionSampleCount, deltaPercent}] }
+```
+
+- **K-anonimato nos dois lados:** uma linha só aparece quando rede E região passam
+  K=3 households distintos + mínimo de amostras (mesmos thresholds do índice
+  público). Abaixo disso a linha é omitida — nunca um preço sub-K.
+- `deltaPercent` = (rede − região) / região em %, 1 casa; positivo = rede mais cara.
+- Região = mesmo estado, índice inteiro (inclui a própria rede), janela `lookbackDays`.
 
 ---
 
