@@ -1,7 +1,9 @@
 package com.relyon.economizaai.controller;
 
+import com.relyon.economizaai.dto.response.SponsoredPromoResponse;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.service.geo.WatchedMarketService;
+import com.relyon.economizaai.service.merchant.SponsoredPromoService;
 import com.relyon.economizaai.service.priceindex.CommunityPromoService;
 import com.relyon.economizaai.service.priceindex.PriceIndexService;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -38,6 +40,7 @@ public class PriceIndexController {
     private final PriceIndexService priceIndexService;
     private final CommunityPromoService communityPromoService;
     private final WatchedMarketService watchedMarketService;
+    private final SponsoredPromoService sponsoredPromoService;
 
     @GetMapping("/products/{productId}/markets/{marketCnpj}/reference")
     public ResponseEntity<PriceIndexService.ReferencePrice> reference(@PathVariable UUID productId,
@@ -85,5 +88,16 @@ public class PriceIndexController {
         return ResponseEntity.ok(communityPromoService.detectAll(
                 user.getHomeLatitude(), user.getHomeLongitude(), radiusKm,
                 watchedMarketService.watchedCnpjs(user)));
+    }
+
+    /**
+     * Merchant-ANNOUNCED promos ("Patrocinado" section). Deliberately a separate
+     * endpoint from /promos: announced prices are claims by paying chains, never
+     * community observations, and must never mix into the organic ranking.
+     * Returns [] until economizaai.merchant.promos-feed-enabled is flipped on.
+     */
+    @GetMapping("/sponsored-promos")
+    public ResponseEntity<List<SponsoredPromoResponse>> sponsoredPromos() {
+        return ResponseEntity.ok(sponsoredPromoService.currentSponsoredPromos());
     }
 }

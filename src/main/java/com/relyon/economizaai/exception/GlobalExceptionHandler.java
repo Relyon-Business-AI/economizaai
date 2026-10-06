@@ -167,6 +167,91 @@ public class GlobalExceptionHandler {
         return respond(ex, HttpStatus.SERVICE_UNAVAILABLE, "Paid-API global daily budget exhausted");
     }
 
+    @ExceptionHandler(MerchantAccessNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantAccessNotFound(MerchantAccessNotFoundException ex) {
+        return respond(ex, HttpStatus.NOT_FOUND, "Merchant access grant not found");
+    }
+
+    @ExceptionHandler(MerchantAccessAlreadyExistsException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantAccessAlreadyExists(MerchantAccessAlreadyExistsException ex) {
+        return respond(ex, HttpStatus.CONFLICT, "Merchant access grant already exists");
+    }
+
+    @ExceptionHandler(MerchantRoleRequiredException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantRoleRequired(MerchantRoleRequiredException ex) {
+        return respond(ex, HttpStatus.CONFLICT, "Merchant access grant on a non-MERCHANT user");
+    }
+
+    @ExceptionHandler(AdminRoleChangeException.class)
+    public ResponseEntity<ErrorResponse> handleAdminRoleChange(AdminRoleChangeException ex) {
+        return respond(ex, HttpStatus.CONFLICT, "Role change touching ADMIN refused");
+    }
+
+    @ExceptionHandler(MerchantClaimNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantClaimNotFound(MerchantClaimNotFoundException ex) {
+        return respond(ex, HttpStatus.NOT_FOUND, "Merchant claim not found");
+    }
+
+    @ExceptionHandler(MerchantClaimAlreadyOpenException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantClaimAlreadyOpen(MerchantClaimAlreadyOpenException ex) {
+        return respond(ex, HttpStatus.CONFLICT, "Merchant claim already open for this chain");
+    }
+
+    @ExceptionHandler(MerchantChainAlreadyGrantedException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantChainAlreadyGranted(MerchantChainAlreadyGrantedException ex) {
+        return respond(ex, HttpStatus.CONFLICT, "Chain already granted to this user");
+    }
+
+    @ExceptionHandler(MerchantClaimCodeInvalidException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantClaimCodeInvalid(MerchantClaimCodeInvalidException ex) {
+        return respond(ex, HttpStatus.BAD_REQUEST, "Merchant claim code mismatch");
+    }
+
+    @ExceptionHandler(MerchantClaimCodeExpiredException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantClaimCodeExpired(MerchantClaimCodeExpiredException ex) {
+        return respond(ex, HttpStatus.BAD_REQUEST, "Merchant claim code expired");
+    }
+
+    @ExceptionHandler(MerchantClaimAttemptsExceededException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantClaimAttempts(MerchantClaimAttemptsExceededException ex) {
+        return respond(ex, HttpStatus.TOO_MANY_REQUESTS, "Merchant claim code attempt budget exhausted");
+    }
+
+    @ExceptionHandler(MerchantClaimNotVerifiableException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantClaimNotVerifiable(MerchantClaimNotVerifiableException ex) {
+        return respond(ex, HttpStatus.CONFLICT, "Merchant claim not awaiting a code");
+    }
+
+    @ExceptionHandler(MerchantClaimAlreadyResolvedException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantClaimAlreadyResolved(MerchantClaimAlreadyResolvedException ex) {
+        return respond(ex, HttpStatus.CONFLICT, "Merchant claim already resolved");
+    }
+
+    @ExceptionHandler(MerchantPromoNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantPromoNotFound(MerchantPromoNotFoundException ex) {
+        return respond(ex, HttpStatus.NOT_FOUND, "Merchant promo not found");
+    }
+
+    @ExceptionHandler(MerchantPromoOverlapException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantPromoOverlap(MerchantPromoOverlapException ex) {
+        return respond(ex, HttpStatus.CONFLICT, "Merchant promo overlaps an active one");
+    }
+
+    @ExceptionHandler(MerchantPromoInvalidException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantPromoInvalid(MerchantPromoInvalidException ex) {
+        return respond(ex, HttpStatus.BAD_REQUEST, "Merchant promo rejected by validation");
+    }
+
+    @ExceptionHandler(MerchantPromoImportException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantPromoImport(MerchantPromoImportException ex) {
+        return respond(ex, HttpStatus.BAD_REQUEST, "Merchant promo import file unreadable");
+    }
+
+    @ExceptionHandler(MerchantSubscriptionRequiredException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantSubscriptionRequired(MerchantSubscriptionRequiredException ex) {
+        return respond(ex, HttpStatus.PAYMENT_REQUIRED, "Merchant marketing subscription required");
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
         var errors = ex.getBindingResult().getFieldErrors().stream()

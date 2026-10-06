@@ -15,6 +15,7 @@ public class CollaborativeProperties {
     private final Preferences preferences = new Preferences();
     private final Subscription subscription = new Subscription();
     private final Attribution attribution = new Attribution();
+    private final Merchant merchant = new Merchant();
 
     public Collaborative getCollaborative() { return collaborative; }
     public PersonalPromo getPersonalPromo() { return personalPromo; }
@@ -22,6 +23,38 @@ public class CollaborativeProperties {
     public Preferences getPreferences() { return preferences; }
     public Subscription getSubscription() { return subscription; }
     public Attribution getAttribution() { return attribution; }
+    public Merchant getMerchant() { return merchant; }
+
+    /**
+     * Merchant marketing accounts (docs/MERCHANT_ACCOUNTS.md). The claim flow and
+     * promo publishing are live for MERCHANT users, but nothing is CONSUMER-visible
+     * until {@code promosFeedEnabled} flips on (the sponsored feed is the only
+     * consumer touchpoint). Launch promo: chains claiming before {@code freeUntil}
+     * get the marketing account free until that date.
+     */
+    public static class Merchant {
+        /** Consumer-facing switch: expose live merchant promos in /price-index/sponsored-promos. */
+        private boolean promosFeedEnabled = false;
+        /** Launch promo: every chain gets the marketing account free until this date. */
+        private LocalDate freeUntil = LocalDate.of(2026, 12, 31);
+        /** TTL of the claim verification code sent to the company e-mail. */
+        private int claimCodeTtlHours = 24;
+        /** Wrong-code budget before the claim must be re-submitted. */
+        private int claimCodeMaxAttempts = 5;
+        /** Row cap per promo import file/batch. */
+        private int importMaxRows = 500;
+
+        public boolean isPromosFeedEnabled() { return promosFeedEnabled; }
+        public void setPromosFeedEnabled(boolean v) { this.promosFeedEnabled = v; }
+        public LocalDate getFreeUntil() { return freeUntil; }
+        public void setFreeUntil(LocalDate v) { this.freeUntil = v; }
+        public int getClaimCodeTtlHours() { return claimCodeTtlHours; }
+        public void setClaimCodeTtlHours(int v) { this.claimCodeTtlHours = v; }
+        public int getClaimCodeMaxAttempts() { return claimCodeMaxAttempts; }
+        public void setClaimCodeMaxAttempts(int v) { this.claimCodeMaxAttempts = v; }
+        public int getImportMaxRows() { return importMaxRows; }
+        public void setImportMaxRows(int v) { this.importMaxRows = v; }
+    }
 
     /**
      * Phase D — savings attribution. When a confirmed receipt buys a product at a

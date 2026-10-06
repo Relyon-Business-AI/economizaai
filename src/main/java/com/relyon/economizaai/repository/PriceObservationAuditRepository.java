@@ -95,6 +95,48 @@ public interface PriceObservationAuditRepository extends JpaRepository<PriceObse
         long getHouseholds();
     }
 
+    /** Merchant-panel k-anon (chain side): distinct households per (product, state)
+     *  across every store of a chain. Same K-gate as the public index — the merchant
+     *  is a B2B consumer of aggregates, so sub-K rows never reach it. */
+    @Query("""
+        SELECT a.observation.product.id AS productId, a.observation.state AS state,
+               COUNT(DISTINCT a.householdId) AS households
+        FROM PriceObservationAudit a
+        WHERE a.observation.marketCnpjRoot = :cnpjRoot
+          AND a.observation.channel = 'IN_STORE'
+          AND a.observation.outlier = false
+          AND a.observation.observedAt >= :since
+          AND a.observation.state IS NOT NULL
+        GROUP BY a.observation.product.id, a.observation.state
+    """)
+    List<ProductStateHouseholdCount> countDistinctHouseholdsPerProductStateForChain(
+            @Param("cnpjRoot") String cnpjRoot, @Param("since") LocalDateTime since);
+
+    /** Merchant-panel k-anon (region side): distinct households per (product, state)
+     *  across the whole index, for the products/states the chain was observed in. */
+    @Query("""
+        SELECT a.observation.product.id AS productId, a.observation.state AS state,
+               COUNT(DISTINCT a.householdId) AS households
+        FROM PriceObservationAudit a
+        WHERE a.observation.product.id IN :productIds
+          AND a.observation.state IN :states
+          AND a.observation.channel = 'IN_STORE'
+          AND a.observation.outlier = false
+          AND a.observation.observedAt >= :since
+        GROUP BY a.observation.product.id, a.observation.state
+    """)
+    List<ProductStateHouseholdCount> countDistinctHouseholdsPerProductState(
+            @Param("productIds") List<UUID> productIds,
+            @Param("states") List<String> states,
+            @Param("since") LocalDateTime since);
+
+    /** Projection for the merchant-panel (product, state) household counts. */
+    interface ProductStateHouseholdCount {
+        UUID getProductId();
+        String getState();
+        long getHouseholds();
+    }
+
     /**
      * True when another household has already contributed observations for
      * a receipt sharing this fiscal chave. Used to keep the same NF from

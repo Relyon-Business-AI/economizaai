@@ -80,6 +80,22 @@ public class AuthEmailSender {
     }
 
     /**
+     * Merchant-claim verification code, sent to the COMPANY e-mail registered at
+     * the Receita (not the claiming user's) — always pt, Brazilian companies.
+     * Same branded code template and async/DEV-fallback semantics as the auth codes.
+     */
+    public void sendMerchantClaimCode(String email, Locale locale, String code, int ttlHours) {
+        var text = messageService.translate("merchant.claim.email.text", locale, ttlHours, code);
+        var html = codeEmailHtml(locale,
+                messageService.translate("merchant.claim.email.heading", locale),
+                messageService.translate("merchant.claim.email.intro", locale),
+                code,
+                messageService.translate("merchant.claim.email.validity", locale, ttlHours),
+                messageService.translate("merchant.claim.email.disclaimer", locale));
+        dispatch(email, messageService.translate("merchant.claim.email.subject", locale), text, html, "merchant-claim");
+    }
+
+    /**
      * Hands the SMTP send to the async pool (SignupAlertService pattern) so the
      * caller's transaction never waits on SMTP. Advisory on rejection: the code
      * is already persisted, the user can request another email.

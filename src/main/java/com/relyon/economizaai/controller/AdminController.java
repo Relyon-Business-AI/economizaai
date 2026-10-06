@@ -6,9 +6,17 @@ import com.relyon.economizaai.dto.request.ReceiptIdsRequest;
 import com.relyon.economizaai.dto.response.BatchResultResponse;
 import com.relyon.economizaai.dto.request.SendTestNotificationRequest;
 import com.relyon.economizaai.dto.request.SetProductBrandRequest;
+import com.relyon.economizaai.dto.request.GrantMerchantAccessRequest;
+import com.relyon.economizaai.dto.request.RejectMerchantClaimRequest;
+import com.relyon.economizaai.dto.request.SetMerchantPromoActiveRequest;
+import com.relyon.economizaai.dto.response.AdminMerchantClaimResponse;
+import com.relyon.economizaai.dto.response.MerchantClaimResponse;
+import com.relyon.economizaai.dto.response.MerchantPromoResponse;
 import com.relyon.economizaai.dto.request.SetMetricsExclusionRequest;
 import com.relyon.economizaai.dto.request.SetProductCategoryRequest;
 import com.relyon.economizaai.dto.request.UpdateSubscriptionTierRequest;
+import com.relyon.economizaai.dto.request.UpdateUserRoleRequest;
+import com.relyon.economizaai.dto.response.MerchantAccessResponse;
 import com.relyon.economizaai.dto.response.AcquisitionReportResponse;
 import com.relyon.economizaai.dto.response.AdminNotificationSummaryResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptDetailResponse;
@@ -24,6 +32,7 @@ import com.relyon.economizaai.dto.response.CostReportResponse;
 import com.relyon.economizaai.dto.response.InfosimplesFinanceResponse;
 import com.relyon.economizaai.dto.response.IngestionHealthResponse;
 import com.relyon.economizaai.dto.response.MarketIntelResponse;
+import com.relyon.economizaai.dto.response.NotificationEffectivenessResponse;
 import com.relyon.economizaai.dto.response.UnmatchedReportResponse;
 import com.relyon.economizaai.dto.response.AdminUserSummaryResponse;
 import com.relyon.economizaai.dto.response.DuplicateProductGroupResponse;
@@ -48,13 +57,19 @@ import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.ReceiptService;
 import com.relyon.economizaai.service.admin.AdminLlmService;
+import com.relyon.economizaai.service.admin.AdminMerchantAccessService;
+import com.relyon.economizaai.service.admin.AdminMerchantPromoService;
 import com.relyon.economizaai.service.admin.AdminMerchantService;
+import com.relyon.economizaai.service.merchant.MerchantClaimService;
+import com.relyon.economizaai.service.admin.AdminNotificationEffectivenessService;
 import com.relyon.economizaai.service.admin.AdminNotificationService;
 import com.relyon.economizaai.service.admin.AdminProductService;
 import com.relyon.economizaai.service.admin.AdminDevService;
 import com.relyon.economizaai.service.admin.AdminReceiptService;
 import com.relyon.economizaai.service.admin.AdminUserService;
 import com.relyon.economizaai.service.analytics.AdminAnalyticsService;
+import com.relyon.economizaai.dto.response.MarketingDashboardResponse;
+import com.relyon.economizaai.service.analytics.MarketingDashboardService;
 import com.relyon.economizaai.service.analytics.RetentionCohortService;
 import com.relyon.economizaai.service.analytics.meta.MetaAdSpendSyncJob;
 import com.relyon.economizaai.service.extraction.CategorizationQualityService;
@@ -109,7 +124,11 @@ public class AdminController {
     private final AdminUserService adminUserService;
     private final AdminReceiptService adminReceiptService;
     private final AdminNotificationService adminNotificationService;
+    private final AdminNotificationEffectivenessService adminNotificationEffectivenessService;
     private final AdminMerchantService adminMerchantService;
+    private final AdminMerchantAccessService adminMerchantAccessService;
+    private final AdminMerchantPromoService adminMerchantPromoService;
+    private final MerchantClaimService merchantClaimService;
     private final AdminLlmService adminLlmService;
     private final AdminProductService adminProductService;
     private final CategorizationQualityService categorizationQualityService;
@@ -123,6 +142,7 @@ public class AdminController {
     private final AdminAnalyticsService adminAnalyticsService;
     private final RetentionCohortService retentionCohortService;
     private final MetaAdSpendSyncJob metaAdSpendSyncJob;
+    private final MarketingDashboardService marketingDashboardService;
     private final StateCoverageService stateCoverageService;
     private final SefazIngestionService sefazIngestionService;
     private final AdminDevService adminDevService;
@@ -177,6 +197,71 @@ public class AdminController {
     public ResponseEntity<AdminUserDetailResponse> setSubscriptionTier(
             @PathVariable UUID id, @Valid @RequestBody UpdateSubscriptionTierRequest request) {
         return ResponseEntity.ok(adminUserService.setTier(id, request.tier()));
+    }
+
+    /** Change a user's role (USER ↔ MERCHANT only — anything touching ADMIN is refused). */
+    @PatchMapping("/users/{id}/role")
+    public ResponseEntity<AdminUserDetailResponse> setRole(
+            @PathVariable UUID id, @Valid @RequestBody UpdateUserRoleRequest request) {
+        return ResponseEntity.ok(adminUserService.setRole(id, request.role()));
+    }
+
+    /** Chains (cnpj_root) a MERCHANT user manages — the scope of its merchant panel. */
+    @GetMapping("/users/{id}/merchant-access")
+    public ResponseEntity<List<MerchantAccessResponse>> listMerchantAccess(@PathVariable UUID id) {
+        return ResponseEntity.ok(adminMerchantAccessService.list(id));
+    }
+
+    /** Grant a chain to a MERCHANT user (409 if not MERCHANT or already granted). */
+    @PostMapping("/users/{id}/merchant-access")
+    public ResponseEntity<MerchantAccessResponse> grantMerchantAccess(
+            @PathVariable UUID id, @Valid @RequestBody GrantMerchantAccessRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(adminMerchantAccessService.grant(id, request.cnpjRoot()));
+    }
+
+    @DeleteMapping("/users/{id}/merchant-access/{cnpjRoot}")
+    public ResponseEntity<Void> revokeMerchantAccess(@PathVariable UUID id, @PathVariable String cnpjRoot) {
+        adminMerchantAccessService.revoke(id, cnpjRoot);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** Claims the e-mail-code path couldn't auto-verify (CNPJ without a usable company e-mail). */
+    @GetMapping("/merchant-claims")
+    public ResponseEntity<List<AdminMerchantClaimResponse>> pendingMerchantClaims() {
+        return ResponseEntity.ok(merchantClaimService.pendingReview().stream()
+                .map(AdminMerchantClaimResponse::from)
+                .toList());
+    }
+
+    /** Approves a claim: promotes the user to MERCHANT, grants the chain, opens the subscription. */
+    @PostMapping("/merchant-claims/{id}/approve")
+    public ResponseEntity<MerchantClaimResponse> approveMerchantClaim(@PathVariable UUID id,
+                                                                      @AuthenticationPrincipal User admin) {
+        return ResponseEntity.ok(merchantClaimService.approveByAdmin(id, admin.getId()));
+    }
+
+    @PostMapping("/merchant-claims/{id}/reject")
+    public ResponseEntity<MerchantClaimResponse> rejectMerchantClaim(@PathVariable UUID id,
+                                                                     @AuthenticationPrincipal User admin,
+                                                                     @Valid @RequestBody(required = false) RejectMerchantClaimRequest request) {
+        var reason = request == null ? null : request.reason();
+        return ResponseEntity.ok(merchantClaimService.rejectByAdmin(id, admin.getId(), reason));
+    }
+
+    /** Moderation view of merchant-announced promos (optionally one chain). */
+    @GetMapping("/merchant-promos")
+    public ResponseEntity<Page<MerchantPromoResponse>> listMerchantPromos(
+            @RequestParam(required = false) String cnpjRoot,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(adminMerchantPromoService.list(cnpjRoot, pageable));
+    }
+
+    /** Pulls a promo from (or restores it to) circulation without deleting the merchant's record. */
+    @PatchMapping("/merchant-promos/{id}/active")
+    public ResponseEntity<MerchantPromoResponse> setMerchantPromoActive(
+            @PathVariable UUID id, @Valid @RequestBody SetMerchantPromoActiveRequest request) {
+        return ResponseEntity.ok(adminMerchantPromoService.setActive(id, request.active()));
     }
 
     /** Exclude/re-include a user from ALL metrics (hide store-review / robo test accounts) without deleting it. */
@@ -286,6 +371,17 @@ public class AdminController {
         return ResponseEntity.ok(relevanceReportService.report(Math.max(1, days)));
     }
 
+    @Operation(summary = "Notification effectiveness",
+            description = "Delivery/read performance of the notifications outbox over the window: per-type "
+                    + "sent/delivered/read with rates, send-vs-read volume by Brasília hour-of-day (24 buckets) "
+                    + "and ISO day-of-week (7 buckets), plus the top 15 titles by send volume. Complements the "
+                    + "relevance-report (telemetry-based). Reads the notifications table only.")
+    @GetMapping("/notifications/effectiveness")
+    public ResponseEntity<NotificationEffectivenessResponse> notificationEffectiveness(
+            @RequestParam(defaultValue = "30") int days) {
+        return ResponseEntity.ok(adminNotificationEffectivenessService.effectiveness(days));
+    }
+
     @Operation(summary = "Sent notifications",
             description = "Cross-user list of notifications sent over the window (newest first): recipient, "
                     + "type/channel, title/body, delivered + read status. Paginated.")
@@ -371,6 +467,13 @@ public class AdminController {
             @RequestParam(defaultValue = "8") int weeks,
             @RequestParam(defaultValue = "false") boolean includeInternal) {
         return ResponseEntity.ok(retentionCohortService.cohorts(weeks, includeInternal));
+    }
+
+    @Operation(summary = "Marketing dashboard — Meta Ads spend + Google Search Console organic metrics for the window. Both sections carry configured=false until their env vars are set.")
+    @GetMapping("/marketing/dashboard")
+    public ResponseEntity<MarketingDashboardResponse> marketingDashboard(
+            @RequestParam(defaultValue = "30") int days) {
+        return ResponseEntity.ok(marketingDashboardService.dashboard(days));
     }
 
     @Operation(summary = "Sync Meta ad spend now",

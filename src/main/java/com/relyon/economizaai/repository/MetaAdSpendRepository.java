@@ -19,8 +19,8 @@ public interface MetaAdSpendRepository extends JpaRepository<MetaAdSpend, UUID> 
             + "where spend.spendDate between :from and :to")
     BigDecimal totalSpendBetween(LocalDate from, LocalDate to);
 
-    /** Per-campaign spend totals in the window — [campaignId, campaignName, totalSpend, clicks, impressions]. */
-    @Query("select spend.campaignId, max(spend.campaignName), sum(spend.spend), sum(spend.clicks), sum(spend.impressions) "
+    /** Per-campaign spend totals in the window — [campaignId, campaignName, totalSpend, clicks, impressions, reach]. */
+    @Query("select spend.campaignId, max(spend.campaignName), sum(spend.spend), sum(spend.clicks), sum(spend.impressions), sum(spend.reach) "
             + "from MetaAdSpend spend where spend.spendDate between :from and :to group by spend.campaignId")
     List<Object[]> campaignTotalsBetween(LocalDate from, LocalDate to);
 }

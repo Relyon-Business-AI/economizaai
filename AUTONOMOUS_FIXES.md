@@ -73,6 +73,26 @@ A rollback looks like:
 
 <!-- AUTONOMOUS ENTRIES BELOW - newest first. The watchdog inserts here. -->
 
+### [2026-10-06 12:21:13] [NEEDS-HUMAN] NO-TESTREF - E2E: 22. Categorizer AI status (admin)
+- **Detected:**
+```
+A daily E2E run against the live dev server FAILED (2/237 assertions).
+Failing steps:
+- 22. Categorizer AI status (admin): AssertionError: expected response to have status code 200 but got 403
+- 22. Categorizer AI status (admin): AssertionError: expected { status: 403, message: 'Forbidden' } to have property 'enabled'
+
+Server-side errors during the run (the likely root cause):
+```
+2026-10-06 12:20:50.575 WARN  [req=8f0555a1 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Entity not found: Product not found.
+2026-10-06 12:20:50.679 WARN  [req=6b0c1e54 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Type mismatch for parameter 'groupBy': Method parameter 'groupBy': Failed to convert value of type 'java.lang.String' to required type 'com.relyon.economizaai.model.enums.InsightsGroupBy'; Failed to convert from type [java.lang.String] to type [@org.springframework.web.bind.annotation.RequestParam com.relyon.economizaai.model.enums.InsightsGroupBy] for value [NONSENSE]
+2026-10-06 12:20:50.803 WARN  [req=54a6248b user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Validation failed: {name=must not be blank}
+2026-10-06 12:20:50.901 WARN  [req=9d54fc51 user=a***@economizaai.app rcpt= item=] c.r.e.e.GlobalExceptionHandler - Validation failed: {name=size must be between 0 and 120, items[0].freeText=size must be between 0 and 255}
+2026-10-06 12:20:51.098 WARN  [req=60a9f193 user=a***@economizaai.app rcpt= item=] c.r.e.e.G
+```
+- **Claude:** Failed to authenticate. API Error: 401 OAuth access token has been revoked.
+Ignoring 25 permissions.allow entries from .claude/settings.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog, or set projects["/home/runner/work/economizaai/economizaai"].hasTrustDialogAccepted: true in /home/runner/.claude.json.
+- **Outcome:** reply lacked a verifiable test reference; changes discarded.
+
 ### [2026-10-05 12:53:13] [NEEDS-HUMAN] NO-TESTREF - E2E: 22. Categorizer AI status (admin)
 - **Detected:**
 ```

@@ -86,6 +86,48 @@ public interface PriceObservationRepository extends JpaRepository<PriceObservati
     """)
     List<PriceObservation> findRecent(@Param("since") LocalDateTime since);
 
+    /** Merchant panel (chain side): recent IN_STORE observations across every store of a chain. */
+    @Query("""
+        SELECT po FROM PriceObservation po
+        WHERE po.marketCnpjRoot = :cnpjRoot
+          AND po.channel = 'IN_STORE'
+          AND po.outlier = false
+          AND po.observedAt >= :since
+    """)
+    List<PriceObservation> findRecentByMarketCnpjRoot(@Param("cnpjRoot") String cnpjRoot,
+                                                      @Param("since") LocalDateTime since);
+
+    /** Promo verification: does any real scanned receipt at the chain, inside the promo
+     *  window, confirm the announced price (observed unit price <= announced)? */
+    @Query("""
+        SELECT COUNT(po) > 0 FROM PriceObservation po
+        WHERE po.product.id = :productId
+          AND po.marketCnpjRoot = :cnpjRoot
+          AND po.channel = 'IN_STORE'
+          AND po.outlier = false
+          AND po.observedAt >= :from
+          AND po.observedAt < :to
+          AND po.unitPrice <= :maxPrice
+    """)
+    boolean existsConfirmingObservation(@Param("productId") UUID productId,
+                                        @Param("cnpjRoot") String cnpjRoot,
+                                        @Param("from") LocalDateTime from,
+                                        @Param("to") LocalDateTime to,
+                                        @Param("maxPrice") BigDecimal maxPrice);
+
+    /** Merchant panel (region side): recent observations for the given products in the given states. */
+    @Query("""
+        SELECT po FROM PriceObservation po
+        WHERE po.product.id IN :productIds
+          AND po.state IN :states
+          AND po.channel = 'IN_STORE'
+          AND po.outlier = false
+          AND po.observedAt >= :since
+    """)
+    List<PriceObservation> findRecentByProductIdsAndStates(@Param("productIds") List<UUID> productIds,
+                                                           @Param("states") List<String> states,
+                                                           @Param("since") LocalDateTime since);
+
     @Query("""
         SELECT DISTINCT po.product.id FROM PriceObservation po
         WHERE po.product.id IN :productIds

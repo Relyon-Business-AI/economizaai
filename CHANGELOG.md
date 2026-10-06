@@ -16,6 +16,73 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-06 — Merchant: claim self-serve, promos (manual/CSV/XLSX/API) e assinatura de marketing
+
+Segunda leva das contas de mercado (`docs/MERCHANT_ACCOUNTS.md`). **Nada muda pro
+app de consumidor**: o único endpoint consumer é inerte por flag.
+
+- **Claim "sou este mercado"** (`/api/v1/merchant-claims`, qualquer usuário logado):
+  `POST` {cnpj} → código de 6 dígitos vai pro e-mail da EMPRESA registrado na
+  Receita (BrasilAPI); `POST /{id}/verify` {code} aprova → usuário vira MERCHANT,
+  ganha a rede e a assinatura abre. CNPJ sem e-mail → fila do admin
+  (`GET /admin/merchant-claims` + `approve`/`reject`).
+- **Promos do lojista** (`/api/v1/merchant/promos`, role MERCHANT): CRUD manual,
+  upload CSV/XLSX (export de tabela de preço do ERP, colunas pt flexíveis) e batch
+  JSON — relatório por linha com mensagens localizadas. `verifiedByReceipts` em
+  cada promo = cupom NFC-e real confirma o preço anunciado.
+- **Assinatura de marketing** (`GET /merchant/subscription`): por REDE; todo claim
+  aprovado ganha status `PROMO` **grátis até 31/12/2026** (`freeUntil`) — o portal
+  do lojista deve mostrar o modal de lançamento quando status=PROMO. Writes de promo
+  sem assinatura ativa → **402** (`merchant.subscription.required`). Pagamento ainda
+  inerte.
+- **Feed patrocinado (INERTE)**: `GET /price-index/sponsored-promos` devolve []
+  até `MERCHANT_PROMOS_FEED_ENABLED=true`. Endpoint separado do `/promos` orgânico
+  de propósito — promo anunciada nunca entra no ranking; selo "Patrocinado"
+  obrigatório + flag `verified`.
+- Moderação admin: `GET /admin/merchant-promos`, `PATCH /admin/merchant-promos/{id}/active`.
+
+---
+
+## 2026-10-06 — Contas de mercado (role MERCHANT) + mini-painel do lojista
+
+- **Novo role `MERCHANT`** (terceiro valor além de USER/ADMIN) — contas de lojista,
+  invisíveis pro app de consumidor. Nenhuma tela FE por enquanto (deliberado);
+  nada muda nos fluxos existentes.
+- **Novos endpoints MERCHANT** (`/api/v1/merchant/**`, 403 fora da role):
+  - `GET /merchant/profile` — redes (cnpjRoot) que a conta gerencia + lojas
+    conhecidas com contagem de notas.
+  - `GET /merchant/price-comparison` — mediana da rede vs. mediana da região
+    (mesmo estado) por produto, com k-anonimato K=3 nos dois lados.
+- **Novos endpoints ADMIN** (gestão das contas merchant):
+  - `PATCH /admin/users/{id}/role` — USER ↔ MERCHANT (409 em qualquer coisa
+    envolvendo ADMIN; demotion revoga os grants).
+  - `GET/POST /admin/users/{id}/merchant-access` e
+    `DELETE /admin/users/{id}/merchant-access/{cnpjRoot}` — grants de rede
+    (cnpjRoot = 8 primeiros dígitos do CNPJ = a rede inteira).
+- Design completo e fases futuras (promos pagas do lojista, atribuição) em
+  `docs/MERCHANT_ACCOUNTS.md`; modelo de receita em `MONETIZATION.md` §4b.
+
+---
+
+## 2026-10-06 — `GET /admin/notifications/effectiveness`: eficácia de notificações (entrega/leitura)
+
+- **Novo endpoint ADMIN `GET /api/v1/admin/notifications/effectiveness?days=30`**
+  — mede a eficácia da caixa de saída de notificações (tabela `notifications`),
+  complementando o `relevance-report` (que vem da telemetria). `sent` = total,
+  `delivered` = entregues, `read` = lidas. Resposta `NotificationEffectivenessResponse`:
+  - `windowDays` (int) — janela efetiva (mínimo 1).
+  - `byType[]` — um por `NotificationType` com envio no período:
+    `{ type, sent, delivered, read, deliveryRate, readRate }`. As taxas são
+    frações 0..1 (escala 4, HALF_UP; divisão por zero → 0).
+  - `byHour[]` — **sempre 24 buckets** (`hour` 0..23, horário de Brasília):
+    `{ hour, sent, read }`.
+  - `byDayOfWeek[]` — **sempre 7 buckets** (`dayOfWeek` 1=Seg..7=Dom, ISO,
+    Brasília): `{ dayOfWeek, sent, read }`.
+  - `topTexts[]` — top 15 `title` por volume de envio:
+    `{ title, sent, read, readRate }`.
+  - Janela ancorada em `today()-days` à meia-noite de Brasília; buckets de
+    hora/dia usam hora de parede de Brasília. ADMIN-only (regra `/admin/**`).
+
 ## 2026-09-30 (5) — `GET /app-config`: kill-switch de força de atualização sai do gist
 
 - **Novo endpoint público `GET /api/v1/app-config`** — o JSON que o
