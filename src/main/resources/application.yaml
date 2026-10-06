@@ -551,6 +551,16 @@ meta:
     graph-base-url: ${META_CAPI_GRAPH_BASE_URL:https://graph.facebook.com}
     test-event-code: ${META_CAPI_TEST_EVENT_CODE:}
 
+google:
+  search-console:
+    # Google Search Console Search Analytics API. Inert until GOOGLE_SC_ENABLED=true AND
+    # GOOGLE_SC_ACCESS_TOKEN is set (OAuth2 access token with webmasters.readonly scope).
+    # Generate via Google's OAuth2 Playground or a service-account flow.
+    enabled: ${GOOGLE_SC_ENABLED:false}
+    access-token: ${GOOGLE_SC_ACCESS_TOKEN:}
+    site-url: ${GOOGLE_SC_SITE_URL:sc-domain:economizaai.app}
+    api-version: ${GOOGLE_SC_API_VERSION:v3}
+
 springdoc:
   swagger-ui:
     path: /swagger-ui

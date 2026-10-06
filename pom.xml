@@ -214,6 +214,13 @@
 			<version>1.5.5</version>
 		</dependency>
 
+		<!-- Google Search Console API auth -->
+		<dependency>
+			<groupId>com.google.auth</groupId>
+			<artifactId>google-auth-library-oauth2-http</artifactId>
+			<version>1.23.0</version>
+		</dependency>
+
 		<!-- Tests -->
 		<dependency>
 			<groupId>com.h2database</groupId>
