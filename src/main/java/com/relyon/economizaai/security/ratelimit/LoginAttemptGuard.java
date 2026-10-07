@@ -3,6 +3,7 @@ package com.relyon.economizaai.security.ratelimit;
 import com.relyon.economizaai.exception.AccountLockedException;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -35,6 +36,7 @@ public class LoginAttemptGuard {
     private final Clock clock;
     private final Map<String, Attempts> byEmail = new ConcurrentHashMap<>();
 
+    @Autowired
     public LoginAttemptGuard(
             @Value("${economizaai.auth.lockout.max-failures:10}") int maxFailures,
             @Value("${economizaai.auth.lockout.window-seconds:900}") long windowSeconds,
