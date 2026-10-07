@@ -264,6 +264,14 @@ economizaai:
     # logs. Hard-disabled in application-prod.yaml — a code in the logs is an
     # account-takeover vector.
     dev-code-log-enabled: ${AUTH_DEV_CODE_LOG_ENABLED:true}
+    # Per-account login lockout: after N failed password attempts within the
+    # window, the account is blocked for the cooldown regardless of source IP —
+    # closes the IP-rotation gap the per-IP rate limit can't cover. Threshold is
+    # high so a legit user's typos never trip it; in-memory (per instance).
+    lockout:
+      max-failures: ${AUTH_LOCKOUT_MAX_FAILURES:10}
+      window-seconds: ${AUTH_LOCKOUT_WINDOW_S:900}
+      duration-seconds: ${AUTH_LOCKOUT_DURATION_S:900}
   # Where the public contact/feedback form (POST /api/v1/contact) delivers messages.
   # Blank + no SMTP → the message is logged (DEV-MODE) instead of emailed, never lost.
   contact:

@@ -38,6 +38,12 @@ public class GlobalExceptionHandler {
         return respond(ex, HttpStatus.UNAUTHORIZED, "Failed login attempt");
     }
 
+    /** Account temporarily locked after too many failed password attempts. */
+    @ExceptionHandler(AccountLockedException.class)
+    public ResponseEntity<ErrorResponse> handleAccountLocked(AccountLockedException ex) {
+        return respond(ex, HttpStatus.TOO_MANY_REQUESTS, "Login blocked: account temporarily locked");
+    }
+
     /**
      * Password login attempted on a social account. 409 (distinct from the 401
      * for a wrong password so the FE branches cleanly) + the provider in the

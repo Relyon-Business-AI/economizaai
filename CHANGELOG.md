@@ -16,6 +16,18 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-07 — Lockout de conta no login (anti brute-force) [só dev por ora]
+
+Defesa contra adivinhação de senha que **roda IPs** (o rate limit por IP não pega
+isso). Após **10 falhas de senha** numa conta dentro de 15 min, a conta fica
+**bloqueada por 15 min** — independente do IP, e bloqueia mesmo com a senha certa.
+Novo retorno: **HTTP 429** com mensagem `auth.account_locked` ("Muitas tentativas…
+tente novamente em alguns minutos"). Threshold alto de propósito pra não pegar
+typo de usuário legítimo. Só conta existente é rastreada. Config por env
+(`AUTH_LOCKOUT_*`). **Ainda não está em prod** — validando em dev primeiro.
+
+---
+
 ## 2026-10-07 — Rate limit de auth segmentado + logs de login
 
 O throttle de `/auth/*` era um único balde de **5 req/min por IP** compartilhado
