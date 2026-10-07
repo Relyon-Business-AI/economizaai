@@ -16,7 +16,20 @@ says `economizai-app-prod`):
 
 ---
 
-## 2026-10-07 — Lockout de conta no login (anti brute-force) [só dev por ora]
+## 2026-10-07 — Categorização: keyword de regra não aceita mais letra/unidade solta
+
+As sugestões de regra da IA (admin → Categorização → Revisar) vinham com keywords
+ruins — às vezes uma letra ("l" pra "L ROUPA OMO 900ML LA") ou só unidade/número.
+Aprovar isso criaria uma regra casando qualquer item com um "l" solto → categorização
+errada em massa. Agora, em 3 camadas: o **sweep da IA** limpa a keyword (tira letra
+solta, unidade — ml/kg/pct… — e número; descarta o achado se não sobrar token real);
+o **approve** rejeita keyword fraca (rede de segurança); e o **modal do admin** avisa
+e bloqueia aprovar/salvar até a keyword ter ao menos um token de ≥3 letras que não seja
+unidade/número. Sem mudança de API.
+
+---
+
+## 2026-10-07 — Lockout de conta no login (anti brute-force)
 
 Defesa contra adivinhação de senha que **roda IPs** (o rate limit por IP não pega
 isso). Após **10 falhas de senha** numa conta dentro de 15 min, a conta fica

@@ -1,10 +1,44 @@
 package com.relyon.economizaai.service.canonicalization;
 
 import java.text.Normalizer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Set;
 
 public final class DescriptionNormalizer {
 
     private DescriptionNormalizer() {}
+
+    private static final int MIN_KEYWORD_TOKEN_LENGTH = 3;
+    // ≥3-char packaging/unit/quantity words that are noise as a category keyword
+    // (shorter units like l/ml/kg/un/pc are already dropped by the min-length rule).
+    private static final Set<String> KEYWORD_NOISE_TOKENS = Set.of(
+            "pct", "ltr", "und", "unid", "unidade", "kit", "emb", "caixa", "caixas",
+            "frasco", "pote", "pacote", "sache", "garrafa", "lata", "saco", "rolo");
+
+    /**
+     * Cleans a would-be curated-rule keyword: normalizes it, then trims leading and
+     * trailing noise tokens — single/double letters, pure numbers and unit/packaging
+     * words (l, ml, 900, pct, und…). Returns "" when nothing meaningful survives, so a
+     * garbage suggestion like "l" (from "L ROUPA OMO 900ML LA") can't become a rule
+     * that matches every item carrying a stray "l". A usable keyword must keep at least
+     * one real product token (≥{@value #MIN_KEYWORD_TOKEN_LENGTH} letters, not a unit,
+     * not numeric).
+     */
+    public static String sanitizeRuleKeyword(String raw) {
+        var normalized = normalize(raw);
+        if (normalized.isBlank()) return "";
+        var tokens = new ArrayList<>(Arrays.asList(normalized.split(" ")));
+        while (!tokens.isEmpty() && isNoiseToken(tokens.get(0))) tokens.remove(0);
+        while (!tokens.isEmpty() && isNoiseToken(tokens.get(tokens.size() - 1))) tokens.remove(tokens.size() - 1);
+        return tokens.isEmpty() ? "" : String.join(" ", tokens);
+    }
+
+    private static boolean isNoiseToken(String token) {
+        if (token.length() < MIN_KEYWORD_TOKEN_LENGTH) return true;
+        if (token.chars().allMatch(Character::isDigit)) return true;
+        return KEYWORD_NOISE_TOKENS.contains(token);
+    }
 
     public static String normalize(String raw) {
         if (raw == null) return "";

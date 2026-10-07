@@ -3,6 +3,7 @@ package com.relyon.economizaai.service.ai;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import com.relyon.economizaai.model.AiFinding;
 import com.relyon.economizaai.model.AiSweepRun;
 import com.relyon.economizaai.model.Product;
@@ -166,9 +167,14 @@ public class AiSweepService {
             var text = aiGateway.complete(AiActivity.RULE_SUGGESTION, aiGateway.extractorModel(),
                     systemPrompt(), user, 4000);
             for (var node : parseArray(text)) {
-                var keyword = node.path("keyword").asText("");
+                // Sanitize the LLM's keyword: drop single letters, units and numbers so a
+                // garbage suggestion like "l" (from "L ROUPA OMO 900ML LA") never reaches the
+                // approval queue. Empty after cleaning → skip the finding entirely.
+                var keyword = DescriptionNormalizer.sanitizeRuleKeyword(node.path("keyword").asText(""));
                 var category = node.path("category").asText("");
                 if (keyword.isBlank() || parseCategory(category) == null) continue;
+                // Persist the CLEANED keyword in the payload so the admin reviews/approves it.
+                if (node instanceof ObjectNode objectNode) objectNode.put("keyword", keyword);
                 created += saveFinding(runId, AiFindingType.MISSING_RULE, AiActivity.RULE_SUGGESTION,
                         "Regra: \"" + keyword + "\" → " + node.path("genericName").asText("?") + " / " + category,
                         node.path("reason").asText(null) + " (descrição: " + node.path("description").asText("") + ")",
