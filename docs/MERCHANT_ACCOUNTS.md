@@ -158,4 +158,22 @@ Requests prontos na collection Postman (pasta **Merchant**).
 4. Painel: evolução temporal (minha mediana vs. região por semana), share de cupons na
    cidade, produtos onde estou mais caro (oportunidade de promo).
 5. Encarte PDF via OCR/LLM como canal extra de import (caro/impreciso — só com demanda).
-6. FE do portal do lojista (web) — todo o backend já responde.
+6. **FE do portal do lojista — CONSTRUÍDO e NO AR (2026-10-06):**
+   - **https://merchant.economizaai.app** — micro-SPA (Vite + React + TS) no repo
+     `Relyon-Business-AI/economiza-ai-merchant` (local:
+     `~/Documents/projects/economiza-ai-merchant`), servida como Cloudflare Worker
+     `economiza-ai-merchant` (conta Relyon AI, custom domain criado pelo wrangler).
+     Deploy manual: `npm run deploy` (tsc + vite build + wrangler, OAuth já logado).
+     Deliberadamente leve/descartável — sem CI, sem Expo, até provar demanda.
+   - **Telas**: login/registro → claim (CNPJ + código no e-mail da empresa) → modal
+     "grátis até {freeUntil}" (status PROMO) → painel (lojas + comparação k-anônima)
+     → promoções (criar manual + upload CSV/XLSX + lista com selo verificado).
+     Roteia por estado: 403 em `/merchant/subscription` = ainda não é MERCHANT → claim.
+   - **API**: aponta pra `api-dev.economizaai.app` (default `VITE_API_BASE`); trocar
+     pra prod no build quando os endpoints merchant forem released.
+   - **Por que NÃO dentro do `economiza-ai-front`**: bundle do app de consumidor é
+     pesado pro caso, tem dev humano ativo lá, e o deploy é acoplado ao `master` do
+     app. Se o portal vingar, migrar depois é barato (telas finas, lógica no backend).
+   - ⚠️ **PENDÊNCIA (1 passo manual)**: adicionar `https://merchant.economizaai.app`
+     ao env `CORS_ORIGINS` do serviço **economizaai-api-dev** no Render (+ redeploy).
+     Sem isso o preflight responde 403 e o portal não consegue logar.

@@ -61,8 +61,8 @@ class RateLimitFilterTest {
     }
 
     @Test
-    void blocksSixthAuthRequestFromSameIp() throws Exception {
-        for (var i = 0; i < 5; i++) invokeAuthRequest("5.6.7.8");
+    void blocksSixteenthLoginRequestFromSameIp() throws Exception {
+        for (var i = 0; i < 15; i++) invokeAuthRequest("5.6.7.8");
         var blocked = invokeAuthRequest("5.6.7.8");
         assertEquals(429, blocked.getStatus());
         assertNotNull(blocked.getHeader("Retry-After"));
@@ -70,7 +70,7 @@ class RateLimitFilterTest {
 
     @Test
     void blocked429BodyMatchesErrorResponseShapeWithIsoTimestamp() throws Exception {
-        for (var i = 0; i < 5; i++) invokeAuthRequest("7.7.7.7");
+        for (var i = 0; i < 15; i++) invokeAuthRequest("7.7.7.7");
         var blocked = invokeAuthRequest("7.7.7.7");
 
         assertEquals(429, blocked.getStatus());
@@ -222,7 +222,32 @@ class RateLimitFilterTest {
     @Test
     void successfulMatchedRequestExposesRemainingHeader() throws Exception {
         var response = invokeAuthRequest("6.6.6.6");
-        assertEquals("4", response.getHeader("X-RateLimit-Remaining"));
+        assertEquals("14", response.getHeader("X-RateLimit-Remaining"));
+    }
+
+    @Test
+    void refreshHasItsOwnGenerousBucket() throws Exception {
+        for (var i = 0; i < 60; i++) {
+            assertEquals(200, invokePost("/api/v1/auth/refresh", "11.12.13.14").getStatus());
+        }
+        assertEquals(429, invokePost("/api/v1/auth/refresh", "11.12.13.14").getStatus());
+    }
+
+    @Test
+    void generalAuthPathStillLimitedAtFive() throws Exception {
+        for (var i = 0; i < 5; i++) {
+            assertEquals(200, invokePost("/api/v1/auth/forgot-password", "15.16.17.18").getStatus());
+        }
+        assertEquals(429, invokePost("/api/v1/auth/forgot-password", "15.16.17.18").getStatus());
+    }
+
+    @Test
+    void loginRefreshAndResetUseSeparateBuckets() throws Exception {
+        var ip = "19.20.21.22";
+        for (var i = 0; i < 15; i++) invokeAuthRequest(ip);       // drain the login bucket
+        assertEquals(429, invokeAuthRequest(ip).getStatus());      // login now blocked
+        assertEquals(200, invokePost("/api/v1/auth/refresh", ip).getStatus());         // refresh unaffected
+        assertEquals(200, invokePost("/api/v1/auth/forgot-password", ip).getStatus()); // reset unaffected
     }
 
     private void authenticateAs(String email) {
@@ -260,6 +285,14 @@ class RateLimitFilterTest {
 
     private MockHttpServletResponse invokeAuthRequest(String ip) throws Exception {
         var request = authRequest(ip, null);
+        var response = new MockHttpServletResponse();
+        filter.doFilterInternal(request, response, chain);
+        return response;
+    }
+
+    private MockHttpServletResponse invokePost(String path, String ip) throws Exception {
+        var request = new MockHttpServletRequest("POST", path);
+        request.setRemoteAddr(ip);
         var response = new MockHttpServletResponse();
         filter.doFilterInternal(request, response, chain);
         return response;

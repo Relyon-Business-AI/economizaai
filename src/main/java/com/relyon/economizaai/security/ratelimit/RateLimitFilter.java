@@ -43,13 +43,29 @@ import java.util.function.Predicate;
 public class RateLimitFilter extends OncePerRequestFilter {
 
     /**
-     * 5 attempts per minute per IP on the password / verification surface.
-     * Generous enough for legitimate retries (typo on login, forgot the
-     * code), tight enough that brute-forcing 1M password combinations
-     * would take ~14 years.
+     * 5 attempts per minute per IP on the password-RESET / register / social
+     * surface (everything under /auth/* EXCEPT login and refresh, which have
+     * their own buckets below). Tight enough that brute-forcing a 6-digit reset
+     * code or 1M password combos stays impractical.
      */
     private static final RateLimitPolicy AUTH_POLICY =
             new RateLimitPolicy("auth", 5, Duration.ofMinutes(1));
+
+    /**
+     * Login and token-refresh each get their OWN per-IP bucket, split out from
+     * the shared /auth/* one. A single egress IP (a NAT'd network, or Apple's
+     * App Review farm) drives many /auth/* calls at once — the app refreshes its
+     * token on launch AND a reviewer retries login a few times — which would
+     * drain a single 5/min bucket and surface to the user as "unable to sign in"
+     * (a 429 is returned BEFORE the credential check, so it looks like a login
+     * failure). Login stays brute-force-resistant: 15/min/IP is still ~4–5 years
+     * to walk 1M combos, and a per-IP cap never stopped a distributed attack
+     * anyway. Refresh is not a credential-guessing surface, so it's generous.
+     */
+    private static final RateLimitPolicy LOGIN_POLICY =
+            new RateLimitPolicy("auth-login", 15, Duration.ofMinutes(1));
+    private static final RateLimitPolicy REFRESH_POLICY =
+            new RateLimitPolicy("auth-refresh", 60, Duration.ofMinutes(1));
 
     /**
      * 30 receipt submissions per hour per authenticated user. A normal
@@ -172,6 +188,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     private final List<Rule> rules = List.of(
+            // Login and refresh match BEFORE the catch-all /auth/* rule (first match wins).
+            new Rule(
+                    LOGIN_POLICY,
+                    req -> "POST".equals(req.getMethod()) && "/api/v1/auth/login".equals(req.getRequestURI()),
+                    KeyStrategy.IP),
+            new Rule(
+                    REFRESH_POLICY,
+                    req -> "POST".equals(req.getMethod()) && "/api/v1/auth/refresh".equals(req.getRequestURI()),
+                    KeyStrategy.IP),
             new Rule(
                     AUTH_POLICY,
                     req -> "POST".equals(req.getMethod()) && req.getRequestURI().startsWith("/api/v1/auth/"),
