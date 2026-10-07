@@ -96,4 +96,39 @@ class DescriptionNormalizerTest {
         assertEquals(once, DescriptionNormalizer.normalizeOrNull(once));
         assertEquals("cafe pilao", once);
     }
+
+    // ---------------------------------------------------------- sanitizeRuleKeyword
+
+    @Test
+    void sanitizeRuleKeyword_rejectsSingleLetterAndUnitsAndNumbers() {
+        // The exact bug: LLM suggested "l" for "L ROUPA OMO 900ML LA".
+        assertEquals("", DescriptionNormalizer.sanitizeRuleKeyword("L"));
+        assertEquals("", DescriptionNormalizer.sanitizeRuleKeyword("ml"));
+        assertEquals("", DescriptionNormalizer.sanitizeRuleKeyword("kg"));
+        assertEquals("", DescriptionNormalizer.sanitizeRuleKeyword("90g"));
+        assertEquals("", DescriptionNormalizer.sanitizeRuleKeyword("900"));
+        assertEquals("", DescriptionNormalizer.sanitizeRuleKeyword("pct"));
+        assertEquals("", DescriptionNormalizer.sanitizeRuleKeyword("kit"));
+    }
+
+    @Test
+    void sanitizeRuleKeyword_trimsLeadingAndTrailingNoise() {
+        assertEquals("roupa omo", DescriptionNormalizer.sanitizeRuleKeyword("l roupa omo"));
+        assertEquals("arroz", DescriptionNormalizer.sanitizeRuleKeyword("l arroz 5kg"));
+        assertEquals("roupa omo", DescriptionNormalizer.sanitizeRuleKeyword("ROUPA OMO 900ML"));
+    }
+
+    @Test
+    void sanitizeRuleKeyword_keepsMeaningfulKeywords() {
+        assertEquals("sal", DescriptionNormalizer.sanitizeRuleKeyword("sal"));
+        assertEquals("cha", DescriptionNormalizer.sanitizeRuleKeyword("CHÁ"));
+        assertEquals("arroz", DescriptionNormalizer.sanitizeRuleKeyword("Arroz"));
+        assertEquals("chocotone", DescriptionNormalizer.sanitizeRuleKeyword("chocotone"));
+    }
+
+    @Test
+    void sanitizeRuleKeyword_emptyAndNullProduceEmptyString() {
+        assertEquals("", DescriptionNormalizer.sanitizeRuleKeyword(""));
+        assertEquals("", DescriptionNormalizer.sanitizeRuleKeyword(null));
+    }
 }

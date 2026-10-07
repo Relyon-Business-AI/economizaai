@@ -223,9 +223,11 @@ public class CategorizerAdminService {
                 skipped++;
                 continue;
             }
-            // Normalize the match key the same way descriptions are normalized at lookup
-            // (accent-strip + lowercase + SEFAZ expansion), so accented keywords still match.
-            var keyword = DescriptionNormalizer.normalize(request.keyword());
+            // Normalize + sanitize the match key: besides the usual accent-strip/lowercase/
+            // SEFAZ expansion, this trims leading/trailing noise tokens (single letters,
+            // units, numbers). A garbage keyword like "l" sanitizes to "" and is skipped —
+            // it must never become a rule that matches every item with a stray "l".
+            var keyword = DescriptionNormalizer.sanitizeRuleKeyword(request.keyword());
             if (keyword.isBlank()) {
                 skipped++;
                 continue;
