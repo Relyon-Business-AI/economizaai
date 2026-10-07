@@ -16,6 +16,22 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-07 — Rate limit de auth segmentado + logs de login
+
+O throttle de `/auth/*` era um único balde de **5 req/min por IP** compartilhado
+por login, refresh, register e reset. Num IP compartilhado (rede NAT, parque de
+review da Apple) isso estourava fácil e o 429 aparecia como "não consegui entrar".
+Agora:
+- **`POST /auth/login`**: bucket próprio, **15/min por IP**.
+- **`POST /auth/refresh`**: bucket próprio, **60/min por IP**.
+- Resto de `/auth/*` (register, forgot/verify/reset-password, social): segue **5/min**.
+
+Sem mudança de contrato — só mais folga antes do 429 no login/refresh. Também:
+toda tentativa de login agora é logada (`login.ok` / `login.failed reason=...`)
+com e-mail mascarado + plataforma, e **todas** as linhas de log carregam `ip=`.
+
+---
+
 ## 2026-10-07 — Fix: ingestão via Infosimples quebrava com número no formato BR
 
 A API do Infosimples às vezes devolve campos numéricos como string no formato
