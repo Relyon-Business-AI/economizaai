@@ -216,6 +216,35 @@ class InfosimplesServiceTest {
         assertNull(parsed.issuedAt());
     }
 
+    @Test
+    void fetchParsed_acceptsBrazilianCommaDecimalNumbers() {
+        // Infosimples intermittently returns numeric fields as BRL-formatted
+        // strings ("1,004", "1.234,56") instead of JSON numbers — this used to
+        // 500 the whole ingestion ("Cannot deserialize Double from String \"1,004\"").
+        var json = """
+                {"code":200,"data":[{
+                  "emitente":null,"informacoes_nota":null,
+                  "normalizado_valor_a_pagar":"1.234,56","normalizado_valor_desconto":null,
+                  "produtos":[{
+                    "nome":"ARROZ TIPO 1 KG",
+                    "normalizado_quantidade":"1,004",
+                    "normalizado_valor_unitario":"5,49",
+                    "normalizado_valor_total_produto":"5,51",
+                    "ean_tributavel":"7891234567890","unidade":"KG"}],
+                  "site_receipt":null}]}
+                """;
+        server.expect(requestTo(BASE_URL + "/api/v2/consultas/sefaz/ms/nfce?token=test-key&nfce=" + CHAVE))
+                .andRespond(withSuccess(json, MediaType.APPLICATION_JSON));
+
+        var parsed = service.fetchParsed(CHAVE, UnidadeFederativa.MS);
+
+        assertEquals(0, new BigDecimal("1234.56").compareTo(parsed.totalAmount()));
+        var item = parsed.items().get(0);
+        assertEquals(0, new BigDecimal("1.004").compareTo(item.quantity()));
+        assertEquals(0, new BigDecimal("5.49").compareTo(item.unitPrice()));
+        assertEquals(0, new BigDecimal("5.51").compareTo(item.totalPrice()));
+    }
+
     // ── Real cross-shape fixtures: Infosimples returns a "resumida" schema for
     //    some states (PR) and a fuller "completa" schema for others (SP). The
     //    mapping must read both. ─────────────────────────────────────────────────

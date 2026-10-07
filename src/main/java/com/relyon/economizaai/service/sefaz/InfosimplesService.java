@@ -11,6 +11,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import tools.jackson.core.JsonParser;
+import tools.jackson.databind.DeserializationContext;
+import tools.jackson.databind.ValueDeserializer;
+import tools.jackson.databind.annotation.JsonDeserialize;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -347,6 +351,29 @@ public class InfosimplesService {
         return null;
     }
 
+    /**
+     * Jackson deserializers that accept Brazilian-format numbers. Infosimples
+     * intermittently returns numeric fields as BRL-formatted strings ("1,004",
+     * "1.234,56") instead of JSON numbers; the default Double/BigDecimal binding
+     * rejects those and the whole receipt fails to ingest. These route every
+     * numeric field through {@link #toDecimal(Object)}, which handles both the
+     * plain ("12.34") and comma ("1,004") shapes.
+     */
+    static final class LenientBigDecimalDeserializer extends ValueDeserializer<BigDecimal> {
+        @Override
+        public BigDecimal deserialize(JsonParser parser, DeserializationContext context) {
+            return toDecimal(parser.getValueAsString());
+        }
+    }
+
+    static final class LenientDoubleDeserializer extends ValueDeserializer<Double> {
+        @Override
+        public Double deserialize(JsonParser parser, DeserializationContext context) {
+            var decimal = toDecimal(parser.getValueAsString());
+            return decimal == null ? null : decimal.doubleValue();
+        }
+    }
+
     // ── Internal JSON DTOs ─────────────────────────────────────────────────────
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -370,8 +397,10 @@ public class InfosimplesService {
             @JsonProperty("informacoes_nota") InfosimplesNotaInfo informacoesNota,
             InfosimplesTotais totais,
             InfosimplesNfe nfe,
-            @JsonProperty("normalizado_valor_a_pagar") BigDecimal normalizadoValorAPagar,
-            @JsonProperty("normalizado_valor_desconto") BigDecimal normalizadoValorDesconto,
+            @JsonProperty("normalizado_valor_a_pagar")
+            @JsonDeserialize(using = LenientBigDecimalDeserializer.class) BigDecimal normalizadoValorAPagar,
+            @JsonProperty("normalizado_valor_desconto")
+            @JsonDeserialize(using = LenientBigDecimalDeserializer.class) BigDecimal normalizadoValorDesconto,
             List<InfosimplesProduto> produtos,
             @JsonProperty("site_receipt") String siteReceipt,
             // "resumida" shape (MG /nfce-resumida): items live under produtos_servicos,
@@ -395,7 +424,8 @@ public class InfosimplesService {
     /** "resumida" shape totals block (MG). */
     @JsonIgnoreProperties(ignoreUnknown = true)
     record InfosimplesValores(
-            @JsonProperty("normalizado_valor_total_servico") BigDecimal normalizadoValorTotalServico
+            @JsonProperty("normalizado_valor_total_servico")
+            @JsonDeserialize(using = LenientBigDecimalDeserializer.class) BigDecimal normalizadoValorTotalServico
     ) {}
 
     /** "resumida" shape nfce block — carries the emission datetime. */
@@ -413,28 +443,35 @@ public class InfosimplesService {
     /** "completa" shape totals block. */
     @JsonIgnoreProperties(ignoreUnknown = true)
     record InfosimplesTotais(
-            @JsonProperty("normalizado_valor_nfe") BigDecimal normalizadoValorNfe,
-            @JsonProperty("normalizado_valor_descontos") BigDecimal normalizadoValorDescontos
+            @JsonProperty("normalizado_valor_nfe")
+            @JsonDeserialize(using = LenientBigDecimalDeserializer.class) BigDecimal normalizadoValorNfe,
+            @JsonProperty("normalizado_valor_descontos")
+            @JsonDeserialize(using = LenientBigDecimalDeserializer.class) BigDecimal normalizadoValorDescontos
     ) {}
 
     /** "completa" shape nfe block (single-field emission datetime + total). */
     @JsonIgnoreProperties(ignoreUnknown = true)
     record InfosimplesNfe(
             @JsonProperty("data_emissao") String dataEmissao,
-            @JsonProperty("normalizado_valor_total") BigDecimal normalizadoValorTotal
+            @JsonProperty("normalizado_valor_total")
+            @JsonDeserialize(using = LenientBigDecimalDeserializer.class) BigDecimal normalizadoValorTotal
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record InfosimplesProduto(
             String nome,
             String descricao,
-            @JsonProperty("normalizado_quantidade") Double normalizadoQuantidade,
-            Double qtd,
+            @JsonProperty("normalizado_quantidade")
+            @JsonDeserialize(using = LenientDoubleDeserializer.class) Double normalizadoQuantidade,
+            @JsonDeserialize(using = LenientDoubleDeserializer.class) Double qtd,
             // "resumida" shape uses a plain `quantidade` + `unidade_comercial`.
-            Double quantidade,
-            @JsonProperty("normalizado_valor_unitario") BigDecimal normalizadoValorUnitario,
-            @JsonProperty("normalizado_valor_total_produto") BigDecimal normalizadoValorTotalProduto,
-            @JsonProperty("normalizado_valor") BigDecimal normalizadoValor,
+            @JsonDeserialize(using = LenientDoubleDeserializer.class) Double quantidade,
+            @JsonProperty("normalizado_valor_unitario")
+            @JsonDeserialize(using = LenientBigDecimalDeserializer.class) BigDecimal normalizadoValorUnitario,
+            @JsonProperty("normalizado_valor_total_produto")
+            @JsonDeserialize(using = LenientBigDecimalDeserializer.class) BigDecimal normalizadoValorTotalProduto,
+            @JsonProperty("normalizado_valor")
+            @JsonDeserialize(using = LenientBigDecimalDeserializer.class) BigDecimal normalizadoValor,
             @JsonProperty("ean_comercial") String eanComercial,
             @JsonProperty("ean_tributavel") String eanTributavel,
             String unidade,
