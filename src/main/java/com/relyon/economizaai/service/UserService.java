@@ -65,6 +65,7 @@ import com.relyon.economizaai.repository.HouseholdProductAliasRepository;
 import com.relyon.economizaai.repository.DataShareConsentRepository;
 import com.relyon.economizaai.model.UserWatchedMarket;
 import com.relyon.economizaai.security.JwtService;
+import com.relyon.economizaai.security.ratelimit.LoginAttemptGuard;
 import com.relyon.economizaai.service.auth.EmailVerificationService;
 import com.relyon.economizaai.service.auth.LoginActivityRecorder;
 import com.relyon.economizaai.service.auth.SignupAlertService;
@@ -118,6 +119,7 @@ public class UserService {
     private final RefreshTokenService refreshTokenService;
     private final NotificationRuleService notificationRuleService;
     private final LoginActivityRecorder loginActivityRecorder;
+    private final LoginAttemptGuard loginAttemptGuard;
     private final SubscriptionService subscriptionService;
     private final SignupAlertService signupAlertService;
     private final MetaConversionsService metaConversionsService;
@@ -187,12 +189,18 @@ public class UserService {
             throw new InvalidCredentialsException();
         }
 
-        var user = found
-                .filter(foundUser -> passwordEncoder.matches(request.password(), foundUser.getPassword()))
-                .orElseThrow(() -> {
-                    log.warn("login.failed reason=bad_password email={} platform={}", maskedEmail, request.platform());
-                    return new InvalidCredentialsException();
-                });
+        // Per-account lockout (independent of IP): stops an attacker who rotates
+        // IPs from grinding one account's password. Checked before the password
+        // compare, so a locked account is rejected even with the right password.
+        loginAttemptGuard.assertNotLocked(request.email());
+
+        var user = found.get();
+        if (!passwordEncoder.matches(request.password(), user.getPassword())) {
+            loginAttemptGuard.recordFailure(request.email());
+            log.warn("login.failed reason=bad_password email={} platform={}", maskedEmail, request.platform());
+            throw new InvalidCredentialsException();
+        }
+        loginAttemptGuard.recordSuccess(request.email());
 
         loginActivityRecorder.recordLogin(user, request.platform());
         var token = jwtService.generateToken(user);

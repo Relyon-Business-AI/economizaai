@@ -6,6 +6,7 @@ import com.relyon.economizaai.dto.request.RegisterRequest;
 import com.relyon.economizaai.dto.request.SetPasswordRequest;
 import com.relyon.economizaai.dto.request.UpdateContributionRequest;
 import com.relyon.economizaai.dto.request.UpdateUserRequest;
+import com.relyon.economizaai.exception.AccountLockedException;
 import com.relyon.economizaai.exception.EmailAlreadyExistsException;
 import com.relyon.economizaai.exception.InvalidCredentialsException;
 import com.relyon.economizaai.exception.SocialAccountLoginException;
@@ -50,6 +51,7 @@ import com.relyon.economizaai.service.subscription.SubscriptionService;
 import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.repository.UserWatchedMarketRepository;
 import com.relyon.economizaai.security.JwtService;
+import com.relyon.economizaai.security.ratelimit.LoginAttemptGuard;
 import com.relyon.economizaai.model.enums.Platform;
 import com.relyon.economizaai.service.auth.EmailVerificationService;
 import com.relyon.economizaai.service.auth.LoginActivityRecorder;
@@ -82,6 +84,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -181,6 +184,9 @@ class UserServiceTest {
 
     @Mock
     private AttributionResolver attributionResolver;
+
+    @Mock
+    private LoginAttemptGuard loginAttemptGuard;
 
     @InjectMocks
     private UserService userService;
@@ -321,6 +327,41 @@ class UserServiceTest {
         when(userRepository.findByEmail("noone@test.com")).thenReturn(Optional.empty());
 
         assertThrows(InvalidCredentialsException.class, () -> userService.login(request));
+    }
+
+    @Test
+    void login_lockedAccount_throwsAccountLockedEvenWithRightPassword() {
+        var request = new LoginRequest("john@test.com", "password123", null);
+        var user = buildUser();
+        when(userRepository.findByEmail("john@test.com")).thenReturn(Optional.of(user));
+        doThrow(new AccountLockedException()).when(loginAttemptGuard).assertNotLocked("john@test.com");
+
+        assertThrows(AccountLockedException.class, () -> userService.login(request));
+        // password is never checked once the account is locked
+        verify(passwordEncoder, never()).matches(any(), any());
+    }
+
+    @Test
+    void login_recordsFailureOnBadPassword() {
+        var request = new LoginRequest("john@test.com", "wrong", null);
+        var user = buildUser();
+        when(userRepository.findByEmail("john@test.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("wrong", "encoded")).thenReturn(false);
+
+        assertThrows(InvalidCredentialsException.class, () -> userService.login(request));
+        verify(loginAttemptGuard).recordFailure("john@test.com");
+    }
+
+    @Test
+    void login_recordsSuccessOnValidLogin() {
+        var request = new LoginRequest("john@test.com", "password123", null);
+        var user = buildUser();
+        when(userRepository.findByEmail("john@test.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password123", "encoded")).thenReturn(true);
+        when(jwtService.generateToken(user)).thenReturn("jwt-token");
+
+        userService.login(request);
+        verify(loginAttemptGuard).recordSuccess("john@test.com");
     }
 
     @Test
