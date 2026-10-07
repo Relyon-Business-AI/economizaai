@@ -167,6 +167,10 @@ public class UserService {
     }
 
     public AuthResponse login(LoginRequest request) {
+        // Every failure path logs the masked email + reason + platform (ip= comes
+        // from MDC) so a login that never succeeds — e.g. an App Review attempt —
+        // is traceable end-to-end instead of a silent generic "invalid credentials".
+        var maskedEmail = LogMasker.email(request.email());
         var found = userRepository.findByEmail(request.email());
         // A social-login account (Google/Apple) has no local password, so a password
         // attempt would only ever yield a generic "invalid credentials". Detect it and
@@ -174,17 +178,26 @@ public class UserService {
         found.filter(candidate -> candidate.getPassword() == null
                         && candidate.getAuthProvider() != AuthProvider.LOCAL)
                 .ifPresent(socialUser -> {
+                    log.warn("login.failed reason=social_account email={} platform={}", maskedEmail, request.platform());
                     throw new SocialAccountLoginException(socialUser.getAuthProvider());
                 });
 
+        if (found.isEmpty()) {
+            log.warn("login.failed reason=no_account email={} platform={}", maskedEmail, request.platform());
+            throw new InvalidCredentialsException();
+        }
+
         var user = found
                 .filter(foundUser -> passwordEncoder.matches(request.password(), foundUser.getPassword()))
-                .orElseThrow(InvalidCredentialsException::new);
+                .orElseThrow(() -> {
+                    log.warn("login.failed reason=bad_password email={} platform={}", maskedEmail, request.platform());
+                    return new InvalidCredentialsException();
+                });
 
         loginActivityRecorder.recordLogin(user, request.platform());
         var token = jwtService.generateToken(user);
         var refreshToken = refreshTokenService.issue(user);
-        log.info("User logged in: {}", LogMasker.email(user.getEmail()));
+        log.info("login.ok email={} platform={}", LogMasker.email(user.getEmail()), request.platform());
         return new AuthResponse(token, refreshToken, UserResponse.from(user), false, null);
     }
 

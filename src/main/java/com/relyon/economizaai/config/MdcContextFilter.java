@@ -1,5 +1,6 @@
 package com.relyon.economizaai.config;
 
+import com.relyon.economizaai.security.ratelimit.ClientIpResolver;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -27,11 +28,15 @@ public class MdcContextFilter extends OncePerRequestFilter {
     public static final String USER_ID = "userId";
     public static final String RECEIPT_ID = "receiptId";
     public static final String ITEM_ID = "itemId";
+    public static final String CLIENT_IP = "clientIp";
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         MDC.put(REQUEST_ID, UUID.randomUUID().toString().substring(0, 8));
+        // Client IP on every request line — the anchor for tracing an auth
+        // failure/429 back to a specific caller (e.g. an App Review attempt).
+        MDC.put(CLIENT_IP, ClientIpResolver.resolve(request));
         try {
             chain.doFilter(request, response);
         } finally {

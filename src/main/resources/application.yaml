@@ -606,10 +606,11 @@ logging:
       max-history: 10
       total-size-cap: 500MB
   pattern:
-    # MDC tags in brackets: requestId user receipt item. Empty when not in scope.
+    # MDC tags in brackets: requestId user ip receipt item. Empty when not in scope.
     # To deep-debug a flow: filter by receipt=<8-char-id> in your log viewer.
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [req=%X{requestId:-} user=%X{userId:-} rcpt=%X{receiptId:-} item=%X{itemId:-}] %logger{30} - %msg%n"
-    file:    "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [req=%X{requestId:-} user=%X{userId:-} rcpt=%X{receiptId:-} item=%X{itemId:-}] %logger{30} - %msg%n"
+    # ip=<client ip> anchors auth failures/429s to a specific caller.
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [req=%X{requestId:-} user=%X{userId:-} ip=%X{clientIp:-} rcpt=%X{receiptId:-} item=%X{itemId:-}] %logger{30} - %msg%n"
+    file:    "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [req=%X{requestId:-} user=%X{userId:-} ip=%X{clientIp:-} rcpt=%X{receiptId:-} item=%X{itemId:-}] %logger{30} - %msg%n"
 
 # Error tracking (Sentry). INERT until SENTRY_DSN is set: SentryInitializer skips
 # init on a blank DSN, so dev/CI/local are no-ops. Set SENTRY_DSN (+ SENTRY_ENVIRONMENT)
