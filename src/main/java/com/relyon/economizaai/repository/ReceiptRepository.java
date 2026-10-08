@@ -32,6 +32,12 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
     // live count of in-flight PROCESSING rows so the worker yields to real scans.
     List<Receipt> findByStatusOrderByCreatedAtAsc(ReceiptStatus status, Pageable pageable);
 
+    // Contingency resync sweeper: by CREATED time (the window counts from the scan, not from the
+    // status flips the resync itself makes). Within the window → re-fetch; past it → give up.
+    List<Receipt> findByStatusAndCreatedAtAfter(ReceiptStatus status, LocalDateTime cutoff, Pageable pageable);
+
+    List<Receipt> findByStatusAndCreatedAtBefore(ReceiptStatus status, LocalDateTime cutoff, Pageable pageable);
+
     long countByStatus(ReceiptStatus status);
 
     // Import staging: every non-confirmed import receipt for the household, so the

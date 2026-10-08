@@ -261,11 +261,12 @@ public class ReceiptIngestionService {
             if (receipt == null) return;
             receipt.setRawHtml(fetched.html());
             receipt.setSourceUrl(fetched.sourceUrl());
-            receipt.setParseErrorReason(parseFailureReason(ex, receipt.getChaveAcesso()));
-            receipt.setStatus(ReceiptStatus.FAILED_PARSE);
+            var reason = parseFailureReason(ex, receipt.getChaveAcesso());
+            receipt.setParseErrorReason(reason);
+            receipt.setStatus(statusForReason(reason));
             receiptRepository.save(receipt);
-            log.warn("ingest parse-failed status=FAILED_PARSE reason={} (raw HTML kept for review)",
-                    receipt.getParseErrorReason());
+            log.warn("ingest parse-failed status={} reason={} (raw HTML kept for review)",
+                    receipt.getStatus(), reason);
         });
     }
 
@@ -274,13 +275,28 @@ public class ReceiptIngestionService {
      * no items for a note the store emitted offline and may never have transmitted. Classify it
      * honestly (contingency) so the user gets a clear message instead of the generic "no items".
      */
+    /** Reason-key prefix for a contingency note still waiting for SEFAZ — set by the no-items case
+     * here and by {@link com.relyon.economizaai.exception.SefazPortalRejectionException} (rejection
+     * page). Both mean "recoverable, auto-resync" → {@link ReceiptStatus#CONTINGENCY_PENDING}. */
+    static final String CONTINGENCY_PENDING_REASON = "receipt.contingency.pending";
+
     static String parseFailureReason(ReceiptParseException ex, String chaveAcesso) {
         // Reuse the existing contingency key — same honest story as a portal REJECTION page, but for
         // the case where SEFAZ serves an EMPTY DANFE (no items, no error div) for the offline note.
         if (ex.isNoItemsFound() && ChaveAcessoParser.isContingencyEmission(chaveAcesso)) {
-            return "receipt.contingency.pending:";
+            return CONTINGENCY_PENDING_REASON + ":";
         }
         return ex.getMessageKey() + ":" + String.join(",", ex.getArguments());
+    }
+
+    /**
+     * A contingency note whose items aren't on SEFAZ yet is RECOVERABLE — keep it CONTINGENCY_PENDING
+     * so the resync sweeper re-fetches it within the window. Every other parse failure is terminal.
+     */
+    static ReceiptStatus statusForReason(String reason) {
+        return reason.startsWith(CONTINGENCY_PENDING_REASON)
+                ? ReceiptStatus.CONTINGENCY_PENDING
+                : ReceiptStatus.FAILED_PARSE;
     }
 
     /**

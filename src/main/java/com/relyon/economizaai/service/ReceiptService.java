@@ -1016,7 +1016,11 @@ public class ReceiptService {
      * the generic parse-failure message — never null for a FAILED_PARSE row.
      */
     private String localizedParseError(Receipt receipt) {
-        if (receipt.getStatus() != ReceiptStatus.FAILED_PARSE || receipt.getParseErrorReason() == null) {
+        // CONTINGENCY_PENDING carries the same localized reason (the transparent "aguardando SEFAZ"
+        // message) so the detail/admin can show WHY the note is pending, not just FAILED_PARSE.
+        var hasReason = receipt.getStatus() == ReceiptStatus.FAILED_PARSE
+                || receipt.getStatus() == ReceiptStatus.CONTINGENCY_PENDING;
+        if (!hasReason || receipt.getParseErrorReason() == null) {
             return null;
         }
         var reason = receipt.getParseErrorReason();

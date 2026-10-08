@@ -1,6 +1,8 @@
 package com.relyon.economizaai.service.sefaz;
 
 import com.relyon.economizaai.exception.ReceiptParseException;
+import com.relyon.economizaai.exception.SefazPortalRejectionException;
+import com.relyon.economizaai.model.enums.ReceiptStatus;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,5 +34,34 @@ class ReceiptIngestionServiceReasonTest {
         var reason = ReceiptIngestionService.parseFailureReason(
                 new ReceiptParseException("bad-chave"), CONTINGENCY_CHAVE);
         assertThat(reason).isEqualTo("receipt.parse.failed:bad-chave");
+    }
+
+    @Test
+    void contingencyNoItemsParksAsContingencyPending() {
+        var reason = ReceiptIngestionService.parseFailureReason(
+                new ReceiptParseException("no-items-found"), CONTINGENCY_CHAVE);
+        assertThat(ReceiptIngestionService.statusForReason(reason)).isEqualTo(ReceiptStatus.CONTINGENCY_PENDING);
+    }
+
+    @Test
+    void contingencyPortalRejectionParksAsContingencyPending() {
+        var reason = ReceiptIngestionService.parseFailureReason(
+                new SefazPortalRejectionException("227", true), CONTINGENCY_CHAVE);
+        assertThat(reason).startsWith("receipt.contingency.pending");
+        assertThat(ReceiptIngestionService.statusForReason(reason)).isEqualTo(ReceiptStatus.CONTINGENCY_PENDING);
+    }
+
+    @Test
+    void normalNoItemsFailsTerminally() {
+        var reason = ReceiptIngestionService.parseFailureReason(
+                new ReceiptParseException("no-items-found"), NORMAL_CHAVE);
+        assertThat(ReceiptIngestionService.statusForReason(reason)).isEqualTo(ReceiptStatus.FAILED_PARSE);
+    }
+
+    @Test
+    void nonContingencyRejectionFailsTerminally() {
+        var reason = ReceiptIngestionService.parseFailureReason(
+                new SefazPortalRejectionException("999", false), NORMAL_CHAVE);
+        assertThat(ReceiptIngestionService.statusForReason(reason)).isEqualTo(ReceiptStatus.FAILED_PARSE);
     }
 }

@@ -20,5 +20,14 @@ public enum ReceiptStatus {
     PENDING_CONFIRMATION,
     CONFIRMED,
     REJECTED,
+    /**
+     * A contingency NFC-e (emitted offline, tpEmis != 1) whose items aren't on the SEFAZ portal
+     * yet — the store has up to ~72h to transmit it. NOT a dead end like {@link #FAILED_PARSE}:
+     * the {@link com.relyon.economizaai.service.sefaz.ContingencyResyncSweeper} re-fetches it on a
+     * schedule within the window (items appear → PENDING_CONFIRMATION). Past the window it becomes
+     * FAILED_PARSE (store never transmitted). The user sees a transparent "aguardando" state with
+     * no manual retry — the system resyncs automatically.
+     */
+    CONTINGENCY_PENDING,
     FAILED_PARSE
 }
