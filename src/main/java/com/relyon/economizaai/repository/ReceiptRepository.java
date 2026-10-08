@@ -188,6 +188,14 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
             + "GROUP BY receipt.household.id")
     List<Object[]> sumConfirmedTotalByHouseholdIds(List<UUID> householdIds);
 
+    /** (householdId, uf, count) for the given households — frequency of each state so the admin
+     * layer can pick the PREDOMINANT UF per household. Batch + lazy: the admin user list/detail
+     * loads without it and fetches this separately, so the main query stays fast. */
+    @Query("SELECT receipt.household.id, receipt.uf, count(receipt) FROM Receipt receipt "
+            + "WHERE receipt.household.id IN :householdIds AND receipt.uf IS NOT NULL "
+            + "GROUP BY receipt.household.id, receipt.uf")
+    List<Object[]> ufFrequencyByHouseholdIds(List<UUID> householdIds);
+
     // --- Ingestion health (ops dashboard) ---
 
     /** (status, count) for receipts submitted since the window start. */

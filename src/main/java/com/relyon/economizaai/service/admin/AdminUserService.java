@@ -10,6 +10,7 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.model.enums.SubscriptionTier;
+import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.repository.MerchantAccessRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
@@ -144,6 +145,30 @@ public class AdminUserService {
             spend.put((UUID) row[0], (BigDecimal) row[1]);
         }
         return spend;
+    }
+
+    /**
+     * Predominant UF (most-frequent state) per household — the state a user scans most of their
+     * notes from. Batch + lazy: the admin list/detail loads WITHOUT this and fetches it separately,
+     * so the heavy query never slows the main page. Households with no UF-bearing note are absent.
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, UnidadeFederativa> predominantUfByHouseholdIds(List<UUID> householdIds) {
+        if (householdIds == null || householdIds.isEmpty()) {
+            return Map.of();
+        }
+        var predominant = new HashMap<UUID, UnidadeFederativa>();
+        var topCount = new HashMap<UUID, Long>();
+        for (var row : receiptRepository.ufFrequencyByHouseholdIds(householdIds)) {
+            var householdId = (UUID) row[0];
+            var uf = (UnidadeFederativa) row[1];
+            var count = ((Number) row[2]).longValue();
+            if (count > topCount.getOrDefault(householdId, 0L)) {
+                topCount.put(householdId, count);
+                predominant.put(householdId, uf);
+            }
+        }
+        return predominant;
     }
 
     private List<UUID> householdIdsOf(List<User> users) {

@@ -180,6 +180,16 @@ public class AdminController {
         return ResponseEntity.ok(adminUserService.list(q, includeInternal, pageable));
     }
 
+    /**
+     * Predominant UF per household — the state a user scans most notes from. SEPARATE lazy lookup:
+     * the user list/detail renders fast and fetches the state afterwards, so the main query never
+     * slows down. Returns householdId → UF ("SP"); households with no note are simply absent.
+     */
+    @GetMapping("/users/uf")
+    public ResponseEntity<Map<UUID, UnidadeFederativa>> usersPredominantUf(@RequestParam List<UUID> householdIds) {
+        return ResponseEntity.ok(adminUserService.predominantUfByHouseholdIds(householdIds));
+    }
+
     @GetMapping("/users/{id}")
     public ResponseEntity<AdminUserDetailResponse> getUser(@PathVariable UUID id) {
         return ResponseEntity.ok(adminUserService.get(id));
