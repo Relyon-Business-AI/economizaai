@@ -15,6 +15,8 @@ public enum NotificationDestination {
     PRODUCT,
     /** Budget screen. */
     BUDGET,
+    /** A specific receipt's screen (e.g. a recovered contingency note). */
+    RECEIPT,
     /** Generic inbox — transactional/system notifications and the fallback. */
     INBOX
 }

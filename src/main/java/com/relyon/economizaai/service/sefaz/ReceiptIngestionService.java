@@ -277,7 +277,7 @@ public class ReceiptIngestionService {
         var title = messageService.translate("receipt.contingency.recovered.title", locale);
         var body = messageService.translate("receipt.contingency.recovered.body", locale, marketName);
         notificationService.notifyAfterCommit(new NotificationPayload(
-                user, NotificationType.SYSTEM, title, body, Map.of("receiptId", receipt.getId().toString())));
+                user, NotificationType.RECEIPT_RECOVERED, title, body, Map.of("receiptId", receipt.getId().toString())));
         log.info("contingency.recovered.notified user={} receipt={}",
                 LogMasker.email(user.getEmail()), abbrev(receipt.getId()));
     }
