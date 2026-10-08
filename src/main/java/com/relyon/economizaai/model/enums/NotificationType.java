@@ -39,7 +39,9 @@ public enum NotificationType {
     DEALS_DIGEST(Scope.SYSTEM, false, false),
 
     // --- Transactional / one-off ---
-    SYSTEM(Scope.SYSTEM, false, false);
+    SYSTEM(Scope.SYSTEM, false, false),
+    /** A note stuck in contingency ("aguardando SEFAZ") was auto-recovered and now has items. */
+    RECEIPT_RECOVERED(Scope.SYSTEM, false, false);
 
     public enum Scope { DEFAULT, USER, SYSTEM }
 
@@ -85,6 +87,7 @@ public enum NotificationType {
             case STOCKOUT -> NotificationDestination.REPLENISHMENT;
             case PRICE_DROP -> NotificationDestination.PRODUCT;
             case BUDGET -> NotificationDestination.BUDGET;
+            case RECEIPT_RECOVERED -> NotificationDestination.RECEIPT;
             case SYSTEM -> NotificationDestination.INBOX;
         };
     }

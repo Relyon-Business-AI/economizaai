@@ -57,6 +57,7 @@ public class ContingencyResyncSweeper {
         expired.forEach(receipt -> {
             receipt.setStatus(ReceiptStatus.FAILED_PARSE);
             receipt.setParseErrorReason("receipt.contingency.unavailable:");
+            receipt.setResyncingFromContingency(false);
         });
         receiptRepository.saveAll(expired);
         log.info("contingency.resync gave_up count={} windowHours={}", expired.size(), windowHours);
@@ -73,6 +74,8 @@ public class ContingencyResyncSweeper {
             var qrPayload = receipt.getQrPayload();
             if (qrPayload == null || qrPayload.isBlank()) continue;
             receipt.setStatus(ReceiptStatus.IMPORT_QUEUED);
+            // Mark it so the ingest success path knows to notify the owner if this fetch recovers it.
+            receipt.setResyncingFromContingency(true);
             requeued.add(receipt);
         }
         if (requeued.isEmpty()) return;
