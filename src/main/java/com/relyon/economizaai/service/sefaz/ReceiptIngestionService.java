@@ -10,10 +10,15 @@ import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.enums.ReceiptChannel;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
+import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.repository.ReceiptRepository;
+import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.extraction.EanCatalogEnrichmentService;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.geo.MerchantSupportGate;
+import com.relyon.economizaai.service.notifications.NotificationPayload;
+import com.relyon.economizaai.service.notifications.NotificationService;
+import com.relyon.economizaai.service.privacy.LogMasker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
@@ -24,6 +29,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -61,6 +67,8 @@ public class ReceiptIngestionService {
     private final MarketLocationService marketLocationService;
     private final MerchantSupportGate merchantSupportGate;
     private final RsChaveReconsultService rsChaveReconsultService;
+    private final NotificationService notificationService;
+    private final LocalizedMessageService messageService;
 
     /**
      * Fetch + parse the PROCESSING receipt, then transition it. Runs on the
@@ -248,10 +256,30 @@ public class ReceiptIngestionService {
             // keep their original reason until the retry actually resolves them).
             receipt.setParseErrorReason(null);
             receipt.setStatus(ReceiptStatus.PENDING_CONFIRMATION);
+            // A note that was stuck "aguardando SEFAZ" (contingency) just came back with items —
+            // clear the resync marker and tell the owner (after this tx commits).
+            var recoveredFromContingency = receipt.isResyncingFromContingency();
+            if (recoveredFromContingency) receipt.setResyncingFromContingency(false);
             receiptRepository.save(receipt);
             log.info("ingest ok status=PENDING_CONFIRMATION items={} total={} market='{}'",
                     receipt.getItems().size(), receipt.getTotalAmount(), receipt.getMarketName());
+            if (recoveredFromContingency) notifyContingencyRecovery(receipt);
         });
+    }
+
+    /** The note stuck in contingency just recovered — ping the owner (dispatched after commit). */
+    private void notifyContingencyRecovery(Receipt receipt) {
+        var user = receipt.getUser();
+        var locale = LocalizedMessageService.toLocale(user.getLocale());
+        var marketName = receipt.getMarketName() != null && !receipt.getMarketName().isBlank()
+                ? receipt.getMarketName()
+                : messageService.translate("receipt.contingency.recovered.market_fallback", locale);
+        var title = messageService.translate("receipt.contingency.recovered.title", locale);
+        var body = messageService.translate("receipt.contingency.recovered.body", locale, marketName);
+        notificationService.notifyAfterCommit(new NotificationPayload(
+                user, NotificationType.SYSTEM, title, body, Map.of("receiptId", receipt.getId().toString())));
+        log.info("contingency.recovered.notified user={} receipt={}",
+                LogMasker.email(user.getEmail()), abbrev(receipt.getId()));
     }
 
     private void persistParseFailure(UUID receiptId, SefazIngestionService.FetchedDocument fetched,

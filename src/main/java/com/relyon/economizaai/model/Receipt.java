@@ -118,6 +118,12 @@ public class Receipt extends BaseEntity implements HouseholdScoped {
     @Column(name = "parse_error_reason", columnDefinition = "TEXT")
     private String parseErrorReason;
 
+    // True while a contingency note is in the auto-resync loop (ContingencyResyncSweeper set it on
+    // re-queue). The ingest success path reads it to notify the owner their stuck note was recovered;
+    // it's cleared on recovery (success) and on give-up (72h window elapsed).
+    @Column(name = "resyncing_from_contingency", nullable = false)
+    private boolean resyncingFromContingency;
+
     // BatchSize: list endpoints (GET /receipts, dashboard) read items per row —
     // batching turns that page-sized N+1 into one IN query.
     @OneToMany(mappedBy = "receipt", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
