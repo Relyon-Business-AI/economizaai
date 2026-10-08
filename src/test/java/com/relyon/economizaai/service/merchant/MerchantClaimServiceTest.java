@@ -29,7 +29,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.LocalDateTime;
+import com.relyon.economizaai.time.BrazilClock;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -164,7 +164,7 @@ class MerchantClaimServiceTest {
     @Test
     void verify_expiredCode_closesClaim() {
         var claim = awaitingClaim("123456");
-        claim.setCodeExpiresAt(LocalDateTime.now().minusMinutes(1));
+        claim.setCodeExpiresAt(BrazilClock.nowDateTime().minusMinutes(1));
         when(claimRepository.findByIdAndUserId(claim.getId(), claimant.getId())).thenReturn(Optional.of(claim));
 
         assertThrows(MerchantClaimCodeExpiredException.class,
