@@ -7,9 +7,11 @@ import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.Role;
+import com.relyon.economizaai.model.enums.PaidApiService;
 import com.relyon.economizaai.model.enums.SubscriptionTier;
 import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.repository.MerchantAccessRepository;
+import com.relyon.economizaai.repository.PaidApiCallRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.UserService;
@@ -51,8 +53,54 @@ class AdminUserServiceTest {
     @Mock private SubscriptionService subscriptionService;
     @Mock private UserService userService;
     @Mock private MerchantAccessRepository merchantAccessRepository;
+    @Mock private PaidApiCallRepository paidApiCallRepository;
 
     @InjectMocks private AdminUserService service;
+
+    @Test
+    void costBreakdownForUser_sumsTotalAndKeepsServiceLines() {
+        var userId = UUID.randomUUID();
+        when(paidApiCallRepository.costByServiceForUser(userId)).thenReturn(List.of(
+                serviceSpend(PaidApiService.INFOSIMPLES, 10, 240),
+                serviceSpend(PaidApiService.CAPTCHA_SOLVE, 5, 15)));
+
+        var result = service.costBreakdownForUser(userId);
+
+        assertEquals(255L, result.totalCents());
+        assertEquals(2, result.byService().size());
+        assertEquals(PaidApiService.INFOSIMPLES, result.byService().get(0).service());
+    }
+
+    @Test
+    void totalCostCentsByUserIds_emptyInput_returnsEmptyMapWithoutQuerying() {
+        assertTrue(service.totalCostCentsByUserIds(List.of()).isEmpty());
+        verify(paidApiCallRepository, never()).totalCostByUserIds(anyList());
+    }
+
+    @Test
+    void totalCostCentsByUserIds_mapsRowsByUser() {
+        var userId = UUID.randomUUID();
+        when(paidApiCallRepository.totalCostByUserIds(anyList())).thenReturn(List.of(userCost(userId, 777)));
+
+        var map = service.totalCostCentsByUserIds(List.of(userId));
+
+        assertEquals(777L, map.get(userId));
+    }
+
+    private static PaidApiCallRepository.UserServiceSpend serviceSpend(PaidApiService service, long calls, long cents) {
+        return new PaidApiCallRepository.UserServiceSpend() {
+            public PaidApiService getService() { return service; }
+            public long getCalls() { return calls; }
+            public long getCostCents() { return cents; }
+        };
+    }
+
+    private static PaidApiCallRepository.UserCost userCost(UUID userId, long cents) {
+        return new PaidApiCallRepository.UserCost() {
+            public UUID getUserId() { return userId; }
+            public long getCostCents() { return cents; }
+        };
+    }
 
     @Test
     void delete_regularUser_delegatesToDeleteAccount() {

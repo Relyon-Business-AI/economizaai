@@ -46,11 +46,44 @@ public interface PaidApiCallRepository extends JpaRepository<PaidApiCall, UUID> 
     """)
     List<StateSpend> spendByState(@Param("since") OffsetDateTime since);
 
+    /** Lifetime spend (cents) per user for the given users — batch enrichment for the admin user list. */
+    @Query("""
+        SELECT call.userId AS userId,
+               COALESCE(SUM(call.estimatedCostCents), 0) AS costCents
+        FROM PaidApiCall call
+        WHERE call.userId IN :userIds
+        GROUP BY call.userId
+    """)
+    List<UserCost> totalCostByUserIds(@Param("userIds") List<UUID> userIds);
+
+    /** Lifetime spend + volume grouped by service for one user — the "de onde vem o custo" breakdown. */
+    @Query("""
+        SELECT call.service AS service,
+               COUNT(call) AS calls,
+               COALESCE(SUM(call.estimatedCostCents), 0) AS costCents
+        FROM PaidApiCall call
+        WHERE call.userId = :userId
+        GROUP BY call.service
+        ORDER BY SUM(call.estimatedCostCents) DESC
+    """)
+    List<UserServiceSpend> costByServiceForUser(@Param("userId") UUID userId);
+
     interface ServiceSpend {
         PaidApiService getService();
         long getCalls();
         long getCostCents();
         long getFailures();
+    }
+
+    interface UserCost {
+        UUID getUserId();
+        long getCostCents();
+    }
+
+    interface UserServiceSpend {
+        PaidApiService getService();
+        long getCalls();
+        long getCostCents();
     }
 
     interface StateSpend {

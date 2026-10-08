@@ -10,4 +10,10 @@ public class ReceiptParseException extends DomainException {
     protected ReceiptParseException(String messageKey, String... arguments) {
         super(messageKey, arguments);
     }
+
+    /** The specific "parser reached the DANFE but found no line items" failure. */
+    public boolean isNoItemsFound() {
+        var arguments = getArguments();
+        return arguments.length > 0 && "no-items-found".equals(arguments[0]);
+    }
 }
