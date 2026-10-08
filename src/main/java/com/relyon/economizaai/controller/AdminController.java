@@ -30,6 +30,7 @@ import com.relyon.economizaai.dto.response.BrandCoverageReportResponse;
 import com.relyon.economizaai.dto.response.AdminOverviewResponse;
 import com.relyon.economizaai.dto.response.CostReportResponse;
 import com.relyon.economizaai.dto.response.InfosimplesFinanceResponse;
+import com.relyon.economizaai.dto.response.UserCostResponse;
 import com.relyon.economizaai.dto.response.IngestionHealthResponse;
 import com.relyon.economizaai.dto.response.MarketIntelResponse;
 import com.relyon.economizaai.dto.response.NotificationEffectivenessResponse;
@@ -190,9 +191,25 @@ public class AdminController {
         return ResponseEntity.ok(adminUserService.predominantUfByHouseholdIds(householdIds));
     }
 
+    /**
+     * Lifetime paid-API cost (cents) per user — SEPARATE lazy lookup (like /users/uf) so the list
+     * renders fast and fetches each user's cost afterwards. Returns userId → cents; users with no
+     * paid call are absent (treat as 0). Declared before /users/{id} so "cost" isn't read as an id.
+     */
+    @GetMapping("/users/cost")
+    public ResponseEntity<Map<UUID, Long>> usersCost(@RequestParam List<UUID> userIds) {
+        return ResponseEntity.ok(adminUserService.totalCostCentsByUserIds(userIds));
+    }
+
     @GetMapping("/users/{id}")
     public ResponseEntity<AdminUserDetailResponse> getUser(@PathVariable UUID id) {
         return ResponseEntity.ok(adminUserService.get(id));
+    }
+
+    /** Where a single user's cost comes from — total + per-service breakdown (lifetime). */
+    @GetMapping("/users/{id}/cost")
+    public ResponseEntity<UserCostResponse> userCostBreakdown(@PathVariable UUID id) {
+        return ResponseEntity.ok(adminUserService.costBreakdownForUser(id));
     }
 
     /** Delete a user account and its dependents (test/garbage cleanup). Refuses ADMIN accounts. */

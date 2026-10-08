@@ -3,6 +3,7 @@ package com.relyon.economizaai.service.admin;
 import com.relyon.economizaai.dto.response.AdminUserDetailResponse;
 import com.relyon.economizaai.dto.response.AdminUserDetailResponse.ReceiptCounts;
 import com.relyon.economizaai.dto.response.AdminUserSummaryResponse;
+import com.relyon.economizaai.dto.response.UserCostResponse;
 import com.relyon.economizaai.exception.AdminRoleChangeException;
 import com.relyon.economizaai.exception.AdminUserDeletionException;
 import com.relyon.economizaai.exception.UserNotFoundException;
@@ -13,6 +14,7 @@ import com.relyon.economizaai.model.enums.SubscriptionTier;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.repository.MerchantAccessRepository;
+import com.relyon.economizaai.repository.PaidApiCallRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.UserService;
@@ -64,9 +66,10 @@ public class AdminUserService {
     private final SubscriptionService subscriptionService;
     private final UserService userService;
     private final MerchantAccessRepository merchantAccessRepository;
+    private final PaidApiCallRepository paidApiCallRepository;
 
-    /** Sort keys that rank by a per-household aggregate (not a User column) — handled in memory. */
-    private static final Set<String> AGGREGATE_SORTS = Set.of("receiptCount", "totalSpend");
+    /** Sort keys that rank by a per-household/per-user aggregate (not a User column) — handled in memory. */
+    private static final Set<String> AGGREGATE_SORTS = Set.of("receiptCount", "totalSpend", "cost");
     private static final int AGGREGATE_SORT_CAP = 5000;
 
     @Transactional(readOnly = true)
@@ -101,9 +104,15 @@ public class AdminUserService {
         var spend = spendFor(all);
         var summaries = new ArrayList<>(all.stream().map(user -> summaryFor(user, counts, spend)).toList());
 
-        Comparator<AdminUserSummaryResponse> comparator = "totalSpend".equals(order.getProperty())
-                ? Comparator.comparing(AdminUserSummaryResponse::totalSpend)
-                : Comparator.comparingLong(AdminUserSummaryResponse::receiptCount);
+        Comparator<AdminUserSummaryResponse> comparator;
+        if ("cost".equals(order.getProperty())) {
+            var costByUser = totalCostCentsByUserIds(all.stream().map(User::getId).toList());
+            comparator = Comparator.comparingLong(summary -> costByUser.getOrDefault(summary.id(), 0L));
+        } else if ("totalSpend".equals(order.getProperty())) {
+            comparator = Comparator.comparing(AdminUserSummaryResponse::totalSpend);
+        } else {
+            comparator = Comparator.comparingLong(AdminUserSummaryResponse::receiptCount);
+        }
         if (order.isDescending()) {
             comparator = comparator.reversed();
         }
@@ -169,6 +178,33 @@ public class AdminUserService {
             }
         }
         return predominant;
+    }
+
+    /**
+     * Lifetime paid-API cost (cents) per user — how much each user has cost us. Batch + lazy: the
+     * admin list/detail loads WITHOUT it and fetches it separately, so the main page stays fast.
+     * Users with no paid call are absent (treated as 0 by the caller).
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, Long> totalCostCentsByUserIds(List<UUID> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Map.of();
+        }
+        var costs = new HashMap<UUID, Long>();
+        for (var row : paidApiCallRepository.totalCostByUserIds(userIds)) {
+            costs.put(row.getUserId(), row.getCostCents());
+        }
+        return costs;
+    }
+
+    /** Where a single user's cost comes from — total + per-service breakdown (lifetime). */
+    @Transactional(readOnly = true)
+    public UserCostResponse costBreakdownForUser(UUID userId) {
+        var lines = paidApiCallRepository.costByServiceForUser(userId).stream()
+                .map(row -> new UserCostResponse.ServiceLine(row.getService(), row.getCalls(), row.getCostCents()))
+                .toList();
+        var total = lines.stream().mapToLong(UserCostResponse.ServiceLine::costCents).sum();
+        return new UserCostResponse(total, lines);
     }
 
     private List<UUID> householdIdsOf(List<User> users) {
