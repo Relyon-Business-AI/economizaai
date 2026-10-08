@@ -317,6 +317,12 @@ public class SefazIngestionService {
                 var rescued = rescueRejectionViaChaveReconsult(fetched);
                 if (rescued != null) return rescued;
             }
+            // A contingency note (tpEmis != 1) with no items isn't a parser regression — SEFAZ has
+            // no items for a note the store emitted offline. Don't pollute the verified-parser
+            // regression signal (nor spend a fallback on it); fail it honestly downstream.
+            if (parseEx.isNoItemsFound() && ChaveAcessoParser.isContingencyEmission(fetched.chave())) {
+                throw parseEx;
+            }
             if (!experimental) {
                 // A verified state's parser failed on real HTML — the regression
                 // signature (portal changed its DANFE format). Record it; a burst

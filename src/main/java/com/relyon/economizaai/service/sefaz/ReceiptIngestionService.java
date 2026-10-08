@@ -261,12 +261,26 @@ public class ReceiptIngestionService {
             if (receipt == null) return;
             receipt.setRawHtml(fetched.html());
             receipt.setSourceUrl(fetched.sourceUrl());
-            receipt.setParseErrorReason(ex.getMessageKey() + ":" + String.join(",", ex.getArguments()));
+            receipt.setParseErrorReason(parseFailureReason(ex, receipt.getChaveAcesso()));
             receipt.setStatus(ReceiptStatus.FAILED_PARSE);
             receiptRepository.save(receipt);
             log.warn("ingest parse-failed status=FAILED_PARSE reason={} (raw HTML kept for review)",
-                    ex.getMessageKey());
+                    receipt.getParseErrorReason());
         });
+    }
+
+    /**
+     * "no-items-found" on a CONTINGENCY note (tpEmis != 1) is NOT an app failure: SEFAZ simply has
+     * no items for a note the store emitted offline and may never have transmitted. Classify it
+     * honestly (contingency) so the user gets a clear message instead of the generic "no items".
+     */
+    static String parseFailureReason(ReceiptParseException ex, String chaveAcesso) {
+        // Reuse the existing contingency key — same honest story as a portal REJECTION page, but for
+        // the case where SEFAZ serves an EMPTY DANFE (no items, no error div) for the offline note.
+        if (ex.isNoItemsFound() && ChaveAcessoParser.isContingencyEmission(chaveAcesso)) {
+            return "receipt.contingency.pending:";
+        }
+        return ex.getMessageKey() + ":" + String.join(",", ex.getArguments());
     }
 
     /**
