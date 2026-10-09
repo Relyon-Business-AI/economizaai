@@ -1392,7 +1392,7 @@ PUT    /api/v1/admin/notifications/audiences/{id}          → AudienceResponse 
 DELETE /api/v1/admin/notifications/audiences/{id}          → 204 (built-in → 400; usado por campanha → 409)
 GET    /api/v1/admin/notifications/audiences/{id}/preview  → { matchCount, sampleEmails }
 GET    /api/v1/admin/notifications/campaigns?page=&size=   → Page<CampaignResponse> (cada linha com bloco metrics)
-POST   /api/v1/admin/notifications/campaigns               → 201 CampaignResponse (scheduledAt null=DRAFT, futuro=SCHEDULED, passado=400)
+POST   /api/v1/admin/notifications/campaigns               → 201 CampaignResponse (alvo = audienceId OU recipientUserIds[] — exatamente um; scheduledAt null=DRAFT, futuro=SCHEDULED, passado=400)
 GET    /api/v1/admin/notifications/campaigns/{id}          → CampaignResponse
 PUT    /api/v1/admin/notifications/campaigns/{id}          → CampaignResponse (só DRAFT/SCHEDULED)
 POST   /api/v1/admin/notifications/campaigns/{id}/send     → 202 CampaignResponse (enviar agora; scheduler dispara em ~15s)

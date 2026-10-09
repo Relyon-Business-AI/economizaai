@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.admin;
 
 import com.relyon.economizaai.dto.request.SaveCampaignRequest;
+import com.relyon.economizaai.exception.InvalidCampaignRecipientsException;
 import com.relyon.economizaai.exception.InvalidCampaignScheduleException;
 import com.relyon.economizaai.exception.InvalidCampaignStateException;
 import com.relyon.economizaai.exception.NotificationAudienceNotFoundException;
@@ -17,6 +18,7 @@ import com.relyon.economizaai.repository.NotificationEventRepository.CampaignCon
 import com.relyon.economizaai.repository.NotificationEventRepository.CampaignEventTally;
 import com.relyon.economizaai.repository.NotificationRepository;
 import com.relyon.economizaai.repository.NotificationRepository.CampaignTally;
+import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.notifications.NotificationPayload;
 import com.relyon.economizaai.service.notifications.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,6 +53,7 @@ class AdminCampaignServiceTest {
     @Mock private NotificationRepository notificationRepository;
     @Mock private NotificationEventRepository eventRepository;
     @Mock private NotificationService notificationService;
+    @Mock private UserRepository userRepository;
 
     private AdminCampaignService service;
 
@@ -59,13 +62,19 @@ class AdminCampaignServiceTest {
     @BeforeEach
     void setUp() {
         service = new AdminCampaignService(campaignRepository, audienceRepository,
-                notificationRepository, eventRepository, notificationService, CONVERSION_WINDOW_DAYS);
+                notificationRepository, eventRepository, notificationService, userRepository,
+                CONVERSION_WINDOW_DAYS);
         audience = NotificationAudience.builder().id(UUID.randomUUID()).name("Admins").builtIn(true).build();
     }
 
     private SaveCampaignRequest request(OffsetDateTime scheduledAt) {
         return new SaveCampaignRequest("Boas-vindas", "Bem-vindo!", "Escaneie sua primeira nota.",
-                null, audience.getId(), scheduledAt, null);
+                null, audience.getId(), null, scheduledAt, null);
+    }
+
+    private SaveCampaignRequest recipientsRequest(List<UUID> recipientUserIds) {
+        return new SaveCampaignRequest("Direta", "Oi!", "Mensagem direta.",
+                null, null, recipientUserIds, null, null);
     }
 
     private NotificationCampaign campaign(CampaignStatus status) {
@@ -115,6 +124,46 @@ class AdminCampaignServiceTest {
         var unknownAudienceRequest = request(null);
         assertThrows(NotificationAudienceNotFoundException.class,
                 () -> service.create(unknownAudienceRequest, "admin@economizaai.app"));
+    }
+
+    @Test
+    void createWithExplicitRecipientsKeepsOnlyKnownActiveUsers() {
+        var activeUser = User.builder().id(UUID.randomUUID()).email("admin1@economizaai.app").active(true).build();
+        var inactiveUser = User.builder().id(UUID.randomUUID()).email("off@economizaai.app").active(false).build();
+        var unknownId = UUID.randomUUID();
+        when(userRepository.findAllById(any())).thenReturn(List.of(activeUser, inactiveUser));
+        when(campaignRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = service.create(
+                recipientsRequest(List.of(activeUser.getId(), inactiveUser.getId(), unknownId)),
+                "admin@economizaai.app");
+
+        assertEquals(List.of(activeUser.getId()), response.recipientUserIds());
+        assertEquals(1, response.recipientCount());
+        assertNull(response.audienceId());
+    }
+
+    @Test
+    void createRejectsNeitherAudienceNorRecipients() {
+        var emptyTargetRequest = recipientsRequest(List.of());
+        assertThrows(InvalidCampaignRecipientsException.class,
+                () -> service.create(emptyTargetRequest, "admin@economizaai.app"));
+    }
+
+    @Test
+    void createRejectsBothAudienceAndRecipients() {
+        var bothTargetsRequest = new SaveCampaignRequest("x", "t", "b", null,
+                audience.getId(), List.of(UUID.randomUUID()), null, null);
+        assertThrows(InvalidCampaignRecipientsException.class,
+                () -> service.create(bothTargetsRequest, "admin@economizaai.app"));
+    }
+
+    @Test
+    void createRejectsWhenNoRecipientResolves() {
+        when(userRepository.findAllById(any())).thenReturn(List.of());
+        var unknownOnlyRequest = recipientsRequest(List.of(UUID.randomUUID()));
+        assertThrows(InvalidCampaignRecipientsException.class,
+                () -> service.create(unknownOnlyRequest, "admin@economizaai.app"));
     }
 
     @Test

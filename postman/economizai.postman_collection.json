@@ -16872,7 +16872,7 @@
 								"campaigns"
 							]
 						},
-						"description": "Creates a campaign over an audience. scheduledAt null -> DRAFT; future ISO-8601 instant -> SCHEDULED (dispatched automatically); past -> 400. type defaults to SYSTEM (inbox deep-link); other NotificationTypes reuse their organic FE destination. extras is forwarded verbatim to the push payload.",
+						"description": "Creates a campaign. Target is EXACTLY ONE of: audienceId (filter-based segment) OR recipientUserIds (hand-picked user ids, max 1000; unknown/inactive ids are dropped; both/neither -> 400). scheduledAt null -> DRAFT; future ISO-8601 instant -> SCHEDULED (dispatched automatically); past -> 400. type defaults to SYSTEM (inbox deep-link); other NotificationTypes reuse their organic FE destination. extras is forwarded verbatim to the push payload.",
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"name\": \"Teste interno\",\n  \"title\": \"Testando campanhas\",\n  \"body\": \"Se chegou, o m\\u00f3dulo de campanhas est\\u00e1 funcionando.\",\n  \"type\": \"SYSTEM\",\n  \"audienceId\": \"{{audienceId}}\"\n}"
@@ -16936,7 +16936,7 @@
 								"{{campaignId}}"
 							]
 						},
-						"description": "Edits content/audience/schedule. Only DRAFT/SCHEDULED are editable -> otherwise 400.",
+						"description": "Edits content/target/schedule (same exactly-one-of audienceId/recipientUserIds rule as create). Only DRAFT/SCHEDULED are editable -> otherwise 400.",
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"name\": \"Teste interno\",\n  \"title\": \"Testando campanhas (v2)\",\n  \"body\": \"Texto ajustado.\",\n  \"type\": \"SYSTEM\",\n  \"audienceId\": \"{{audienceId}}\"\n}"

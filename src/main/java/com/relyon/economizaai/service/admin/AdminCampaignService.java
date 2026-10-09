@@ -6,6 +6,7 @@ import com.relyon.economizaai.dto.response.CampaignMetricsResponse;
 import com.relyon.economizaai.dto.response.CampaignMetricsResponse.EventLine;
 import com.relyon.economizaai.dto.response.CampaignResponse;
 import com.relyon.economizaai.dto.response.CampaignResponse.Metrics;
+import com.relyon.economizaai.exception.InvalidCampaignRecipientsException;
 import com.relyon.economizaai.exception.InvalidCampaignScheduleException;
 import com.relyon.economizaai.exception.InvalidCampaignStateException;
 import com.relyon.economizaai.exception.NotificationAudienceNotFoundException;
@@ -21,6 +22,7 @@ import com.relyon.economizaai.repository.NotificationEventRepository;
 import com.relyon.economizaai.repository.NotificationEventRepository.CampaignEventTally;
 import com.relyon.economizaai.repository.NotificationRepository;
 import com.relyon.economizaai.repository.NotificationRepository.CampaignTally;
+import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.notifications.NotificationPayload;
 import com.relyon.economizaai.service.notifications.NotificationService;
 import com.relyon.economizaai.service.privacy.LogMasker;
@@ -65,6 +67,7 @@ public class AdminCampaignService {
     private final NotificationRepository notificationRepository;
     private final NotificationEventRepository eventRepository;
     private final NotificationService notificationService;
+    private final UserRepository userRepository;
     private final int conversionWindowDays;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -73,12 +76,14 @@ public class AdminCampaignService {
                                 NotificationRepository notificationRepository,
                                 NotificationEventRepository eventRepository,
                                 NotificationService notificationService,
+                                UserRepository userRepository,
                                 @Value("${economizaai.attribution.window-days:14}") int conversionWindowDays) {
         this.campaignRepository = campaignRepository;
         this.audienceRepository = audienceRepository;
         this.notificationRepository = notificationRepository;
         this.eventRepository = eventRepository;
         this.notificationService = notificationService;
+        this.userRepository = userRepository;
         this.conversionWindowDays = conversionWindowDays;
     }
 
@@ -100,8 +105,10 @@ public class AdminCampaignService {
         var campaign = applyContent(NotificationCampaign.builder().build(), request);
         campaign.setCreatedByEmail(adminEmail);
         var saved = campaignRepository.save(campaign);
-        log.info("admin.campaign.created id={} name={} status={} audience={}",
-                saved.getId(), saved.getName(), saved.getStatus(), saved.getAudience().getName());
+        log.info("admin.campaign.created id={} name={} status={} audience={} recipients={}",
+                saved.getId(), saved.getName(), saved.getStatus(),
+                saved.getAudience() != null ? saved.getAudience().getName() : null,
+                saved.getRecipientUserIds().size());
         return CampaignResponse.from(saved, emptyMetrics());
     }
 
@@ -190,13 +197,11 @@ public class AdminCampaignService {
     }
 
     private NotificationCampaign applyContent(NotificationCampaign campaign, SaveCampaignRequest request) {
-        var audience = audienceRepository.findById(request.audienceId())
-                .orElseThrow(() -> new NotificationAudienceNotFoundException(String.valueOf(request.audienceId())));
+        applyTarget(campaign, request);
         campaign.setName(request.name());
         campaign.setTitle(request.title());
         campaign.setBody(request.body());
         campaign.setType(request.type() != null ? request.type() : NotificationType.SYSTEM);
-        campaign.setAudience(audience);
         campaign.setExtras(serialize(request.extras()));
         if (request.scheduledAt() != null) {
             if (request.scheduledAt().isBefore(OffsetDateTime.now())) {
@@ -209,6 +214,32 @@ public class AdminCampaignService {
             campaign.setScheduledAt(null);
         }
         return campaign;
+    }
+
+    /**
+     * A campaign targets EXACTLY ONE source: a filter-based audience or a
+     * hand-picked user list. Unknown recipient ids are dropped; an empty
+     * resolved list (or both/neither source) is a 400.
+     */
+    private void applyTarget(NotificationCampaign campaign, SaveCampaignRequest request) {
+        var hasAudience = request.audienceId() != null;
+        var hasRecipients = request.recipientUserIds() != null && !request.recipientUserIds().isEmpty();
+        if (hasAudience == hasRecipients) throw new InvalidCampaignRecipientsException();
+        if (hasAudience) {
+            var audience = audienceRepository.findById(request.audienceId())
+                    .orElseThrow(() -> new NotificationAudienceNotFoundException(String.valueOf(request.audienceId())));
+            campaign.setAudience(audience);
+            campaign.getRecipientUserIds().clear();
+            return;
+        }
+        var knownRecipientIds = userRepository.findAllById(request.recipientUserIds()).stream()
+                .filter(User::isActive)
+                .map(User::getId)
+                .collect(Collectors.toSet());
+        if (knownRecipientIds.isEmpty()) throw new InvalidCampaignRecipientsException();
+        campaign.setAudience(null);
+        campaign.getRecipientUserIds().clear();
+        campaign.getRecipientUserIds().addAll(knownRecipientIds);
     }
 
     private String serialize(Map<String, Object> extras) {
