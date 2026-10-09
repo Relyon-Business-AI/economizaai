@@ -68,6 +68,23 @@ public interface PaidApiCallRepository extends JpaRepository<PaidApiCall, UUID> 
     """)
     List<UserServiceSpend> costByServiceForUser(@Param("userId") UUID userId);
 
+    /**
+     * Lifetime spend + volume grouped by calendar month (Brazil time) for one user — the per-month
+     * cost trend shown in the admin user detail. Native because JPQL has no {@code AT TIME ZONE};
+     * {@code created_at} is {@code timestamptz}, so one conversion to America/Sao_Paulo gives the
+     * local month. Most recent month first.
+     */
+    @Query(nativeQuery = true, value = """
+        SELECT to_char(call.created_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') AS yearmonth,
+               COUNT(*) AS calls,
+               COALESCE(SUM(call.estimated_cost_cents), 0) AS costcents
+        FROM paid_api_call call
+        WHERE call.user_id = :userId
+        GROUP BY to_char(call.created_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM')
+        ORDER BY yearmonth DESC
+    """)
+    List<UserMonthlySpend> costByMonthForUser(@Param("userId") UUID userId);
+
     interface ServiceSpend {
         PaidApiService getService();
         long getCalls();
@@ -82,6 +99,12 @@ public interface PaidApiCallRepository extends JpaRepository<PaidApiCall, UUID> 
 
     interface UserServiceSpend {
         PaidApiService getService();
+        long getCalls();
+        long getCostCents();
+    }
+
+    interface UserMonthlySpend {
+        String getYearMonth();
         long getCalls();
         long getCostCents();
     }

@@ -74,6 +74,9 @@ public class PushDispatcher implements NotificationDispatcher {
     private Map<String, String> buildData(NotificationPayload payload) {
         var data = new HashMap<String, String>();
         data.put("type", payload.type().name());
+        // The app routes the tap by destination (same switch as the in-app notification detail),
+        // so ship it alongside the extras (receiptId/productId/...) that the target screen needs.
+        data.put("destination", payload.type().destination().name());
         if (payload.extras() == null) return data;
         for (var entry : payload.extras().entrySet()) {
             if (entry.getKey() == null || entry.getValue() == null) continue;

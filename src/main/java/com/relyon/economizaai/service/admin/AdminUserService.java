@@ -197,14 +197,18 @@ public class AdminUserService {
         return costs;
     }
 
-    /** Where a single user's cost comes from — total + per-service breakdown (lifetime). */
+    /** Where a single user's cost comes from — total + per-service breakdown + the last 12 months (lifetime). */
     @Transactional(readOnly = true)
     public UserCostResponse costBreakdownForUser(UUID userId) {
         var lines = paidApiCallRepository.costByServiceForUser(userId).stream()
                 .map(row -> new UserCostResponse.ServiceLine(row.getService(), row.getCalls(), row.getCostCents()))
                 .toList();
+        var byMonth = paidApiCallRepository.costByMonthForUser(userId).stream()
+                .limit(12)
+                .map(row -> new UserCostResponse.MonthlyLine(row.getYearMonth(), row.getCalls(), row.getCostCents()))
+                .toList();
         var total = lines.stream().mapToLong(UserCostResponse.ServiceLine::costCents).sum();
-        return new UserCostResponse(total, lines);
+        return new UserCostResponse(total, lines, byMonth);
     }
 
     private List<UUID> householdIdsOf(List<User> users) {
