@@ -27,12 +27,27 @@ public class LoginActivityRecorder {
         if (platform == null) {
             return;
         }
+        backfillRegistrationPlatform(user, platform);
         stampLogin(user, platform);
         userRepository.save(user);
         log.info("login.platform_recorded user={} platform={}", LogMasker.email(user.getEmail()), platform);
     }
 
-    /** Set the immutable registration platform, then stamp it as the first login. No-op when platform is null. */
+    /**
+     * Users registered before the FE sent the platform field carry a null
+     * registrationPlatform forever — adopt the first platform we ever see as the
+     * best available origin. Never overwrites a known value.
+     */
+    private void backfillRegistrationPlatform(User user, Platform platform) {
+        if (user.getRegistrationPlatform() != null) {
+            return;
+        }
+        user.setRegistrationPlatform(platform);
+        log.info("login.registration_platform_backfilled user={} platform={}",
+                LogMasker.email(user.getEmail()), platform);
+    }
+
+    /** Set the registration platform, then stamp it as the first login. No-op when platform is null. */
     public void recordRegistration(User user, Platform platform) {
         if (platform == null) {
             return;

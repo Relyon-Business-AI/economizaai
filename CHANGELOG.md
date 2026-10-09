@@ -16,6 +16,16 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-09 — Plataforma de cadastro: backfill no login
+
+Usuários antigos sem `registrationPlatform` (cadastrados antes do FE enviar o
+campo) agora ganham a plataforma do **primeiro login conhecido** — o backend
+adota o `platform` do login quando o de cadastro é nulo (nunca sobrescreve um
+valor já conhecido). Efeito no painel de aquisição: a linha "Desconhecido" em
+"Por plataforma" encolhe conforme esses usuários voltam a logar. Também rodamos
+um backfill one-off em prod usando o histórico de login por plataforma (13
+usuários recuperados).
+
 ## 2026-10-09 — Custo por mês no detalhe do usuário + push com deep link
 
 **Admin — custo por usuário:** `GET /admin/users/{id}/cost` agora traz, além de
