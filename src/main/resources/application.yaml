@@ -484,6 +484,9 @@ economizaai:
     storage: ${PROFILE_PICTURE_STORAGE:local}
     local-dir: ${PROFILE_PICTURE_DIR:/tmp/economizai/profile-pics}   # dev: local disk. prod: R2 (see below)
     max-size-mb: 5
+    # One-time: on the deploy that still has the disk mounted + storage=r2, copy
+    # existing files to R2. Turn off and detach the disk once logs show migrate done.
+    migrate-disk-to-r2: ${PROFILE_PICTURE_MIGRATE_DISK_TO_R2:false}
     r2:
       endpoint: ${R2_ENDPOINT:}          # https://<account>.r2.cloudflarestorage.com
       bucket: ${R2_BUCKET:}
