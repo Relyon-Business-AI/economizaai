@@ -16,6 +16,15 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-09 — Fix: campanhas de lista explícita sumiam da listagem + flag de push no admin
+
+- **Fix:** `GET /admin/notifications/campaigns` não retornava campanhas SEM
+  público (lista explícita) — o fetch era INNER JOIN; agora LEFT JOIN. Elas
+  sempre existiram e dispararam normalmente; só não apareciam na página.
+- `AdminUserSummaryResponse` (lista `/admin/users`) ganhou **`hasPushToken`** —
+  o dashboard usa pra marcar "sem push" ao escolher destinatários (sem token o
+  envio cai só na caixa de notificações do app).
+
 ## 2026-10-09 — Campanhas: destinatários escolhidos a dedo (além de público)
 
 `POST/PUT /admin/notifications/campaigns` agora aceita **`recipientUserIds[]`**
