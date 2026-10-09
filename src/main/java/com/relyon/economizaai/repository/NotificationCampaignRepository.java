@@ -16,7 +16,8 @@ import java.util.UUID;
 
 public interface NotificationCampaignRepository extends JpaRepository<NotificationCampaign, UUID> {
 
-    @Query(value = "SELECT campaign FROM NotificationCampaign campaign JOIN FETCH campaign.audience "
+    // LEFT JOIN: campanhas de lista explícita têm audience NULL e precisam aparecer.
+    @Query(value = "SELECT campaign FROM NotificationCampaign campaign LEFT JOIN FETCH campaign.audience "
             + "ORDER BY campaign.createdAt DESC",
             countQuery = "SELECT COUNT(campaign) FROM NotificationCampaign campaign")
     Page<NotificationCampaign> findAllWithAudience(Pageable pageable);
