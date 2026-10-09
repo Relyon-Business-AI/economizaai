@@ -17,6 +17,7 @@ import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
 @Table(name = "notifications")
@@ -62,4 +63,9 @@ public class Notification extends BaseEntity {
 
     @Column(name = "read_at")
     private LocalDateTime readAt;
+
+    /** Loose reference to the admin campaign that produced this row (null for
+     *  organic notifications). Kept as a bare UUID — metrics only ever GROUP BY it. */
+    @Column(name = "campaign_id")
+    private UUID campaignId;
 }

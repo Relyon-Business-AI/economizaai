@@ -16,6 +16,36 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-09 — Admin: campanhas de notificação (criar, enviar, públicos, métricas)
+
+Módulo novo de **notification ops** no admin, em `/api/v1/admin/notifications/*`
+(ADMIN-only, como todo `/admin/**`):
+
+- **Públicos (audiences):** segmentos reutilizáveis de usuários por filtros
+  combináveis (role, tier, locale, tem push token, cadastrado nos últimos N dias,
+  ativo — escaneou nota — nos últimos N dias). CRUD em `/audiences`, preview
+  (`GET /audiences/{id}/preview` → `{ matchCount, sampleEmails }`). Resolução é
+  sempre AO VIVO (nunca lista congelada). Vem com o público **built-in "Admins"**
+  (travado, não editável) — o alvo seguro pra testar campanhas.
+- **Campanhas:** CRUD em `/campaigns` (`name`, `title`, `body`, `type`
+  NotificationType — define o deep-link do FE igual às notificações orgânicas —,
+  `audienceId`, `scheduledAt` opcional, `extras` JSON repassado ao push). Estados:
+  `DRAFT → SCHEDULED → SENDING → SENT` (+ `CANCELLED`/`FAILED`; FAILED pode
+  reenviar). `POST /{id}/send` = enviar agora (202; o scheduler dispara em ~15s —
+  faça poll do status), `POST /{id}/cancel`, `POST /{id}/test` = manda só pro
+  admin chamador sem poluir métricas, `DELETE` só DRAFT/CANCELLED/FAILED.
+- **Métricas por campanha** (o bloco `metrics` vem em CADA linha da lista, pra
+  comparar performance de texto/horário/tipo): funil `sent/delivered/read` (da
+  outbox `notifications`, agora com `campaign_id`), engajamento
+  `pushOpened/tapped/dismissed` (da telemetria `notification_events` via
+  `notificationId`) e **conversão atribuída** (`convertedUsers`, `conversions`,
+  `attributedSavings` em R$ — eventos CONVERTED dos destinatários na janela de
+  atribuição de 14d pós-envio) + taxas (`deliveryRate`, `readRate`, `openRate`,
+  `conversionRate`). Drill-down completo em `GET /campaigns/{id}/metrics`.
+- **FE:** o push de campanha carrega `campaignId` nos extras; ao abrir, reporte
+  `PUSH_OPENED` com o `notificationId` normalmente (`POST /notifications/events`)
+  — é isso que liga a abertura à campanha.
+
 ## 2026-10-09 — Plataforma de cadastro: backfill no login
 
 Usuários antigos sem `registrationPlatform` (cadastrados antes do FE enviar o

@@ -74,6 +74,7 @@ public class NotificationService {
                 .title(payload.title())
                 .body(payload.body())
                 .payload(serialize(payload.extras()))
+                .campaignId(payload.campaignId())
                 .delivered(false)
                 .build();
 

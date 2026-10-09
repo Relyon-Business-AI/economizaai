@@ -94,4 +94,55 @@ public interface NotificationEventRepository extends JpaRepository<NotificationE
         OffsetDateTime getOccurredAt();
         BigDecimal getSavingsAmount();
     }
+
+    /**
+     * Engagement events per type for a batch of campaigns, joined through the
+     * outbox rows the campaigns produced ({@code notifications.campaign_id}) —
+     * PUSH_OPENED / DEAL_TAPPED / DISMISSED etc. reported with the notification id.
+     */
+    @Query("""
+        SELECT notification.campaignId AS campaignId, event.eventType AS eventType,
+               COUNT(event) AS occurrences, COUNT(DISTINCT event.user.id) AS users
+        FROM NotificationEvent event, Notification notification
+        WHERE event.notificationId = notification.id
+          AND notification.campaignId IN :campaignIds
+        GROUP BY notification.campaignId, event.eventType
+    """)
+    List<CampaignEventTally> tallyEventsByCampaigns(@Param("campaignIds") Collection<UUID> campaignIds);
+
+    /** Projection for {@link #tallyEventsByCampaigns}. */
+    interface CampaignEventTally {
+        UUID getCampaignId();
+        NotificationEventType getEventType();
+        long getOccurrences();
+        long getUsers();
+    }
+
+    /**
+     * Attributed conversions for one campaign: CONVERTED events by the campaign's
+     * recipients inside the window after the send. Conversions are attributed by
+     * recipient + time window (not notification id) because the attribution
+     * pipeline records them against the surfaced deal, not the push.
+     */
+    @Query("""
+        SELECT COUNT(DISTINCT event.user.id) AS convertedUsers,
+               COUNT(event) AS conversions,
+               COALESCE(SUM(event.savingsAmount), 0) AS savings
+        FROM NotificationEvent event
+        WHERE event.eventType = 'CONVERTED'
+          AND event.occurredAt >= :from AND event.occurredAt < :to
+          AND event.user.id IN (
+              SELECT notification.user.id FROM Notification notification
+              WHERE notification.campaignId = :campaignId)
+    """)
+    CampaignConversionRollup conversionsForCampaign(@Param("campaignId") UUID campaignId,
+                                                    @Param("from") OffsetDateTime from,
+                                                    @Param("to") OffsetDateTime to);
+
+    /** Projection for {@link #conversionsForCampaign}. */
+    interface CampaignConversionRollup {
+        long getConvertedUsers();
+        long getConversions();
+        BigDecimal getSavings();
+    }
 }

@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -100,6 +101,26 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     interface TimeBucketTally {
         int getBucket();
         long getSent();
+        long getRead();
+    }
+
+    /** Outbox funnel per campaign (sent/delivered/read) for a batch of campaigns. */
+    @Query("""
+        SELECT notification.campaignId AS campaignId,
+               COUNT(notification) AS sent,
+               COALESCE(SUM(CASE WHEN notification.delivered = true THEN 1 ELSE 0 END), 0) AS delivered,
+               COALESCE(SUM(CASE WHEN notification.readAt IS NOT NULL THEN 1 ELSE 0 END), 0) AS read
+        FROM Notification notification
+        WHERE notification.campaignId IN :campaignIds
+        GROUP BY notification.campaignId
+    """)
+    List<CampaignTally> tallyByCampaigns(@Param("campaignIds") Collection<UUID> campaignIds);
+
+    /** Projection for {@link #tallyByCampaigns}. */
+    interface CampaignTally {
+        UUID getCampaignId();
+        long getSent();
+        long getDelivered();
         long getRead();
     }
 }
