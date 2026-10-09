@@ -582,6 +582,13 @@ management:
   endpoint:
     health:
       show-details: never    # don't leak DB/disk internals to anyone hitting /actuator/health
+      # Liveness/readiness probes. Render's health check points at
+      # /actuator/health/readiness, which only reflects the app lifecycle
+      # (ACCEPTING_TRAFFIC after startup) — NOT the DB — so a deploy's new
+      # instance only receives traffic once it's fully booted (zero-downtime,
+      # kills the ~34s 5xx window), and a transient DB blip never force-restarts.
+      probes:
+        enabled: true
   prometheus:
     metrics:
       export:
