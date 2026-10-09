@@ -45,8 +45,27 @@ class LoginActivityRecorderTest {
         assertNotNull(user.getLastAndroidLoginAt());
         assertNull(user.getLastWebLoginAt());
         assertNull(user.getLastIosLoginAt());
-        assertNull(user.getRegistrationPlatform());
         verify(userRepository).save(user);
+    }
+
+    @Test
+    void recordLogin_backfillsRegistrationPlatformWhenMissing() {
+        var user = new User();
+
+        loginActivityRecorder.recordLogin(user, Platform.ANDROID);
+
+        assertEquals(Platform.ANDROID, user.getRegistrationPlatform());
+    }
+
+    @Test
+    void recordLogin_neverOverwritesKnownRegistrationPlatform() {
+        var user = new User();
+        user.setRegistrationPlatform(Platform.IOS);
+
+        loginActivityRecorder.recordLogin(user, Platform.WEB);
+
+        assertEquals(Platform.IOS, user.getRegistrationPlatform());
+        assertEquals(Platform.WEB, user.getLastPlatform());
     }
 
     @Test
