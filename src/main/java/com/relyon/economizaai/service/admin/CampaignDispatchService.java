@@ -7,6 +7,7 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.CampaignStatus;
 import com.relyon.economizaai.model.enums.NotificationEventType;
 import com.relyon.economizaai.repository.NotificationCampaignRepository;
+import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.notifications.NotificationEventService;
 import com.relyon.economizaai.service.notifications.NotificationEventService.RecordContext;
 import com.relyon.economizaai.service.notifications.NotificationPayload;
@@ -40,6 +41,7 @@ import java.util.UUID;
 public class CampaignDispatchService {
 
     private final NotificationCampaignRepository campaignRepository;
+    private final UserRepository userRepository;
     private final AdminAudienceService audienceService;
     private final NotificationService notificationService;
     private final NotificationEventService eventService;
@@ -85,11 +87,21 @@ public class CampaignDispatchService {
                 return null;
             }
             var campaign = campaignRepository.findById(campaignId).orElseThrow();
-            var recipients = audienceService.resolveUsers(campaign.getAudience());
+            var recipients = resolveRecipients(campaign);
             campaign.setRecipientsTotal(recipients.size());
             campaignRepository.save(campaign);
             return new ClaimedCampaign(campaign, recipients);
         });
+    }
+
+    /** Audience campaigns resolve the live segment; explicit campaigns load the hand-picked users. */
+    private List<User> resolveRecipients(NotificationCampaign campaign) {
+        if (campaign.getAudience() != null) {
+            return audienceService.resolveUsers(campaign.getAudience());
+        }
+        return userRepository.findAllById(campaign.getRecipientUserIds()).stream()
+                .filter(User::isActive)
+                .toList();
     }
 
     /** True when an outbox row was created (false = user opted out of the type). */

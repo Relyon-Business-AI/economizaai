@@ -9,6 +9,7 @@ import com.relyon.economizaai.model.enums.NotificationChannel;
 import com.relyon.economizaai.model.enums.NotificationEventType;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.repository.NotificationCampaignRepository;
+import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.notifications.NotificationEventService;
 import com.relyon.economizaai.service.notifications.NotificationPayload;
 import com.relyon.economizaai.service.notifications.NotificationService;
@@ -42,6 +43,7 @@ import static org.mockito.Mockito.when;
 class CampaignDispatchServiceTest {
 
     @Mock private NotificationCampaignRepository campaignRepository;
+    @Mock private UserRepository userRepository;
     @Mock private AdminAudienceService audienceService;
     @Mock private NotificationService notificationService;
     @Mock private NotificationEventService eventService;
@@ -76,6 +78,24 @@ class CampaignDispatchServiceTest {
         when(campaignRepository.claimForSending(any(), any(), any(), any(), any())).thenReturn(1);
         when(campaignRepository.findById(campaign.getId())).thenReturn(Optional.of(campaign));
         when(audienceService.resolveUsers(campaign.getAudience())).thenReturn(recipients);
+    }
+
+    @Test
+    void explicitRecipientCampaignLoadsHandPickedUsers() {
+        campaign.setAudience(null);
+        campaign.getRecipientUserIds().add(firstRecipient.getId());
+        when(campaignRepository.claimForSending(any(), any(), any(), any(), any())).thenReturn(1);
+        when(campaignRepository.findById(campaign.getId())).thenReturn(Optional.of(campaign));
+        firstRecipient.setActive(true);
+        when(userRepository.findAllById(campaign.getRecipientUserIds())).thenReturn(List.of(firstRecipient));
+        when(notificationService.notify(any())).thenReturn(
+                Notification.builder().id(UUID.randomUUID()).channel(NotificationChannel.PUSH).build());
+
+        service.dispatch(campaign.getId());
+
+        verify(audienceService, never()).resolveUsers(any());
+        assertEquals(1, campaign.getRecipientsSent());
+        assertEquals(CampaignStatus.SENT, campaign.getStatus());
     }
 
     @Test

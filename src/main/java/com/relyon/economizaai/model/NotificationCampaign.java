@@ -2,7 +2,9 @@ package com.relyon.economizaai.model;
 
 import com.relyon.economizaai.model.enums.CampaignStatus;
 import com.relyon.economizaai.model.enums.NotificationType;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -17,6 +19,9 @@ import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 
 import java.time.OffsetDateTime;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * An admin-authored notification send over a {@link NotificationAudience}.
@@ -53,9 +58,18 @@ public class NotificationCampaign extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String extras;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "audience_id", nullable = false)
+    /** Filter-based target. Null when the campaign targets an explicit user list instead. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "audience_id")
     private NotificationAudience audience;
+
+    /** Hand-picked recipients (exactly one source per campaign: audience OR this list). */
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "notification_campaign_recipients",
+            joinColumns = @JoinColumn(name = "campaign_id"))
+    @Column(name = "user_id")
+    @lombok.Builder.Default
+    private Set<UUID> recipientUserIds = new HashSet<>();
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

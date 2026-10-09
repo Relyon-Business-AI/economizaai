@@ -7,6 +7,7 @@ import com.relyon.economizaai.model.enums.NotificationType;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -22,6 +23,8 @@ public record CampaignResponse(
         NotificationType type,
         UUID audienceId,
         String audienceName,
+        List<UUID> recipientUserIds,
+        int recipientCount,
         CampaignStatus status,
         OffsetDateTime scheduledAt,
         OffsetDateTime startedAt,
@@ -52,14 +55,18 @@ public record CampaignResponse(
     ) {}
 
     public static CampaignResponse from(NotificationCampaign campaign, Metrics metrics) {
+        var audience = campaign.getAudience();
+        var recipients = campaign.getRecipientUserIds();
         return new CampaignResponse(
                 campaign.getId(),
                 campaign.getName(),
                 campaign.getTitle(),
                 campaign.getBody(),
                 campaign.getType(),
-                campaign.getAudience().getId(),
-                campaign.getAudience().getName(),
+                audience != null ? audience.getId() : null,
+                audience != null ? audience.getName() : null,
+                List.copyOf(recipients),
+                recipients.size(),
                 campaign.getStatus(),
                 campaign.getScheduledAt(),
                 campaign.getStartedAt(),

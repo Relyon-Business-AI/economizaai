@@ -16,6 +16,17 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-09 — Campanhas: destinatários escolhidos a dedo (além de público)
+
+`POST/PUT /admin/notifications/campaigns` agora aceita **`recipientUserIds[]`**
+(até 1000 ids; ids desconhecidos/inativos são descartados) como alternativa ao
+`audienceId` — **exatamente um dos dois** (ambos ou nenhum → 400,
+`campaign.recipients.required`). `CampaignResponse` ganhou `recipientUserIds[]`
+e `recipientCount`; `audienceId`/`audienceName` agora podem vir `null` (campanha
+de lista explícita). Dispatch, agendamento, test-send e métricas funcionam igual
+nos dois modos. Na UI do dashboard: "Nova campanha" → destinatários "Público" ou
+"Usuários específicos" (busca + checkbox) + envio imediato ou agendado.
+
 ## 2026-10-09 — Admin: campanhas de notificação (criar, enviar, públicos, métricas)
 
 Módulo novo de **notification ops** no admin, em `/api/v1/admin/notifications/*`
