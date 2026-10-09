@@ -1,7 +1,7 @@
 {
 	"info": {
 		"name": "economizai",
-		"description": "API collection for the economizai backend (NFC-e collaborative price intelligence). Maintain in sync with every endpoint change. The 'E2E Flow' folder runs all requests in logical order — each request seeds variables for the next.",
+		"description": "API collection for the economizai backend (NFC-e collaborative price intelligence). Maintain in sync with every endpoint change. The 'E2E Flow' folder runs all requests in logical order \u2014 each request seeds variables for the next.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -134,7 +134,7 @@
 		{
 			"key": "cnpjRoot",
 			"value": "93015006",
-			"description": "Primeiros 8 dígitos do CNPJ da rede (grants de merchant)"
+			"description": "Primeiros 8 d\u00edgitos do CNPJ da rede (grants de merchant)"
 		},
 		{
 			"key": "merchantPromoId",
@@ -144,13 +144,13 @@
 		{
 			"key": "merchantClaimId",
 			"value": "",
-			"description": "Id de claim de mercado (fluxo de reivindicação)"
+			"description": "Id de claim de mercado (fluxo de reivindica\u00e7\u00e3o)"
 		}
 	],
 	"item": [
 		{
 			"name": "Legal",
-			"description": "Public endpoints — no auth needed.",
+			"description": "Public endpoints \u2014 no auth needed.",
 			"item": [
 				{
 					"name": "Get current Terms of Use",
@@ -212,7 +212,7 @@
 		},
 		{
 			"name": "App config (public)",
-			"description": "Public endpoint — no auth needed. Remote config for the mobile force-update gate (replaces the legacy GitHub gist).",
+			"description": "Public endpoint \u2014 no auth needed. Remote config for the mobile force-update gate (replaces the legacy GitHub gist).",
 			"item": [
 				{
 					"name": "Get app config (force-update gate)",
@@ -650,7 +650,7 @@
 							"mode": "raw",
 							"raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
 						},
-						"description": "Single-use rotation. Returns a new (token, refreshToken) pair; the presented refresh token is consumed. Replay → 400 auth.token.invalid."
+						"description": "Single-use rotation. Returns a new (token, refreshToken) pair; the presented refresh token is consumed. Replay \u2192 400 auth.token.invalid."
 					},
 					"response": []
 				},
@@ -1545,7 +1545,7 @@
 					"response": []
 				},
 				{
-					"name": "Remove a member (kick — moves them to a fresh solo household)",
+					"name": "Remove a member (kick \u2014 moves them to a fresh solo household)",
 					"request": {
 						"method": "DELETE",
 						"header": [
@@ -1594,7 +1594,7 @@
 								"pending"
 							]
 						},
-						"description": "Data-share requests where I am the grantor — another member wants to take a copy of my data on household split. Returns List<ConsentResponse>."
+						"description": "Data-share requests where I am the grantor \u2014 another member wants to take a copy of my data on household split. Returns List<ConsentResponse>."
 					},
 					"response": []
 				},
@@ -1692,7 +1692,7 @@
 					"response": []
 				},
 				{
-					"name": "Submit NFC-e prefetched (app fetched the SEFAZ page on-device — e.g. PE)",
+					"name": "Submit NFC-e prefetched (app fetched the SEFAZ page on-device \u2014 e.g. PE)",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -1721,7 +1721,7 @@
 							"mode": "raw",
 							"raw": "{\n  \"qrPayload\": \"{{qrPayload}}\",\n  \"rawContent\": \"<raw HTML/XML the app fetched from the QR URL on-device>\"\n}"
 						},
-						"description": "For state portals that block our datacenter server (e.g. Pernambuco): the app fetches the nota's own SEFAZ page on the device (residential/mobile IP is accepted) and posts the raw body here. Same validation and ReceiptResponse (status PROCESSING) as POST /receipts; ingestion parses rawContent instead of scraping. rawContent must contain the chave.\n\nSince the 2026-09-22 security pass this endpoint only accepts UFs whose portal blocks our server (config SEFAZ_PREFETCH_ALLOWED_UFS, default PE). Any other UF gets a localized 400 (receipt.prefetched.unsupported) — use the regular scan flow."
+						"description": "For state portals that block our datacenter server (e.g. Pernambuco): the app fetches the nota's own SEFAZ page on the device (residential/mobile IP is accepted) and posts the raw body here. Same validation and ReceiptResponse (status PROCESSING) as POST /receipts; ingestion parses rawContent instead of scraping. rawContent must contain the chave.\n\nSince the 2026-09-22 security pass this endpoint only accepts UFs whose portal blocks our server (config SEFAZ_PREFETCH_ALLOWED_UFS, default PE). Any other UF gets a localized 400 (receipt.prefetched.unsupported) \u2014 use the regular scan flow."
 					},
 					"response": []
 				},
@@ -1770,7 +1770,7 @@
 								"value": "pt"
 							}
 						],
-						"description": "Uploads a PHOTO of the QR code (web/gallery fallback). Decoded server-side with ZXing and fed into the same submit flow — returns 201 with a PROCESSING receipt, or 400 receipt.photo.qr.unreadable if no QR is found.",
+						"description": "Uploads a PHOTO of the QR code (web/gallery fallback). Decoded server-side with ZXing and fed into the same submit flow \u2014 returns 201 with a PROCESSING receipt, or 400 receipt.photo.qr.unreadable if no QR is found.",
 						"url": {
 							"raw": "{{baseUrl}}/api/v1/receipts/photo",
 							"host": [
@@ -1797,7 +1797,7 @@
 					"response": []
 				},
 				{
-					"name": "Import receipts from chaves (RS — NFC-e 65 / NF-e 55)",
+					"name": "Import receipts from chaves (RS \u2014 NFC-e 65 / NF-e 55)",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -1830,7 +1830,7 @@
 					"response": []
 				},
 				{
-					"name": "Import receipts from Nota Fiscal Gaúcha CSV (multipart 'file')",
+					"name": "Import receipts from Nota Fiscal Ga\u00facha CSV (multipart 'file')",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -1902,7 +1902,7 @@
 					"response": []
 				},
 				{
-					"name": "Extract chaves from export file (CSV/Excel/PDF — no import)",
+					"name": "Extract chaves from export file (CSV/Excel/PDF \u2014 no import)",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -1934,11 +1934,11 @@
 								"extract-chaves"
 							]
 						},
-						"description": "Server-side chave extraction from a state-program export upload (CSV/TXT, Excel or PDF; format sniffed by content). Returns {chaves:[...]} and imports NOTHING — the client shows the count and the user confirms via POST /receipts/import. 400 receipt.import.file.unreadable when the file can't be parsed."
+						"description": "Server-side chave extraction from a state-program export upload (CSV/TXT, Excel or PDF; format sniffed by content). Returns {chaves:[...]} and imports NOTHING \u2014 the client shows the count and the user confirms via POST /receipts/import. 400 receipt.import.file.unreadable when the file can't be parsed."
 					}
 				},
 				{
-					"name": "Extract chaves from export file (CSV/Excel/PDF — no import)",
+					"name": "Extract chaves from export file (CSV/Excel/PDF \u2014 no import)",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -1974,7 +1974,7 @@
 					}
 				},
 				{
-					"name": "Import staging (non-confirmed import notas — rehydrates the import screen)",
+					"name": "Import staging (non-confirmed import notas \u2014 rehydrates the import screen)",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -2042,7 +2042,7 @@
 								"value": "pt"
 							}
 						],
-						"description": "OCRs the printed 44-digit chave de acesso (fallback when the QR is unreadable). Returns { chaveAcesso, uf } for the user to CONFIRM — then submit it via POST /api/v1/receipts. Validates the mod-11 check digit + UF prefix, so misreads come back as 400 receipt.photo.chave.unreadable. 503 receipt.ocr.unavailable when Tesseract isn't on the host.",
+						"description": "OCRs the printed 44-digit chave de acesso (fallback when the QR is unreadable). Returns { chaveAcesso, uf } for the user to CONFIRM \u2014 then submit it via POST /api/v1/receipts. Validates the mod-11 check digit + UF prefix, so misreads come back as 400 receipt.photo.chave.unreadable. 503 receipt.ocr.unavailable when Tesseract isn't on the host.",
 						"url": {
 							"raw": "{{baseUrl}}/api/v1/receipts/chave/photo",
 							"host": [
@@ -2217,13 +2217,13 @@
 						},
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"ean\": \"7891234567890\",\n  \"quantity\": 2,\n  \"unit\": \"UN\",\n  \"unitPrice\": 28.90,\n  \"totalPrice\": 57.80,\n  \"paidTotalPrice\": 49.90,\n  \"friendlyDescription\": \"Arroz Tio João 5kg\"\n}"
+							"raw": "{\n  \"ean\": \"7891234567890\",\n  \"quantity\": 2,\n  \"unit\": \"UN\",\n  \"unitPrice\": 28.90,\n  \"totalPrice\": 57.80,\n  \"paidTotalPrice\": 49.90,\n  \"friendlyDescription\": \"Arroz Tio Jo\u00e3o 5kg\"\n}"
 						}
 					},
 					"response": []
 				},
 				{
-					"name": "Edit item — personal layer (any status)",
+					"name": "Edit item \u2014 personal layer (any status)",
 					"request": {
 						"method": "PATCH",
 						"header": [
@@ -2255,7 +2255,7 @@
 							"mode": "raw",
 							"raw": "{\n  \"excludedFromPersonal\": true,\n  \"friendlyDescription\": \"Cerveja Stella 330ml\",\n  \"paidTotalPrice\": 49.90\n}"
 						},
-						"description": "Household \"personal layer\" — works at ANY status incl. CONFIRMED. excludedFromPersonal=\"não é meu\" drops the line from personal totals but keeps its price in the collaborative index; friendlyDescription/paidTotalPrice editable after confirm too. Immutable nota fields (qty, shelf price, EAN) stay PENDING-only via the full item PATCH."
+						"description": "Household \"personal layer\" \u2014 works at ANY status incl. CONFIRMED. excludedFromPersonal=\"n\u00e3o \u00e9 meu\" drops the line from personal totals but keeps its price in the collaborative index; friendlyDescription/paidTotalPrice editable after confirm too. Immutable nota fields (qty, shelf price, EAN) stay PENDING-only via the full item PATCH."
 					},
 					"response": []
 				},
@@ -2458,7 +2458,7 @@
 								}
 							]
 						},
-						"description": "`q` does case-insensitive substring match on rawDescription, friendlyDescription, the linked product's normalized name, and the receipt's market name. `category` is multi-value — repeat it for OR (here: GROCERIES or CLEANING)."
+						"description": "`q` does case-insensitive substring match on rawDescription, friendlyDescription, the linked product's normalized name, and the receipt's market name. `category` is multi-value \u2014 repeat it for OR (here: GROCERIES or CLEANING)."
 					},
 					"response": []
 				},
@@ -2577,7 +2577,7 @@
 								"retry"
 							]
 						},
-						"description": "Tentar novamente uma nota FAILED_PARSE sem reescanear: SCAN re-roda a ingestão com o qrPayload guardado; IMPORT re-enfileira o reconsult; XML re-parseia o XML armazenado. 202; 400 receipt.retry.unavailable quando a nota não tem fonte reprocessável (ex.: foto). Header opcional X-Device-Fetch marca o cliente como device-capable."
+						"description": "Tentar novamente uma nota FAILED_PARSE sem reescanear: SCAN re-roda a ingest\u00e3o com o qrPayload guardado; IMPORT re-enfileira o reconsult; XML re-parseia o XML armazenado. 202; 400 receipt.retry.unavailable quando a nota n\u00e3o tem fonte reprocess\u00e1vel (ex.: foto). Header opcional X-Device-Fetch marca o cliente como device-capable."
 					},
 					"response": []
 				},
@@ -2603,7 +2603,7 @@
 								"retry"
 							]
 						},
-						"description": "Re-enfileira notas de import FAILED_PARSE para novo reconsult (o \"tentar de novo\" da tela de import). Escopo do domicílio; status não-FAILED são pulados. 202 { affected }.",
+						"description": "Re-enfileira notas de import FAILED_PARSE para novo reconsult (o \"tentar de novo\" da tela de import). Escopo do domic\u00edlio; status n\u00e3o-FAILED s\u00e3o pulados. 202 { affected }.",
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"ids\": [\"{{e2eReceiptId}}\"]\n}"
@@ -2633,7 +2633,7 @@
 								"delete-batch"
 							]
 						},
-						"description": "Apaga em lote as notas selecionadas do domicílio (o \"apagar selecionadas\" da tela de import). 200 { affected }.",
+						"description": "Apaga em lote as notas selecionadas do domic\u00edlio (o \"apagar selecionadas\" da tela de import). 200 { affected }.",
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"ids\": [\"{{e2eReceiptId}}\"]\n}"
@@ -2666,7 +2666,7 @@
 								"correction"
 							]
 						},
-						"description": "Correção de item mal classificado: o usuário diz o que o produto realmente é; a IA re-classifica com a dica, atualiza o produto e cria um finding MISSING_RULE para revisão do admin. 200 com a nota atualizada.",
+						"description": "Corre\u00e7\u00e3o de item mal classificado: o usu\u00e1rio diz o que o produto realmente \u00e9; a IA re-classifica com a dica, atualiza o produto e cria um finding MISSING_RULE para revis\u00e3o do admin. 200 com a nota atualizada.",
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"hint\": \"arroz integral 1kg\"\n}"
@@ -2832,7 +2832,7 @@
 								}
 							]
 						},
-						"description": "Products whose detail screen the user opened, newest first. 200 List<ProductResponse>.\n\nResponse inclui `friendlyDescription` (apelido que o domicílio deu ao produto; null se nunca renomeado) ao lado do nome de catálogo."
+						"description": "Products whose detail screen the user opened, newest first. 200 List<ProductResponse>.\n\nResponse inclui `friendlyDescription` (apelido que o domic\u00edlio deu ao produto; null se nunca renomeado) ao lado do nome de cat\u00e1logo."
 					},
 					"response": []
 				},
@@ -2859,7 +2859,7 @@
 								"view"
 							]
 						},
-						"description": "Records that the user opened this product’s detail screen (feeds recently-viewed). 204 No Content."
+						"description": "Records that the user opened this product\u2019s detail screen (feeds recently-viewed). 204 No Content."
 					},
 					"response": []
 				},
@@ -2927,7 +2927,7 @@
 								}
 							]
 						},
-						"description": "ADMIN-only since the 2026-09-22 security pass — canonical products are global (create also relinks receipt items across households by EAN). Regular users get 403."
+						"description": "ADMIN-only since the 2026-09-22 security pass \u2014 canonical products are global (create also relinks receipt items across households by EAN). Regular users get 403."
 					},
 					"response": []
 				},
@@ -3021,7 +3021,7 @@
 								"7891234567890"
 							]
 						},
-						"description": "Products whose detail screen the user opened, newest first. 200 List<ProductResponse>.\n\nResponse inclui `friendlyDescription` (apelido que o domicílio deu ao produto; null se nunca renomeado) ao lado do nome de catálogo."
+						"description": "Products whose detail screen the user opened, newest first. 200 List<ProductResponse>.\n\nResponse inclui `friendlyDescription` (apelido que o domic\u00edlio deu ao produto; null se nunca renomeado) ao lado do nome de cat\u00e1logo."
 					}
 				}
 			]
@@ -3249,12 +3249,12 @@
 								"price-history"
 							]
 						},
-						"description": "Response inclui `friendlyDescription` (apelido que o domicílio deu ao produto; null se nunca renomeado) ao lado do nome de catálogo."
+						"description": "Response inclui `friendlyDescription` (apelido que o domic\u00edlio deu ao produto; null se nunca renomeado) ao lado do nome de cat\u00e1logo."
 					},
 					"response": []
 				},
 				{
-					"name": "Flexible query — weekly spend in April",
+					"name": "Flexible query \u2014 weekly spend in April",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -3291,7 +3291,7 @@
 									"key": "scope",
 									"value": "SUPPORTED",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
+									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						},
@@ -3300,7 +3300,7 @@
 					"response": []
 				},
 				{
-					"name": "Flexible query — top markets all-time",
+					"name": "Flexible query \u2014 top markets all-time",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -3333,7 +3333,7 @@
 									"key": "scope",
 									"value": "SUPPORTED",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
+									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						},
@@ -3342,7 +3342,7 @@
 					"response": []
 				},
 				{
-					"name": "Flexible query — category breakdown at one market",
+					"name": "Flexible query \u2014 category breakdown at one market",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -3375,7 +3375,7 @@
 									"key": "scope",
 									"value": "SUPPORTED",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
+									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						},
@@ -3384,7 +3384,7 @@
 					"response": []
 				},
 				{
-					"name": "Flexible query — top 20 products in GROCERIES + BEVERAGES",
+					"name": "Flexible query \u2014 top 20 products in GROCERIES + BEVERAGES",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -3425,7 +3425,7 @@
 									"key": "scope",
 									"value": "SUPPORTED",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
+									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						},
@@ -3434,7 +3434,7 @@
 					"response": []
 				},
 				{
-					"name": "Flexible query — big trips only (R$200+) by month",
+					"name": "Flexible query \u2014 big trips only (R$200+) by month",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -3467,7 +3467,7 @@
 									"key": "scope",
 									"value": "SUPPORTED",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
+									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						},
@@ -3476,7 +3476,7 @@
 					"response": []
 				},
 				{
-					"name": "Flexible query — summary only (no groupBy)",
+					"name": "Flexible query \u2014 summary only (no groupBy)",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -3509,11 +3509,11 @@
 									"key": "scope",
 									"value": "SUPPORTED",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
+									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						},
-						"description": "Default groupBy=NONE → returns only summary (total, receiptCount, itemCount, averageTicket)."
+						"description": "Default groupBy=NONE \u2192 returns only summary (total, receiptCount, itemCount, averageTicket)."
 					},
 					"response": []
 				},
@@ -3592,7 +3592,7 @@
 					"response": []
 				},
 				{
-					"name": "Flexible query — category breakdown (HOUSEHOLD lens, default)",
+					"name": "Flexible query \u2014 category breakdown (HOUSEHOLD lens, default)",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -3626,7 +3626,7 @@
 									"key": "scope",
 									"value": "SUPPORTED",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
+									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						}
@@ -3634,7 +3634,7 @@
 					"response": []
 				},
 				{
-					"name": "Flexible query — category breakdown (GLOBAL lens)",
+					"name": "Flexible query \u2014 category breakdown (GLOBAL lens)",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -3668,7 +3668,7 @@
 									"key": "scope",
 									"value": "SUPPORTED",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
+									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						}
@@ -3898,7 +3898,7 @@
 								"promote-consensus"
 							]
 						},
-						"description": "Graduates products corrected by ≥N households to a global category (source USER) and learns recurring agreed tokens into the learned dictionary. Returns { productsGraduated, tokensLearned, learnedTotal }."
+						"description": "Graduates products corrected by \u2265N households to a global category (source USER) and learns recurring agreed tokens into the learned dictionary. Returns { productsGraduated, tokensLearned, learnedTotal }."
 					},
 					"response": []
 				},
@@ -3976,7 +3976,7 @@
 								"consensus"
 							]
 						},
-						"description": "[ADMIN] Reverts all products whose category was set by consensus (source=CONSENSUS) back to NONE / null category. Returns { revertedProducts }. The learned dictionary is NOT cleared by this — use DELETE /learned to clear that too."
+						"description": "[ADMIN] Reverts all products whose category was set by consensus (source=CONSENSUS) back to NONE / null category. Returns { revertedProducts }. The learned dictionary is NOT cleared by this \u2014 use DELETE /learned to clear that too."
 					},
 					"response": []
 				},
@@ -4016,7 +4016,7 @@
 								"import"
 							]
 						},
-						"description": "[ADMIN] Upserts a batch of token → (genericName, category) entries directly into the learned dictionary (sampleCount defaults to 999 if omitted). Immediately swaps the in-memory dictionary. Use to seed large volumes of known mappings without re-parsing receipts. Returns { imported, skipped }."
+						"description": "[ADMIN] Upserts a batch of token \u2192 (genericName, category) entries directly into the learned dictionary (sampleCount defaults to 999 if omitted). Immediately swaps the in-memory dictionary. Use to seed large volumes of known mappings without re-parsing receipts. Returns { imported, skipped }."
 					},
 					"response": []
 				},
@@ -4093,7 +4093,7 @@
 								"import"
 							]
 						},
-						"description": "[ADMIN] Upserts a batch of token → (genericName, category) entries directly into the learned dictionary (sampleCount defaults to 999 if omitted). Immediately swaps the in-memory dictionary. Use to seed large volumes of known mappings without re-parsing receipts. Returns { imported, skipped }."
+						"description": "[ADMIN] Upserts a batch of token \u2192 (genericName, category) entries directly into the learned dictionary (sampleCount defaults to 999 if omitted). Immediately swaps the in-memory dictionary. Use to seed large volumes of known mappings without re-parsing receipts. Returns { imported, skipped }."
 					}
 				},
 				{
@@ -4128,7 +4128,7 @@
 								}
 							]
 						},
-						"description": "[ADMIN] Autocomplete do campo Marca no editor de regras: nomes de marca distintos do registro cujo key normalizado casa com q. Retorna string[] (nomes de exibição). Alimenta o combobox — marcas escolhidas do registro em vez de texto livre."
+						"description": "[ADMIN] Autocomplete do campo Marca no editor de regras: nomes de marca distintos do registro cujo key normalizado casa com q. Retorna string[] (nomes de exibi\u00e7\u00e3o). Alimenta o combobox \u2014 marcas escolhidas do registro em vez de texto livre."
 					},
 					"response": []
 				},
@@ -4148,7 +4148,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "[\n  { \"key\": \"tio joao\", \"displayName\": \"Tio João\" }\n]",
+							"raw": "[\n  { \"key\": \"tio joao\", \"displayName\": \"Tio Jo\u00e3o\" }\n]",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -4168,7 +4168,7 @@
 								"import"
 							]
 						},
-						"description": "[ADMIN] Upserts a batch of token → (genericName, category) entries directly into the learned dictionary (sampleCount defaults to 999 if omitted). Immediately swaps the in-memory dictionary. Use to seed large volumes of known mappings without re-parsing receipts. Returns { imported, skipped }."
+						"description": "[ADMIN] Upserts a batch of token \u2192 (genericName, category) entries directly into the learned dictionary (sampleCount defaults to 999 if omitted). Immediately swaps the in-memory dictionary. Use to seed large volumes of known mappings without re-parsing receipts. Returns { imported, skipped }."
 					}
 				},
 				{
@@ -4187,7 +4187,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "[\n  { \"description\": \"ARROZ TIO J 5KG\", \"expectedCategory\": \"GROCERIES\", \"expectedBrand\": \"Tio João\", \"expectedPackSize\": 5, \"expectedPackUnit\": \"KG\" }\n]",
+							"raw": "[\n  { \"description\": \"ARROZ TIO J 5KG\", \"expectedCategory\": \"GROCERIES\", \"expectedBrand\": \"Tio Jo\u00e3o\", \"expectedPackSize\": 5, \"expectedPackUnit\": \"KG\" }\n]",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -4207,7 +4207,7 @@
 								"import"
 							]
 						},
-						"description": "[ADMIN] Upserts a batch of token → (genericName, category) entries directly into the learned dictionary (sampleCount defaults to 999 if omitted). Immediately swaps the in-memory dictionary. Use to seed large volumes of known mappings without re-parsing receipts. Returns { imported, skipped }."
+						"description": "[ADMIN] Upserts a batch of token \u2192 (genericName, category) entries directly into the learned dictionary (sampleCount defaults to 999 if omitted). Immediately swaps the in-memory dictionary. Use to seed large volumes of known mappings without re-parsing receipts. Returns { imported, skipped }."
 					}
 				},
 				{
@@ -4247,7 +4247,7 @@
 								}
 							]
 						},
-						"description": "[ADMIN] Grows the brand registry from brand strings already in the EAN catalog. onlyBrazil=true (default) restricts to 789/790 EANs — the catalog is ~97% foreign and deriving without the filter floods the registry with US chains. Returns { created, skippedExisting, belowThreshold }."
+						"description": "[ADMIN] Grows the brand registry from brand strings already in the EAN catalog. onlyBrazil=true (default) restricts to 789/790 EANs \u2014 the catalog is ~97% foreign and deriving without the filter floods the registry with US chains. Returns { created, skippedExisting, belowThreshold }."
 					}
 				},
 				{
@@ -4337,7 +4337,7 @@
 								"promote-aliases"
 							]
 						},
-						"description": "[ADMIN] Scans branded products' receipt descriptions and promotes each unambiguous abbreviated brand form (e.g. 'd benta' → Dona Benta) into a deterministic registry alias. Conflicting keys are skipped. Returns { created, conflictsSkipped }."
+						"description": "[ADMIN] Scans branded products' receipt descriptions and promotes each unambiguous abbreviated brand form (e.g. 'd benta' \u2192 Dona Benta) into a deterministic registry alias. Conflicting keys are skipped. Returns { created, conflictsSkipped }."
 					}
 				},
 				{
@@ -4363,7 +4363,7 @@
 								"status"
 							]
 						},
-						"description": "[ADMIN] Camada IA: habilitada? modelos configurados + última varredura (status/achados)."
+						"description": "[ADMIN] Camada IA: habilitada? modelos configurados + \u00faltima varredura (status/achados)."
 					},
 					"response": []
 				},
@@ -4390,7 +4390,7 @@
 								"sweep"
 							]
 						},
-						"description": "[ADMIN] IA varre órfãos, produtos sem marca/OTHER/sem nome, duplicatas, consenso, mercados e anomalias, e grava ACHADOS pendentes de revisão humana. Assíncrono (retorna runId); nada é aplicado sem aprovação. 409 se desabilitada/cap diário/já rodando."
+						"description": "[ADMIN] IA varre \u00f3rf\u00e3os, produtos sem marca/OTHER/sem nome, duplicatas, consenso, mercados e anomalias, e grava ACHADOS pendentes de revis\u00e3o humana. Ass\u00edncrono (retorna runId); nada \u00e9 aplicado sem aprova\u00e7\u00e3o. 409 se desabilitada/cap di\u00e1rio/j\u00e1 rodando."
 					},
 					"response": []
 				},
@@ -4461,7 +4461,7 @@
 								"approve"
 							]
 						},
-						"description": "[ADMIN] Aprova e APLICA o achado via os serviços existentes (regra curada→import+recanonização; marca→registro+produto; categoria→patch; duplicata→merge; nome→produto). Tipos informativos (consenso/mercado/anomalia) só são reconhecidos."
+						"description": "[ADMIN] Aprova e APLICA o achado via os servi\u00e7os existentes (regra curada\u2192import+recanoniza\u00e7\u00e3o; marca\u2192registro+produto; categoria\u2192patch; duplicata\u2192merge; nome\u2192produto). Tipos informativos (consenso/mercado/anomalia) s\u00f3 s\u00e3o reconhecidos."
 					},
 					"response": []
 				},
@@ -4490,7 +4490,7 @@
 								"reject"
 							]
 						},
-						"description": "[ADMIN] Rejeita o achado (fica registrado — a varredura não re-propõe o mesmo título)."
+						"description": "[ADMIN] Rejeita o achado (fica registrado \u2014 a varredura n\u00e3o re-prop\u00f5e o mesmo t\u00edtulo)."
 					},
 					"response": []
 				},
@@ -4526,7 +4526,7 @@
 								"approve-bulk"
 							]
 						},
-						"description": "[ADMIN] Aprova vários achados; falha individual não derruba o lote. Retorna { approved, failed }."
+						"description": "[ADMIN] Aprova v\u00e1rios achados; falha individual n\u00e3o derruba o lote. Retorna { approved, failed }."
 					},
 					"response": []
 				},
@@ -4559,7 +4559,7 @@
 								}
 							]
 						},
-						"description": "[ADMIN] Gastos de IA: totais (chamadas/tokens/custo USD) + por atividade + por dia, últimos N dias."
+						"description": "[ADMIN] Gastos de IA: totais (chamadas/tokens/custo USD) + por atividade + por dia, \u00faltimos N dias."
 					},
 					"response": []
 				},
@@ -4592,7 +4592,7 @@
 								}
 							]
 						},
-						"description": "[ADMIN] Classifica UMA descrição com o LLM (toggle IA da tela Testar). Custa 1 chamada pequena, logada como TEST_CLASSIFY no painel."
+						"description": "[ADMIN] Classifica UMA descri\u00e7\u00e3o com o LLM (toggle IA da tela Testar). Custa 1 chamada pequena, logada como TEST_CLASSIFY no painel."
 					},
 					"response": []
 				},
@@ -4613,7 +4613,7 @@
 								"live-accuracy"
 							]
 						},
-						"description": "Acurácia do motor contra produtos validados por humanos/consenso (dados REAIS, não o golden set) + lista dos casos em que o motor discorda de um humano. Read-only."
+						"description": "Acur\u00e1cia do motor contra produtos validados por humanos/consenso (dados REAIS, n\u00e3o o golden set) + lista dos casos em que o motor discorda de um humano. Read-only."
 					},
 					"response": []
 				},
@@ -4649,7 +4649,7 @@
 								}
 							]
 						},
-						"description": "Lista paginada do dicionário curado; q opcional (substring da keyword). Page<CuratedEntryResponse>."
+						"description": "Lista paginada do dicion\u00e1rio curado; q opcional (substring da keyword). Page<CuratedEntryResponse>."
 					},
 					"response": []
 				},
@@ -4672,7 +4672,7 @@
 								"{{curatedEntryId}}"
 							]
 						},
-						"description": "Remove UMA entrada curada (cirúrgico, diferente do reset que zera tudo) — hot-reload do dicionário. 204."
+						"description": "Remove UMA entrada curada (cir\u00fargico, diferente do reset que zera tudo) \u2014 hot-reload do dicion\u00e1rio. 204."
 					},
 					"response": []
 				},
@@ -4708,7 +4708,7 @@
 								}
 							]
 						},
-						"description": "Lista paginada do dicionário aprendido (auto-promovido); q opcional (substring do token). Page<LearnedEntryResponse>."
+						"description": "Lista paginada do dicion\u00e1rio aprendido (auto-promovido); q opcional (substring do token). Page<LearnedEntryResponse>."
 					},
 					"response": []
 				},
@@ -4731,7 +4731,7 @@
 								"{{learnedEntryId}}"
 							]
 						},
-						"description": "Remove UMA entrada aprendida (cirúrgico) — hot-reload do dicionário. 204."
+						"description": "Remove UMA entrada aprendida (cir\u00fargico) \u2014 hot-reload do dicion\u00e1rio. 204."
 					},
 					"response": []
 				},
@@ -4759,7 +4759,7 @@
 								}
 							]
 						},
-						"description": "Trilha de auditoria da graduação por consenso — quais domicílios promoveram qual produto para qual categoria, mais recentes primeiro. Filtro opcional productId. Torna um consenso ruim rastreável e reversível."
+						"description": "Trilha de auditoria da gradua\u00e7\u00e3o por consenso \u2014 quais domic\u00edlios promoveram qual produto para qual categoria, mais recentes primeiro. Filtro opcional productId. Torna um consenso ruim rastre\u00e1vel e revers\u00edvel."
 					},
 					"response": []
 				},
@@ -4786,10 +4786,10 @@
 								"import-off"
 							]
 						},
-						"description": "Importa linhas cruas do Open Food Facts — as category tags são mapeadas para o enum no servidor. 200 BulkImportOutcome.",
+						"description": "Importa linhas cruas do Open Food Facts \u2014 as category tags s\u00e3o mapeadas para o enum no servidor. 200 BulkImportOutcome.",
 						"body": {
 							"mode": "raw",
-							"raw": "[\n  {\n    \"code\": \"7891234567890\",\n    \"productName\": \"Arroz Tio João 5kg\",\n    \"brands\": \"Tio João\",\n    \"categoryTags\": \"en:cereals,en:rices\"\n  }\n]"
+							"raw": "[\n  {\n    \"code\": \"7891234567890\",\n    \"productName\": \"Arroz Tio Jo\u00e3o 5kg\",\n    \"brands\": \"Tio Jo\u00e3o\",\n    \"categoryTags\": \"en:cereals,en:rices\"\n  }\n]"
 						}
 					},
 					"response": []
@@ -4969,7 +4969,7 @@
 					"response": []
 				},
 				{
-					"name": "Deals — Ofertas pra você (watched markets only)",
+					"name": "Deals \u2014 Ofertas pra voc\u00ea (watched markets only)",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -4995,12 +4995,12 @@
 								}
 							]
 						},
-						"description": "Response inclui `friendlyDescription` (apelido que o domicílio deu ao produto; null se nunca renomeado) ao lado do nome de catálogo."
+						"description": "Response inclui `friendlyDescription` (apelido que o domic\u00edlio deu ao produto; null se nunca renomeado) ao lado do nome de cat\u00e1logo."
 					},
 					"response": []
 				},
 				{
-					"name": "Deals — Ofertas pra você (include nearby)",
+					"name": "Deals \u2014 Ofertas pra voc\u00ea (include nearby)",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -5034,7 +5034,7 @@
 								}
 							]
 						},
-						"description": "Response inclui `friendlyDescription` (apelido que o domicílio deu ao produto; null se nunca renomeado) ao lado do nome de catálogo."
+						"description": "Response inclui `friendlyDescription` (apelido que o domic\u00edlio deu ao produto; null se nunca renomeado) ao lado do nome de cat\u00e1logo."
 					},
 					"response": []
 				},
@@ -5060,7 +5060,7 @@
 								"sponsored-promos"
 							]
 						},
-						"description": "Promos ANUNCIADAS por lojistas pagantes — endpoint separado do /promos orgânico (nunca altera ranking). [] até MERCHANT_PROMOS_FEED_ENABLED=true. Cada item tem verified (cupons reais confirmam)."
+						"description": "Promos ANUNCIADAS por lojistas pagantes \u2014 endpoint separado do /promos org\u00e2nico (nunca altera ranking). [] at\u00e9 MERCHANT_PROMOS_FEED_ENABLED=true. Cada item tem verified (cupons reais confirmam)."
 					},
 					"response": []
 				}
@@ -5265,7 +5265,7 @@
 		},
 		{
 			"name": "Price Alerts",
-			"description": "User price-drop alerts ('avise-me quando'). A rule fires when any household's confirmed receipt contributes an observation at or below the threshold (optionally within radiusKm of home). Delivers a PRICE_DROP notification to the inbox + push. One rule per (user, product) — re-posting updates it.",
+			"description": "User price-drop alerts ('avise-me quando'). A rule fires when any household's confirmed receipt contributes an observation at or below the threshold (optionally within radiusKm of home). Delivers a PRICE_DROP notification to the inbox + push. One rule per (user, product) \u2014 re-posting updates it.",
 			"item": [
 				{
 					"name": "Create / update a price alert",
@@ -5296,7 +5296,7 @@
 							"mode": "raw",
 							"raw": "{\n  \"productId\": \"{{productId}}\",\n  \"thresholdPrice\": 5.99,\n  \"radiusKm\": 5\n}"
 						},
-						"description": "Response inclui `friendlyDescription` (apelido que o domicílio deu ao produto; null se nunca renomeado) ao lado do nome de catálogo."
+						"description": "Response inclui `friendlyDescription` (apelido que o domic\u00edlio deu ao produto; null se nunca renomeado) ao lado do nome de cat\u00e1logo."
 					},
 					"response": []
 				},
@@ -5321,7 +5321,7 @@
 								"alerts"
 							]
 						},
-						"description": "Response inclui `friendlyDescription` (apelido que o domicílio deu ao produto; null se nunca renomeado) ao lado do nome de catálogo."
+						"description": "Response inclui `friendlyDescription` (apelido que o domic\u00edlio deu ao produto; null se nunca renomeado) ao lado do nome de cat\u00e1logo."
 					},
 					"response": []
 				},
@@ -5354,7 +5354,7 @@
 		},
 		{
 			"name": "Notification Rules",
-			"description": "Unified notification rules — create user rules (PRICE_DROP, STOCKOUT/replenishment, BUDGET) and enable/disable any rule including the auto-seeded system defaults (PROMO_PERSONAL, PROMO_COMMUNITY, CHEAPER_MARKET, DIGEST). GET returns user rules + defaults as toggles. PATCH toggles 'active' (and for CHEAPER_MARKET, set radiusKm to also include markets near home in addition to your watched markets). The legacy /api/v1/alerts folder is a thin alias over PRICE_DROP rules.",
+			"description": "Unified notification rules \u2014 create user rules (PRICE_DROP, STOCKOUT/replenishment, BUDGET) and enable/disable any rule including the auto-seeded system defaults (PROMO_PERSONAL, PROMO_COMMUNITY, CHEAPER_MARKET, DIGEST). GET returns user rules + defaults as toggles. PATCH toggles 'active' (and for CHEAPER_MARKET, set radiusKm to also include markets near home in addition to your watched markets). The legacy /api/v1/alerts folder is a thin alias over PRICE_DROP rules.",
 			"item": [
 				{
 					"name": "List notification rules (user + defaults)",
@@ -5377,7 +5377,7 @@
 								"notification-rules"
 							]
 						},
-						"description": "Response inclui `friendlyDescription` (apelido que o domicílio deu ao produto; null se nunca renomeado) ao lado do nome de catálogo."
+						"description": "Response inclui `friendlyDescription` (apelido que o domic\u00edlio deu ao produto; null se nunca renomeado) ao lado do nome de cat\u00e1logo."
 					},
 					"response": []
 				},
@@ -5410,7 +5410,7 @@
 							"mode": "raw",
 							"raw": "{\n  \"type\": \"STOCKOUT\",\n  \"productId\": \"{{productId}}\",\n  \"leadTimeDays\": 3\n}"
 						},
-						"description": "Response inclui `friendlyDescription` (apelido que o domicílio deu ao produto; null se nunca renomeado) ao lado do nome de catálogo."
+						"description": "Response inclui `friendlyDescription` (apelido que o domic\u00edlio deu ao produto; null se nunca renomeado) ao lado do nome de cat\u00e1logo."
 					},
 					"response": []
 				},
@@ -5443,7 +5443,7 @@
 							"mode": "raw",
 							"raw": "{\n  \"type\": \"BUDGET\",\n  \"thresholdPrice\": 1500.00\n}"
 						},
-						"description": "Response inclui `friendlyDescription` (apelido que o domicílio deu ao produto; null se nunca renomeado) ao lado do nome de catálogo."
+						"description": "Response inclui `friendlyDescription` (apelido que o domic\u00edlio deu ao produto; null se nunca renomeado) ao lado do nome de cat\u00e1logo."
 					},
 					"response": []
 				},
@@ -5477,7 +5477,7 @@
 							"mode": "raw",
 							"raw": "{\n  \"active\": false\n}"
 						},
-						"description": "Response inclui `friendlyDescription` (apelido que o domicílio deu ao produto; null se nunca renomeado) ao lado do nome de catálogo."
+						"description": "Response inclui `friendlyDescription` (apelido que o domic\u00edlio deu ao produto; null se nunca renomeado) ao lado do nome de cat\u00e1logo."
 					},
 					"response": []
 				},
@@ -5510,7 +5510,7 @@
 		},
 		{
 			"name": "Items",
-			"description": "Purchased line items flattened across all receipts. Item-level companion to Receipts (receipt rows) and Insights (aggregates). Same filter vocabulary as /insights/query — every filter optional, multi-value filters OR internally. CONFIRMED purchases only, newest first, paginated.",
+			"description": "Purchased line items flattened across all receipts. Item-level companion to Receipts (receipt rows) and Insights (aggregates). Same filter vocabulary as /insights/query \u2014 every filter optional, multi-value filters OR internally. CONFIRMED purchases only, newest first, paginated.",
 			"item": [
 				{
 					"name": "List items (all, paginated)",
@@ -5545,7 +5545,7 @@
 									"key": "scope",
 									"value": "SUPPORTED",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
+									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						}
@@ -5581,7 +5581,7 @@
 									"key": "scope",
 									"value": "SUPPORTED",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
+									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						}
@@ -5617,7 +5617,7 @@
 									"key": "scope",
 									"value": "SUPPORTED",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
+									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						}
@@ -5625,7 +5625,7 @@
 					"response": []
 				},
 				{
-					"name": "List items by category (HOUSEHOLD lens — effective category, default)",
+					"name": "List items by category (HOUSEHOLD lens \u2014 effective category, default)",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -5658,7 +5658,7 @@
 									"key": "scope",
 									"value": "SUPPORTED",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
+									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						}
@@ -5666,7 +5666,7 @@
 					"response": []
 				},
 				{
-					"name": "List items by category (GLOBAL lens — global Product.category)",
+					"name": "List items by category (GLOBAL lens \u2014 global Product.category)",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -5699,7 +5699,7 @@
 									"key": "scope",
 									"value": "SUPPORTED",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
+									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						}
@@ -5830,7 +5830,7 @@
 									"key": "scope",
 									"value": "SUPPORTED",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
+									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						}
@@ -5866,7 +5866,7 @@
 		},
 		{
 			"name": "Consumption (Phase 3)",
-			"description": "Predictive purchase intelligence per household — when products will run out, suggested shopping list. Volume-gated: products with fewer than 2 prior purchases are silently skipped.",
+			"description": "Predictive purchase intelligence per household \u2014 when products will run out, suggested shopping list. Volume-gated: products with fewer than 2 prior purchases are silently skipped.",
 			"item": [
 				{
 					"name": "Predictions per product",
@@ -5890,7 +5890,7 @@
 								"predictions"
 							]
 						},
-						"description": "Response inclui `friendlyDescription` (apelido que o domicílio deu ao produto; null se nunca renomeado) ao lado do nome de catálogo."
+						"description": "Response inclui `friendlyDescription` (apelido que o domic\u00edlio deu ao produto; null se nunca renomeado) ao lado do nome de cat\u00e1logo."
 					},
 					"response": []
 				},
@@ -5955,7 +5955,7 @@
 					"response": []
 				},
 				{
-					"name": "Snooze a product (Não preciso agora)",
+					"name": "Snooze a product (N\u00e3o preciso agora)",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -6015,7 +6015,7 @@
 					"response": []
 				},
 				{
-					"name": "Log manual purchase (Já comprei sem nota)",
+					"name": "Log manual purchase (J\u00e1 comprei sem nota)",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -6051,7 +6051,7 @@
 		},
 		{
 			"name": "Shopping list (PRO-52)",
-			"description": "Multi-market basket optimization. Greedy heuristic — for each item picks the cheapest known market (local history first, community index fallback), then groups items per market.",
+			"description": "Multi-market basket optimization. Greedy heuristic \u2014 for each item picks the cheapest known market (local history first, community index fallback), then groups items per market.",
 			"item": [
 				{
 					"name": "Optimize a shopping list",
@@ -6083,7 +6083,7 @@
 							"mode": "raw",
 							"raw": "{\n  \"items\": [\n    { \"productId\": \"{{e2eProductId}}\", \"quantity\": 1 }\n  ]\n}"
 						},
-						"description": "Response inclui `friendlyDescription` (apelido que o domicílio deu ao produto; null se nunca renomeado) ao lado do nome de catálogo."
+						"description": "Response inclui `friendlyDescription` (apelido que o domic\u00edlio deu ao produto; null se nunca renomeado) ao lado do nome de cat\u00e1logo."
 					},
 					"response": []
 				}
@@ -6091,7 +6091,7 @@
 		},
 		{
 			"name": "Shopping lists (persistent)",
-			"description": "Real per-household shopping lists — build, edit, check off as you shop. Items can reference a canonical Product OR be free text.",
+			"description": "Real per-household shopping lists \u2014 build, edit, check off as you shop. Items can reference a canonical Product OR be free text.",
 			"item": [
 				{
 					"name": "List my household's shopping lists",
@@ -6169,7 +6169,7 @@
 						},
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"Compra da semana\",\n  \"items\": [\n    { \"freeText\": \"papel higiênico\", \"quantity\": 1 }\n  ]\n}"
+							"raw": "{\n  \"name\": \"Compra da semana\",\n  \"items\": [\n    { \"freeText\": \"papel higi\u00eanico\", \"quantity\": 1 }\n  ]\n}"
 						}
 					},
 					"response": []
@@ -6500,7 +6500,7 @@
 		},
 		{
 			"name": "Dashboard",
-			"description": "App-open snapshot — bundles spend + recent receipts + suggested list + community promos + unread count.",
+			"description": "App-open snapshot \u2014 bundles spend + recent receipts + suggested list + community promos + unread count.",
 			"item": [
 				{
 					"name": "Get dashboard",
@@ -6648,7 +6648,7 @@
 		},
 		{
 			"name": "E2E Flow",
-			"description": "Sequential test suite — run top to bottom. Each step seeds variables for the next. Steps 9+ require a real NFC-e QR payload in the {{qrPayload}} collection variable; otherwise they will report parsing/fetch errors but won't break the auth/household flow.",
+			"description": "Sequential test suite \u2014 run top to bottom. Each step seeds variables for the next. Steps 9+ require a real NFC-e QR payload in the {{qrPayload}} collection variable; otherwise they will report parsing/fetch errors but won't break the auth/household flow.",
 			"item": [
 				{
 					"name": "0. App config is public (force-update gate)",
@@ -7240,7 +7240,7 @@
 								"exec": [
 									"var qr = pm.variables.get('qrPayload');",
 									"if (!qr || qr.indexOf('PASTE_REAL') === 0) {",
-									"    pm.test.skip('qrPayload not set — skipping receipt steps');",
+									"    pm.test.skip('qrPayload not set \u2014 skipping receipt steps');",
 									"    return;",
 									"}",
 									"pm.test('Returns 201', function () { pm.response.to.have.status(201); });",
@@ -7284,7 +7284,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eReceiptId')) { pm.test.skip('No receipt id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eReceiptId')) { pm.test.skip('No receipt id \u2014 skipping'); return; }",
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"var d = pm.response.json();",
 									"if (d.status === 'PROCESSING') {",
@@ -7313,7 +7313,7 @@
 					]
 				},
 				{
-					"name": "9c. Import chaves (RS) — 202 even if chave rejected",
+					"name": "9c. Import chaves (RS) \u2014 202 even if chave rejected",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -7422,7 +7422,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eReceiptId')) { pm.test.skip('No receipt id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eReceiptId')) { pm.test.skip('No receipt id \u2014 skipping'); return; }",
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });"
 								]
 							}
@@ -7469,7 +7469,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eReceiptItemId')) { pm.test.skip('No item id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eReceiptItemId')) { pm.test.skip('No item id \u2014 skipping'); return; }",
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"var d = pm.response.json();",
 									"var item = d.items.find(function (i) { return i.id === pm.collectionVariables.get('e2eReceiptItemId'); });",
@@ -7479,7 +7479,7 @@
 									"pm.test('rawDescription stays immutable (SEFAZ audit trail)', function () {",
 									"    pm.expect(item.rawDescription).to.not.eql('ITEM REVISADO');",
 									"});",
-									"pm.test('manual discount recorded — paid below original marks the line promotional', function () {",
+									"pm.test('manual discount recorded \u2014 paid below original marks the line promotional', function () {",
 									"    pm.expect(item.paidTotalPrice).to.eql(7.99);",
 									"    pm.expect(item.totalPrice).to.eql(9.99);",
 									"    pm.expect(item.promotional).to.eql(true);",
@@ -7520,7 +7520,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eReceiptId')) { pm.test.skip('No receipt id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eReceiptId')) { pm.test.skip('No receipt id \u2014 skipping'); return; }",
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"var d = pm.response.json();",
 									"pm.test('receipt.status is CONFIRMED', function () { pm.expect(d.receipt.status).to.eql('CONFIRMED'); });",
@@ -7532,7 +7532,7 @@
 					]
 				},
 				{
-					"name": "13a. Edit confirmed item — personal layer (não é meu)",
+					"name": "13a. Edit confirmed item \u2014 personal layer (n\u00e3o \u00e9 meu)",
 					"request": {
 						"method": "PATCH",
 						"header": [
@@ -7572,8 +7572,8 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eReceiptItemId')) { pm.test.skip('No item id — skipping'); return; }",
-									"pm.test('Returns 200 — personal edit works AFTER confirm', function () { pm.response.to.have.status(200); });",
+									"if (!pm.collectionVariables.get('e2eReceiptItemId')) { pm.test.skip('No item id \u2014 skipping'); return; }",
+									"pm.test('Returns 200 \u2014 personal edit works AFTER confirm', function () { pm.response.to.have.status(200); });",
 									"var d = pm.response.json();",
 									"var item = d.items.find(function (i) { return i.id === pm.collectionVariables.get('e2eReceiptItemId'); });",
 									"pm.test('marked not-mine (out of personal totals, still in index)', function () { pm.expect(item.excludedFromPersonal).to.eql(true); });",
@@ -7617,7 +7617,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eReceiptId')) { pm.test.skip('No receipt id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eReceiptId')) { pm.test.skip('No receipt id \u2014 skipping'); return; }",
 									"pm.test('GET /receipts/export -> 200 text/csv', function () {",
 									"    pm.response.to.have.status(200);",
 									"    pm.expect(pm.response.headers.get('Content-Type')).to.include('text/csv');",
@@ -7712,7 +7712,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eReceiptId')) { pm.test.skip('No receipt id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eReceiptId')) { pm.test.skip('No receipt id \u2014 skipping'); return; }",
 									"pm.test('Returns 400', function () { pm.response.to.have.status(400); });"
 								]
 							}
@@ -7757,7 +7757,7 @@
 								"type": "text/javascript",
 								"exec": [
 									"var qr = pm.variables.get('qrPayload');",
-									"if (!qr || qr.indexOf('PASTE_REAL') === 0) { pm.test.skip('qrPayload not set — skipping'); return; }",
+									"if (!qr || qr.indexOf('PASTE_REAL') === 0) { pm.test.skip('qrPayload not set \u2014 skipping'); return; }",
 									"pm.test('Duplicate returns 409', function () { pm.response.to.have.status(409); });"
 								]
 							}
@@ -7895,14 +7895,14 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"// Admin login must succeed when creds are configured — a bad E2E_ADMIN_* credential fails RED (no silent skip).",
+									"// Admin login must succeed when creds are configured \u2014 a bad E2E_ADMIN_* credential fails RED (no silent skip).",
 									"// With NO creds at all (e.g. prod, where E2E_PROD_ADMIN_* is optional) the admin coverage block is skipped.",
 									"var adminEmail = pm.variables.replaceIn('{{adminEmail}}');",
 									"if (!adminEmail) {",
-									"    console.log('adminEmail not configured — skipping admin coverage');",
+									"    console.log('adminEmail not configured \u2014 skipping admin coverage');",
 									"} else {",
 									"    pm.test('admin login succeeded (200)', function () {",
-									"        pm.expect(pm.response.code, 'admin login must return 200 — check E2E_ADMIN_* secrets').to.eql(200);",
+									"        pm.expect(pm.response.code, 'admin login must return 200 \u2014 check E2E_ADMIN_* secrets').to.eql(200);",
 									"    });",
 									"}",
 									"if (pm.response.code === 200) {",
@@ -7974,7 +7974,7 @@
 								"exec": [
 									"var adminEmail = pm.variables.replaceIn('{{adminEmail}}');",
 									"if (!adminEmail) {",
-									"    console.log('adminEmail not configured — skipping admin-only product create');",
+									"    console.log('adminEmail not configured \u2014 skipping admin-only product create');",
 									"} else {",
 									"    pm.test('Returns 201', function () { pm.response.to.have.status(201); });",
 									"    var d = pm.response.json();",
@@ -8035,7 +8035,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id \u2014 skipping'); return; }",
 									"pm.test('Returns 201', function () { pm.response.to.have.status(201); });"
 								]
 							}
@@ -8254,7 +8254,7 @@
 								"type": "text/javascript",
 								"exec": [
 									"var adminToken = pm.collectionVariables.get('adminToken');",
-									"if (!adminToken) { console.log('adminToken not set — skipping step 22'); return; }",
+									"if (!adminToken) { console.log('adminToken not set \u2014 skipping step 22'); return; }",
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"var d = pm.response.json();",
 									"pm.test('Has enabled field', function () {",
@@ -8335,7 +8335,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id \u2014 skipping'); return; }",
 									"pm.test('Returns 200 (200 even when k-anon hides data)', function () { pm.response.to.have.status(200); });",
 									"var d = pm.response.json();",
 									"pm.test('Has sampleCount + distinctHouseholds', function () {",
@@ -8399,7 +8399,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id \u2014 skipping'); return; }",
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"pm.test('Returns an array', function () { pm.expect(pm.response.json()).to.be.an('array'); });"
 								]
@@ -8476,7 +8476,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id \u2014 skipping'); return; }",
 									"pm.test('Returns 200 (200 even when k-anon hides data)', function () { pm.response.to.have.status(200); });",
 									"var d = pm.response.json();",
 									"pm.test('Has sampleCount + distinctHouseholds', function () {",
@@ -8489,7 +8489,7 @@
 					]
 				},
 				{
-					"name": "27b. Deals — Ofertas pra você",
+					"name": "27b. Deals \u2014 Ofertas pra voc\u00ea",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -8874,7 +8874,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eMarketCnpj')) { pm.test.skip('No market available — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eMarketCnpj')) { pm.test.skip('No market available \u2014 skipping'); return; }",
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"pm.test('watching=true after pin', function () { pm.expect(pm.response.json().watching).to.eql(true); });"
 								]
@@ -8912,7 +8912,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eMarketCnpj')) { pm.test.skip('No market available — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eMarketCnpj')) { pm.test.skip('No market available \u2014 skipping'); return; }",
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"pm.test('Pinned market is in the watchlist', function () {",
 									"    var rows = pm.response.json();",
@@ -8955,7 +8955,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eMarketCnpj')) { pm.test.skip('No market available — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eMarketCnpj')) { pm.test.skip('No market available \u2014 skipping'); return; }",
 									"pm.test('Returns 204', function () { pm.response.to.have.status(204); });"
 								]
 							}
@@ -9038,7 +9038,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eMarketCnpj')) { pm.test.skip('No market available — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eMarketCnpj')) { pm.test.skip('No market available \u2014 skipping'); return; }",
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"pm.test('Echoes custom name', function () { pm.expect(pm.response.json().name).to.eql('Mercado teste E2E'); });"
 								]
@@ -9087,7 +9087,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id \u2014 skipping'); return; }",
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"pm.test('Body is an array', function () { pm.expect(pm.response.json()).to.be.an('array'); });"
 								]
@@ -9126,7 +9126,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eMarketCnpj')) { pm.test.skip('No market available — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eMarketCnpj')) { pm.test.skip('No market available \u2014 skipping'); return; }",
 									"pm.test('Returns 204', function () { pm.response.to.have.status(204); });"
 								]
 							}
@@ -9293,7 +9293,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id \u2014 skipping'); return; }",
 									"pm.test('Returns 204', function () { pm.response.to.have.status(204); });"
 								]
 							}
@@ -9338,7 +9338,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id \u2014 skipping'); return; }",
 									"pm.test('Returns 204', function () { pm.response.to.have.status(204); });"
 								]
 							}
@@ -9428,7 +9428,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id \u2014 skipping'); return; }",
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"var d = pm.response.json();",
 									"pm.test('Has marketPlans + estimatedTotal + unpriced', function () {",
@@ -9522,7 +9522,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id \u2014 skipping'); return; }",
 									"pm.test('Returns 201', function () { pm.response.to.have.status(201); });",
 									"var d = pm.response.json();",
 									"pm.collectionVariables.set('e2eAlertId', d.id);",
@@ -9564,7 +9564,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eAlertId')) { pm.test.skip('No alert id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eAlertId')) { pm.test.skip('No alert id \u2014 skipping'); return; }",
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"var list = pm.response.json();",
 									"pm.test('Contains the created alert', function () {",
@@ -9612,7 +9612,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eAlertId')) { pm.test.skip('No alert id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eAlertId')) { pm.test.skip('No alert id \u2014 skipping'); return; }",
 									"pm.test('Returns 204', function () { pm.response.to.have.status(204); });"
 								]
 							}
@@ -9656,7 +9656,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id \u2014 skipping'); return; }",
 									"pm.test('Returns 201', function () { pm.response.to.have.status(201); });",
 									"var d = pm.response.json();",
 									"pm.collectionVariables.set('e2eRuleId', d.id);",
@@ -9698,7 +9698,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eRuleId')) { pm.test.skip('No rule id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eRuleId')) { pm.test.skip('No rule id \u2014 skipping'); return; }",
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"var list = pm.response.json();",
 									"pm.test('Contains the created rule', function () {",
@@ -9757,7 +9757,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eRuleId')) { pm.test.skip('No rule id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eRuleId')) { pm.test.skip('No rule id \u2014 skipping'); return; }",
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"pm.test('Rule is now disabled', function () { pm.expect(pm.response.json().active).to.eql(false); });"
 								]
@@ -9795,7 +9795,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eRuleId')) { pm.test.skip('No rule id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eRuleId')) { pm.test.skip('No rule id \u2014 skipping'); return; }",
 									"pm.test('Returns 204', function () { pm.response.to.have.status(204); });"
 								]
 							}
@@ -9998,7 +9998,7 @@
 									"key": "scope",
 									"value": "SUPPORTED",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
+									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						}
@@ -10010,7 +10010,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id \u2014 skipping'); return; }",
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"var page = pm.response.json();",
 									"pm.test('Paginated item list', function () { pm.expect(page.content).to.be.an('array'); });",
@@ -10155,7 +10155,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id \u2014 skipping'); return; }",
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"var d = pm.response.json();",
 									"pm.test('Migrated one product', function () { pm.expect(d.migrated).to.eql(1); });"
@@ -10193,7 +10193,7 @@
 									"key": "scope",
 									"value": "SUPPORTED",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
+									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						}
@@ -10208,14 +10208,14 @@
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"var page = pm.response.json();",
 									"pm.test('Paginated item list', function () { pm.expect(page.content).to.be.an('array'); });",
-									"// /items returns purchased line items only — the migrated product appears here",
+									"// /items returns purchased line items only \u2014 the migrated product appears here",
 									"// only if it had confirmed purchases (captured in step 43).",
 									"if (pm.collectionVariables.get('e2eProductHasItems') === 'yes') {",
 									"    pm.test('Migrated product shows under the custom category', function () {",
 									"        pm.expect(page.content.some(function(i){return i.productId===pm.collectionVariables.get('e2eProductId');})).to.eql(true);",
 									"    });",
 									"} else {",
-									"    pm.test.skip('Migrated product has no confirmed purchases — nothing to list (expected)');",
+									"    pm.test.skip('Migrated product has no confirmed purchases \u2014 nothing to list (expected)');",
 									"}"
 								]
 							}
@@ -10291,7 +10291,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -10332,7 +10332,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -10379,7 +10379,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -10426,7 +10426,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -10473,7 +10473,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -10520,7 +10520,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -10567,7 +10567,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -10606,7 +10606,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -10653,7 +10653,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -10692,7 +10692,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -10731,7 +10731,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -10771,7 +10771,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -10811,7 +10811,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -10842,7 +10842,7 @@
 								"pending"
 							]
 						},
-						"description": "Data-share requests where I am the grantor — another member wants to take a copy of my data on household split. Returns List<ConsentResponse>."
+						"description": "Data-share requests where I am the grantor \u2014 another member wants to take a copy of my data on household split. Returns List<ConsentResponse>."
 					},
 					"response": [],
 					"event": [
@@ -10851,7 +10851,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -10898,7 +10898,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -10948,7 +10948,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -10987,7 +10987,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -11025,7 +11025,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -11076,7 +11076,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -11115,7 +11115,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -11160,7 +11160,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -11191,7 +11191,7 @@
 								"view"
 							]
 						},
-						"description": "Records that the user opened this product’s detail screen (feeds recently-viewed). 204 No Content."
+						"description": "Records that the user opened this product\u2019s detail screen (feeds recently-viewed). 204 No Content."
 					},
 					"response": [],
 					"event": [
@@ -11200,7 +11200,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -11239,7 +11239,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -11284,7 +11284,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -11324,7 +11324,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -11333,7 +11333,7 @@
 					]
 				},
 				{
-					"name": "COV: Flexible query — weekly spend in April",
+					"name": "COV: Flexible query \u2014 weekly spend in April",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -11370,7 +11370,7 @@
 									"key": "scope",
 									"value": "SUPPORTED",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
+									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						},
@@ -11383,7 +11383,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -11436,7 +11436,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -11475,7 +11475,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -11521,7 +11521,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -11560,7 +11560,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -11599,7 +11599,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -11636,7 +11636,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -11674,7 +11674,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -11709,7 +11709,7 @@
 						},
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"Compra da semana\",\n  \"items\": [\n    { \"freeText\": \"papel higiênico\", \"quantity\": 1 }\n  ]\n}"
+							"raw": "{\n  \"name\": \"Compra da semana\",\n  \"items\": [\n    { \"freeText\": \"papel higi\u00eanico\", \"quantity\": 1 }\n  ]\n}"
 						}
 					},
 					"response": [],
@@ -11719,7 +11719,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — 201 created', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 201 created', function () {",
 									"    pm.response.to.have.status(201);",
 									"});",
 									"var d = pm.response.json();",
@@ -11760,7 +11760,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -11806,7 +11806,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -11853,8 +11853,8 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id — skipping'); return; }",
-									"pm.test(pm.info.requestName + ' — 200/201', function () {",
+									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id \u2014 skipping'); return; }",
+									"pm.test(pm.info.requestName + ' \u2014 200/201', function () {",
 									"    pm.expect(pm.response.code).to.be.below(300);",
 									"});",
 									"var d = pm.response.json();",
@@ -11899,7 +11899,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -11939,7 +11939,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -11977,7 +11977,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -12016,7 +12016,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -12053,7 +12053,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -12092,7 +12092,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -12140,7 +12140,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -12180,7 +12180,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -12221,14 +12221,14 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"// Admin login must succeed when creds are configured — a bad E2E_ADMIN_* credential fails RED (no silent skip).",
+									"// Admin login must succeed when creds are configured \u2014 a bad E2E_ADMIN_* credential fails RED (no silent skip).",
 									"// With NO creds at all (e.g. prod, where E2E_PROD_ADMIN_* is optional) the admin coverage block is skipped.",
 									"var adminEmail = pm.variables.replaceIn('{{adminEmail}}');",
 									"if (!adminEmail) {",
-									"    console.log('adminEmail not configured — skipping admin coverage');",
+									"    console.log('adminEmail not configured \u2014 skipping admin coverage');",
 									"} else {",
 									"    pm.test('admin login succeeded (200)', function () {",
-									"        pm.expect(pm.response.code, 'admin login must return 200 — check E2E_ADMIN_* secrets').to.eql(200);",
+									"        pm.expect(pm.response.code, 'admin login must return 200 \u2014 check E2E_ADMIN_* secrets').to.eql(200);",
 									"    });",
 									"}",
 									"if (pm.response.code === 200) {",
@@ -12294,7 +12294,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -12342,7 +12342,7 @@
 								}
 							]
 						},
-						"description": "Same content-search semantics as GET /receipts but cross-household. Includes FAILED_PARSE rows for parser triage.\n\nResponse: Page<AdminReceiptSummaryResponse> — cada linha = { receipt: ReceiptSummaryResponse, owner: {id,name,email}|null, uf, createdAt, parseErrorReason, parseErrorMessage } (contexto de triagem já na lista).",
+						"description": "Same content-search semantics as GET /receipts but cross-household. Includes FAILED_PARSE rows for parser triage.\n\nResponse: Page<AdminReceiptSummaryResponse> \u2014 cada linha = { receipt: ReceiptSummaryResponse, owner: {id,name,email}|null, uf, createdAt, parseErrorReason, parseErrorMessage } (contexto de triagem j\u00e1 na lista).",
 						"auth": {
 							"type": "bearer",
 							"bearer": [
@@ -12361,7 +12361,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -12429,7 +12429,7 @@
 								}
 							]
 						},
-						"description": "Aggregate stats for the admin receipts list under the same filters as GET /admin/receipts (q, from, to, uf, status, parseErrorReason, includeInternal — all optional). Returns { count, totalAmount }. ADMIN only.",
+						"description": "Aggregate stats for the admin receipts list under the same filters as GET /admin/receipts (q, from, to, uf, status, parseErrorReason, includeInternal \u2014 all optional). Returns { count, totalAmount }. ADMIN only.",
 						"auth": {
 							"type": "bearer",
 							"bearer": [
@@ -12448,7 +12448,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -12504,7 +12504,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -12560,9 +12560,406 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV: campanhas sao ADMIN-only (403 pra user comum)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/campaigns",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"campaigns"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('403 para usuario comum', function () { pm.response.to.have.status(403); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV admin: List audiences (builtin Admins presente)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/audiences",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"audiences"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test('skipped (sem adminToken)', function () { pm.expect(true).to.be.true; }); return; }",
+									"pm.test('200 com audiencia builtin Admins', function () {",
+									"    pm.response.to.have.status(200);",
+									"    var audiences = pm.response.json();",
+									"    var admins = audiences.find(function (audience) { return audience.builtIn; });",
+									"    pm.expect(admins, 'builtin Admins audience').to.exist;",
+									"    pm.collectionVariables.set('e2eAdminsAudienceId', admins.id);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV admin: Preview da audiencia Admins",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/audiences/{{e2eAdminsAudienceId}}/preview",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"audiences",
+								"{{e2eAdminsAudienceId}}",
+								"preview"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test('skipped (sem adminToken)', function () { pm.expect(true).to.be.true; }); return; }",
+									"pm.test('preview com matchCount >= 1', function () {",
+									"    pm.response.to.have.status(200);",
+									"    pm.expect(pm.response.json().matchCount).to.be.at.least(1);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV admin: Criar campanha DRAFT (audiencia Admins)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/campaigns",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"campaigns"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"E2E campanha\",\n  \"title\": \"E2E: campanha de teste\",\n  \"body\": \"Disparo do fluxo E2E \\u2014 pode ignorar.\",\n  \"type\": \"SYSTEM\",\n  \"audienceId\": \"{{e2eAdminsAudienceId}}\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test('skipped (sem adminToken)', function () { pm.expect(true).to.be.true; }); return; }",
+									"pm.test('201 DRAFT', function () {",
+									"    pm.response.to.have.status(201);",
+									"    var campaign = pm.response.json();",
+									"    pm.expect(campaign.status).to.eql('DRAFT');",
+									"    pm.collectionVariables.set('e2eCampaignId', campaign.id);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV admin: Test-send da campanha pra si (202)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/campaigns/{{e2eCampaignId}}/test",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"campaigns",
+								"{{e2eCampaignId}}",
+								"test"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test('skipped (sem adminToken)', function () { pm.expect(true).to.be.true; }); return; }",
+									"pm.test('202 accepted', function () { pm.response.to.have.status(202); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV admin: Agendar no passado e rejeitado (400)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/campaigns/{{e2eCampaignId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"campaigns",
+								"{{e2eCampaignId}}"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"E2E campanha\",\n  \"title\": \"E2E: campanha de teste\",\n  \"body\": \"Disparo do fluxo E2E.\",\n  \"audienceId\": \"{{e2eAdminsAudienceId}}\",\n  \"scheduledAt\": \"2020-01-01T00:00:00-03:00\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test('skipped (sem adminToken)', function () { pm.expect(true).to.be.true; }); return; }",
+									"pm.test('400 scheduledAt no passado', function () { pm.response.to.have.status(400); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV admin: Metricas da campanha (zeradas em DRAFT)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/campaigns/{{e2eCampaignId}}/metrics",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"campaigns",
+								"{{e2eCampaignId}}",
+								"metrics"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test('skipped (sem adminToken)', function () { pm.expect(true).to.be.true; }); return; }",
+									"pm.test('200 com bloco de metricas', function () {",
+									"    pm.response.to.have.status(200);",
+									"    pm.expect(pm.response.json().metrics.sent).to.eql(0);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV admin: Lista de campanhas inclui a criada",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/campaigns?page=0&size=20",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"campaigns"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "20"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test('skipped (sem adminToken)', function () { pm.expect(true).to.be.true; }); return; }",
+									"pm.test('200 e contem a campanha E2E', function () {",
+									"    pm.response.to.have.status(200);",
+									"    var created = pm.collectionVariables.get('e2eCampaignId');",
+									"    var found = pm.response.json().content.some(function (campaign) { return campaign.id === created; });",
+									"    pm.expect(found).to.be.true;",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV admin: Deletar campanha DRAFT (204)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/campaigns/{{e2eCampaignId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"campaigns",
+								"{{e2eCampaignId}}"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test('skipped (sem adminToken)', function () { pm.expect(true).to.be.true; }); return; }",
+									"pm.test('204 no content', function () { pm.response.to.have.status(204); });"
 								]
 							}
 						}
@@ -12596,7 +12993,7 @@
 								}
 							]
 						},
-						"description": "Paid-API spend report (captcha + Infosimples): total cost/calls over the window, plus breakdown byService and byState, and today's spend vs the global daily budget. Reads the paid_api_call ledger. ADMIN only.\n\nResposta inclui infosimplesSaldo — crédito vivo na conta Infosimples (R$; null se indisponível).",
+						"description": "Paid-API spend report (captcha + Infosimples): total cost/calls over the window, plus breakdown byService and byState, and today's spend vs the global daily budget. Reads the paid_api_call ledger. ADMIN only.\n\nResposta inclui infosimplesSaldo \u2014 cr\u00e9dito vivo na conta Infosimples (R$; null se indispon\u00edvel).",
 						"auth": {
 							"type": "bearer",
 							"bearer": [
@@ -12615,7 +13012,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -12651,7 +13048,7 @@
 								"infosimples"
 							]
 						},
-						"description": "Painel financeiro da conta Infosimples pré-paga: saldo/consumoMes/franquiaMinima ao vivo, aVarrerNoFechamento + proximoFechamento (varredura da franquia no dia 1º ~06h), totais (recarregado/consumido/varrido) e historico[] mensal."
+						"description": "Painel financeiro da conta Infosimples pr\u00e9-paga: saldo/consumoMes/franquiaMinima ao vivo, aVarrerNoFechamento + proximoFechamento (varredura da franquia no dia 1\u00ba ~06h), totais (recarregado/consumido/varrido) e historico[] mensal."
 					},
 					"response": []
 				},
@@ -12703,7 +13100,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -12762,7 +13159,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -12803,7 +13200,7 @@
 								}
 							]
 						},
-						"description": "Paginated list of products with brand=null. Each entry includes up to 5 sample raw descriptions from its aliases — gives the curator enough context to assign a brand.",
+						"description": "Paginated list of products with brand=null. Each entry includes up to 5 sample raw descriptions from its aliases \u2014 gives the curator enough context to assign a brand.",
 						"auth": {
 							"type": "bearer",
 							"bearer": [
@@ -12822,7 +13219,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -12853,7 +13250,7 @@
 								"duplicates"
 							]
 						},
-						"description": "Groups of products sharing the same (genericName, brand, packSize, packUnit) profile — likely duplicates. Within each group, oldest product first.",
+						"description": "Groups of products sharing the same (genericName, brand, packSize, packUnit) profile \u2014 likely duplicates. Within each group, oldest product first.",
 						"auth": {
 							"type": "bearer",
 							"bearer": [
@@ -12872,7 +13269,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -12926,7 +13323,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -12975,7 +13372,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -13107,7 +13504,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -13132,7 +13529,7 @@
 								"market-intel"
 							]
 						},
-						"description": "Índice colaborativo + top produtos/mercados + gasto por categoria/UF. ADMIN-only.",
+						"description": "\u00cdndice colaborativo + top produtos/mercados + gasto por categoria/UF. ADMIN-only.",
 						"auth": {
 							"type": "bearer",
 							"bearer": [
@@ -13151,7 +13548,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -13196,7 +13593,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -13228,7 +13625,7 @@
 								}
 							]
 						},
-						"description": "Taxa UNMATCHED + descrições órfãs mais frequentes. ADMIN-only.",
+						"description": "Taxa UNMATCHED + descri\u00e7\u00f5es \u00f3rf\u00e3s mais frequentes. ADMIN-only.",
 						"auth": {
 							"type": "bearer",
 							"bearer": [
@@ -13247,7 +13644,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -13272,7 +13669,7 @@
 								"live-accuracy"
 							]
 						},
-						"description": "Acurácia contra produtos validados por humanos (dados reais). ADMIN-only.",
+						"description": "Acur\u00e1cia contra produtos validados por humanos (dados reais). ADMIN-only.",
 						"auth": {
 							"type": "bearer",
 							"bearer": [
@@ -13291,7 +13688,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -13323,7 +13720,7 @@
 								}
 							]
 						},
-						"description": "Trilha de auditoria da graduação por consenso. ADMIN-only.",
+						"description": "Trilha de auditoria da gradua\u00e7\u00e3o por consenso. ADMIN-only.",
 						"auth": {
 							"type": "bearer",
 							"bearer": [
@@ -13342,7 +13739,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -13378,7 +13775,7 @@
 								}
 							]
 						},
-						"description": "Dicionário curado paginado. ADMIN-only.",
+						"description": "Dicion\u00e1rio curado paginado. ADMIN-only.",
 						"auth": {
 							"type": "bearer",
 							"bearer": [
@@ -13397,7 +13794,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -13433,7 +13830,7 @@
 								}
 							]
 						},
-						"description": "Dicionário aprendido paginado. ADMIN-only.",
+						"description": "Dicion\u00e1rio aprendido paginado. ADMIN-only.",
 						"auth": {
 							"type": "bearer",
 							"bearer": [
@@ -13452,7 +13849,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no server error (<500)', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -13494,7 +13891,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no 5xx on edge input', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no 5xx on edge input', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -13533,7 +13930,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no 5xx on edge input', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no 5xx on edge input', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -13572,7 +13969,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no 5xx on edge input', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no 5xx on edge input', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -13613,7 +14010,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no 5xx on edge input', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no 5xx on edge input', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -13654,7 +14051,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no 5xx on edge input', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no 5xx on edge input', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -13691,7 +14088,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no 5xx on edge input', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no 5xx on edge input', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -13705,7 +14102,7 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{baseUrl}}/api/v1/products?query=çãõ%20🧀🍚%20ÜMLÄUT",
+							"raw": "{{baseUrl}}/api/v1/products?query=\u00e7\u00e3\u00f5%20\ud83e\uddc0\ud83c\udf5a%20\u00dcML\u00c4UT",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -13717,7 +14114,7 @@
 							"query": [
 								{
 									"key": "query",
-									"value": "çãõ%20🧀🍚%20ÜMLÄUT"
+									"value": "\u00e7\u00e3\u00f5%20\ud83e\uddc0\ud83c\udf5a%20\u00dcML\u00c4UT"
 								}
 							]
 						}
@@ -13728,7 +14125,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no 5xx on edge input', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no 5xx on edge input', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -13761,7 +14158,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no 5xx on edge input', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no 5xx on edge input', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -13802,7 +14199,7 @@
 									"key": "scope",
 									"value": "SUPPORTED",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) — filtra por segmento do emitente"
+									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						}
@@ -13813,7 +14210,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no 5xx on edge input', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no 5xx on edge input', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -13853,7 +14250,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no 5xx on edge input', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no 5xx on edge input', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -13893,7 +14290,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no 5xx on edge input', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no 5xx on edge input', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -13934,7 +14331,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no 5xx on edge input', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no 5xx on edge input', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -13976,7 +14373,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(pm.info.requestName + ' — no 5xx on edge input', function () {",
+									"pm.test(pm.info.requestName + ' \u2014 no 5xx on edge input', function () {",
 									"    pm.expect(pm.response.code).to.be.below(500);",
 									"});"
 								]
@@ -14109,8 +14506,8 @@
 								"exec": [
 									"var adminEmail = pm.variables.get('adminEmail');",
 									"pm.collectionVariables.set('adminToken', '');",
-									"if (!adminEmail) { pm.test.skip('Sem credenciais de admin (adminEmail/adminPassword) — pulando verificacao de cascade'); return; }",
-									"if (pm.response.code !== 200) { pm.test.skip('Admin login nao retornou 200 (' + pm.response.code + ', ex. rate-limit) — pulando verificacao de cascade'); return; }",
+									"if (!adminEmail) { pm.test.skip('Sem credenciais de admin (adminEmail/adminPassword) \u2014 pulando verificacao de cascade'); return; }",
+									"if (pm.response.code !== 200) { pm.test.skip('Admin login nao retornou 200 (' + pm.response.code + ', ex. rate-limit) \u2014 pulando verificacao de cascade'); return; }",
 									"pm.test('Admin login 200', function () { pm.response.to.have.status(200); });",
 									"var d = pm.response.json(); if (d.token) pm.collectionVariables.set('adminToken', d.token);"
 								]
@@ -14153,7 +14550,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin — pulando'); return; }",
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin \u2014 pulando'); return; }",
 									"pm.test('GET /admin/merchants/grey -> 200', function () { pm.response.to.have.status(200); });",
 									"pm.test('resposta e uma lista', function () { pm.expect(pm.response.json()).to.be.an('array'); });"
 								]
@@ -14197,7 +14594,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin — pulando'); return; }",
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin \u2014 pulando'); return; }",
 									"pm.test('GET /admin/garimpo/marketplaces -> 200', function () { pm.response.to.have.status(200); });",
 									"pm.test('mercadolivre esta listado', function () { var keys = pm.response.json().map(function (m) { return m.key; }); pm.expect(keys).to.include('mercadolivre'); });"
 								]
@@ -14249,7 +14646,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin — pulando'); return; }",
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin \u2014 pulando'); return; }",
 									"pm.test('POST /admin/garimpo/watches -> 200', function () { pm.response.to.have.status(200); });",
 									"var w = pm.response.json();",
 									"pm.test('watch criado com defaults', function () { pm.expect(w.marketplace).to.eql('mercadolivre'); pm.expect(w.active).to.be.true; });",
@@ -14303,7 +14700,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin — pulando'); return; }",
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin \u2014 pulando'); return; }",
 									"pm.test('watch sem targetPrice/minDiscount -> 400', function () { pm.response.to.have.status(400); });",
 									"pm.test('mensagem localizada, sem chave crua', function () { var m = pm.response.json().message || ''; pm.expect(m).to.not.include('garimpo.watch.invalid'); });"
 								]
@@ -14356,8 +14753,8 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin — pulando'); return; }",
-									"if (!pm.collectionVariables.get('garimpoWatchId')) { pm.test.skip('Sem watch criado — pulando'); return; }",
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin \u2014 pulando'); return; }",
+									"if (!pm.collectionVariables.get('garimpoWatchId')) { pm.test.skip('Sem watch criado \u2014 pulando'); return; }",
 									"pm.test('PUT watch -> 200', function () { pm.response.to.have.status(200); });",
 									"pm.test('criterio atualizado', function () { pm.expect(pm.response.json().minDiscountPercent).to.eql(30); });"
 								]
@@ -14402,8 +14799,8 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin — pulando'); return; }",
-									"if (!pm.collectionVariables.get('garimpoWatchId')) { pm.test.skip('Sem watch criado — pulando'); return; }",
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin \u2014 pulando'); return; }",
+									"if (!pm.collectionVariables.get('garimpoWatchId')) { pm.test.skip('Sem watch criado \u2014 pulando'); return; }",
 									"pm.test('DELETE watch -> 204', function () { pm.response.to.have.status(204); });",
 									"pm.collectionVariables.unset('garimpoWatchId');"
 								]
@@ -15247,7 +15644,7 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin — pulando'); return; }",
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin \u2014 pulando'); return; }",
 									"pm.test('GET /admin/users/{deletedId} -> 404', function () { pm.response.to.have.status(404); });"
 								]
 							}
@@ -15291,7 +15688,7 @@
 								"exec": [
 									"if (pm.collectionVariables.get('adminToken') && pm.collectionVariables.get('e2eReceiptId')) {",
 									"    pm.test('GET /admin/receipts/{deletedReceiptId} -> 404 (cascade)', function () { pm.response.to.have.status(404); });",
-									"} else { pm.test.skip('Sem admin ou sem nota — pulando'); }",
+									"} else { pm.test.skip('Sem admin ou sem nota \u2014 pulando'); }",
 									"// limpeza final das variaveis",
 									"pm.collectionVariables.set('e2eReceiptId', '');",
 									"pm.collectionVariables.set('e2eHouseholdId', '');",
@@ -15332,7 +15729,7 @@
 								"visits"
 							]
 						},
-						"description": "Anonymous visit beacon the web landing fires once per session on first load. Public (no auth), returns 204. Powers acquisition.visits (click→signup conversion per campaign). No PII — client IP kept only as a one-way hash. Rate-limited 60/min per IP. anonId required (missing → silently ignored)."
+						"description": "Anonymous visit beacon the web landing fires once per session on first load. Public (no auth), returns 204. Powers acquisition.visits (click\u2192signup conversion per campaign). No PII \u2014 client IP kept only as a one-way hash. Rate-limited 60/min per IP. anonId required (missing \u2192 silently ignored)."
 					},
 					"response": []
 				}
@@ -15444,11 +15841,11 @@
 					"response": []
 				}
 			],
-			"description": "Server-to-server billing webhook seam. Not called by the FE — a payment provider posts here on subscription lifecycle events."
+			"description": "Server-to-server billing webhook seam. Not called by the FE \u2014 a payment provider posts here on subscription lifecycle events."
 		},
 		{
 			"name": "Admin",
-			"description": "Endpoints under /api/v1/admin/** — require ROLE_ADMIN.",
+			"description": "Endpoints under /api/v1/admin/** \u2014 require ROLE_ADMIN.",
 			"item": [
 				{
 					"name": "Reparse a receipt from stored raw HTML (admin)",
@@ -15506,7 +15903,7 @@
 								"retry-batch"
 							]
 						},
-						"description": "Re-ingere o backlog FAILED_PARSE de notas ESCANEADAS pelo qrPayload guardado (cross-household). Body opcional { ids: [uuid...] }; sem body = backlog inteiro (cap 200). 202 { affected }. Uso: após shippar um fallback novo ou o provedor pago voltar a ter saldo."
+						"description": "Re-ingere o backlog FAILED_PARSE de notas ESCANEADAS pelo qrPayload guardado (cross-household). Body opcional { ids: [uuid...] }; sem body = backlog inteiro (cap 200). 202 { affected }. Uso: ap\u00f3s shippar um fallback novo ou o provedor pago voltar a ter saldo."
 					},
 					"response": []
 				},
@@ -15541,7 +15938,7 @@
 								}
 							]
 						},
-						"description": "DEV-ONLY (economizai.admin.dev-seed-enabled=true). Plants a PENDING receipt with a receipt-level discount and THREE promotional lines (paidTotalPrice below totalPrice) — deterministic data for QA/e2e of the discount UI. Seeds the calling admin's household, or targetEmail's when given. 403 when the flag is off (prod)."
+						"description": "DEV-ONLY (economizai.admin.dev-seed-enabled=true). Plants a PENDING receipt with a receipt-level discount and THREE promotional lines (paidTotalPrice below totalPrice) \u2014 deterministic data for QA/e2e of the discount UI. Seeds the calling admin's household, or targetEmail's when given. 403 when the flag is off (prod)."
 					},
 					"response": []
 				},
@@ -15779,7 +16176,7 @@
 							"mode": "raw",
 							"raw": "{\n  \"role\": \"MERCHANT\"\n}"
 						},
-						"description": "Muda o papel de um usuário (USER <-> MERCHANT). Qualquer mudança envolvendo ADMIN é recusada (409). Rebaixar um MERCHANT revoga todos os grants de rede. docs/MERCHANT_ACCOUNTS.md."
+						"description": "Muda o papel de um usu\u00e1rio (USER <-> MERCHANT). Qualquer mudan\u00e7a envolvendo ADMIN \u00e9 recusada (409). Rebaixar um MERCHANT revoga todos os grants de rede. docs/MERCHANT_ACCOUNTS.md."
 					},
 					"response": []
 				},
@@ -15807,7 +16204,7 @@
 								"merchant-access"
 							]
 						},
-						"description": "Redes (cnpj_root, 8 dígitos) que o usuário MERCHANT gerencia — o escopo do painel dele."
+						"description": "Redes (cnpj_root, 8 d\u00edgitos) que o usu\u00e1rio MERCHANT gerencia \u2014 o escopo do painel dele."
 					},
 					"response": []
 				},
@@ -15843,7 +16240,7 @@
 							"mode": "raw",
 							"raw": "{\n  \"cnpjRoot\": \"{{cnpjRoot}}\"\n}"
 						},
-						"description": "Concede uma rede (primeiros 8 dígitos do CNPJ) a um usuário MERCHANT. 409 se o usuário não é MERCHANT ou se o grant já existe. 201 no sucesso."
+						"description": "Concede uma rede (primeiros 8 d\u00edgitos do CNPJ) a um usu\u00e1rio MERCHANT. 409 se o usu\u00e1rio n\u00e3o \u00e9 MERCHANT ou se o grant j\u00e1 existe. 201 no sucesso."
 					},
 					"response": []
 				},
@@ -15872,7 +16269,7 @@
 								"{{cnpjRoot}}"
 							]
 						},
-						"description": "Revoga o acesso do usuário MERCHANT à rede. 204 no sucesso, 404 se o grant não existe."
+						"description": "Revoga o acesso do usu\u00e1rio MERCHANT \u00e0 rede. 204 no sucesso, 404 se o grant n\u00e3o existe."
 					},
 					"response": []
 				},
@@ -15898,7 +16295,7 @@
 								"merchant-claims"
 							]
 						},
-						"description": "Fila PENDING_REVIEW — claims cujo CNPJ não tem e-mail utilizável na Receita."
+						"description": "Fila PENDING_REVIEW \u2014 claims cujo CNPJ n\u00e3o tem e-mail utiliz\u00e1vel na Receita."
 					},
 					"response": []
 				},
@@ -15926,7 +16323,7 @@
 								"approve"
 							]
 						},
-						"description": "Promove o usuário a MERCHANT, concede a rede e abre a assinatura de marketing."
+						"description": "Promove o usu\u00e1rio a MERCHANT, concede a rede e abre a assinatura de marketing."
 					},
 					"response": []
 				},
@@ -15961,7 +16358,7 @@
 						"description": "Rejeita com motivo opcional.",
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"reason\": \"não comprovou vínculo com o estabelecimento\"\n}"
+							"raw": "{\n  \"reason\": \"n\u00e3o comprovou v\u00ednculo com o estabelecimento\"\n}"
 						}
 					},
 					"response": []
@@ -15994,7 +16391,7 @@
 								}
 							]
 						},
-						"description": "Moderação das promos anunciadas (filtra por ?cnpjRoot=)."
+						"description": "Modera\u00e7\u00e3o das promos anunciadas (filtra por ?cnpjRoot=)."
 					},
 					"response": []
 				},
@@ -16026,7 +16423,7 @@
 								"active"
 							]
 						},
-						"description": "Tira a promo de circulação (active=false) sem apagar o registro do lojista.",
+						"description": "Tira a promo de circula\u00e7\u00e3o (active=false) sem apagar o registro do lojista.",
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"active\": false\n}"
@@ -16074,7 +16471,7 @@
 								}
 							]
 						},
-						"description": "Same content-search semantics as GET /receipts but cross-household. Includes FAILED_PARSE rows for parser triage.\n\nResponse: Page<AdminReceiptSummaryResponse> — cada linha = { receipt: ReceiptSummaryResponse, owner: {id,name,email}|null, uf, createdAt, parseErrorReason, parseErrorMessage } (contexto de triagem já na lista)."
+						"description": "Same content-search semantics as GET /receipts but cross-household. Includes FAILED_PARSE rows for parser triage.\n\nResponse: Page<AdminReceiptSummaryResponse> \u2014 cada linha = { receipt: ReceiptSummaryResponse, owner: {id,name,email}|null, uf, createdAt, parseErrorReason, parseErrorMessage } (contexto de triagem j\u00e1 na lista)."
 					},
 					"response": []
 				},
@@ -16135,7 +16532,7 @@
 								"test"
 							]
 						},
-						"description": "Resolves the user by email and dispatches a notification through NotificationService — useful for verifying push/SMTP wiring on demand. Returns 202 even if the channel is stubbed; check the notifications inbox or device to confirm delivery."
+						"description": "Resolves the user by email and dispatches a notification through NotificationService \u2014 useful for verifying push/SMTP wiring on demand. Returns 202 even if the channel is stubbed; check the notifications inbox or device to confirm delivery."
 					},
 					"response": []
 				},
@@ -16257,6 +16654,441 @@
 					"response": []
 				},
 				{
+					"name": "List audiences (admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/audiences",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"audiences"
+							]
+						},
+						"description": "All audiences (built-in first, e.g. the seeded 'Admins' test audience) with the LIVE count of matching users per audience."
+					},
+					"response": []
+				},
+				{
+					"name": "Create audience (admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/audiences",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"audiences"
+							]
+						},
+						"description": "Creates a reusable user segment. Null filter fields mean 'don't filter on this'; non-null ones combine with AND. Filters: role, subscriptionTier, locale (pt|en), hasPushToken, registeredWithinDays, activeWithinDays (scanned a receipt in the last N days). Duplicate name -> 409.",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"PRO com push\",\n  \"description\": \"Assinantes PRO com token de push registrado\",\n  \"subscriptionTier\": \"PRO\",\n  \"hasPushToken\": true\n}"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update audience (admin)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/audiences/{{audienceId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"audiences",
+								"{{audienceId}}"
+							]
+						},
+						"description": "Replaces the audience's name/filters. Built-in audiences (Admins) are locked -> 400.",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"PRO com push\",\n  \"description\": \"Assinantes PRO com token de push registrado\",\n  \"subscriptionTier\": \"PRO\",\n  \"hasPushToken\": true,\n  \"activeWithinDays\": 30\n}"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Preview audience (admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/audiences/{{audienceId}}/preview",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"audiences",
+								"{{audienceId}}",
+								"preview"
+							]
+						},
+						"description": "Who the audience resolves to RIGHT NOW: { matchCount, sampleEmails } (up to 10 sample recipients)."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete audience (admin)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/audiences/{{audienceId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"audiences",
+								"{{audienceId}}"
+							]
+						},
+						"description": "Deletes a custom audience. Built-in -> 400; referenced by any campaign -> 409."
+					},
+					"response": []
+				},
+				{
+					"name": "List campaigns (admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/campaigns?page=0&size=20",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"campaigns"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "20"
+								}
+							]
+						},
+						"description": "Paginated, newest first. Every row carries the comparable metrics block (sent/delivered/read/pushOpened/converted + rates) so texts, times and types rank against each other."
+					},
+					"response": []
+				},
+				{
+					"name": "Create campaign (admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/campaigns",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"campaigns"
+							]
+						},
+						"description": "Creates a campaign over an audience. scheduledAt null -> DRAFT; future ISO-8601 instant -> SCHEDULED (dispatched automatically); past -> 400. type defaults to SYSTEM (inbox deep-link); other NotificationTypes reuse their organic FE destination. extras is forwarded verbatim to the push payload.",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Teste interno\",\n  \"title\": \"Testando campanhas\",\n  \"body\": \"Se chegou, o m\\u00f3dulo de campanhas est\\u00e1 funcionando.\",\n  \"type\": \"SYSTEM\",\n  \"audienceId\": \"{{audienceId}}\"\n}"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get campaign (admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/campaigns/{{campaignId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"campaigns",
+								"{{campaignId}}"
+							]
+						},
+						"description": "One campaign with its metrics block."
+					},
+					"response": []
+				},
+				{
+					"name": "Update campaign (admin)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/campaigns/{{campaignId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"campaigns",
+								"{{campaignId}}"
+							]
+						},
+						"description": "Edits content/audience/schedule. Only DRAFT/SCHEDULED are editable -> otherwise 400.",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Teste interno\",\n  \"title\": \"Testando campanhas (v2)\",\n  \"body\": \"Texto ajustado.\",\n  \"type\": \"SYSTEM\",\n  \"audienceId\": \"{{audienceId}}\"\n}"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Send campaign now (admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/campaigns/{{campaignId}}/send",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"campaigns",
+								"{{campaignId}}",
+								"send"
+							]
+						},
+						"description": "Queues the campaign for immediate dispatch (the scheduler poll picks it up within ~15s; the response is 202 with the SCHEDULED campaign \u2014 poll GET until SENT). Allowed from DRAFT, SCHEDULED or FAILED (retry)."
+					},
+					"response": []
+				},
+				{
+					"name": "Cancel campaign (admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/campaigns/{{campaignId}}/cancel",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"campaigns",
+								"{{campaignId}}",
+								"cancel"
+							]
+						},
+						"description": "DRAFT/SCHEDULED -> CANCELLED. An in-flight (SENDING) or completed send cannot be cancelled."
+					},
+					"response": []
+				},
+				{
+					"name": "Test-send campaign to self (admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/campaigns/{{campaignId}}/test",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"campaigns",
+								"{{campaignId}}",
+								"test"
+							]
+						},
+						"description": "Dispatches the campaign's content to the CALLING admin only, untagged \u2014 test sends never pollute the campaign's metrics. Allowed in any status. 202."
+					},
+					"response": []
+				},
+				{
+					"name": "Campaign metrics (admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/campaigns/{{campaignId}}/metrics",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"campaigns",
+								"{{campaignId}}",
+								"metrics"
+							]
+						},
+						"description": "Full drill-down: funnel (sent/delivered/read from the outbox), engagement (PUSH_OPENED/DEAL_TAPPED/DISMISSED from notification_events), attributed conversions (CONVERTED events by recipients within the attribution window after the send, with R$ savings) and every event type."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete campaign (admin)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/campaigns/{{campaignId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"campaigns",
+								"{{campaignId}}"
+							]
+						},
+						"description": "DRAFT/CANCELLED/FAILED only \u2014 SENT campaigns are history (their outbox rows keep campaign_id)."
+					},
+					"response": []
+				},
+				{
 					"name": "Cost report (paid-API spend)",
 					"request": {
 						"method": "GET",
@@ -16284,7 +17116,7 @@
 								}
 							]
 						},
-						"description": "Paid-API spend report (captcha + Infosimples): total cost/calls over the window, plus breakdown byService and byState, and today's spend vs the global daily budget. Reads the paid_api_call ledger. ADMIN only.\n\nResposta inclui infosimplesSaldo — crédito vivo na conta Infosimples (R$; null se indisponível)."
+						"description": "Paid-API spend report (captcha + Infosimples): total cost/calls over the window, plus breakdown byService and byState, and today's spend vs the global daily budget. Reads the paid_api_call ledger. ADMIN only.\n\nResposta inclui infosimplesSaldo \u2014 cr\u00e9dito vivo na conta Infosimples (R$; null se indispon\u00edvel)."
 					},
 					"response": []
 				},
@@ -16547,7 +17379,7 @@
 								}
 							]
 						},
-						"description": "Paginated list of products with brand=null. Each entry includes up to 5 sample raw descriptions from its aliases — gives the curator enough context to assign a brand."
+						"description": "Paginated list of products with brand=null. Each entry includes up to 5 sample raw descriptions from its aliases \u2014 gives the curator enough context to assign a brand."
 					},
 					"response": []
 				},
@@ -16567,7 +17399,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"brand\": \"Tio João\"\n}"
+							"raw": "{\n  \"brand\": \"Tio Jo\u00e3o\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/v1/admin/products/{{productId}}/brand",
@@ -16610,7 +17442,7 @@
 								"duplicates"
 							]
 						},
-						"description": "Groups of products sharing the same (genericName, brand, packSize, packUnit) profile — likely duplicates. Within each group, oldest product first."
+						"description": "Groups of products sharing the same (genericName, brand, packSize, packUnit) profile \u2014 likely duplicates. Within each group, oldest product first."
 					},
 					"response": []
 				},
@@ -16682,7 +17514,7 @@
 								"merge"
 							]
 						},
-						"description": "APPLIES the merge. Migrates aliases, receipt items, price observations, manual purchases, shopping-list items, household aliases and consumption snoozes from absorbed → survivor, then deletes absorbed. NO undo."
+						"description": "APPLIES the merge. Migrates aliases, receipt items, price observations, manual purchases, shopping-list items, household aliases and consumption snoozes from absorbed \u2192 survivor, then deletes absorbed. NO undo."
 					},
 					"response": []
 				},
@@ -16990,7 +17822,7 @@
 								}
 							]
 						},
-						"description": "KPIs cross-área numa chamada: usuários (total/hoje/semana/PRO), notas (total/hoje + parse rate 30d), domicílios ativos 7d, gasto global confirmado e tamanho do índice. ADMIN."
+						"description": "KPIs cross-\u00e1rea numa chamada: usu\u00e1rios (total/hoje/semana/PRO), notas (total/hoje + parse rate 30d), domic\u00edlios ativos 7d, gasto global confirmado e tamanho do \u00edndice. ADMIN."
 					},
 					"response": []
 				},
@@ -17017,7 +17849,7 @@
 								}
 							]
 						},
-						"description": "Tamanho do índice colaborativo + produtos/mercados mais escaneados, gasto por categoria e por UF, agregado entre todos os domicílios (dados confirmados, não excluídos). ADMIN."
+						"description": "Tamanho do \u00edndice colaborativo + produtos/mercados mais escaneados, gasto por categoria e por UF, agregado entre todos os domic\u00edlios (dados confirmados, n\u00e3o exclu\u00eddos). ADMIN."
 					},
 					"response": []
 				},
@@ -17067,7 +17899,7 @@
 								}
 							]
 						},
-						"description": "KPI de matching: taxa UNMATCHED + as descrições órfãs mais frequentes (o que curar primeiro). ADMIN."
+						"description": "KPI de matching: taxa UNMATCHED + as descri\u00e7\u00f5es \u00f3rf\u00e3s mais frequentes (o que curar primeiro). ADMIN."
 					},
 					"response": []
 				},
@@ -17095,7 +17927,7 @@
 								"category"
 							]
 						},
-						"description": "Define a categoria GLOBAL do produto e trava como decisão manual (USER). 200 ProductResponse. ADMIN.",
+						"description": "Define a categoria GLOBAL do produto e trava como decis\u00e3o manual (USER). 200 ProductResponse. ADMIN.",
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"category\": \"GROCERIES\"\n}"
@@ -17121,7 +17953,7 @@
 								"orphaned"
 							]
 						},
-						"description": "Limpeza dev-only: apaga em lote toda observação órfã (sobras de contas deletadas). 403 a menos que economizaai.admin.dev-cleanup-enabled=true — em prod são agregados anonimizados preservados por LGPD."
+						"description": "Limpeza dev-only: apaga em lote toda observa\u00e7\u00e3o \u00f3rf\u00e3 (sobras de contas deletadas). 403 a menos que economizaai.admin.dev-cleanup-enabled=true \u2014 em prod s\u00e3o agregados anonimizados preservados por LGPD."
 					},
 					"response": []
 				}
@@ -17411,7 +18243,7 @@
 		},
 		{
 			"name": "Garimpo (admin)",
-			"description": "Deal hunting em marketplaces (ML) — busca por termo, historico de precos e watches com alerta via webhook. Tudo ADMIN-only. Buscas ao vivo exigem credenciais do ML (503 sem elas); watches/history funcionam sempre.",
+			"description": "Deal hunting em marketplaces (ML) \u2014 busca por termo, historico de precos e watches com alerta via webhook. Tudo ADMIN-only. Buscas ao vivo exigem credenciais do ML (503 sem elas); watches/history funcionam sempre.",
 			"item": [
 				{
 					"name": "Admin: garimpo search by term",
@@ -17678,7 +18510,7 @@
 		},
 		{
 			"name": "Merchant (conta de mercado)",
-			"description": "Mini-painel do lojista (docs/MERCHANT_ACCOUNTS.md, Fase 1). Requer role MERCHANT (grant via Admin). Invisível pra usuários comuns — 403 fora da role.",
+			"description": "Mini-painel do lojista (docs/MERCHANT_ACCOUNTS.md, Fase 1). Requer role MERCHANT (grant via Admin). Invis\u00edvel pra usu\u00e1rios comuns \u2014 403 fora da role.",
 			"item": [
 				{
 					"name": "Get merchant profile (chains + stores)",
@@ -17702,7 +18534,7 @@
 								"profile"
 							]
 						},
-						"description": "Redes que o usuário logado gerencia + lojas conhecidas de cada rede (criadas a partir dos cupons escaneados) com contagem de notas."
+						"description": "Redes que o usu\u00e1rio logado gerencia + lojas conhecidas de cada rede (criadas a partir dos cupons escaneados) com contagem de notas."
 					},
 					"response": []
 				},
@@ -17728,7 +18560,7 @@
 								"price-comparison"
 							]
 						},
-						"description": "Por produto observado na rede: mediana da rede vs. mediana da região (mesmo estado). Só linhas que passam k-anonimato (K=3 households) + mínimo de amostras nos DOIS lados."
+						"description": "Por produto observado na rede: mediana da rede vs. mediana da regi\u00e3o (mesmo estado). S\u00f3 linhas que passam k-anonimato (K=3 households) + m\u00ednimo de amostras nos DOIS lados."
 					},
 					"response": []
 				},
@@ -17754,7 +18586,7 @@
 								"subscription"
 							]
 						},
-						"description": "Status da conta de marketing por rede. status=PROMO + freeUntil → modal 'grátis até 31/12/2026'."
+						"description": "Status da conta de marketing por rede. status=PROMO + freeUntil \u2192 modal 'gr\u00e1tis at\u00e9 31/12/2026'."
 					},
 					"response": []
 				},
@@ -17780,7 +18612,7 @@
 								"promos"
 							]
 						},
-						"description": "Promoções anunciadas das minhas redes, com verifiedByReceipts (cupom real confirma o preço)."
+						"description": "Promo\u00e7\u00f5es anunciadas das minhas redes, com verifiedByReceipts (cupom real confirma o pre\u00e7o)."
 					},
 					"response": []
 				},
@@ -17913,7 +18745,7 @@
 								}
 							]
 						},
-						"description": "Upload do export do ERP (CSV ou XLSX). Colunas pt (aliases/acentos ok): ean, preco[_promocional], preco_normal?, inicio, fim, descricao?. Preços 'R$ 4,99'/'4.99'; datas ISO ou dd/MM/yyyy. Relatório por linha."
+						"description": "Upload do export do ERP (CSV ou XLSX). Colunas pt (aliases/acentos ok): ean, preco[_promocional], preco_normal?, inicio, fim, descricao?. Pre\u00e7os 'R$ 4,99'/'4.99'; datas ISO ou dd/MM/yyyy. Relat\u00f3rio por linha."
 					},
 					"response": []
 				},
@@ -17944,7 +18776,7 @@
 								"batch"
 							]
 						},
-						"description": "Integração ERP/API — mesma validação por linha do upload.",
+						"description": "Integra\u00e7\u00e3o ERP/API \u2014 mesma valida\u00e7\u00e3o por linha do upload.",
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"promos\": [\n    {\n      \"ean\": \"7891000100110\",\n      \"description\": \"Arroz 1kg\",\n      \"promoPrice\": 3.50,\n      \"startsAt\": \"2026-11-01\",\n      \"endsAt\": \"2026-11-07\"\n    }\n  ]\n}"
@@ -17956,7 +18788,7 @@
 		},
 		{
 			"name": "Merchant claims (sou este mercado)",
-			"description": "Claim self-serve (docs/MERCHANT_ACCOUNTS.md §4b): qualquer usuário autenticado reivindica um mercado; código vai pro e-mail da empresa na Receita, ou cai na fila do admin.",
+			"description": "Claim self-serve (docs/MERCHANT_ACCOUNTS.md \u00a74b): qualquer usu\u00e1rio autenticado reivindica um mercado; c\u00f3digo vai pro e-mail da empresa na Receita, ou cai na fila do admin.",
 			"item": [
 				{
 					"name": "Submit claim",
@@ -17983,7 +18815,7 @@
 								"merchant-claims"
 							]
 						},
-						"description": "AWAITING_CODE (código no e-mail da empresa, mascarado na resposta) ou PENDING_REVIEW (fila admin). 409 se claim aberto ou rede já concedida.",
+						"description": "AWAITING_CODE (c\u00f3digo no e-mail da empresa, mascarado na resposta) ou PENDING_REVIEW (fila admin). 409 se claim aberto ou rede j\u00e1 concedida.",
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"cnpj\": \"93015006000101\",\n  \"companyName\": \"Mercado Exemplo\",\n  \"contactPhone\": \"+5551999999999\"\n}"
@@ -18012,7 +18844,7 @@
 								"merchant-claims"
 							]
 						},
-						"description": "Claims do usuário logado, mais recente primeiro."
+						"description": "Claims do usu\u00e1rio logado, mais recente primeiro."
 					},
 					"response": []
 				},
@@ -18043,7 +18875,7 @@
 								"verify"
 							]
 						},
-						"description": "Aprova com o código de 6 dígitos (TTL 24h, 5 tentativas). Sucesso = vira MERCHANT + grant + assinatura.",
+						"description": "Aprova com o c\u00f3digo de 6 d\u00edgitos (TTL 24h, 5 tentativas). Sucesso = vira MERCHANT + grant + assinatura.",
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"code\": \"123456\"\n}"

@@ -475,11 +475,10 @@ The report works identically in SHADOW and ON (computed purely from
 
 ## Storage / infrastructure
 
-### Profile picture storage = local disk (now on a persistent volume)
-- **Now**: `LocalDiskProfilePictureStorage` writes to `PROFILE_PICTURE_DIR` (default `/tmp/economizai/profile-pics`). On the self-hosted server the app sets it to `/data/profile-pics`, backed by the named Docker volume `economizai-profilepics` (compose `app` service) — same durability as `economizai-pgdata`. Bytes served via `GET /users/me/profile-picture`.
-- **History**: the default `/tmp` is **inside the container** and wiped on every `--build` redeploy. Since every push auto-deploys (rebuild), uploaded pics vanished while the DB key dangled → `read()` fell back to the initials avatar = pics "disappearing". Fixed 2026-06-07 by mounting a volume + pointing the env var at it.
-- **Why still NOT prod-final**: local disk can't scale to multiple instances and isn't backed up off-box.
-- **Fix before prod**: implement an `S3ProfilePictureStorage` (or Cloudinary), wire via the `ProfilePictureStorage` interface, switch via env var. ~2 hr.
+### Profile picture storage — RESOLVED: Cloudflare R2 in prod (2026-10-09)
+- **Prod/dev now**: `CloudflareR2ProfilePictureStorage` (S3-compatible, RestClient + hand-rolled SigV4 — no AWS SDK). Selected via `PROFILE_PICTURE_STORAGE=r2`. Buckets `economizai-profile-pics` (prod) / `-dev` (dev); creds in `R2_*` env vars. Bytes still served via `GET /users/me/profile-picture` (API unchanged). The 7 existing pics were migrated disk→R2 by `DiskToR2ProfilePictureMigration`.
+- **Why**: the local-disk persistent volume PREVENTED Render zero-downtime deploys (a disk attaches to only one instance, so the old instance must stop before the new boots → ~34-60s of 5xx on every deploy — this is what got iOS 1.3.1 rejected). Removing the disk (after R2 migration) + the readiness health check gave **true zero-downtime** (verified 37×200 / 0×5xx during a deploy).
+- **Dev default stays local**: `LocalDiskProfilePictureStorage` (`@ConditionalOnProperty ... matchIfMissing=true`) → `PROFILE_PICTURE_DIR` when `storage` is unset. See [[project_r2_profile_pics]].
 
 ### Push notifications = Expo Push Service (works in dev with no setup)
 - **Now**: `PushDispatcher` calls the Expo Push HTTP API (`https://exp.host/--/api/v2/push/send`). The FE (React Native + Expo) registers an Expo Push Token via `PUT /api/v1/users/me/push-token`; the backend POSTs to Expo, which routes to FCM (Android) or APNs (iOS).
