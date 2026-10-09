@@ -16,6 +16,22 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-09 — Custo por mês no detalhe do usuário + push com deep link
+
+**Admin — custo por usuário:** `GET /admin/users/{id}/cost` agora traz, além de
+`totalCents` e `byService[]`, um **`byMonth[]`** — custo por mês civil (horário do
+Brasil), mais recente primeiro, últimos 12 meses:
+`{ "month": "2026-10", "calls": 2, "costCents": 27 }`. O total continua vitalício.
+
+**Push notifications (infra ligada):** o payload que o backend manda pro Expo Push
+agora inclui **`destination`** (ex.: `RECEIPT`, `DEALS`, `PRODUCT`) junto de `type` e
+dos extras (`receiptId`, `productId`…). O app usa isso pra abrir a tela certa quando o
+usuário toca na notificação. `PATCH /users/me/push-token` passou a ser efetivamente
+exercido: o app registra o Expo Push Token no login e limpa no logout. Nenhum contrato
+de request mudou. (FREE segue só com a caixa in-app; push é PRO.)
+
+---
+
 ## 2026-10-07 — Categorização: keyword de regra não aceita mais letra/unidade solta
 
 As sugestões de regra da IA (admin → Categorização → Revisar) vinham com keywords
