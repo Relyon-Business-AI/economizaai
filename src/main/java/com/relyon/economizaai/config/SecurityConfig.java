@@ -97,7 +97,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         // /app-config is the mobile force-update gate: fetched BEFORE login, so it must be public.
-                        .requestMatchers("/api/v1/auth/**", "/api/v1/legal/**", "/api/v1/webhooks/**", "/api/v1/contact", "/api/v1/beta-signup", "/api/v1/visits", "/api/v1/app-config", "/swagger-ui/**", "/v3/api-docs/**", "/actuator/health").permitAll()
+                        .requestMatchers("/api/v1/auth/**", "/api/v1/legal/**", "/api/v1/webhooks/**", "/api/v1/contact", "/api/v1/beta-signup", "/api/v1/visits", "/api/v1/app-config", "/swagger-ui/**", "/v3/api-docs/**", "/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         // Merchant mini-panel (docs/MERCHANT_ACCOUNTS.md): invisible to
                         // regular users — only MERCHANT accounts (admin-granted) get in.
