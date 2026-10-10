@@ -73,6 +73,15 @@ A rollback looks like:
 
 <!-- AUTONOMOUS ENTRIES BELOW - newest first. The watchdog inserts here. -->
 
+### [2026-10-10 12:29:37] [NEEDS-HUMAN] NO-TESTREF - ERROR [req=] c.r.e.service.ContactService - contact.failed f
+- **Detected:**
+```
+2026-10-10 11:30:31.588 ERROR [req=] c.r.e.service.ContactService - contact.failed from=c***@economizaai.app MailAuthenticationException: Authentication failed — message was:
+```
+- **Claude:** Failed to authenticate. API Error: 401 OAuth access token has been revoked.
+Ignoring 25 permissions.allow entries from .claude/settings.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog, or set projects["/home/runner/work/economizaai/economizaai"].hasTrustDialogAccepted: true in /home/runner/.claude.json.
+- **Outcome:** reply lacked a verifiable test reference; changes discarded.
+
 ### [2026-10-10 11:30:54] [NEEDS-HUMAN] NO-TESTREF - E2E: 22. Categorizer AI status (admin)
 - **Detected:**
 ```
