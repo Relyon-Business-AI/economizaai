@@ -20,10 +20,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
@@ -95,6 +97,46 @@ class DigestServiceTest {
                 eq(HOUSEHOLD_ID), eq(ReceiptStatus.CONFIRMED), any());
         inOrder.verify(receiptRepository).sumConfirmedTotalSince(eq(HOUSEHOLD_ID), any());
         inOrder.verify(notificationService).notify(any(NotificationPayload.class));
+    }
+
+    @Test
+    void runMonthly_sendsMonthNamedDigestForPreviousMonthWindow() {
+        when(ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.DIGEST))
+                .thenReturn(List.of(digestRule()));
+        when(receiptRepository.countByHouseholdIdAndStatusAndConfirmedAtGreaterThanEqualAndConfirmedAtBefore(
+                eq(HOUSEHOLD_ID), eq(ReceiptStatus.CONFIRMED), any(), any())).thenReturn(12L);
+        when(receiptRepository.sumConfirmedTotalBetween(eq(HOUSEHOLD_ID), any(), any()))
+                .thenReturn(new BigDecimal("843.20"));
+
+        service.runMonthly();
+
+        var captor = ArgumentCaptor.forClass(NotificationPayload.class);
+        verify(notificationService).notify(captor.capture());
+        var payload = captor.getValue();
+        assertEquals(NotificationType.DIGEST, payload.type());
+        assertTrue(payload.title().startsWith("Seu resumo de "), "título carrega o nome do mês");
+        assertTrue(payload.body().contains("12"), "corpo carrega o total de notas do mês");
+        // janela = mês civil anterior: [1º do mês passado, 1º deste mês)
+        var fromCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+        var toCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(receiptRepository).countByHouseholdIdAndStatusAndConfirmedAtGreaterThanEqualAndConfirmedAtBefore(
+                eq(HOUSEHOLD_ID), eq(ReceiptStatus.CONFIRMED), fromCaptor.capture(), toCaptor.capture());
+        assertEquals(1, fromCaptor.getValue().getDayOfMonth());
+        assertEquals(1, toCaptor.getValue().getDayOfMonth());
+        assertEquals(fromCaptor.getValue().toLocalDate().plusMonths(1), toCaptor.getValue().toLocalDate());
+    }
+
+    @Test
+    void runMonthly_skipsHouseholdWithNoActivityInMonth() {
+        when(ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.DIGEST))
+                .thenReturn(List.of(digestRule()));
+        when(receiptRepository.countByHouseholdIdAndStatusAndConfirmedAtGreaterThanEqualAndConfirmedAtBefore(
+                eq(HOUSEHOLD_ID), eq(ReceiptStatus.CONFIRMED), any(), any())).thenReturn(0L);
+
+        service.runMonthly();
+
+        verify(notificationService, never()).notify(any());
+        verify(receiptRepository, never()).sumConfirmedTotalBetween(any(), any(), any());
     }
 
     @Test

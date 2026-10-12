@@ -2,6 +2,7 @@ package com.relyon.economizaai.service.notifications.schedule;
 import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.service.LocalizedMessageService;
 
+import com.relyon.economizaai.model.NotificationRule;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.NotificationRuleRepository;
@@ -13,12 +14,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+import java.time.Month;
+import java.time.format.TextStyle;
 import java.util.Map;
 
 /**
- * Weekly savings digest (DIGEST default). Sends each opted-in user a summary of
- * their household activity over the past week. Users with no activity are
- * skipped to avoid empty noise.
+ * Savings digests (DIGEST default): weekly (Mondays, last 7 days) and monthly
+ * (1st of the month, previous calendar month). Both reuse the same DIGEST
+ * preference toggle; users with no activity in the window are skipped to avoid
+ * empty noise.
  */
 @Slf4j
 @Service
@@ -62,5 +67,43 @@ public class DigestService {
             sent++;
         }
         log.info("digest.run done rules={} sent={}", rules.size(), sent);
+    }
+
+    /**
+     * Monthly rollup: every 1st at 08:00 (Brasília) about the PREVIOUS calendar
+     * month. Same transaction posture as {@link #run()}.
+     */
+    @Scheduled(cron = "${economizaai.notifications.digest.monthly-cron:0 0 8 1 * *}",
+            zone = "${economizaai.notifications.digest.zone:America/Sao_Paulo}")
+    public void runMonthly() {
+        var rules = ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.DIGEST);
+        if (rules.isEmpty()) return;
+        var monthStart = BrazilClock.today().withDayOfMonth(1).minusMonths(1);
+        var from = monthStart.atStartOfDay();
+        var to = monthStart.plusMonths(1).atStartOfDay();
+        var sent = 0;
+        for (var rule : rules) {
+            if (sendMonthlyDigest(rule, from, to, monthStart.getMonth())) sent++;
+        }
+        log.info("digest.monthly done rules={} sent={} month={}", rules.size(), sent, monthStart.getMonth());
+    }
+
+    private boolean sendMonthlyDigest(NotificationRule rule, LocalDateTime from,
+                                      LocalDateTime to, Month month) {
+        var household = rule.getUser().getHousehold();
+        if (household == null) return false;
+        var receipts = receiptRepository.countByHouseholdIdAndStatusAndConfirmedAtGreaterThanEqualAndConfirmedAtBefore(
+                household.getId(), ReceiptStatus.CONFIRMED, from, to);
+        if (receipts == 0) return false;
+        var spend = receiptRepository.sumConfirmedTotalBetween(household.getId(), from, to);
+        var locale = LocalizedMessageService.toLocale(rule.getUser().getLocale());
+        var monthName = month.getDisplayName(TextStyle.FULL, locale);
+        notificationService.notify(new NotificationPayload(
+                rule.getUser(), NotificationType.DIGEST,
+                messageService.translate("notification.digest.monthly.title", locale, monthName),
+                messageService.translate("notification.digest.monthly.body", locale,
+                        monthName, String.valueOf(receipts), String.valueOf(spend)),
+                Map.of("receipts", receipts, "spend", spend, "month", month.getValue())));
+        return true;
     }
 }

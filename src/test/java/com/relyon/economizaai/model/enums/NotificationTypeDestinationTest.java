@@ -13,8 +13,9 @@ class NotificationTypeDestinationTest {
         assertEquals(NotificationDestination.DEALS, NotificationType.PROMO_COMMUNITY.destination());
         assertEquals(NotificationDestination.DEALS, NotificationType.CHEAPER_MARKET.destination());
         assertEquals(NotificationDestination.DEALS, NotificationType.DEALS_DIGEST.destination());
-        // Resumo semanal lê-se no corpo da notificação — INBOX (ofertas poderia estar vazia).
-        assertEquals(NotificationDestination.INBOX, NotificationType.DIGEST.destination());
+        // Resumo (semanal/mensal) deep-linka pra gastos por categoria — nunca pra
+        // ofertas (poderia estar vazia em volume baixo).
+        assertEquals(NotificationDestination.SPENDING, NotificationType.DIGEST.destination());
         assertEquals(NotificationDestination.REPLENISHMENT, NotificationType.STOCKOUT.destination());
         assertEquals(NotificationDestination.PRODUCT, NotificationType.PRICE_DROP.destination());
         assertEquals(NotificationDestination.BUDGET, NotificationType.BUDGET.destination());
