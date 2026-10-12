@@ -33,6 +33,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -68,6 +69,10 @@ class NotificationServiceTest {
         // Default: delivery allowed (PRO). FREE-tier behavior is exercised by
         // the inbox-only test, which stubs allows(...) false.
         lenient().when(subscriptionGate.allows(any(), eq(Feature.PUSH_AND_EMAIL_DELIVERY))).thenReturn(true);
+        // notify() agora salva ANTES do dispatch (pra ter o id no payload do push)
+        // e de novo depois — o mock devolve a própria entidade.
+        lenient().when(notificationRepository.save(any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         var dispatchers = new ArrayList<NotificationDispatcher>();
         if (withEmail) {
             lenient().when(emailDispatcher.channel()).thenReturn(NotificationChannel.EMAIL);
@@ -96,7 +101,7 @@ class NotificationServiceTest {
         verify(pushDispatcher).dispatch(any());
         verify(emailDispatcher, never()).dispatch(any());
         var captor = ArgumentCaptor.forClass(Notification.class);
-        verify(notificationRepository).save(captor.capture());
+        verify(notificationRepository, times(2)).save(captor.capture());
         assertEquals(NotificationChannel.PUSH, captor.getValue().getChannel());
         assertTrue(captor.getValue().isDelivered());
     }
@@ -139,7 +144,7 @@ class NotificationServiceTest {
         svc.notify(payload(user, NotificationType.PROMO_PERSONAL));
 
         var captor = ArgumentCaptor.forClass(Notification.class);
-        verify(notificationRepository).save(captor.capture());
+        verify(notificationRepository, times(2)).save(captor.capture());
         assertEquals(false, captor.getValue().isDelivered());
         assertEquals("no token", captor.getValue().getFailureReason());
     }
@@ -175,7 +180,7 @@ class NotificationServiceTest {
         svc.notifyAfterCommit(payload(user, NotificationType.PROMO_PERSONAL));
 
         verify(pushDispatcher).dispatch(any());
-        verify(notificationRepository).save(any());
+        verify(notificationRepository, times(2)).save(any());
     }
 
     @Test
@@ -197,7 +202,7 @@ class NotificationServiceTest {
         }
 
         verify(pushDispatcher).dispatch(any());
-        verify(notificationRepository).save(any());
+        verify(notificationRepository, times(2)).save(any());
     }
 
     @Test

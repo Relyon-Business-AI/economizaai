@@ -16,6 +16,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.LocalDateTime;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -94,11 +95,23 @@ public class NotificationService {
                     payload.user().getEmail(), payload.type(), channel);
             return notificationRepository.save(notification);
         }
-        var result = dispatcher.dispatch(payload);
-        notification.setDelivered(result.delivered());
-        notification.setDeliveredAt(result.delivered() ? LocalDateTime.now() : null);
-        notification.setFailureReason(result.failureReason());
-        return notificationRepository.save(notification);
+        // Persist BEFORE the dispatch so the push payload carries the notification
+        // id — the app reports PUSH_OPENED with it on tap (open attribution).
+        var saved = notificationRepository.save(notification);
+        var result = dispatcher.dispatch(withNotificationId(payload, saved));
+        saved.setDelivered(result.delivered());
+        saved.setDeliveredAt(result.delivered() ? LocalDateTime.now() : null);
+        saved.setFailureReason(result.failureReason());
+        return notificationRepository.save(saved);
+    }
+
+    /** Dispatch copy whose extras include the persisted notification id (tap attribution). */
+    private NotificationPayload withNotificationId(NotificationPayload payload, Notification saved) {
+        if (saved.getId() == null) return payload;
+        var extras = new HashMap<String, Object>(payload.extras() != null ? payload.extras() : Map.of());
+        extras.put("notificationId", saved.getId().toString());
+        return new NotificationPayload(payload.user(), payload.type(), payload.title(),
+                payload.body(), extras, payload.campaignId());
     }
 
     /**
