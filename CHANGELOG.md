@@ -16,6 +16,17 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-12 — Digest mensal + resumo abre em "gastos por categoria"
+
+- **Novo destino `SPENDING`** (`NotificationDestination`): o DIGEST (resumo)
+  deep-linka pra tela de gastos por categoria — tanto no tap do push quanto no
+  CTA do detalhe ("Ver gastos por categoria"). Tipos de oferta seguem em DEALS.
+  FE: rotear `SPENDING` → ItemsByCategory (já shipado no app/web).
+- **Digest mensal**: todo dia 1 às 08:00 (Brasília) sai um resumo do **mês
+  anterior** ("Seu resumo de setembro" — {notas, gasto}), mesma preferência
+  DIGEST do semanal, pulando domicílios sem atividade no mês. Cron em
+  `economizaai.notifications.digest.monthly-cron`.
+
 ## 2026-10-12 — Atribuição de abertura de push + DIGEST abre no sininho
 
 - **Push payload agora carrega `notificationId`**: a notificação é salva ANTES
