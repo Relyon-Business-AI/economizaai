@@ -12,5 +12,6 @@ public enum AiActivity {
     ANOMALY_SCAN,
     TEST_CLASSIFY,
     ITEM_CLASSIFY,  // real-time fallback when the deterministic categorizer misses an item at scan time
-    ITEM_CORRECTION // user-triggered correction of a misclassified receipt item
+    ITEM_CORRECTION, // user-triggered correction of a misclassified receipt item
+    RECEIPT_RESCUE  // parse-rescue: extracts the receipt from fetched SEFAZ HTML the state parser failed on
 }

@@ -180,6 +180,7 @@ public class PaidApiGuardService {
             case TWILIO_MESSAGE -> properties.getTwilioDailyCapPerUser();
             case LLM_ENRICH -> properties.getLlmEnrichDailyCapPerUser();
             case LLM_VISION -> properties.getLlmVisionDailyCapPerUser();
+            case LLM_HTML_RESCUE -> properties.getLlmHtmlRescueDailyCapPerUser();
         };
     }
 

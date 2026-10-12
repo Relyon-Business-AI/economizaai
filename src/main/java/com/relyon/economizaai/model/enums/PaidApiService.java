@@ -20,7 +20,10 @@ public enum PaidApiService {
     LLM_ENRICH(2),
 
     /** One LLM vision extraction of a photographed receipt (~R$0.10). */
-    LLM_VISION(10);
+    LLM_VISION(10),
+
+    /** One LLM extraction of an already-fetched DANFE HTML the parser failed on (~R$0.05). */
+    LLM_HTML_RESCUE(5);
 
     private final int defaultCostCents;
 

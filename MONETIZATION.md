@@ -513,3 +513,12 @@ a maioria dos resgates Infosimples) → Infosimples só quando o FETCH falha →
 solver p/ captcha. Custo misto projetado: ~R$0,01-0,02/nota (vs R$0,24 se
 tudo fosse Infosimples). LLM NÃO substitui o fetch — o risco de IP/captcha
 mora no HTTP, não no parse.
+
+> **✅ Shipado 2026-10-12:** a camada "LLM extrai do HTML quando o parser falha"
+> está LIVE (`HtmlReceiptRescueService` na stack Anthropic, ledger
+> `LLM_HTML_RESCUE` ~R$0,03-0,13, cap 10/usuário/dia; validada com nota real de
+> 10 UFs contra o modelo real). **E o CE ganhou scraper nativo no mesmo dia**
+> (`CearaNfcePortalAdapter` — api JSON qrcodev3 escondida atrás do shell Angular,
+> chave pura, sem captcha): **nenhum estado é mais Infosimples-only**; o R$0,24
+> virou fallback puro em todo lugar. Falta da cadeia: só o proxy residencial
+> (quando a escala exigir).

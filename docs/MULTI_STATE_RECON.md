@@ -48,7 +48,7 @@ são reais mas antigas, 2018–2026; prod fresco só BA/MG):
 | **DF** | 🟡 precisa chave fresca | DECVisualizador processa chave pura mas "chave não encontrada" p/ nota 2021 (expurgo?) — sem chave DF fresca no banco |
 | **ES** | 🟡 precisa chave fresca | página ASP.NET com captcha-token; nota 2021 não renderizou — inconclusivo |
 | **MT** | 🔴 | "Inconsistência de Informações no QRCode" — exige assinatura |
-| **CE** | 🔴 (QR) | "Inconsistência de Informações no QR Code" — exige assinatura (browser, chave 2026). Infosimples já cobre CE |
+| **CE** | ✅ **grátis, sem captcha (2026-10-12)** | O erro "Inconsistência de Informações no QR Code" era validação CLIENT-SIDE do shell Angular — o servidor tem uma api JSON (`POST /nfce/api/notasFiscal/qrcodev3/` com `{chave_acesso, versao_qrcode:3, tipo_ambiente:1}`) que devolve a DANFE completa de **chave pura**. `CearaNfcePortalAdapter` em prod; fixture real (Centerbox, 68 itens) em `fixtures/sefaz/ce/` |
 | **RN** | 🔴 (QR) | idem CE |
 | **MG** | ⚪ portal fora do ar | `portalsped` inacessível hoje (reset no script E error page no Chrome) — retestar; temos chave fresca (set/2026) |
 | **MA** | ⚪ | host `nfce.sefaz.ma.gov.br` não resolve mais (DNS) — URL mudou, redescobrir |

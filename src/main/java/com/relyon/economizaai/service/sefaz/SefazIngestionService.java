@@ -18,6 +18,7 @@ import com.relyon.economizaai.model.enums.PaidApiService;
 import com.relyon.economizaai.model.enums.StateIngestionOutcome;
 import com.relyon.economizaai.model.enums.StateIngestionStrategy;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
+import com.relyon.economizaai.service.llm.HtmlReceiptRescueService;
 import com.relyon.economizaai.service.paidapi.PaidApiGuardService;
 import com.relyon.economizaai.service.sefaz.captcha.CaptchaSolveTracker;
 import lombok.extern.slf4j.Slf4j;
@@ -42,13 +43,15 @@ public class SefazIngestionService {
     private final StateCoverageService stateCoverage;
     private final RsChaveReconsultService rsChaveReconsult;
     private final PrefetchPolicy prefetchPolicy;
+    private final HtmlReceiptRescueService htmlReceiptRescue;
 
     public SefazIngestionService(List<SefazAdapter> adapters,
                                  Optional<InfosimplesService> infosimples,
                                  PaidApiGuardService paidApiGuard,
                                  StateCoverageService stateCoverage,
                                  RsChaveReconsultService rsChaveReconsult,
-                                 PrefetchPolicy prefetchPolicy) {
+                                 PrefetchPolicy prefetchPolicy,
+                                 HtmlReceiptRescueService htmlReceiptRescue) {
         var byState = new EnumMap<UnidadeFederativa, SefazAdapter>(UnidadeFederativa.class);
         for (var adapter : adapters) {
             for (var uf : adapter.supportedStates()) {
@@ -79,6 +82,7 @@ public class SefazIngestionService {
         this.stateCoverage = stateCoverage;
         this.rsChaveReconsult = rsChaveReconsult;
         this.prefetchPolicy = prefetchPolicy;
+        this.htmlReceiptRescue = htmlReceiptRescue;
         log.info("Registered SEFAZ adapters: verified={} experimental={} infosimples-fallback={}",
                 verifiedStates, experimentalStates(), infosimples.isPresent());
     }
@@ -298,9 +302,10 @@ public class SefazIngestionService {
     /**
      * Step 2: parse the fetched HTML, attributing any paid rescue to {@code userId}.
      * Returns the pre-parsed receipt immediately when the fetch was served by the
-     * Infosimples fallback. For experimental states an unparseable layout (portal
-     * responded but not with the responsive DANFE) is retried via Infosimples
-     * before giving up — the last chain layer.
+     * Infosimples fallback. An unparseable layout (portal responded but the parser
+     * couldn't read it) is rescued by the LLM from the same HTML (~R$0.05); for
+     * experimental states a failed LLM rescue still falls to Infosimples (~R$0.24)
+     * before giving up — the chain is ordered by cost.
      */
     public ParsedReceipt parse(FetchedDocument fetched, UUID userId) {
         if (fetched.preParsed() != null) return fetched.preParsed();
@@ -325,14 +330,22 @@ public class SefazIngestionService {
             }
             if (!experimental) {
                 // A verified state's parser failed on real HTML — the regression
-                // signature (portal changed its DANFE format). Record it; a burst
-                // of these alerts the admin with the HTML to fix the adapter.
+                // signature (portal changed its DANFE format). Record it either way
+                // (a burst alerts the admin with the HTML to fix the adapter), then
+                // let the LLM rescue the user's receipt from the same HTML.
                 stateCoverage.recordVerifiedParseFailure(fetched.uf(), fetched.chave(), fetched.sourceUrl(),
                         parseEx.getMessageKey() + ":" + String.join(",", parseEx.getArguments()), fetched.html());
+                var llmRescued = rescueParseViaLlm(fetched, parseEx, userId);
+                if (llmRescued != null) return llmRescued;
                 throw parseEx;
             }
             stateCoverage.recordFailure(fetched.uf(), StateIngestionStrategy.QR_PORTAL,
                     StateIngestionOutcome.PARSE_FAILED, qrHost, describe(parseEx));
+            var llmRescued = rescueParseViaLlm(fetched, parseEx, userId);
+            if (llmRescued != null) {
+                stateCoverage.recordSuccess(fetched.uf(), StateIngestionStrategy.LLM_RESCUE, qrHost);
+                return llmRescued;
+            }
             var infosimplesNote = "desabilitado";
             if (infosimples.isPresent()) {
                 log.warn("sefaz.parse.experimental.failed uf={} chave={} reason={} — trying infosimples fallback",
@@ -353,6 +366,23 @@ public class SefazIngestionService {
                     "QR_PORTAL (parse): " + describe(parseEx) + "; INFOSIMPLES: " + infosimplesNote,
                     fetched.html(), false);
         }
+    }
+
+    /**
+     * The LLM layer of the parse-fallback chain (between the free parser and the
+     * paid Infosimples re-fetch). Skipped for portal REJECTION pages — those carry
+     * no DANFE for the model to read, so spending on them is guaranteed waste; the
+     * reconsult arbiter and (for experimental states) Infosimples still apply.
+     * Returns null when the rescue didn't produce a validated receipt.
+     */
+    private ParsedReceipt rescueParseViaLlm(FetchedDocument fetched, ReceiptParseException parseEx, UUID userId) {
+        if (parseEx instanceof SefazPortalRejectionException) return null;
+        var rescued = htmlReceiptRescue.rescue(fetched.html(), fetched.chave(), fetched.uf(), fetched.sourceUrl(), userId);
+        if (rescued != null) {
+            log.info("sefaz.parse.llm_rescued uf={} chave={} items={}",
+                    fetched.uf(), abbrev(fetched.chave()), rescued.items().size());
+        }
+        return rescued;
     }
 
     /**
