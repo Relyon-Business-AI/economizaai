@@ -9,6 +9,9 @@ public enum StateIngestionStrategy {
     /** Direct GET of the QR's own portal URL, parsed with the shared responsive-DANFE parser. */
     QR_PORTAL,
 
+    /** LLM extraction of the already-fetched DANFE HTML the parser failed on (cheaper than Infosimples). */
+    LLM_RESCUE,
+
     /** Paid Infosimples by-chave lookup (works for every UF). */
     INFOSIMPLES,
 

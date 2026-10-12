@@ -31,6 +31,9 @@ public class PaidApiGuardProperties {
     /** Max LLM vision photo-extractions per user per day. 0 or negative = unlimited. */
     private int llmVisionDailyCapPerUser = 5;
 
+    /** Max LLM HTML parse-rescues per user per day. 0 or negative = unlimited. */
+    private int llmHtmlRescueDailyCapPerUser = 10;
+
     /**
      * Global spend ceiling across ALL users per day, in cents (R$). The kill-switch
      * against a viral spike: once today's ledger total reaches this, every paid call
@@ -64,6 +67,9 @@ public class PaidApiGuardProperties {
 
     public int getLlmVisionDailyCapPerUser() { return llmVisionDailyCapPerUser; }
     public void setLlmVisionDailyCapPerUser(int llmVisionDailyCapPerUser) { this.llmVisionDailyCapPerUser = llmVisionDailyCapPerUser; }
+
+    public int getLlmHtmlRescueDailyCapPerUser() { return llmHtmlRescueDailyCapPerUser; }
+    public void setLlmHtmlRescueDailyCapPerUser(int llmHtmlRescueDailyCapPerUser) { this.llmHtmlRescueDailyCapPerUser = llmHtmlRescueDailyCapPerUser; }
 
     public int getDailyGlobalBudgetCents() { return dailyGlobalBudgetCents; }
     public void setDailyGlobalBudgetCents(int dailyGlobalBudgetCents) { this.dailyGlobalBudgetCents = dailyGlobalBudgetCents; }

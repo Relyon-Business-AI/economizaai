@@ -254,6 +254,7 @@ economizaai:
     infosimples-daily-cap-per-user: ${INFOSIMPLES_DAILY_CAP:20}
     captcha-daily-cap-per-user: ${CAPTCHA_DAILY_CAP:60}
     twilio-daily-cap-per-user: ${TWILIO_DAILY_CAP:10}
+    llm-html-rescue-daily-cap-per-user: ${LLM_HTML_RESCUE_DAILY_CAP:10}
     daily-global-budget-cents: ${PAID_API_DAILY_BUDGET_CENTS:5000}   # R$50/day kill-switch; 0 = unlimited
     infosimples-failure-threshold: ${INFOSIMPLES_BREAKER_THRESHOLD:5}
     breaker-window-seconds: ${INFOSIMPLES_BREAKER_WINDOW_S:600}
@@ -545,6 +546,15 @@ economizaai:
       # economizaai.paid-api (llm-vision-daily-cap-per-user).
       enabled: ${PHOTO_EXTRACTION_ENABLED:true}
       max-items: ${PHOTO_EXTRACTION_MAX_ITEMS:60}
+    html-rescue:
+      # Parse rescue: when a state parser fails on already-fetched SEFAZ HTML,
+      # the LLM extracts the receipt from the page text BEFORE the chain falls
+      # to the paid Infosimples re-fetch (~R$0.05 vs R$0.24). Self-heals portal
+      # layout changes. Per-user daily cap under economizaai.paid-api
+      # (llm-html-rescue-daily-cap-per-user).
+      enabled: ${LLM_HTML_RESCUE_ENABLED:true}
+      max-items: ${LLM_HTML_RESCUE_MAX_ITEMS:80}
+      max-text-chars: ${LLM_HTML_RESCUE_MAX_TEXT_CHARS:60000}
 
 meta:
   ads:

@@ -16,6 +16,16 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-12 — Resgate de parse por IA (menos FAILED_PARSE, menos Infosimples)
+
+- **Camada nova na cadeia de ingestão**: quando o parser de um estado falha no
+  HTML já baixado da SEFAZ (portal mudou o layout), a LLM extrai a nota do texto
+  da página ANTES do fallback pago (Infosimples). Validação anti-alucinação:
+  chave/CNPJ nunca vêm do modelo e a soma dos itens precisa bater com o total —
+  senão a cadeia segue como antes. Sem mudança de contrato; efeito visível é
+  **menos notas terminando em FAILED_PARSE** em troca de ~R$0,05/resgate
+  (medido no ledger como `LLM_HTML_RESCUE`, cap 10/usuário/dia).
+
 ## 2026-10-12 — Notificações de sistema configuráveis pelo dashboard + painel de insights
 
 - **Settings** (`GET/PUT /admin/notifications/settings[/{job}]`): as notificações
