@@ -2,11 +2,13 @@ package com.relyon.economizaai.repository;
 
 import com.relyon.economizaai.model.NotificationEvent;
 import com.relyon.economizaai.model.enums.NotificationEventType;
+import com.relyon.economizaai.model.enums.NotificationType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -145,4 +147,57 @@ public interface NotificationEventRepository extends JpaRepository<NotificationE
         long getConversions();
         BigDecimal getSavings();
     }
+
+    /**
+     * Engajamento por TIPO de notificação (eventos ligados via notificationId) —
+     * aberturas/taps distintos por usuário, por tipo, na janela.
+     */
+    @Query("""
+        SELECT notification.type AS type, event.eventType AS eventType,
+               COUNT(event) AS occurrences, COUNT(DISTINCT event.user.id) AS users
+        FROM NotificationEvent event, Notification notification
+        WHERE event.notificationId = notification.id
+          AND notification.createdAt >= :since
+        GROUP BY notification.type, event.eventType
+    """)
+    List<TypeEventTally> tallyEventsByNotificationType(@Param("since") LocalDateTime since);
+
+    /** Projection for {@link #tallyEventsByNotificationType}. */
+    interface TypeEventTally {
+        NotificationType getType();
+        NotificationEventType getEventType();
+        long getOccurrences();
+        long getUsers();
+    }
+
+    /** Histograma de engajamento por hora LOCAL (Brasília) — pra achar o melhor horário. */
+    @Query(value = """
+        SELECT EXTRACT(HOUR FROM (occurred_at AT TIME ZONE 'America/Sao_Paulo'))::int AS bucket,
+               COUNT(*) FILTER (WHERE event_type = 'PUSH_OPENED') AS opens,
+               COUNT(*) FILTER (WHERE event_type IN ('SCREEN_OPENED', 'DEAL_TAPPED')) AS taps
+        FROM notification_events
+        WHERE occurred_at >= :since
+        GROUP BY bucket
+    """, nativeQuery = true)
+    List<HourEngagementTally> engagementByLocalHourSince(@Param("since") OffsetDateTime since);
+
+    /** Projection for {@link #engagementByLocalHourSince}. */
+    interface HourEngagementTally {
+        int getBucket();
+        long getOpens();
+        long getTaps();
+    }
+
+    /** Usuários que receberam notificação na janela E engajaram (abriram/toaram) com qualquer uma. */
+    @Query("""
+        SELECT COUNT(DISTINCT event.user.id)
+        FROM NotificationEvent event
+        WHERE event.occurredAt >= :since
+          AND event.eventType IN ('PUSH_OPENED', 'SCREEN_OPENED', 'DEAL_TAPPED')
+          AND event.user.id IN (
+              SELECT notification.user.id FROM Notification notification
+              WHERE notification.createdAt >= :sinceLocal)
+    """)
+    long countEngagedRecipients(@Param("since") OffsetDateTime since,
+                                @Param("sinceLocal") LocalDateTime sinceLocal);
 }

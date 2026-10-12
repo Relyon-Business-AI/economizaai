@@ -9,11 +9,14 @@ import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.NotificationJob;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.repository.NotificationRuleRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.service.notifications.NotificationPayload;
 import com.relyon.economizaai.service.notifications.NotificationService;
+import com.relyon.economizaai.service.notifications.NotificationSettingsService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -47,7 +50,13 @@ class ReplenishmentServiceTest {
     }
 
     @Spy private LocalizedMessageService messageService = realMessageService();
+    @Mock private NotificationSettingsService settingsService;
     @InjectMocks private ReplenishmentService service;
+
+    @BeforeEach
+    void enableJobSetting() {
+        lenient().when(settingsService.isEnabled(NotificationJob.REPLENISHMENT)).thenReturn(true);
+    }
 
     private static final UUID PRODUCT_ID = UUID.randomUUID();
     private static final UUID HOUSEHOLD_ID = UUID.randomUUID();

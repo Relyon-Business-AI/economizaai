@@ -6,11 +6,14 @@ import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.NotificationRule;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.NotificationJob;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.repository.NotificationRuleRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.notifications.NotificationPayload;
 import com.relyon.economizaai.service.notifications.NotificationService;
+import com.relyon.economizaai.service.notifications.NotificationSettingsService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -29,6 +32,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -45,7 +49,13 @@ class BudgetMonitorServiceTest {
     }
 
     @Spy private LocalizedMessageService messageService = realMessageService();
+    @Mock private NotificationSettingsService settingsService;
     @InjectMocks private BudgetMonitorService service;
+
+    @BeforeEach
+    void enableJobSetting() {
+        lenient().when(settingsService.isEnabled(NotificationJob.BUDGET_ALERT)).thenReturn(true);
+    }
 
     private static final UUID HOUSEHOLD_ID = UUID.randomUUID();
 

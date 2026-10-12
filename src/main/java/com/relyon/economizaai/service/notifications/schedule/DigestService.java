@@ -3,12 +3,14 @@ import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.service.LocalizedMessageService;
 
 import com.relyon.economizaai.model.NotificationRule;
+import com.relyon.economizaai.model.enums.NotificationJob;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.NotificationRuleRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.notifications.NotificationPayload;
 import com.relyon.economizaai.service.notifications.NotificationService;
+import com.relyon.economizaai.service.notifications.NotificationSettingsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -16,26 +18,31 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.Month;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.TextStyle;
 import java.util.Map;
 
 /**
- * Savings digests (DIGEST default): weekly (Mondays, last 7 days) and monthly
- * (1st of the month, previous calendar month). Both reuse the same DIGEST
- * preference toggle; users with no activity in the window are skipped to avoid
- * empty noise.
+ * Resumos de gastos (DIGEST): semanal e mensal. A agenda (dia/hora), o
+ * liga/desliga e os textos vêm de {@code notification_system_settings}
+ * (editável no dashboard) — um tick HORÁRIO pergunta ao
+ * {@link NotificationSettingsService} se o disparo do dia é agora; o claim
+ * atômico garante no máximo um envio por dia mesmo com restart/2 instâncias.
+ * Domicílios sem atividade na janela são pulados (sem ruído vazio).
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class DigestService {
 
+    private static final ZoneId ZONE = ZoneId.of("America/Sao_Paulo");
     private static final int WINDOW_DAYS = 7;
 
     private final NotificationRuleRepository ruleRepository;
     private final ReceiptRepository receiptRepository;
     private final NotificationService notificationService;
-    private final LocalizedMessageService messageService;
+    private final NotificationSettingsService settingsService;
 
     /**
      * Deliberately NOT {@code @Transactional}: {@code notificationService.notify(...)} dispatches over
@@ -43,8 +50,15 @@ public class DigestService {
      * across every send, starving the pool under load. The counts read here are plain repository calls
      * (each in its own short tx) and there is no post-send write to protect.
      */
-    @Scheduled(cron = "${economizaai.notifications.digest.cron:0 0 8 * * MON}",
+    @Scheduled(cron = "${economizaai.notifications.digest.tick-cron:0 0 * * * *}",
             zone = "${economizaai.notifications.digest.zone:America/Sao_Paulo}")
+    public void tick() {
+        var now = ZonedDateTime.now(ZONE);
+        if (settingsService.claimDueDaily(NotificationJob.WEEKLY_DIGEST, now)) run();
+        if (settingsService.claimDueDaily(NotificationJob.MONTHLY_DIGEST, now)) runMonthly();
+    }
+
+    /** Resumo semanal: últimos {@value WINDOW_DAYS} dias. */
     public void run() {
         var rules = ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.DIGEST);
         if (rules.isEmpty()) return;
@@ -60,21 +74,17 @@ public class DigestService {
             var locale = LocalizedMessageService.toLocale(rule.getUser().getLocale());
             notificationService.notify(new NotificationPayload(
                     rule.getUser(), NotificationType.DIGEST,
-                    messageService.translate("notification.digest.title", locale),
-                    messageService.translate("notification.digest.body", locale,
-                            String.valueOf(receipts), String.valueOf(spend)),
+                    settingsService.resolveTitle(NotificationJob.WEEKLY_DIGEST, locale,
+                            "notification.digest.title"),
+                    settingsService.resolveBody(NotificationJob.WEEKLY_DIGEST, locale,
+                            "notification.digest.body", String.valueOf(receipts), String.valueOf(spend)),
                     Map.of("receipts", receipts, "spend", spend, "windowDays", WINDOW_DAYS)));
             sent++;
         }
         log.info("digest.run done rules={} sent={}", rules.size(), sent);
     }
 
-    /**
-     * Monthly rollup: every 1st at 08:00 (Brasília) about the PREVIOUS calendar
-     * month. Same transaction posture as {@link #run()}.
-     */
-    @Scheduled(cron = "${economizaai.notifications.digest.monthly-cron:0 0 8 1 * *}",
-            zone = "${economizaai.notifications.digest.zone:America/Sao_Paulo}")
+    /** Resumo mensal: mês civil anterior completo. */
     public void runMonthly() {
         var rules = ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.DIGEST);
         if (rules.isEmpty()) return;
@@ -100,8 +110,10 @@ public class DigestService {
         var monthName = month.getDisplayName(TextStyle.FULL, locale);
         notificationService.notify(new NotificationPayload(
                 rule.getUser(), NotificationType.DIGEST,
-                messageService.translate("notification.digest.monthly.title", locale, monthName),
-                messageService.translate("notification.digest.monthly.body", locale,
+                settingsService.resolveTitle(NotificationJob.MONTHLY_DIGEST, locale,
+                        "notification.digest.monthly.title", monthName),
+                settingsService.resolveBody(NotificationJob.MONTHLY_DIGEST, locale,
+                        "notification.digest.monthly.body",
                         monthName, String.valueOf(receipts), String.valueOf(spend)),
                 Map.of("receipts", receipts, "spend", spend, "month", month.getValue())));
         return true;
