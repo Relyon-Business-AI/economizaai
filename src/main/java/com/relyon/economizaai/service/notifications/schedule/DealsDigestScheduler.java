@@ -7,6 +7,7 @@ import com.relyon.economizaai.model.DealSurfaceState;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.DigestFrequency;
 import com.relyon.economizaai.model.enums.NotificationEventType;
+import com.relyon.economizaai.model.enums.NotificationJob;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.repository.DealSurfaceStateRepository;
 import com.relyon.economizaai.repository.UserRepository;
@@ -14,6 +15,7 @@ import com.relyon.economizaai.service.notifications.NotificationEventService;
 import com.relyon.economizaai.service.notifications.NotificationEventService.RecordContext;
 import com.relyon.economizaai.service.notifications.NotificationPayload;
 import com.relyon.economizaai.service.notifications.NotificationService;
+import com.relyon.economizaai.service.notifications.NotificationSettingsService;
 import com.relyon.economizaai.service.notifications.RelevanceThreshold;
 import com.relyon.economizaai.service.priceindex.DealsService;
 import com.relyon.economizaai.service.privacy.LogMasker;
@@ -69,6 +71,7 @@ public class DealsDigestScheduler {
     private final DealSurfaceStateRepository surfaceStateRepository;
     private final NotificationService notificationService;
     private final NotificationEventService eventService;
+    private final NotificationSettingsService settingsService;
     private final CollaborativeProperties properties;
     private final DigestScheduleService scheduleService;
 
@@ -81,6 +84,7 @@ public class DealsDigestScheduler {
     @Scheduled(cron = "${economizaai.notifications.deals-digest.cron:0 0 * * * *}",
             zone = "${economizaai.notifications.deals-digest.zone:America/Sao_Paulo}")
     public void run() {
+        if (!settingsService.isEnabled(NotificationJob.DEALS_DIGEST)) return;
         var now = ZonedDateTime.now(ZONE);
         var currentHour = now.getHour();
         var candidates = userRepository.findDigestCandidates(DigestFrequency.OFF);

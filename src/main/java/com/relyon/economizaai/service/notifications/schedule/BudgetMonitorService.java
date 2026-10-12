@@ -3,11 +3,13 @@ import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.service.LocalizedMessageService;
 
 import com.relyon.economizaai.model.NotificationRule;
+import com.relyon.economizaai.model.enums.NotificationJob;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.repository.NotificationRuleRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.notifications.NotificationPayload;
 import com.relyon.economizaai.service.notifications.NotificationService;
+import com.relyon.economizaai.service.notifications.NotificationSettingsService;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +38,7 @@ public class BudgetMonitorService {
     private final ReceiptRepository receiptRepository;
     private final NotificationService notificationService;
     private final LocalizedMessageService messageService;
+    private final NotificationSettingsService settingsService;
 
     // Self-reference so the per-rule @Transactional persist goes through the Spring
     // proxy (a direct call would bypass it). Defaults to `this` for plain unit tests;
@@ -54,6 +57,7 @@ public class BudgetMonitorService {
     @Scheduled(fixedDelayString = "${economizaai.notifications.budget.interval-ms:21600000}",
             initialDelayString = "${economizaai.notifications.budget.initial-delay-ms:90000}")
     public void run() {
+        if (!settingsService.isEnabled(NotificationJob.BUDGET_ALERT)) return;
         var rules = ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.BUDGET);
         if (rules.isEmpty()) return;
         var now = BrazilClock.nowDateTime();

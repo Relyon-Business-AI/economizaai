@@ -16,6 +16,21 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-12 — Notificações de sistema configuráveis pelo dashboard + painel de insights
+
+- **Settings** (`GET/PUT /admin/notifications/settings[/{job}]`): as notificações
+  automáticas (resumo semanal/mensal, ofertas do dia, orçamento, reposição)
+  agora são linhas editáveis — liga/desliga, agenda (hora local; dia da
+  semana/mês nos resumos) e override de título/corpo (vazio = default i18n,
+  exposto em `defaultTitlePt/defaultBodyPt`). Efeito imediato, sem deploy; os
+  schedulers viraram um tick horário com claim atômico por dia (restart/2
+  instâncias nunca duplicam). UI: Campanhas push → aba **Sistema**.
+- **Insights** (`GET /admin/notifications/insights?days=`): painel completo —
+  funil por tipo (enviadas/entrega/leitura/**abertura via push**/taps + taxas),
+  engajamento por hora local + **melhor horário**, corte por **UF** do
+  destinatário (moda das notas), **engajados vs silenciosos** e conversões
+  atribuídas (R$). UI: tela Notificações ganhou os blocos novos.
+
 ## 2026-10-12 — Digest mensal + resumo abre em "gastos por categoria"
 
 - **Novo destino `SPENDING`** (`NotificationDestination`): o DIGEST (resumo)

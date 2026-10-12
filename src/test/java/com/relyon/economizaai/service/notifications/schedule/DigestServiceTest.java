@@ -1,27 +1,30 @@
 package com.relyon.economizaai.service.notifications.schedule;
-import org.mockito.Spy;
 import org.springframework.context.support.ResourceBundleMessageSource;
 import com.relyon.economizaai.service.LocalizedMessageService;
 
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.NotificationRule;
+import com.relyon.economizaai.model.NotificationSystemSetting;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.NotificationRuleRepository;
+import com.relyon.economizaai.repository.NotificationSystemSettingRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.notifications.NotificationPayload;
 import com.relyon.economizaai.service.notifications.NotificationService;
+import com.relyon.economizaai.service.notifications.NotificationSettingsService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -29,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -39,6 +43,8 @@ class DigestServiceTest {
     @Mock private NotificationRuleRepository ruleRepository;
     @Mock private ReceiptRepository receiptRepository;
     @Mock private NotificationService notificationService;
+    @Mock private NotificationSystemSettingRepository settingsRepository;
+
     private static LocalizedMessageService realMessageService() {
         var source = new ResourceBundleMessageSource();
         source.setBasename("i18n/messages");
@@ -46,8 +52,17 @@ class DigestServiceTest {
         return new LocalizedMessageService(source);
     }
 
-    @Spy private LocalizedMessageService messageService = realMessageService();
-    @InjectMocks private DigestService service;
+    private DigestService service;
+
+    @BeforeEach
+    void setUp() {
+        // Settings reais (sem override) sobre repo mockado — templates caem no i18n default.
+        lenient().when(settingsRepository.findByJob(any())).thenAnswer(invocation ->
+                Optional.of(NotificationSystemSetting.builder()
+                        .job(invocation.getArgument(0)).enabled(true).build()));
+        var settingsService = new NotificationSettingsService(settingsRepository, realMessageService());
+        service = new DigestService(ruleRepository, receiptRepository, notificationService, settingsService);
+    }
 
     private static final UUID HOUSEHOLD_ID = UUID.randomUUID();
 

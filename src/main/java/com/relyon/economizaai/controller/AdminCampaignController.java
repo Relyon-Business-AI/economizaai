@@ -2,13 +2,19 @@ package com.relyon.economizaai.controller;
 
 import com.relyon.economizaai.dto.request.SaveAudienceRequest;
 import com.relyon.economizaai.dto.request.SaveCampaignRequest;
+import com.relyon.economizaai.dto.request.UpdateNotificationSettingRequest;
 import com.relyon.economizaai.dto.response.AudiencePreviewResponse;
 import com.relyon.economizaai.dto.response.AudienceResponse;
 import com.relyon.economizaai.dto.response.CampaignMetricsResponse;
 import com.relyon.economizaai.dto.response.CampaignResponse;
+import com.relyon.economizaai.dto.response.NotificationInsightsResponse;
+import com.relyon.economizaai.dto.response.NotificationSettingResponse;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.NotificationJob;
 import com.relyon.economizaai.service.admin.AdminAudienceService;
 import com.relyon.economizaai.service.admin.AdminCampaignService;
+import com.relyon.economizaai.service.admin.AdminNotificationInsightsService;
+import com.relyon.economizaai.service.admin.AdminNotificationSettingsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -26,6 +32,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -44,6 +51,8 @@ public class AdminCampaignController {
 
     private final AdminAudienceService audienceService;
     private final AdminCampaignService campaignService;
+    private final AdminNotificationSettingsService settingsService;
+    private final AdminNotificationInsightsService insightsService;
 
     // ── Audiences ──
 
@@ -148,5 +157,34 @@ public class AdminCampaignController {
     @GetMapping("/campaigns/{id}/metrics")
     public ResponseEntity<CampaignMetricsResponse> campaignMetrics(@PathVariable UUID id) {
         return ResponseEntity.ok(campaignService.metrics(id));
+    }
+
+    // ── Notificações de sistema (settings) ──
+
+    @Operation(summary = "List system notification settings", description = "Configuração editável das notificações de "
+            + "sistema (digest semanal/mensal, digest de ofertas, orçamento, reposição): liga/desliga, agenda e "
+            + "templates — com os defaults do i18n pra UI. Efeito imediato, sem redeploy.")
+    @GetMapping("/settings")
+    public ResponseEntity<List<NotificationSettingResponse>> listSettings() {
+        return ResponseEntity.ok(settingsService.list());
+    }
+
+    @Operation(summary = "Update a system notification setting", description = "Liga/desliga, agenda (hora local; dia da "
+            + "semana no semanal, dia do mês 1-28 no mensal) e override de título/corpo (vazio = volta pro default).")
+    @PutMapping("/settings/{job}")
+    public ResponseEntity<NotificationSettingResponse> updateSetting(@AuthenticationPrincipal User admin,
+                                                                     @PathVariable NotificationJob job,
+                                                                     @Valid @RequestBody UpdateNotificationSettingRequest request) {
+        return ResponseEntity.ok(settingsService.update(job, request, admin.getEmail()));
+    }
+
+    // ── Insights ──
+
+    @Operation(summary = "Notification insights", description = "Painel completo (orgânicas + campanhas): funil por tipo "
+            + "com abertura/tap atribuídos, engajamento por hora local + melhor horário, corte por UF do destinatário, "
+            + "engajados vs silenciosos e conversões atribuídas (R$).")
+    @GetMapping("/insights")
+    public ResponseEntity<NotificationInsightsResponse> insights(@RequestParam(defaultValue = "30") int days) {
+        return ResponseEntity.ok(insightsService.insights(days));
     }
 }

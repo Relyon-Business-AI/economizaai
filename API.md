@@ -1418,6 +1418,9 @@ POST   /api/v1/admin/notifications/campaigns/{id}/cancel   → CampaignResponse 
 POST   /api/v1/admin/notifications/campaigns/{id}/test     → 202 (manda só pro admin chamador, fora das métricas)
 DELETE /api/v1/admin/notifications/campaigns/{id}          → 204 (só DRAFT/CANCELLED/FAILED)
 GET    /api/v1/admin/notifications/campaigns/{id}/metrics  → CampaignMetricsResponse (funil + engajamento + conversão)
+GET    /api/v1/admin/notifications/settings                → List<NotificationSettingResponse> (notificações de sistema: enabled/agenda/templates + defaults)
+PUT    /api/v1/admin/notifications/settings/{job}          → NotificationSettingResponse (job ∈ WEEKLY_DIGEST|MONTHLY_DIGEST|DEALS_DIGEST|BUDGET_ALERT|REPLENISHMENT; efeito imediato)
+GET    /api/v1/admin/notifications/insights?days=30        → NotificationInsightsResponse (funil por tipo c/ abertura, melhor horário, por UF, engajados vs silenciosos, conversões R$)
 GET    /api/v1/admin/products?page=&size=&q=&category=&source= → Page<ProductResponse> (catalog; optional filters: name/EAN substring, category e.g. OTHER, categorizationSource)
 GET    /api/v1/admin/products/missing-brand    → Page<MissingBrandProductResponse>
 PATCH  /api/v1/admin/products/{id}/brand       → 200 ProductResponse

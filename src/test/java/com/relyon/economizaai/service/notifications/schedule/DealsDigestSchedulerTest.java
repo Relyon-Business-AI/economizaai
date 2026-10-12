@@ -11,12 +11,14 @@ import com.relyon.economizaai.model.Notification;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.DigestFrequency;
 import com.relyon.economizaai.model.enums.NotificationEventType;
+import com.relyon.economizaai.model.enums.NotificationJob;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.repository.DealSurfaceStateRepository;
 import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.notifications.NotificationEventService;
 import com.relyon.economizaai.service.notifications.NotificationPayload;
 import com.relyon.economizaai.service.notifications.NotificationService;
+import com.relyon.economizaai.service.notifications.NotificationSettingsService;
 import com.relyon.economizaai.service.priceindex.DealsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -66,6 +68,7 @@ class DealsDigestSchedulerTest {
     }
 
     @Spy private LocalizedMessageService messageService = realMessageService();
+    @Mock private NotificationSettingsService settingsService;
     @InjectMocks private DealsDigestScheduler scheduler;
 
     private final CollaborativeProperties properties = new CollaborativeProperties();
@@ -77,6 +80,7 @@ class DealsDigestSchedulerTest {
     void setUp() {
         // @InjectMocks won't inject the concrete properties bean; set it directly.
         ReflectionTestUtils.setField(scheduler, "properties", properties);
+        lenient().when(settingsService.isEnabled(NotificationJob.DEALS_DIGEST)).thenReturn(true);
     }
 
     private User dueUser(DigestFrequency frequency, OffsetDateTime lastSent) {

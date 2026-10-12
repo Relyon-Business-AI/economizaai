@@ -123,4 +123,37 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
         long getDelivered();
         long getRead();
     }
+
+    /**
+     * Funil por UF do destinatário (UF = moda das notas do usuário; sem nota
+     * confirmada com UF → bucket "—"). Alimenta o corte geográfico do insights.
+     */
+    @Query(value = """
+        WITH user_uf AS (
+            SELECT user_id, uf FROM (
+                SELECT r.user_id, r.uf, ROW_NUMBER() OVER (PARTITION BY r.user_id ORDER BY COUNT(*) DESC) AS rn
+                FROM receipts r WHERE r.uf IS NOT NULL GROUP BY r.user_id, r.uf) ranked
+            WHERE rn = 1)
+        SELECT COALESCE(uu.uf, '—') AS uf,
+               COUNT(*) AS sent,
+               COUNT(*) FILTER (WHERE n.delivered) AS delivered,
+               COUNT(*) FILTER (WHERE n.read_at IS NOT NULL) AS read
+        FROM notifications n LEFT JOIN user_uf uu ON uu.user_id = n.user_id
+        WHERE n.created_at >= :since
+        GROUP BY COALESCE(uu.uf, '—')
+        ORDER BY sent DESC
+    """, nativeQuery = true)
+    List<UfTally> tallyByUfSince(@Param("since") LocalDateTime since);
+
+    /** Projection for {@link #tallyByUfSince}. */
+    interface UfTally {
+        String getUf();
+        long getSent();
+        long getDelivered();
+        long getRead();
+    }
+
+    /** Destinatários distintos na janela — base do "quem engajou vs quem ficou em silêncio". */
+    @Query("SELECT COUNT(DISTINCT notification.user.id) FROM Notification notification WHERE notification.createdAt >= :since")
+    long countDistinctRecipientsSince(@Param("since") LocalDateTime since);
 }

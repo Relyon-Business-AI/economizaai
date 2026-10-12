@@ -17089,6 +17089,102 @@
 					"response": []
 				},
 				{
+					"name": "List system notification settings (admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/settings",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"settings"
+							]
+						},
+						"description": "Configuracao editavel das notificacoes de SISTEMA (WEEKLY_DIGEST, MONTHLY_DIGEST, DEALS_DIGEST, BUDGET_ALERT, REPLENISHMENT): enabled, agenda (sendHour/dayOfWeek/dayOfMonth) e overrides de template (null = default i18n, mostrado em defaultTitlePt/defaultBodyPt). supportsSchedule/supportsTemplates dizem o que cada job permite editar."
+					},
+					"response": []
+				},
+				{
+					"name": "Update system notification setting (admin)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"enabled\": true,\n  \"sendHour\": 8,\n  \"dayOfWeek\": 1,\n  \"titlePt\": \"\",\n  \"bodyPt\": \"\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/settings/WEEKLY_DIGEST",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"settings",
+								"WEEKLY_DIGEST"
+							]
+						},
+						"description": "Liga/desliga, agenda (hora local Brasilia; dayOfWeek ISO 1-7 no semanal; dayOfMonth 1-28 no mensal) e override de titulo/corpo (vazio = volta pro default i18n; placeholders {0},{1}...). Efeito imediato \u2014 os jobs leem a cada execucao."
+					},
+					"response": []
+				},
+				{
+					"name": "Notification insights (admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/insights?days=30",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"insights"
+							],
+							"query": [
+								{
+									"key": "days",
+									"value": "30"
+								}
+							]
+						},
+						"description": "Painel completo (organicas + campanhas): byType (sent/delivered/read/opened/tapped + taxas), engagementByHour (hora local) + bestHour, byUf (UF predominante das notas do destinatario), engagement (recipients/engaged/silent) e conversions (CONVERTED + R$)."
+					},
+					"response": []
+				},
+				{
 					"name": "Cost report (paid-API spend)",
 					"request": {
 						"method": "GET",
