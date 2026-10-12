@@ -87,7 +87,7 @@ public enum NotificationType {
             // chegam com a tela vazia). O resumo semanal vive no corpo da própria
             // notificação → INBOX, onde dá pra ler (volume baixo não atrapalha).
             case PROMO_PERSONAL, PROMO_COMMUNITY, CHEAPER_MARKET, DEALS_DIGEST -> NotificationDestination.DEALS;
-            case DIGEST -> NotificationDestination.INBOX;
+            case DIGEST -> NotificationDestination.SPENDING;
             case STOCKOUT -> NotificationDestination.REPLENISHMENT;
             case PRICE_DROP -> NotificationDestination.PRODUCT;
             case BUDGET -> NotificationDestination.BUDGET;

@@ -240,6 +240,20 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
     """)
     BigDecimal sumConfirmedTotalSince(@Param("householdId") UUID householdId, @Param("since") LocalDateTime since);
 
+    long countByHouseholdIdAndStatusAndConfirmedAtGreaterThanEqualAndConfirmedAtBefore(
+            UUID householdId, ReceiptStatus status, LocalDateTime from, LocalDateTime to);
+
+    /** Total R$ dos confirmados do domicílio na janela [from, to) — digest mensal. */
+    @Query("""
+        SELECT COALESCE(SUM(r.totalAmount), 0) FROM Receipt r
+        WHERE r.household.id = :householdId
+          AND r.status = 'CONFIRMED'
+          AND r.confirmedAt >= :from AND r.confirmedAt < :to
+    """)
+    BigDecimal sumConfirmedTotalBetween(@Param("householdId") UUID householdId,
+                                        @Param("from") LocalDateTime from,
+                                        @Param("to") LocalDateTime to);
+
     /**
      * Hour-of-day histogram of the household's confirmed receipts with a non-null
      * issued_at: each row is (hour 0-23, count). Native (the EXTRACT-then-GROUP BY
