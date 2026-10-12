@@ -16,6 +16,24 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-12 — Admin: falhas por motivo (pizza) + retry em lote + msg "atualize o app"
+
+- **`GET /admin/receipts/failure-breakdown`**: devolve a contagem de notas em
+  `FAILED_PARSE` agrupada por `parseErrorReason`, como lista de
+  `{ reason, count }` (ordenada desc). Aceita os mesmos filtros da busca de notas
+  (`from`, `to`, `marketCnpj`, `category`, `q`, `householdId`, `uf`,
+  `includeInternal`). Alimenta o gráfico de pizza "Falhas por motivo" na tela
+  Notas do dashboard (filtro Falhas).
+- **`POST /admin/receipts/retry-by-reason`** (`{ "reasonContains": "INFOSIMPLES" }`):
+  reenfileira em lote todas as notas `FAILED_PARSE` cujo motivo contém o fragmento
+  (case-insensitive) — devolve `BatchResultResponse` com `affected`. Pensado pro
+  botão "Retentar falhas Infosimples (N)".
+- **Mensagem `receipt.state.app_update_required`** reescrita: diz ao usuário pra
+  atualizar o app e tocar em **"Tentar novamente"** — ele **não precisa
+  reescanear**. O retry reusa o QR guardado e, com o app atualizado (manda o
+  header `X-Device-Fetch`), a nota vai pra `NEEDS_DEVICE_FETCH` e resolve no
+  aparelho.
+
 ## 2026-10-12 — CE ganhou scraper nativo (grátis, sem captcha)
 
 - **Ceará deixou de ser Infosimples-only**: descobrimos a API JSON que o portal
