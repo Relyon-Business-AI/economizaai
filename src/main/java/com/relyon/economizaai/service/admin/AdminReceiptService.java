@@ -3,6 +3,7 @@ package com.relyon.economizaai.service.admin;
 import com.relyon.economizaai.dto.response.AdminReceiptDetailResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptStatsResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptSummaryResponse;
+import com.relyon.economizaai.dto.response.FailureReasonCount;
 import com.relyon.economizaai.dto.response.ReceiptResponse;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
 import com.relyon.economizaai.model.Receipt;
@@ -25,9 +26,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Admin-only operations on receipts: cross-household paginated search and
@@ -85,6 +88,33 @@ public class AdminReceiptService {
         var spec = buildSearchSpec(from, to, marketCnpj, categories, search, householdId, uf, status,
                 parseErrorReason, includeInternal);
         return new AdminReceiptStatsResponse(receiptRepository.count(spec), receiptRepository.sumTotalAmount(spec));
+    }
+
+    /**
+     * FAILED_PARSE notas grouped by raw parseErrorReason under the same filters as
+     * {@link #list} (status forced to FAILED_PARSE) — the data behind the admin
+     * "falhas por motivo" pie. Few rows in practice, so we load + group in memory
+     * to reuse the exact Specification filters. Most frequent reason first.
+     */
+    @Transactional(readOnly = true)
+    public List<FailureReasonCount> failureBreakdown(LocalDateTime from,
+                                                     LocalDateTime to,
+                                                     String marketCnpj,
+                                                     List<ProductCategory> categories,
+                                                     String search,
+                                                     UUID householdId,
+                                                     UnidadeFederativa uf,
+                                                     boolean includeInternal) {
+        var spec = buildSearchSpec(from, to, marketCnpj, categories, search, householdId, uf,
+                ReceiptStatus.FAILED_PARSE, null, includeInternal);
+        return receiptRepository.findAll(spec).stream()
+                .collect(Collectors.groupingBy(
+                        receipt -> Optional.ofNullable(receipt.getParseErrorReason()).orElse("unknown"),
+                        Collectors.counting()))
+                .entrySet().stream()
+                .map(entry -> new FailureReasonCount(entry.getKey(), entry.getValue()))
+                .sorted(Comparator.comparingLong(FailureReasonCount::count).reversed())
+                .toList();
     }
 
     private Specification<Receipt> buildSearchSpec(LocalDateTime from, LocalDateTime to, String marketCnpj,

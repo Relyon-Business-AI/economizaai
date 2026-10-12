@@ -3,7 +3,9 @@ package com.relyon.economizaai.controller;
 import com.relyon.economizaai.dto.request.MergeProductRequest;
 import com.relyon.economizaai.dto.request.MerchantSupportOverrideRequest;
 import com.relyon.economizaai.dto.request.ReceiptIdsRequest;
+import com.relyon.economizaai.dto.request.RetryByReasonRequest;
 import com.relyon.economizaai.dto.response.BatchResultResponse;
+import com.relyon.economizaai.dto.response.FailureReasonCount;
 import com.relyon.economizaai.dto.request.SendTestNotificationRequest;
 import com.relyon.economizaai.dto.request.SetProductBrandRequest;
 import com.relyon.economizaai.dto.request.GrantMerchantAccessRequest;
@@ -173,6 +175,16 @@ public class AdminController {
         return ResponseEntity.accepted().body(new BatchResultResponse(receiptService.adminRetryFailedScans(ids)));
     }
 
+    /**
+     * Bulk-retry every FAILED_PARSE scan whose reason contains a fragment — the admin
+     * "retentar falhas Infosimples" button (reasonContains=INFOSIMPLES). 202 + count.
+     */
+    @PostMapping("/receipts/retry-by-reason")
+    public ResponseEntity<BatchResultResponse> retryFailedByReason(@Valid @RequestBody RetryByReasonRequest request) {
+        return ResponseEntity.accepted().body(
+                new BatchResultResponse(receiptService.adminRetryFailedByReason(request.reasonContains())));
+    }
+
     @GetMapping("/users")
     public ResponseEntity<Page<AdminUserSummaryResponse>> listUsers(
             @RequestParam(required = false) String q,
@@ -330,6 +342,25 @@ public class AdminController {
             @RequestParam(defaultValue = "false") boolean includeInternal) {
         return ResponseEntity.ok(adminReceiptService.stats(
                 from, to, marketCnpj, category, q, householdId, uf, status, parseErrorReason, includeInternal));
+    }
+
+    /**
+     * FAILED_PARSE notas grouped by reason under the current filters — feeds the
+     * "falhas por motivo" pie on the admin Notas screen. Status is forced to
+     * FAILED_PARSE; the rest of the filters mirror {@link #receiptStats}.
+     */
+    @GetMapping("/receipts/failure-breakdown")
+    public ResponseEntity<List<FailureReasonCount>> failureBreakdown(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
+            @RequestParam(required = false) String marketCnpj,
+            @RequestParam(required = false) List<ProductCategory> category,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) UUID householdId,
+            @RequestParam(required = false) UnidadeFederativa uf,
+            @RequestParam(defaultValue = "false") boolean includeInternal) {
+        return ResponseEntity.ok(adminReceiptService.failureBreakdown(
+                from, to, marketCnpj, category, q, householdId, uf, includeInternal));
     }
 
     @GetMapping("/receipts/{id}")
