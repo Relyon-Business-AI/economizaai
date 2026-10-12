@@ -73,6 +73,61 @@ A rollback looks like:
 
 <!-- AUTONOMOUS ENTRIES BELOW - newest first. The watchdog inserts here. -->
 
+### [2026-10-11 11:44:12] [NEEDS-HUMAN] NO-TESTREF - E2E: 22. Categorizer AI status (admin)
+- **Detected:**
+```
+A daily E2E run against the live dev server FAILED (12/277 assertions).
+Failing steps:
+- 22. Categorizer AI status (admin): AssertionError: expected response to have status code 200 but got 403
+- 22. Categorizer AI status (admin): AssertionError: expected { status: 403, message: 'Forbidden' } to have property 'enabled'
+- COV admin: List audiences (builtin Admins presente): AssertionError: expected response to have status code 200 but got 403
+- COV admin: Preview da audiencia Admins: AssertionError: expected response to have status code 200 but got 403
+- COV admin: Criar campanha DRAFT (audiencia Admins): AssertionError: expected response to have status code 201 but got 403
+- COV admin: Test-send da campanha pra si (202): AssertionError: expected response to have status code 202 but got 403
+- COV admin: Agendar no passado e rejeitado (400): AssertionError: expected response to have status code 400 but got 403
+- COV admin: Metricas da campanha (zeradas em DRAFT): AssertionError: expected response to have status code 200 but got 403
+
+Server-side errors during the run (the likely root cause):
+```
+2026-10-11 11:43:46.983 WARN  [req=44421770 user=a***@economizaai.app ip=20.161.67.208 rcpt= item=] c.r.e.e.GlobalExceptionHandler - Validation failed: {name=must not be blank}
+2026-10-11 11:43:47.084 WARN  [req=c1b7621d user=a***@economizaai.app ip=20.161.67.208 rcpt= item=] c.r.e.e.GlobalExceptionHandler - Validation failed: {name=size must be between 0 and 120, items[0].freeText=size 
+```
+- **Claude:** Failed to authenticate. API Error: 401 OAuth access token has been revoked.
+Ignoring 25 permissions.allow entries from .claude/settings.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog, or set projects["/home/runner/work/economizaai/economizaai"].hasTrustDialogAccepted: true in /home/runner/.claude.json.
+- **Outcome:** reply lacked a verifiable test reference; changes discarded.
+
+### [2026-10-10 12:29:37] [NEEDS-HUMAN] NO-TESTREF - ERROR [req=] c.r.e.service.ContactService - contact.failed f
+- **Detected:**
+```
+2026-10-10 11:30:31.588 ERROR [req=] c.r.e.service.ContactService - contact.failed from=c***@economizaai.app MailAuthenticationException: Authentication failed — message was:
+```
+- **Claude:** Failed to authenticate. API Error: 401 OAuth access token has been revoked.
+Ignoring 25 permissions.allow entries from .claude/settings.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog, or set projects["/home/runner/work/economizaai/economizaai"].hasTrustDialogAccepted: true in /home/runner/.claude.json.
+- **Outcome:** reply lacked a verifiable test reference; changes discarded.
+
+### [2026-10-10 11:30:54] [NEEDS-HUMAN] NO-TESTREF - E2E: 22. Categorizer AI status (admin)
+- **Detected:**
+```
+A daily E2E run against the live dev server FAILED (12/277 assertions).
+Failing steps:
+- 22. Categorizer AI status (admin): AssertionError: expected response to have status code 200 but got 403
+- 22. Categorizer AI status (admin): AssertionError: expected { status: 403, message: 'Forbidden' } to have property 'enabled'
+- COV admin: List audiences (builtin Admins presente): AssertionError: expected response to have status code 200 but got 403
+- COV admin: Preview da audiencia Admins: AssertionError: expected response to have status code 200 but got 403
+- COV admin: Criar campanha DRAFT (audiencia Admins): AssertionError: expected response to have status code 201 but got 403
+- COV admin: Test-send da campanha pra si (202): AssertionError: expected response to have status code 202 but got 403
+- COV admin: Agendar no passado e rejeitado (400): AssertionError: expected response to have status code 400 but got 403
+- COV admin: Metricas da campanha (zeradas em DRAFT): AssertionError: expected response to have status code 200 but got 403
+
+Server-side errors during the run (the likely root cause):
+```
+2026-10-10 11:30:28.963 WARN  [req=e7d91007 user=a***@economizaai.app ip=20.15.228.210 rcpt= item=] c.r.e.e.GlobalExceptionHandler - Entity not found: Product not found.
+2026-10-10 11:30:29.083 WARN  [req=88221a13 user=a***@economizaai.app ip=20.15.228.210 rcpt= item=] c.r.e.e.GlobalExceptionHandler - Type mismatch for parameter 'groupBy': Method parameter 'groupBy': Failed to convert va
+```
+- **Claude:** Failed to authenticate. API Error: 401 OAuth access token has been revoked.
+Ignoring 25 permissions.allow entries from .claude/settings.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog, or set projects["/home/runner/work/economizaai/economizaai"].hasTrustDialogAccepted: true in /home/runner/.claude.json.
+- **Outcome:** reply lacked a verifiable test reference; changes discarded.
+
 ### [2026-10-09 12:13:43] [NEEDS-HUMAN] NO-TESTREF - E2E: 22. Categorizer AI status (admin)
 - **Detected:**
 ```
