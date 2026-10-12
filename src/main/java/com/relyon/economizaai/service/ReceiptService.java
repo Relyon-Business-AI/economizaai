@@ -365,6 +365,21 @@ public class ReceiptService {
     }
 
     /**
+     * Admin bulk-retry of every FAILED_PARSE scan whose parseErrorReason contains
+     * {@code fragment} (case-insensitive) — e.g. {@code INFOSIMPLES} once the paid
+     * quota resets or the circuit closes. Re-queues through the same paced lane as
+     * {@link #adminRetryFailedScans}; the diagnostic reason survives until it runs.
+     */
+    @Transactional
+    public int adminRetryFailedByReason(String fragment) {
+        var ids = receiptRepository
+                .findByStatusAndParseErrorReasonContainingIgnoreCase(ReceiptStatus.FAILED_PARSE, fragment)
+                .stream().map(Receipt::getId).toList();
+        log.info("admin.retry_by_reason fragment={} matched={}", fragment, ids.size());
+        return adminRetryFailedScans(ids);
+    }
+
+    /**
      * Shared submit path: everything decidable synchronously (unsupported UF,
      * manual-chave-without-fallback, blocked merchant, monthly cap, stale/dup
      * replacement) fails fast with a localized 4xx, then the receipt is persisted

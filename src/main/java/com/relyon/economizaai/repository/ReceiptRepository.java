@@ -32,6 +32,10 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
     // live count of in-flight PROCESSING rows so the worker yields to real scans.
     List<Receipt> findByStatusOrderByCreatedAtAsc(ReceiptStatus status, Pageable pageable);
 
+    // Admin bulk-retry by failure reason (e.g. re-queue every Infosimples failure):
+    // parseErrorReason is "key:args", so a case-insensitive CONTAINS matches the arg too.
+    List<Receipt> findByStatusAndParseErrorReasonContainingIgnoreCase(ReceiptStatus status, String fragment);
+
     // Contingency resync sweeper: by CREATED time (the window counts from the scan, not from the
     // status flips the resync itself makes). Within the window → re-fetch; past it → give up.
     List<Receipt> findByStatusAndCreatedAtAfter(ReceiptStatus status, LocalDateTime cutoff, Pageable pageable);
