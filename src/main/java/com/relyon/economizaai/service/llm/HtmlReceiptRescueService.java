@@ -1,10 +1,13 @@
 package com.relyon.economizaai.service.llm;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.relyon.economizaai.exception.PaidApiBudgetExceededException;
 import com.relyon.economizaai.exception.PaidApiQuotaExceededException;
+import com.relyon.economizaai.model.enums.AiActivity;
 import com.relyon.economizaai.model.enums.PaidApiService;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
+import com.relyon.economizaai.service.ai.AiGateway;
 import com.relyon.economizaai.service.paidapi.PaidApiGuardService;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import com.relyon.economizaai.service.sefaz.ChaveAcessoParser;
@@ -26,9 +29,14 @@ import java.util.regex.Pattern;
 
 /**
  * Parse-rescue layer: when a state parser fails on SEFAZ HTML we ALREADY fetched,
- * the LLM extracts the receipt from the page text before the ingestion chain falls
+ * the AI extracts the receipt from the page text before the ingestion chain falls
  * to the paid Infosimples re-fetch (~R$0.05 vs R$0.24). It self-heals portal layout
  * changes — the main source of Infosimples fallback spend.
+ *
+ * <p>Runs on the app's live AI stack ({@link AiGateway} → Anthropic, extractor
+ * model) — NOT the dormant OpenAI client — so it works wherever ANTHROPIC_API_KEY
+ * is set (dev + prod today). The gateway logs tokens/cost per call under
+ * {@link AiActivity#RECEIPT_RESCUE} in the admin spend panel.
  *
  * <p>Anti-hallucination rails: the chave and the CNPJ are NEVER taken from the model
  * (both come from the chave we already hold, and a CNPJ the model does extract must
@@ -37,10 +45,11 @@ import java.util.regex.Pattern;
  * unchanged. Rescued receipts come from the real SEFAZ document, so unlike photo
  * extractions they DO feed the collaborative index.
  *
- * <p>Every call is metered through {@link PaidApiGuardService}
- * ({@link PaidApiService#LLM_HTML_RESCUE}): global budget + per-user daily cap
- * before spending, one ledger row per attempt. A guard block returns null (the
- * chain continues) instead of failing the receipt.
+ * <p>Cost guards: global paid-API budget + per-user daily cap
+ * ({@link PaidApiService#LLM_HTML_RESCUE}) checked before spending; one ledger row
+ * per successful call (the gateway's own usage log covers failures and the global
+ * AI daily request cap). A guard block returns null (the chain continues) instead
+ * of failing the receipt.
  */
 @Slf4j
 @Service
@@ -52,18 +61,19 @@ public class HtmlReceiptRescueService {
     private static final int MIN_TEXT_CHARS = 200;
     private static final int MAX_COMPLETION_TOKENS = 8000;
 
-    private final OpenAiClient openAiClient;
+    private final AiGateway aiGateway;
     private final PaidApiGuardService paidApiGuard;
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final boolean enabled;
     private final int maxItems;
     private final int maxTextChars;
 
-    public HtmlReceiptRescueService(OpenAiClient openAiClient,
+    public HtmlReceiptRescueService(AiGateway aiGateway,
                                     PaidApiGuardService paidApiGuard,
                                     @Value("${economizaai.llm.html-rescue.enabled:true}") boolean enabled,
                                     @Value("${economizaai.llm.html-rescue.max-items:80}") int maxItems,
                                     @Value("${economizaai.llm.html-rescue.max-text-chars:60000}") int maxTextChars) {
-        this.openAiClient = openAiClient;
+        this.aiGateway = aiGateway;
         this.paidApiGuard = paidApiGuard;
         this.enabled = enabled;
         this.maxItems = maxItems;
@@ -73,11 +83,11 @@ public class HtmlReceiptRescueService {
     /**
      * Attempts to extract a {@link ParsedReceipt} from DANFE HTML the regular parser
      * failed on. Returns null — the caller continues the fallback chain untouched —
-     * when the layer is off or unconfigured, a cost guard blocks the spend, the LLM
+     * when the layer is off or unconfigured, a cost guard blocks the spend, the AI
      * call fails, or the extraction fails validation.
      */
     public ParsedReceipt rescue(String html, String chave, UnidadeFederativa uf, String sourceUrl, UUID userId) {
-        if (!enabled || !openAiClient.isConfigured() || html == null || html.isBlank()) {
+        if (!enabled || !aiGateway.isEnabled() || html == null || html.isBlank()) {
             return null;
         }
         try {
@@ -94,14 +104,21 @@ public class HtmlReceiptRescueService {
                     uf, LogMasker.chave(chave), pageText.length());
             return null;
         }
-        JsonNode extraction;
+        String responseText;
         try {
-            extraction = openAiClient.completeJson(systemPrompt(), userContent(chave, pageText), MAX_COMPLETION_TOKENS);
-            paidApiGuard.recordSuccess(userId, PaidApiService.LLM_HTML_RESCUE, uf.name(), "openai");
-        } catch (LlmCallFailedException callEx) {
-            paidApiGuard.recordFailure(userId, PaidApiService.LLM_HTML_RESCUE, uf.name(), "openai");
-            log.warn("llm_rescue.call_failed uf={} chave={} reason={}",
-                    uf, LogMasker.chave(chave), callEx.getMessage());
+            responseText = aiGateway.complete(AiActivity.RECEIPT_RESCUE, aiGateway.extractorModel(),
+                    systemPrompt(), userContent(chave, pageText), MAX_COMPLETION_TOKENS);
+        } catch (AiGateway.AiUnavailableException unavailableEx) {
+            // Disabled / daily cap / provider failure — tokens and failures are already
+            // accounted in the gateway's own usage log, so no paid_api_call row here.
+            log.warn("llm_rescue.unavailable uf={} chave={} reason={}",
+                    uf, LogMasker.chave(chave), unavailableEx.getMessage());
+            return null;
+        }
+        paidApiGuard.recordSuccess(userId, PaidApiService.LLM_HTML_RESCUE, uf.name(), "anthropic");
+        var extraction = parseJsonOrNull(responseText);
+        if (extraction == null) {
+            log.info("llm_rescue.rejected uf={} chave={} reason=unparseable_response", uf, LogMasker.chave(chave));
             return null;
         }
         return toValidatedReceipt(extraction, html, chave, uf, sourceUrl);
@@ -115,7 +132,7 @@ public class HtmlReceiptRescueService {
                 Nunca invente itens ou valores; copie exatamente o que esta no texto. Valores com ponto decimal. \
                 total_amount e o "Valor total R$" (a soma dos itens, ANTES de descontos); \
                 discount_total e o "Descontos R$" quando impresso.
-                Responda APENAS o JSON: {"is_receipt": true, "cnpj": "14 digitos do emitente|null", \
+                Responda APENAS o JSON, sem texto fora dele: {"is_receipt": true, "cnpj": "14 digitos do emitente|null", \
                 "market_name": "...|null", "market_address": "...|null", "issued_at": "yyyy-MM-dd HH:mm|null", \
                 "total_amount": <numero|null>, "discount_total": <numero|null>, \
                 "items": [{"description": "...", "ean": "codigo de barras, so digitos|null", \
@@ -134,6 +151,20 @@ public class HtmlReceiptRescueService {
         document.select("p, div, li, tr, table, h1, h2, h3, h4").append("\\n");
         var text = document.text().replace("\\n", "\n").replaceAll("\n{2,}", "\n").trim();
         return text.length() > maxTextChars ? text.substring(0, maxTextChars) : text;
+    }
+
+    /** The model answers plain text promised to be JSON — strip markdown fences and parse defensively. */
+    private JsonNode parseJsonOrNull(String responseText) {
+        if (responseText == null) return null;
+        var text = responseText.trim();
+        var start = text.indexOf('{');
+        var end = text.lastIndexOf('}');
+        if (start < 0 || end <= start) return null;
+        try {
+            return objectMapper.readTree(text.substring(start, end + 1));
+        } catch (Exception parseEx) {
+            return null;
+        }
     }
 
     private ParsedReceipt toValidatedReceipt(JsonNode extraction, String html, String chave,
@@ -188,7 +219,7 @@ public class HtmlReceiptRescueService {
         return receipt;
     }
 
-    /** One cent of per-line rounding slack — the LLM copies printed values, so drift means hallucination. */
+    /** One cent of per-line rounding slack — the model copies printed values, so drift means hallucination. */
     private static BigDecimal totalTolerance(int itemCount) {
         return BigDecimal.valueOf(Math.max(itemCount, 5), 2);
     }

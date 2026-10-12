@@ -23,8 +23,11 @@ says `economizai-app-prod`):
   da página ANTES do fallback pago (Infosimples). Validação anti-alucinação:
   chave/CNPJ nunca vêm do modelo e a soma dos itens precisa bater com o total —
   senão a cadeia segue como antes. Sem mudança de contrato; efeito visível é
-  **menos notas terminando em FAILED_PARSE** em troca de ~R$0,05/resgate
-  (medido no ledger como `LLM_HTML_RESCUE`, cap 10/usuário/dia).
+  **menos notas terminando em FAILED_PARSE** em troca de ~R$0,03-0,13/resgate
+  (roda na stack de IA viva do app — Anthropic/claude-haiku; medido no ledger
+  como `LLM_HTML_RESCUE`, cap 10/usuário/dia, + tokens no painel de gastos de
+  IA como `RECEIPT_RESCUE`). Validado contra o modelo real com 1 nota real de
+  cada um dos 10 estados cobertos — 10/10 com total e itens exatos.
 
 ## 2026-10-12 — Notificações de sistema configuráveis pelo dashboard + painel de insights
 
