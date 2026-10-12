@@ -16,6 +16,15 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-12 — Atribuição de abertura de push + DIGEST abre no sininho
+
+- **Push payload agora carrega `notificationId`**: a notificação é salva ANTES
+  do dispatch, então o push chega com o id. O app reporta `PUSH_OPENED` com ele
+  no tap → a métrica **"Abertura"** passa a funcionar (campanhas e orgânico).
+- **DIGEST (resumo semanal) deep-linka pro sininho (INBOX)**, não mais pra tela
+  de Ofertas — o conteúdo do resumo está no corpo da notificação; Ofertas fica
+  só pros tipos que nascem de uma oferta concreta (nunca chegam vazios).
+
 ## 2026-10-09 — Fix: campanhas de lista explícita sumiam da listagem + flag de push no admin
 
 - **Fix:** `GET /admin/notifications/campaigns` não retornava campanhas SEM
