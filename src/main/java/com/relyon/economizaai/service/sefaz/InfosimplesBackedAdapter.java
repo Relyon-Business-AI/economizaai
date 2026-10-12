@@ -12,7 +12,8 @@ import java.util.Set;
 
 /**
  * Adapter for states we support <b>only</b> through the paid Infosimples fallback
- * — no native scraper yet (portal unverified / layout unknown). Currently CE.
+ * — no native scraper yet (portal unverified / layout unknown). Empty by default
+ * since 2026-10-12 (CE gained a native scraper); kept for the next state that needs it.
  *
  * <p>It has no HTML fetch of its own: {@link #fetchHtml} throws a rescuable
  * {@link SefazFetchException} so {@link SefazIngestionService} routes the receipt
@@ -34,7 +35,7 @@ public class InfosimplesBackedAdapter implements SefazAdapter {
     private final Set<UnidadeFederativa> supportedStates;
 
     public InfosimplesBackedAdapter(
-            @Value("${economizaai.ingestion.sefaz.infosimples-only-states:CE}") String states) {
+            @Value("${economizaai.ingestion.sefaz.infosimples-only-states:}") String states) {
         this.supportedStates = parseStates(states);
         log.info("InfosimplesBackedAdapter active for UFs: {} (fetch always via Infosimples fallback)",
                 this.supportedStates);

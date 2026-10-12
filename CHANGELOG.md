@@ -16,6 +16,15 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-12 — CE ganhou scraper nativo (grátis, sem captcha)
+
+- **Ceará deixou de ser Infosimples-only**: descobrimos a API JSON que o portal
+  esconde atrás do shell Angular (`qrcodev3` — consulta por **chave pura**, sem
+  assinatura de QR e sem captcha). Nota de CE agora é escrapeada de graça como
+  qualquer estado verificado, com Infosimples só como fallback. Validado com
+  nota real (Centerbox Fortaleza, 68 itens). Pro FE nada muda de contrato; CE
+  continua aceito no submit (por QR ou chave digitada) e fica mais rápido/confiável.
+
 ## 2026-10-12 — Resgate de parse por IA (menos FAILED_PARSE, menos Infosimples)
 
 - **Camada nova na cadeia de ingestão**: quando o parser de um estado falha no

@@ -206,7 +206,10 @@ economizaai:
       # can scan the QR OR type the 44-digit chave. Requires Infosimples enabled;
       # each fetch costs ~R$0.24. Promote a UF to a native adapter once its portal
       # is verified with a real QR (then remove it from here).
-      infosimples-only-states: ${SEFAZ_INFOSIMPLES_ONLY_STATES:CE}
+      # Empty since 2026-10-12: CE gained a native scraper (CearaNfcePortalAdapter,
+      # qrcodev3 JSON api) — no state is Infosimples-ONLY anymore; the paid call
+      # is a fallback everywhere. Keep the knob for a future state that needs it.
+      infosimples-only-states: ${SEFAZ_INFOSIMPLES_ONLY_STATES:}
       captcha:
         # UFs whose consult portal gates the DANFE behind a captcha and is
         # handled by a dedicated adapter (currently MS — www.dfe.ms.gov.br with

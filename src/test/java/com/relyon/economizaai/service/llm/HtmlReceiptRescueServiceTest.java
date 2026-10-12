@@ -212,6 +212,19 @@ class HtmlReceiptRescueServiceTest {
     }
 
     @Test
+    void rescue_discountedReceipt_persistsPaidTotalAndKeepsGrossItems() {
+        givenAiResponds(validExtraction().replace("\"discount_total\": null", "\"discount_total\": 2.00"));
+
+        var parsed = service(true).rescue(HTML, CHAVE, UnidadeFederativa.RS, SOURCE_URL, USER_ID);
+
+        assertNotNull(parsed);
+        // Parser semantics: totalAmount = what was PAID; items keep gross prices.
+        assertEquals(0, new BigDecimal("16.99").compareTo(parsed.totalAmount()));
+        assertEquals(0, new BigDecimal("2.00").compareTo(parsed.discountTotal()));
+        assertEquals(0, new BigDecimal("13.00").compareTo(parsed.items().get(0).totalPrice()));
+    }
+
+    @Test
     void rescue_missingTotal_fallsBackToItemsSum() {
         givenAiResponds(validExtraction().replace("\"total_amount\": 18.99", "\"total_amount\": null"));
 

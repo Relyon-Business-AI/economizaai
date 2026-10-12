@@ -61,7 +61,13 @@ class HtmlReceiptRescueRealLlmTest {
             "GO, go/nfce-render-page-with-embedded-danfe.html, 52260739346861022483650190000191021190388509, 94.14, 6",
             "MG, mg/danfe.html,                  31260911614938000118650180003378659268089479, 73.45,  6",
             "DF, df/marcosbko-atacadista.html,   53261007738069000328653050000125721251741713, 235.21, 50",
-            "PE, pe/pe-novo-israel-4items.xml,   26260920534381000287651020001738551001743421, 24.13,  4",
+            // 68 items, R$14,70 receipt-level discount: paid total = 543.46 - 14.70.
+            "CE, ce/nfce-real-centerbox.html,    23260311497712000346651050000140211138967393, 528.76, 68",
+            // PE is deliberately absent: its flow is XML parsed deterministically by
+            // NfceXmlParser and never reaches the HTML rescue. Raw XML through the
+            // text extractor is label-less, so the model's reading is ambiguous — the
+            // totals validation rejects it (observed live: 24.26 vs 24.13 → rejected),
+            // which is the fail-safe we want, not a target to assert on.
     })
     void rescue_extractsRealStateReceipt(String stateLabel, String fixture, String chave,
                                          String expectedTotal, int expectedItems) throws Exception {

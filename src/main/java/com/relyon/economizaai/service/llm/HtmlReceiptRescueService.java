@@ -202,20 +202,28 @@ public class HtmlReceiptRescueService {
             return null;
         }
         var discount = scaled(decimalOrNull(extraction, "discount_total"));
+        if (discount == null || discount.signum() <= 0) {
+            discount = null;
+        }
+        // Parser semantics (see RealDiscountFixtureTest): totalAmount is what was
+        // PAID ("Valor a pagar"), items keep gross printed prices. The model
+        // extracts the gross total (validated against the items sum above), so
+        // subtract the receipt-level discount before persisting.
+        var paidTotal = discount == null ? totalAmount : totalAmount.subtract(discount);
         var receipt = ParsedReceipt.builder()
                 .chaveAcesso(chave)
                 .cnpjEmitente(cnpjFromChave)
                 .marketName(textOrNull(extraction, "market_name"))
                 .marketAddress(textOrNull(extraction, "market_address"))
                 .issuedAt(parseIssuedAt(extraction))
-                .totalAmount(totalAmount)
-                .discountTotal(discount == null || discount.signum() <= 0 ? null : discount)
+                .totalAmount(paidTotal)
+                .discountTotal(discount)
                 .sourceUrl(sourceUrl)
                 .rawHtml(html)
                 .items(items)
                 .build();
         log.info("llm_rescue.ok uf={} chave={} items={} total={}",
-                uf, LogMasker.chave(chave), items.size(), totalAmount);
+                uf, LogMasker.chave(chave), items.size(), paidTotal);
         return receipt;
     }
 
