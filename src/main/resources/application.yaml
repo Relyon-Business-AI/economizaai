@@ -58,6 +58,9 @@ economizaai:
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:8081}
   default-locale: pt
+  # Public base URL of this API (prod domain). Used to reconstruct the exact URL Twilio signed
+  # when validating inbound-webhook X-Twilio-Signature.
+  public-base-url: ${PUBLIC_BASE_URL:https://api.economizaai.app}
   app-config:
     # Remote config do ForceUpdateGate do app (GET /api/v1/app-config, público).
     # Defaults tornam o gate um NO-OP — min-version 0.0.0 nunca bloqueia nenhuma
@@ -465,6 +468,21 @@ economizaai:
       auth-token: ${TWILIO_AUTH_TOKEN:}
       from-sms: ${TWILIO_FROM_SMS:}              # e.g. +15551234567
       from-whatsapp: ${TWILIO_FROM_WHATSAPP:}    # e.g. +14155238886 (Twilio WhatsApp sender, no whatsapp: prefix)
+      # WhatsApp Content template (ContentSid HX…) for proactive ADMIN ops alerts. Proactive
+      # (business-initiated) WhatsApp needs an approved template — freeform Body is rejected.
+      admin-template-sid: ${TWILIO_WHATSAPP_ADMIN_TEMPLATE_SID:}
+      # Content template for the proactive USER weekly report (single {{1}} = one-line summary).
+      report-template-sid: ${TWILIO_WHATSAPP_REPORT_TEMPLATE_SID:}
+    # Urgent operational alerts to the owner/admins (Infosimples saldo, etc.): ALWAYS e-mail,
+    # PLUS WhatsApp to these E.164 numbers when the Twilio WhatsApp sender + template are set.
+    admin-phone-numbers: ${ADMIN_PHONE_NUMBERS:}           # CSV, e.g. +5551999999999,+5551888888888
+    admin-whatsapp-enabled: ${ADMIN_WHATSAPP_ENABLED:true} # master off-switch for admin WhatsApp alerts
+    # User-facing WhatsApp reports. Opt-in (reverse flow) + toggle are ALWAYS active; the proactive
+    # weekly SEND is INERT until weekly-report.enabled=true AND a report template SID is set.
+    whatsapp:
+      weekly-report:
+        enabled: ${WHATSAPP_REPORTS_ENABLED:false}
+        cron: ${WHATSAPP_WEEKLY_REPORT_CRON:0 0 10 ? * MON}  # Monday 10:00 America/Sao_Paulo
     # Alexa remains a stub — structure only, dispatch records a "not implemented" failure.
     alexa:
       enabled: ${NOTIFICATIONS_ALEXA_ENABLED:false}     # Alexa Skill Messaging / Proactive Events

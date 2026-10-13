@@ -9,6 +9,7 @@ import com.relyon.economizaai.dto.request.UpdateNotificationPreferencesRequest;
 import com.relyon.economizaai.dto.request.UpdatePhoneRequest;
 import com.relyon.economizaai.dto.request.UpdatePushTokenRequest;
 import com.relyon.economizaai.dto.request.UpdateUserRequest;
+import com.relyon.economizaai.dto.request.UpdateWhatsAppRequest;
 import com.relyon.economizaai.dto.request.VerifyPhoneRequest;
 import com.relyon.economizaai.dto.response.DigestPreferencesResponse;
 import com.relyon.economizaai.dto.response.NotificationPreferenceResponse;
@@ -16,6 +17,7 @@ import com.relyon.economizaai.dto.response.SavingsSummaryResponse;
 import com.relyon.economizaai.dto.response.SubscriptionStatusResponse;
 import com.relyon.economizaai.dto.response.UserDataExportResponse;
 import com.relyon.economizaai.dto.response.UserResponse;
+import com.relyon.economizaai.dto.response.WhatsAppStatusResponse;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.UserService;
@@ -23,6 +25,7 @@ import com.relyon.economizaai.service.auth.EmailVerificationService;
 import com.relyon.economizaai.service.auth.PhoneVerificationService;
 import com.relyon.economizaai.service.notifications.NotificationPreferenceService;
 import com.relyon.economizaai.service.notifications.SavingsService;
+import com.relyon.economizaai.service.notifications.WhatsAppOptInService;
 import com.relyon.economizaai.service.profile.ProfilePictureService;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -59,6 +62,7 @@ public class UserController {
     private final PhoneVerificationService phoneVerificationService;
     private final SavingsService savingsService;
     private final SubscriptionService subscriptionService;
+    private final WhatsAppOptInService whatsAppOptInService;
 
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getProfile(@AuthenticationPrincipal User user) {
@@ -194,5 +198,16 @@ public class UserController {
                                             @Valid @RequestBody VerifyPhoneRequest request) {
         phoneVerificationService.verify(user, request.code());
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/me/whatsapp")
+    public ResponseEntity<WhatsAppStatusResponse> whatsAppStatus(@AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(whatsAppOptInService.status(user));
+    }
+
+    @PatchMapping("/me/whatsapp")
+    public ResponseEntity<WhatsAppStatusResponse> updateWhatsApp(@AuthenticationPrincipal User user,
+                                                                @Valid @RequestBody UpdateWhatsAppRequest request) {
+        return ResponseEntity.ok(whatsAppOptInService.updateWeeklyReport(user, request.weeklyReportEnabled()));
     }
 }

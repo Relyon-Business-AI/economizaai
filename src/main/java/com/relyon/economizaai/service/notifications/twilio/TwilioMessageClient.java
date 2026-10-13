@@ -73,12 +73,45 @@ public class TwilioMessageClient {
         send(WHATSAPP_PREFIX + fromWhatsApp, WHATSAPP_PREFIX + toE164, body);
     }
 
+    /**
+     * Sends a WhatsApp TEMPLATE message via the Content API — required for proactive
+     * (business-initiated) messages, which freeform {@link #sendWhatsApp} can't do
+     * outside a 24h customer-service window. {@code contentVariablesJson} maps the
+     * template's {@code {{n}}} slots as JSON, e.g. {@code {"1":"saldo baixo"}}.
+     */
+    public void sendWhatsAppTemplate(String toE164, String contentSid, String contentVariablesJson) {
+        try {
+            postTemplate(WHATSAPP_PREFIX + fromWhatsApp, WHATSAPP_PREFIX + toE164, contentSid, contentVariablesJson);
+        } catch (Exception ex) {
+            throw new TwilioMessageException(
+                    "Twilio WhatsApp template send failed: " + ex.getClass().getSimpleName() + ": " + ex.getMessage(), ex);
+        }
+    }
+
     /** Raw POST — isolated as a seam so callers/tests can stub the HTTP exchange. */
     protected void post(String from, String to, String body) {
         var form = new LinkedMultiValueMap<String, String>();
         form.add("From", from);
         form.add("To", to);
         form.add("Body", body);
+        restClient.post()
+                .uri(API_BASE + accountSid + "/Messages.json")
+                .header("Authorization", basicAuthHeader())
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body((MultiValueMap<String, String>) form)
+                .retrieve()
+                .toBodilessEntity();
+    }
+
+    /** Raw template POST — isolated as a seam so callers/tests can stub the HTTP exchange. */
+    protected void postTemplate(String from, String to, String contentSid, String contentVariablesJson) {
+        var form = new LinkedMultiValueMap<String, String>();
+        form.add("From", from);
+        form.add("To", to);
+        form.add("ContentSid", contentSid);
+        if (contentVariablesJson != null && !contentVariablesJson.isBlank()) {
+            form.add("ContentVariables", contentVariablesJson);
+        }
         restClient.post()
                 .uri(API_BASE + accountSid + "/Messages.json")
                 .header("Authorization", basicAuthHeader())
