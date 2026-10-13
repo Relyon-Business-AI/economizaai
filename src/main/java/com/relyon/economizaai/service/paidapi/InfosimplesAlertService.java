@@ -1,6 +1,6 @@
 package com.relyon.economizaai.service.paidapi;
 
-import com.relyon.economizaai.service.ContactService;
+import com.relyon.economizaai.service.notifications.OperationalAlertService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -27,13 +27,13 @@ public class InfosimplesAlertService {
 
     private static final Duration CONSULT_ALERT_THROTTLE = Duration.ofHours(6);
 
-    private final ContactService contactService;
+    private final OperationalAlertService operationalAlertService;
     private final BigDecimal lowBalanceThreshold;
     private final AtomicReference<Instant> lastConsultAlert = new AtomicReference<>();
 
-    public InfosimplesAlertService(ContactService contactService,
+    public InfosimplesAlertService(OperationalAlertService operationalAlertService,
                                    @Value("${economizaai.infosimples.low-balance-threshold:5.00}") BigDecimal lowBalanceThreshold) {
-        this.contactService = contactService;
+        this.operationalAlertService = operationalAlertService;
         this.lowBalanceThreshold = lowBalanceThreshold;
     }
 
@@ -93,8 +93,11 @@ public class InfosimplesAlertService {
     }
 
     private void dispatch(String subject, String body) {
+        // OperationalAlertService fans out to e-mail (always) + WhatsApp (when configured).
+        // It already swallows per-channel failures; the extra guard keeps the ingestion flow
+        // safe even if alert dispatch blows up unexpectedly.
         try {
-            contactService.notifyAdmin(subject, body);
+            operationalAlertService.alertAdmin(subject, body);
             log.info("infosimples.alert.dispatched subject='{}'", subject);
         } catch (RuntimeException dispatchFailure) {
             log.warn("infosimples.alert.dispatch_failed subject='{}' reason={}",

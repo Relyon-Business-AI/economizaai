@@ -465,6 +465,13 @@ economizaai:
       auth-token: ${TWILIO_AUTH_TOKEN:}
       from-sms: ${TWILIO_FROM_SMS:}              # e.g. +15551234567
       from-whatsapp: ${TWILIO_FROM_WHATSAPP:}    # e.g. +14155238886 (Twilio WhatsApp sender, no whatsapp: prefix)
+      # WhatsApp Content template (ContentSid HX…) for proactive ADMIN ops alerts. Proactive
+      # (business-initiated) WhatsApp needs an approved template — freeform Body is rejected.
+      admin-template-sid: ${TWILIO_WHATSAPP_ADMIN_TEMPLATE_SID:}
+    # Urgent operational alerts to the owner/admins (Infosimples saldo, etc.): ALWAYS e-mail,
+    # PLUS WhatsApp to these E.164 numbers when the Twilio WhatsApp sender + template are set.
+    admin-phone-numbers: ${ADMIN_PHONE_NUMBERS:}           # CSV, e.g. +5551999999999,+5551888888888
+    admin-whatsapp-enabled: ${ADMIN_WHATSAPP_ENABLED:true} # master off-switch for admin WhatsApp alerts
     # Alexa remains a stub — structure only, dispatch records a "not implemented" failure.
     alexa:
       enabled: ${NOTIFICATIONS_ALEXA_ENABLED:false}     # Alexa Skill Messaging / Proactive Events
