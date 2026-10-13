@@ -113,6 +113,13 @@ public class PriceIndexService {
             log.info("price_index.write.skipped reason=photo_origin receipt={}", receipt.getId());
             return true;
         }
+        if (!receipt.isIndexEligible()) {
+            // On-device fetch from a non-trusted state: client-authored content whose only
+            // tie to SEFAZ is the embedded chave (forgeable), so personal history only —
+            // same trust class as PHOTO. Server-fetched and trusted device-fetch are eligible.
+            log.info("price_index.write.skipped reason=not_index_eligible receipt={}", receipt.getId());
+            return true;
+        }
         if (receipt.getCnpjEmitente() == null) {
             log.warn("price_index.write.skipped reason=no_market_cnpj receipt={}", receipt.getId());
             return true;

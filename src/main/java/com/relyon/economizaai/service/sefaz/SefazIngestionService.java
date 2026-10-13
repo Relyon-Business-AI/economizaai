@@ -169,6 +169,21 @@ public class SefazIngestionService {
      * A null {@code userId} (admin reparse, tests) skips the cap but is still logged.
      */
     public FetchedDocument fetch(String qrPayload, UUID userId) {
+        return fetch(qrPayload, userId, false);
+    }
+
+    /**
+     * As {@link #fetch(String, UUID)} but {@code deviceFetchAvailable} says the
+     * submitting client can resolve a blocked-state failure on its own residential
+     * IP. With the generic device-fetch fallback ON, a rescuable fetch failure
+     * (IP block / portal unreachable) then defers to {@code NEEDS_DEVICE_FETCH}
+     * BEFORE spending the paid Infosimples fallback — the device fetch succeeds
+     * exactly where our datacenter IP is blocked, and Infosimples stays the last
+     * resort if it also fails (see {@code ReceiptIngestionService#ingestPrefetched}).
+     * A captcha wall the phone can't pass either (CaptchaUnavailableException) is
+     * NOT deferred. Flag OFF → this parameter is inert and behavior is unchanged.
+     */
+    public FetchedDocument fetch(String qrPayload, UUID userId, boolean deviceFetchAvailable) {
         var chave = resolveChave(qrPayload);
         var uf = ChaveAcessoParser.extractUf(chave);
         var adapter = adapters.get(uf);
@@ -224,6 +239,20 @@ public class SefazIngestionService {
                 log.info("sefaz.fetch.deterministic_4xx uf={} chave={} — skipping paid fallback", uf, abbrev(chave));
                 throw primaryEx;
             }
+            // Generic reactive device-fetch (flag-gated): an IP-block / portal-unreachable
+            // failure may succeed from the user's residential IP, so defer to on-device fetch
+            // BEFORE spending the paid Infosimples fallback. Only a plain SefazFetchException
+            // qualifies — a captcha wall the phone can't pass either (CaptchaUnavailableException,
+            // not a SefazFetchException) falls through to Infosimples as before. Flag OFF makes
+            // isGenericEnabled() false, so this branch never fires and behavior is unchanged.
+            if (deviceFetchAvailable && prefetchPolicy.isGenericEnabled()
+                    && primaryEx instanceof SefazFetchException) {
+                log.info("sefaz.fetch.defer_device uf={} chave={} — server blocked, deferring to on-device fetch before paid fallback",
+                        uf, abbrev(chave));
+                throw experimentalExhausted(uf, userId, chave, sourceUrlOf(qrPayload),
+                        "QR_PORTAL: " + describe(primaryEx) + "; deferred to on-device fetch (pre-Infosimples)",
+                        portalEvidence, false);
+            }
             if (infosimples.isEmpty()) {
                 if (experimental) {
                     throw experimentalExhausted(uf, userId, chave, sourceUrlOf(qrPayload),
@@ -276,6 +305,21 @@ public class SefazIngestionService {
 
     private static String joinDetail(String description, String portalEvidence) {
         return portalEvidence == null ? description : description + "\n" + portalEvidence;
+    }
+
+    /**
+     * Public entry to the paid by-chave fallback, for the device-fetch chain: when
+     * on-device content fails to parse, the ingestion continues here (Infosimples is
+     * server-side by-chave, so it doesn't need the client). Throws
+     * {@link SefazFetchException} when no provider is configured, so the caller treats
+     * "no continuation available" the same as a failed one. The returned document
+     * carries a pre-parsed receipt.
+     */
+    public FetchedDocument fetchViaInfosimplesFallback(String chave, UnidadeFederativa uf, UUID userId) {
+        if (infosimples.isEmpty()) {
+            throw new SefazFetchException(uf.name());
+        }
+        return fetchViaInfosimples(chave, uf, userId);
     }
 
     /**

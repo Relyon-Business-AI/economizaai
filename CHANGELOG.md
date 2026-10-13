@@ -16,6 +16,18 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-12 — Device-fetch genérico (atrás de flag, OFF) + fix de roteamento SP
+
+- **Nada muda pro FE agora** (flag `DEVICE_FETCH_GENERIC_ENABLED` default OFF = comportamento
+  idêntico ao atual). Quando ligada: qualquer estado cujo fetch no servidor falhe por
+  bloqueio de IP tenta **device-fetch** (app busca no IP residencial) **antes** do Infosimples
+  pago; se o device-fetch falhar, a cadeia segue pro Infosimples. Conteúdo device-fetch de
+  estado **não-confiável** (fora de `prefetch-allowed-ufs`) entra só no histórico pessoal,
+  nunca no índice colaborativo (nova coluna `receipts.index_eligible`). `/receipts/prefetched`
+  passa a aceitar qualquer UF com a flag ligada (hoje só PE).
+- **Fix**: chave pura/pipe de SP não é mais roteada pro portal errado (SVRS do RS); sinaliza
+  falha recuperável → Infosimples. QR escaneado de SP (URL completa) não muda.
+
 ## 2026-10-12 — Admin: falhas por motivo (pizza) + retry em lote + msg "atualize o app"
 
 - **`GET /admin/receipts/failure-breakdown`**: devolve a contagem de notas em

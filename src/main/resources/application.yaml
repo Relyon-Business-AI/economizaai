@@ -128,6 +128,15 @@ economizaai:
     # legitimate ingest (MS captcha wall-clock cap 3 min + fallback).
     processing-timeout-minutes: ${INGEST_PROCESSING_TIMEOUT_MINUTES:10}
     sweeper-delay-ms: ${INGEST_SWEEPER_DELAY_MS:60000}
+    device-fetch:
+      # Generic reactive device-fetch (OFF by default = long-standing behavior).
+      # When ON, ANY state's rescuable server-fetch failure (IP block / portal
+      # unreachable) defers to on-device fetch on the user's residential IP BEFORE
+      # spending the paid Infosimples fallback; if the device fetch also fails, the
+      # chain continues to Infosimples. Content from a non-trusted state (not on
+      # economizaai.sefaz.prefetch-allowed-ufs) is marked index_eligible=false —
+      # personal history only, never the shared index. See PrefetchPolicy.
+      generic-enabled: ${DEVICE_FETCH_GENERIC_ENABLED:false}
     ean-catalog:
       # On-demand catalog fill: when a receipt item's barcode isn't in our
       # imported catalog, look it up live in the Open Food/Beauty/Products Facts
