@@ -16,6 +16,20 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-13 — Admin SUPPORTED override agora move o comerciante pra "mercado"
+
+- A lente **Mercado/Outras** (e o gasto por escopo em `/insights/*`) passou a
+  honrar o `supportOverride` do comerciante: um **SUPPORTED** promove a loja pra
+  mercado mesmo com segmento UNKNOWN/OTHER (caso o CNAE nunca tenha resolvido), e
+  um **BLOCKED** a tira de mercado mesmo com segmento de supermercado. Antes a
+  lente olhava só o `segment` e ignorava o override — então promover um
+  comerciante no admin não refletia nas telas do usuário.
+- Sem mudança de contrato. Os endpoints de revisão já existiam:
+  `GET /admin/merchants/grey` (fila, inclui UNKNOWN/OTHER) e
+  `PUT /admin/merchants/{cnpj}/support` (`{override: SUPPORTED|BLOCKED|null}`).
+- FE: nova seção **"Comerciantes em revisão"** no dashboard admin (tela Preços)
+  pra marcar como mercado / bloquear sem curl.
+
 ## 2026-10-13 — Fix: correção de item por IA não dá mais 500
 
 - **`POST /receipts/{id}/items/{itemId}/correct`** estava retornando **500**
