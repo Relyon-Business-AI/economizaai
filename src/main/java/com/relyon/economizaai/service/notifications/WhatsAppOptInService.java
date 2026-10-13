@@ -155,13 +155,29 @@ public class WhatsAppOptInService {
     }
 
     /** Sends the reply OUTSIDE the tx. When the report has category data, attaches the pie chart as
-     *  an image + caption in ONE message (same cost as text) via a short-lived public chart URL. */
+     *  an image + caption in ONE message (same cost as text) via a short-lived public chart URL.
+     *  If the media send fails (e.g. Twilio can't fetch the image), falls back to text-only so a
+     *  chart hiccup never costs the user their report. */
     private void reply(String toE164, PreparedReply prepared) {
+        var mediaUrl = prepared.chartUserId() == null ? null : chartUrl(prepared.chartUserId());
         try {
-            var mediaUrl = prepared.chartUserId() == null ? null : chartUrl(prepared.chartUserId());
             twilioClient.sendWhatsApp(toE164, prepared.body(), mediaUrl);
         } catch (RuntimeException sendFailure) {
-            log.warn("whatsapp.inbound.reply_failed to={} reason={}", maskNumber(toE164), sendFailure.getClass().getSimpleName());
+            log.warn("whatsapp.inbound.reply_failed to={} withMedia={} reason={}",
+                    maskNumber(toE164), mediaUrl != null, sendFailure.getClass().getSimpleName());
+            if (mediaUrl != null) {
+                sendTextFallback(toE164, prepared.body());
+            }
+        }
+    }
+
+    private void sendTextFallback(String toE164, String body) {
+        try {
+            twilioClient.sendWhatsApp(toE164, body);
+            log.info("whatsapp.inbound.reply_textfallback to={}", maskNumber(toE164));
+        } catch (RuntimeException textFailure) {
+            log.warn("whatsapp.inbound.reply_textfallback_failed to={} reason={}",
+                    maskNumber(toE164), textFailure.getClass().getSimpleName());
         }
     }
 

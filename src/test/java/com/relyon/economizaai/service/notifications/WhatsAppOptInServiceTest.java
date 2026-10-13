@@ -98,6 +98,22 @@ class WhatsAppOptInServiceTest {
     }
 
     @Test
+    void handleInbound_mediaSendFails_fallsBackToTextOnly() {
+        var user = User.builder().id(UUID.randomUUID()).email("u@economizaai.app").whatsAppLinkToken("tok123").build();
+        when(userRepository.findByWhatsAppLinkToken("tok123")).thenReturn(Optional.of(user));
+        when(reportService.buildWeeklyReport(user)).thenReturn(new WeeklyReport("SEU RESUMO", true));
+        when(chartTokenService.mint(user.getId())).thenReturn("TOKEN");
+        // media send blows up (e.g. Twilio can't fetch the image)
+        doThrow(new RuntimeException("twilio media 400")).when(twilioClient)
+                .sendWhatsApp(anyString(), anyString(), anyString());
+
+        assertDoesNotThrow(() -> service.handleInbound("+5551997513229", "RELATORIO-tok123"));
+
+        // ...and the user still gets the report as text-only
+        verify(twilioClient).sendWhatsApp(eq("+5551997513229"), contains("SEU RESUMO"));
+    }
+
+    @Test
     void handleInbound_unknownToken_isNoOp() {
         when(userRepository.findByWhatsAppLinkToken("nope")).thenReturn(Optional.empty());
 
