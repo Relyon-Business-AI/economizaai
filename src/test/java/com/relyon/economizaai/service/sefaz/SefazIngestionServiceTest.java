@@ -67,7 +67,7 @@ class SefazIngestionServiceTest {
     /** The free RS bare-chave arbiter for portal rejection pages (broken printed QR). */
     private final RsChaveReconsultService rsChaveReconsult = mock(RsChaveReconsultService.class);
     /** Real policy with the production default (PE) so the device-fetch exemption is exercised. */
-    private final PrefetchPolicy prefetchPolicy = new PrefetchPolicy("PE");
+    private final PrefetchPolicy prefetchPolicy = new PrefetchPolicy("PE", false);
     /** The LLM parse-rescue layer; the mock's default null = "didn't rescue", so the chain continues. */
     private final HtmlReceiptRescueService htmlReceiptRescue = mock(HtmlReceiptRescueService.class);
 
@@ -974,6 +974,152 @@ class SefazIngestionServiceTest {
         assertThrows(ReceiptParseException.class, () -> service.parse(fetched, null));
 
         verifyNoInteractions(htmlReceiptRescue);
+    }
+
+    // ── Generic reactive device-fetch (flag ON): defer BEFORE Infosimples ────
+
+    /** A generic-ON policy: any UF may device-fetch; trust (index) still PE-only. */
+    private final PrefetchPolicy genericPrefetch = new PrefetchPolicy("PE", true);
+
+    private SefazIngestionService genericService(SefazAdapter adapter, Optional<InfosimplesService> infosimples) {
+        return new SefazIngestionService(List.of(adapter), infosimples, paidApiGuard, stateCoverage,
+                rsChaveReconsult, genericPrefetch, htmlReceiptRescue);
+    }
+
+    @Test
+    void fetch_genericOn_ipBlock_defersToDeviceFetchBeforeInfosimples() {
+        var rsAdapter = mockAdapterFor(UnidadeFederativa.RS);
+        when(rsAdapter.fetchHtml(anyString())).thenThrow(new SefazFetchException("RS"));
+        var infosimples = mock(InfosimplesService.class);
+        var service = genericService(rsAdapter, Optional.of(infosimples));
+
+        // canDeviceRetry=true + generic ON + rescuable fetch failure → device-fetch signal.
+        assertThrows(ExperimentalStateFailedException.class, () -> service.fetch(CHAVE_RS, null, true));
+        // The paid fallback must NOT run — device-fetch comes first.
+        verify(infosimples, never()).fetchParsed(any(), any());
+    }
+
+    @Test
+    void fetch_genericOn_appliesToVerifiedStatesToo() {
+        // Verified states (GO/SP/…) never got the device-fetch lifeline before; now they do.
+        var chaveGo = "52260412345678000190650010000123451123456780"; // UF 52 = GO
+        var goAdapter = mockAdapterFor(UnidadeFederativa.GO);
+        when(goAdapter.fetchHtml(anyString())).thenThrow(new SefazFetchException("GO"));
+        var infosimples = mock(InfosimplesService.class);
+        var service = genericService(goAdapter, Optional.of(infosimples));
+
+        assertThrows(ExperimentalStateFailedException.class, () -> service.fetch(chaveGo, null, true));
+        verify(infosimples, never()).fetchParsed(any(), any());
+    }
+
+    @Test
+    void fetch_genericOn_clientCannotRetry_fallsToInfosimplesAsBefore() {
+        var rsAdapter = mockAdapterFor(UnidadeFederativa.RS);
+        when(rsAdapter.fetchHtml(anyString())).thenThrow(new SefazFetchException("RS"));
+        var infosimples = mock(InfosimplesService.class);
+        when(infosimples.fetchParsed(eq(CHAVE_RS), eq(UnidadeFederativa.RS))).thenReturn(sampleParsed());
+        var service = genericService(rsAdapter, Optional.of(infosimples));
+
+        var fetched = service.fetch(CHAVE_RS, null, false); // web/photo client — can't device-fetch
+
+        assertNotNull(fetched.preParsed());
+        verify(infosimples).fetchParsed(CHAVE_RS, UnidadeFederativa.RS);
+    }
+
+    @Test
+    void fetch_genericOn_captchaWall_notDeferred_goesToInfosimples() {
+        // A captcha the server couldn't pass — the phone can't either, so device-fetch
+        // would just time out. Must NOT defer; fall to Infosimples (or fail) as before.
+        var chaveMs = "50260777863223012709650180004455861342485537";
+        var msAdapter = mockAdapterFor(UnidadeFederativa.MS);
+        when(msAdapter.fetchHtml(anyString())).thenThrow(new CaptchaUnavailableException("MS"));
+        var infosimples = mock(InfosimplesService.class);
+        when(infosimples.fetchParsed(eq(chaveMs), eq(UnidadeFederativa.MS))).thenReturn(sampleParsed());
+        var service = genericService(msAdapter, Optional.of(infosimples));
+
+        var fetched = service.fetch(chaveMs, null, true);
+
+        assertNotNull(fetched.preParsed());
+        verify(infosimples).fetchParsed(chaveMs, UnidadeFederativa.MS);
+    }
+
+    @Test
+    void fetch_genericOn_deterministicFailure_notDeferred_propagates() {
+        var rsAdapter = mockAdapterFor(UnidadeFederativa.RS);
+        var deterministic = new SefazDeterministicFetchException("RS");
+        when(rsAdapter.fetchHtml(anyString())).thenThrow(deterministic);
+        var infosimples = mock(InfosimplesService.class);
+        var service = genericService(rsAdapter, Optional.of(infosimples));
+
+        var thrown = assertThrows(SefazDeterministicFetchException.class, () -> service.fetch(CHAVE_RS, null, true));
+
+        assertSame(deterministic, thrown);
+        verify(infosimples, never()).fetchParsed(any(), any());
+    }
+
+    @Test
+    void fetch_flagOff_deviceFetchAvailableIsInert() {
+        // Same inputs as the defer test, but policy OFF (default) → identical old behavior.
+        var rsAdapter = mockAdapterFor(UnidadeFederativa.RS);
+        when(rsAdapter.fetchHtml(anyString())).thenThrow(new SefazFetchException("RS"));
+        var infosimples = mock(InfosimplesService.class);
+        when(infosimples.fetchParsed(eq(CHAVE_RS), eq(UnidadeFederativa.RS))).thenReturn(sampleParsed());
+        var service = new SefazIngestionService(List.of(rsAdapter), Optional.of(infosimples), paidApiGuard,
+                stateCoverage, rsChaveReconsult, prefetchPolicy, htmlReceiptRescue); // prefetchPolicy = OFF
+
+        var fetched = service.fetch(CHAVE_RS, null, true); // deviceFetchAvailable=true but flag OFF
+
+        assertNotNull(fetched.preParsed());
+        verify(infosimples).fetchParsed(CHAVE_RS, UnidadeFederativa.RS); // no deferral — Infosimples runs
+    }
+
+    @Test
+    void fetch_genericOn_experimentalState_defersToDeviceFetch() {
+        // Experimental state (no dedicated adapter), portal unreachable from our IP: with
+        // generic ON + device-capable client, defer to device-fetch instead of Infosimples.
+        var generic = genericAdapter(null); // httpFetch throws → SefazFetchException
+        var infosimples = mock(InfosimplesService.class);
+        var service = new SefazIngestionService(List.of(generic), Optional.of(infosimples), paidApiGuard,
+                stateCoverage, rsChaveReconsult, genericPrefetch, htmlReceiptRescue);
+
+        assertThrows(ExperimentalStateFailedException.class, () -> service.fetch(QR_URL_BA, null, true));
+        verify(infosimples, never()).fetchParsed(any(), any());
+    }
+
+    @Test
+    void fetch_genericOn_scrapeSucceeds_noDeviceFetchNoInfosimples() {
+        // The happy path is unaffected by the flag: a successful scrape just returns.
+        var rsAdapter = mockAdapterFor(UnidadeFederativa.RS);
+        when(rsAdapter.fetchHtml(anyString())).thenReturn("<html>ok</html>");
+        var infosimples = mock(InfosimplesService.class);
+        var service = genericService(rsAdapter, Optional.of(infosimples));
+
+        var fetched = service.fetch(CHAVE_RS, null, true);
+
+        assertSame(rsAdapter, fetched.adapter());
+        verify(infosimples, never()).fetchParsed(any(), any());
+    }
+
+    @Test
+    void fetchViaInfosimplesFallback_returnsPreParsedOnSuccess() {
+        var infosimples = mock(InfosimplesService.class);
+        var preParsed = sampleParsed();
+        when(infosimples.fetchParsed(eq(CHAVE_RS), eq(UnidadeFederativa.RS))).thenReturn(preParsed);
+        var service = new SefazIngestionService(List.of(mockAdapterFor(UnidadeFederativa.RS)), Optional.of(infosimples),
+                paidApiGuard, stateCoverage, rsChaveReconsult, prefetchPolicy, htmlReceiptRescue);
+
+        var fetched = service.fetchViaInfosimplesFallback(CHAVE_RS, UnidadeFederativa.RS, null);
+
+        assertSame(preParsed, fetched.preParsed());
+    }
+
+    @Test
+    void fetchViaInfosimplesFallback_noProvider_throwsRescuable() {
+        var service = new SefazIngestionService(List.of(mockAdapterFor(UnidadeFederativa.RS)), Optional.empty(),
+                paidApiGuard, stateCoverage, rsChaveReconsult, prefetchPolicy, htmlReceiptRescue);
+
+        assertThrows(SefazFetchException.class,
+                () -> service.fetchViaInfosimplesFallback(CHAVE_RS, UnidadeFederativa.RS, null));
     }
 
     // ── Deterministic portal 4xx: never spend Infosimples ────────────────────

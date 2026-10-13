@@ -124,6 +124,14 @@ public class Receipt extends BaseEntity implements HouseholdScoped {
     @Column(name = "resyncing_from_contingency", nullable = false)
     private boolean resyncingFromContingency;
 
+    // False ONLY for device-fetched (client-authored) content from a state that isn't on the
+    // device-fetch trust allowlist — such content is personal-history only and never feeds the
+    // collaborative index (same trust class as PHOTO). Default/true for every server-fetched and
+    // trusted device-fetch receipt. Read by PriceIndexService#isContributionBlocked at confirm.
+    @Column(name = "index_eligible", nullable = false)
+    @Builder.Default
+    private boolean indexEligible = true;
+
     // BatchSize: list endpoints (GET /receipts, dashboard) read items per row —
     // batching turns that page-sized N+1 into one IN query.
     @OneToMany(mappedBy = "receipt", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)

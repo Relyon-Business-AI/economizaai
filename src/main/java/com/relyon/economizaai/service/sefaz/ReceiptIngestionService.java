@@ -11,6 +11,7 @@ import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.enums.ReceiptChannel;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.NotificationType;
+import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.extraction.EanCatalogEnrichmentService;
@@ -69,6 +70,7 @@ public class ReceiptIngestionService {
     private final RsChaveReconsultService rsChaveReconsultService;
     private final NotificationService notificationService;
     private final LocalizedMessageService messageService;
+    private final PrefetchPolicy prefetchPolicy;
 
     /**
      * Fetch + parse the PROCESSING receipt, then transition it. Runs on the
@@ -95,7 +97,8 @@ public class ReceiptIngestionService {
         // Mobile scan (attribute paid SEFAZ calls to the owner for metering). canDeviceRetry=true
         // (app knows NEEDS_DEVICE_FETCH) → resolve on-device; false (older app) → FAILED_PARSE
         // telling the user to update, since this state only works on the newer app.
-        ingestResolved(receiptId, receipt -> sefazIngestionService.fetch(qrPayload, receipt.getUser().getId()),
+        ingestResolved(receiptId, receipt -> sefazIngestionService.fetch(
+                        qrPayload, receipt.getUser().getId(), canDeviceRetry),
                 canDeviceRetry, "receipt.state.app_update_required");
     }
 
@@ -107,10 +110,79 @@ public class ReceiptIngestionService {
      */
     @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
     public void ingestPrefetched(UUID receiptId, String qrPayload, String rawContent) {
-        // The app ALREADY fetched on-device; if this still fails it's a real dead end, not an
-        // "update the app" case — plain FAILED_PARSE and no NEEDS_DEVICE_FETCH loop.
-        ingestResolved(receiptId, receipt -> sefazIngestionService.fromClientContent(
-                rawContent, receipt.getChaveAcesso(), receipt.getUf(), sourceUrlOf(qrPayload)), false, null);
+        MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
+        try {
+            var receipt = receiptRepository.findById(receiptId).orElse(null);
+            if (receipt == null || receipt.getStatus() != ReceiptStatus.PROCESSING) {
+                log.warn("ingest skipped: receipt {} missing or no longer PROCESSING", abbrev(receiptId));
+                return;
+            }
+            var userId = receipt.getUser().getId();
+            var uf = receipt.getUf();
+            var chave = receipt.getChaveAcesso();
+            ParsedReceipt parsed;
+            boolean indexEligible;
+            try {
+                // The app fetched the nota on its own (residential) IP. Parse it with the same
+                // per-UF pipeline as a server fetch. Client-authored content is index-TRUSTED only
+                // for UFs on the device-fetch allowlist (validated, IP-blocked by design); for any
+                // other UF (generic fallback) it's personal-history only — index_eligible=false.
+                var fetched = sefazIngestionService.fromClientContent(rawContent, chave, uf, sourceUrlOf(qrPayload));
+                parsed = sefazIngestionService.parse(fetched, userId);
+                indexEligible = prefetchPolicy.isTrustedForIndex(uf);
+            } catch (ReceiptParseException deviceFail) {
+                // On-device content unusable — continue the fallback chain to the paid by-chave
+                // lookup (server-side, so it doesn't need the client). A server fetch is trusted,
+                // so its result IS index-eligible. If Infosimples also fails, record the ORIGINAL
+                // device failure for review (keeping the raw client content).
+                var rescued = continueToInfosimples(receiptId, chave, uf, userId, rawContent,
+                        sourceUrlOf(qrPayload), deviceFail);
+                if (rescued == null) return; // already persisted as FAILED_PARSE
+                parsed = rescued;
+                indexEligible = true;
+            }
+            if (rejectUnsupportedMerchant(receiptId, parsed)) {
+                return;
+            }
+            warmEanCatalog(parsed);
+            persistParsed(receiptId, parsed, indexEligible);
+        } catch (TransientDataAccessException | RecoverableDataAccessException ex) {
+            log.warn("ingest transient DB failure, leaving receipt {} PROCESSING for retry: {}",
+                    abbrev(receiptId), ex.getMessage());
+        } catch (RuntimeException ex) {
+            markFailed(receiptId, ex);
+        } finally {
+            MDC.remove(MdcContextFilter.RECEIPT_ID);
+        }
+    }
+
+    /**
+     * The device-fetch content didn't yield a usable receipt — try the paid Infosimples
+     * by-chave fallback (the last chain layer). Returns the pre-parsed receipt on success,
+     * or null after recording the ORIGINAL device failure as FAILED_PARSE (keeping the raw
+     * client content for review) when Infosimples is unavailable or also fails.
+     */
+    private ParsedReceipt continueToInfosimples(UUID receiptId, String chave, UnidadeFederativa uf,
+                                                UUID userId, String rawContent, String sourceUrl,
+                                                ReceiptParseException deviceFail) {
+        // A contingency note with no items isn't a rescuable failure — SEFAZ simply doesn't have it
+        // yet. Keep it CONTINGENCY_PENDING (recoverable, no paid spend), same as the server path,
+        // instead of burning an Infosimples query on a note that isn't there.
+        var clientDoc = new SefazIngestionService.FetchedDocument(null, rawContent, chave, uf, sourceUrl);
+        if (deviceFail.isNoItemsFound() && ChaveAcessoParser.isContingencyEmission(chave)) {
+            persistParseFailure(receiptId, clientDoc, deviceFail);
+            return null;
+        }
+        try {
+            var rescued = sefazIngestionService.fetchViaInfosimplesFallback(chave, uf, userId);
+            log.info("ingest device-fetch failed, rescued via infosimples uf={}", uf);
+            return rescued.preParsed();
+        } catch (RuntimeException infosimplesFail) {
+            log.warn("ingest device-fetch AND infosimples failed uf={} reason={}",
+                    uf, infosimplesFail.getClass().getSimpleName());
+            persistParseFailure(receiptId, clientDoc, deviceFail);
+            return null;
+        }
     }
 
     /**
@@ -167,7 +239,8 @@ public class ReceiptIngestionService {
                     return;
                 }
                 warmEanCatalog(parsed);
-                persistParsed(receiptId, parsed);
+                // Server-fetched (or import/XML) content is self-verified by our fetch → index-eligible.
+                persistParsed(receiptId, parsed, true);
             } catch (ExperimentalStateFailedException ex) {
                 routeExperimentalFailure(receiptId, ex, canDeviceRetry, blockedStateReasonKey);
             } catch (ReceiptParseException ex) {
@@ -247,11 +320,12 @@ public class ReceiptIngestionService {
         return true;
     }
 
-    private void persistParsed(UUID receiptId, ParsedReceipt parsed) {
+    private void persistParsed(UUID receiptId, ParsedReceipt parsed, boolean indexEligible) {
         transactionTemplate.executeWithoutResult(txStatus -> {
             var receipt = loadIfProcessing(receiptId);
             if (receipt == null) return;
             applyParsed(receipt, parsed);
+            receipt.setIndexEligible(indexEligible);
             // A successful parse supersedes any prior failure diagnostic (retried notas
             // keep their original reason until the retry actually resolves them).
             receipt.setParseErrorReason(null);

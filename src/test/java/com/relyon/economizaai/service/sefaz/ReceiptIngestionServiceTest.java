@@ -2,6 +2,7 @@ package com.relyon.economizaai.service.sefaz;
 
 import com.relyon.economizaai.exception.ExperimentalStateFailedException;
 import com.relyon.economizaai.exception.ReceiptParseException;
+import com.relyon.economizaai.exception.SefazFetchException;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.MarketLocation;
 import com.relyon.economizaai.model.enums.MerchantSegment;
@@ -36,10 +37,12 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
@@ -60,6 +63,7 @@ class ReceiptIngestionServiceTest {
     @Mock private EanCatalogEnrichmentService eanCatalogEnrichmentService;
     @Mock private MarketLocationService marketLocationService;
     @Mock private MerchantSupportGate merchantSupportGate;
+    @Mock private PrefetchPolicy prefetchPolicy;
 
     @InjectMocks private ReceiptIngestionService service;
 
@@ -146,7 +150,7 @@ class ReceiptIngestionServiceTest {
         var receipt = processingReceipt();
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
-        when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
+        when(sefazIngestionService.fetch(eq(QR), any(), anyBoolean())).thenReturn(fetched);
         when(sefazIngestionService.parse(eq(fetched), any())).thenThrow(new ExperimentalStateFailedException("PE"));
 
         service.ingest(receipt.getId(), QR, true);
@@ -163,7 +167,7 @@ class ReceiptIngestionServiceTest {
         var receipt = processingReceipt();
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
-        when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
+        when(sefazIngestionService.fetch(eq(QR), any(), anyBoolean())).thenReturn(fetched);
         when(sefazIngestionService.parse(eq(fetched), any()))
                 .thenThrow(new ExperimentalStateFailedException("BA", true));
 
@@ -181,7 +185,7 @@ class ReceiptIngestionServiceTest {
         var receipt = processingReceipt();
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
-        when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
+        when(sefazIngestionService.fetch(eq(QR), any(), anyBoolean())).thenReturn(fetched);
         when(sefazIngestionService.parse(eq(fetched), any())).thenThrow(new ExperimentalStateFailedException("PE"));
 
         service.ingest(receipt.getId(), QR, false); // mobile, not device-capable
@@ -209,19 +213,97 @@ class ReceiptIngestionServiceTest {
     }
 
     @Test
-    void ingestPrefetched_experimentalStateFailed_marksFailedParseNoLoop() {
-        // The DEVICE content also couldn't be parsed — a real dead end, NOT another
-        // NEEDS_DEVICE_FETCH (which would loop the app forever).
+    void ingestPrefetched_deviceContentFails_andInfosimplesAlsoFails_marksFailedParseNoLoop() {
+        // The DEVICE content couldn't be parsed AND the Infosimples continuation also failed
+        // (or is unavailable) — a real dead end, NOT another NEEDS_DEVICE_FETCH (app loop).
         var receipt = processingReceipt();
         var fetched = new SefazIngestionService.FetchedDocument(null, "<xml/>", CHAVE_RS, UnidadeFederativa.RS, null);
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fromClientContent(any(), eq(CHAVE_RS), eq(UnidadeFederativa.RS), any()))
                 .thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenThrow(new ExperimentalStateFailedException("PE"));
+        when(sefazIngestionService.parse(eq(fetched), any())).thenThrow(new ReceiptParseException("no items found"));
+        when(sefazIngestionService.fetchViaInfosimplesFallback(eq(CHAVE_RS), eq(UnidadeFederativa.RS), any()))
+                .thenThrow(new SefazFetchException("RS"));
 
         service.ingestPrefetched(receipt.getId(), QR, "<xml/>");
 
         assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+    }
+
+    @Test
+    void ingestPrefetched_contingencyNoItems_staysContingencyPending_noInfosimplesSpend() {
+        // A contingency note with no items on-device isn't a rescuable failure (SEFAZ doesn't
+        // have it yet) — it must stay CONTINGENCY_PENDING, NOT burn an Infosimples query.
+        var contingencyChave = CHAVE_RS.substring(0, 34) + "9" + CHAVE_RS.substring(35); // tpEmis != 1
+        var receipt = processingReceipt();
+        receipt.setChaveAcesso(contingencyChave);
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<xml/>", contingencyChave, UnidadeFederativa.RS, null);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fromClientContent(any(), eq(contingencyChave), eq(UnidadeFederativa.RS), any()))
+                .thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any())).thenThrow(new ReceiptParseException("no-items-found"));
+
+        service.ingestPrefetched(receipt.getId(), contingencyChave, "<xml/>");
+
+        assertEquals(ReceiptStatus.CONTINGENCY_PENDING, receipt.getStatus());
+        verify(sefazIngestionService, never()).fetchViaInfosimplesFallback(any(), any(), any());
+    }
+
+    @Test
+    void ingestPrefetched_trustedUf_persistsIndexEligible() {
+        // PE is on the device-fetch trust allowlist → its on-device content feeds the index.
+        var receipt = processingReceipt();
+        receipt.setUf(UnidadeFederativa.PE);
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<xml/>", CHAVE_RS, UnidadeFederativa.PE, null);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fromClientContent(any(), eq(CHAVE_RS), eq(UnidadeFederativa.PE), any()))
+                .thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(sampleParsed());
+        when(prefetchPolicy.isTrustedForIndex(UnidadeFederativa.PE)).thenReturn(true);
+
+        service.ingestPrefetched(receipt.getId(), QR, "<xml/>");
+
+        assertEquals(ReceiptStatus.PENDING_CONFIRMATION, receipt.getStatus());
+        assertTrue(receipt.isIndexEligible(), "trusted UF device-fetch feeds the index");
+    }
+
+    @Test
+    void ingestPrefetched_untrustedUf_marksIndexExcluded() {
+        // Generic device-fetch from a NON-trusted state (GO): personal history only — the
+        // client-authored content must never feed the collaborative index.
+        var receipt = processingReceipt();
+        receipt.setUf(UnidadeFederativa.GO);
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.GO, null);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fromClientContent(any(), eq(CHAVE_RS), eq(UnidadeFederativa.GO), any()))
+                .thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(sampleParsed());
+        when(prefetchPolicy.isTrustedForIndex(UnidadeFederativa.GO)).thenReturn(false);
+
+        service.ingestPrefetched(receipt.getId(), QR, "<html/>");
+
+        assertEquals(ReceiptStatus.PENDING_CONFIRMATION, receipt.getStatus());
+        assertFalse(receipt.isIndexEligible(), "untrusted device-fetch is personal-history only");
+    }
+
+    @Test
+    void ingestPrefetched_deviceContentFails_rescuedByInfosimples_isIndexEligible() {
+        // On-device content unusable → continue to Infosimples (server-side, trusted) → index-eligible.
+        var receipt = processingReceipt();
+        receipt.setUf(UnidadeFederativa.GO);
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.GO, null);
+        var infosimplesDoc = new SefazIngestionService.FetchedDocument(null, null, CHAVE_RS, UnidadeFederativa.GO, null, sampleParsed());
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fromClientContent(any(), eq(CHAVE_RS), eq(UnidadeFederativa.GO), any()))
+                .thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any())).thenThrow(new ReceiptParseException("no items found"));
+        when(sefazIngestionService.fetchViaInfosimplesFallback(eq(CHAVE_RS), eq(UnidadeFederativa.GO), any()))
+                .thenReturn(infosimplesDoc);
+
+        service.ingestPrefetched(receipt.getId(), QR, "<html/>");
+
+        assertEquals(ReceiptStatus.PENDING_CONFIRMATION, receipt.getStatus());
+        assertTrue(receipt.isIndexEligible(), "server-side Infosimples rescue is trusted for the index");
     }
 
     @Test

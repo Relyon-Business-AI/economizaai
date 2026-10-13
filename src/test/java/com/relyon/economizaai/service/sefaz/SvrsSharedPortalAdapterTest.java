@@ -152,6 +152,38 @@ class SvrsSharedPortalAdapterTest {
         assertTrue(resolved.contains(CHAVE_RS));
     }
 
+    // UF 41 = PR, UF 35 = SP.
+    private static final String CHAVE_PR = "41260412345678000190650010000123451123456780";
+    private static final String CHAVE_SP = "35260412345678000190650010000123451123456780";
+
+    @Test
+    void resolveUrl_prPipePayload_routesToPrOwnPortal() {
+        var multi = new SvrsSharedPortalAdapter(RestClient.builder(), NO_CAPTCHA, 5000, "test",
+                "RS,PR,SP", 5, 3, 0L, "svrs.rs.gov.br,fazenda.pr.gov.br,fazenda.sp.gov.br");
+        var resolved = multi.resolveUrl(CHAVE_PR + "|2|1|1|hash");
+        assertTrue(resolved.startsWith("https://www.fazenda.pr.gov.br/nfce/qrcode?p="), resolved);
+    }
+
+    @Test
+    void resolveUrl_spPipePayload_doesNotHitSvrsRsPortal_signalsRescuableFailure() {
+        // Regression: SP's own portal differs from SVRS; a non-URL SP payload must NOT
+        // be scraped at the RS portal (the old != PR default) — it signals a rescuable
+        // failure so the ingestion chain uses the Infosimples by-chave fallback instead.
+        var multi = new SvrsSharedPortalAdapter(RestClient.builder(), NO_CAPTCHA, 5000, "test",
+                "RS,PR,SP", 5, 3, 0L, "svrs.rs.gov.br,fazenda.pr.gov.br,fazenda.sp.gov.br");
+        var thrown = assertThrows(SefazFetchException.class, () -> multi.resolveUrl(CHAVE_SP + "|2|1|1|hash"));
+        assertEquals("SP", thrown.getArguments()[0]);
+    }
+
+    @Test
+    void resolveUrl_realSpQrUrl_stillAcceptedDirectly() {
+        // The common case — a scanned SP QR carries the full URL — is unaffected.
+        var multi = new SvrsSharedPortalAdapter(RestClient.builder(), NO_CAPTCHA, 5000, "test",
+                "RS,PR,SP", 5, 3, 0L, "svrs.rs.gov.br,fazenda.pr.gov.br,fazenda.sp.gov.br");
+        var url = "https://www.nfce.fazenda.sp.gov.br/qrcode?p=" + CHAVE_SP + "|2|1|1|hash";
+        assertEquals(url, multi.resolveUrl(url));
+    }
+
     @Test
     void parseHtml_extractsItemsAndMetadata() throws Exception {
         var html = CpfMasker.strip(loadFixture());
@@ -294,9 +326,12 @@ class SvrsSharedPortalAdapterTest {
 
     @Test
     void fetchHtml_scSecurityVerifyHtmlThrowsCaptchaUnavailable() {
+        // Exercises the post-fetch SecurityVerify-HTML detector (not the pre-fetch
+        // URL detector): an allowlisted SC consult URL fetches, and the returned
+        // security-challenge HTML must surface CaptchaUnavailable, not a generic error.
         var calls = new AtomicInteger();
         var stub = new SvrsSharedPortalAdapter(RestClient.builder(), NO_CAPTCHA,
-                5000, "test", "SC", 5, 3, 0L, "svrs.rs.gov.br") {
+                5000, "test", "SC", 5, 3, 0L, "sef.sc.gov.br") {
             @Override
             protected String httpGet(String url) {
                 calls.incrementAndGet();
@@ -313,9 +348,21 @@ class SvrsSharedPortalAdapterTest {
                         """;
             }
         };
+        var scUrl = "https://sat.sef.sc.gov.br/tax.NET/Sat.DFe.NFCe.Web/Consultas/ConsultaPublicaNFCe.aspx?p="
+                + CHAVE_SC + "|2|1|1|hash";
 
-        assertThrows(CaptchaUnavailableException.class, () -> stub.fetchHtml(CHAVE_SC));
+        assertThrows(CaptchaUnavailableException.class, () -> stub.fetchHtml(scUrl));
         assertEquals(1, calls.get());
+    }
+
+    @Test
+    void resolveUrl_scPipePayload_doesNotHitSvrsRsPortal_signalsRescuableFailure() {
+        // SC has its own portal (served by SantaCatarinaNfcePortalAdapter); a non-URL
+        // SC payload reaching this adapter must not be scraped at the RS portal.
+        var scAdapter = new SvrsSharedPortalAdapter(RestClient.builder(), NO_CAPTCHA, 5000, "test",
+                "SC", 5, 3, 0L, "sef.sc.gov.br");
+        var thrown = assertThrows(SefazFetchException.class, () -> scAdapter.resolveUrl(CHAVE_SC + "|2|1|1|hash"));
+        assertEquals("SC", thrown.getArguments()[0]);
     }
 
     @Test
