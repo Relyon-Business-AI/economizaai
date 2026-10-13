@@ -228,6 +228,18 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
     @Query("SELECT ri FROM ReceiptItem ri WHERE ri.receipt.id = :receiptId AND ri.product IS NULL AND ri.excluded = false")
     List<ReceiptItem> findUnmatchedByReceiptId(@Param("receiptId") UUID receiptId);
 
+    /** Loads an item with its receipt + household initialized up front, so the
+     *  item-correction ownership check (receipt id + household id) can run without
+     *  an open session. Accessing the lazy Receipt proxy's household otherwise throws
+     *  LazyInitializationException — the correct() path runs untransacted by design. */
+    @Query("""
+        SELECT ri FROM ReceiptItem ri
+        JOIN FETCH ri.receipt r
+        JOIN FETCH r.household
+        WHERE ri.id = :itemId
+    """)
+    Optional<ReceiptItem> findByIdWithReceiptAndHousehold(@Param("itemId") UUID itemId);
+
     /** UFs where an item with this raw description was scanned — helps spot regional brands in review.
      *  Case-insensitive: findings store the description lowercased, receipts keep it as printed (UPPER). */
     @Query("SELECT DISTINCT r.uf FROM ReceiptItem ri JOIN ri.receipt r WHERE LOWER(ri.rawDescription) = LOWER(:description) AND r.uf IS NOT NULL")
