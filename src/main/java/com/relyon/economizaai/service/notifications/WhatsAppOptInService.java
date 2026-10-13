@@ -17,6 +17,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
@@ -120,7 +121,7 @@ public class WhatsAppOptInService {
             user.setWhatsAppWeeklyReportEnabled(true);
             userRepository.save(user);
             log.info("whatsapp.optin.confirmed user={} from={}", abbrev(user), maskNumber(fromE164));
-            return messageService.translate("whatsapp.optin.confirmed") + "\n\n" + reportService.buildWeeklyReportText(user);
+            return messageService.translate("whatsapp.optin.confirmed", localeOf(user)) + "\n\n" + reportService.buildWeeklyReportText(user);
         }
         if (user.getWhatsAppNumber() == null) {
             user.setWhatsAppNumber(fromE164);
@@ -128,6 +129,11 @@ public class WhatsAppOptInService {
         }
         log.info("whatsapp.report.pull user={} from={}", abbrev(user), maskNumber(fromE164));
         return reportService.buildWeeklyReportText(user);
+    }
+
+    private Locale localeOf(User user) {
+        var locale = user.getLocale();
+        return Locale.forLanguageTag(locale == null || locale.isBlank() ? "pt" : locale);
     }
 
     public String waMeLink(String action, String token) {
