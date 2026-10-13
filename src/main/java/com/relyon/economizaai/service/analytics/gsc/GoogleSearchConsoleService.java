@@ -35,13 +35,21 @@ public class GoogleSearchConsoleService {
     private final RestClient restClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final GoogleSearchConsoleProperties properties;
+    private final GoogleServiceAccountTokenProvider tokenProvider;
 
-    public GoogleSearchConsoleService(RestClient.Builder builder, GoogleSearchConsoleProperties properties) {
+    public GoogleSearchConsoleService(RestClient.Builder builder, GoogleSearchConsoleProperties properties,
+                                      GoogleServiceAccountTokenProvider tokenProvider) {
         var factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5000);
         factory.setReadTimeout(15000);
         this.restClient = builder.requestFactory(factory).build();
         this.properties = properties;
+        this.tokenProvider = tokenProvider;
+    }
+
+    /** Service-account token (self-renewing) when configured, else the legacy static token. */
+    private String bearerToken() {
+        return properties.hasServiceAccount() ? tokenProvider.accessToken() : properties.getAccessToken();
     }
 
     public GscReportResponse report(int days) {
@@ -110,7 +118,7 @@ public class GoogleSearchConsoleService {
         try {
             responseBody = restClient.post()
                     .uri(URI.create(url))
-                    .header("Authorization", "Bearer " + properties.getAccessToken())
+                    .header("Authorization", "Bearer " + bearerToken())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(jsonBody)
                     .retrieve()
