@@ -16,6 +16,15 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-12 — Device-fetch: resolução imediata quando o app não consegue buscar
+
+- **`POST /receipts/{id}/device-content`** ganhou o campo **`unavailable: boolean`** e
+  `rawContent` virou opcional. Quando o app **não consegue** buscar a nota on-device (portal
+  complexo/timeout), manda `{"unavailable": true}` → o servidor **cai na próxima camada
+  (Infosimples) na hora**, em vez de deixar a nota parada até o sweeper (15 min). Com
+  conteúdo, fluxo igual ao de antes (`{"rawContent": "..."}`). FE: `resolveDeviceFetch`
+  agora sempre avisa o desfecho e mantém a nota em acompanhamento (sem falso "falhou").
+
 ## 2026-10-12 — Device-fetch genérico (atrás de flag, OFF) + fix de roteamento SP
 
 - **Nada muda pro FE agora** (flag `DEVICE_FETCH_GENERIC_ENABLED` default OFF = comportamento
