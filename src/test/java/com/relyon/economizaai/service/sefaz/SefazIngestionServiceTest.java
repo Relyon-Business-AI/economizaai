@@ -1074,6 +1074,33 @@ class SefazIngestionServiceTest {
     }
 
     @Test
+    void fetch_genericOn_experimentalState_defersToDeviceFetch() {
+        // Experimental state (no dedicated adapter), portal unreachable from our IP: with
+        // generic ON + device-capable client, defer to device-fetch instead of Infosimples.
+        var generic = genericAdapter(null); // httpFetch throws → SefazFetchException
+        var infosimples = mock(InfosimplesService.class);
+        var service = new SefazIngestionService(List.of(generic), Optional.of(infosimples), paidApiGuard,
+                stateCoverage, rsChaveReconsult, genericPrefetch, htmlReceiptRescue);
+
+        assertThrows(ExperimentalStateFailedException.class, () -> service.fetch(QR_URL_BA, null, true));
+        verify(infosimples, never()).fetchParsed(any(), any());
+    }
+
+    @Test
+    void fetch_genericOn_scrapeSucceeds_noDeviceFetchNoInfosimples() {
+        // The happy path is unaffected by the flag: a successful scrape just returns.
+        var rsAdapter = mockAdapterFor(UnidadeFederativa.RS);
+        when(rsAdapter.fetchHtml(anyString())).thenReturn("<html>ok</html>");
+        var infosimples = mock(InfosimplesService.class);
+        var service = genericService(rsAdapter, Optional.of(infosimples));
+
+        var fetched = service.fetch(CHAVE_RS, null, true);
+
+        assertSame(rsAdapter, fetched.adapter());
+        verify(infosimples, never()).fetchParsed(any(), any());
+    }
+
+    @Test
     void fetchViaInfosimplesFallback_returnsPreParsedOnSuccess() {
         var infosimples = mock(InfosimplesService.class);
         var preParsed = sampleParsed();

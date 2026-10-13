@@ -231,6 +231,25 @@ class ReceiptIngestionServiceTest {
     }
 
     @Test
+    void ingestPrefetched_contingencyNoItems_staysContingencyPending_noInfosimplesSpend() {
+        // A contingency note with no items on-device isn't a rescuable failure (SEFAZ doesn't
+        // have it yet) — it must stay CONTINGENCY_PENDING, NOT burn an Infosimples query.
+        var contingencyChave = CHAVE_RS.substring(0, 34) + "9" + CHAVE_RS.substring(35); // tpEmis != 1
+        var receipt = processingReceipt();
+        receipt.setChaveAcesso(contingencyChave);
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<xml/>", contingencyChave, UnidadeFederativa.RS, null);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fromClientContent(any(), eq(contingencyChave), eq(UnidadeFederativa.RS), any()))
+                .thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any())).thenThrow(new ReceiptParseException("no-items-found"));
+
+        service.ingestPrefetched(receipt.getId(), contingencyChave, "<xml/>");
+
+        assertEquals(ReceiptStatus.CONTINGENCY_PENDING, receipt.getStatus());
+        verify(sefazIngestionService, never()).fetchViaInfosimplesFallback(any(), any(), any());
+    }
+
+    @Test
     void ingestPrefetched_trustedUf_persistsIndexEligible() {
         // PE is on the device-fetch trust allowlist → its on-device content feeds the index.
         var receipt = processingReceipt();
