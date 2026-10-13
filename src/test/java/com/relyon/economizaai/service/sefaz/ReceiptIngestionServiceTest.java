@@ -250,6 +250,25 @@ class ReceiptIngestionServiceTest {
     }
 
     @Test
+    void ingestPrefetched_nullContent_gaveUp_continuesStraightToInfosimples() {
+        // The app signalled "unavailable" (device couldn't fetch) → null content → the real
+        // fromClientContent fails on the absent chave → continue to Infosimples immediately.
+        var receipt = processingReceipt();
+        receipt.setUf(UnidadeFederativa.GO);
+        var infosimplesDoc = new SefazIngestionService.FetchedDocument(null, null, CHAVE_RS, UnidadeFederativa.GO, null, sampleParsed());
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fromClientContent(any(), eq(CHAVE_RS), eq(UnidadeFederativa.GO), any()))
+                .thenThrow(new ReceiptParseException("client-content-chave-mismatch"));
+        when(sefazIngestionService.fetchViaInfosimplesFallback(eq(CHAVE_RS), eq(UnidadeFederativa.GO), any()))
+                .thenReturn(infosimplesDoc);
+
+        service.ingestPrefetched(receipt.getId(), QR, null);
+
+        assertEquals(ReceiptStatus.PENDING_CONFIRMATION, receipt.getStatus());
+        assertTrue(receipt.isIndexEligible(), "the server-side Infosimples rescue is index-eligible");
+    }
+
+    @Test
     void ingestPrefetched_trustedUf_persistsIndexEligible() {
         // PE is on the device-fetch trust allowlist → its on-device content feeds the index.
         var receipt = processingReceipt();

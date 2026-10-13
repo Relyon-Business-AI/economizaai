@@ -253,11 +253,14 @@ public class ReceiptService {
     }
 
     /**
-     * The app's on-device retry for a receipt the server left in NEEDS_DEVICE_FETCH
-     * (state blocks our datacenter IP). The app fetched the nota on its own accepted
-     * IP and reposts the body; we flip the row back to PROCESSING and re-ingest with
-     * it — reusing the stored qrPayload/chave. If the device content also can't be
-     * parsed it becomes a real FAILED_PARSE (no NEEDS_DEVICE_FETCH loop).
+     * The app's response for a receipt the server left in NEEDS_DEVICE_FETCH (state
+     * blocks our datacenter IP). Either the app fetched the nota on its own accepted
+     * IP (reposts the body) OR it couldn't fetch it either ({@code unavailable=true}).
+     * Both flip the row back to PROCESSING and re-ingest: with content it parses that;
+     * with no content ({@code rawContent=null}) the ingest's own fromClientContent
+     * fails and continues the chain to the paid by-chave fallback IMMEDIATELY — so a
+     * device-fetch the app gave up on resolves right away instead of waiting for the
+     * device-fetch sweeper. If every layer fails it's a real FAILED_PARSE (no loop).
      */
     @Transactional
     public ReceiptResponse submitDeviceContent(User user, UUID receiptId, DeviceContentRequest request) {
@@ -266,11 +269,12 @@ public class ReceiptService {
             throw new ReceiptNotEditableException(receipt.getStatus().name());
         }
         var qrPayload = receipt.getQrPayload();
-        var rawContent = request.rawContent();
+        // No content (app gave up) → null → the ingest continues straight to the paid fallback.
+        var rawContent = request.hasContent() ? request.rawContent() : null;
         receipt.setStatus(ReceiptStatus.PROCESSING);
         receiptRepository.save(receipt);
         MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
-        log.info("device-content received, re-ingesting on-device fetch");
+        log.info("device-content received hasContent={} — re-ingesting", rawContent != null);
         dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingestPrefetched(receiptId, qrPayload, rawContent));
         return withFriendlyName(user.getHousehold().getId(), receipt, ReceiptResponse.from(receipt));
     }

@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service;
 
+import com.relyon.economizaai.dto.request.DeviceContentRequest;
 import com.relyon.economizaai.dto.request.PrefetchedReceiptRequest;
 import com.relyon.economizaai.dto.request.SubmitReceiptRequest;
 import com.relyon.economizaai.dto.request.UpdateItemPersonalRequest;
@@ -477,6 +478,46 @@ class ReceiptServiceTest {
 
         assertEquals(ReceiptStatus.PROCESSING, response.status());
         verify(receiptIngestionService).markFailed(eq(response.id()), any(RuntimeException.class));
+    }
+
+    @Test
+    void submitDeviceContent_withContent_reingestsTheFetchedBody() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.NEEDS_DEVICE_FETCH);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        var response = receiptService.submitDeviceContent(user, receipt.getId(),
+                new DeviceContentRequest("<xml>nota</xml>", false));
+
+        assertEquals(ReceiptStatus.PROCESSING, response.status());
+        verify(receiptIngestionService).ingestPrefetched(eq(receipt.getId()), eq(CHAVE_RS), eq("<xml>nota</xml>"));
+    }
+
+    @Test
+    void submitDeviceContent_unavailable_reingestsWithNullSoItContinuesToInfosimplesImmediately() {
+        // The app couldn't fetch on-device either — null content makes the ingest's own
+        // fromClientContent fail and continue straight to the paid fallback, instead of
+        // leaving the row for the 15-min device-fetch sweeper.
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.NEEDS_DEVICE_FETCH);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        var response = receiptService.submitDeviceContent(user, receipt.getId(),
+                new DeviceContentRequest(null, true));
+
+        assertEquals(ReceiptStatus.PROCESSING, response.status());
+        verify(receiptIngestionService).ingestPrefetched(eq(receipt.getId()), eq(CHAVE_RS), eq((String) null));
+    }
+
+    @Test
+    void submitDeviceContent_rejectsWhenReceiptNotAwaitingDeviceFetch() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        assertThrows(ReceiptNotEditableException.class, () -> receiptService.submitDeviceContent(
+                user, receipt.getId(), new DeviceContentRequest(null, true)));
+        verify(receiptIngestionService, never()).ingestPrefetched(any(), any(), any());
     }
 
     @Test
