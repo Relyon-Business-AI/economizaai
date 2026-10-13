@@ -16,6 +16,17 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-13 — Endpoint de teste de alerta admin + confirmação WhatsApp em pt
+
+- Novo `POST /api/v1/admin/alerts/test` (ADMIN) — dispara um alerta operacional
+  de teste pelos mesmos canais da produção (e-mail sempre + WhatsApp template
+  quando configurado/aprovado). Resposta `200 { triggered, at, note }`. Serve pra
+  validar os canais sob demanda sem esperar um evento real (ex.: saldo baixo no
+  Infosimples).
+- Fix: a confirmação de opt-in do WhatsApp agora renderiza no **locale do
+  usuário** (pt por padrão). O webhook do Twilio não carrega `Accept-Language`,
+  então a mensagem caía no default do JVM (inglês); agora segue `User.locale`.
+
 ## 2026-10-13 — Admin SUPPORTED override agora move o comerciante pra "mercado"
 
 - A lente **Mercado/Outras** (e o gasto por escopo em `/insights/*`) passou a
