@@ -20,6 +20,7 @@ import java.time.LocalDateTime;
 import java.time.Month;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
@@ -193,5 +194,27 @@ class ReceiptItemRepositoryTest {
         assertEquals(2, history.size());
         assertEquals("JANUARY BUY", history.get(0).getRawDescription(), "oldest first");
         assertEquals("FEBRUARY BUY", history.get(1).getRawDescription());
+    }
+
+    // ---------------------------------------------------------- findByIdWithReceiptAndHousehold
+
+    @Test
+    void findByIdWithReceiptAndHousehold_initializesReceiptAndHouseholdForOutOfSessionAccess() {
+        var receipt = emptyReceipt(ReceiptStatus.PENDING_CONFIRMATION, LocalDateTime.of(2026, Month.MAY, 1, 12, 0));
+        receipt.addItem(item(1, "CAFE PILAO 500G", null, null, false));
+        receiptRepository.save(receipt);
+        var itemId = receipt.getItems().get(0).getId();
+        entityManager.flush();
+        entityManager.clear(); // detach everything so a plain findById would hand back lazy proxies
+
+        var loaded = receiptItemRepository.findByIdWithReceiptAndHousehold(itemId).orElseThrow();
+        entityManager.clear(); // sever the session — the ownership traversal below must still work
+
+        // This is exactly the AiItemCorrectionService.correct() ownership check that threw
+        // LazyInitializationException in prod (receipt proxy's household accessed with no session).
+        assertDoesNotThrow(() -> {
+            assertEquals(receipt.getId(), loaded.getReceipt().getId());
+            assertEquals(householdId, loaded.getReceipt().getHousehold().getId());
+        });
     }
 }

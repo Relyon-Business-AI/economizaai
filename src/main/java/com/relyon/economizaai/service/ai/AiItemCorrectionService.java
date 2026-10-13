@@ -66,8 +66,10 @@ public class AiItemCorrectionService {
             throw new IllegalStateException("IA não disponível no momento");
         }
 
-        // Validate ownership without opening a long transaction — plain repository call.
-        var item = receiptItemRepository.findById(itemId).orElse(null);
+        // Validate ownership without opening a long transaction — a single fetch-join
+        // read that loads receipt + household up front, so the proxy traversal below
+        // doesn't hit a closed session (LazyInitializationException).
+        var item = receiptItemRepository.findByIdWithReceiptAndHousehold(itemId).orElse(null);
         if (item == null
                 || !item.getReceipt().getId().equals(receiptId)
                 || !item.getReceipt().getHousehold().getId().equals(householdId)) {
