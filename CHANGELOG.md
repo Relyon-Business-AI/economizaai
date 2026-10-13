@@ -16,6 +16,13 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-13 — Fix: correção de item por IA não dá mais 500
+
+- **`POST /receipts/{id}/items/{itemId}/correct`** estava retornando **500**
+  (`LazyInitializationException`) em algumas notas — a validação de posse acessava
+  dados da nota fora da sessão do banco. Corrigido; o endpoint volta a corrigir o
+  item normalmente. Sem mudança de contrato.
+
 ## 2026-10-12 — Device-fetch: resolução imediata quando o app não consegue buscar
 
 - **`POST /receipts/{id}/device-content`** ganhou o campo **`unavailable: boolean`** e
