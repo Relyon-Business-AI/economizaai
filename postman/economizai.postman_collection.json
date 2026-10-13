@@ -236,6 +236,31 @@
 						"description": "Remote config the mobile ForceUpdateGate fetches on launch. Public (no auth), Cache-Control max-age=60. Shape mirrors the legacy gist JSON: minVersion (always present; 0.0.0 = gate NO-OP), androidUrl/iosUrl/message (omitted when unset). Values come from APP_CONFIG_* env vars. Rate-limited 60/min per IP."
 					},
 					"response": []
+				},
+				{
+					"name": "Report chart PNG (token-gated, Twilio MediaUrl)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/public/report-charts/{{chartToken}}.png",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"public",
+								"report-charts",
+								"{{chartToken}}.png"
+							]
+						},
+						"auth": {
+							"type": "noauth"
+						},
+						"description": "Pizza de gastos por categoria (últimos 7 dias) de UM usuário, em PNG. Público (sem auth) porque o Twilio busca como MediaUrl sem credenciais — mas gated por token HMAC curto (expira ~15 min), mintado pelo backend ao responder no WhatsApp. NÃO é chamável manualmente sem um token válido (404 sem token/expirado/sem dados). Regenerado a cada fetch (sem storage)."
+					},
+					"response": []
 				}
 			]
 		},

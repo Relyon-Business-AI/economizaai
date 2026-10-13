@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.Locale;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
@@ -37,22 +38,28 @@ public class WhatsAppOptInService {
     private final UserRepository userRepository;
     private final TwilioMessageClient twilioClient;
     private final WhatsAppReportService reportService;
+    private final ReportChartTokenService chartTokenService;
     private final LocalizedMessageService messageService;
     private final TransactionTemplate transactionTemplate;
     private final String fromWhatsAppDigits;
+    private final String publicBaseUrl;
 
     public WhatsAppOptInService(UserRepository userRepository,
                                 TwilioMessageClient twilioClient,
                                 WhatsAppReportService reportService,
+                                ReportChartTokenService chartTokenService,
                                 LocalizedMessageService messageService,
                                 TransactionTemplate transactionTemplate,
-                                @Value("${economizaai.notifications.twilio.from-whatsapp:}") String fromWhatsApp) {
+                                @Value("${economizaai.notifications.twilio.from-whatsapp:}") String fromWhatsApp,
+                                @Value("${economizaai.public-base-url:https://api.economizaai.app}") String publicBaseUrl) {
         this.userRepository = userRepository;
         this.twilioClient = twilioClient;
         this.reportService = reportService;
+        this.chartTokenService = chartTokenService;
         this.messageService = messageService;
         this.transactionTemplate = transactionTemplate;
         this.fromWhatsAppDigits = fromWhatsApp == null ? "" : fromWhatsApp.replaceAll("\\D", "");
+        this.publicBaseUrl = publicBaseUrl == null ? "" : publicBaseUrl.replaceAll("/+$", "");
     }
 
     /** Current opt-in status + the deep-links the FE renders (generates the token on first read). */
@@ -106,9 +113,12 @@ public class WhatsAppOptInService {
         }
     }
 
+    /** The reply body plus the user whose chart to attach (null = no chart, text-only). */
+    private record PreparedReply(String body, UUID chartUserId) {}
+
     /** Runs inside the tx: resolves the user by token, applies opt-in state, and builds the reply
-     *  text (DB reads). Returns the reply body, or null when no user matches the token. */
-    private String prepareReply(String action, String token, String fromE164) {
+     *  (DB reads). Returns the prepared reply, or null when no user matches the token. */
+    private PreparedReply prepareReply(String action, String token, String fromE164) {
         var user = userRepository.findByWhatsAppLinkToken(token).orElse(null);
         if (user == null) {
             log.info("whatsapp.inbound.unmatched_token from={}", maskNumber(fromE164));
@@ -121,14 +131,17 @@ public class WhatsAppOptInService {
             user.setWhatsAppWeeklyReportEnabled(true);
             userRepository.save(user);
             log.info("whatsapp.optin.confirmed user={} from={}", abbrev(user), maskNumber(fromE164));
-            return messageService.translate("whatsapp.optin.confirmed", localeOf(user)) + "\n\n" + reportService.buildWeeklyReportText(user);
+            var report = reportService.buildWeeklyReport(user);
+            var body = messageService.translate("whatsapp.optin.confirmed", localeOf(user)) + "\n\n" + report.text();
+            return new PreparedReply(body, report.hasCategoryData() ? user.getId() : null);
         }
         if (user.getWhatsAppNumber() == null) {
             user.setWhatsAppNumber(fromE164);
             userRepository.save(user);
         }
         log.info("whatsapp.report.pull user={} from={}", abbrev(user), maskNumber(fromE164));
-        return reportService.buildWeeklyReportText(user);
+        var report = reportService.buildWeeklyReport(user);
+        return new PreparedReply(report.text(), report.hasCategoryData() ? user.getId() : null);
     }
 
     private Locale localeOf(User user) {
@@ -141,12 +154,20 @@ public class WhatsAppOptInService {
         return "https://wa.me/" + fromWhatsAppDigits + "?text=" + text;
     }
 
-    private void reply(String toE164, String body) {
+    /** Sends the reply OUTSIDE the tx. When the report has category data, attaches the pie chart as
+     *  an image + caption in ONE message (same cost as text) via a short-lived public chart URL. */
+    private void reply(String toE164, PreparedReply prepared) {
         try {
-            twilioClient.sendWhatsApp(toE164, body);
+            var mediaUrl = prepared.chartUserId() == null ? null : chartUrl(prepared.chartUserId());
+            twilioClient.sendWhatsApp(toE164, prepared.body(), mediaUrl);
         } catch (RuntimeException sendFailure) {
             log.warn("whatsapp.inbound.reply_failed to={} reason={}", maskNumber(toE164), sendFailure.getClass().getSimpleName());
         }
+    }
+
+    /** Public, token-gated URL Twilio fetches for the category pie (regenerated on fetch). */
+    private String chartUrl(UUID userId) {
+        return publicBaseUrl + "/api/v1/public/report-charts/" + chartTokenService.mint(userId) + ".png";
     }
 
     private static String generateToken() {

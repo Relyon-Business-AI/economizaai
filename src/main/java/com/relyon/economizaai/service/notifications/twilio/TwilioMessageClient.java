@@ -76,6 +76,25 @@ public class TwilioMessageClient {
     }
 
     /**
+     * Sends a WhatsApp message with an image + caption in ONE message ({@code mediaUrl} must be
+     * a publicly-fetchable URL — Twilio fetches it with no credentials). A single media+caption
+     * message costs the same as a single text message. When {@code mediaUrl} is blank this
+     * degrades to a plain text send.
+     */
+    public void sendWhatsApp(String toE164, String body, String mediaUrl) {
+        if (isBlank(mediaUrl)) {
+            sendWhatsApp(toE164, body);
+            return;
+        }
+        try {
+            postMedia(WHATSAPP_PREFIX + fromWhatsApp, WHATSAPP_PREFIX + toE164, body, mediaUrl);
+        } catch (Exception ex) {
+            throw new TwilioMessageException(
+                    "Twilio WhatsApp media send failed: " + ex.getClass().getSimpleName() + ": " + ex.getMessage(), ex);
+        }
+    }
+
+    /**
      * Sends a WhatsApp TEMPLATE message via the Content API — required for proactive
      * (business-initiated) messages, which freeform {@link #sendWhatsApp} can't do
      * outside a 24h customer-service window. {@code contentVariablesJson} maps the
@@ -121,6 +140,24 @@ public class TwilioMessageClient {
         form.add("From", from);
         form.add("To", to);
         form.add("Body", body);
+        restClient.post()
+                .uri(API_BASE + accountSid + "/Messages.json")
+                .header("Authorization", basicAuthHeader())
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body((MultiValueMap<String, String>) form)
+                .retrieve()
+                .toBodilessEntity();
+    }
+
+    /** Raw media POST — isolated as a seam so callers/tests can stub the HTTP exchange. */
+    protected void postMedia(String from, String to, String body, String mediaUrl) {
+        var form = new LinkedMultiValueMap<String, String>();
+        form.add("From", from);
+        form.add("To", to);
+        if (body != null && !body.isBlank()) {
+            form.add("Body", body);
+        }
+        form.add("MediaUrl", mediaUrl);
         restClient.post()
                 .uri(API_BASE + accountSid + "/Messages.json")
                 .header("Authorization", basicAuthHeader())

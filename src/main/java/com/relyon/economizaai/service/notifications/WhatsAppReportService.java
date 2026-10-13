@@ -28,16 +28,26 @@ public class WhatsAppReportService {
     private final PurchaseReportAssembler reportAssembler;
     private final LocalizedMessageService messageService;
 
+    /** A weekly report body plus whether it has category data worth charting. */
+    public record WeeklyReport(String text, boolean hasCategoryData) {}
+
     @Transactional(readOnly = true)
     public String buildWeeklyReportText(User user) {
+        return buildWeeklyReport(user).text();
+    }
+
+    @Transactional(readOnly = true)
+    public WeeklyReport buildWeeklyReport(User user) {
         var to = BrazilClock.nowDateTime();
         var from = to.minusDays(7);
         var data = reportAssembler.assemble(user, from, to);
         var kpis = data.kpis();
 
         if (kpis.receiptCount() == 0) {
-            return "📊 *Seu resumo economizai* (" + from.format(DAY_MONTH) + " a " + to.format(DAY_MONTH) + ")\n\n"
-                    + "Nenhuma compra registrada essa semana. Escaneie suas notas pra acompanhar seus gastos! 🛒";
+            return new WeeklyReport("📊 *Seu resumo economizai* (" + from.format(DAY_MONTH)
+                    + " a " + to.format(DAY_MONTH) + ")\n\n"
+                    + "Nenhuma compra registrada essa semana. Escaneie suas notas pra acompanhar seus gastos! 🛒",
+                    false);
         }
 
         var text = new StringBuilder();
@@ -63,7 +73,7 @@ public class WhatsAppReportService {
                             .append(": ").append(money(market.total())).append("\n"));
         }
 
-        return text.toString().trim();
+        return new WeeklyReport(text.toString().trim(), !categories.isEmpty());
     }
 
     /**

@@ -16,6 +16,18 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-13 — Gráfico de pizza no relatório do WhatsApp
+
+- O relatório do WhatsApp (resposta a `CONFIRMAR`/`RELATORIO`) agora vem com uma
+  **imagem de pizza de gastos por categoria** + a legenda de texto, numa única
+  mensagem. Custo **zero** a mais (mídia+legenda = 1 msg, dentro da janela de
+  serviço gratuita). Só anexa quando há dados de categoria; sem dados, cai no
+  texto puro.
+- Novo endpoint público `GET /api/v1/public/report-charts/{token}.png` — serve o
+  PNG do gráfico sem auth (o Twilio busca como MediaUrl), gated por **token HMAC
+  curto** (expira ~15 min, mintado pelo backend). Não é chamável manualmente.
+  Regenerado a cada fetch (sem storage). Nada muda pro FE do app.
+
 ## 2026-10-13 — Endpoint de teste de alerta admin + confirmação WhatsApp em pt
 
 - Novo `POST /api/v1/admin/alerts/test` (ADMIN) — dispara um alerta operacional
