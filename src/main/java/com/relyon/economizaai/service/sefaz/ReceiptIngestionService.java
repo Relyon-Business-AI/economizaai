@@ -198,6 +198,19 @@ public class ReceiptIngestionService {
     }
 
     /**
+     * Last chain layer for a device-fetch that never resolved: the app couldn't fetch the nota
+     * on-device within the timeout (complex portal, or the app was closed), so the sweeper re-queued
+     * this row to try the paid by-chave fallback before giving up — "continue the fallbacks until one
+     * resolves or it fails for good". Server-side, so it needs no client; a success is index-eligible.
+     * Only the generic-device-fetch sweeper dispatches this (gated there on the flag).
+     */
+    @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
+    public void ingestInfosimplesOnly(UUID receiptId, String chave) {
+        ingestResolved(receiptId, receipt -> sefazIngestionService.fetchViaInfosimplesFallback(
+                chave, receipt.getUf(), receipt.getUser().getId()), false, null);
+    }
+
+    /**
      * Ingest a user-uploaded NFe XML (e-commerce import). The XML is self-contained, so this
      * parses the provided content directly ({@link SefazIngestionService#fromXml}) — no fetch —
      * through the same persist pipeline (EAN warm-up, merchant gate, parse-failure handling).
