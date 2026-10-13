@@ -267,10 +267,24 @@ public class SvrsSharedPortalAdapter implements SefazAdapter {
         return fallbackPortalFor(trimmed) + "?p=" + trimmed;
     }
 
-    /** Portal that serves bare-chave consults for the payload's UF. */
+    /**
+     * Portal that serves a non-URL (pipe) payload's consult, by UF. Only states
+     * whose portal we've actually verified are reconstructed here: RS (+ states
+     * that delegate to the SVRS portal) and PR. SP renders the SAME responsive
+     * DANFE but on its OWN host (www.nfce.fazenda.sp.gov.br), NOT the SVRS portal
+     * — routing an SP payload to the SVRS RS portal (the old {@code != PR} default)
+     * silently hit the wrong portal. Since we don't have a fixture-verified SP
+     * reconstruction URL, a non-URL SP payload signals a rescuable fetch failure
+     * so the ingestion chain uses the Infosimples by-chave fallback instead of a
+     * doomed scrape. A real scanned SP QR carries the full URL and never reaches here.
+     */
     private String fallbackPortalFor(String chavePayload) {
         var uf = ChaveAcessoParser.extractUf(ChaveAcessoParser.extractChave(chavePayload));
-        return uf == UnidadeFederativa.PR ? PR_PORTAL_URL : PORTAL_URL;
+        return switch (uf) {
+            case RS -> PORTAL_URL;
+            case PR -> PR_PORTAL_URL;
+            default -> throw new SefazFetchException(uf.name());
+        };
     }
 
     // Manual scheme/host extraction instead of URI.create: real NFC-e QR URLs
