@@ -25,15 +25,20 @@ import java.util.UUID;
 @Repository
 public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
 
-    // The household's CONFIRMED-receipt CNPJs that belong to an index-supported
-    // (grocery/pharmacy) segment. Used to partition every aggregation below.
+    // The household's CONFIRMED-receipt CNPJs that count as "mercado/farmácia".
+    // Mirrors MerchantSupportGate.statusOf: an admin SUPPORTED override wins over
+    // the CNAE segment (promotes a merchant stuck UNKNOWN because its CNAE lookup
+    // never resolved), a BLOCKED override excludes it even with a grocery segment,
+    // and otherwise it falls back to the segment. Used to partition every
+    // aggregation below.
     @Query("""
         SELECT DISTINCT r.cnpjEmitente
         FROM Receipt r
         JOIN MarketLocation ml ON ml.cnpj = r.cnpjEmitente
         WHERE r.household.id = :householdId
           AND r.status = 'CONFIRMED'
-          AND ml.segment IN :segments
+          AND (ml.supportOverride = 'SUPPORTED'
+               OR (ml.supportOverride IS NULL AND ml.segment IN :segments))
     """)
     List<String> supportedCnpjs(@Param("householdId") UUID householdId,
                                 @Param("segments") Collection<MerchantSegment> segments);

@@ -7,6 +7,7 @@ import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.MerchantSegment;
+import com.relyon.economizaai.model.enums.MerchantSupportOverride;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
@@ -194,6 +195,31 @@ class InsightsRepositoryTest {
         var rows = insightsRepository.spendByMarket(household.getId(), ALL_TIME_FROM, ALL_TIME_TO, OTHER, supported());
         assertEquals(1, rows.size());
         assertEquals(CNPJ_OTHER, rows.get(0)[0]);
+    }
+
+    @Test
+    void supportedCnpjs_includesAdminSupportedOverride_evenWhenSegmentNotGrocery() {
+        // A merchant stuck UNKNOWN/OTHER (CNAE lookup never resolved) that an admin
+        // marks SUPPORTED must count as mercado despite its segment.
+        overrideSupport(CNPJ_OTHER, MerchantSupportOverride.SUPPORTED);
+        var supported = supported();
+        assertEquals(2, supported.size());
+        assertTrue(supported.contains(CNPJ_SUPERMARKET));
+        assertTrue(supported.contains(CNPJ_OTHER));
+    }
+
+    @Test
+    void supportedCnpjs_excludesAdminBlockedOverride_evenWhenGrocerySegment() {
+        // A BLOCKED override wins over a grocery segment — the merchant leaves mercado.
+        overrideSupport(CNPJ_SUPERMARKET, MerchantSupportOverride.BLOCKED);
+        var supported = supported();
+        assertTrue(supported.isEmpty());
+    }
+
+    private void overrideSupport(String cnpj, MerchantSupportOverride override) {
+        var market = marketLocationRepository.findByCnpj(cnpj).orElseThrow();
+        market.setSupportOverride(override);
+        marketLocationRepository.saveAndFlush(market);
     }
 
     // ---------- edge cases ----------
