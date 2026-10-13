@@ -20,6 +20,7 @@ import com.relyon.economizaai.dto.request.UpdateSubscriptionTierRequest;
 import com.relyon.economizaai.dto.request.UpdateUserRoleRequest;
 import com.relyon.economizaai.dto.response.MerchantAccessResponse;
 import com.relyon.economizaai.dto.response.AcquisitionReportResponse;
+import com.relyon.economizaai.dto.response.AdminAlertsConfigResponse;
 import com.relyon.economizaai.dto.response.AdminNotificationSummaryResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptDetailResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptStatsResponse;
@@ -171,6 +172,12 @@ public class AdminController {
      * (e-mail always + WhatsApp template when configured/approved). Lets an admin verify
      * both channels on demand without waiting for a genuine low-balance event.
      */
+    @Operation(summary = "Config dos canais de alerta admin (e-mail + WhatsApp) + status do template")
+    @GetMapping("/alerts/config")
+    public ResponseEntity<AdminAlertsConfigResponse> alertsConfig() {
+        return ResponseEntity.ok(operationalAlertService.config());
+    }
+
     @Operation(summary = "Dispara um alerta de teste pros canais de admin (e-mail + WhatsApp)")
     @PostMapping("/alerts/test")
     public ResponseEntity<Map<String, Object>> sendTestAlert() {

@@ -16030,6 +16030,33 @@
 					"response": []
 				},
 				{
+					"name": "Alert channels config (admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/alerts/config",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"alerts",
+								"config"
+							]
+						},
+						"description": "Estado dos canais de alerta operacional: { emailActive, whatsAppEnabled, adminPhoneCount, adminTemplateConfigured, twilioWhatsAppConfigured, templateStatus }. O templateStatus é consultado AO VIVO no Twilio (approved/pending/rejected/unknown/unset) — mostra se o canal WhatsApp já pode ser testado. ADMIN only."
+					},
+					"response": []
+				},
+				{
 					"name": "Send test admin alert (admin)",
 					"request": {
 						"method": "POST",

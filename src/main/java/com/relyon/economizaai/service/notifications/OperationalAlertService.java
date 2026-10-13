@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.notifications;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.relyon.economizaai.dto.response.AdminAlertsConfigResponse;
 import com.relyon.economizaai.service.ContactService;
 import com.relyon.economizaai.service.notifications.twilio.TwilioMessageClient;
 import lombok.extern.slf4j.Slf4j;
@@ -59,6 +60,24 @@ public class OperationalAlertService {
     public void alertAdmin(String subject, String body) {
         sendEmail(subject, body);
         sendWhatsApp(subject);
+    }
+
+    /**
+     * Current state of the alert channels for the admin screen. Queries Twilio live for the
+     * template's Meta-approval status (so the admin knows if the WhatsApp channel is ready).
+     */
+    public AdminAlertsConfigResponse config() {
+        var templateConfigured = !isBlank(whatsAppTemplateSid);
+        var templateStatus = templateConfigured
+                ? twilioClient.fetchWhatsAppTemplateStatus(whatsAppTemplateSid)
+                : "unset";
+        return new AdminAlertsConfigResponse(
+                true,
+                whatsAppEnabled,
+                adminPhoneNumbers.size(),
+                templateConfigured,
+                twilioClient.isConfigured(true),
+                templateStatus);
     }
 
     private void sendEmail(String subject, String body) {

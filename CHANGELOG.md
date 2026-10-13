@@ -23,6 +23,11 @@ says `economizai-app-prod`):
   quando configurado/aprovado). Resposta `200 { triggered, at, note }`. Serve pra
   validar os canais sob demanda sem esperar um evento real (ex.: saldo baixo no
   Infosimples).
+- Novo `GET /api/v1/admin/alerts/config` (ADMIN) — estado dos canais:
+  `{ emailActive, whatsAppEnabled, adminPhoneCount, adminTemplateConfigured,
+  twilioWhatsAppConfigured, templateStatus }`. O `templateStatus` é consultado
+  ao vivo no Twilio (`approved`/`pending`/`rejected`/`unknown`/`unset`) — diz se
+  o canal WhatsApp já está pronto pra testar. Alimenta a tela admin "Alertas".
 - Fix: a confirmação de opt-in do WhatsApp agora renderiza no **locale do
   usuário** (pt por padrão). O webhook do Twilio não carrega `Accept-Language`,
   então a mensagem caía no default do JVM (inglês); agora segue `User.locale`.

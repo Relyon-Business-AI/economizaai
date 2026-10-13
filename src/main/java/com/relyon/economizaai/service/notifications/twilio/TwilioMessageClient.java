@@ -11,6 +11,7 @@ import org.springframework.web.client.RestClient;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.Map;
 
 /**
  * Thin wrapper over the Twilio REST Messages API — does BOTH SMS and WhatsApp
@@ -29,6 +30,7 @@ import java.util.Base64;
 public class TwilioMessageClient {
 
     private static final String API_BASE = "https://api.twilio.com/2010-04-01/Accounts/";
+    private static final String CONTENT_BASE = "https://content.twilio.com/v1/Content/";
     private static final String WHATSAPP_PREFIX = "whatsapp:";
     private static final int CONNECT_TIMEOUT_MS = 5000;
     private static final int READ_TIMEOUT_MS = 10000;
@@ -85,6 +87,31 @@ public class TwilioMessageClient {
         } catch (Exception ex) {
             throw new TwilioMessageException(
                     "Twilio WhatsApp template send failed: " + ex.getClass().getSimpleName() + ": " + ex.getMessage(), ex);
+        }
+    }
+
+    /**
+     * Fetches the WhatsApp approval status of a Content template (Twilio Content API).
+     * Returns the raw status string ({@code approved}, {@code pending}, {@code received},
+     * {@code rejected}, …), or {@code unknown} when the lookup can't be made (unconfigured,
+     * blank sid, HTTP/parse error). Never throws — this is a status probe, not a critical path.
+     */
+    public String fetchWhatsAppTemplateStatus(String contentSid) {
+        if (isBlank(accountSid) || isBlank(authToken) || isBlank(contentSid)) return "unknown";
+        try {
+            var response = restClient.get()
+                    .uri(CONTENT_BASE + contentSid + "/ApprovalRequests")
+                    .header("Authorization", basicAuthHeader())
+                    .retrieve()
+                    .body(Map.class);
+            if (response != null && response.get("whatsapp") instanceof Map<?, ?> whatsapp) {
+                var status = whatsapp.get("status");
+                if (status != null) return status.toString();
+            }
+            return "unknown";
+        } catch (Exception ex) {
+            log.warn("twilio.template_status_failed sid={} reason={}", contentSid, ex.getClass().getSimpleName());
+            return "unknown";
         }
     }
 

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -66,6 +67,33 @@ class OperationalAlertServiceTest {
 
         verify(contactService).notifyAdmin("algo", "corpo");
         verify(twilioClient, never()).sendWhatsAppTemplate(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void config_reportsChannelsAndLiveTemplateStatus() {
+        when(twilioClient.isConfigured(true)).thenReturn(true);
+        when(twilioClient.fetchWhatsAppTemplateStatus("HX123")).thenReturn("approved");
+        var alerts = service("+5551999999999,+5551888888888", "HX123", true);
+
+        var config = alerts.config();
+
+        assertEquals(true, config.emailActive());
+        assertEquals(true, config.whatsAppEnabled());
+        assertEquals(2, config.adminPhoneCount());
+        assertEquals(true, config.adminTemplateConfigured());
+        assertEquals(true, config.twilioWhatsAppConfigured());
+        assertEquals("approved", config.templateStatus());
+    }
+
+    @Test
+    void config_templateUnsetSkipsTwilioLookupAndReportsUnset() {
+        var alerts = service("+5551999999999", "", true);
+
+        var config = alerts.config();
+
+        assertEquals(false, config.adminTemplateConfigured());
+        assertEquals("unset", config.templateStatus());
+        verify(twilioClient, never()).fetchWhatsAppTemplateStatus(anyString());
     }
 
     @Test

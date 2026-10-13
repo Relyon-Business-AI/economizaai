@@ -34,6 +34,15 @@ class TwilioMessageTemplateTest {
     }
 
     @Test
+    void fetchWhatsAppTemplateStatus_unknownWhenUnconfiguredOrBlankSid() {
+        var unconfigured = new TwilioMessageClient(RestClient.builder(), "", "", "", "");
+        assertEquals("unknown", unconfigured.fetchWhatsAppTemplateStatus("HX123"));
+
+        var configured = new TwilioMessageClient(RestClient.builder(), "AC123", "token", "", "+14063448189");
+        assertEquals("unknown", configured.fetchWhatsAppTemplateStatus(""));
+    }
+
+    @Test
     void isConfigured_trueForWhatsAppWhenCredsAndFromSet() {
         var client = new TwilioMessageClient(RestClient.builder(), "AC123", "token", "", "+14063448189");
         assertEquals(true, client.isConfigured(true));
