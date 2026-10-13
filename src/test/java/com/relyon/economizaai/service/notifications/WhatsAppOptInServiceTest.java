@@ -1,0 +1,129 @@
+package com.relyon.economizaai.service.notifications;
+
+import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.repository.UserRepository;
+import com.relyon.economizaai.service.LocalizedMessageService;
+import com.relyon.economizaai.service.notifications.twilio.TwilioMessageClient;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+class WhatsAppOptInServiceTest {
+
+    private final UserRepository userRepository = mock(UserRepository.class);
+    private final TwilioMessageClient twilioClient = mock(TwilioMessageClient.class);
+    private final WhatsAppReportService reportService = mock(WhatsAppReportService.class);
+    private final LocalizedMessageService messageService = mock(LocalizedMessageService.class);
+    private final TransactionTemplate transactionTemplate = mock(TransactionTemplate.class);
+
+    private WhatsAppOptInService service;
+
+    @BeforeEach
+    void setUp() {
+        // run the tx callback inline so handleInbound's DB work executes in unit tests
+        when(transactionTemplate.execute(any())).thenAnswer(invocation ->
+                invocation.getArgument(0, TransactionCallback.class).doInTransaction(null));
+        service = new WhatsAppOptInService(userRepository, twilioClient, reportService,
+                messageService, transactionTemplate, "whatsapp:+14063448189");
+    }
+
+    private User userWithToken(String token) {
+        return User.builder().email("u@economizaai.app").whatsAppLinkToken(token).build();
+    }
+
+    @Test
+    void handleInbound_confirmar_linksNumberOptsInAndReplies() {
+        var user = userWithToken("tok123");
+        when(userRepository.findByWhatsAppLinkToken("tok123")).thenReturn(Optional.of(user));
+        when(reportService.buildWeeklyReportText(user)).thenReturn("SEU RESUMO");
+        when(messageService.translate("whatsapp.optin.confirmed")).thenReturn("Vinculado!");
+
+        service.handleInbound("+5551997513229", "CONFIRMAR-tok123");
+
+        assertTrue(user.isWhatsAppOptIn());
+        assertTrue(user.isWhatsAppWeeklyReportEnabled());
+        assertEquals("+5551997513229", user.getWhatsAppNumber());
+        assertNotNull(user.getWhatsAppOptInAt());
+        verify(userRepository).save(user);
+        verify(twilioClient).sendWhatsApp(eq("+5551997513229"), contains("SEU RESUMO"));
+    }
+
+    @Test
+    void handleInbound_relatorio_repliesWithoutOptingIn() {
+        var user = userWithToken("tok123");
+        when(userRepository.findByWhatsAppLinkToken("tok123")).thenReturn(Optional.of(user));
+        when(reportService.buildWeeklyReportText(user)).thenReturn("SEU RESUMO");
+
+        service.handleInbound("+5551997513229", "RELATORIO-tok123");
+
+        assertFalse(user.isWhatsAppOptIn());
+        verify(twilioClient).sendWhatsApp(eq("+5551997513229"), contains("SEU RESUMO"));
+    }
+
+    @Test
+    void handleInbound_unknownToken_isNoOp() {
+        when(userRepository.findByWhatsAppLinkToken("nope")).thenReturn(Optional.empty());
+
+        service.handleInbound("+5551997513229", "CONFIRMAR-nope");
+
+        verify(userRepository, never()).save(any());
+        verify(twilioClient, never()).sendWhatsApp(anyString(), anyString());
+    }
+
+    @Test
+    void handleInbound_unparseableBody_neverLooksUpToken() {
+        service.handleInbound("+5551997513229", "oi tudo bem?");
+
+        verify(userRepository, never()).findByWhatsAppLinkToken(anyString());
+        verify(twilioClient, never()).sendWhatsApp(anyString(), anyString());
+    }
+
+    @Test
+    void handleInbound_swallowsSendFailure() {
+        var user = userWithToken("tok123");
+        when(userRepository.findByWhatsAppLinkToken("tok123")).thenReturn(Optional.of(user));
+        when(reportService.buildWeeklyReportText(user)).thenReturn("SEU RESUMO");
+        when(messageService.translate("whatsapp.optin.confirmed")).thenReturn("Vinculado!");
+        doThrow(new RuntimeException("twilio 500")).when(twilioClient).sendWhatsApp(anyString(), anyString());
+
+        // the inbound handler must never throw (webhook has to return 200)
+        assertDoesNotThrow(() -> service.handleInbound("+5551997513229", "CONFIRMAR-tok123"));
+        assertTrue(user.isWhatsAppOptIn()); // state still persisted even though the reply failed
+    }
+
+    @Test
+    void ensureLinkToken_isIdempotent() {
+        var existing = userWithToken("already");
+        assertEquals("already", service.ensureLinkToken(existing));
+        verify(userRepository, never()).save(existing);
+
+        var fresh = userWithToken(null);
+        var generated = service.ensureLinkToken(fresh);
+        assertNotNull(generated);
+        assertEquals(generated, fresh.getWhatsAppLinkToken());
+        assertEquals(generated, service.ensureLinkToken(fresh), "second call returns the same token");
+    }
+
+    @Test
+    void waMeLink_buildsDeepLinkWithDigitsAndEncodedText() {
+        assertEquals("https://wa.me/14063448189?text=CONFIRMAR-abc", service.waMeLink("CONFIRMAR", "abc"));
+    }
+}

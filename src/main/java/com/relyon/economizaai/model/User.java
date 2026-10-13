@@ -180,6 +180,29 @@ public class User extends BaseEntity implements UserDetails {
     @Builder.Default
     private boolean phoneVerified = false;
 
+    // WhatsApp opt-in (reverse flow): the user sends "CONFIRMAR-<token>" to our WhatsApp,
+    // the inbound webhook links the sender number here and flips the opt-in on. Independent
+    // of phoneNumber (that's the SMS/OTP number) — WhatsApp is its own consented channel.
+    @Column(name = "whatsapp_number", length = 20)
+    private String whatsAppNumber;
+
+    @Column(name = "whatsapp_opt_in", nullable = false)
+    @Builder.Default
+    private boolean whatsAppOptIn = false;
+
+    @Column(name = "whatsapp_opt_in_at")
+    private LocalDateTime whatsAppOptInAt;
+
+    // Random token embedded in the wa.me deep-link ("CONFIRMAR-<token>" / "RELATORIO-<token>")
+    // so the inbound webhook can map the message back to this user.
+    @Column(name = "whatsapp_link_token", length = 64)
+    private String whatsAppLinkToken;
+
+    // User toggle for the weekly spending report on WhatsApp (requires whatsAppOptIn).
+    @Column(name = "whatsapp_weekly_report_enabled", nullable = false)
+    @Builder.Default
+    private boolean whatsAppWeeklyReportEnabled = false;
+
     // Platform used when the account was first created (immutable once set).
     @Enumerated(EnumType.STRING)
     @Column(name = "registration_platform", length = 10)

@@ -45,6 +45,20 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     """)
     List<User> findDigestCandidates(DigestFrequency off);
 
+    /** Resolves the user behind a WhatsApp opt-in deep-link token (from "CONFIRMAR-<token>"). */
+    Optional<User> findByWhatsAppLinkToken(String whatsAppLinkToken);
+
+    /** Active users who linked their WhatsApp AND left the weekly report on — the proactive send list. */
+    @Query("""
+        SELECT user FROM User user
+        JOIN FETCH user.household
+        WHERE user.active = true
+          AND user.whatsAppOptIn = true
+          AND user.whatsAppWeeklyReportEnabled = true
+          AND user.whatsAppNumber IS NOT NULL
+    """)
+    List<User> findWhatsAppWeeklyReportCandidates();
+
     // --- Acquisition analytics (admin dashboard) ---
     // `:includeInternal = false` (the dashboard default) excludes admins and test
     // accounts (@economizaai.app) so the numbers reflect real users only. The
