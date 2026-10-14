@@ -451,6 +451,12 @@ public class CanonicalizationService {
             product.setCategory(entry.getCategory());
             product.setCategorizationSource(CategorizationSource.DICTIONARY); // catalog is curated data
         }
+        // New taxonomy: the catalog's fine node (mapped from OFF tags) is more
+        // specific than the enum's group default, so set it directly — the
+        // fill-only listener then preserves it instead of mirroring the enum.
+        if (entry.getCategoryId() != null) {
+            product.setCategoryId(entry.getCategoryId());
+        }
         if (product.getGenericName() == null && entry.getGenericName() != null) {
             product.setGenericName(entry.getGenericName());
             product.setGenericNameNorm(DescriptionNormalizer.normalizeOrNull(entry.getGenericName()));

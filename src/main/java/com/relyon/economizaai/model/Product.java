@@ -2,10 +2,8 @@ package com.relyon.economizaai.model;
 
 import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
-import com.relyon.economizaai.model.listener.ProductCategoryNodeListener;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
@@ -21,7 +19,6 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "products")
-@EntityListeners(ProductCategoryNodeListener.class)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -58,9 +55,10 @@ public class Product extends BaseEntity {
     /**
      * New two-level taxonomy node (FK into {@code categories}), superseding
      * {@link #category} over the migration. Mapped as a bare id (not an
-     * association) so {@link ProductCategoryNodeListener} can keep it in sync
-     * from the enum on persist/update without touching Hibernate's flush graph.
-     * Readers prefer this with a fallback to the enum until Phase 2 completes.
+     * association) to keep it decoupled from the enum. Populated by: the V100
+     * backfill (existing rows, from the enum default), canonicalization when an
+     * EAN catalog hit carries a fine node, and a recategorization sweeper for the
+     * rest (Phase 2). Readers keep using the enum until that sweep completes.
      */
     @Column(name = "category_id")
     private UUID categoryId;
