@@ -1,10 +1,12 @@
 package com.relyon.economizaai.service.extraction;
 
+import com.relyon.economizaai.service.CategoryResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 class ZaffariExtractionDemo {
 
@@ -32,7 +34,7 @@ class ZaffariExtractionDemo {
     void setUp() {
         var brandExtractor = SeedFixtures.loadedBrandExtractor();
         var dictionaryClassifier = SeedFixtures.loadedDictionaryClassifier();
-        extractor = new ProductExtractor(brandExtractor, dictionaryClassifier);
+        extractor = new ProductExtractor(brandExtractor, dictionaryClassifier, mock(CategoryResolver.class));
     }
 
     @Test

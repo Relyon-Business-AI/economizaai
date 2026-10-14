@@ -1,22 +1,32 @@
 package com.relyon.economizaai.service.extraction;
 
+import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.service.CategoryResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class ProductExtractorTest {
 
     private ProductExtractor extractor;
+    private CategoryResolver categoryResolver;
 
     @BeforeEach
     void setUp() {
         var brandExtractor = SeedFixtures.loadedBrandExtractor();
         var dictionaryClassifier = SeedFixtures.loadedDictionaryClassifier();
-        extractor = new ProductExtractor(brandExtractor, dictionaryClassifier);
+        categoryResolver = mock(CategoryResolver.class);
+        extractor = new ProductExtractor(brandExtractor, dictionaryClassifier, categoryResolver);
     }
 
     @Test
@@ -57,5 +67,36 @@ class ProductExtractorTest {
         assertNull(e.packSize());
         assertNull(e.packUnit());
         assertNull(e.category());
+    }
+
+    @Test
+    void keywordFallbackFillsFineNode_onHighConfidenceWhenNoDictNode() {
+        var queijosNode = UUID.randomUUID();
+        when(categoryResolver.idForSlug("queijos")).thenReturn(queijosNode);
+        // seed dictionary carries no category_id → the HIGH keyword match fills the fine node.
+        var e = extractor.extract("QUEIJO MUSSARELA TIROLEZ 500G");
+        assertEquals(queijosNode, e.categoryId());
+    }
+
+    @Test
+    void keywordFallbackLeavesNodeNull_whenNoHighMatch() {
+        var e = extractor.extract("PRODUTO XYZ DESCONHECIDO");
+        assertNull(e.categoryId());
+        verify(categoryResolver, never()).idForSlug(any());
+    }
+
+    @Test
+    void keywordFallbackSkipped_whenDictionaryAlreadyGaveNode() {
+        var dictNode = UUID.randomUUID();
+        var dictionaryWithNode = mock(DictionaryClassifier.class);
+        when(dictionaryWithNode.classify(any())).thenReturn(new DictionaryClassifier.DictEntry(
+                "Queijo", null, ProductCategory.MEAT_DAIRY, dictNode, CategorizationSource.DICTIONARY));
+        var extractorWithNode = new ProductExtractor(
+                SeedFixtures.loadedBrandExtractor(), dictionaryWithNode, categoryResolver);
+
+        var e = extractorWithNode.extract("QUEIJO MUSSARELA 500G");
+
+        assertEquals(dictNode, e.categoryId());
+        verify(categoryResolver, never()).idForSlug(any()); // nó do dicionário não é sobrescrito
     }
 }

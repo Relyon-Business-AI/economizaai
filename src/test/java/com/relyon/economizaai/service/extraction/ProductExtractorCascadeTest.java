@@ -2,6 +2,7 @@ package com.relyon.economizaai.service.extraction;
 
 import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.extraction.DictionaryClassifier.DictEntry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,6 +32,9 @@ class ProductExtractorCascadeTest {
 
     @Mock
     private DictionaryClassifier dictionaryClassifier;
+
+    @Mock
+    private CategoryResolver categoryResolver;
 
     @InjectMocks
     private ProductExtractor extractor;
