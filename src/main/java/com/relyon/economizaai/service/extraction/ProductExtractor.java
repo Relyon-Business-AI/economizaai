@@ -2,6 +2,7 @@ package com.relyon.economizaai.service.extraction;
 
 import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.service.CategoryResolver;
+import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import com.relyon.economizaai.service.extraction.ProductNameLeafClassifier.Confidence;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,7 +42,10 @@ public class ProductExtractor {
         // Fase 4: sem nó do dicionário/catálogo, tenta o classificador de keyword (grátis,
         // determinístico). Só confia em HIGH; não sobrescreve um nó já resolvido.
         if (categoryId == null) {
-            var leaf = ProductNameLeafClassifier.classify(rawDescription);
+            // Normaliza igual ao recategorizador (que passa o nome normalizado) e ao
+            // dicionário: as regras de keyword casam por fronteira de palavra em tokens
+            // limpos, então a descrição crua (com pontuação) perderia matches.
+            var leaf = ProductNameLeafClassifier.classify(DescriptionNormalizer.normalize(rawDescription));
             if (leaf.confidence() == Confidence.HIGH) {
                 categoryId = categoryResolver.idForSlug(leaf.slug());
             }
