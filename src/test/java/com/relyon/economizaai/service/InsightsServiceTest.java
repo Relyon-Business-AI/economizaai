@@ -47,6 +47,7 @@ class InsightsServiceTest {
     @Mock private ProductRepository productRepository;
     @Mock private MarketNameService marketNameService;
     @Mock private HouseholdProductCategoryOverrideService categoryOverrideService;
+    @Mock private CategoryResolver categoryResolver;
     @Mock private SubscriptionGateService subscriptionGate;
     @Mock private HouseholdProductAliasService householdProductAliasService;
 
@@ -75,7 +76,7 @@ class InsightsServiceTest {
         lenient().when(insightsRepository.spendByMonth(householdId, fromBound, toBound, ALL_SCOPE, ALL_CNPJS)).thenReturn(List.of());
         lenient().when(insightsRepository.spendByWeek(householdId, fromBound, toBound, ALL_SCOPE, ALL_CNPJS)).thenReturn(List.of());
         lenient().when(insightsRepository.spendByMarket(householdId, fromBound, toBound, ALL_SCOPE, ALL_CNPJS)).thenReturn(List.of());
-        lenient().when(insightsRepository.spendByCategory(householdId, fromBound, toBound, ALL_SCOPE, ALL_CNPJS)).thenReturn(List.of());
+        lenient().when(insightsRepository.spendByProductNode(householdId, fromBound, toBound, ALL_SCOPE, ALL_CNPJS)).thenReturn(List.of());
     }
 
     @Test
@@ -92,8 +93,13 @@ class InsightsServiceTest {
                 .thenReturn(List.<Object[]>of(new Object[]{2026, 17, new BigDecimal("25.00"), 1L}));
         when(insightsRepository.spendByMarket(householdId, from, to, ALL_SCOPE, ALL_CNPJS))
                 .thenReturn(List.<Object[]>of(new Object[]{"12345678000190", "Zaffari", new BigDecimal("73.45"), 3L}));
-        when(insightsRepository.spendByCategory(householdId, from, to, ALL_SCOPE, ALL_CNPJS))
-                .thenReturn(List.<Object[]>of(new Object[]{ProductCategory.GROCERIES, new BigDecimal("40.00"), 7L}));
+        var productId = UUID.randomUUID();
+        var categoryId = UUID.randomUUID();
+        when(insightsRepository.spendByProductNode(householdId, from, to, ALL_SCOPE, ALL_CNPJS))
+                .thenReturn(List.<Object[]>of(new Object[]{productId, categoryId, new BigDecimal("40.00"), 7L}));
+        when(categoryOverrideService.effectiveCategoryByProduct(eq(householdId), any())).thenReturn(Map.of());
+        when(categoryResolver.slugForId(categoryId)).thenReturn("mercearia");
+        when(categoryResolver.labelFor(eq(categoryId), any())).thenReturn("Mercearia");
 
         var response = insightsService.spend(user, from, to);
 
@@ -120,7 +126,9 @@ class InsightsServiceTest {
         assertEquals(3L, marketBucket.receiptCount());
 
         var categoryBucket = response.byCategory().get(0);
-        assertEquals(ProductCategory.GROCERIES, categoryBucket.category());
+        assertNull(categoryBucket.category());
+        assertEquals("mercearia", categoryBucket.slug());
+        assertEquals("Mercearia", categoryBucket.label());
         assertEquals(new BigDecimal("40.00"), categoryBucket.total());
         assertEquals(7L, categoryBucket.itemCount());
     }
@@ -140,7 +148,7 @@ class InsightsServiceTest {
         verify(insightsRepository).spendByMonth(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS);
         verify(insightsRepository).spendByWeek(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS);
         verify(insightsRepository).spendByMarket(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS);
-        verify(insightsRepository).spendByCategory(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS);
+        verify(insightsRepository).spendByProductNode(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS);
     }
 
     @Test
@@ -151,8 +159,9 @@ class InsightsServiceTest {
         // double total + null category total exercise the toBigDecimal Number and null branches
         when(insightsRepository.spendByMonth(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS))
                 .thenReturn(List.<Object[]>of(new Object[]{2026, 3, 12.5d, 1L}));
-        when(insightsRepository.spendByCategory(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS))
-                .thenReturn(List.<Object[]>of(new Object[]{ProductCategory.OTHER, null, 4L}));
+        when(insightsRepository.spendByProductNode(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS))
+                .thenReturn(List.<Object[]>of(new Object[]{UUID.randomUUID(), null, null, 4L}));
+        when(categoryOverrideService.effectiveCategoryByProduct(eq(householdId), any())).thenReturn(Map.of());
 
         var response = insightsService.spend(user, null, null);
 

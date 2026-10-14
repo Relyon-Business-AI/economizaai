@@ -13,6 +13,7 @@ import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.CategoryRepository;
 import com.relyon.economizaai.repository.HouseholdCustomCategoryRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.cache.HouseholdCacheGen;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.i18n.LocaleContextHolder;
@@ -40,6 +41,7 @@ public class CustomCategoryService {
     private final ProductRepository productRepository;
     private final HouseholdProductCategoryOverrideService overrideService;
     private final CategoryRepository categoryRepository;
+    private final HouseholdCacheGen householdCacheGen;
 
     /** The active two-level taxonomy tree (groups + leaves), localized, for the FE. */
     @Transactional(readOnly = true)
@@ -160,6 +162,7 @@ public class CustomCategoryService {
             }
             migrated++;
         }
+        householdCacheGen.bump(user.getHousehold().getId()); // insights override-aware → invalida
         log.info("custom_category.migrate household={} target={} migrated={} skipped={}",
                 user.getHousehold().getId(),
                 customCategory != null ? "custom:" + customCategory.getId() : targetCategory, migrated, skipped);

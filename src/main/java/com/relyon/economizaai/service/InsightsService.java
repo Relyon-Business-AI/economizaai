@@ -150,33 +150,56 @@ public class InsightsService {
                                                       LocalDateTime fromBound, LocalDateTime toBound,
                                                       String scope, List<String> cnpjs) {
         var locale = LocaleContextHolder.getLocale();
-        var byNode = new LinkedHashMap<String, NodeAccumulator>();
-        for (var row : insightsRepository.spendByCategory(householdId, fromBound, toBound, scope, cnpjs)) {
-            var categoryId = (UUID) row[0];
-            var slug = categoryId != null ? categoryResolver.slugForId(categoryId) : null;
-            var label = categoryId != null ? categoryResolver.labelFor(categoryId, locale) : null;
-            if (slug == null) { slug = "outros"; label = "en".equals(locale.getLanguage()) ? "Other" : "Outros"; }
-            var finalSlug = slug;
-            var finalLabel = label;
-            byNode.computeIfAbsent(slug, ignored -> new NodeAccumulator(finalSlug, finalLabel))
-                    .add(toBigDecimal(row[1]), ((Number) row[2]).longValue());
+        var rows = insightsRepository.spendByProductNode(householdId, fromBound, toBound, scope, cnpjs);
+        var productIds = rows.stream().map(row -> (UUID) row[0]).filter(Objects::nonNull).distinct().toList();
+        var effective = categoryOverrideService.effectiveCategoryByProduct(householdId, productIds);
+
+        var byKey = new LinkedHashMap<String, BucketAccumulator>();
+        for (var row : rows) {
+            var productId = (UUID) row[0];
+            var globalNodeId = (UUID) row[1];
+            var override = productId != null ? effective.get(productId) : null;
+            String key, slug, label, parentSlug, icon, color;
+            if (override != null) {
+                key = override.key(); slug = override.slug(); label = override.label();
+                parentSlug = override.parentSlug(); icon = override.icon(); color = override.color();
+            } else {
+                slug = globalNodeId != null ? categoryResolver.slugForId(globalNodeId) : null;
+                label = globalNodeId != null ? categoryResolver.labelFor(globalNodeId, locale) : null;
+                key = slug; parentSlug = null; icon = null; color = null;
+            }
+            if (key == null) { key = "outros"; slug = "outros"; label = "en".equals(locale.getLanguage()) ? "Other" : "Outros"; }
+            if (label == null) label = slug;
+            var finalSlug = slug; var finalLabel = label; var finalParent = parentSlug;
+            var finalIcon = icon; var finalColor = color;
+            byKey.computeIfAbsent(key, ignored -> new BucketAccumulator(finalSlug, finalLabel, finalParent, finalIcon, finalColor))
+                    .add(toBigDecimal(row[2]), ((Number) row[3]).longValue());
         }
-        return byNode.values().stream()
-                .sorted(Comparator.comparing(NodeAccumulator::total).reversed())
-                .map(NodeAccumulator::toBucket)
+        return byKey.values().stream()
+                .sorted(Comparator.comparing(BucketAccumulator::total).reversed())
+                .map(BucketAccumulator::toBucket)
                 .toList();
     }
 
-    /** Merges node rows that resolve to the same slug (e.g. several null → "outros"). */
-    private static final class NodeAccumulator {
+    /** Accumulates spend per EFFECTIVE category (taxonomy node or household custom). */
+    private static final class BucketAccumulator {
         private final String slug;
         private final String label;
+        private final String parentSlug;
+        private final String icon;
+        private final String color;
         private BigDecimal total = BigDecimal.ZERO;
         private long itemCount = 0;
-        NodeAccumulator(String slug, String label) { this.slug = slug; this.label = label; }
+        BucketAccumulator(String slug, String label, String parentSlug, String icon, String color) {
+            this.slug = slug; this.label = label; this.parentSlug = parentSlug; this.icon = icon; this.color = color;
+        }
         void add(BigDecimal amount, long count) { total = total.add(amount); itemCount += count; }
         BigDecimal total() { return total; }
-        CategoryBucket toBucket() { return CategoryBucket.ofNode(slug, label, total, itemCount); }
+        CategoryBucket toBucket() {
+            return (icon != null || color != null || parentSlug != null)
+                    ? CategoryBucket.ofCustom(slug, label, parentSlug, icon, color, total, itemCount)
+                    : CategoryBucket.ofNode(slug, label, total, itemCount);
+        }
     }
 
     /** Index receipt-level discount rows by a bucket key for O(1) lookup when merging into spend buckets. */
@@ -325,7 +348,7 @@ public class InsightsService {
         }
 
         CategoryBucket toBucket() {
-            return new CategoryBucket(category, null, label, total, itemCount);
+            return new CategoryBucket(category, null, label, null, null, null, total, itemCount);
         }
     }
 

@@ -124,4 +124,53 @@ public class HouseholdProductCategoryOverrideService {
 
     /** A product's effective category as a discriminated key plus its display label. */
     public record OverrideKey(String key, String label) {}
+
+    /**
+     * Per-product EFFECTIVE category for the override-aware "Por categoria" chart.
+     * Resolves each override to a taxonomy node (node/enum corrections) or a custom
+     * bucket (carrying the group it nests under + its visual). Products without an
+     * override are absent from the map → the caller falls back to the global node.
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, EffectiveCategory> effectiveCategoryByProduct(UUID householdId, List<UUID> productIds) {
+        if (productIds.isEmpty()) return Map.of();
+        var locale = LocaleContextHolder.getLocale();
+        var map = new HashMap<UUID, EffectiveCategory>();
+        for (var override : overrideRepository.findByHouseholdIdAndProductIdIn(householdId, productIds)) {
+            var effective = toEffective(override, locale);
+            if (effective != null) map.put(override.getProduct().getId(), effective);
+        }
+        return map;
+    }
+
+    private EffectiveCategory toEffective(HouseholdProductCategoryOverride override, Locale locale) {
+        if (override.getCategoryNodeId() != null) {
+            var slug = categoryResolver.slugForId(override.getCategoryNodeId());
+            var label = categoryResolver.labelFor(override.getCategoryNodeId(), locale);
+            return slug == null ? null : new EffectiveCategory(slug, slug, label, null, null, null);
+        }
+        var custom = override.getCustomCategory();
+        if (custom != null) {
+            var parent = custom.getParentCategory();
+            return new EffectiveCategory("custom:" + custom.getId(), "custom:" + custom.getId(),
+                    custom.getName(), parent != null ? parent.getSlug() : null,
+                    custom.getIcon(), custom.getColor());
+        }
+        var enumCategory = override.getCategory();
+        if (enumCategory != null) {
+            var nodeId = categoryResolver.idForLegacyEnum(enumCategory);
+            var slug = nodeId != null ? categoryResolver.slugForId(nodeId) : null;
+            var label = nodeId != null ? categoryResolver.labelFor(nodeId, locale) : enumCategory.name();
+            return new EffectiveCategory(slug != null ? slug : enumCategory.name(), slug, label, null, null, null);
+        }
+        return null;
+    }
+
+    /**
+     * The household's effective category for a product. {@code key} is the collision-free
+     * bucket key; {@code slug} is the taxonomy slug (null for a custom category). For
+     * customs, {@code parentSlug}/{@code icon}/{@code color} carry the nesting + visual.
+     */
+    public record EffectiveCategory(String key, String slug, String label,
+                                    String parentSlug, String icon, String color) {}
 }

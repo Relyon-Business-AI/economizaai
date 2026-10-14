@@ -4,6 +4,7 @@ import com.relyon.economizaai.exception.CustomCategoryNotFoundException;
 import com.relyon.economizaai.exception.InvalidCategoryMigrationException;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.dto.request.CreateCategoryRequest;
+import com.relyon.economizaai.service.cache.HouseholdCacheGen;
 import com.relyon.economizaai.model.HouseholdCustomCategory;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.User;
@@ -36,6 +37,7 @@ class CustomCategoryServiceTest {
     @Mock private HouseholdCustomCategoryRepository customCategoryRepository;
     @Mock private ProductRepository productRepository;
     @Mock private HouseholdProductCategoryOverrideService overrideService;
+    @Mock private HouseholdCacheGen householdCacheGen;
     @InjectMocks private CustomCategoryService service;
 
     private User user() {

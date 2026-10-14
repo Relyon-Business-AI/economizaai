@@ -640,6 +640,9 @@ public class ReceiptService {
             categoryOverrideService.setOverride(user, product, category);
             log.info("item.category.override product={} category={}", product.getId(), category);
         }
+        // O gráfico "Por categoria" agora é override-aware — invalida o cache de insights
+        // pra a correção refletir na hora.
+        householdCacheGen.bump(receipt.getHousehold().getId());
         return toResponse(user, receipt);
     }
 

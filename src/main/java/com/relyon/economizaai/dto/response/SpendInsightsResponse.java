@@ -35,16 +35,30 @@ public record SpendInsightsResponse(
      * {@code category} is that enum and {@code label} is its name. {@code label}
      * is therefore the always-present, display-safe key.
      */
+    /**
+     * {@code parentSlug}/{@code icon}/{@code color} are populated only for household
+     * CUSTOM categories (so the FE can nest them under their group and render their
+     * chosen visual). Taxonomy nodes leave them null — the FE derives the group from
+     * {@code slug} via its static tree.
+     */
     public record CategoryBucket(ProductCategory category, String slug, String label,
+                                 String parentSlug, String icon, String color,
                                  BigDecimal total, long itemCount) {
         /** Convenience for the global lens, where the label is just the enum name. */
         public static CategoryBucket ofEnum(ProductCategory category, BigDecimal total, long itemCount) {
-            return new CategoryBucket(category, null, category != null ? category.name() : null, total, itemCount);
+            return new CategoryBucket(category, null, category != null ? category.name() : null,
+                    null, null, null, total, itemCount);
         }
 
         /** New taxonomy node bucket: {@code slug} drives the FE icon, {@code label} the text. */
         public static CategoryBucket ofNode(String slug, String label, BigDecimal total, long itemCount) {
-            return new CategoryBucket(null, slug, label, total, itemCount);
+            return new CategoryBucket(null, slug, label, null, null, null, total, itemCount);
+        }
+
+        /** Household custom category bucket: carries its visual + the group it nests under. */
+        public static CategoryBucket ofCustom(String key, String label, String parentSlug,
+                                              String icon, String color, BigDecimal total, long itemCount) {
+            return new CategoryBucket(null, key, label, parentSlug, icon, color, total, itemCount);
         }
     }
 }
