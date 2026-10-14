@@ -119,7 +119,8 @@ public class SecurityConfig {
                                 "/api/v1/categorizer/brands/derive-from-catalog",
                                 "/api/v1/categorizer/brands/promote-aliases",
                                 "/api/v1/categorizer/benchmark",
-                                "/api/v1/categorizer/benchmark/import").hasRole("ADMIN")
+                                "/api/v1/categorizer/benchmark/import",
+                                "/api/v1/categorizer/recategorize-taxonomy").hasRole("ADMIN")
                         // Dictionary MANAGEMENT (list + single delete) is ADMIN-only — it exposes and
                         // edits the full curated/learned dictionary, unlike the read/debug GETs above.
                         .requestMatchers(HttpMethod.GET,

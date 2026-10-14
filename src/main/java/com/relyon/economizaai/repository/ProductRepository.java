@@ -6,8 +6,10 @@ import com.relyon.economizaai.model.enums.ProductCategory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Collection;
@@ -76,6 +78,26 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
 
 
     Optional<Product> findByEan(String ean);
+
+    /** Distinct non-blank EANs across all products — input for the taxonomy re-fetch sweeper. */
+    @Query("SELECT DISTINCT p.ean FROM Product p WHERE p.ean IS NOT NULL AND p.ean <> ''")
+    List<String> findDistinctEans();
+
+    /**
+     * Apply the EAN catalog's fine taxonomy node to products: set
+     * {@code products.category_id} from {@code ean_catalog.category_id} wherever
+     * the catalog has a (finer) node and it differs. Returns rows updated.
+     */
+    @Modifying
+    @Transactional
+    @Query(value = """
+            UPDATE products p SET category_id = ec.category_id, updated_at = now()
+            FROM ean_catalog ec
+            WHERE ec.ean = p.ean
+              AND ec.category_id IS NOT NULL
+              AND p.category_id IS DISTINCT FROM ec.category_id
+            """, nativeQuery = true)
+    int applyCatalogCategoryNodes();
 
     List<Product> findByCategorizationSourceIn(Collection<CategorizationSource> sources);
 
