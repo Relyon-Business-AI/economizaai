@@ -6,6 +6,7 @@ import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.LearnedDictionaryRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -56,6 +57,7 @@ public class AutoPromotionService {
     private final ProductRepository productRepository;
     private final LearnedDictionaryRepository learnedRepository;
     private final DictionaryClassifier dictionaryClassifier;
+    private final CategoryResolver categoryResolver;
 
     // 7 amostras + 90% de concordância = na prática exige unanimidade em 7 ocorrências
     // (6/7 = 85% reprova). Baixo o bastante pra ter efeito no volume atual, seguro o
@@ -173,6 +175,9 @@ public class AutoPromotionService {
                             .build());
             entry.setGenericName(req.genericName());
             entry.setCategory(req.category());
+            // Fase 3: grava também a folha fina (dual-write). A promoção vota por enum,
+            // então mapeia pro nó-grupo default do enum via CategoryResolver (null-safe).
+            entry.setCategoryId(categoryResolver.idForLegacyEnum(req.category()));
             entry.setSampleCount(req.samples());
             entry.setPromotedAt(now);
             toSave.add(entry);

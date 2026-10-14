@@ -10,6 +10,7 @@ import com.relyon.economizaai.repository.ConsensusGraduationAuditRepository;
 import com.relyon.economizaai.repository.HouseholdProductCategoryOverrideRepository;
 import com.relyon.economizaai.repository.LearnedDictionaryRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,12 +40,13 @@ class ConsensusPromotionServiceTest {
     @Mock private LearnedDictionaryRepository learnedRepository;
     @Mock private DictionaryClassifier dictionaryClassifier;
     @Mock private ConsensusGraduationAuditRepository auditRepository;
+    @Mock private CategoryResolver categoryResolver;
 
     private ConsensusPromotionService service;
 
     @BeforeEach
     void setUp() {
-        service = new ConsensusPromotionService(overrideRepository, productRepository, learnedRepository, dictionaryClassifier, auditRepository);
+        service = new ConsensusPromotionService(overrideRepository, productRepository, learnedRepository, dictionaryClassifier, auditRepository, categoryResolver);
         ReflectionTestUtils.setField(service, "minHouseholds", 2);
         ReflectionTestUtils.setField(service, "minTokenProducts", 2);
         lenient().when(learnedRepository.findAll()).thenReturn(List.of());
@@ -132,5 +134,29 @@ class ConsensusPromotionServiceTest {
                 .flatMap(List::stream)
                 .anyMatch(e -> "milho".equals(e.getNormalizedToken()) && e.getCategory() == ProductCategory.GROCERIES);
         assertTrue(savedMilho);
+    }
+
+    @Test
+    void learnedToken_dualWritesFineNodeFromEnum() {
+        var groceriesNode = UUID.randomUUID();
+        var milhoA = product("MILHO ODERICH 200G");
+        var milhoB = product("MILHO VERDE PREDILECTA 170G");
+        when(overrideRepository.findAll()).thenReturn(List.of(
+                override(UUID.randomUUID(), milhoA, ProductCategory.GROCERIES),
+                override(UUID.randomUUID(), milhoA, ProductCategory.GROCERIES),
+                override(UUID.randomUUID(), milhoB, ProductCategory.GROCERIES),
+                override(UUID.randomUUID(), milhoB, ProductCategory.GROCERIES)));
+        when(productRepository.findAllById(Set.of(milhoA.getId(), milhoB.getId())))
+                .thenReturn(List.of(milhoA, milhoB));
+        when(categoryResolver.idForLegacyEnum(ProductCategory.GROCERIES)).thenReturn(groceriesNode);
+
+        service.promote();
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<LearnedDictionaryEntry>> captor = ArgumentCaptor.captor();
+        verify(learnedRepository, atLeastOnce()).saveAll(captor.capture());
+        var milhoEntry = captor.getAllValues().stream().flatMap(List::stream)
+                .filter(e -> "milho".equals(e.getNormalizedToken())).findFirst().orElseThrow();
+        assertEquals(groceriesNode, milhoEntry.getCategoryId());
     }
 }

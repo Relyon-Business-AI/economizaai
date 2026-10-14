@@ -9,6 +9,7 @@ import com.relyon.economizaai.repository.ConsensusGraduationAuditRepository;
 import com.relyon.economizaai.repository.HouseholdProductCategoryOverrideRepository;
 import com.relyon.economizaai.repository.LearnedDictionaryRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -57,6 +58,7 @@ public class ConsensusPromotionService {
     private final LearnedDictionaryRepository learnedRepository;
     private final DictionaryClassifier dictionaryClassifier;
     private final ConsensusGraduationAuditRepository auditRepository;
+    private final CategoryResolver categoryResolver;
 
     // Self-reference so the scheduled trigger's call to @Transactional promote()
     // goes through the Spring proxy. Defaults to `this` for plain unit tests.
@@ -223,6 +225,9 @@ public class ConsensusPromotionService {
                             .sampleCount(0)
                             .build());
             entry.setCategory(tokenEntry.getValue());
+            // Fase 3: dual-write da folha fina — consenso vota por enum, mapeia pro
+            // nó-grupo default do enum (null-safe).
+            entry.setCategoryId(categoryResolver.idForLegacyEnum(tokenEntry.getValue()));
             entry.setPromotedAt(now);
             toSave.add(entry);
         }

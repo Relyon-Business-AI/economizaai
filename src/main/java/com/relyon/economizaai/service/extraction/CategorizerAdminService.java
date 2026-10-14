@@ -169,6 +169,8 @@ public class CategorizerAdminService {
                             .promotedAt(now)
                             .build());
             entry.setCategory(req.category());
+            // Fase 3: dual-write da folha fina (nó-grupo default do enum, null-safe).
+            entry.setCategoryId(categoryResolver.idForLegacyEnum(req.category()));
             entry.setGenericName(req.genericName());
             // High sample count signals high confidence — this entry won't be overridden by low-count promotions
             entry.setSampleCount(req.sampleCount() > 0 ? req.sampleCount() : 999);

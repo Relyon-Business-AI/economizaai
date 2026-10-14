@@ -6,6 +6,7 @@ import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.LearnedDictionaryRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,6 +35,7 @@ class AutoPromotionServiceTest {
     @Mock private ProductRepository productRepository;
     @Mock private LearnedDictionaryRepository learnedRepository;
     @Mock private DictionaryClassifier dictionaryClassifier;
+    @Mock private CategoryResolver categoryResolver;
 
     @InjectMocks private AutoPromotionService service;
 
@@ -79,6 +81,26 @@ class AutoPromotionServiceTest {
         ArgumentCaptor<List<LearnedDictionaryEntry>> captor = ArgumentCaptor.captor();
         verify(learnedRepository).saveAll(captor.capture());
         assertEquals(outcome.promoted(), captor.getValue().size());
+    }
+
+    @Test
+    void promotion_dualWritesFineNodeFromEnum() {
+        var otherNode = UUID.randomUUID();
+        var products = IntStream.range(0, 30)
+                .mapToObj(i -> llmProduct("RACAO PEDIGREE FILHOTE " + i, ProductCategory.OTHER, "Ração"))
+                .toList();
+        when(productRepository.findByCategorizationSourceIn(any())).thenReturn(products);
+        when(learnedRepository.findByNormalizedTokenIn(any())).thenReturn(List.of());
+        when(learnedRepository.findAll()).thenReturn(List.of());
+        when(categoryResolver.idForLegacyEnum(ProductCategory.OTHER)).thenReturn(otherNode);
+
+        service.promote();
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<LearnedDictionaryEntry>> captor = ArgumentCaptor.captor();
+        verify(learnedRepository).saveAll(captor.capture());
+        assertTrue(captor.getValue().stream().allMatch(entry -> otherNode.equals(entry.getCategoryId())),
+                "every promoted entry dual-writes the enum's default node");
     }
 
     @Test
