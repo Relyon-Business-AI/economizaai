@@ -28,6 +28,9 @@ public final class ProductNameLeafClassifier {
             "queijo", "mussarela", "mucarela", "parmesao", "provolone", "gorgonzola",
             "ricota", "catupiry", "cheddar", "minas", "coalho")),
         new Rule("iogurtes", List.of("iogurte", "yogurt", "activia", "danoninho")),
+        // --- instant noodles BEFORE meat/produce so flavor names (picanha/tomate) don't win ---
+        new Rule("graos-massas", List.of("macarrao", "miojo", "lamen", "cup noodles", "nissin",
+            "espaguete", "talharim")),
         // --- meat ---
         new Rule("aves", List.of(
             "frango", "peito de frango", "coxa", "sobrecoxa", "asa de frango", "peru",
@@ -44,9 +47,11 @@ public final class ProductNameLeafClassifier {
             "moida", "hamburguer", "bife", "maminha", "fraldinha", "cupim", "contra file",
             "file mignon", "musculo", "cupim")),
         // --- beverages: alcoholic ---
+        // Beer brands that ALSO make sodas/other (antarctica/brahma/skol) are left out —
+        // the word "cerveja" (always on beer labels) + beer-only brands cover it safely.
         new Rule("cervejas", List.of(
-            "cerveja", "chopp", "heineken", "brahma", "skol", "antarctica", "budweiser",
-            "stella", "eisenbahn", "itaipava", "amstel", "spaten")),
+            "cerveja", "chopp", "heineken", "budweiser", "stella artois",
+            "eisenbahn", "itaipava", "amstel", "spaten", "corona", "becks")),
         new Rule("vinhos", List.of("vinho", "espumante", "prosecco", "champagne")),
         new Rule("destilados", List.of(
             "whisky", "vodka", "cachaca", " gin ", " rum ", "tequila", "conhaque", "licor",

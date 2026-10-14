@@ -23,7 +23,7 @@ class TaxonomyRecategorizationServiceTest {
     @InjectMocks private TaxonomyRecategorizationService service;
 
     @Test
-    void recategorize_runsNameThenOffCatalog_inOrder() {
+    void recategorize_resetsThenNameThenOffCatalog_inOrder() {
         when(productRepository.findAll()).thenReturn(List.of()); // name pass: nothing to update
         when(productRepository.findDistinctEans()).thenReturn(List.of("111", "222"));
         when(enrichmentService.enrichForce(List.of("111", "222"))).thenReturn(2);
@@ -35,8 +35,9 @@ class TaxonomyRecategorizationServiceTest {
         assertEquals(2, result.eansScanned());
         assertEquals(2, result.catalogRowsEnriched());
         assertEquals(5, result.productsUpdated());
-        // Name pass first, then OFF re-fetch, then apply catalog nodes.
+        // Reset baseline first, then name pass, then OFF re-fetch, then apply catalog nodes.
         var order = inOrder(productRepository, enrichmentService);
+        order.verify(productRepository).resetCategoryIdFromEnumGroup();
         order.verify(productRepository).findAll();
         order.verify(enrichmentService).enrichForce(List.of("111", "222"));
         order.verify(productRepository).applyCatalogCategoryNodes();

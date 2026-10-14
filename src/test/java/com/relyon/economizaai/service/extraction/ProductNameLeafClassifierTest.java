@@ -38,6 +38,8 @@ class ProductNameLeafClassifierTest {
     void wordBoundary_shortKeywordsDoNotMatchSubstrings() {
         // "maca" (maçã) must not match "macarrao"; "mate" (chá) not "tomate".
         assertEquals("graos-massas", ProductNameLeafClassifier.classify("MACARRAO NISSIN MIOJO 85G"));
+        // instant-noodle flavor names must not win (picanha/tomate) — noodle rule is higher priority
+        assertEquals("graos-massas", ProductNameLeafClassifier.classify("MACARRAO NISSIN PICANHA 80G"));
         assertEquals("frutas", ProductNameLeafClassifier.classify("MACA FUJI KG"));
         assertEquals("legumes-verduras", ProductNameLeafClassifier.classify("TOMATE LONGA VIDA KG"));
         // "original" removed as a beer keyword (too generic); the brand still wins.

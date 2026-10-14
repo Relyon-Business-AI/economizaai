@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.extraction;
 
 import com.relyon.economizaai.model.Product;
+import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.service.CategoryResolver;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +35,8 @@ public class TaxonomyRecategorizationService {
     private final CategoryResolver categoryResolver;
 
     public RecategorizeResult recategorizeFromEanCatalog() {
+        // Deterministic: reset to the enum group baseline, then refine by name, then OFF.
+        productRepository.resetCategoryIdFromEnumGroup();
         var byName = recategorizeByName();
         var eans = productRepository.findDistinctEans();
         var enriched = enrichmentService.enrichForce(eans);        // OFF re-fetch (untransacted)
@@ -43,12 +46,17 @@ public class TaxonomyRecategorizationService {
         return new RecategorizeResult(byName, eans.size(), enriched, byCatalog);
     }
 
-    /** Set products' category_id from the name-based leaf classifier where confident. */
+    /**
+     * Set products' category_id from the name-based leaf classifier where confident.
+     * Only FOOD enums are refined — CLEANING/PERSONAL_CARE/HEALTH/PET keep their group
+     * node, so a fruit-scented cleaner ("detergente limão") isn't pulled into Frutas.
+     */
     @Transactional
     public int recategorizeByName() {
         var updated = 0;
         var toSave = new ArrayList<Product>();
         for (var product : productRepository.findAll()) {
+            if (isNonFood(product.getCategory())) continue;
             var slug = ProductNameLeafClassifier.classify(product.getNormalizedName());
             if (slug == null) continue;
             var nodeId = categoryResolver.idForSlug(slug);
@@ -60,6 +68,11 @@ public class TaxonomyRecategorizationService {
         }
         productRepository.saveAll(toSave);
         return updated;
+    }
+
+    private static boolean isNonFood(ProductCategory category) {
+        return category == ProductCategory.CLEANING || category == ProductCategory.PERSONAL_CARE
+                || category == ProductCategory.HEALTH || category == ProductCategory.PET_SUPPLIES;
     }
 
     public record RecategorizeResult(int nameUpdated, int eansScanned, int catalogRowsEnriched, int productsUpdated) {}

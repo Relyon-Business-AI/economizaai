@@ -99,6 +99,21 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
             """, nativeQuery = true)
     int applyCatalogCategoryNodes();
 
+    /**
+     * Reset every product's {@code category_id} to the group default for its legacy
+     * enum — the deterministic baseline the taxonomy sweep rebuilds on each run, so
+     * stale fine-node assignments from older classifier rules are wiped first.
+     */
+    @Modifying
+    @Transactional
+    @Query(value = """
+            UPDATE products p SET category_id = c.id, updated_at = now()
+            FROM categories c
+            WHERE c.legacy_enum = p.category AND p.category IS NOT NULL
+              AND p.category_id IS DISTINCT FROM c.id
+            """, nativeQuery = true)
+    int resetCategoryIdFromEnumGroup();
+
     List<Product> findByCategorizationSourceIn(Collection<CategorizationSource> sources);
 
     /** Products that have any category assigned — for catalog coverage metrics. */
