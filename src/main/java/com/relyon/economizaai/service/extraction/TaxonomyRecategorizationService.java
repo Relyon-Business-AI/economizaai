@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.extraction;
 
 import com.relyon.economizaai.model.Product;
+import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.service.CategoryResolver;
@@ -58,6 +59,25 @@ public class TaxonomyRecategorizationService {
         log.info("taxonomy.recategorize keyword={} llm={} pending={} eans={} enriched={} catalog={}",
                 byKeyword.updated(), byLlm, byKeyword.pending().size(), eans.size(), enriched, byCatalog);
         return new RecategorizeResult(byKeyword.updated(), byLlm, eans.size(), enriched, byCatalog);
+    }
+
+    /**
+     * Lightweight pass for the scheduler: only products that still LACK a fine node
+     * (category_id null), not USER-locked, food. Keyword HIGH + LLM for the rest. Does
+     * NOT reset existing nodes and does NOT re-fetch Open Food Facts — cheap enough to
+     * run daily (unlike {@link #recategorizeFromEanCatalog()}, which hits OFF per EAN).
+     */
+    public RecategorizeResult recategorizeIncremental() {
+        var pending = productRepository.findByCategoryIdIsNull().stream()
+                .filter(product -> product.getCategorizationSource() != CategorizationSource.USER)
+                .filter(product -> !isNonFood(product.getCategory()))
+                .toList();
+        if (pending.isEmpty()) return new RecategorizeResult(0, 0, 0, 0, 0);
+        var byKeyword = applyKeywordHighConfidence(pending);
+        var byLlm = applyLlmForLowConfidence(byKeyword.pending());
+        log.info("taxonomy.recategorize.incremental keyword={} llm={} candidates={}",
+                byKeyword.updated(), byLlm, pending.size());
+        return new RecategorizeResult(byKeyword.updated(), byLlm, 0, 0, 0);
     }
 
     private record KeywordPass(int updated, List<Product> pending) {}

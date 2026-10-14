@@ -134,6 +134,9 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     /** Products already mapped to a fine taxonomy node (category_id) — taxonomy coverage. */
     long countByCategoryIdNotNull();
 
+    /** Products still missing a fine taxonomy node — the incremental recategorize candidates. */
+    List<Product> findByCategoryIdIsNull();
+
     /**
      * Distinct OTHER-category products that have at least one confirmed,
      * non-excluded purchase at the given merchant CNPJ. Used to backfill the
