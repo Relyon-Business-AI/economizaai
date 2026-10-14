@@ -68,6 +68,8 @@ import com.relyon.economizaai.service.merchant.MerchantClaimService;
 import com.relyon.economizaai.service.admin.AdminNotificationEffectivenessService;
 import com.relyon.economizaai.service.admin.AdminNotificationService;
 import com.relyon.economizaai.service.admin.AdminProductService;
+import com.relyon.economizaai.service.CategoryResolver;
+import com.relyon.economizaai.dto.response.TaxonomyCoverageResponse;
 import com.relyon.economizaai.service.admin.AdminDevService;
 import com.relyon.economizaai.service.admin.AdminReceiptService;
 import com.relyon.economizaai.service.admin.AdminUserService;
@@ -137,6 +139,7 @@ public class AdminController {
     private final MerchantClaimService merchantClaimService;
     private final AdminLlmService adminLlmService;
     private final AdminProductService adminProductService;
+    private final CategoryResolver categoryResolver;
     private final CategorizationQualityService categorizationQualityService;
     private final MarketLocationService marketLocationService;
     private final RelevanceReportService relevanceReportService;
@@ -678,6 +681,21 @@ public class AdminController {
     public ResponseEntity<ProductResponse> setProductCategory(
             @PathVariable UUID id, @Valid @RequestBody SetProductCategoryRequest request) {
         return ResponseEntity.ok(adminProductService.setCategory(id, request.category()));
+    }
+
+    /** Assign a product to a fine taxonomy node (sets category_id). Slug from GET /categories/taxonomy. */
+    @PatchMapping("/products/{id}/category-node")
+    public ResponseEntity<ProductResponse> setProductCategoryNode(
+            @PathVariable UUID id, @RequestParam String slug) {
+        var categoryNodeId = categoryResolver.idForSlug(slug);
+        if (categoryNodeId == null) return ResponseEntity.badRequest().build();
+        return ResponseEntity.ok(adminProductService.setCategoryNode(id, categoryNodeId));
+    }
+
+    /** Taxonomy migration coverage: products with a fine node vs still on the enum default. */
+    @GetMapping("/products/taxonomy-coverage")
+    public ResponseEntity<TaxonomyCoverageResponse> taxonomyCoverage() {
+        return ResponseEntity.ok(adminProductService.taxonomyCoverage());
     }
 
     /**

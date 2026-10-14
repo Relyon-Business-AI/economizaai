@@ -131,6 +131,9 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     /** Products that have any category assigned — for catalog coverage metrics. */
     long countByCategoryNotNull();
 
+    /** Products already mapped to a fine taxonomy node (category_id) — taxonomy coverage. */
+    long countByCategoryIdNotNull();
+
     /**
      * Distinct OTHER-category products that have at least one confirmed,
      * non-excluded purchase at the given merchant CNPJ. Used to backfill the

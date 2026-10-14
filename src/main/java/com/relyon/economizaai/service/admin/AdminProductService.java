@@ -29,6 +29,8 @@ import com.relyon.economizaai.repository.ProductAliasRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.repository.ShoppingListItemRepository;
+import com.relyon.economizaai.service.CategoryResolver;
+import com.relyon.economizaai.dto.response.TaxonomyCoverageResponse;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -59,6 +61,7 @@ public class AdminProductService {
     private static final int SAMPLE_DESCRIPTION_LIMIT = 5;
 
     private final ProductRepository productRepository;
+    private final CategoryResolver categoryResolver;
     private final ProductAliasRepository aliasRepository;
     private final ReceiptItemRepository receiptItemRepository;
     private final PriceObservationRepository priceObservationRepository;
@@ -316,6 +319,26 @@ public class AdminProductService {
         var saved = productRepository.save(product);
         log.info("admin.product.category_set product={} category={} source=USER", productId, category);
         return ProductResponse.from(saved);
+    }
+
+    /**
+     * Assign a product to a fine taxonomy node (sets {@code category_id}). The slug
+     * is resolved to a node id by the caller; USER source locks it from the sweepers.
+     */
+    public ProductResponse setCategoryNode(UUID productId, UUID categoryNodeId) {
+        var product = productRepository.findById(productId)
+                .orElseThrow(ProductNotFoundException::new);
+        product.setCategoryId(categoryNodeId);
+        product.setCategorizationSource(CategorizationSource.USER);
+        var saved = productRepository.save(product);
+        log.info("admin.product.category_node_set product={} node={} source=USER", productId, categoryNodeId);
+        return ProductResponse.from(saved);
+    }
+
+    /** Taxonomy migration coverage: how many products carry a fine node vs none. */
+    @Transactional(readOnly = true)
+    public TaxonomyCoverageResponse taxonomyCoverage() {
+        return TaxonomyCoverageResponse.of(productRepository.count(), productRepository.countByCategoryIdNotNull());
     }
 
     /**
