@@ -6,6 +6,9 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -50,6 +53,15 @@ public class Product extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(length = 30)
     private ProductCategory category;
+
+    /**
+     * New two-level taxonomy node (supersedes {@link #category} over the migration).
+     * Dual-write phase: both are kept in sync; readers prefer this with a fallback
+     * to the enum until the backfill/recategorization (Phase 2) completes.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id")
+    private Category categoryNode;
 
     @Column(length = 10)
     private String unit;
