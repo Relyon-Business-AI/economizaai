@@ -906,17 +906,22 @@ Households can define their own categories ("Frutas", "Bebê", …) and move pro
 
 ```
 GET    /api/v1/categories                → categories this household can use
-GET    /api/v1/categories/taxonomy       → árvore 2 níveis (grupo→folha), localizada
-POST   /api/v1/categories                { "name": "Frutas", "icon"?, "color"?, "parentGroupSlug"? } → 201, idempotent no nome
+GET    /api/v1/categories/taxonomy       → árvore 2 níveis (categoria→subcategoria), localizada; ordenada categoria→suas subcategorias
+POST   /api/v1/categories                { "name":"Frutas", "icon"?, "color"?, "parentGroupSlug"?, "parentCustomCategoryId"? } → 201, idempotent no nome
 DELETE /api/v1/categories/{id}           → 204, removes a custom category (its overrides revert)
 POST   /api/v1/categories/migrate        { "productIds":[...], "targetCategory":..., "targetCustomCategoryId":... }
 ```
 
+`GET /categories/taxonomy` devolve nós `{ slug, name, parentSlug, hasSubcategories }`
+(`hasSubcategories` = tem subcategorias; era `group` antes do rename), já ordenados
+**categoria → suas subcategorias** (Outros/Não-mercado por último).
+
 `POST /categories` aceita, além do `name`, opcionais **`icon`** (nome Ionicons, ex.
-`"paw-outline"`), **`color`** (hex, ex. `"#F5A623"`) e **`parentGroupSlug`** (slug de um
-**GRUPO** da taxonomia — a custom vira uma "folha" sua dentro dele, aninhada no gráfico).
-Re-enviar um nome existente **edita** o estilo/grupo. `parentGroupSlug` precisa ser um grupo
-(não folha), senão `400`.
+`"paw-outline"`), **`color`** (hex) e UM pai (no máximo um): **`parentGroupSlug`** (slug de
+uma **CATEGORIA** embutida da taxonomia) **ou** **`parentCustomCategoryId`** (id de uma
+categoria **custom** do household) — a custom vira uma **subcategoria** dentro do pai,
+aninhada no gráfico. Sem pai = categoria principal. Re-enviar um nome existente **edita** o
+estilo/pai. `parentGroupSlug` precisa ser uma categoria embutida (não subcategoria), senão `400`.
 
 `GET /categories` returns the 9 global enums **and** the household's custom ones. Buckets
 custom carregam o visual + o grupo-pai (`icon`/`color`/`parentSlug`/`parentName`); nos enums

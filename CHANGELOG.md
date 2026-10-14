@@ -30,13 +30,16 @@ ignorava a correção). Cache invalida em `updateItemCategory` e no migrate de c
 aparece aninhada no grupo (`parentSlug`) com o ícone/cor escolhidos. Nós da taxonomia
 deixam esses campos null — o FE deriva o grupo pelo slug como antes.
 
-**Categoria custom com ícone + cor + grupo-pai.** `POST /categories` aceita opcionais
-`icon` (nome Ionicons), `color` (hex), `parentGroupSlug` (slug de um GRUPO — vira uma
-"folha" sua nele). `CategoryResponse` (GET/POST `/categories`) ganhou `icon`, `color`,
-`parentSlug`, `parentName`.
+**Categoria custom com ícone + cor + categoria-pai.** `POST /categories` aceita opcionais
+`icon` (Ionicons), `color` (hex) e UM pai: `parentGroupSlug` (categoria embutida) **ou**
+`parentCustomCategoryId` (categoria custom do household) — a custom vira **subcategoria**
+dentro do pai. `CategoryResponse` ganhou `icon`, `color`, `parentSlug`, `parentName`
+(pai custom → `parentSlug="custom:<id>"`).
 
-**`/categories/taxonomy` agora ordenado grupo → suas folhas** em ordem lógica (Hortifrúti
-→ … → Outros por último; "Não-mercado" por último). Antes vinha embaralhado.
+**`/categories/taxonomy` ordenado categoria → suas subcategorias** (Outros/Não-mercado por
+último). **Rename de contrato:** o booleano `group` do nó virou **`hasSubcategories`**
+(mesmo significado). Vocabulário padronizado: **"categoria"** (nível 1) e **"subcategoria"**
+(nível 2) — "grupo"/"folha" eram jargão interno.
 
 **Admin (não-FE, referência):**
 - NOVO `PATCH /admin/products/{id}/category-node?slug=` (folha fina ao produto) e
