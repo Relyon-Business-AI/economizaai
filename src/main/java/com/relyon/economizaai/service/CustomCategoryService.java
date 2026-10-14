@@ -56,6 +56,13 @@ public class CustomCategoryService {
         return categories;
     }
 
+    /** Resolve a custom category owned by this household, or 404. */
+    @Transactional(readOnly = true)
+    public HouseholdCustomCategory requireOwned(User user, UUID id) {
+        return customCategoryRepository.findByIdAndHouseholdId(id, user.getHousehold().getId())
+                .orElseThrow(CustomCategoryNotFoundException::new);
+    }
+
     @Transactional
     public void delete(User user, UUID id) {
         var category = customCategoryRepository.findByIdAndHouseholdId(id, user.getHousehold().getId())

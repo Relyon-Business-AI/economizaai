@@ -595,7 +595,7 @@ PATCH  /api/v1/receipts/{id}/items/{itemId}          → fix typos / qty / toggl
                                                         (nota fields — PENDING_CONFIRMATION only)
 PATCH  /api/v1/receipts/{id}/items/{itemId}/personal  → household "personal layer" — ANY status (incl. CONFIRMED):
                                                         { excludedFromPersonal, friendlyDescription, paidTotalPrice }
-PUT    /api/v1/receipts/{id}/items/{itemId}/category  → correct the category { "category": "MEAT_DAIRY" }
+PUT    /api/v1/receipts/{id}/items/{itemId}/category  → correct the category { "category": "MEAT_DAIRY" } OR { "customCategoryId": "<uuid>" }
 POST   /api/v1/receipts/{id}/items                   → add a missing item (PENDING_CONFIRMATION only)
 POST   /api/v1/receipts/items-photo                  → multipart photo of the printed receipt; vision-LLM
                                                         extracts items into a PENDING_CONFIRMATION receipt
@@ -629,7 +629,7 @@ DELETE /api/v1/receipts/{id}                         → hard delete. Frees the 
 
 Returns the updated receipt. The immutable nota fields (quantity, shelf price, EAN, adding items) remain `PENDING_CONFIRMATION`-only via the full PATCH.
 
-**Per-item category correction** — `PUT /receipts/{id}/items/{itemId}/category` with `{ "category": "MEAT_DAIRY" }`. This is **household-scoped "evidence, not truth"**: it changes the category *this household* sees for that product everywhere (`GET /receipts/{id}`, `GET /items`) but does **not** mutate the global product, so other households are unaffected. `400` if the item isn't linked to a canonical product yet. Returns the updated receipt with the override applied. (Aggregates/insights honor this override in the **HOUSEHOLD** category lens, the default — pass `categoryView=GLOBAL` on `/items`, `/insights/query`, and `/insights/categories/top` to ignore overrides and use the global category.)
+**Per-item category correction** — `PUT /receipts/{id}/items/{itemId}/category` with EXACTLY ONE target: a global enum `{ "category": "MEAT_DAIRY" }` **or** a household custom category `{ "customCategoryId": "<uuid>" }` (create one first via `POST /categories`, or reuse one from `GET /categories`). This lets the FE assign a custom category inline at confirm/edit without leaving the receipt. This is **household-scoped "evidence, not truth"**: it changes the category *this household* sees for that product everywhere (`GET /receipts/{id}`, `GET /items`) but does **not** mutate the global product, so other households are unaffected. `400` if both/neither target is given or the item isn't linked to a canonical product yet. Returns the updated receipt with the override applied. (Aggregates/insights honor this override in the **HOUSEHOLD** category lens, the default — pass `categoryView=GLOBAL` on `/items`, `/insights/query`, and `/insights/categories/top` to ignore overrides and use the global category.)
 
 The response always includes both:
 - `rawDescription` — original NFC-e text, never changes

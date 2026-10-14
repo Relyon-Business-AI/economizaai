@@ -16,6 +16,18 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-13 — Correção de categoria do item aceita categoria personalizada
+
+- `PUT /receipts/{id}/items/{itemId}/category` agora aceita **um de dois destinos**:
+  o enum global `{ "category": "MEAT_DAIRY" }` **ou** uma categoria personalizada
+  do household `{ "customCategoryId": "<uuid>" }`. Antes só aceitava o enum — por
+  isso, quando nenhuma das categorias globais servia, o único jeito era jogar em
+  `Outros`. Agora o FE pode (no seletor do item, ao confirmar ou editar) listar
+  as customs de `GET /categories`, criar uma nova inline via `POST /categories` e
+  já atribuí-la ao item sem sair da nota. `400` se vier os dois destinos ou nenhum.
+- Semântica inalterada: segue household-scoped ("evidence, not truth"), não mexe
+  no produto global.
+
 ## 2026-10-13 — Gráfico de pizza no relatório do WhatsApp
 
 - O relatório do WhatsApp (resposta a `CONFIRMAR`/`RELATORIO`) agora vem com uma

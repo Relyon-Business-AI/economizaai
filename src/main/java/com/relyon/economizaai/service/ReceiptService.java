@@ -19,6 +19,7 @@ import com.relyon.economizaai.exception.ReceiptAlreadyIngestedException;
 import com.relyon.economizaai.exception.UnsupportedStateException;
 import com.relyon.economizaai.exception.ReceiptItemNotFoundException;
 import com.relyon.economizaai.exception.InvalidItemPriceException;
+import com.relyon.economizaai.exception.InvalidCategoryTargetException;
 import com.relyon.economizaai.exception.ReceiptNotEditableException;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
 import com.relyon.economizaai.exception.UnsupportedMerchantException;
@@ -105,6 +106,7 @@ public class ReceiptService {
     private final NotificationRuleService notificationRuleService;
     private final HouseholdProductAliasService householdProductAliasService;
     private final HouseholdProductCategoryOverrideService categoryOverrideService;
+    private final CustomCategoryService customCategoryService;
     private final HouseholdCacheGen householdCacheGen;
     private final LocalizedMessageService localizedMessageService;
     private final MarketNameService marketNameService;
@@ -605,7 +607,11 @@ public class ReceiptService {
      * live AND propagates to future purchases of the same item.
      */
     @Transactional
-    public ReceiptResponse updateItemCategory(User user, UUID receiptId, UUID itemId, ProductCategory category) {
+    public ReceiptResponse updateItemCategory(User user, UUID receiptId, UUID itemId,
+                                              ProductCategory category, UUID customCategoryId) {
+        if ((category == null) == (customCategoryId == null)) {
+            throw new InvalidCategoryTargetException(); // exactly one target: enum OR custom
+        }
         MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
         MDC.put(MdcContextFilter.ITEM_ID, abbrev(itemId));
         var receipt = loadOwned(user, receiptId);
@@ -616,8 +622,14 @@ public class ReceiptService {
         var product = item.getProduct() != null
                 ? item.getProduct()
                 : canonicalizationService.linkOrCreateProduct(receipt, item);
-        categoryOverrideService.setOverride(user, product, category);
-        log.info("item.category.override product={} category={}", product.getId(), category);
+        if (customCategoryId != null) {
+            var customCategory = customCategoryService.requireOwned(user, customCategoryId);
+            categoryOverrideService.setCustomOverride(user, product, customCategory);
+            log.info("item.category.override product={} customCategory={}", product.getId(), customCategory.getId());
+        } else {
+            categoryOverrideService.setOverride(user, product, category);
+            log.info("item.category.override product={} category={}", product.getId(), category);
+        }
         return toResponse(user, receipt);
     }
 

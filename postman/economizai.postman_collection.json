@@ -2317,7 +2317,7 @@
 							"mode": "raw",
 							"raw": "{\n  \"category\": \"MEAT_DAIRY\"\n}"
 						},
-						"description": "Evidence-not-truth: overrides the category THIS household sees for the item's product; the global product is untouched. 400 if the item isn't linked to a product."
+						"description": "Evidence-not-truth: overrides the category THIS household sees for the item's product; the global product is untouched. Set EXACTLY ONE target: a global enum `category` OR a household `customCategoryId` (from POST /categories) — body `{\"customCategoryId\":\"<uuid>\"}`. 400 if both/neither are given, or if the item isn't linked to a product."
 					},
 					"response": []
 				},
@@ -10964,7 +10964,7 @@
 							"mode": "raw",
 							"raw": "{\n  \"category\": \"MEAT_DAIRY\"\n}"
 						},
-						"description": "Evidence-not-truth: overrides the category THIS household sees for the item's product; the global product is untouched. 400 if the item isn't linked to a product."
+						"description": "Evidence-not-truth: overrides the category THIS household sees for the item's product; the global product is untouched. Set EXACTLY ONE target: a global enum `category` OR a household `customCategoryId` (from POST /categories) — body `{\"customCategoryId\":\"<uuid>\"}`. 400 if both/neither are given, or if the item isn't linked to a product."
 					},
 					"response": [],
 					"event": [
