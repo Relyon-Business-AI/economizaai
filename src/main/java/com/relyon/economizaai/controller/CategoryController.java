@@ -4,6 +4,7 @@ import com.relyon.economizaai.dto.request.CreateCategoryRequest;
 import com.relyon.economizaai.dto.request.MigrateCategoryRequest;
 import com.relyon.economizaai.dto.response.CategoryMigrationResponse;
 import com.relyon.economizaai.dto.response.CategoryResponse;
+import com.relyon.economizaai.dto.response.TaxonomyCategoryResponse;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.service.CustomCategoryService;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -40,6 +41,12 @@ public class CategoryController {
     @GetMapping
     public ResponseEntity<List<CategoryResponse>> list(@AuthenticationPrincipal User user) {
         return ResponseEntity.ok(customCategoryService.list(user));
+    }
+
+    /** The new two-level taxonomy tree (groups + leaves), localized — for chips/filters/picker. */
+    @GetMapping("/taxonomy")
+    public ResponseEntity<List<TaxonomyCategoryResponse>> taxonomy() {
+        return ResponseEntity.ok(customCategoryService.taxonomy());
     }
 
     @PostMapping

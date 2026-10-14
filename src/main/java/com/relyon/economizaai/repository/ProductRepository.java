@@ -83,6 +83,10 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     @Query("SELECT DISTINCT p.ean FROM Product p WHERE p.ean IS NOT NULL AND p.ean <> ''")
     List<String> findDistinctEans();
 
+    /** Product ids whose taxonomy node is in the given set — backs the /items category-slug filter. */
+    @Query("SELECT p.id FROM Product p WHERE p.categoryId IN :categoryIds")
+    List<UUID> findIdsByCategoryIdIn(@Param("categoryIds") Collection<UUID> categoryIds);
+
     /**
      * Apply the EAN catalog's fine taxonomy node to products: set
      * {@code products.category_id} from {@code ean_catalog.category_id} wherever

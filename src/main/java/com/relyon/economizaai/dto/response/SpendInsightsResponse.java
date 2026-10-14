@@ -35,10 +35,16 @@ public record SpendInsightsResponse(
      * {@code category} is that enum and {@code label} is its name. {@code label}
      * is therefore the always-present, display-safe key.
      */
-    public record CategoryBucket(ProductCategory category, String label, BigDecimal total, long itemCount) {
+    public record CategoryBucket(ProductCategory category, String slug, String label,
+                                 BigDecimal total, long itemCount) {
         /** Convenience for the global lens, where the label is just the enum name. */
         public static CategoryBucket ofEnum(ProductCategory category, BigDecimal total, long itemCount) {
-            return new CategoryBucket(category, category != null ? category.name() : null, total, itemCount);
+            return new CategoryBucket(category, null, category != null ? category.name() : null, total, itemCount);
+        }
+
+        /** New taxonomy node bucket: {@code slug} drives the FE icon, {@code label} the text. */
+        public static CategoryBucket ofNode(String slug, String label, BigDecimal total, long itemCount) {
+            return new CategoryBucket(null, slug, label, total, itemCount);
         }
     }
 }

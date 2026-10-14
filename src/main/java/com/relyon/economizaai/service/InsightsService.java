@@ -17,6 +17,7 @@ import com.relyon.economizaai.service.geo.MerchantSupportGate;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,6 +49,7 @@ public class InsightsService {
     private final HouseholdProductCategoryOverrideService categoryOverrideService;
     private final SubscriptionGateService subscriptionGate;
     private final HouseholdProductAliasService householdProductAliasService;
+    private final CategoryResolver categoryResolver;
 
     /** Backwards-compatible entry point — every segment (ALL scope). */
     @Transactional(readOnly = true)
@@ -147,12 +149,34 @@ public class InsightsService {
     private List<CategoryBucket> buildCategoryBuckets(UUID householdId,
                                                       LocalDateTime fromBound, LocalDateTime toBound,
                                                       String scope, List<String> cnpjs) {
-        return insightsRepository.spendByCategory(householdId, fromBound, toBound, scope, cnpjs).stream()
-                .map(row -> SpendInsightsResponse.CategoryBucket.ofEnum(
-                        (ProductCategory) row[0],
-                        toBigDecimal(row[1]),
-                        ((Number) row[2]).longValue()))
+        var locale = LocaleContextHolder.getLocale();
+        var byNode = new LinkedHashMap<String, NodeAccumulator>();
+        for (var row : insightsRepository.spendByCategory(householdId, fromBound, toBound, scope, cnpjs)) {
+            var categoryId = (UUID) row[0];
+            var slug = categoryId != null ? categoryResolver.slugForId(categoryId) : null;
+            var label = categoryId != null ? categoryResolver.labelFor(categoryId, locale) : null;
+            if (slug == null) { slug = "outros"; label = "en".equals(locale.getLanguage()) ? "Other" : "Outros"; }
+            var finalSlug = slug;
+            var finalLabel = label;
+            byNode.computeIfAbsent(slug, ignored -> new NodeAccumulator(finalSlug, finalLabel))
+                    .add(toBigDecimal(row[1]), ((Number) row[2]).longValue());
+        }
+        return byNode.values().stream()
+                .sorted(Comparator.comparing(NodeAccumulator::total).reversed())
+                .map(NodeAccumulator::toBucket)
                 .toList();
+    }
+
+    /** Merges node rows that resolve to the same slug (e.g. several null → "outros"). */
+    private static final class NodeAccumulator {
+        private final String slug;
+        private final String label;
+        private BigDecimal total = BigDecimal.ZERO;
+        private long itemCount = 0;
+        NodeAccumulator(String slug, String label) { this.slug = slug; this.label = label; }
+        void add(BigDecimal amount, long count) { total = total.add(amount); itemCount += count; }
+        BigDecimal total() { return total; }
+        CategoryBucket toBucket() { return CategoryBucket.ofNode(slug, label, total, itemCount); }
     }
 
     /** Index receipt-level discount rows by a bucket key for O(1) lookup when merging into spend buckets. */
@@ -301,7 +325,7 @@ public class InsightsService {
         }
 
         CategoryBucket toBucket() {
-            return new CategoryBucket(category, label, total, itemCount);
+            return new CategoryBucket(category, null, label, total, itemCount);
         }
     }
 

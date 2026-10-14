@@ -2,21 +2,28 @@ package com.relyon.economizaai.service;
 
 import com.relyon.economizaai.dto.response.CategoryMigrationResponse;
 import com.relyon.economizaai.dto.response.CategoryResponse;
+import com.relyon.economizaai.dto.response.TaxonomyCategoryResponse;
 import com.relyon.economizaai.exception.CustomCategoryNotFoundException;
 import com.relyon.economizaai.exception.InvalidCategoryMigrationException;
+import com.relyon.economizaai.model.Category;
 import com.relyon.economizaai.model.HouseholdCustomCategory;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.repository.CategoryRepository;
 import com.relyon.economizaai.repository.HouseholdCustomCategoryRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Household-defined custom categories (e.g. "Frutas") + migrating products into
@@ -31,6 +38,30 @@ public class CustomCategoryService {
     private final HouseholdCustomCategoryRepository customCategoryRepository;
     private final ProductRepository productRepository;
     private final HouseholdProductCategoryOverrideService overrideService;
+    private final CategoryRepository categoryRepository;
+
+    /** The active two-level taxonomy tree (groups + leaves), localized, for the FE. */
+    @Transactional(readOnly = true)
+    public List<TaxonomyCategoryResponse> taxonomy() {
+        var locale = LocaleContextHolder.getLocale();
+        var all = categoryRepository.findAllByActiveTrueOrderBySortOrderAsc();
+        Set<UUID> parentIds = all.stream()
+                .map(Category::getParent)
+                .filter(parent -> parent != null)
+                .map(Category::getId)
+                .collect(Collectors.toSet());
+        return all.stream()
+                .map(category -> new TaxonomyCategoryResponse(
+                        category.getSlug(),
+                        localizedName(category, locale),
+                        category.getParent() != null ? category.getParent().getSlug() : null,
+                        parentIds.contains(category.getId())))
+                .toList();
+    }
+
+    private static String localizedName(Category category, Locale locale) {
+        return locale != null && "en".equals(locale.getLanguage()) ? category.getNameEn() : category.getNamePt();
+    }
 
     /** Create a custom category for the household (idempotent on name). */
     @Transactional

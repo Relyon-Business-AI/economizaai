@@ -8,9 +8,11 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -62,6 +64,24 @@ public class CategoryResolver {
         if (categoryId == null) return null;
         var category = byId.get(categoryId);
         return category == null ? null : category.getSlug();
+    }
+
+    /**
+     * The node for a slug PLUS every descendant leaf — so filtering by a GROUP slug
+     * (e.g. "carnes") matches products on the group or any of its leaves. Empty when
+     * the slug is unknown. Never queries.
+     */
+    public Set<UUID> nodeAndDescendantIds(String slug) {
+        var rootId = idBySlug.get(slug);
+        if (rootId == null) return Set.of();
+        var ids = new HashSet<UUID>();
+        ids.add(rootId);
+        for (var category : byId.values()) {
+            if (category.getParent() != null && rootId.equals(category.getParent().getId())) {
+                ids.add(category.getId());
+            }
+        }
+        return ids;
     }
 
     /** Category id the given legacy enum maps to by default, or null. Never queries. */

@@ -204,7 +204,7 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
     // rewrite what the household already saw; live p.category is only the
     // fallback for legacy rows without a snapshot.
     @Query("""
-        SELECT COALESCE(ri.categoryAtConfirmation, p.category, com.relyon.economizaai.model.enums.ProductCategory.OTHER) AS category,
+        SELECT p.categoryId AS categoryId,
                COALESCE(SUM(ri.totalPrice), 0) AS total,
                COUNT(ri) AS itemCount
         FROM ReceiptItem ri
@@ -219,7 +219,7 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
           AND (:scope = 'ALL'
                OR (:scope = 'SUPPORTED' AND r.cnpjEmitente IN :supportedCnpjs)
                OR (:scope = 'OTHER' AND (r.cnpjEmitente IS NULL OR r.cnpjEmitente NOT IN :supportedCnpjs)))
-        GROUP BY COALESCE(ri.categoryAtConfirmation, p.category, com.relyon.economizaai.model.enums.ProductCategory.OTHER)
+        GROUP BY p.categoryId
         ORDER BY total DESC
     """)
     List<Object[]> spendByCategory(@Param("householdId") UUID householdId,
