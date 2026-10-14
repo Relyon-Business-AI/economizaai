@@ -33,4 +33,14 @@ class ProductNameLeafClassifierTest {
         assertNull(ProductNameLeafClassifier.classify("PRODUTO GENERICO XYZ"));
         assertNull(ProductNameLeafClassifier.classify(""));
     }
+
+    @Test
+    void wordBoundary_shortKeywordsDoNotMatchSubstrings() {
+        // "maca" (maçã) must not match "macarrao"; "mate" (chá) not "tomate".
+        assertEquals("graos-massas", ProductNameLeafClassifier.classify("MACARRAO NISSIN MIOJO 85G"));
+        assertEquals("frutas", ProductNameLeafClassifier.classify("MACA FUJI KG"));
+        assertEquals("legumes-verduras", ProductNameLeafClassifier.classify("TOMATE LONGA VIDA KG"));
+        // "original" removed as a beer keyword (too generic); the brand still wins.
+        assertEquals("cervejas", ProductNameLeafClassifier.classify("CERVEJA ANTARCTICA ORIGINAL 600ML"));
+    }
 }

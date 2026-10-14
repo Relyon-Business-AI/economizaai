@@ -46,10 +46,10 @@ public final class ProductNameLeafClassifier {
         // --- beverages: alcoholic ---
         new Rule("cervejas", List.of(
             "cerveja", "chopp", "heineken", "brahma", "skol", "antarctica", "budweiser",
-            "stella", "eisenbahn", "itaipava", "amstel", "original", "spaten")),
+            "stella", "eisenbahn", "itaipava", "amstel", "spaten")),
         new Rule("vinhos", List.of("vinho", "espumante", "prosecco", "champagne")),
         new Rule("destilados", List.of(
-            "whisky", "vodka", "cachaca", "gin", "rum", "tequila", "conhaque", "licor",
+            "whisky", "vodka", "cachaca", " gin ", " rum ", "tequila", "conhaque", "licor",
             "aperitivo", "campari", "steinhaeger")),
         // --- beverages: non-alcoholic ---
         new Rule("refrigerantes", List.of(
@@ -73,7 +73,7 @@ public final class ProductNameLeafClassifier {
             "gelatina", "goma", "paconga", "pacoca", "brigadeiro")),
         // --- produce ---
         new Rule("frutas", List.of(
-            "banana", "maca", "laranja", "mamao", "abacaxi", "uva", "melancia", "manga",
+            "banana", " maca ", "laranja", "mamao", "abacaxi", "uva", "melancia", "manga",
             "morango", "limao", "pera", "abacate", "melao", "kiwi", "tangerina", "goiaba",
             " meloa", "ameixa")),
         new Rule("legumes-verduras", List.of(
