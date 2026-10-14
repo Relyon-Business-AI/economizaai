@@ -388,7 +388,7 @@ public class ReceiptController {
                                                               @PathVariable UUID itemId,
                                                               @Valid @RequestBody UpdateItemCategoryRequest request) {
         return ResponseEntity.ok(receiptService.updateItemCategory(
-                user, id, itemId, request.category(), request.customCategoryId()));
+                user, id, itemId, request.category(), request.customCategoryId(), request.categoryNodeSlug()));
     }
 
     /**

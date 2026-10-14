@@ -610,9 +610,12 @@ public class ReceiptService {
      */
     @Transactional
     public ReceiptResponse updateItemCategory(User user, UUID receiptId, UUID itemId,
-                                              ProductCategory category, UUID customCategoryId) {
-        if ((category == null) == (customCategoryId == null)) {
-            throw new InvalidCategoryTargetException(); // exactly one target: enum OR custom
+                                              ProductCategory category, UUID customCategoryId,
+                                              String categoryNodeSlug) {
+        var targets = (category != null ? 1 : 0) + (customCategoryId != null ? 1 : 0)
+                + (categoryNodeSlug != null && !categoryNodeSlug.isBlank() ? 1 : 0);
+        if (targets != 1) {
+            throw new InvalidCategoryTargetException(); // exactly one target: enum OR custom OR node
         }
         MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
         MDC.put(MdcContextFilter.ITEM_ID, abbrev(itemId));
@@ -628,6 +631,11 @@ public class ReceiptService {
             var customCategory = customCategoryService.requireOwned(user, customCategoryId);
             categoryOverrideService.setCustomOverride(user, product, customCategory);
             log.info("item.category.override product={} customCategory={}", product.getId(), customCategory.getId());
+        } else if (categoryNodeSlug != null && !categoryNodeSlug.isBlank()) {
+            var nodeId = categoryResolver.findBySlug(categoryNodeSlug)
+                    .orElseThrow(InvalidCategoryTargetException::new).getId();
+            categoryOverrideService.setNodeOverride(user, product, nodeId);
+            log.info("item.category.override product={} node={}", product.getId(), categoryNodeSlug);
         } else {
             categoryOverrideService.setOverride(user, product, category);
             log.info("item.category.override product={} category={}", product.getId(), category);
