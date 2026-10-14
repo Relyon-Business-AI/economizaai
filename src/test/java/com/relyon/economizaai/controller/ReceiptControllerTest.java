@@ -203,7 +203,9 @@ class ReceiptControllerTest {
                         false,
                         false,
                         null,
-                        false
+                        false,
+                        null,
+                        null
                 ))
         );
     }

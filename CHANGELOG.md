@@ -16,6 +16,19 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-14 — Taxonomia de categorias 2 níveis (grupo→folha) começa a aparecer
+
+- Itens de nota (`ReceiptItemResponse`) agora trazem dois campos **aditivos**:
+  `categoryNodeLabel` (nome fino já localizado, ex. "Queijos", "Cervejas") e
+  `categoryNodeSlug` (chave estável p/ ícone/cor). O campo `category` (enum) segue
+  igual — o FE usa o node pra exibir e cai no enum quando ausente. Quando há
+  correção manual do household, o override vence e os campos de node vêm null.
+- Dashboard **"Por categoria"** (lens HOUSEHOLD) passa a agrupar pela folha fina
+  da nova taxonomia (ex. laticínios separados de carnes), com fallback no enum.
+- Admin: `POST /categorizer/recategorize-taxonomy` recategoriza os produtos na
+  taxonomia nova (classificador por nome + OFF). Operacional, não-FE.
+- Enquanto isso o enum legado continua válido em exports/relatórios (sem regressão).
+
 ## 2026-10-13 — Preferências de notificação multi-canal (matriz tipo × canal)
 
 - `notification_preferences` passou a aceitar **vários canais por tipo** (antes era 1

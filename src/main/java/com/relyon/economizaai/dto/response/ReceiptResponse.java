@@ -55,6 +55,17 @@ public record ReceiptResponse(
      */
     public static ReceiptResponse from(Receipt receipt, Map<UUID, String> categoryOverrides,
                                        Map<UUID, String> suggestionsByItemId) {
+        return from(receipt, categoryOverrides, suggestionsByItemId, Map.of(), Map.of());
+    }
+
+    /**
+     * @param nodeSlugByProduct   productId → new-taxonomy node slug (icon key)
+     * @param nodeLabelByProduct  productId → new-taxonomy node localized name (display)
+     */
+    public static ReceiptResponse from(Receipt receipt, Map<UUID, String> categoryOverrides,
+                                       Map<UUID, String> suggestionsByItemId,
+                                       Map<UUID, String> nodeSlugByProduct,
+                                       Map<UUID, String> nodeLabelByProduct) {
         var householdTotal = receipt.getItems().stream()
                 .filter(item -> !item.isExcluded() && !item.isExcludedFromPersonal())
                 .map(ReceiptItem::getTotalPrice)
@@ -84,7 +95,10 @@ public record ReceiptResponse(
                         .map(item -> {
                             var label = labelFor(item, categoryOverrides, suggestionsByItemId);
                             var suggested = label != null && item.getProduct() == null;
-                            return ReceiptItemResponse.from(item, label, suggested);
+                            var productId = item.getProduct() != null ? item.getProduct().getId() : null;
+                            var nodeSlug = productId != null ? nodeSlugByProduct.get(productId) : null;
+                            var nodeLabel = productId != null ? nodeLabelByProduct.get(productId) : null;
+                            return ReceiptItemResponse.from(item, label, suggested, nodeSlug, nodeLabel);
                         })
                         .toList()
         );

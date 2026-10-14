@@ -62,6 +62,7 @@ import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
+import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -107,6 +108,7 @@ public class ReceiptService {
     private final HouseholdProductAliasService householdProductAliasService;
     private final HouseholdProductCategoryOverrideService categoryOverrideService;
     private final CustomCategoryService customCategoryService;
+    private final CategoryResolver categoryResolver;
     private final HouseholdCacheGen householdCacheGen;
     private final LocalizedMessageService localizedMessageService;
     private final MarketNameService marketNameService;
@@ -641,8 +643,18 @@ public class ReceiptService {
                 .distinct()
                 .toList();
         var overrides = categoryOverrideService.overridesByProduct(user.getHousehold().getId(), productIds);
-        return withFriendlyName(user.getHousehold().getId(),
-                receipt, ReceiptResponse.from(receipt, overrides, suggestedCategories(receipt)));
+        var locale = LocaleContextHolder.getLocale();
+        var nodeSlugByProduct = new HashMap<UUID, String>();
+        var nodeLabelByProduct = new HashMap<UUID, String>();
+        for (var item : receipt.getItems()) {
+            var product = item.getProduct();
+            if (product == null || product.getCategoryId() == null) continue;
+            nodeSlugByProduct.putIfAbsent(product.getId(), categoryResolver.slugForId(product.getCategoryId()));
+            nodeLabelByProduct.putIfAbsent(product.getId(), categoryResolver.labelFor(product.getCategoryId(), locale));
+        }
+        return withFriendlyName(user.getHousehold().getId(), receipt,
+                ReceiptResponse.from(receipt, overrides, suggestedCategories(receipt),
+                        nodeSlugByProduct, nodeLabelByProduct));
     }
 
     /**

@@ -8,6 +8,7 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -29,19 +30,38 @@ public class CategoryResolver {
 
     private volatile Map<ProductCategory, UUID> idByLegacyEnum = new ConcurrentHashMap<>();
     private volatile Map<String, UUID> idBySlug = new ConcurrentHashMap<>();
+    private volatile Map<UUID, Category> byId = new ConcurrentHashMap<>();
 
     @EventListener(ApplicationReadyEvent.class)
     public void warmUp() {
         var byEnum = new ConcurrentHashMap<ProductCategory, UUID>();
         var bySlug = new ConcurrentHashMap<String, UUID>();
+        var byIdMap = new ConcurrentHashMap<UUID, Category>();
         for (var category : categoryRepository.findAll()) {
             bySlug.put(category.getSlug(), category.getId());
+            byIdMap.put(category.getId(), category);
             if (category.getLegacyEnum() != null) {
                 byEnum.put(category.getLegacyEnum(), category.getId());
             }
         }
         idByLegacyEnum = byEnum;
         idBySlug = bySlug;
+        byId = byIdMap;
+    }
+
+    /** Localized name of a category node (pt by default, en when locale is English), or null. Never queries. */
+    public String labelFor(UUID categoryId, Locale locale) {
+        if (categoryId == null) return null;
+        var category = byId.get(categoryId);
+        if (category == null) return null;
+        return locale != null && "en".equals(locale.getLanguage()) ? category.getNameEn() : category.getNamePt();
+    }
+
+    /** Slug of a category node (stable key for FE icon/color mapping), or null. Never queries. */
+    public String slugForId(UUID categoryId) {
+        if (categoryId == null) return null;
+        var category = byId.get(categoryId);
+        return category == null ? null : category.getSlug();
     }
 
     /** Category id the given legacy enum maps to by default, or null. Never queries. */
