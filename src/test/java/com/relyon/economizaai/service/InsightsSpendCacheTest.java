@@ -54,7 +54,7 @@ class InsightsSpendCacheTest {
         when(insightsRepository.spendByMonth(any(), any(), any(), any(), any())).thenReturn(List.of());
         when(insightsRepository.spendByWeek(any(), any(), any(), any(), any())).thenReturn(List.of());
         when(insightsRepository.spendByMarket(any(), any(), any(), any(), any())).thenReturn(List.of());
-        when(insightsRepository.spendByCategory(any(), any(), any(), any(), any())).thenReturn(List.of());
+        when(insightsRepository.spendByProductNode(any(), any(), any(), any(), any())).thenReturn(List.of());
         when(insightsRepository.supportedCnpjs(any(), any())).thenReturn(List.of());
     }
 

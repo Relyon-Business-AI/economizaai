@@ -148,12 +148,6 @@ class InsightsRepositoryTest {
         assertEquals(0, ((BigDecimal) rows.get(0)[2]).compareTo(new BigDecimal("180.00")));
     }
 
-    @Test
-    void spendByCategory_groupsByProductCategory() {
-        var rows = insightsRepository.spendByCategory(household.getId(), ALL_TIME_FROM, ALL_TIME_TO, ALL, SENTINEL);
-        assertTrue(rows.size() >= 2);
-    }
-
     // ---------- scope: SUPPORTED vs OTHER ----------
 
     @Test

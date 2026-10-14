@@ -232,20 +232,29 @@ class InsightsServiceTest {
     }
 
     @Test
-    void topCategories_globalLens_appliesLimitOverGlobalEnumGrouping() {
+    void topCategories_globalLens_appliesLimitOverNodeBuckets() {
         var user = buildUser();
         var householdId = user.getHousehold().getId();
         stubEmptyAggregates(householdId, EPOCH_FLOOR, EPOCH_CEIL);
-        when(insightsRepository.spendByCategory(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS))
-                .thenReturn(List.of(
-                        new Object[]{ProductCategory.GROCERIES, new BigDecimal("40.00"), 5L},
-                        new Object[]{ProductCategory.BEVERAGES, new BigDecimal("15.00"), 2L}));
+        var productOne = UUID.randomUUID();
+        var nodeOne = UUID.randomUUID();
+        var productTwo = UUID.randomUUID();
+        var nodeTwo = UUID.randomUUID();
+        when(insightsRepository.spendByProductNode(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS))
+                .thenReturn(List.<Object[]>of(
+                        new Object[]{productOne, nodeOne, new BigDecimal("40.00"), 5L},
+                        new Object[]{productTwo, nodeTwo, new BigDecimal("15.00"), 2L}));
+        when(categoryOverrideService.effectiveCategoryByProduct(eq(householdId), any())).thenReturn(Map.of());
+        when(categoryResolver.slugForId(nodeOne)).thenReturn("mercearia");
+        when(categoryResolver.labelFor(eq(nodeOne), any())).thenReturn("Mercearia");
+        when(categoryResolver.slugForId(nodeTwo)).thenReturn("bebidas");
+        when(categoryResolver.labelFor(eq(nodeTwo), any())).thenReturn("Bebidas");
 
         var top = insightsService.topCategories(user, null, null, 1, CategoryView.GLOBAL);
 
         assertEquals(1, top.size());
-        assertEquals(ProductCategory.GROCERIES, top.get(0).category());
-        assertEquals("GROCERIES", top.get(0).label());
+        assertEquals("mercearia", top.get(0).slug());
+        assertEquals("Mercearia", top.get(0).label());
     }
 
     @Test

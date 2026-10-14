@@ -15,6 +15,7 @@ import com.relyon.economizaai.service.extraction.CategorizerAdminService;
 import com.relyon.economizaai.service.extraction.ConsensusPromotionService;
 import com.relyon.economizaai.service.extraction.EanCatalogService;
 import com.relyon.economizaai.service.extraction.PhraseTokenSimulationService;
+import com.relyon.economizaai.service.extraction.TaxonomyRecategorizationService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,6 +55,7 @@ class CategorizerControllerTest {
     @MockitoBean private JwtService jwtService;
     @MockitoBean private UserDetailsService userDetailsService;
     @MockitoBean private LocalizedMessageService localizedMessageService;
+    @MockitoBean private TaxonomyRecategorizationService taxonomyRecategorizationService;
 
     private User principal() {
         var household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();

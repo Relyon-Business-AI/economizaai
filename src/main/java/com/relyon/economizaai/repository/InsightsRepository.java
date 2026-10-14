@@ -194,39 +194,6 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
                                  @Param("scope") String scope,
                                  @Param("supportedCnpjs") Collection<String> supportedCnpjs);
 
-    // COALESCE must yield the ProductCategory ENUM (the result is cast to
-    // ProductCategory in InsightsService), so the null fallback needs the
-    // fully-qualified enum literal — a string literal makes the projection a
-    // String and breaks both the cast and Postgres enum/text unification.
-    // This is the rare JPQL type-inference exception to the no-FQN rule.
-    // Snapshot-first: confirmed history aggregates by the category frozen at
-    // confirmation (categoryAtConfirmation), so later recategorizations never
-    // rewrite what the household already saw; live p.category is only the
-    // fallback for legacy rows without a snapshot.
-    @Query("""
-        SELECT p.categoryId AS categoryId,
-               COALESCE(SUM(ri.totalPrice), 0) AS total,
-               COUNT(ri) AS itemCount
-        FROM ReceiptItem ri
-        JOIN ri.receipt r
-        LEFT JOIN ri.product p
-        WHERE r.household.id = :householdId
-          AND r.status = 'CONFIRMED'
-          AND ri.excluded = false
-          AND ri.excludedFromPersonal = false
-          AND r.issuedAt >= :from
-          AND r.issuedAt <= :to
-          AND (:scope = 'ALL'
-               OR (:scope = 'SUPPORTED' AND r.cnpjEmitente IN :supportedCnpjs)
-               OR (:scope = 'OTHER' AND (r.cnpjEmitente IS NULL OR r.cnpjEmitente NOT IN :supportedCnpjs)))
-        GROUP BY p.categoryId
-        ORDER BY total DESC
-    """)
-    List<Object[]> spendByCategory(@Param("householdId") UUID householdId,
-                                   @Param("from") LocalDateTime from,
-                                   @Param("to") LocalDateTime to,
-                                   @Param("scope") String scope,
-                                   @Param("supportedCnpjs") Collection<String> supportedCnpjs);
 
     // Product-granularity spend, used by the HOUSEHOLD category lens: the global
     // p.category is returned per product so InsightsService can re-bucket by the

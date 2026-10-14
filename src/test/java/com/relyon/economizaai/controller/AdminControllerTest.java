@@ -49,6 +49,8 @@ import com.relyon.economizaai.service.analytics.MarketingDashboardService;
 import com.relyon.economizaai.service.merchant.MerchantClaimService;
 import com.relyon.economizaai.service.admin.AdminNotificationEffectivenessService;
 import com.relyon.economizaai.service.admin.AdminNotificationService;
+import com.relyon.economizaai.service.CategoryResolver;
+import com.relyon.economizaai.service.notifications.OperationalAlertService;
 import com.relyon.economizaai.service.admin.AdminProductService;
 import com.relyon.economizaai.service.admin.AdminDevService;
 import com.relyon.economizaai.service.admin.AdminReceiptService;
@@ -144,6 +146,8 @@ class AdminControllerTest {
     @MockitoBean private StateCoverageService stateCoverageService;
     @MockitoBean private SefazIngestionService sefazIngestionService;
     @MockitoBean private AdminDevService adminDevService;
+    @MockitoBean private CategoryResolver categoryResolver;
+    @MockitoBean private OperationalAlertService operationalAlertService;
     @MockitoBean private JwtService jwtService;
     @MockitoBean private UserDetailsService userDetailsService;
     @MockitoBean private LocalizedMessageService localizedMessageService;
