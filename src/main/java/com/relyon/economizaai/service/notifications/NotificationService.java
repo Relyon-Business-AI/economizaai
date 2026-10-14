@@ -16,9 +16,11 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.LocalDateTime;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Orchestrates notification delivery:
@@ -62,16 +64,19 @@ public class NotificationService {
      * transaction.
      */
     public Notification notify(NotificationPayload payload) {
-        var channel = resolveChannel(payload.user(), payload.type());
-        if (channel == NotificationChannel.NONE) {
-            log.debug("notification.skipped user={} type={} reason=opted_out",
+        var configured = configuredChannels(payload.user(), payload.type());
+        if (configured.contains(NotificationChannel.NONE)) {
+            log.debug("notification.skipped user={} type={} reason=muted",
                     payload.user().getEmail(), payload.type());
             return null;
         }
+        var outbound = outboundChannels(payload.user(), configured);
+        var primary = outbound.stream().findFirst().orElse(NotificationChannel.INBOX);
+
         var notification = Notification.builder()
                 .user(payload.user())
                 .type(payload.type())
-                .channel(channel)
+                .channel(primary)
                 .title(payload.title())
                 .body(payload.body())
                 .payload(serialize(payload.extras()))
@@ -79,30 +84,48 @@ public class NotificationService {
                 .delivered(false)
                 .build();
 
-        // FREE tier: persist the in-app inbox row but skip push/email dispatch.
-        // The inbox itself is never gated; only outbound delivery is PRO.
-        if (!subscriptionGate.allows(payload.user(), Feature.PUSH_AND_EMAIL_DELIVERY)) {
-            notification.setFailureReason("free_tier_inbox_only");
-            log.info("notification.inbox_only user={} type={} channel={} reason=free_tier",
-                    payload.user().getEmail(), payload.type(), channel);
+        // Inbox is the always-on baseline (free). FREE tier gets the inbox row but no
+        // outbound dispatch; only push/email delivery is PRO. Inbox-only by choice
+        // (no outbound channels selected) likewise just persists the row.
+        if (outbound.isEmpty()
+                || !subscriptionGate.allows(payload.user(), Feature.PUSH_AND_EMAIL_DELIVERY)) {
+            if (outbound.isEmpty()) {
+                log.debug("notification.inbox_only user={} type={} reason=no_outbound_selected",
+                        payload.user().getEmail(), payload.type());
+            } else {
+                notification.setFailureReason("free_tier_inbox_only");
+                log.info("notification.inbox_only user={} type={} reason=free_tier",
+                        payload.user().getEmail(), payload.type());
+            }
             return notificationRepository.save(notification);
         }
 
-        var dispatcher = dispatchersByChannel.get(channel);
-        if (dispatcher == null) {
-            notification.setFailureReason("no dispatcher registered for channel " + channel);
-            log.warn("notification.no_dispatcher user={} type={} channel={}",
-                    payload.user().getEmail(), payload.type(), channel);
-            return notificationRepository.save(notification);
-        }
-        // Persist BEFORE the dispatch so the push payload carries the notification
-        // id — the app reports PUSH_OPENED with it on tap (open attribution).
+        // Persist BEFORE dispatch so the push payload carries the notification id —
+        // the app reports PUSH_OPENED with it on tap (open attribution).
         var saved = notificationRepository.save(notification);
-        var result = dispatcher.dispatch(withNotificationId(payload, saved));
-        saved.setDelivered(result.delivered());
-        saved.setDeliveredAt(result.delivered() ? LocalDateTime.now() : null);
-        saved.setFailureReason(result.failureReason());
+        dispatchAll(payload, saved, outbound);
         return notificationRepository.save(saved);
+    }
+
+    /** Fan out to every selected outbound channel; the row records aggregate delivery. */
+    private void dispatchAll(NotificationPayload payload, Notification saved, Set<NotificationChannel> outbound) {
+        var anyDelivered = false;
+        String lastFailure = null;
+        for (var channel : outbound) {
+            var dispatcher = dispatchersByChannel.get(channel);
+            if (dispatcher == null) {
+                lastFailure = "no dispatcher registered for channel " + channel;
+                log.warn("notification.no_dispatcher user={} type={} channel={}",
+                        payload.user().getEmail(), payload.type(), channel);
+                continue;
+            }
+            var result = dispatcher.dispatch(withNotificationId(payload, saved));
+            anyDelivered = anyDelivered || result.delivered();
+            if (!result.delivered()) lastFailure = result.failureReason();
+        }
+        saved.setDelivered(anyDelivered);
+        saved.setDeliveredAt(anyDelivered ? LocalDateTime.now() : null);
+        saved.setFailureReason(anyDelivered ? null : lastFailure);
     }
 
     /** Dispatch copy whose extras include the persisted notification id (tap attribution). */
@@ -146,14 +169,30 @@ public class NotificationService {
         }
     }
 
-    private NotificationChannel resolveChannel(User user, NotificationType type) {
-        var preference = preferenceRepository.findByUserIdAndType(user.getId(), type);
-        if (preference.isPresent()) return preference.get().getChannel();
-        // System default: prefer push when token is registered, else email
-        if (user.getPushDeviceToken() != null && !user.getPushDeviceToken().isBlank()) {
-            return NotificationChannel.PUSH;
+    /** The raw set of channels the user configured for this type (empty = never configured). */
+    private Set<NotificationChannel> configuredChannels(User user, NotificationType type) {
+        var configured = EnumSet.noneOf(NotificationChannel.class);
+        preferenceRepository.findAllByUserIdAndType(user.getId(), type)
+                .forEach(preference -> configured.add(preference.getChannel()));
+        return configured;
+    }
+
+    /**
+     * The outbound channels to dispatch to (inbox is implicit/always). When the user never
+     * configured this type, default to push if they have a token, else email. Only PUSH/EMAIL
+     * are honored here — WhatsApp lives in the digest flow, not the per-type matrix.
+     */
+    private Set<NotificationChannel> outboundChannels(User user, Set<NotificationChannel> configured) {
+        if (configured.isEmpty()) {
+            return EnumSet.of(hasPushToken(user) ? NotificationChannel.PUSH : NotificationChannel.EMAIL);
         }
-        return NotificationChannel.EMAIL;
+        var outbound = EnumSet.copyOf(configured);
+        outbound.retainAll(EnumSet.of(NotificationChannel.PUSH, NotificationChannel.EMAIL));
+        return outbound;
+    }
+
+    private static boolean hasPushToken(User user) {
+        return user.getPushDeviceToken() != null && !user.getPushDeviceToken().isBlank();
     }
 
     private String serialize(Map<String, Object> extras) {

@@ -16,6 +16,20 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-13 — Preferências de notificação multi-canal (matriz tipo × canal)
+
+- `notification_preferences` passou a aceitar **vários canais por tipo** (antes era 1
+  só). O contrato dos endpoints **não muda de forma** — segue lista de `{ type, channel }`
+  — mas agora dá pra enviar **mais de uma linha por tipo** (ex.: `PROMO_PERSONAL`+`PUSH`
+  e `PROMO_PERSONAL`+`EMAIL` juntos).
+- `PUT /users/me/notification-preferences` agora **substitui o conjunto inteiro de canais**
+  de cada tipo presente no corpo (tipos ausentes ficam intactos).
+- Novo canal **`INBOX`** (lista no app, sempre-ligada, grátis — baseline). Semântica: sem
+  linhas = default (push se tiver token, senão e-mail); `{INBOX}` = só no app; `{INBOX,PUSH,EMAIL}`
+  = app + push + e-mail; `{NONE}` = **mudo total**.
+- Envio dispara em **todos os canais ligados**. WhatsApp **não** entra na matriz por ora
+  (fica no digest). Trava mantida: **FREE = só inbox**; push/e-mail são PRO.
+
 ## 2026-10-13 — Correção de categoria do item aceita categoria personalizada
 
 - `PUT /receipts/{id}/items/{itemId}/category` agora aceita **um de dois destinos**:

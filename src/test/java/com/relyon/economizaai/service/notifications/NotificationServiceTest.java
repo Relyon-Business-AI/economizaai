@@ -22,7 +22,6 @@ import java.util.ArrayList;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -92,7 +91,7 @@ class NotificationServiceTest {
     @Test
     void preferencesPushWhenUserHasTokenAndNoExplicitPreference() {
         var user = userWithPushToken();
-        when(preferenceRepository.findByUserIdAndType(any(), any())).thenReturn(Optional.empty());
+        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
         when(pushDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.ok());
         var svc = service(true, true);
 
@@ -109,7 +108,7 @@ class NotificationServiceTest {
     @Test
     void fallsBackToEmailWhenNoPushToken() {
         var user = userWithoutPushToken();
-        when(preferenceRepository.findByUserIdAndType(any(), any())).thenReturn(Optional.empty());
+        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
         when(emailDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.ok());
         var svc = service(true, true);
 
@@ -122,7 +121,7 @@ class NotificationServiceTest {
     @Test
     void respectsExplicitNonePreferenceAndDoesNotDispatch() {
         var user = userWithPushToken();
-        when(preferenceRepository.findByUserIdAndType(any(), any())).thenReturn(Optional.of(
+        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of(
                 NotificationPreference.builder().user(user).type(NotificationType.PROMO_PERSONAL)
                         .channel(NotificationChannel.NONE).build()));
         var svc = service(true, true);
@@ -137,7 +136,7 @@ class NotificationServiceTest {
     @Test
     void persistsFailureWhenDispatchFails() {
         var user = userWithPushToken();
-        when(preferenceRepository.findByUserIdAndType(any(), any())).thenReturn(Optional.empty());
+        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
         when(pushDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.failed("no token"));
         var svc = service(true, true);
 
@@ -154,7 +153,7 @@ class NotificationServiceTest {
         var user = freeUserWithPushToken();
         when(emailDispatcher.channel()).thenReturn(NotificationChannel.EMAIL);
         when(pushDispatcher.channel()).thenReturn(NotificationChannel.PUSH);
-        when(preferenceRepository.findByUserIdAndType(any(), any())).thenReturn(Optional.empty());
+        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
         when(subscriptionGate.allows(any(), eq(Feature.PUSH_AND_EMAIL_DELIVERY))).thenReturn(false);
         var svc = new NotificationService(preferenceRepository, notificationRepository, subscriptionGate,
                 List.of(emailDispatcher, pushDispatcher));
@@ -173,7 +172,7 @@ class NotificationServiceTest {
     @Test
     void notifyAfterCommit_withoutActiveTransaction_dispatchesImmediately() {
         var user = userWithPushToken();
-        when(preferenceRepository.findByUserIdAndType(any(), any())).thenReturn(Optional.empty());
+        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
         when(pushDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.ok());
         var svc = service(true, true);
 
@@ -193,7 +192,7 @@ class NotificationServiceTest {
             verify(pushDispatcher, never()).dispatch(any());
             verify(notificationRepository, never()).save(any());
 
-            when(preferenceRepository.findByUserIdAndType(any(), any())).thenReturn(Optional.empty());
+            when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
             when(pushDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.ok());
             TransactionSynchronizationManager.getSynchronizations()
                     .forEach(TransactionSynchronization::afterCommit);
@@ -208,7 +207,7 @@ class NotificationServiceTest {
     @Test
     void notifyAfterCommit_dispatchFailureIsSwallowed() {
         var user = userWithPushToken();
-        when(preferenceRepository.findByUserIdAndType(any(), any())).thenReturn(Optional.empty());
+        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
         when(pushDispatcher.dispatch(any())).thenThrow(new IllegalStateException("expo down"));
         var svc = service(true, true);
 
@@ -218,16 +217,54 @@ class NotificationServiceTest {
     @Test
     void persistsFailureWhenNoDispatcherForRequestedChannel() {
         var user = userWithPushToken();
-        when(preferenceRepository.findByUserIdAndType(any(), any())).thenReturn(Optional.of(
+        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of(
                 NotificationPreference.builder().user(user).type(NotificationType.PROMO_PERSONAL)
                         .channel(NotificationChannel.EMAIL).build()));
         var svc = service(false, true); // no email dispatcher (e.g., SMTP not configured)
 
         svc.notify(payload(user, NotificationType.PROMO_PERSONAL));
 
+        // persisted before dispatch + again after (aggregate outcome) → 2 saves
         var captor = ArgumentCaptor.forClass(Notification.class);
-        verify(notificationRepository).save(captor.capture());
+        verify(notificationRepository, times(2)).save(captor.capture());
         assertEquals(false, captor.getValue().isDelivered());
         assertNotNull(captor.getValue().getFailureReason());
+    }
+
+    @Test
+    void multiChannel_dispatchesToBothPushAndEmail() {
+        var user = userWithPushToken();
+        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of(
+                NotificationPreference.builder().user(user).type(NotificationType.PROMO_PERSONAL)
+                        .channel(NotificationChannel.INBOX).build(),
+                NotificationPreference.builder().user(user).type(NotificationType.PROMO_PERSONAL)
+                        .channel(NotificationChannel.PUSH).build(),
+                NotificationPreference.builder().user(user).type(NotificationType.PROMO_PERSONAL)
+                        .channel(NotificationChannel.EMAIL).build()));
+        when(pushDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.ok());
+        when(emailDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.ok());
+        var svc = service(true, true);
+
+        svc.notify(payload(user, NotificationType.PROMO_PERSONAL));
+
+        verify(pushDispatcher).dispatch(any());
+        verify(emailDispatcher).dispatch(any());
+    }
+
+    @Test
+    void inboxOnlySelection_persistsRowButNoDispatch() {
+        var user = userWithPushToken();
+        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of(
+                NotificationPreference.builder().user(user).type(NotificationType.PROMO_PERSONAL)
+                        .channel(NotificationChannel.INBOX).build()));
+        var svc = service(true, true);
+
+        svc.notify(payload(user, NotificationType.PROMO_PERSONAL));
+
+        verify(pushDispatcher, never()).dispatch(any());
+        verify(emailDispatcher, never()).dispatch(any());
+        var captor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationRepository).save(captor.capture());
+        assertEquals(NotificationChannel.INBOX, captor.getValue().getChannel());
     }
 }

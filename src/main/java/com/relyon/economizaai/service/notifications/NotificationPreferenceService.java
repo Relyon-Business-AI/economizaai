@@ -16,7 +16,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -35,14 +38,24 @@ public class NotificationPreferenceService {
 
     @Transactional
     public List<NotificationPreferenceResponse> update(User user, UpdateNotificationPreferencesRequest request) {
-        for (var entry : request.preferences()) {
-            var existing = preferenceRepository.findByUserIdAndType(user.getId(), entry.type());
-            var preference = existing.orElseGet(() -> NotificationPreference.builder()
-                    .user(user).type(entry.type()).build());
-            preference.setChannel(entry.channel());
-            preferenceRepository.save(preference);
-        }
-        log.info("notification.preferences.updated user={} count={}", LogMasker.email(user.getEmail()), request.preferences().size());
+        // The request carries the COMPLETE desired set of channels for each type it
+        // mentions (multi-channel). Replace that type's rows wholesale; types not in
+        // the request are left untouched.
+        var channelsByType = request.preferences().stream()
+                .collect(Collectors.groupingBy(
+                        UpdateNotificationPreferencesRequest.Preference::type,
+                        LinkedHashMap::new,
+                        Collectors.mapping(UpdateNotificationPreferencesRequest.Preference::channel,
+                                Collectors.toCollection(LinkedHashSet::new))));
+
+        channelsByType.keySet().forEach(type -> preferenceRepository.deleteByUserIdAndType(user.getId(), type));
+        preferenceRepository.flush(); // ensure deletes land before re-inserts (unique constraint)
+        channelsByType.forEach((type, channels) -> channels.forEach(channel ->
+                preferenceRepository.save(NotificationPreference.builder()
+                        .user(user).type(type).channel(channel).build())));
+
+        log.info("notification.preferences.updated user={} types={}",
+                LogMasker.email(user.getEmail()), channelsByType.size());
         return list(user);
     }
 
