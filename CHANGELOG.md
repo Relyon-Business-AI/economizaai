@@ -16,6 +16,41 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-14 — Taxonomia redonda: gráfico override-aware, categoria custom c/ visual, motor por nó
+
+Leva grande (vai pra prod junta). Tudo aditivo — o enum legado continua válido.
+
+**"Por categoria" agora reflete correções (override-aware).** `/insights/spend` (e
+`/insights/query`) agrupam pela categoria **efetiva do household**: ao corrigir um item
+(folha/enum/custom) o gráfico muda na hora (antes agrupava pelo `category_id` global e
+ignorava a correção). Cache invalida em `updateItemCategory` e no migrate de categoria.
+
+**`CategoryBucket` ganhou `parentSlug`, `icon`, `color`** (em `/insights/spend` →
+`byCategory`). Preenchidos **só p/ categorias CUSTOM** (slug = `custom:<id>`): a custom
+aparece aninhada no grupo (`parentSlug`) com o ícone/cor escolhidos. Nós da taxonomia
+deixam esses campos null — o FE deriva o grupo pelo slug como antes.
+
+**Categoria custom com ícone + cor + grupo-pai.** `POST /categories` aceita opcionais
+`icon` (nome Ionicons), `color` (hex), `parentGroupSlug` (slug de um GRUPO — vira uma
+"folha" sua nele). `CategoryResponse` (GET/POST `/categories`) ganhou `icon`, `color`,
+`parentSlug`, `parentName`.
+
+**`/categories/taxonomy` agora ordenado grupo → suas folhas** em ordem lógica (Hortifrúti
+→ … → Outros por último; "Não-mercado" por último). Antes vinha embaralhado.
+
+**Admin (não-FE, referência):**
+- NOVO `PATCH /admin/products/{id}/category-node?slug=` (folha fina ao produto) e
+  `GET /admin/products/taxonomy-coverage` (`{total, withLeaf, withoutLeaf}`).
+- `POST /categorizer/dictionary/curated/import` e o override de
+  `POST /categorizer/ai/findings/{id}/approve` aceitam `categoryNodeSlug`.
+- **REMOVIDOS** (morto): `GET`/`POST /admin/products/recategorize` (recategorizador por
+  enum — o scheduler roda a versão taxonomia) e `GET /insights/categories/top` (órfão).
+
+**Motor por nó (dual-write aditivo):** dicionário (curado+aprendido), promoção de consenso
+e a ingestão gravam `products.category_id` (folha) ao lado do enum. Migrations **V104**
+(custom icon/cor/pai), **V105** (dicionário category_id), **V106** (backfill das entradas
+antigas p/ o nó-grupo do enum). Enum segue como camada de compatibilidade — sem regressão.
+
 ## 2026-10-14 — Taxonomia de categorias 2 níveis (grupo→folha) começa a aparecer
 
 - Itens de nota (`ReceiptItemResponse`) agora trazem dois campos **aditivos**:

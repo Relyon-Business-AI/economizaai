@@ -10,6 +10,24 @@ mirror entries here.
 
 ---
 
+## Taxonomia de categorias: dual-write enum↔nó + arestas (2026-10-14)
+- **Now**: a categorização virou 2 níveis (grupo→folha, tabela `categories`). O motor
+  faz **dual-write ADITIVO**: grava `products.category_id` (folha) ao lado do `category`
+  (enum legado). Dicionário/consenso/ingestão já emitem nó (V104–V106). O gráfico "Por
+  categoria" é override-aware.
+- **OK for dev**: o enum segue como **camada de compatibilidade** — export, WhatsApp e
+  `ProductResponse` ainda usam o enum; a folha é extra. Nada quebra se o nó vier null.
+- **Before prod / revisitar**:
+  1. **Consenso grava nó-GRUPO, não folha fina** — a contagem de votos do consenso é por
+     enum; folha-no-consenso exige recontar por nó (re-arquitetura do tally). Esforço: médio.
+  2. **Admin (dicionário + aprovar-achado): enum ainda é pick separado** do picker de folha.
+     Pra virar pick único, expor `legacy_enum` no `/categories/taxonomy` e derivar o enum da
+     folha no FE. Esforço: baixo.
+  3. Expor a folha fina no `ProductResponse`/export quando o FE/B2B precisar do nível fino.
+- **CI gotcha**: o build do Render roda com **`-DskipTests`** (compila os testes, não roda).
+  Falha de runtime de teste NÃO trava deploy → a suíte apodrece sem ninguém ver. **Rodar
+  `./mvnw -o test` completo** antes de confiar no verde.
+
 ## OOM hardening: flags da JVM + watchdog de heap (2026-09-30)
 - **Now**: depois do OOM de prod (2026-09-30 15:09 UTC, serviço ficou meio-morto até
   redeploy manual), o ENTRYPOINT do `Dockerfile` ganhou `-XX:+ExitOnOutOfMemoryError`
