@@ -3,6 +3,7 @@ package com.relyon.economizaai.service;
 import com.relyon.economizaai.exception.CustomCategoryNotFoundException;
 import com.relyon.economizaai.exception.InvalidCategoryMigrationException;
 import com.relyon.economizaai.model.Household;
+import com.relyon.economizaai.dto.request.CreateCategoryRequest;
 import com.relyon.economizaai.model.HouseholdCustomCategory;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.User;
@@ -65,7 +66,7 @@ class CustomCategoryServiceTest {
         when(customCategoryRepository.findByHouseholdIdAndNameIgnoreCase(user.getHousehold().getId(), "Frutas"))
                 .thenReturn(Optional.of(existing));
 
-        var response = service.create(user, " Frutas ");
+        var response = service.create(user, new CreateCategoryRequest(" Frutas ", null, null, null));
 
         assertEquals(existing.getId(), response.id());
         assertTrue(response.custom());

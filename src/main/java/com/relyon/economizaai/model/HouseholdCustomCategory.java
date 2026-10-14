@@ -46,6 +46,21 @@ public class HouseholdCustomCategory extends BaseEntity implements HouseholdScop
     @Column(nullable = false, length = 60)
     private String name;
 
+    // Personalização visual escolhida pelo usuário (nome de ícone Ionicons + cor hex).
+    // Null = usa o padrão (etiqueta). Validados contra uma paleta fixa no FE.
+    @Column(length = 40)
+    private String icon;
+
+    @Column(length = 9)
+    private String color;
+
+    // Grupo da taxonomia em que a custom se encaixa (vira uma "folha" do grupo no
+    // gráfico). Null = custom solta (nível de topo). SET NULL se o grupo sumir.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_category_id")
+    @OnDelete(action = OnDeleteAction.SET_NULL)
+    private Category parentCategory;
+
     // Default origin to the current household on first persist, so callers never
     // have to remember to set it. Merge code overrides household_id later but leaves
     // originHousehold untouched.

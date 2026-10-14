@@ -52,7 +52,7 @@ public class CategoryController {
     @PostMapping
     public ResponseEntity<CategoryResponse> create(@AuthenticationPrincipal User user,
                                                    @Valid @RequestBody CreateCategoryRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(customCategoryService.create(user, request.name()));
+        return ResponseEntity.status(HttpStatus.CREATED).body(customCategoryService.create(user, request));
     }
 
     @DeleteMapping("/{id}")

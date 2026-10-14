@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service;
 
 import com.relyon.economizaai.model.Household;
+import com.relyon.economizaai.dto.request.CreateCategoryRequest;
 import com.relyon.economizaai.model.HouseholdCustomCategory;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.User;
@@ -48,7 +49,7 @@ class CustomCategoryServiceCoverageTest {
                 .household(user.getHousehold()).name("Frutas").build();
         when(customCategoryRepository.save(any(HouseholdCustomCategory.class))).thenReturn(saved);
 
-        var response = service.create(user, "  Frutas  ");
+        var response = service.create(user, new CreateCategoryRequest("  Frutas  ", null, null, null));
 
         assertEquals(saved.getId(), response.id());
         assertEquals("Frutas", response.name());

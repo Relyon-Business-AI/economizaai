@@ -59,8 +59,8 @@ class CategoryControllerTest {
     @Test
     void list_returnsCategories() throws Exception {
         when(customCategoryService.list(any(User.class))).thenReturn(List.of(
-                new CategoryResponse(null, "GROCERIES", false),
-                new CategoryResponse(UUID.randomUUID(), "Frutas", true)));
+                CategoryResponse.enumCategory("GROCERIES"),
+                CategoryResponse.custom(UUID.randomUUID(), "Frutas")));
 
         mockMvc.perform(get("/api/v1/categories")
                         .with(SecurityMockMvcRequestPostProcessors.user(principal())))
@@ -74,10 +74,10 @@ class CategoryControllerTest {
     @Test
     void create_returnsCreatedCategory() throws Exception {
         var id = UUID.randomUUID();
-        when(customCategoryService.create(any(User.class), eq("Frutas")))
-                .thenReturn(new CategoryResponse(id, "Frutas", true));
+        when(customCategoryService.create(any(User.class), any(CreateCategoryRequest.class)))
+                .thenReturn(CategoryResponse.custom(id, "Frutas"));
 
-        var body = objectMapper.writeValueAsString(new CreateCategoryRequest("Frutas"));
+        var body = objectMapper.writeValueAsString(new CreateCategoryRequest("Frutas", null, null, null));
         mockMvc.perform(post("/api/v1/categories")
                         .contentType(MediaType.APPLICATION_JSON).content(body)
                         .with(SecurityMockMvcRequestPostProcessors.user(principal())))
@@ -89,7 +89,7 @@ class CategoryControllerTest {
 
     @Test
     void create_blankName_returns400() throws Exception {
-        var body = objectMapper.writeValueAsString(new CreateCategoryRequest("  "));
+        var body = objectMapper.writeValueAsString(new CreateCategoryRequest("  ", null, null, null));
         when(localizedMessageService.translate("validation.failed")).thenReturn("Validation failed");
 
         mockMvc.perform(post("/api/v1/categories")

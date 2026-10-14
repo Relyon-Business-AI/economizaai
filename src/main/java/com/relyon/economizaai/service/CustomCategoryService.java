@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service;
 
+import com.relyon.economizaai.dto.request.CreateCategoryRequest;
 import com.relyon.economizaai.dto.response.CategoryMigrationResponse;
 import com.relyon.economizaai.dto.response.CategoryResponse;
 import com.relyon.economizaai.dto.response.TaxonomyCategoryResponse;
@@ -63,16 +64,44 @@ public class CustomCategoryService {
         return locale != null && "en".equals(locale.getLanguage()) ? category.getNameEn() : category.getNamePt();
     }
 
-    /** Create a custom category for the household (idempotent on name). */
+    /**
+     * Create (or, idempotent on name, update) a custom category for the household.
+     * Optional visual (icon/color) and nesting under a taxonomy GROUP are applied
+     * when provided — so re-submitting an existing name edits its style/group.
+     */
     @Transactional
-    public CategoryResponse create(User user, String rawName) {
-        var name = rawName.trim();
+    public CategoryResponse create(User user, CreateCategoryRequest request) {
+        var name = request.name().trim();
         var householdId = user.getHousehold().getId();
+        var parentGroup = resolveParentGroup(request.parentGroupSlug());
         var existing = customCategoryRepository.findByHouseholdIdAndNameIgnoreCase(householdId, name);
-        var category = existing.orElseGet(() -> customCategoryRepository.save(
-                HouseholdCustomCategory.builder().household(user.getHousehold()).name(name).build()));
-        log.info("custom_category.create household={} name='{}' id={}", householdId, name, category.getId());
-        return new CategoryResponse(category.getId(), category.getName(), true);
+        var category = existing.orElseGet(
+                () -> HouseholdCustomCategory.builder().household(user.getHousehold()).name(name).build());
+        var mutated = existing.isEmpty();
+        if (request.icon() != null) { category.setIcon(request.icon()); mutated = true; }
+        if (request.color() != null) { category.setColor(request.color()); mutated = true; }
+        if (request.parentGroupSlug() != null) { category.setParentCategory(parentGroup); mutated = true; }
+        var saved = mutated ? customCategoryRepository.save(category) : category;
+        log.info("custom_category.create household={} name='{}' id={} parent={} icon={}",
+                householdId, name, saved.getId(), parentGroup != null ? parentGroup.getSlug() : null, saved.getIcon());
+        return toResponse(saved);
+    }
+
+    /** Resolve a taxonomy GROUP by slug (must be a top-level node). Null slug → standalone. */
+    private Category resolveParentGroup(String slug) {
+        if (slug == null || slug.isBlank()) return null;
+        var category = categoryRepository.findBySlug(slug).orElseThrow(InvalidCategoryMigrationException::new);
+        if (category.getParent() != null) throw new InvalidCategoryMigrationException(); // só grupo, não folha
+        return category;
+    }
+
+    private CategoryResponse toResponse(HouseholdCustomCategory custom) {
+        var parent = custom.getParentCategory();
+        var locale = LocaleContextHolder.getLocale();
+        return new CategoryResponse(custom.getId(), custom.getName(), true,
+                custom.getIcon(), custom.getColor(),
+                parent != null ? parent.getSlug() : null,
+                parent != null ? localizedName(parent, locale) : null);
     }
 
     /** All categories the household can use: global enums + its custom categories. */
@@ -80,10 +109,10 @@ public class CustomCategoryService {
     public List<CategoryResponse> list(User user) {
         var categories = new ArrayList<CategoryResponse>();
         for (var category : ProductCategory.values()) {
-            categories.add(new CategoryResponse(null, category.name(), false));
+            categories.add(CategoryResponse.enumCategory(category.name()));
         }
         customCategoryRepository.findByHouseholdIdOrderByName(user.getHousehold().getId())
-                .forEach(custom -> categories.add(new CategoryResponse(custom.getId(), custom.getName(), true)));
+                .forEach(custom -> categories.add(toResponse(custom)));
         return categories;
     }
 
