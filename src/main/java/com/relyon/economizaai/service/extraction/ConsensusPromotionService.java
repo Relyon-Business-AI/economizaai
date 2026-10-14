@@ -234,7 +234,8 @@ public class ConsensusPromotionService {
         var map = new LinkedHashMap<String, DictionaryClassifier.DictEntry>();
         for (var entry : entries) {
             map.put(entry.getNormalizedToken(), new DictionaryClassifier.DictEntry(
-                    entry.getGenericName(), null, entry.getCategory(), CategorizationSource.LEARNED_DICTIONARY));
+                    entry.getGenericName(), null, entry.getCategory(),
+                    entry.getCategoryId(), CategorizationSource.LEARNED_DICTIONARY));
         }
         dictionaryClassifier.replaceLearnedEntries(map);
         return entries.size();

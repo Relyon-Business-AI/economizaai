@@ -99,7 +99,7 @@ class CanonicalizationServiceTest {
         // Brand null → metadata-dedup gate is skipped automatically
         when(productExtractor.extract(any())).thenReturn(
                 new ProductExtraction("Leite", null, new BigDecimal("1"), "L",
-                        ProductCategory.MEAT_DAIRY, CategorizationSource.DICTIONARY));
+                        ProductCategory.MEAT_DAIRY, null, CategorizationSource.DICTIONARY));
         when(productRepository.findByEan("123")).thenReturn(Optional.empty());
         when(productRepository.save(any(Product.class))).thenAnswer(inv -> {
             var p = inv.<Product>getArgument(0);
@@ -120,11 +120,34 @@ class CanonicalizationServiceTest {
     }
 
     @Test
+    void createsNewProduct_dualWritesTaxonomyNodeFromDictionary() {
+        var nodeId = UUID.randomUUID();
+        var receipt = buildReceipt(item("QUEIJO MUSSARELA 500G", "321"));
+        when(productExtractor.extract(any())).thenReturn(
+                new ProductExtraction("Queijo", null, new BigDecimal("500"), "G",
+                        ProductCategory.MEAT_DAIRY, nodeId, CategorizationSource.DICTIONARY));
+        when(productRepository.findByEan("321")).thenReturn(Optional.empty());
+        when(productRepository.save(any(Product.class))).thenAnswer(inv -> {
+            var p = inv.<Product>getArgument(0);
+            p.setId(UUID.randomUUID());
+            return p;
+        });
+        when(aliasRepository.existsByNormalizedDescription(anyString())).thenReturn(false);
+
+        service.canonicalize(receipt);
+
+        var product = receipt.getItems().get(0).getProduct();
+        assertNotNull(product);
+        assertEquals(ProductCategory.MEAT_DAIRY, product.getCategory());
+        assertEquals(nodeId, product.getCategoryId());
+    }
+
+    @Test
     void createdProduct_populatesNormalizedMirrorsKeepingDisplayValues() {
         var receipt = buildReceipt(item("CAFE PILAO 500G", "555"));
         when(productExtractor.extract(any())).thenReturn(
                 new ProductExtraction("Café", "Pilão", new BigDecimal("500"), "G",
-                        ProductCategory.GROCERIES, CategorizationSource.DICTIONARY));
+                        ProductCategory.GROCERIES, null, CategorizationSource.DICTIONARY));
         when(productRepository.findByEan("555")).thenReturn(Optional.empty());
         // No metadata dedup hit → forces creation, exercising buildEnrichedProduct.
         when(productRepository.findByMetadata(any(), any(), any(), any())).thenReturn(List.of());
@@ -151,7 +174,7 @@ class CanonicalizationServiceTest {
         receipt.setMarketName("DROGARIA SAO JOAO");
         when(merchantClassifier.isPharmacy(any(), eq("DROGARIA SAO JOAO"))).thenReturn(true);
         when(productExtractor.extract(any())).thenReturn(
-                new ProductExtraction(null, null, null, null, ProductCategory.OTHER, CategorizationSource.NONE));
+                new ProductExtraction(null, null, null, null, ProductCategory.OTHER, null, CategorizationSource.NONE));
         when(productRepository.findByEan("999")).thenReturn(Optional.empty());
         when(productRepository.save(any(Product.class))).thenAnswer(inv -> {
             var p = inv.<Product>getArgument(0);
@@ -175,7 +198,7 @@ class CanonicalizationServiceTest {
         when(merchantClassifier.isPharmacy(any(), eq("DROGARIA SAO JOAO"))).thenReturn(true);
         when(productExtractor.extract(any())).thenReturn(
                 new ProductExtraction("Refrigerante", null, new BigDecimal("2"), "L",
-                        ProductCategory.BEVERAGES, CategorizationSource.DICTIONARY));
+                        ProductCategory.BEVERAGES, null, CategorizationSource.DICTIONARY));
         when(productRepository.findByEan("888")).thenReturn(Optional.empty());
         when(productRepository.save(any(Product.class))).thenAnswer(inv -> {
             var p = inv.<Product>getArgument(0);
@@ -205,7 +228,7 @@ class CanonicalizationServiceTest {
         when(productRepository.findByEan("INTERNO99")).thenReturn(Optional.empty());
         when(productExtractor.extract(any())).thenReturn(
                 new ProductExtraction("Leite", "Itambe", new BigDecimal("1"), "L",
-                        ProductCategory.MEAT_DAIRY, CategorizationSource.DICTIONARY));
+                        ProductCategory.MEAT_DAIRY, null, CategorizationSource.DICTIONARY));
         // dedup queries on the normalized mirror columns
         when(productRepository.findByMetadata("leite", "itambe", new BigDecimal("1"), "L"))
                 .thenReturn(List.of(existing));
@@ -228,7 +251,7 @@ class CanonicalizationServiceTest {
         // brand null → dedup gate skipped, falls through to create new
         when(productExtractor.extract(any())).thenReturn(
                 new ProductExtraction("Leite", null, new BigDecimal("1"), "L",
-                        ProductCategory.MEAT_DAIRY, CategorizationSource.DICTIONARY));
+                        ProductCategory.MEAT_DAIRY, null, CategorizationSource.DICTIONARY));
         when(productRepository.save(any(Product.class))).thenAnswer(inv -> {
             var p = inv.<Product>getArgument(0);
             p.setId(UUID.randomUUID());
@@ -274,7 +297,7 @@ class CanonicalizationServiceTest {
         when(aliasRepository.findByNormalizedDescription(anyString())).thenReturn(Optional.empty());
         when(productExtractor.extract("ABOBORA CABOTIA PICADA KG")).thenReturn(
                 new ProductExtraction("Abóbora", null, null, null,
-                        ProductCategory.PRODUCE, CategorizationSource.DICTIONARY));
+                        ProductCategory.PRODUCE, null, CategorizationSource.DICTIONARY));
         when(productRepository.save(any(Product.class))).thenAnswer(inv -> {
             var p = inv.<Product>getArgument(0);
             p.setId(UUID.randomUUID());
@@ -403,7 +426,7 @@ class CanonicalizationServiceTest {
         when(aliasRepository.findByNormalizedDescription("arroz tio j 5 kg")).thenReturn(Optional.empty());
         when(productExtractor.extract("ARROZ TIO J 5KG")).thenReturn(
                 new ProductExtraction("Arroz", "Tio Joao", new BigDecimal("5"), "KG",
-                        ProductCategory.GROCERIES, CategorizationSource.DICTIONARY));
+                        ProductCategory.GROCERIES, null, CategorizationSource.DICTIONARY));
         when(aliasRepository.findCandidatesByProductMetadata("arroz", new BigDecimal("5"), "KG"))
                 .thenReturn(List.of(existingAlias));
         when(aliasRepository.existsByNormalizedDescription("arroz tio j 5 kg")).thenReturn(false);
@@ -431,7 +454,7 @@ class CanonicalizationServiceTest {
         when(aliasRepository.findByNormalizedDescription("feijao preto 5 kg")).thenReturn(Optional.empty());
         when(productExtractor.extract("FEIJAO PRETO 5KG")).thenReturn(
                 new ProductExtraction("Arroz", null, new BigDecimal("5"), "KG",
-                        ProductCategory.GROCERIES, CategorizationSource.DICTIONARY));
+                        ProductCategory.GROCERIES, null, CategorizationSource.DICTIONARY));
         when(aliasRepository.findCandidatesByProductMetadata("arroz", new BigDecimal("5"), "KG"))
                 .thenReturn(List.of(existingAlias));
         when(productRepository.save(any(Product.class))).thenAnswer(inv -> {
@@ -462,7 +485,7 @@ class CanonicalizationServiceTest {
         when(aliasRepository.findByNormalizedDescription("leite itamb integral 1 l")).thenReturn(Optional.empty());
         when(productExtractor.extract("LEITE ITAMB INTEGRAL 1L")).thenReturn(
                 new ProductExtraction("Leite", "Itambé", new BigDecimal("1"), "L",
-                        ProductCategory.MEAT_DAIRY, CategorizationSource.DICTIONARY));
+                        ProductCategory.MEAT_DAIRY, null, CategorizationSource.DICTIONARY));
         when(aliasRepository.findCandidatesByProductMetadata("leite", new BigDecimal("1"), "L"))
                 .thenReturn(List.of());
         when(productRepository.findByMetadata("leite", "itambe", new BigDecimal("1"), "L"))
@@ -491,7 +514,7 @@ class CanonicalizationServiceTest {
         when(aliasRepository.findByNormalizedDescription("sal cisne ref 1 kg")).thenReturn(Optional.empty());
         when(productExtractor.extract("SAL CISNE REF 1KG")).thenReturn(
                 new ProductExtraction("Sal", "Cisne", new BigDecimal("1"), "KG",
-                        ProductCategory.GROCERIES, CategorizationSource.DICTIONARY));
+                        ProductCategory.GROCERIES, null, CategorizationSource.DICTIONARY));
         when(aliasRepository.findCandidatesByProductMetadata("sal", new BigDecimal("1"), "KG"))
                 .thenReturn(List.of());
         when(productRepository.findByMetadata("sal", "cisne", new BigDecimal("1"), "KG"))
@@ -516,7 +539,7 @@ class CanonicalizationServiceTest {
         when(aliasRepository.findByNormalizedDescription("banana prata kg")).thenReturn(Optional.empty());
         when(productExtractor.extract("BANANA PRATA KG")).thenReturn(
                 new ProductExtraction("Banana Prata", null, null, null,
-                        ProductCategory.PRODUCE, CategorizationSource.DICTIONARY));
+                        ProductCategory.PRODUCE, null, CategorizationSource.DICTIONARY));
         when(productRepository.save(any(Product.class))).thenAnswer(inv -> {
             var p = inv.<Product>getArgument(0);
             p.setId(UUID.randomUUID());
@@ -555,7 +578,7 @@ class CanonicalizationServiceTest {
         // Extractor returns no category (dictionary missed this EAN)
         when(productExtractor.extract(any())).thenReturn(
                 new ProductExtraction(null, "Coca-Cola", new BigDecimal("350"), "ML",
-                        null, CategorizationSource.NONE));
+                        null, null, CategorizationSource.NONE));
         when(productRepository.findByEan("7894900010015")).thenReturn(Optional.empty());
         when(eanCatalogService.lookup("7894900010015")).thenReturn(Optional.of(catalogEntry));
         when(productRepository.save(any(Product.class))).thenAnswer(inv -> {
@@ -578,7 +601,7 @@ class CanonicalizationServiceTest {
     void catalogMiss_fallsThroughToExtractor() {
         when(productExtractor.extract(any())).thenReturn(
                 new ProductExtraction("Refrigerante", "Coca-Cola", new BigDecimal("2"), "L",
-                        ProductCategory.BEVERAGES, CategorizationSource.DICTIONARY));
+                        ProductCategory.BEVERAGES, null, CategorizationSource.DICTIONARY));
         when(productRepository.findByEan("9999")).thenReturn(Optional.empty());
         // eanCatalogService.lookup already stubbed to Optional.empty() in @BeforeEach
         when(productRepository.save(any(Product.class))).thenAnswer(inv -> {

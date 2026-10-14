@@ -53,7 +53,7 @@ class ProductExtractorCascadeTest {
     void dictionaryHitProducesCorrectFields() {
         when(brandExtractor.find(anyString())).thenReturn("Tio João");
         when(dictionaryClassifier.classify(anyString())).thenReturn(
-                new DictEntry("Arroz", null, ProductCategory.GROCERIES, CategorizationSource.DICTIONARY));
+                new DictEntry("Arroz", null, ProductCategory.GROCERIES, null, CategorizationSource.DICTIONARY));
 
         var result = extractor.extract("ARROZ TIO J TP1 5KG");
 
@@ -93,7 +93,7 @@ class ProductExtractorCascadeTest {
     void dictBrandOverridesTakesPrecedenceOverRegistryBrand() {
         // DictEntry supplies brand → BrandExtractor is never consulted
         when(dictionaryClassifier.classify(anyString())).thenReturn(
-                new DictEntry("Arroz", "BrandFromDict", ProductCategory.GROCERIES, CategorizationSource.DICTIONARY));
+                new DictEntry("Arroz", "BrandFromDict", ProductCategory.GROCERIES, null, CategorizationSource.DICTIONARY));
 
         var result = extractor.extract("ARROZ MARCA 5KG");
 

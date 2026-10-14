@@ -188,6 +188,7 @@ public class AutoPromotionService {
                     entry.getGenericName(),
                     null,
                     entry.getCategory(),
+                    entry.getCategoryId(),
                     CategorizationSource.LEARNED_DICTIONARY));
         }
         dictionaryClassifier.replaceLearnedEntries(map);

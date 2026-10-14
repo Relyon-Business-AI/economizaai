@@ -32,10 +32,12 @@ public class ProductExtractor {
 
         var genericName = dictHit.genericName();
         var category = dictHit.category();
+        var categoryId = dictHit.categoryId();
         var source = (category != null || genericName != null)
                 ? dictHit.source()
                 : CategorizationSource.NONE;
 
-        return new ProductExtraction(genericName, brand, packSize.size(), packSize.unit(), category, source);
+        return new ProductExtraction(genericName, brand, packSize.size(), packSize.unit(),
+                category, categoryId, source);
     }
 }

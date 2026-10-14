@@ -1,6 +1,7 @@
 package com.relyon.economizaai.model;
 
 import com.relyon.economizaai.model.enums.ProductCategory;
+import java.util.UUID;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -32,6 +33,11 @@ public class LearnedDictionaryEntry extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private ProductCategory category;
+
+    /** Fine taxonomy node (products.category_id). Optional — null until a later phase
+     *  promotes nodes; dual-write alongside {@link #category}. */
+    @Column(name = "category_id")
+    private UUID categoryId;
 
     @Column(name = "sample_count", nullable = false)
     private Integer sampleCount;

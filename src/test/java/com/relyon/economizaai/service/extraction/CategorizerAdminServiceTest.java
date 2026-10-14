@@ -10,6 +10,7 @@ import com.relyon.economizaai.repository.CuratedDictionaryEntryRepository;
 import com.relyon.economizaai.repository.EanCatalogRepository;
 import com.relyon.economizaai.repository.LearnedDictionaryRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.canonicalization.CanonicalizationService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,6 +46,7 @@ class CategorizerAdminServiceTest {
     @Mock private CategorizationBenchmarkEntryRepository benchmarkRepository;
     @Mock private EanCatalogRepository eanCatalogRepository;
     @Mock private CanonicalizationService canonicalizationService;
+    @Mock private CategoryResolver categoryResolver;
 
     @InjectMocks private CategorizerAdminService service;
 
@@ -84,7 +86,7 @@ class CategorizerAdminServiceTest {
         var saved = ArgumentCaptor.forClass(CuratedDictionaryEntry.class);
 
         var outcome = service.importCuratedEntries(List.of(
-                new CategorizerAdminService.CuratedImportRequest("AÇÚCAR", "Açúcar", null, ProductCategory.GROCERIES)));
+                new CategorizerAdminService.CuratedImportRequest("AÇÚCAR", "Açúcar", null, ProductCategory.GROCERIES, null)));
 
         assertEquals(1, outcome.imported());
         verify(curatedRepository).save(saved.capture());
@@ -95,12 +97,40 @@ class CategorizerAdminServiceTest {
     }
 
     @Test
+    void importCuratedEntries_withNodeSlug_persistsFineNode() {
+        var nodeId = UUID.randomUUID();
+        when(curatedRepository.findByKeyword("queijo")).thenReturn(Optional.empty());
+        when(categoryResolver.idForSlug("queijos")).thenReturn(nodeId);
+        var saved = ArgumentCaptor.forClass(CuratedDictionaryEntry.class);
+
+        service.importCuratedEntries(List.of(new CategorizerAdminService.CuratedImportRequest(
+                "queijo", "Queijo", null, ProductCategory.MEAT_DAIRY, "queijos")));
+
+        verify(curatedRepository).save(saved.capture());
+        assertEquals(nodeId, saved.getValue().getCategoryId());
+    }
+
+    @Test
+    void importCuratedEntries_withoutNodeSlug_fallsBackToEnumDefaultNode() {
+        var defaultNodeId = UUID.randomUUID();
+        when(curatedRepository.findByKeyword("acucar")).thenReturn(Optional.empty());
+        when(categoryResolver.idForLegacyEnum(ProductCategory.GROCERIES)).thenReturn(defaultNodeId);
+        var saved = ArgumentCaptor.forClass(CuratedDictionaryEntry.class);
+
+        service.importCuratedEntries(List.of(new CategorizerAdminService.CuratedImportRequest(
+                "ACUCAR", "Açúcar", null, ProductCategory.GROCERIES, null)));
+
+        verify(curatedRepository).save(saved.capture());
+        assertEquals(defaultNodeId, saved.getValue().getCategoryId());
+    }
+
+    @Test
     void importCuratedEntries_keepsBrandAndGenericDisplayButNormalizesKeyword() {
         when(curatedRepository.findByKeyword("cafe pilao")).thenReturn(Optional.empty());
         var saved = ArgumentCaptor.forClass(CuratedDictionaryEntry.class);
 
         service.importCuratedEntries(List.of(new CategorizerAdminService.CuratedImportRequest(
-                "Café Pilão", "Café", "Pilão", ProductCategory.GROCERIES)));
+                "Café Pilão", "Café", "Pilão", ProductCategory.GROCERIES, null)));
 
         verify(curatedRepository).save(saved.capture());
         assertEquals("cafe pilao", saved.getValue().getKeyword());   // match key normalized

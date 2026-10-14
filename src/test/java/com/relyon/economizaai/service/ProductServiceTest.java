@@ -205,7 +205,7 @@ class ProductServiceTest {
         var request = new CreateProductRequest(null, "Arroz Tio Joao", null, null, ProductCategory.GROCERIES, null, null, null);
         // Extractor disagrees — the user's explicit pick must win, with source USER.
         when(productExtractor.extract("Arroz Tio Joao")).thenReturn(new ProductExtraction(
-                "Arroz", "Tio Joao", null, null, ProductCategory.OTHER, CategorizationSource.DICTIONARY));
+                "Arroz", "Tio Joao", null, null, ProductCategory.OTHER, null, CategorizationSource.DICTIONARY));
         when(productRepository.save(any(Product.class))).thenAnswer(inv -> {
             var saved = inv.<Product>getArgument(0);
             saved.setId(UUID.randomUUID());

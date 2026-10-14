@@ -4,6 +4,7 @@ import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 public record ProductExtraction(
         String genericName,
@@ -11,8 +12,9 @@ public record ProductExtraction(
         BigDecimal packSize,
         String packUnit,
         ProductCategory category,
+        UUID categoryId,
         CategorizationSource categorizationSource
 ) {
     public static final ProductExtraction EMPTY =
-            new ProductExtraction(null, null, null, null, null, CategorizationSource.NONE);
+            new ProductExtraction(null, null, null, null, null, null, CategorizationSource.NONE);
 }

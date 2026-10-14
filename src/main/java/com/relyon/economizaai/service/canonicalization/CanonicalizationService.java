@@ -491,6 +491,7 @@ public class CanonicalizationService {
                 .brand(extraction.brand())
                 .brandNorm(DescriptionNormalizer.normalizeOrNull(extraction.brand()))
                 .category(extraction.category())
+                .categoryId(extraction.categoryId()) // dual-write da folha fina quando a regra de dicionário traz um nó
                 .packSize(extraction.packSize())
                 .packUnit(extraction.packUnit())
                 .categorizationSource(extraction.categorizationSource())

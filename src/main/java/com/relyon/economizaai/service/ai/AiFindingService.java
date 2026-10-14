@@ -158,7 +158,8 @@ public class AiFindingService {
                 payload.path("keyword").asText(),
                 blankToNull(payload.path("genericName").asText(null)),
                 blankToNull(brand),
-                ProductCategory.valueOf(payload.path("category").asText()));
+                ProductCategory.valueOf(payload.path("category").asText()),
+                blankToNull(payload.path("categoryNodeSlug").asText(null)));
         var outcome = categorizerAdminService.importCuratedEntries(List.of(request));
         log.info("ai.apply.rule keyword='{}' recanonicalized={}", request.keyword(), outcome.recanonicalized());
     }

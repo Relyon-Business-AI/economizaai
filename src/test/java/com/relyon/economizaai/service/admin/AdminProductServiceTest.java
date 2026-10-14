@@ -64,7 +64,7 @@ class AdminProductServiceTest {
     }
 
     private ProductExtraction extracted(ProductCategory category, CategorizationSource source) {
-        return new ProductExtraction(null, null, null, null, category, source);
+        return new ProductExtraction(null, null, null, null, category, null, source);
     }
 
     @Test
