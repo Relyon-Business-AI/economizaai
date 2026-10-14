@@ -13,5 +13,6 @@ public enum AiActivity {
     TEST_CLASSIFY,
     ITEM_CLASSIFY,  // real-time fallback when the deterministic categorizer misses an item at scan time
     ITEM_CORRECTION, // user-triggered correction of a misclassified receipt item
-    RECEIPT_RESCUE  // parse-rescue: extracts the receipt from fetched SEFAZ HTML the state parser failed on
+    RECEIPT_RESCUE, // parse-rescue: extracts the receipt from fetched SEFAZ HTML the state parser failed on
+    FINE_CATEGORY_CLASSIFY // classifies products into the fine 2-level taxonomy leaf when keywords are low-confidence
 }

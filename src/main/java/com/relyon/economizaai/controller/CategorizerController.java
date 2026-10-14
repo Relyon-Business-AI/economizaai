@@ -150,6 +150,17 @@ public class CategorizerController {
     }
 
     /**
+     * Dry run: measures the keyword classifier's HIGH-confidence precision against the
+     * LLM on a food sample (writes nothing). Use it to decide the hybrid threshold
+     * before a full backlog pass. ADMIN-only.
+     */
+    @GetMapping("/recategorize-taxonomy/calibrate")
+    public ResponseEntity<TaxonomyRecategorizationService.CalibrationResult> calibrateTaxonomy(
+            @RequestParam(defaultValue = "100") int sample) {
+        return ResponseEntity.ok(taxonomyRecategorizationService.calibrate(Math.min(sample, 500)));
+    }
+
+    /**
      * Bulk-seeds the EAN catalog (step A2 in the canonicalization cascade).
      * Each entry maps a GTIN/EAN to a category, generic name, and brand.
      * Use {@code source=OPEN_FOOD_FACTS} for OPF imports, {@code CURATED_IMPORT}

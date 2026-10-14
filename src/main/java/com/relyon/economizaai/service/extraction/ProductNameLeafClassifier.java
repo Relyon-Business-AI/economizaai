@@ -1,120 +1,145 @@
 package com.relyon.economizaai.service.extraction;
 
 import java.text.Normalizer;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 /**
- * Maps a product's (normalized) name to a fine taxonomy leaf {@code slug} using
- * Portuguese grocery keywords. OFF coverage of Brazilian EANs is poor (~0.3% hit
- * on real data), so the product NAME is the reliable signal for the fine splits
- * the new taxonomy is about — especially dairy≠meat and alcoholic≠non-alcoholic.
+ * Keyword classifier for the fine taxonomy — the CHEAP first pass of the hybrid.
+ * It no longer pretends to answer everything: it returns a {@link Confidence}, and
+ * only HIGH-confidence results are trusted deterministically. LOW / NONE are routed
+ * to the LLM (see {@code AiFineCategoryClassifier} / the recategorization sweep).
  *
- * <p>Priority order matters: more specific phrases first (e.g. "creme de leite" →
- * outros-laticinios before "leite" → leite; "leite de coco" is an accepted
- * mis-hit). Whole-word-ish containment on an accent-folded, lowercased name.
+ * <p>Confidence is derived from two signals, no magic threshold:
+ * <ul>
+ *   <li><b>Conflict:</b> if the name matches keywords from MORE THAN ONE group
+ *       (e.g. "MACARRÃO PICANHA" → mercearia AND carnes; "SUCO LIMÃO" → bebidas AND
+ *       hortifrúti) it's ambiguous → LOW. First-rule-wins used to hide this.</li>
+ *   <li><b>Strength:</b> STRONG keywords are the product itself (picanha, cerveja,
+ *       iogurte); WEAK ones are generic/context-dependent (leite→leite de coco,
+ *       molho, água). A single group matched only via WEAK keywords → LOW.</li>
+ * </ul>
+ * HIGH = exactly one group matched AND at least one match is STRONG.
  */
 public final class ProductNameLeafClassifier {
 
     private ProductNameLeafClassifier() {}
 
-    private record Rule(String slug, List<String> keywords) {}
+    public enum Confidence { HIGH, LOW, NONE }
+
+    /** best = the leaf slug to use when HIGH (meaningless for NONE). */
+    public record Result(String slug, Confidence confidence) {
+        public static final Result NONE = new Result(null, Confidence.NONE);
+    }
+
+    /** group = parent group slug used for conflict detection. */
+    private record Rule(String slug, String group, List<String> strong, List<String> weak) {
+        Rule(String slug, String group, List<String> strong) { this(slug, group, strong, List.of()); }
+    }
 
     private static final List<Rule> RULES = List.of(
-        // --- dairy (before meat) ---
-        new Rule("outros-laticinios", List.of(
+        new Rule("outros-laticinios", "laticinios-ovos", List.of(
             "creme de leite", "leite condensado", "leite em po", "manteiga", "margarina",
             "requeijao", "nata", "chantilly")),
-        new Rule("queijos", List.of(
+        new Rule("queijos", "laticinios-ovos", List.of(
             "queijo", "mussarela", "mucarela", "parmesao", "provolone", "gorgonzola",
             "ricota", "catupiry", "cheddar", "minas", "coalho")),
-        new Rule("iogurtes", List.of("iogurte", "yogurt", "activia", "danoninho")),
-        // --- instant noodles BEFORE meat/produce so flavor names (picanha/tomate) don't win ---
-        new Rule("graos-massas", List.of("macarrao", "miojo", "lamen", "cup noodles", "nissin",
-            "espaguete", "talharim")),
-        // --- meat ---
-        new Rule("aves", List.of(
-            "frango", "peito de frango", "coxa", "sobrecoxa", "asa de frango", "peru",
-            "chester", "tender")),
-        new Rule("suinos", List.of(
+        new Rule("iogurtes", "laticinios-ovos", List.of("iogurte", "yogurt", "activia", "danoninho")),
+        // instant noodles before meat/produce so flavor names don't win
+        new Rule("graos-massas", "mercearia", List.of(
+            "macarrao", "miojo", "lamen", "cup noodles", "nissin", "espaguete", "talharim")),
+        new Rule("aves", "carnes", List.of(
+            "frango", "peito de frango", "coxa", "sobrecoxa", "asa de frango", "peru", "chester")),
+        new Rule("suinos", "carnes", List.of(
             "suino", "bacon", "lombo", "pernil", "costelinha", "linguica", "salsicha",
             "presunto", "mortadela", "salame", "paio", "pancetta")),
-        new Rule("peixes", List.of(
-            "peixe", "tilapia", "salmao", "sardinha", "atum", "merluza", "bacalhau",
-            "pescada", "file de peixe")),
-        new Rule("frutos-do-mar", List.of("camarao", "lula", "polvo", "marisco", "frutos do mar")),
-        new Rule("carnes-bovinas", List.of(
-            "carne", "bovina", "picanha", "alcatra", "coxao", "patinho", "acem", "costela",
-            "moida", "hamburguer", "bife", "maminha", "fraldinha", "cupim", "contra file",
-            "file mignon", "musculo", "cupim")),
-        // --- beverages: alcoholic ---
-        // Beer brands that ALSO make sodas/other (antarctica/brahma/skol) are left out —
-        // the word "cerveja" (always on beer labels) + beer-only brands cover it safely.
-        new Rule("cervejas", List.of(
-            "cerveja", "chopp", "heineken", "budweiser", "stella artois",
-            "eisenbahn", "itaipava", "amstel", "spaten", "corona", "becks")),
-        new Rule("vinhos", List.of("vinho", "espumante", "prosecco", "champagne")),
-        new Rule("destilados", List.of(
+        new Rule("peixes", "carnes", List.of(
+            "peixe", "tilapia", "salmao", "sardinha", "atum", "merluza", "bacalhau", "pescada")),
+        new Rule("frutos-do-mar", "carnes", List.of("camarao", "lula", "polvo", "marisco", "frutos do mar")),
+        new Rule("carnes-bovinas", "carnes", List.of(
+            "picanha", "alcatra", "coxao", "patinho", "acem", "costela", "hamburguer", "bife",
+            "maminha", "fraldinha", "cupim", "contra file", "file mignon"),
+            List.of("carne", "bovina", "moida", "musculo")),
+        new Rule("cervejas", "bebidas-alcoolicas", List.of(
+            "cerveja", "chopp", "heineken", "budweiser", "stella artois", "eisenbahn",
+            "itaipava", "amstel", "spaten", "corona", "becks")),
+        new Rule("vinhos", "bebidas-alcoolicas", List.of("vinho", "espumante", "prosecco", "champagne")),
+        new Rule("destilados", "bebidas-alcoolicas", List.of(
             "whisky", "vodka", "cachaca", " gin ", " rum ", "tequila", "conhaque", "licor",
             "aperitivo", "campari", "steinhaeger")),
-        // --- beverages: non-alcoholic ---
-        new Rule("refrigerantes", List.of(
-            "refrigerante", "coca cola", "coca-cola", "guarana", "pepsi", "fanta", "sprite",
-            "soda", "tonica", "refri")),
-        new Rule("sucos", List.of("suco", "nectar", "del valle", "tampico")),
-        new Rule("agua", List.of("agua mineral", "agua com gas", "agua sem gas", "agua tonica")),
-        new Rule("cafe-cha", List.of("cafe", "cappuccino", "capuccino", " cha ", "cha preto", "cha verde", " mate ", "erva mate")),
-        // --- bakery ---
-        new Rule("paes", List.of("pao", "baguete", "bisnaga", "pao de forma", "pao frances")),
-        new Rule("bolos-confeitaria", List.of("bolo", "torta", "croissant", "sonho", "panetone")),
-        // --- sweets & snacks ---
-        new Rule("chocolates", List.of(
+        new Rule("refrigerantes", "bebidas", List.of(
+            "refrigerante", "coca cola", "coca-cola", "guarana", "pepsi", "fanta", "sprite", "refri"),
+            List.of("soda", "tonica")),
+        new Rule("sucos", "bebidas", List.of("suco", "nectar", "del valle", "tampico")),
+        new Rule("agua", "bebidas", List.of("agua mineral", "agua com gas", "agua tonica"), List.of("agua")),
+        new Rule("cafe-cha", "bebidas", List.of(
+            "cafe", "cappuccino", "capuccino", "cha preto", "cha verde", "erva mate"), List.of(" cha ", " mate ")),
+        new Rule("paes", "padaria", List.of("baguete", "bisnaga", "pao de forma", "pao frances"), List.of("pao")),
+        new Rule("bolos-confeitaria", "padaria", List.of("bolo", "torta", "croissant", "sonho", "panetone")),
+        new Rule("chocolates", "doces-snacks", List.of(
             "chocolate", "bombom", "nescau", "toddy", "achocolatado", "kitkat", "lacta",
             "garoto", "diamante negro", "talento")),
-        new Rule("salgadinhos", List.of(
+        new Rule("salgadinhos", "doces-snacks", List.of(
             "salgadinho", "batata frita", "chips", "doritos", "ruffles", "cheetos", "pipoca",
             "amendoim", "torcida", "fandangos")),
-        new Rule("doces", List.of(
+        new Rule("doces", "doces-snacks", List.of(
             "bala", "pirulito", "chiclete", "biscoito", "bolacha", "cookie", "wafer",
-            "gelatina", "goma", "paconga", "pacoca", "brigadeiro")),
-        // --- produce ---
-        new Rule("frutas", List.of(
-            "banana", " maca ", "laranja", "mamao", "abacaxi", "uva", "melancia", "manga",
-            "morango", "limao", "pera", "abacate", "melao", "kiwi", "tangerina", "goiaba",
-            " meloa", "ameixa")),
-        new Rule("legumes-verduras", List.of(
+            "gelatina", "pacoca", "brigadeiro")),
+        new Rule("frutas", "hortifruti", List.of(
+            "banana", " maca ", "mamao", "abacaxi", "melancia", "manga", "morango",
+            "abacate", "melao", "kiwi", "tangerina", "goiaba", "ameixa"),
+            List.of("laranja", "uva", "limao", "pera")),
+        new Rule("legumes-verduras", "hortifruti", List.of(
             "tomate", "batata", "cebola", "alface", "cenoura", "brocolis", "couve", "abobrinha",
             "pepino", "pimentao", "alho", "beterraba", "repolho", "mandioca", "abobora",
             "chuchu", "berinjela", "quiabo", "vagem", "espinafre", "rucula")),
-        new Rule("temperos-ervas", List.of(
+        new Rule("temperos-ervas", "hortifruti", List.of(
             "salsa", "cebolinha", "coentro", "manjericao", "alecrim", "hortela", "tomilho")),
-        // --- pantry ---
-        new Rule("graos-massas", List.of(
-            "arroz", "feijao", "macarrao", " massa ", "farinha", "lentilha", "grao de bico",
-            "aveia", "trigo", "polenta", "fuba", "cuscuz", "quinoa")),
-        new Rule("enlatados-conservas", List.of(
+        new Rule("enlatados-conservas", "mercearia", List.of(
             "em conserva", "em lata", "enlatado", "extrato de tomate", "milho verde", "ervilha",
             "palmito", "azeitona", "seleta")),
-        new Rule("molhos-temperos", List.of(
-            "molho", "ketchup", "catchup", "maionese", "mostarda", "azeite", " oleo ", "oleo de",
-            "vinagre", "tempero", "oregano", "pimenta do reino", "shoyu", "caldo")),
-        new Rule("matinais", List.of("cereal", "granola", "sucrilhos", "aveia em flocos", "mingau")),
-        // --- generic dairy fallbacks (LATE: "ao leite" in chocolate/sweets must lose to them) ---
-        new Rule("leite", List.of("leite")),
-        new Rule("ovos", List.of("ovo ", "ovos", "duzia")),
-        // --- home & disposables ---
-        new Rule("papel", List.of("papel higienico", "guardanapo", "toalha de papel", "lenco de papel")),
-        new Rule("descartaveis", List.of("copo descartavel", "prato descartavel", "saco de lixo", "papel aluminio", "filme pvc")));
+        new Rule("molhos-temperos", "mercearia", List.of(
+            "ketchup", "catchup", "maionese", "mostarda", "azeite", "vinagre", "oregano",
+            "pimenta do reino", "shoyu"), List.of("molho", " oleo ", "oleo de", "tempero", "caldo")),
+        new Rule("matinais", "mercearia", List.of("granola", "sucrilhos", "aveia em flocos", "mingau"), List.of("cereal")),
+        new Rule("graos-massas", "mercearia", List.of(
+            "arroz", "feijao", "farinha", "lentilha", "grao de bico", "polenta", "fuba",
+            "cuscuz", "quinoa"), List.of(" massa ", "aveia", "trigo")),
+        new Rule("papel", "casa-descartaveis", List.of(
+            "papel higienico", "guardanapo", "toalha de papel", "lenco de papel")),
+        new Rule("descartaveis", "casa-descartaveis", List.of(
+            "copo descartavel", "prato descartavel", "papel aluminio", "filme pvc")),
+        // generic dairy fallbacks LATE + WEAK (ao leite / leite de coco must not force dairy)
+        new Rule("leite", "laticinios-ovos", List.of(), List.of("leite")),
+        new Rule("ovos", "laticinios-ovos", List.of("duzia de ovos"), List.of("ovo ", "ovos")));
 
-    /** Fine leaf slug matching the name, or null when nothing matches. */
-    public static String classify(String name) {
-        if (name == null || name.isBlank()) return null;
+    /** Classify with a confidence verdict. HIGH is safe to trust; LOW/NONE → LLM. */
+    public static Result classify(String name) {
+        if (name == null || name.isBlank()) return Result.NONE;
         var folded = " " + foldAccents(name).toLowerCase() + " ";
+        var groups = new LinkedHashSet<String>();
+        String firstStrongSlug = null;
+        String firstAnySlug = null;
         for (var rule : RULES) {
-            for (var keyword : rule.keywords()) {
-                if (folded.contains(keyword)) return rule.slug();
-            }
+            var strong = anyMatch(folded, rule.strong());
+            var weak = !strong && anyMatch(folded, rule.weak());
+            if (!strong && !weak) continue;
+            groups.add(rule.group());
+            if (firstAnySlug == null) firstAnySlug = rule.slug();
+            if (strong && firstStrongSlug == null) firstStrongSlug = rule.slug();
         }
-        return null;
+        if (groups.isEmpty()) return Result.NONE;
+        if (groups.size() > 1) return new Result(firstStrongSlug != null ? firstStrongSlug : firstAnySlug, Confidence.LOW);
+        // single group:
+        if (firstStrongSlug != null) return new Result(firstStrongSlug, Confidence.HIGH);
+        return new Result(firstAnySlug, Confidence.LOW); // weak-only
+    }
+
+    private static boolean anyMatch(String foldedName, List<String> keywords) {
+        for (var keyword : keywords) {
+            if (foldedName.contains(keyword)) return true;
+        }
+        return false;
     }
 
     private static String foldAccents(String value) {

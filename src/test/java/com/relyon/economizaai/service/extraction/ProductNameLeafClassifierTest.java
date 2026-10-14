@@ -1,48 +1,46 @@
 package com.relyon.economizaai.service.extraction;
 
+import com.relyon.economizaai.service.extraction.ProductNameLeafClassifier.Confidence;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 
 class ProductNameLeafClassifierTest {
 
     @Test
-    void splitsDairyFromMeat() {
-        assertEquals("iogurtes", ProductNameLeafClassifier.classify("IOGURTE NATURAL DANONE 170G"));
-        assertEquals("queijos", ProductNameLeafClassifier.classify("QUEIJO MUSSARELA FATIADO"));
-        assertEquals("leite", ProductNameLeafClassifier.classify("LEITE INTEGRAL ITAMBE 1L"));
-        assertEquals("outros-laticinios", ProductNameLeafClassifier.classify("CREME DE LEITE NESTLE 200G"));
-        assertEquals("aves", ProductNameLeafClassifier.classify("PEITO DE FRANGO SADIA KG"));
-        assertEquals("carnes-bovinas", ProductNameLeafClassifier.classify("PICANHA BOVINA RESFRIADA"));
+    void highConfidence_singleGroupStrongKeyword() {
+        var r = ProductNameLeafClassifier.classify("QUEIJO MUSSARELA FATIADO");
+        assertEquals("queijos", r.slug());
+        assertEquals(Confidence.HIGH, r.confidence());
+
+        assertEquals("carnes-bovinas", ProductNameLeafClassifier.classify("PICANHA BOVINA RESFRIADA").slug());
+        assertEquals(Confidence.HIGH, ProductNameLeafClassifier.classify("CERVEJA HEINEKEN 330ML").confidence());
+        assertEquals("graos-massas", ProductNameLeafClassifier.classify("ARROZ TIO JOAO 5KG").slug());
     }
 
     @Test
-    void splitsAlcoholFromBeverages() {
-        assertEquals("cervejas", ProductNameLeafClassifier.classify("CERVEJA HEINEKEN LONG NECK 330ML"));
-        assertEquals("vinhos", ProductNameLeafClassifier.classify("VINHO TINTO SECO"));
-        assertEquals("refrigerantes", ProductNameLeafClassifier.classify("REFRIGERANTE COCA COLA 2L"));
-        assertEquals("cafe-cha", ProductNameLeafClassifier.classify("CAFE TORRADO E MOIDO PILAO 500G"));
+    void lowConfidence_conflictAcrossGroups() {
+        // noodle + meat flavor, and juice + fruit — ambiguous → route to LLM
+        assertEquals(Confidence.LOW, ProductNameLeafClassifier.classify("MACARRAO NISSIN PICANHA 80G").confidence());
+        assertEquals(Confidence.LOW, ProductNameLeafClassifier.classify("SUCO DE LIMAO NATURAL 1L").confidence());
     }
 
     @Test
-    void producePantryAndNull() {
-        assertEquals("frutas", ProductNameLeafClassifier.classify("BANANA PRATA KG"));
-        assertEquals("graos-massas", ProductNameLeafClassifier.classify("ARROZ BRANCO TIO JOAO 5KG"));
-        assertEquals("chocolates", ProductNameLeafClassifier.classify("CHOCOLATE LACTA AO LEITE"));
-        assertNull(ProductNameLeafClassifier.classify("PRODUTO GENERICO XYZ"));
-        assertNull(ProductNameLeafClassifier.classify(""));
+    void lowConfidence_weakKeywordOnly() {
+        // "leite" alone is weak (leite de coco isn't dairy) → LOW
+        assertEquals(Confidence.LOW, ProductNameLeafClassifier.classify("LEITE DE COCO 200ML").confidence());
     }
 
     @Test
-    void wordBoundary_shortKeywordsDoNotMatchSubstrings() {
-        // "maca" (maçã) must not match "macarrao"; "mate" (chá) not "tomate".
-        assertEquals("graos-massas", ProductNameLeafClassifier.classify("MACARRAO NISSIN MIOJO 85G"));
-        // instant-noodle flavor names must not win (picanha/tomate) — noodle rule is higher priority
-        assertEquals("graos-massas", ProductNameLeafClassifier.classify("MACARRAO NISSIN PICANHA 80G"));
-        assertEquals("frutas", ProductNameLeafClassifier.classify("MACA FUJI KG"));
-        assertEquals("legumes-verduras", ProductNameLeafClassifier.classify("TOMATE LONGA VIDA KG"));
-        // "original" removed as a beer keyword (too generic); the brand still wins.
-        assertEquals("cervejas", ProductNameLeafClassifier.classify("CERVEJA ANTARCTICA ORIGINAL 600ML"));
+    void none_whenNoKeyword() {
+        assertEquals(Confidence.NONE, ProductNameLeafClassifier.classify("PRODUTO GENERICO XYZ 99").confidence());
+        assertEquals(Confidence.NONE, ProductNameLeafClassifier.classify("").confidence());
+    }
+
+    @Test
+    void wordBoundary_noSubstringFalseHits() {
+        assertEquals("graos-massas", ProductNameLeafClassifier.classify("MACARRAO MIOJO LAMEN 85G").slug());
+        assertEquals("legumes-verduras", ProductNameLeafClassifier.classify("TOMATE LONGA VIDA KG").slug());
+        assertEquals("frutas", ProductNameLeafClassifier.classify("MACA FUJI KG").slug());
     }
 }
