@@ -6,9 +6,7 @@ import com.relyon.economizaai.dto.response.SpendInsightsResponse;
 import com.relyon.economizaai.dto.response.SpendInsightsResponse.CategoryBucket;
 import com.relyon.economizaai.exception.ProductNotFoundException;
 import com.relyon.economizaai.model.User;
-import com.relyon.economizaai.model.enums.CategoryView;
 import com.relyon.economizaai.model.enums.MarketScope;
-import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.config.CachingConfig;
 import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.repository.ProductRepository;
@@ -41,7 +39,6 @@ public class InsightsService {
 
     private static final LocalDateTime EPOCH_FLOOR = LocalDateTime.of(1900, Month.JANUARY, 1, 0, 0);
     private static final LocalDateTime EPOCH_CEIL = LocalDateTime.of(2999, Month.DECEMBER, 31, 23, 59, 59);
-    private static final String ENUM_PREFIX = "enum:";
 
     private final InsightsRepository insightsRepository;
     private final ProductRepository productRepository;
@@ -251,105 +248,6 @@ public class InsightsService {
                 .limit(Math.max(0, limit))
                 .map(MarketDiscountResponse::from)
                 .toList();
-    }
-
-    /** Backwards-compatible entry point — uses the default HOUSEHOLD lens, ALL scope. */
-    @Transactional(readOnly = true)
-    public List<CategoryBucket> topCategories(User user, LocalDateTime from, LocalDateTime to, int limit) {
-        return topCategories(user, from, to, limit, CategoryView.HOUSEHOLD, MarketScope.ALL);
-    }
-
-    @Transactional(readOnly = true)
-    public List<CategoryBucket> topCategories(User user, LocalDateTime from, LocalDateTime to,
-                                              int limit, CategoryView categoryView) {
-        return topCategories(user, from, to, limit, categoryView, MarketScope.ALL);
-    }
-
-    @Transactional(readOnly = true)
-    public List<CategoryBucket> topCategories(User user, LocalDateTime from, LocalDateTime to,
-                                              int limit, CategoryView categoryView, MarketScope scope) {
-        var safeLimit = Math.max(0, limit);
-        if (categoryView == CategoryView.GLOBAL) {
-            return spend(user, from, to, scope).byCategory().stream().limit(safeLimit).toList();
-        }
-        return householdCategoryBuckets(user, from, to, scope).stream().limit(safeLimit).toList();
-    }
-
-    /**
-     * HOUSEHOLD-lens category buckets: each product counts once, under its
-     * EFFECTIVE category. We pull product-granularity spend and re-bucket in code
-     * by the override label (custom name / corrected enum) or the global enum —
-     * correct and free of the double-counting a SQL group-by-p.category would
-     * cause once overrides exist.
-     */
-    private List<CategoryBucket> householdCategoryBuckets(User user, LocalDateTime from, LocalDateTime to, MarketScope scope) {
-        var householdId = user.getHousehold().getId();
-        from = subscriptionGate.clampFrom(user, from);
-        var fromBound = from != null ? from : EPOCH_FLOOR;
-        var toBound = to != null ? to : EPOCH_CEIL;
-        var rows = insightsRepository.spendByProduct(householdId, fromBound, toBound, scope.name(), scopeCnpjs(householdId, scope));
-        var productIds = rows.stream()
-                .map(row -> (UUID) row[0])
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
-        var overrides = categoryOverrideService.overrideKeysByProduct(householdId, productIds);
-
-        var accumulators = new LinkedHashMap<String, CategoryAccumulator>();
-        for (var row : rows) {
-            var productId = (UUID) row[0];
-            var globalCategory = (ProductCategory) row[1];
-            var total = toBigDecimal(row[2]);
-            var itemCount = ((Number) row[3]).longValue();
-            var override = productId != null ? overrides.get(productId) : null;
-            var categoryName = globalCategory != null ? globalCategory.name() : ProductCategory.OTHER.name();
-            var label = override != null ? override.label() : categoryName;
-            // Discriminated bucket key so a custom category named like an enum doesn't merge.
-            var bucketKey = override != null ? override.key() : ENUM_PREFIX + categoryName;
-            // Derive the enum category from the (collision-free) key, not the label: a
-            // custom bucket carries a null enum even when its name matches one.
-            var effectiveCategory = categoryFromKey(bucketKey);
-            accumulators.computeIfAbsent(bucketKey, key -> new CategoryAccumulator(effectiveCategory, label))
-                    .add(total, itemCount);
-        }
-        return accumulators.values().stream()
-                .map(CategoryAccumulator::toBucket)
-                .sorted(Comparator.comparing(CategoryBucket::total).reversed())
-                .toList();
-    }
-
-    /**
-     * The enum category a discriminated bucket key maps to. A {@code custom:...} key
-     * has no enum (returns null); an {@code enum:NAME} key resolves to that enum.
-     */
-    private static ProductCategory categoryFromKey(String bucketKey) {
-        if (!bucketKey.startsWith(ENUM_PREFIX)) return null;
-        var name = bucketKey.substring(ENUM_PREFIX.length());
-        for (var category : ProductCategory.values()) {
-            if (category.name().equals(name)) return category;
-        }
-        return null;
-    }
-
-    private static final class CategoryAccumulator {
-        private final ProductCategory category;
-        private final String label;
-        private BigDecimal total = BigDecimal.ZERO;
-        private long itemCount = 0;
-
-        CategoryAccumulator(ProductCategory category, String label) {
-            this.category = category;
-            this.label = label;
-        }
-
-        void add(BigDecimal amount, long items) {
-            total = total.add(amount);
-            itemCount += items;
-        }
-
-        CategoryBucket toBucket() {
-            return new CategoryBucket(category, null, label, null, null, null, total, itemCount);
-        }
     }
 
     @Transactional(readOnly = true)

@@ -21,8 +21,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -48,18 +50,39 @@ public class CustomCategoryService {
     public List<TaxonomyCategoryResponse> taxonomy() {
         var locale = LocaleContextHolder.getLocale();
         var all = categoryRepository.findAllByActiveTrueOrderBySortOrderAsc();
+        var byId = all.stream().collect(Collectors.toMap(Category::getId, category -> category));
         Set<UUID> parentIds = all.stream()
                 .map(Category::getParent)
                 .filter(parent -> parent != null)
                 .map(Category::getId)
                 .collect(Collectors.toSet());
+        // Ordena cada GRUPO seguido das SUAS folhas: pela ordem do grupo (sort_order do
+        // pai, ou o próprio se for grupo), grupo antes das folhas, depois a ordem da folha.
+        // O sort_order global cru intercala errado (folhas 1-5 vêm antes dos grupos 10+).
         return all.stream()
+                .sorted(Comparator
+                        .comparingInt((Category category) -> groupSortOrder(category, byId))
+                        .thenComparingInt(category -> category.getParent() == null ? 0 : 1)
+                        .thenComparingInt(Category::getSortOrder))
                 .map(category -> new TaxonomyCategoryResponse(
                         category.getSlug(),
                         localizedName(category, locale),
-                        category.getParent() != null ? category.getParent().getSlug() : null,
+                        parentSlug(category, byId),
                         parentIds.contains(category.getId())))
                 .toList();
+    }
+
+    /** The sort_order of the category's GROUP — its own when it's a group, else the parent's. */
+    private static int groupSortOrder(Category category, Map<UUID, Category> byId) {
+        if (category.getParent() == null) return category.getSortOrder();
+        var parent = byId.get(category.getParent().getId());
+        return parent != null ? parent.getSortOrder() : category.getSortOrder();
+    }
+
+    private static String parentSlug(Category category, Map<UUID, Category> byId) {
+        if (category.getParent() == null) return null;
+        var parent = byId.get(category.getParent().getId());
+        return parent != null ? parent.getSlug() : null;
     }
 
     private static String localizedName(Category category, Locale locale) {

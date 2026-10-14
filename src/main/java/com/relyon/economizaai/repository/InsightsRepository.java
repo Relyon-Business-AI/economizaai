@@ -195,36 +195,6 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
                                  @Param("supportedCnpjs") Collection<String> supportedCnpjs);
 
 
-    // Product-granularity spend, used by the HOUSEHOLD category lens: the global
-    // p.category is returned per product so InsightsService can re-bucket by the
-    // household's EFFECTIVE category (override custom name / corrected enum / global
-    // enum) in code, without double-counting. Items with no linked product collapse
-    // under a null productId + null category (treated as OTHER downstream).
-    @Query("""
-        SELECT p.id AS productId,
-               COALESCE(ri.categoryAtConfirmation, p.category) AS category,
-               COALESCE(SUM(ri.totalPrice), 0) AS total,
-               COUNT(ri) AS itemCount
-        FROM ReceiptItem ri
-        JOIN ri.receipt r
-        LEFT JOIN ri.product p
-        WHERE r.household.id = :householdId
-          AND r.status = 'CONFIRMED'
-          AND ri.excluded = false
-          AND ri.excludedFromPersonal = false
-          AND r.issuedAt >= :from
-          AND r.issuedAt <= :to
-          AND (:scope = 'ALL'
-               OR (:scope = 'SUPPORTED' AND r.cnpjEmitente IN :supportedCnpjs)
-               OR (:scope = 'OTHER' AND (r.cnpjEmitente IS NULL OR r.cnpjEmitente NOT IN :supportedCnpjs)))
-        GROUP BY p.id, COALESCE(ri.categoryAtConfirmation, p.category)
-    """)
-    List<Object[]> spendByProduct(@Param("householdId") UUID householdId,
-                                  @Param("from") LocalDateTime from,
-                                  @Param("to") LocalDateTime to,
-                                  @Param("scope") String scope,
-                                  @Param("supportedCnpjs") Collection<String> supportedCnpjs);
-
     /**
      * Per-product spend carrying the product's GLOBAL taxonomy node (category_id), so
      * InsightsService can re-bucket by the household's EFFECTIVE node — applying custom /

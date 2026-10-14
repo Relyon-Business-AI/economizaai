@@ -9,6 +9,9 @@ import com.relyon.economizaai.model.HouseholdCustomCategory;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.dto.response.TaxonomyCategoryResponse;
+import com.relyon.economizaai.model.Category;
+import com.relyon.economizaai.repository.CategoryRepository;
 import com.relyon.economizaai.repository.HouseholdCustomCategoryRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import org.junit.jupiter.api.Test;
@@ -37,6 +40,7 @@ class CustomCategoryServiceTest {
     @Mock private HouseholdCustomCategoryRepository customCategoryRepository;
     @Mock private ProductRepository productRepository;
     @Mock private HouseholdProductCategoryOverrideService overrideService;
+    @Mock private CategoryRepository categoryRepository;
     @Mock private HouseholdCacheGen householdCacheGen;
     @InjectMocks private CustomCategoryService service;
 
@@ -123,5 +127,35 @@ class CustomCategoryServiceTest {
         when(customCategoryRepository.findByIdAndHouseholdId(id, user.getHousehold().getId()))
                 .thenReturn(Optional.empty());
         assertThrows(CustomCategoryNotFoundException.class, () -> service.delete(user, id));
+    }
+
+    @Test
+    void taxonomy_ordersEachGroupFollowedByItsLeaves() {
+        var hortifruti = group("hortifruti", 10);
+        var frutas = leaf("frutas", hortifruti, 1);
+        var legumes = leaf("legumes-verduras", hortifruti, 2);
+        var carnes = group("carnes", 20);
+        var bovinos = leaf("carnes-bovinas", carnes, 1);
+        var outros = group("outros", 150);
+        var naoMercado = leaf("nao-mercado", outros, 1);
+        // Repo devolve na ordem do sort_order GLOBAL cru (folhas 1-2 antes dos grupos 10+).
+        when(categoryRepository.findAllByActiveTrueOrderBySortOrderAsc())
+                .thenReturn(List.of(frutas, bovinos, legumes, naoMercado, hortifruti, carnes, outros));
+
+        var slugs = service.taxonomy().stream().map(TaxonomyCategoryResponse::slug).toList();
+
+        assertEquals(
+                List.of("hortifruti", "frutas", "legumes-verduras", "carnes", "carnes-bovinas", "outros", "nao-mercado"),
+                slugs);
+    }
+
+    private static Category group(String slug, int sortOrder) {
+        return Category.builder().id(UUID.randomUUID()).slug(slug).namePt(slug).nameEn(slug)
+                .sortOrder(sortOrder).active(true).build();
+    }
+
+    private static Category leaf(String slug, Category parent, int sortOrder) {
+        return Category.builder().id(UUID.randomUUID()).slug(slug).namePt(slug).nameEn(slug)
+                .parent(parent).sortOrder(sortOrder).active(true).build();
     }
 }

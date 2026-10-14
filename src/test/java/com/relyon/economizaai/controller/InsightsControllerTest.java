@@ -6,7 +6,6 @@ import com.relyon.economizaai.dto.response.MarketDiscountResponse;
 import com.relyon.economizaai.dto.response.SpendInsightsResponse;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
-import com.relyon.economizaai.model.enums.CategoryView;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.InsightsQueryService;
@@ -98,33 +97,6 @@ class InsightsControllerTest {
                 .andExpect(jsonPath("$[0].marketName").value("Mercado X"))
                 .andExpect(jsonPath("$[0].discount").value(9.00))
                 .andExpect(jsonPath("$[0].discountRate").value(0.09));
-    }
-
-    @Test
-    void topCategories_returnsList_defaultsToHouseholdLens() throws Exception {
-        var user = buildUser();
-        var bucket = SpendInsightsResponse.CategoryBucket.ofEnum(ProductCategory.PRODUCE, new BigDecimal("50"), 7L);
-        when(insightsService.topCategories(any(User.class), any(), any(), anyInt(), eq(CategoryView.HOUSEHOLD), any()))
-                .thenReturn(List.of(bucket));
-
-        mockMvc.perform(get("/api/v1/insights/categories/top")
-                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].category").value("PRODUCE"))
-                .andExpect(jsonPath("$[0].label").value("PRODUCE"));
-    }
-
-    @Test
-    void topCategories_passesGlobalLensThrough() throws Exception {
-        var user = buildUser();
-        var bucket = SpendInsightsResponse.CategoryBucket.ofEnum(ProductCategory.BEVERAGES, new BigDecimal("12"), 3L);
-        when(insightsService.topCategories(any(User.class), any(), any(), anyInt(), eq(CategoryView.GLOBAL), any()))
-                .thenReturn(List.of(bucket));
-
-        mockMvc.perform(get("/api/v1/insights/categories/top?categoryView=GLOBAL")
-                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].category").value("BEVERAGES"));
     }
 
     @Test

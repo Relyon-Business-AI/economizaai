@@ -47,14 +47,11 @@ import com.relyon.economizaai.dto.response.ProductDeletionResponse;
 import com.relyon.economizaai.dto.response.OrphanedObservationsResponse;
 import com.relyon.economizaai.dto.response.ProductMergeResultResponse;
 import com.relyon.economizaai.dto.response.PurgeObservationsResponse;
-import com.relyon.economizaai.dto.response.RecategorizeReportResponse;
-import com.relyon.economizaai.dto.response.RecategorizeResultResponse;
 import com.relyon.economizaai.dto.response.RelevanceReportResponse;
 import com.relyon.economizaai.dto.response.StateCoverageResponse;
 import com.relyon.economizaai.dto.response.ProductResponse;
 import com.relyon.economizaai.dto.response.ReceiptResponse;
 import com.relyon.economizaai.model.User;
-import com.relyon.economizaai.model.enums.CategorizationQualityTrigger;
 import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
@@ -78,7 +75,6 @@ import com.relyon.economizaai.dto.response.MarketingDashboardResponse;
 import com.relyon.economizaai.service.analytics.MarketingDashboardService;
 import com.relyon.economizaai.service.analytics.RetentionCohortService;
 import com.relyon.economizaai.service.analytics.meta.MetaAdSpendSyncJob;
-import com.relyon.economizaai.service.extraction.CategorizationQualityService;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.notifications.OperationalAlertService;
 import com.relyon.economizaai.service.notifications.RelevanceReportService;
@@ -140,7 +136,6 @@ public class AdminController {
     private final AdminLlmService adminLlmService;
     private final AdminProductService adminProductService;
     private final CategoryResolver categoryResolver;
-    private final CategorizationQualityService categorizationQualityService;
     private final MarketLocationService marketLocationService;
     private final RelevanceReportService relevanceReportService;
     private final OperationalAlertService operationalAlertService;
@@ -718,23 +713,5 @@ public class AdminController {
     public ResponseEntity<ProductMergeResultResponse> mergeProduct(
             @PathVariable UUID id, @Valid @RequestBody MergeProductRequest request) {
         return ResponseEntity.ok(adminProductService.merge(id, request));
-    }
-
-    /** Dry-run: re-run the categorizer over the whole catalog and list mismatches (read-only). */
-    @GetMapping("/products/recategorize")
-    public ResponseEntity<RecategorizeReportResponse> recategorizeReport() {
-        return ResponseEntity.ok(adminProductService.recategorizeReport());
-    }
-
-    /**
-     * Apply re-categorization: trusted (dictionary) suggestions are applied;
-     * USER-locked categories and null suggestions are always skipped. Records a
-     * quality snapshot afterwards so the backfill shows up in the trend.
-     */
-    @PostMapping("/products/recategorize")
-    public ResponseEntity<RecategorizeResultResponse> recategorizeApply() {
-        var result = adminProductService.recategorizeApply();
-        categorizationQualityService.measureAndRecord(CategorizationQualityTrigger.BACKFILL);
-        return ResponseEntity.ok(result);
     }
 }
