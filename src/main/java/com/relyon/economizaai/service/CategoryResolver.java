@@ -28,21 +28,30 @@ public class CategoryResolver {
     private final CategoryRepository categoryRepository;
 
     private volatile Map<ProductCategory, UUID> idByLegacyEnum = new ConcurrentHashMap<>();
+    private volatile Map<String, UUID> idBySlug = new ConcurrentHashMap<>();
 
     @EventListener(ApplicationReadyEvent.class)
     public void warmUp() {
-        var cache = new ConcurrentHashMap<ProductCategory, UUID>();
+        var byEnum = new ConcurrentHashMap<ProductCategory, UUID>();
+        var bySlug = new ConcurrentHashMap<String, UUID>();
         for (var category : categoryRepository.findAll()) {
+            bySlug.put(category.getSlug(), category.getId());
             if (category.getLegacyEnum() != null) {
-                cache.put(category.getLegacyEnum(), category.getId());
+                byEnum.put(category.getLegacyEnum(), category.getId());
             }
         }
-        idByLegacyEnum = cache;
+        idByLegacyEnum = byEnum;
+        idBySlug = bySlug;
     }
 
     /** Category id the given legacy enum maps to by default, or null. Never queries. */
     public UUID idForLegacyEnum(ProductCategory legacyEnum) {
         return legacyEnum == null ? null : idByLegacyEnum.get(legacyEnum);
+    }
+
+    /** Category id for a taxonomy slug (group or leaf), or null. Never queries. */
+    public UUID idForSlug(String slug) {
+        return slug == null ? null : idBySlug.get(slug);
     }
 
     public Optional<Category> findById(UUID id) {
