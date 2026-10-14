@@ -130,15 +130,15 @@ class CustomCategoryServiceTest {
     }
 
     @Test
-    void taxonomy_ordersEachGroupFollowedByItsLeaves() {
-        var hortifruti = group("hortifruti", 10);
-        var frutas = leaf("frutas", hortifruti, 1);
-        var legumes = leaf("legumes-verduras", hortifruti, 2);
-        var carnes = group("carnes", 20);
-        var bovinos = leaf("carnes-bovinas", carnes, 1);
-        var outros = group("outros", 150);
-        var naoMercado = leaf("nao-mercado", outros, 1);
-        // Repo devolve na ordem do sort_order GLOBAL cru (folhas 1-2 antes dos grupos 10+).
+    void taxonomy_ordersEachCategoryFollowedByItsSubcategories() {
+        var hortifruti = category("hortifruti", 10);
+        var frutas = subcategory("frutas", hortifruti, 1);
+        var legumes = subcategory("legumes-verduras", hortifruti, 2);
+        var carnes = category("carnes", 20);
+        var bovinos = subcategory("carnes-bovinas", carnes, 1);
+        var outros = category("outros", 150);
+        var naoMercado = subcategory("nao-mercado", outros, 1);
+        // Repo devolve na ordem do sort_order GLOBAL cru (subcategorias 1-2 antes das categorias 10+).
         when(categoryRepository.findAllByActiveTrueOrderBySortOrderAsc())
                 .thenReturn(List.of(frutas, bovinos, legumes, naoMercado, hortifruti, carnes, outros));
 
@@ -149,12 +149,12 @@ class CustomCategoryServiceTest {
                 slugs);
     }
 
-    private static Category group(String slug, int sortOrder) {
+    private static Category category(String slug, int sortOrder) {
         return Category.builder().id(UUID.randomUUID()).slug(slug).namePt(slug).nameEn(slug)
                 .sortOrder(sortOrder).active(true).build();
     }
 
-    private static Category leaf(String slug, Category parent, int sortOrder) {
+    private static Category subcategory(String slug, Category parent, int sortOrder) {
         return Category.builder().id(UUID.randomUUID()).slug(slug).namePt(slug).nameEn(slug)
                 .parent(parent).sortOrder(sortOrder).active(true).build();
     }

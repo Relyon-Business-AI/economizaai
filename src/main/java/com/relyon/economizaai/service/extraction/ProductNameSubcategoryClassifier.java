@@ -12,29 +12,29 @@ import java.util.List;
  *
  * <p>Confidence is derived from two signals, no magic threshold:
  * <ul>
- *   <li><b>Conflict:</b> if the name matches keywords from MORE THAN ONE group
+ *   <li><b>Conflict:</b> if the name matches keywords from MORE THAN ONE category
  *       (e.g. "MACARRÃO PICANHA" → mercearia AND carnes; "SUCO LIMÃO" → bebidas AND
  *       hortifrúti) it's ambiguous → LOW. First-rule-wins used to hide this.</li>
  *   <li><b>Strength:</b> STRONG keywords are the product itself (picanha, cerveja,
  *       iogurte); WEAK ones are generic/context-dependent (leite→leite de coco,
- *       molho, água). A single group matched only via WEAK keywords → LOW.</li>
+ *       molho, água). A single category matched only via WEAK keywords → LOW.</li>
  * </ul>
- * HIGH = exactly one group matched AND at least one match is STRONG.
+ * HIGH = exactly one category matched AND at least one match is STRONG.
  */
-public final class ProductNameLeafClassifier {
+public final class ProductNameSubcategoryClassifier {
 
-    private ProductNameLeafClassifier() {}
+    private ProductNameSubcategoryClassifier() {}
 
     public enum Confidence { HIGH, LOW, NONE }
 
-    /** best = the leaf slug to use when HIGH (meaningless for NONE). */
+    /** slug = the subcategory slug to use when HIGH (meaningless for NONE). */
     public record Result(String slug, Confidence confidence) {
         public static final Result NONE = new Result(null, Confidence.NONE);
     }
 
-    /** group = parent group slug used for conflict detection. */
-    private record Rule(String slug, String group, List<String> strong, List<String> weak) {
-        Rule(String slug, String group, List<String> strong) { this(slug, group, strong, List.of()); }
+    /** category = parent category slug used for conflict detection. */
+    private record Rule(String slug, String category, List<String> strong, List<String> weak) {
+        Rule(String slug, String category, List<String> strong) { this(slug, category, strong, List.of()); }
     }
 
     private static final List<Rule> RULES = List.of(
@@ -117,20 +117,20 @@ public final class ProductNameLeafClassifier {
     public static Result classify(String name) {
         if (name == null || name.isBlank()) return Result.NONE;
         var folded = " " + foldAccents(name).toLowerCase() + " ";
-        var groups = new LinkedHashSet<String>();
+        var categories = new LinkedHashSet<String>();
         String firstStrongSlug = null;
         String firstAnySlug = null;
         for (var rule : RULES) {
             var strong = anyMatch(folded, rule.strong());
             var weak = !strong && anyMatch(folded, rule.weak());
             if (!strong && !weak) continue;
-            groups.add(rule.group());
+            categories.add(rule.category());
             if (firstAnySlug == null) firstAnySlug = rule.slug();
             if (strong && firstStrongSlug == null) firstStrongSlug = rule.slug();
         }
-        if (groups.isEmpty()) return Result.NONE;
-        if (groups.size() > 1) return new Result(firstStrongSlug != null ? firstStrongSlug : firstAnySlug, Confidence.LOW);
-        // single group:
+        if (categories.isEmpty()) return Result.NONE;
+        if (categories.size() > 1) return new Result(firstStrongSlug != null ? firstStrongSlug : firstAnySlug, Confidence.LOW);
+        // single category:
         if (firstStrongSlug != null) return new Result(firstStrongSlug, Confidence.HIGH);
         return new Result(firstAnySlug, Confidence.LOW); // weak-only
     }

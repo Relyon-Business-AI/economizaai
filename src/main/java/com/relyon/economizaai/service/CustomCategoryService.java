@@ -45,35 +45,37 @@ public class CustomCategoryService {
     private final CategoryRepository categoryRepository;
     private final HouseholdCacheGen householdCacheGen;
 
-    /** The active two-level taxonomy tree (groups + leaves), localized, for the FE. */
+    /** The active two-level taxonomy tree (categories + subcategories), localized, for the FE. */
     @Transactional(readOnly = true)
     public List<TaxonomyCategoryResponse> taxonomy() {
         var locale = LocaleContextHolder.getLocale();
         var all = categoryRepository.findAllByActiveTrueOrderBySortOrderAsc();
         var byId = all.stream().collect(Collectors.toMap(Category::getId, category -> category));
-        Set<UUID> parentIds = all.stream()
+        Set<UUID> categoriesWithSubcategories = all.stream()
                 .map(Category::getParent)
                 .filter(parent -> parent != null)
                 .map(Category::getId)
                 .collect(Collectors.toSet());
-        // Ordena cada GRUPO seguido das SUAS folhas: pela ordem do grupo (sort_order do
-        // pai, ou o próprio se for grupo), grupo antes das folhas, depois a ordem da folha.
-        // O sort_order global cru intercala errado (folhas 1-5 vêm antes dos grupos 10+).
+        // Ordena cada CATEGORIA seguida das SUAS subcategorias: pela ordem da categoria
+        // (sort_order do pai, ou o próprio se for categoria de topo), categoria antes das
+        // subcategorias, depois a ordem da subcategoria. O sort_order global cru intercala
+        // errado (subcategorias 1-5 vêm antes das categorias 10+).
         return all.stream()
                 .sorted(Comparator
-                        .comparingInt((Category category) -> groupSortOrder(category, byId))
+                        .comparingInt((Category category) -> categorySortOrder(category, byId))
                         .thenComparingInt(category -> category.getParent() == null ? 0 : 1)
                         .thenComparingInt(Category::getSortOrder))
                 .map(category -> new TaxonomyCategoryResponse(
                         category.getSlug(),
                         localizedName(category, locale),
                         parentSlug(category, byId),
-                        parentIds.contains(category.getId())))
+                        categoriesWithSubcategories.contains(category.getId())))
                 .toList();
     }
 
-    /** The sort_order of the category's GROUP — its own when it's a group, else the parent's. */
-    private static int groupSortOrder(Category category, Map<UUID, Category> byId) {
+    /** The sort_order of the node's top-level CATEGORY — its own when it's a top-level
+     *  category, else the parent's. */
+    private static int categorySortOrder(Category category, Map<UUID, Category> byId) {
         if (category.getParent() == null) return category.getSortOrder();
         var parent = byId.get(category.getParent().getId());
         return parent != null ? parent.getSortOrder() : category.getSortOrder();

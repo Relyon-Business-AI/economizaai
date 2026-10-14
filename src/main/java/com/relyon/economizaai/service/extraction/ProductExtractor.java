@@ -3,7 +3,7 @@ package com.relyon.economizaai.service.extraction;
 import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
-import com.relyon.economizaai.service.extraction.ProductNameLeafClassifier.Confidence;
+import com.relyon.economizaai.service.extraction.ProductNameSubcategoryClassifier.Confidence;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
  *   1. PackSizeExtractor (regex)
  *   2. BrandExtractor (registry)
  *   3. DictionaryClassifier (curated + auto-promoted learned entries)
- *   4. ProductNameLeafClassifier (keyword, HIGH-only) — fills the fine taxonomy
+ *   4. ProductNameSubcategoryClassifier (keyword, HIGH-only) — fills the fine taxonomy
  *      node when the dictionary/catalog gave none, for free at ingestion.
  *
  * Returns a {@link ProductExtraction} carrying the merged result and a
@@ -45,7 +45,7 @@ public class ProductExtractor {
             // Normaliza igual ao recategorizador (que passa o nome normalizado) e ao
             // dicionário: as regras de keyword casam por fronteira de palavra em tokens
             // limpos, então a descrição crua (com pontuação) perderia matches.
-            var leaf = ProductNameLeafClassifier.classify(DescriptionNormalizer.normalize(rawDescription));
+            var leaf = ProductNameSubcategoryClassifier.classify(DescriptionNormalizer.normalize(rawDescription));
             if (leaf.confidence() == Confidence.HIGH) {
                 categoryId = categoryResolver.idForSlug(leaf.slug());
             }

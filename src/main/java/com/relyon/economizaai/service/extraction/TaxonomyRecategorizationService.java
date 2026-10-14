@@ -6,7 +6,7 @@ import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.ai.AiGateway;
-import com.relyon.economizaai.service.extraction.ProductNameLeafClassifier.Confidence;
+import com.relyon.economizaai.service.extraction.ProductNameSubcategoryClassifier.Confidence;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,14 +20,14 @@ import java.util.UUID;
  * Re-categorizes products into the new two-level taxonomy node ({@code category_id}).
  * HYBRID, deterministic baseline first:
  * <ol>
- *   <li><b>Reset</b> every product to its enum group default (wipes stale nodes).</li>
- *   <li><b>Keyword (free):</b> {@link ProductNameLeafClassifier} — only HIGH-confidence
- *       results (single group + strong keyword) are trusted.</li>
+ *   <li><b>Reset</b> every product to its enum category default (wipes stale nodes).</li>
+ *   <li><b>Keyword (free):</b> {@link ProductNameSubcategoryClassifier} — only HIGH-confidence
+ *       results (single category + strong keyword) are trusted.</li>
  *   <li><b>LLM (Claude):</b> everything the keyword marked LOW/NONE goes to
  *       {@link AiFineCategoryClassifier} in batches — shares the AI daily cap + ledger.</li>
  *   <li><b>OFF catalog:</b> force re-fetch, apply any fine node OFF knows.</li>
  * </ol>
- * Non-food enums (CLEANING/PERSONAL_CARE/HEALTH/PET) keep their group node. Admin-triggered.
+ * Non-food enums (CLEANING/PERSONAL_CARE/HEALTH/PET) keep their category node. Admin-triggered.
  */
 @Slf4j
 @Service
@@ -86,7 +86,7 @@ public class TaxonomyRecategorizationService {
         var toSave = new ArrayList<Product>();
         var pending = new ArrayList<Product>();
         for (var product : food) {
-            var result = ProductNameLeafClassifier.classify(product.getNormalizedName());
+            var result = ProductNameSubcategoryClassifier.classify(product.getNormalizedName());
             if (result.confidence() == Confidence.HIGH) {
                 var nodeId = categoryResolver.idForSlug(result.slug());
                 if (nodeId != null && !nodeId.equals(product.getCategoryId())) {
@@ -123,7 +123,7 @@ public class TaxonomyRecategorizationService {
                 updated += toSave.size();
             } catch (AiGateway.AiUnavailableException unavailable) {
                 log.warn("taxonomy.recategorize llm stopped reason={}", unavailable.getMessage());
-                break; // cap/credit exhausted — the rest keep their group default
+                break; // cap/credit exhausted — the rest keep their category default
             }
         }
         return updated;
@@ -151,7 +151,7 @@ public class TaxonomyRecategorizationService {
         var low = 0;
         var none = 0;
         for (var product : food) {
-            var result = ProductNameLeafClassifier.classify(product.getNormalizedName());
+            var result = ProductNameSubcategoryClassifier.classify(product.getNormalizedName());
             switch (result.confidence()) {
                 case HIGH -> { highItems.add(product); highSlug.put(product.getId(), result.slug()); }
                 case LOW -> low++;
