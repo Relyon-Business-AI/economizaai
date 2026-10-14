@@ -57,7 +57,7 @@ public final class ProductNameLeafClassifier {
             "soda", "tonica", "refri")),
         new Rule("sucos", List.of("suco", "nectar", "del valle", "tampico")),
         new Rule("agua", List.of("agua mineral", "agua com gas", "agua sem gas", "agua tonica")),
-        new Rule("cafe-cha", List.of("cafe", "cappuccino", "capuccino", " cha ", "cha preto", "cha verde", "mate")),
+        new Rule("cafe-cha", List.of("cafe", "cappuccino", "capuccino", " cha ", "cha preto", "cha verde", " mate ", "erva mate")),
         // --- bakery ---
         new Rule("paes", List.of("pao", "baguete", "bisnaga", "pao de forma", "pao frances")),
         new Rule("bolos-confeitaria", List.of("bolo", "torta", "croissant", "sonho", "panetone")),
