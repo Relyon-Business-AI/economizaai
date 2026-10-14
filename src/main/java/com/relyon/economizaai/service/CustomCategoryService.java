@@ -98,37 +98,71 @@ public class CustomCategoryService {
      */
     @Transactional
     public CategoryResponse create(User user, CreateCategoryRequest request) {
+        if (request.parentGroupSlug() != null && request.parentCustomCategoryId() != null) {
+            throw new InvalidCategoryMigrationException(); // no máximo um pai (embutida OU custom)
+        }
         var name = request.name().trim();
         var householdId = user.getHousehold().getId();
         var parentGroup = resolveParentGroup(request.parentGroupSlug());
         var existing = customCategoryRepository.findByHouseholdIdAndNameIgnoreCase(householdId, name);
+        if (request.parentCustomCategoryId() != null && existing.isPresent()
+                && existing.get().getId().equals(request.parentCustomCategoryId())) {
+            throw new InvalidCategoryMigrationException(); // não pode ser pai de si mesma
+        }
+        var parentCustom = resolveParentCustom(householdId, request.parentCustomCategoryId());
         var category = existing.orElseGet(
                 () -> HouseholdCustomCategory.builder().household(user.getHousehold()).name(name).build());
         var mutated = existing.isEmpty();
         if (request.icon() != null) { category.setIcon(request.icon()); mutated = true; }
         if (request.color() != null) { category.setColor(request.color()); mutated = true; }
-        if (request.parentGroupSlug() != null) { category.setParentCategory(parentGroup); mutated = true; }
+        if (request.parentGroupSlug() != null) {
+            category.setParentCategory(parentGroup);
+            category.setParentCustomCategory(null);
+            mutated = true;
+        } else if (request.parentCustomCategoryId() != null) {
+            category.setParentCustomCategory(parentCustom);
+            category.setParentCategory(null);
+            mutated = true;
+        }
         var saved = mutated ? customCategoryRepository.save(category) : category;
-        log.info("custom_category.create household={} name='{}' id={} parent={} icon={}",
-                householdId, name, saved.getId(), parentGroup != null ? parentGroup.getSlug() : null, saved.getIcon());
+        log.info("custom_category.create household={} name='{}' id={} parent={} parentCustom={} icon={}",
+                householdId, name, saved.getId(),
+                parentGroup != null ? parentGroup.getSlug() : null,
+                parentCustom != null ? parentCustom.getId() : null, saved.getIcon());
         return toResponse(saved);
     }
 
-    /** Resolve a taxonomy GROUP by slug (must be a top-level node). Null slug → standalone. */
+    /** Resolve a built-in taxonomy CATEGORY by slug (must be a top-level node). Null slug → standalone. */
     private Category resolveParentGroup(String slug) {
         if (slug == null || slug.isBlank()) return null;
         var category = categoryRepository.findBySlug(slug).orElseThrow(InvalidCategoryMigrationException::new);
-        if (category.getParent() != null) throw new InvalidCategoryMigrationException(); // só grupo, não folha
+        if (category.getParent() != null) throw new InvalidCategoryMigrationException(); // só categoria, não subcategoria
         return category;
     }
 
+    /** Resolve a CUSTOM category owned by this household (parent candidate). Null id → none. */
+    private HouseholdCustomCategory resolveParentCustom(UUID householdId, UUID id) {
+        if (id == null) return null;
+        return customCategoryRepository.findByIdAndHouseholdId(id, householdId)
+                .orElseThrow(CustomCategoryNotFoundException::new);
+    }
+
     private CategoryResponse toResponse(HouseholdCustomCategory custom) {
-        var parent = custom.getParentCategory();
         var locale = LocaleContextHolder.getLocale();
+        var builtinParent = custom.getParentCategory();
+        if (builtinParent != null) {
+            return new CategoryResponse(custom.getId(), custom.getName(), true,
+                    custom.getIcon(), custom.getColor(),
+                    builtinParent.getSlug(), localizedName(builtinParent, locale));
+        }
+        var customParent = custom.getParentCustomCategory();
+        if (customParent != null) {
+            return new CategoryResponse(custom.getId(), custom.getName(), true,
+                    custom.getIcon(), custom.getColor(),
+                    "custom:" + customParent.getId(), customParent.getName());
+        }
         return new CategoryResponse(custom.getId(), custom.getName(), true,
-                custom.getIcon(), custom.getColor(),
-                parent != null ? parent.getSlug() : null,
-                parent != null ? localizedName(parent, locale) : null);
+                custom.getIcon(), custom.getColor(), null, null);
     }
 
     /** All categories the household can use: global enums + its custom categories. */

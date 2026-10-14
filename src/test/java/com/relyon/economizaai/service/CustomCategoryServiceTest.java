@@ -72,11 +72,51 @@ class CustomCategoryServiceTest {
         when(customCategoryRepository.findByHouseholdIdAndNameIgnoreCase(user.getHousehold().getId(), "Frutas"))
                 .thenReturn(Optional.of(existing));
 
-        var response = service.create(user, new CreateCategoryRequest(" Frutas ", null, null, null));
+        var response = service.create(user, new CreateCategoryRequest(" Frutas ", null, null, null, null));
 
         assertEquals(existing.getId(), response.id());
         assertTrue(response.custom());
         verify(customCategoryRepository, never()).save(any());
+    }
+
+    @Test
+    void create_nestedUnderCustomParent_returnsCustomParentSlug() {
+        var user = user();
+        var parentId = UUID.randomUUID();
+        var parent = HouseholdCustomCategory.builder().id(parentId)
+                .household(user.getHousehold()).name("Transporte").build();
+        when(customCategoryRepository.findByHouseholdIdAndNameIgnoreCase(user.getHousehold().getId(), "Uber"))
+                .thenReturn(Optional.empty());
+        when(customCategoryRepository.findByIdAndHouseholdId(parentId, user.getHousehold().getId()))
+                .thenReturn(Optional.of(parent));
+        when(customCategoryRepository.save(any(HouseholdCustomCategory.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = service.create(user, new CreateCategoryRequest("Uber", null, null, null, parentId));
+
+        assertTrue(response.custom());
+        assertEquals("custom:" + parentId, response.parentSlug());
+        assertEquals("Transporte", response.parentName());
+    }
+
+    @Test
+    void create_bothParents_throws() {
+        var user = user();
+        var customParentId = UUID.randomUUID();
+        assertThrows(InvalidCategoryMigrationException.class, () ->
+                service.create(user, new CreateCategoryRequest("X", null, null, "pet", customParentId)));
+    }
+
+    @Test
+    void create_selfAsCustomParent_throws() {
+        var user = user();
+        var selfId = UUID.randomUUID();
+        var existing = HouseholdCustomCategory.builder().id(selfId)
+                .household(user.getHousehold()).name("Transporte").build();
+        when(customCategoryRepository.findByHouseholdIdAndNameIgnoreCase(user.getHousehold().getId(), "Transporte"))
+                .thenReturn(Optional.of(existing));
+        assertThrows(InvalidCategoryMigrationException.class, () ->
+                service.create(user, new CreateCategoryRequest("Transporte", null, null, null, selfId)));
     }
 
     @Test

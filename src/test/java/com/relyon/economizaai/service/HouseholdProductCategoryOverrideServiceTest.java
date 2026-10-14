@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service;
 
 import com.relyon.economizaai.model.Household;
+import com.relyon.economizaai.model.HouseholdCustomCategory;
 import com.relyon.economizaai.model.HouseholdProductCategoryOverride;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.User;
@@ -88,5 +89,27 @@ class HouseholdProductCategoryOverrideServiceTest {
     @Test
     void overridesByProduct_emptyProductIds_shortCircuits() {
         assertEquals(0, service.overridesByProduct(UUID.randomUUID(), List.of()).size());
+    }
+
+    @Test
+    void effectiveCategoryByProduct_customUnderCustom_carriesCustomParentKey() {
+        var household = UUID.randomUUID();
+        var product = product();
+        var parentId = UUID.randomUUID();
+        var parent = HouseholdCustomCategory.builder().id(parentId).name("Transporte").build();
+        var custom = HouseholdCustomCategory.builder().id(UUID.randomUUID()).name("Uber")
+                .parentCustomCategory(parent).icon("car-outline").color("#111111").build();
+        var override = HouseholdProductCategoryOverride.builder()
+                .household(Household.builder().id(household).build())
+                .product(product).customCategory(custom).build();
+        when(overrideRepository.findByHouseholdIdAndProductIdIn(eq(household), any()))
+                .thenReturn(List.of(override));
+
+        var effective = service.effectiveCategoryByProduct(household, List.of(product.getId()))
+                .get(product.getId());
+
+        assertEquals("custom:" + custom.getId(), effective.key());
+        assertEquals("Uber", effective.label());
+        assertEquals("custom:" + parentId, effective.parentSlug());
     }
 }

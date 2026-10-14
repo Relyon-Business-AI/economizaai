@@ -4,8 +4,11 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
+import java.util.UUID;
+
 /** Create a household custom category (e.g. "Frutas"), optionally with a visual
- *  (icon+color) and nested under a taxonomy group. */
+ *  (icon+color) and nested under a built-in taxonomy category OR another custom
+ *  category (at most one parent). */
 public record CreateCategoryRequest(
         @Schema(description = "Display name of the custom category.", example = "Frutas")
         @NotBlank @Size(max = 60) String name,
@@ -16,7 +19,11 @@ public record CreateCategoryRequest(
         @Schema(description = "Hex color for the chip.", example = "#F5A623")
         @Size(max = 9) String color,
 
-        @Schema(description = "Slug of the taxonomy GROUP to nest under (null = standalone).",
+        @Schema(description = "Slug of the built-in taxonomy CATEGORY to nest under (null = standalone).",
                 example = "pet")
-        @Size(max = 60) String parentGroupSlug
+        @Size(max = 60) String parentGroupSlug,
+
+        @Schema(description = "Id of a CUSTOM category of the household to nest under "
+                + "(alternative to parentGroupSlug; at most one may be set).")
+        UUID parentCustomCategoryId
 ) {}

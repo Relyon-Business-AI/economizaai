@@ -151,10 +151,8 @@ public class HouseholdProductCategoryOverrideService {
         }
         var custom = override.getCustomCategory();
         if (custom != null) {
-            var parent = custom.getParentCategory();
             return new EffectiveCategory("custom:" + custom.getId(), "custom:" + custom.getId(),
-                    custom.getName(), parent != null ? parent.getSlug() : null,
-                    custom.getIcon(), custom.getColor());
+                    custom.getName(), customParentSlug(custom), custom.getIcon(), custom.getColor());
         }
         var enumCategory = override.getCategory();
         if (enumCategory != null) {
@@ -163,6 +161,14 @@ public class HouseholdProductCategoryOverrideService {
             var label = nodeId != null ? categoryResolver.labelFor(nodeId, locale) : enumCategory.name();
             return new EffectiveCategory(slug != null ? slug : enumCategory.name(), slug, label, null, null, null);
         }
+        return null;
+    }
+
+    /** A custom category's parent key: built-in slug, or {@code custom:<id>} when nested
+     *  under another custom category, or null when it's top-level. */
+    private static String customParentSlug(HouseholdCustomCategory custom) {
+        if (custom.getParentCategory() != null) return custom.getParentCategory().getSlug();
+        if (custom.getParentCustomCategory() != null) return "custom:" + custom.getParentCustomCategory().getId();
         return null;
     }
 

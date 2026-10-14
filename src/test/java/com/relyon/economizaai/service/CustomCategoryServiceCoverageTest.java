@@ -51,7 +51,7 @@ class CustomCategoryServiceCoverageTest {
                 .household(user.getHousehold()).name("Frutas").build();
         when(customCategoryRepository.save(any(HouseholdCustomCategory.class))).thenReturn(saved);
 
-        var response = service.create(user, new CreateCategoryRequest("  Frutas  ", null, null, null));
+        var response = service.create(user, new CreateCategoryRequest("  Frutas  ", null, null, null, null));
 
         assertEquals(saved.getId(), response.id());
         assertEquals("Frutas", response.name());

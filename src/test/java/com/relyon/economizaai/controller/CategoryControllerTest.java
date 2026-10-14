@@ -77,7 +77,7 @@ class CategoryControllerTest {
         when(customCategoryService.create(any(User.class), any(CreateCategoryRequest.class)))
                 .thenReturn(CategoryResponse.custom(id, "Frutas"));
 
-        var body = objectMapper.writeValueAsString(new CreateCategoryRequest("Frutas", null, null, null));
+        var body = objectMapper.writeValueAsString(new CreateCategoryRequest("Frutas", null, null, null, null));
         mockMvc.perform(post("/api/v1/categories")
                         .contentType(MediaType.APPLICATION_JSON).content(body)
                         .with(SecurityMockMvcRequestPostProcessors.user(principal())))
@@ -89,7 +89,7 @@ class CategoryControllerTest {
 
     @Test
     void create_blankName_returns400() throws Exception {
-        var body = objectMapper.writeValueAsString(new CreateCategoryRequest("  ", null, null, null));
+        var body = objectMapper.writeValueAsString(new CreateCategoryRequest("  ", null, null, null, null));
         when(localizedMessageService.translate("validation.failed")).thenReturn("Validation failed");
 
         mockMvc.perform(post("/api/v1/categories")

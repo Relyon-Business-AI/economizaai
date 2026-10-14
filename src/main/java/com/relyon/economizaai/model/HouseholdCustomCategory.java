@@ -61,6 +61,13 @@ public class HouseholdCustomCategory extends BaseEntity implements HouseholdScop
     @OnDelete(action = OnDeleteAction.SET_NULL)
     private Category parentCategory;
 
+    // Alternativa ao parentCategory (embutida): aninhar sob OUTRA categoria custom do
+    // mesmo household. No máximo um dos dois pais é setado. SET NULL se o pai some.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_custom_category_id")
+    @OnDelete(action = OnDeleteAction.SET_NULL)
+    private HouseholdCustomCategory parentCustomCategory;
+
     // Default origin to the current household on first persist, so callers never
     // have to remember to set it. Merge code overrides household_id later but leaves
     // originHousehold untouched.
