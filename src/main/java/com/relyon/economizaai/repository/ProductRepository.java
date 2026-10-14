@@ -114,6 +114,14 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
             """, nativeQuery = true)
     int resetCategoryIdFromEnumGroup();
 
+    /** Companion to the reset: products with no enum have no group default — clear any
+     *  stale node so the name classifier recomputes from scratch (else old rules linger). */
+    @Modifying
+    @Transactional
+    @Query(value = "UPDATE products SET category_id = NULL, updated_at = now() "
+            + "WHERE category IS NULL AND category_id IS NOT NULL", nativeQuery = true)
+    int clearCategoryIdForNullEnum();
+
     List<Product> findByCategorizationSourceIn(Collection<CategorizationSource> sources);
 
     /** Products that have any category assigned — for catalog coverage metrics. */

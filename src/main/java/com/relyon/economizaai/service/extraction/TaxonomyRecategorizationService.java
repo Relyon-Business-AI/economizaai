@@ -37,6 +37,7 @@ public class TaxonomyRecategorizationService {
     public RecategorizeResult recategorizeFromEanCatalog() {
         // Deterministic: reset to the enum group baseline, then refine by name, then OFF.
         productRepository.resetCategoryIdFromEnumGroup();
+        productRepository.clearCategoryIdForNullEnum();
         var byName = recategorizeByName();
         var eans = productRepository.findDistinctEans();
         var enriched = enrichmentService.enrichForce(eans);        // OFF re-fetch (untransacted)
