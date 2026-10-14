@@ -20,6 +20,7 @@ import com.relyon.economizaai.dto.request.UpdateSubscriptionTierRequest;
 import com.relyon.economizaai.dto.request.UpdateUserRoleRequest;
 import com.relyon.economizaai.dto.response.MerchantAccessResponse;
 import com.relyon.economizaai.dto.response.AcquisitionReportResponse;
+import com.relyon.economizaai.dto.response.AdminAlertsConfigResponse;
 import com.relyon.economizaai.dto.response.AdminNotificationSummaryResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptDetailResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptStatsResponse;
@@ -77,6 +78,7 @@ import com.relyon.economizaai.service.analytics.RetentionCohortService;
 import com.relyon.economizaai.service.analytics.meta.MetaAdSpendSyncJob;
 import com.relyon.economizaai.service.extraction.CategorizationQualityService;
 import com.relyon.economizaai.service.geo.MarketLocationService;
+import com.relyon.economizaai.service.notifications.OperationalAlertService;
 import com.relyon.economizaai.service.notifications.RelevanceReportService;
 import com.relyon.economizaai.service.admin.AdminOverviewService;
 import com.relyon.economizaai.service.admin.IngestionHealthService;
@@ -85,6 +87,7 @@ import com.relyon.economizaai.service.paidapi.CostReportService;
 import com.relyon.economizaai.service.paidapi.InfosimplesFinanceService;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
 import com.relyon.economizaai.service.sefaz.StateCoverageService;
+import com.relyon.economizaai.time.BrazilClock;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -137,6 +140,7 @@ public class AdminController {
     private final CategorizationQualityService categorizationQualityService;
     private final MarketLocationService marketLocationService;
     private final RelevanceReportService relevanceReportService;
+    private final OperationalAlertService operationalAlertService;
     private final CostReportService costReportService;
     private final InfosimplesFinanceService infosimplesFinanceService;
     private final IngestionHealthService ingestionHealthService;
@@ -161,6 +165,31 @@ public class AdminController {
     @PostMapping("/receipts/{id}/reparse")
     public ResponseEntity<ReceiptResponse> reparseReceipt(@PathVariable UUID id) {
         return ResponseEntity.ok(receiptService.reparse(id));
+    }
+
+    /**
+     * Fires a real operational alert through the same fan-out used by production alerts
+     * (e-mail always + WhatsApp template when configured/approved). Lets an admin verify
+     * both channels on demand without waiting for a genuine low-balance event.
+     */
+    @Operation(summary = "Config dos canais de alerta admin (e-mail + WhatsApp) + status do template")
+    @GetMapping("/alerts/config")
+    public ResponseEntity<AdminAlertsConfigResponse> alertsConfig() {
+        return ResponseEntity.ok(operationalAlertService.config());
+    }
+
+    @Operation(summary = "Dispara um alerta de teste pros canais de admin (e-mail + WhatsApp)")
+    @PostMapping("/alerts/test")
+    public ResponseEntity<Map<String, Object>> sendTestAlert() {
+        var timestamp = BrazilClock.nowDateTime().toString();
+        operationalAlertService.alertAdmin(
+                "economizai: teste de alerta admin",
+                "Disparo manual de teste em " + timestamp
+                        + ". Se você recebeu isto, o canal de alerta está funcionando.");
+        return ResponseEntity.ok(Map.of(
+                "triggered", true,
+                "at", timestamp,
+                "note", "E-mail sempre; WhatsApp chega quando o template estiver aprovado e configurado."));
     }
 
     /**

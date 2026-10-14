@@ -16,6 +16,34 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-13 — Gráfico de pizza no relatório do WhatsApp
+
+- O relatório do WhatsApp (resposta a `CONFIRMAR`/`RELATORIO`) agora vem com uma
+  **imagem de pizza de gastos por categoria** + a legenda de texto, numa única
+  mensagem. Custo **zero** a mais (mídia+legenda = 1 msg, dentro da janela de
+  serviço gratuita). Só anexa quando há dados de categoria; sem dados, cai no
+  texto puro.
+- Novo endpoint público `GET /api/v1/public/report-charts/{token}.png` — serve o
+  PNG do gráfico sem auth (o Twilio busca como MediaUrl), gated por **token HMAC
+  curto** (expira ~15 min, mintado pelo backend). Não é chamável manualmente.
+  Regenerado a cada fetch (sem storage). Nada muda pro FE do app.
+
+## 2026-10-13 — Endpoint de teste de alerta admin + confirmação WhatsApp em pt
+
+- Novo `POST /api/v1/admin/alerts/test` (ADMIN) — dispara um alerta operacional
+  de teste pelos mesmos canais da produção (e-mail sempre + WhatsApp template
+  quando configurado/aprovado). Resposta `200 { triggered, at, note }`. Serve pra
+  validar os canais sob demanda sem esperar um evento real (ex.: saldo baixo no
+  Infosimples).
+- Novo `GET /api/v1/admin/alerts/config` (ADMIN) — estado dos canais:
+  `{ emailActive, whatsAppEnabled, adminPhoneCount, adminTemplateConfigured,
+  twilioWhatsAppConfigured, templateStatus }`. O `templateStatus` é consultado
+  ao vivo no Twilio (`approved`/`pending`/`rejected`/`unknown`/`unset`) — diz se
+  o canal WhatsApp já está pronto pra testar. Alimenta a tela admin "Alertas".
+- Fix: a confirmação de opt-in do WhatsApp agora renderiza no **locale do
+  usuário** (pt por padrão). O webhook do Twilio não carrega `Accept-Language`,
+  então a mensagem caía no default do JVM (inglês); agora segue `User.locale`.
+
 ## 2026-10-13 — Admin SUPPORTED override agora move o comerciante pra "mercado"
 
 - A lente **Mercado/Outras** (e o gasto por escopo em `/insights/*`) passou a

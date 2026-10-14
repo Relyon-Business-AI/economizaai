@@ -11,6 +11,7 @@ import org.springframework.web.client.RestClient;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.Map;
 
 /**
  * Thin wrapper over the Twilio REST Messages API — does BOTH SMS and WhatsApp
@@ -29,6 +30,7 @@ import java.util.Base64;
 public class TwilioMessageClient {
 
     private static final String API_BASE = "https://api.twilio.com/2010-04-01/Accounts/";
+    private static final String CONTENT_BASE = "https://content.twilio.com/v1/Content/";
     private static final String WHATSAPP_PREFIX = "whatsapp:";
     private static final int CONNECT_TIMEOUT_MS = 5000;
     private static final int READ_TIMEOUT_MS = 10000;
@@ -74,6 +76,25 @@ public class TwilioMessageClient {
     }
 
     /**
+     * Sends a WhatsApp message with an image + caption in ONE message ({@code mediaUrl} must be
+     * a publicly-fetchable URL — Twilio fetches it with no credentials). A single media+caption
+     * message costs the same as a single text message. When {@code mediaUrl} is blank this
+     * degrades to a plain text send.
+     */
+    public void sendWhatsApp(String toE164, String body, String mediaUrl) {
+        if (isBlank(mediaUrl)) {
+            sendWhatsApp(toE164, body);
+            return;
+        }
+        try {
+            postMedia(WHATSAPP_PREFIX + fromWhatsApp, WHATSAPP_PREFIX + toE164, body, mediaUrl);
+        } catch (Exception ex) {
+            throw new TwilioMessageException(
+                    "Twilio WhatsApp media send failed: " + ex.getClass().getSimpleName() + ": " + ex.getMessage(), ex);
+        }
+    }
+
+    /**
      * Sends a WhatsApp TEMPLATE message via the Content API — required for proactive
      * (business-initiated) messages, which freeform {@link #sendWhatsApp} can't do
      * outside a 24h customer-service window. {@code contentVariablesJson} maps the
@@ -88,12 +109,55 @@ public class TwilioMessageClient {
         }
     }
 
+    /**
+     * Fetches the WhatsApp approval status of a Content template (Twilio Content API).
+     * Returns the raw status string ({@code approved}, {@code pending}, {@code received},
+     * {@code rejected}, …), or {@code unknown} when the lookup can't be made (unconfigured,
+     * blank sid, HTTP/parse error). Never throws — this is a status probe, not a critical path.
+     */
+    public String fetchWhatsAppTemplateStatus(String contentSid) {
+        if (isBlank(accountSid) || isBlank(authToken) || isBlank(contentSid)) return "unknown";
+        try {
+            var response = restClient.get()
+                    .uri(CONTENT_BASE + contentSid + "/ApprovalRequests")
+                    .header("Authorization", basicAuthHeader())
+                    .retrieve()
+                    .body(Map.class);
+            if (response != null && response.get("whatsapp") instanceof Map<?, ?> whatsapp) {
+                var status = whatsapp.get("status");
+                if (status != null) return status.toString();
+            }
+            return "unknown";
+        } catch (Exception ex) {
+            log.warn("twilio.template_status_failed sid={} reason={}", contentSid, ex.getClass().getSimpleName());
+            return "unknown";
+        }
+    }
+
     /** Raw POST — isolated as a seam so callers/tests can stub the HTTP exchange. */
     protected void post(String from, String to, String body) {
         var form = new LinkedMultiValueMap<String, String>();
         form.add("From", from);
         form.add("To", to);
         form.add("Body", body);
+        restClient.post()
+                .uri(API_BASE + accountSid + "/Messages.json")
+                .header("Authorization", basicAuthHeader())
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body((MultiValueMap<String, String>) form)
+                .retrieve()
+                .toBodilessEntity();
+    }
+
+    /** Raw media POST — isolated as a seam so callers/tests can stub the HTTP exchange. */
+    protected void postMedia(String from, String to, String body, String mediaUrl) {
+        var form = new LinkedMultiValueMap<String, String>();
+        form.add("From", from);
+        form.add("To", to);
+        if (body != null && !body.isBlank()) {
+            form.add("Body", body);
+        }
+        form.add("MediaUrl", mediaUrl);
         restClient.post()
                 .uri(API_BASE + accountSid + "/Messages.json")
                 .header("Authorization", basicAuthHeader())
