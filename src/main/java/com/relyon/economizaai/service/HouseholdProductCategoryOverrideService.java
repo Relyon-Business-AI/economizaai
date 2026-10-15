@@ -6,6 +6,7 @@ import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.HouseholdProductCategoryOverrideRepository;
+import com.relyon.economizaai.service.cache.HouseholdCacheGen;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.i18n.LocaleContextHolder;
@@ -31,6 +32,7 @@ public class HouseholdProductCategoryOverrideService {
 
     private final HouseholdProductCategoryOverrideRepository overrideRepository;
     private final CategoryResolver categoryResolver;
+    private final HouseholdCacheGen householdCacheGen;
 
     /** Upsert: point this household's view of the product at a global enum category. */
     @Transactional
@@ -40,6 +42,7 @@ public class HouseholdProductCategoryOverrideService {
         override.setCustomCategory(null);
         override.setCategoryNodeId(null);
         overrideRepository.save(override);
+        householdCacheGen.bump(user.getHousehold().getId()); // insights são override-aware → invalida o cache de gastos
         log.info("category.override.set household={} product={} category={}",
                 user.getHousehold().getId(), product.getId(), category);
     }
@@ -52,6 +55,7 @@ public class HouseholdProductCategoryOverrideService {
         override.setCustomCategory(customCategory);
         override.setCategoryNodeId(null);
         overrideRepository.save(override);
+        householdCacheGen.bump(user.getHousehold().getId());
         log.info("category.override.set household={} product={} customCategory={}",
                 user.getHousehold().getId(), product.getId(), customCategory.getId());
     }
@@ -64,6 +68,7 @@ public class HouseholdProductCategoryOverrideService {
         override.setCustomCategory(null);
         override.setCategoryNodeId(categoryNodeId);
         overrideRepository.save(override);
+        householdCacheGen.bump(user.getHousehold().getId());
         log.info("category.override.set household={} product={} node={}",
                 user.getHousehold().getId(), product.getId(), categoryNodeId);
     }

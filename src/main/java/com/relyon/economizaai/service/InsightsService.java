@@ -56,7 +56,7 @@ public class InsightsService {
 
     @Transactional(readOnly = true)
     @Cacheable(value = CachingConfig.INSIGHTS_SPEND_CACHE,
-            key = "#user.household.id + ':' + @householdCacheGen.get(#user.household.id) + ':' + #user.subscriptionTier + ':' + #scope + ':' + #from + ':' + #to")
+            key = "#user.household.id + ':' + @householdCacheGen.get(#user.household.id) + ':' + #user.subscriptionTier + ':' + #scope + ':' + #from + ':' + #to + ':' + T(org.springframework.context.i18n.LocaleContextHolder).getLocale().getLanguage()")
     public SpendInsightsResponse spend(User user, LocalDateTime from, LocalDateTime to, MarketScope scope) {
         var householdId = user.getHousehold().getId();
         // FREE tier: clamp the lower bound to the allowed history window. Tier is
