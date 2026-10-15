@@ -34,6 +34,7 @@ import com.relyon.economizaai.service.subscription.SubscriptionService;
 import com.relyon.economizaai.service.auth.EmailVerificationService;
 import com.relyon.economizaai.service.auth.PhoneVerificationService;
 import com.relyon.economizaai.service.profile.ProfilePictureService;
+import com.relyon.economizaai.service.notifications.WhatsAppOptInService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -101,6 +102,9 @@ class UserControllerTest {
 
     @MockitoBean
     private SubscriptionService subscriptionService;
+
+    @MockitoBean
+    private WhatsAppOptInService whatsAppOptInService;
 
     private User buildUser() {
         var user = User.builder()

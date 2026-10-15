@@ -156,11 +156,11 @@ class InsightsQueryServiceTest {
         var receiptTwo = UUID.randomUUID();
         when(summaryQuery.getSingleResult())
                 .thenReturn(new Object[]{new BigDecimal("40.00"), 2L, 3L});
-        // (productId, category, receiptId, total, itemCount) — leite + arroz share receiptOne.
+        // (productId, nodeId, category, receiptId, total, itemCount) — leite + arroz share receiptOne.
         when(bucketQuery.getResultList()).thenReturn(List.<Object[]>of(
-                new Object[]{leite, ProductCategory.MEAT_DAIRY, receiptOne, new BigDecimal("10.00"), 1L},
-                new Object[]{arroz, ProductCategory.GROCERIES, receiptOne, new BigDecimal("20.00"), 1L},
-                new Object[]{arroz, ProductCategory.GROCERIES, receiptTwo, new BigDecimal("10.00"), 1L}));
+                new Object[]{leite, null, ProductCategory.MEAT_DAIRY, receiptOne, new BigDecimal("10.00"), 1L},
+                new Object[]{arroz, null, ProductCategory.GROCERIES, receiptOne, new BigDecimal("20.00"), 1L},
+                new Object[]{arroz, null, ProductCategory.GROCERIES, receiptTwo, new BigDecimal("10.00"), 1L}));
         when(categoryOverrideService.overrideKeysByProduct(eq(householdId), any()))
                 .thenReturn(Map.of(leite,
                         new HouseholdProductCategoryOverrideService.OverrideKey("enum:GROCERIES", "GROCERIES")));
@@ -188,8 +188,8 @@ class InsightsQueryServiceTest {
         when(summaryQuery.getSingleResult())
                 .thenReturn(new Object[]{new BigDecimal("19.00"), 2L, 2L});
         when(bucketQuery.getResultList()).thenReturn(List.<Object[]>of(
-                new Object[]{arroz, ProductCategory.OTHER, receiptOne, new BigDecimal("12.00"), 1L},
-                new Object[]{sabao, ProductCategory.CLEANING, receiptTwo, new BigDecimal("7.00"), 1L}));
+                new Object[]{arroz, null, ProductCategory.OTHER, receiptOne, new BigDecimal("12.00"), 1L},
+                new Object[]{sabao, null, ProductCategory.CLEANING, receiptTwo, new BigDecimal("7.00"), 1L}));
         when(categoryOverrideService.overrideKeysByProduct(eq(householdId), any()))
                 .thenReturn(Map.of(sabao,
                         new HouseholdProductCategoryOverrideService.OverrideKey("custom:" + customId, "OTHER")));
@@ -358,7 +358,7 @@ class InsightsQueryServiceTest {
         when(summaryQuery.getSingleResult())
                 .thenReturn(new Object[]{new BigDecimal("20.00"), 1L, 1L});
         when(bucketQuery.getResultList()).thenReturn(List.<Object[]>of(
-                new Object[]{arroz, ProductCategory.GROCERIES, receiptOne, new BigDecimal("20.00"), 1L}));
+                new Object[]{arroz, null, ProductCategory.GROCERIES, receiptOne, new BigDecimal("20.00"), 1L}));
         when(categoryOverrideService.overrideKeysByProduct(eq(householdId), any()))
                 .thenReturn(Map.of());
 

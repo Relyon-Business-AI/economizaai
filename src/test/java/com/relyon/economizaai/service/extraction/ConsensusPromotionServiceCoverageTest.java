@@ -10,6 +10,7 @@ import com.relyon.economizaai.repository.ConsensusGraduationAuditRepository;
 import com.relyon.economizaai.repository.HouseholdProductCategoryOverrideRepository;
 import com.relyon.economizaai.repository.LearnedDictionaryRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -49,12 +50,13 @@ class ConsensusPromotionServiceCoverageTest {
     @Mock private LearnedDictionaryRepository learnedRepository;
     @Mock private DictionaryClassifier dictionaryClassifier;
     @Mock private ConsensusGraduationAuditRepository auditRepository;
+    @Mock private CategoryResolver categoryResolver;
 
     private ConsensusPromotionService service;
 
     @BeforeEach
     void setUp() {
-        service = new ConsensusPromotionService(overrideRepository, productRepository, learnedRepository, dictionaryClassifier, auditRepository);
+        service = new ConsensusPromotionService(overrideRepository, productRepository, learnedRepository, dictionaryClassifier, auditRepository, categoryResolver, new LearnedDictionaryWriteLock());
         ReflectionTestUtils.setField(service, "minHouseholds", 2);
         ReflectionTestUtils.setField(service, "minTokenProducts", 2);
         lenient().when(learnedRepository.findAll()).thenReturn(List.of());

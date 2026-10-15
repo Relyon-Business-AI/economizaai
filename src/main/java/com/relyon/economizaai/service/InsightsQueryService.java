@@ -18,6 +18,7 @@ import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.Query;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,6 +61,7 @@ public class InsightsQueryService {
     private final HouseholdProductCategoryOverrideService categoryOverrideService;
     private final SubscriptionGateService subscriptionGate;
     private final InsightsRepository insightsRepository;
+    private final CategoryResolver categoryResolver;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -227,14 +229,14 @@ public class InsightsQueryService {
     private List<Bucket> computeHouseholdCategoryBuckets(QueryFilters filters) {
         var clauses = buildClauses(filters);
         var jpql = """
-                SELECT p.id, COALESCE(ri.categoryAtConfirmation, p.category), r.id,
+                SELECT p.id, p.categoryId, COALESCE(ri.categoryAtConfirmation, p.category), r.id,
                        COALESCE(SUM(ri.totalPrice), 0),
                        COUNT(ri)
                 FROM ReceiptItem ri
                 JOIN ri.receipt r
                 LEFT JOIN ri.product p%s
                 WHERE %s
-                GROUP BY p.id, COALESCE(ri.categoryAtConfirmation, p.category), r.id
+                GROUP BY p.id, p.categoryId, COALESCE(ri.categoryAtConfirmation, p.category), r.id
                 """.formatted(clauses.join(), clauses.where());
         var query = entityManager.createQuery(jpql, Object[].class);
         clauses.bind(query);
@@ -246,19 +248,34 @@ public class InsightsQueryService {
                 .distinct()
                 .toList();
         var overrides = categoryOverrideService.overrideKeysByProduct(filters.householdId(), productIds);
+        var locale = LocaleContextHolder.getLocale();
 
         var accumulators = new LinkedHashMap<String, CategoryAccumulator>();
         for (var row : rows) {
             var productId = (UUID) row[0];
-            var globalCategory = (ProductCategory) row[1];
-            var receiptId = (UUID) row[2];
-            var total = (BigDecimal) row[3];
-            var itemCount = ((Number) row[4]).longValue();
+            var nodeId = (UUID) row[1];
+            var globalCategory = (ProductCategory) row[2];
+            var receiptId = (UUID) row[3];
+            var total = (BigDecimal) row[4];
+            var itemCount = ((Number) row[5]).longValue();
             var override = productId != null ? overrides.get(productId) : null;
             var categoryName = globalCategory != null ? globalCategory.name() : ProductCategory.OTHER.name();
-            var label = override != null ? override.label() : categoryName;
-            // Discriminated bucket key so a custom category named like an enum doesn't merge.
-            var bucketKey = override != null ? override.key() : "enum:" + categoryName;
+            var nodeLabel = nodeId != null ? categoryResolver.labelFor(nodeId, locale) : null;
+            // Override (explicit user choice) wins; else the new fine taxonomy node;
+            // else the legacy enum name. Discriminated bucket key so a custom category
+            // named like an enum/node doesn't merge.
+            String label;
+            String bucketKey;
+            if (override != null) {
+                label = override.label();
+                bucketKey = override.key();
+            } else if (nodeLabel != null) {
+                label = nodeLabel;
+                bucketKey = "node:" + nodeId;
+            } else {
+                label = categoryName;
+                bucketKey = "enum:" + categoryName;
+            }
             accumulators.computeIfAbsent(bucketKey, key -> new CategoryAccumulator(label))
                     .add(total, itemCount, receiptId);
         }

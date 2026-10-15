@@ -378,7 +378,7 @@ class ProductServiceSearchGetUpdateTest {
     void create_withoutEan_skipsBackfillAndUsesExtractedFallbacks() {
         var extracted = new ProductExtraction(
                 "Cerveja", "Stella", new BigDecimal("330"), "ML",
-                ProductCategory.BEVERAGES, CategorizationSource.DICTIONARY);
+                ProductCategory.BEVERAGES, null, CategorizationSource.DICTIONARY);
         when(productExtractor.extract("Cerveja Stella Artois 330ml")).thenReturn(extracted);
         when(productRepository.save(any(Product.class))).thenAnswer(invocation -> {
             Product product = invocation.getArgument(0);

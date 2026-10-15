@@ -60,7 +60,7 @@ class CategorizationBenchmarkServiceCoverageTest {
 
     private ProductExtraction extraction(ProductCategory category, String brand,
                                          BigDecimal packSize, String packUnit) {
-        return new ProductExtraction(null, brand, packSize, packUnit, category, CategorizationSource.DICTIONARY);
+        return new ProductExtraction(null, brand, packSize, packUnit, category, null, CategorizationSource.DICTIONARY);
     }
 
     @Test

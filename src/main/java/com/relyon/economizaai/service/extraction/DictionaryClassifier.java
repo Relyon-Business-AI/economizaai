@@ -15,6 +15,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -81,7 +82,8 @@ public class DictionaryClassifier {
         var abbrevIndex = new LinkedHashMap<Character, List<KeyedEntry>>();
         for (var entry : curatedRepository.findAll()) {
             var dictEntry = new DictEntry(
-                    entry.getGenericName(), entry.getBrand(), entry.getCategory(), CategorizationSource.DICTIONARY);
+                    entry.getGenericName(), entry.getBrand(), entry.getCategory(),
+                    entry.getCategoryId(), CategorizationSource.DICTIONARY);
             entries.put(entry.getKeyword(), dictEntry);
             var keyword = entry.getKeyword();
             if (keyword != null && !keyword.isBlank()) {
@@ -189,7 +191,8 @@ public class DictionaryClassifier {
 
     private record KeyedEntry(String[] keyTokens, DictEntry entry) {}
 
-    public record DictEntry(String genericName, String brand, ProductCategory category, CategorizationSource source) {
-        public static final DictEntry EMPTY = new DictEntry(null, null, null, CategorizationSource.NONE);
+    public record DictEntry(String genericName, String brand, ProductCategory category,
+                            UUID categoryId, CategorizationSource source) {
+        public static final DictEntry EMPTY = new DictEntry(null, null, null, null, CategorizationSource.NONE);
     }
 }

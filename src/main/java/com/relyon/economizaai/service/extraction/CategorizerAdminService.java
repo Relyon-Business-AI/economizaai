@@ -16,6 +16,7 @@ import com.relyon.economizaai.repository.CuratedDictionaryEntryRepository;
 import com.relyon.economizaai.repository.EanCatalogRepository;
 import com.relyon.economizaai.repository.LearnedDictionaryRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.canonicalization.CanonicalizationService;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import lombok.RequiredArgsConstructor;
@@ -76,6 +77,7 @@ public class CategorizerAdminService {
     private final EanCatalogRepository eanCatalogRepository;
     private final ConsensusGraduationAuditRepository consensusAuditRepository;
     private final CanonicalizationService canonicalizationService;
+    private final CategoryResolver categoryResolver;
 
     @Transactional
     public ResetLearnedOutcome resetLearned() {
@@ -130,6 +132,7 @@ public class CategorizerAdminService {
         for (var product : consensusProducts) {
             product.setCategorizationSource(CategorizationSource.NONE);
             product.setCategory(null);
+            // ProductCategoryNodeListener clears categoryId on save when the enum is null.
         }
         productRepository.saveAll(consensusProducts);
         log.info("categorizer.reset_consensus reverted={}", consensusProducts.size());
@@ -167,6 +170,8 @@ public class CategorizerAdminService {
                             .promotedAt(now)
                             .build());
             entry.setCategory(req.category());
+            // Fase 3: dual-write da folha fina (nó-grupo default do enum, null-safe).
+            entry.setCategoryId(categoryResolver.idForLegacyEnum(req.category()));
             entry.setGenericName(req.genericName());
             // High sample count signals high confidence — this entry won't be overridden by low-count promotions
             entry.setSampleCount(req.sampleCount() > 0 ? req.sampleCount() : 999);
@@ -186,7 +191,8 @@ public class CategorizerAdminService {
         var snapshot = new LinkedHashMap<String, DictionaryClassifier.DictEntry>();
         for (var entry : allEntries) {
             snapshot.put(entry.getNormalizedToken(), new DictionaryClassifier.DictEntry(
-                    entry.getGenericName(), null, entry.getCategory(), CategorizationSource.LEARNED_DICTIONARY));
+                    entry.getGenericName(), null, entry.getCategory(),
+                    entry.getCategoryId(), CategorizationSource.LEARNED_DICTIONARY));
         }
         dictionaryClassifier.replaceLearnedEntries(snapshot);
         return allEntries.size();
@@ -237,6 +243,12 @@ public class CategorizerAdminService {
             entry.setGenericName(request.genericName());
             entry.setBrand(request.brand() == null || request.brand().isBlank() ? null : request.brand().trim());
             entry.setCategory(request.category());
+            // Fase 2: regra carrega a folha fina. Slug explícito vence; senão o nó-grupo
+            // default do enum — assim toda regra passa a mapear um nó da taxonomia.
+            var nodeSlug = request.categoryNodeSlug();
+            entry.setCategoryId(nodeSlug != null && !nodeSlug.isBlank()
+                    ? categoryResolver.idForSlug(nodeSlug)
+                    : categoryResolver.idForLegacyEnum(request.category()));
             curatedRepository.save(entry);
             importedKeywords.add(keyword);
             imported++;
@@ -421,7 +433,8 @@ public class CategorizerAdminService {
 
     public record DictionaryImportRequest(String token, String genericName, ProductCategory category, int sampleCount) {}
 
-    public record CuratedImportRequest(String keyword, String genericName, String brand, ProductCategory category) {}
+    public record CuratedImportRequest(String keyword, String genericName, String brand,
+                                       ProductCategory category, String categoryNodeSlug) {}
 
     public record BrandImportRequest(String key, String displayName) {}
 

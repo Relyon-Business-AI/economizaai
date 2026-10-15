@@ -19,6 +19,8 @@ import lombok.experimental.SuperBuilder;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
 
+import java.util.UUID;
+
 /**
  * A household's manual category correction for a product — "evidence, not truth".
  * It overrides the category that household sees (the global {@link Product} stays
@@ -64,20 +66,33 @@ public class HouseholdProductCategoryOverride extends BaseEntity implements Hous
     @JoinColumn(name = "custom_category_id")
     private HouseholdCustomCategory customCategory;
 
-    /** The category label this household sees: custom name if set, else the enum name. */
+    /**
+     * Target new-taxonomy node (categories.id) — null unless the household corrected
+     * the item into a fine leaf/group. Exactly one of category/customCategory/categoryNodeId
+     * is set. Its display NAME isn't on the entity (needs the categories table), so the
+     * service resolves the label; the entity only owns the discriminated key.
+     */
+    @Column(name = "category_node_id")
+    private UUID categoryNodeId;
+
+    /**
+     * The category label this household sees from the ENTITY ALONE: custom name or
+     * enum name. Null for a taxonomy-node override — the service resolves that via
+     * the categories table (see HouseholdProductCategoryOverrideService).
+     */
     public String effectiveLabel() {
         if (customCategory != null) return customCategory.getName();
         return category != null ? category.name() : null;
     }
 
     /**
-     * A discriminated bucket key that never collides across the custom/enum spaces:
-     * {@code "custom:<id>"} for a custom category, {@code "enum:<name>"} for an enum.
-     * Two different categories that happen to share a display label (e.g. a custom
-     * category literally named "OTHER") therefore stay in separate buckets.
+     * A discriminated bucket key that never collides across the custom/enum/node spaces:
+     * {@code "custom:<id>"}, {@code "node:<id>"} or {@code "enum:<name>"}. Two different
+     * categories sharing a display label therefore stay in separate buckets.
      */
     public String effectiveKey() {
         if (customCategory != null) return "custom:" + customCategory.getId();
+        if (categoryNodeId != null) return "node:" + categoryNodeId;
         return category != null ? "enum:" + category.name() : null;
     }
 

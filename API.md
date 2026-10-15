@@ -613,7 +613,7 @@ PATCH  /api/v1/receipts/{id}/items/{itemId}          → fix typos / qty / toggl
                                                         (nota fields — PENDING_CONFIRMATION only)
 PATCH  /api/v1/receipts/{id}/items/{itemId}/personal  → household "personal layer" — ANY status (incl. CONFIRMED):
                                                         { excludedFromPersonal, friendlyDescription, paidTotalPrice }
-PUT    /api/v1/receipts/{id}/items/{itemId}/category  → correct the category { "category": "MEAT_DAIRY" }
+PUT    /api/v1/receipts/{id}/items/{itemId}/category  → correct the category { "category": "MEAT_DAIRY" } OR { "customCategoryId": "<uuid>" }
 POST   /api/v1/receipts/{id}/items                   → add a missing item (PENDING_CONFIRMATION only)
 POST   /api/v1/receipts/items-photo                  → multipart photo of the printed receipt; vision-LLM
                                                         extracts items into a PENDING_CONFIRMATION receipt
@@ -647,7 +647,7 @@ DELETE /api/v1/receipts/{id}                         → hard delete. Frees the 
 
 Returns the updated receipt. The immutable nota fields (quantity, shelf price, EAN, adding items) remain `PENDING_CONFIRMATION`-only via the full PATCH.
 
-**Per-item category correction** — `PUT /receipts/{id}/items/{itemId}/category` with `{ "category": "MEAT_DAIRY" }`. This is **household-scoped "evidence, not truth"**: it changes the category *this household* sees for that product everywhere (`GET /receipts/{id}`, `GET /items`) but does **not** mutate the global product, so other households are unaffected. `400` if the item isn't linked to a canonical product yet. Returns the updated receipt with the override applied. (Aggregates/insights honor this override in the **HOUSEHOLD** category lens, the default — pass `categoryView=GLOBAL` on `/items`, `/insights/query`, and `/insights/categories/top` to ignore overrides and use the global category.)
+**Per-item category correction** — `PUT /receipts/{id}/items/{itemId}/category` with EXACTLY ONE target: a global enum `{ "category": "MEAT_DAIRY" }`, a household custom category `{ "customCategoryId": "<uuid>" }` (create one first via `POST /categories`, or reuse one from `GET /categories`), **or** a fine taxonomy leaf `{ "categoryNodeSlug": "queijos" }` (slug from `GET /categories/taxonomy`). This lets the FE assign a category inline at confirm/edit without leaving the receipt. This is **household-scoped "evidence, not truth"**: it changes the category *this household* sees for that product everywhere (`GET /receipts/{id}`, `GET /items`) but does **not** mutate the global product, so other households are unaffected. `400` if not exactly one target is given or the item isn't linked to a canonical product yet. Returns the updated receipt with the override applied. (Aggregates/insights honor this override: `/insights/spend` `byCategory` is always override-aware; `/items` and `/insights/query` take `categoryView` — pass `categoryView=GLOBAL` to ignore overrides and use the global category.)
 
 The response always includes both:
 - `rawDescription` — original NFC-e text, never changes
@@ -734,9 +734,19 @@ Returns:
   "byMonth": [{ "year": 2026, "month": 4, "total": 1234.50, "discount": 18.40, "receiptCount": 5 }],
   "byWeek":  [{ "year": 2026, "week": 17, "total": 312.00, "discount": 4.00, "receiptCount": 1 }, ...],
   "byMarket": [{ "cnpj": "...", "marketName": "...", "total": 850.00, "discount": 12.40, "receiptCount": 3 }, ...],
-  "byCategory": [{ "category": "GROCERIES", "total": 600.00, "itemCount": 18 }, ...]
+  "byCategory": [
+    { "category": null, "slug": "leite", "label": "Leite", "parentSlug": null, "icon": null, "color": null, "total": 120.00, "itemCount": 8 },
+    { "category": null, "slug": "custom:9f...", "label": "Ração premium", "parentSlug": "pet", "icon": "paw-outline", "color": "#F5A623", "total": 60.00, "itemCount": 2 }, ...
+  ]
 }
 ```
+- **`byCategory` é OVERRIDE-AWARE** (desde 2026-10-14): agrupa pela categoria **efetiva do
+  household** (correção de folha/enum/custom reflete na hora), não mais pelo `category_id`
+  global. Cada bucket traz `slug` (folha da taxonomia; `custom:<id>` p/ categoria custom)
+  e `label` (nome fino localizado). `category` (enum) vem **null** p/ buckets de nó/custom.
+  `parentSlug`/`icon`/`color` são preenchidos **só p/ custom** (a custom aninha no grupo
+  `parentSlug` com o visual escolhido); nós da taxonomia deixam null — o FE deriva o grupo
+  pelo `slug`.
 - **Spend totals are gross** (sum of item prices). The receipt-level discount is reported **alongside**, not subtracted: `totalDiscount` for the period, and `discount` per `byMonth`/`byWeek`/`byMarket` bucket. **Net spend = `total − discount`** — compute on the FE. `byCategory` has **no** `discount` (a receipt-level discount can't be split across categories); use `totalDiscount` there.
 - **Ticket médio** is `total / receipts.count` — compute on the FE.
 - **Empty state** = `total: 0`, `totalDiscount: 0` + all arrays empty. No errors.
@@ -744,13 +754,14 @@ Returns:
 ```
 GET /api/v1/insights/markets/top?limit=5
 GET /api/v1/insights/markets/top-discounts?from=&to=&limit=5
-GET /api/v1/insights/categories/top?limit=5&categoryView=HOUSEHOLD
 GET /api/v1/insights/products/{productId}/price-history?from=&to=
 ```
 
-`markets/top-discounts` ranks the household's markets by **discount received** (biggest first), excluding markets that gave none. Each row: `{ cnpj, marketName, marketFriendlyName, grossTotal, discount, discountRate, receiptCount }` — `discount` in R$, `discountRate` = `discount / grossTotal` (0–1 fraction, format as %). Personal to your household, so it works even without community volume.
+> **Removido (2026-10-14):** `GET /insights/categories/top` — era órfão (nenhum consumidor).
+> Use `byCategory` do `/insights/spend` (override-aware, com `slug`/`label`/`parentSlug`) ou o
+> lens `CATEGORY` do `/insights/query`.
 
-`categories/top` takes the same **category lens** as `/items` via `categoryView` (default `HOUSEHOLD`). In the HOUSEHOLD lens each product is counted **once** under its effective category, so a product moved by an override is removed from its old enum bucket and added to the override target (custom name → its own bucket). Each `CategoryBucket` carries `category` (the global enum, **null** for custom-category buckets), `label` (always present — the display name), `total`, and `itemCount`. Pass `categoryView=GLOBAL` to group purely by `Product.category` (the pre-lens behavior).
+`markets/top-discounts` ranks the household's markets by **discount received** (biggest first), excluding markets that gave none. Each row: `{ cnpj, marketName, marketFriendlyName, grossTotal, discount, discountRate, receiptCount }` — `discount` in R$, `discountRate` = `discount / grossTotal` (0–1 fraction, format as %). Personal to your household, so it works even without community volume.
 
 `price-history`'s top level carries `productName` **and `friendlyDescription`**
 (the household's rename, null when never renamed — prefer it for the chart
@@ -836,7 +847,7 @@ GET /api/v1/insights/query
 | Big shopping trips only (R$200+) by month | `?minReceiptTotal=200.00&groupBy=MONTH` |
 | Total spend on milk EAN | `?ean=7891234567890` (no groupBy = just summary) |
 
-The legacy `/insights/spend`, `/markets/top`, `/categories/top`, `/products/{id}/price-history` endpoints stay around for the existing dashboards. Use `/insights/query` for anything custom.
+The legacy `/insights/spend`, `/markets/top`, `/products/{id}/price-history` endpoints stay around for the existing dashboards. Use `/insights/query` for anything custom.
 
 ---
 
@@ -851,6 +862,8 @@ GET /api/v1/items
     &marketCnpj=93015006005182        ← list-typed (repeat for OR)
     &marketCnpjRoot=93015006          ← chain-level, list-typed
     &category=MEAT_DAIRY              ← list-typed (repeat for OR)
+    &categorySlug=carnes              ← taxonomy node (category OR subcategory); a category slug also matches its subcategories
+    &customCategoryId=<uuid>          ← items the household moved into a custom category
     &productId=<uuid>                 ← list-typed
     &ean=7891234567890                ← list-typed
     &minReceiptTotal=100.00           ← receipt-total range
@@ -913,19 +926,51 @@ Households can define their own categories ("Frutas", "Bebê", …) and move pro
 
 ```
 GET    /api/v1/categories                → categories this household can use
-POST   /api/v1/categories                { "name": "Frutas" }   → 201, idempotent on name
+GET    /api/v1/categories/taxonomy       → árvore 2 níveis (categoria→subcategoria), localizada; ordenada categoria→suas subcategorias
+POST   /api/v1/categories                { "name":"Frutas", "icon"?, "color"?, "parentGroupSlug"?, "parentCustomCategoryId"? } → 201
+PATCH  /api/v1/categories/{id}           { "name"?, "icon"?, "color"?, "parentGroupSlug"?, "parentCustomCategoryId"? } → 200 (edita por id)
 DELETE /api/v1/categories/{id}           → 204, removes a custom category (its overrides revert)
 POST   /api/v1/categories/migrate        { "productIds":[...], "targetCategory":..., "targetCustomCategoryId":... }
 ```
 
-`GET /categories` returns the 9 global enums **and** the household's custom ones:
+`GET /categories/taxonomy` devolve nós `{ slug, name, parentSlug, hasSubcategories }`
+(`hasSubcategories` = tem subcategorias; era `group` antes do rename), já ordenados
+**categoria → suas subcategorias** (Outros/Não-mercado por último).
+
+`POST /categories` aceita, além do `name`, opcionais **`icon`** (nome Ionicons, ex.
+`"paw-outline"`), **`color`** (hex) e UM pai (no máximo um): **`parentGroupSlug`** (slug de
+uma **CATEGORIA** embutida da taxonomia) **ou** **`parentCustomCategoryId`** (id de uma
+categoria **custom** do household) — a custom vira uma **subcategoria** dentro do pai,
+aninhada no gráfico. Sem pai = categoria principal. `parentGroupSlug` precisa ser uma
+categoria embutida (não subcategoria), senão `400`.
+
+> **Mudou (2026-10-15):** o `POST` **não é mais idempotente por nome** — criar com um nome
+> que já existe (entre as custom do household **ou** uma categoria/subcategoria embutida,
+> case-insensitive) agora retorna **`409` `customcategory.name.duplicate`**. Para **editar**
+> ícone/cor/pai/nome use o novo **`PATCH /categories/{id}`** (campos todos opcionais; um
+> campo null fica inalterado; o pai só é (re)definido quando um campo de pai vem no corpo).
+> **Nesting travado em 2 níveis:** o pai (embutido ou custom) tem de ser de **topo** e a
+> categoria editada não pode ter subcategorias próprias; violar (profundidade >2, ciclo,
+> auto-pai) → **`400` `customcategory.nesting.invalid`**.
+
+`GET /categories` returns the 9 global enums **and** the household's custom ones. Buckets
+custom carregam o visual + o grupo-pai (`icon`/`color`/`parentSlug`/`parentName`); nos enums
+esses campos vêm null:
 ```json
 [
-  { "id": null, "name": "GROCERIES", "custom": false },
-  { "id": null, "name": "BEVERAGES", "custom": false },
-  { "id": "uuid", "name": "Frutas", "custom": true }
+  { "id": null, "name": "GROCERIES", "custom": false, "icon": null, "color": null, "parentSlug": null, "parentName": null },
+  { "id": "uuid", "name": "Ração premium", "custom": true, "icon": "paw-outline", "color": "#F5A623", "parentSlug": "pet", "parentName": "Pet" }
 ]
 ```
+
+> **`parentSlug`/`parentName` são só para aninhar na exibição** (mostrar a custom dentro do
+> grupo-pai). O gasto de uma custom **não** é somado também no pai — no `/insights/spend` a
+> custom vem como bucket próprio com `parentSlug`; **não some pai + filhas** ou conta dobrado.
+
+`GET /categories/taxonomy` retorna a árvore 2 níveis já **ordenada grupo → suas folhas**
+em ordem lógica (Hortifrúti → … → **Outros por último**; "Não-mercado" por último). Cada nó:
+`{ slug, name, parentSlug, hasSubcategories }` (`hasSubcategories=true` p/ grupo). Use os `slug`
+de folha em `categoryNodeSlug` (correção de item, regra de dicionário, aprovar achado).
 
 `POST /categories/migrate` moves the selected products into the target. Provide **exactly one** of `targetCategory` (a global enum) or `targetCustomCategoryId` (a custom-category uuid) — `400 customcategory.migration.invalid` otherwise.
 ```json
@@ -1424,11 +1469,11 @@ GET    /api/v1/admin/notifications/insights?days=30        → NotificationInsig
 GET    /api/v1/admin/products?page=&size=&q=&category=&source= → Page<ProductResponse> (catalog; optional filters: name/EAN substring, category e.g. OTHER, categorizationSource)
 GET    /api/v1/admin/products/missing-brand    → Page<MissingBrandProductResponse>
 PATCH  /api/v1/admin/products/{id}/brand       → 200 ProductResponse
-PATCH  /api/v1/admin/products/{id}/category    → 200 ProductResponse — body {"category":"PET_SUPPLIES"}; sets GLOBAL category + locks it (source=USER; recategorize/LLM won't override)
+PATCH  /api/v1/admin/products/{id}/category    → 200 ProductResponse — body {"category":"PET_SUPPLIES"}; sets GLOBAL enum + locks it (source=USER)
+PATCH  /api/v1/admin/products/{id}/category-node?slug=queijos → 200 ProductResponse — seta a FOLHA fina (products.category_id), source=USER. slug de GET /categories/taxonomy. 400 se slug desconhecido
+GET    /api/v1/admin/products/taxonomy-coverage → { total, withLeaf, withoutLeaf } — cobertura da migração pra taxonomia
 GET    /api/v1/admin/products/duplicates       → List<DuplicateProductGroupResponse>
 POST   /api/v1/admin/products/{id}/merge       → 200 ProductMergeResultResponse
-GET    /api/v1/admin/products/recategorize        → RecategorizeReportResponse (dry-run, read-only)
-POST   /api/v1/admin/products/recategorize?includeMl=false → RecategorizeResultResponse (apply)
 POST   /api/v1/admin/products/refresh-brands       → BrandBackfillResponse (fill missing brands)
 POST   /api/v1/admin/markets/classify-segments     → SegmentClassificationSummary (CNAE-classify pending markets)
 GET    /api/v1/admin/merchants/grey                → List<GreyMerchantResponse> (grey-zone review queue, ranked by scan volume)
@@ -1674,7 +1719,7 @@ GET    /api/v1/categorizer/consensus         → list all CONSENSUS-graduated pr
 DELETE /api/v1/categorizer/learned           → clear all auto-promoted learned entries + reset in-memory dict [ADMIN only]
 DELETE /api/v1/categorizer/consensus         → revert all CONSENSUS-graduated products to NONE  [ADMIN only]
 POST   /api/v1/categorizer/dictionary/import  → bulk-upsert token mappings into learned dict       [ADMIN only]
-POST   /api/v1/categorizer/dictionary/curated/import → bulk-upsert CURATED entries (highest tier), hot-reloaded [ADMIN only]
+POST   /api/v1/categorizer/dictionary/curated/import → bulk-upsert CURATED entries (highest tier), hot-reloaded [ADMIN only]. CuratedImportRequest aceita `categoryNodeSlug` opcional (folha fina → grava category_id; ausente usa o nó-grupo default do enum)
 GET    /api/v1/categorizer/dictionary/curated?q=&page=&size= → Page<CuratedEntryResponse> — list/search curated entries [ADMIN only]
 DELETE /api/v1/categorizer/dictionary/curated/{id} → 204 — delete one curated entry + hot-reload  [ADMIN only]
 GET    /api/v1/categorizer/dictionary/learned?q=&page=&size= → Page<LearnedEntryResponse> — list/search learned entries [ADMIN only]

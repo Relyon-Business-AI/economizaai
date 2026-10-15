@@ -1,11 +1,13 @@
 package com.relyon.economizaai.service;
 
 import com.relyon.economizaai.model.Household;
+import com.relyon.economizaai.model.HouseholdCustomCategory;
 import com.relyon.economizaai.model.HouseholdProductCategoryOverride;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.HouseholdProductCategoryOverrideRepository;
+import com.relyon.economizaai.service.cache.HouseholdCacheGen;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -27,6 +29,7 @@ import static org.mockito.Mockito.when;
 class HouseholdProductCategoryOverrideServiceTest {
 
     @Mock private HouseholdProductCategoryOverrideRepository overrideRepository;
+    @Mock private HouseholdCacheGen householdCacheGen;
     @InjectMocks private HouseholdProductCategoryOverrideService service;
 
     private User user() {
@@ -53,6 +56,7 @@ class HouseholdProductCategoryOverrideServiceTest {
         assertEquals(ProductCategory.GROCERIES, saved.getCategory());
         assertEquals(product.getId(), saved.getProduct().getId());
         assertEquals(user.getHousehold().getId(), saved.getHousehold().getId());
+        verify(householdCacheGen).bump(user.getHousehold().getId()); // override-aware insights invalidam o cache
     }
 
     @Test
@@ -88,5 +92,27 @@ class HouseholdProductCategoryOverrideServiceTest {
     @Test
     void overridesByProduct_emptyProductIds_shortCircuits() {
         assertEquals(0, service.overridesByProduct(UUID.randomUUID(), List.of()).size());
+    }
+
+    @Test
+    void effectiveCategoryByProduct_customUnderCustom_carriesCustomParentKey() {
+        var household = UUID.randomUUID();
+        var product = product();
+        var parentId = UUID.randomUUID();
+        var parent = HouseholdCustomCategory.builder().id(parentId).name("Transporte").build();
+        var custom = HouseholdCustomCategory.builder().id(UUID.randomUUID()).name("Uber")
+                .parentCustomCategory(parent).icon("car-outline").color("#111111").build();
+        var override = HouseholdProductCategoryOverride.builder()
+                .household(Household.builder().id(household).build())
+                .product(product).customCategory(custom).build();
+        when(overrideRepository.findByHouseholdIdAndProductIdIn(eq(household), any()))
+                .thenReturn(List.of(override));
+
+        var effective = service.effectiveCategoryByProduct(household, List.of(product.getId()))
+                .get(product.getId());
+
+        assertEquals("custom:" + custom.getId(), effective.key());
+        assertEquals("Uber", effective.label());
+        assertEquals("custom:" + parentId, effective.parentSlug());
     }
 }

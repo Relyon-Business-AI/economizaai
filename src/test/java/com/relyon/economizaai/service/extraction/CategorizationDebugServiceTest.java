@@ -26,9 +26,9 @@ class CategorizationDebugServiceTest {
     @Test
     void explain_exposesFinalDecisionPlusPerLayerBreakdown() {
         when(productExtractor.extract("Batata Frita")).thenReturn(new ProductExtraction(
-                "Batata", null, new BigDecimal("100"), "G", ProductCategory.PRODUCE, CategorizationSource.DICTIONARY));
+                "Batata", null, new BigDecimal("100"), "G", ProductCategory.PRODUCE, null, CategorizationSource.DICTIONARY));
         when(dictionaryClassifier.classify("Batata Frita")).thenReturn(
-                new DictEntry("Batata", null, ProductCategory.PRODUCE, CategorizationSource.DICTIONARY));
+                new DictEntry("Batata", null, ProductCategory.PRODUCE, null, CategorizationSource.DICTIONARY));
 
         var r = service.explain("Batata Frita");
 

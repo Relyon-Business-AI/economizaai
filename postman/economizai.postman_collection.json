@@ -258,7 +258,7 @@
 						"auth": {
 							"type": "noauth"
 						},
-						"description": "Pizza de gastos por categoria (últimos 7 dias) de UM usuário, em PNG. Público (sem auth) porque o Twilio busca como MediaUrl sem credenciais — mas gated por token HMAC curto (expira ~15 min), mintado pelo backend ao responder no WhatsApp. NÃO é chamável manualmente sem um token válido (404 sem token/expirado/sem dados). Regenerado a cada fetch (sem storage)."
+						"description": "Pizza de gastos por categoria (\u00faltimos 7 dias) de UM usu\u00e1rio, em PNG. P\u00fablico (sem auth) porque o Twilio busca como MediaUrl sem credenciais \u2014 mas gated por token HMAC curto (expira ~15 min), mintado pelo backend ao responder no WhatsApp. N\u00c3O \u00e9 cham\u00e1vel manualmente sem um token v\u00e1lido (404 sem token/expirado/sem dados). Regenerado a cada fetch (sem storage)."
 					},
 					"response": []
 				}
@@ -2317,7 +2317,7 @@
 							"mode": "raw",
 							"raw": "{\n  \"category\": \"MEAT_DAIRY\"\n}"
 						},
-						"description": "Evidence-not-truth: overrides the category THIS household sees for the item's product; the global product is untouched. 400 if the item isn't linked to a product."
+						"description": "Evidence-not-truth: overrides the category THIS household sees for the item's product; the global product is untouched. Set EXACTLY ONE target: a global enum `category` OR a household `customCategoryId` (from POST /categories) \u2014 body `{\"customCategoryId\":\"<uuid>\"}`. 400 if both/neither are given, or if the item isn't linked to a product."
 					},
 					"response": []
 				},
@@ -3219,38 +3219,6 @@
 					"response": []
 				},
 				{
-					"name": "Top categories",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Accept-Language",
-								"value": "pt"
-							}
-						],
-						"url": {
-							"raw": "{{baseUrl}}/api/v1/insights/categories/top?limit=5",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"insights",
-								"categories",
-								"top"
-							],
-							"query": [
-								{
-									"key": "limit",
-									"value": "5"
-								}
-							]
-						}
-					},
-					"response": []
-				},
-				{
 					"name": "Price history for product",
 					"request": {
 						"method": "GET",
@@ -3539,80 +3507,6 @@
 							]
 						},
 						"description": "Default groupBy=NONE \u2192 returns only summary (total, receiptCount, itemCount, averageTicket)."
-					},
-					"response": []
-				},
-				{
-					"name": "Top categories (HOUSEHOLD lens, default)",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Accept-Language",
-								"value": "pt"
-							}
-						],
-						"url": {
-							"raw": "{{baseUrl}}/api/v1/insights/categories/top?limit=5&categoryView=HOUSEHOLD",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"insights",
-								"categories",
-								"top"
-							],
-							"query": [
-								{
-									"key": "limit",
-									"value": "5"
-								},
-								{
-									"key": "categoryView",
-									"value": "HOUSEHOLD",
-									"description": "Default. Buckets by effective category; custom categories get their own bucket (category=null, label=name)."
-								}
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "Top categories (GLOBAL lens)",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Accept-Language",
-								"value": "pt"
-							}
-						],
-						"url": {
-							"raw": "{{baseUrl}}/api/v1/insights/categories/top?limit=5&categoryView=GLOBAL",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"insights",
-								"categories",
-								"top"
-							],
-							"query": [
-								{
-									"key": "limit",
-									"value": "5"
-								},
-								{
-									"key": "categoryView",
-									"value": "GLOBAL",
-									"description": "Group purely by global Product.category (pre-lens behavior)."
-								}
-							]
-						}
 					},
 					"response": []
 				},
@@ -4097,7 +3991,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "[\n  { \"keyword\": \"arroz\", \"genericName\": \"Arroz\", \"brand\": \"Sorriso\", \"category\": \"GROCERIES\" }\n]",
+							"raw": "[\n  {\n    \"keyword\": \"arroz\",\n    \"genericName\": \"Arroz\",\n    \"brand\": \"Sorriso\",\n    \"category\": \"GROCERIES\",\n    \"categoryNodeSlug\": \"queijos\"\n  }\n]",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -5788,12 +5682,46 @@
 						},
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"Frutas\"\n}"
+							"raw": "{\n  \"name\": \"Ra\u00e7\u00e3o premium\",\n  \"icon\": \"paw-outline\",\n  \"color\": \"#F5A623\",\n  \"parentGroupSlug\": \"pet\"\n}"
 						}
 					},
 					"response": []
 				},
-				{
+								{
+					"name": "Edit custom category",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categories/{{customCategoryId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categories",
+								"{{customCategoryId}}"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"icon\": \"nutrition-outline\",\n  \"color\": \"#4A90E2\"\n}"
+						},
+						"description": "Edit name/icon/color/parent of a custom category by id (household-scoped). All optional; null field unchanged; parent only (re)set when a parent field is sent. Nesting stays 2 levels (parent must be top-level, category cannot already have subcategories) else 400 customcategory.nesting.invalid. Name clash returns 409 customcategory.name.duplicate."
+					},
+					"response": []
+				},
+{
 					"name": "Migrate products into a category",
 					"request": {
 						"method": "POST",
@@ -5882,6 +5810,31 @@
 								"v1",
 								"categories",
 								"{{customCategoryId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List taxonomy (groups + leaves)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categories/taxonomy",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categories",
+								"taxonomy"
 							]
 						}
 					},
@@ -10964,7 +10917,7 @@
 							"mode": "raw",
 							"raw": "{\n  \"category\": \"MEAT_DAIRY\"\n}"
 						},
-						"description": "Evidence-not-truth: overrides the category THIS household sees for the item's product; the global product is untouched. 400 if the item isn't linked to a product."
+						"description": "Evidence-not-truth: overrides the category THIS household sees for the item's product; the global product is untouched. Set EXACTLY ONE target: a global enum `category` OR a household `customCategoryId` (from POST /categories) \u2014 body `{\"customCategoryId\":\"<uuid>\"}`. 400 if both/neither are given, or if the item isn't linked to a product."
 					},
 					"response": [],
 					"event": [
@@ -11258,51 +11211,6 @@
 						},
 						"description": "Products whose detail screen the user opened, newest first. 200 List<ProductResponse>."
 					},
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"type": "text/javascript",
-								"exec": [
-									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
-									"    pm.expect(pm.response.code).to.be.below(500);",
-									"});"
-								]
-							}
-						}
-					]
-				},
-				{
-					"name": "COV: Top categories",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Accept-Language",
-								"value": "pt"
-							}
-						],
-						"url": {
-							"raw": "{{baseUrl}}/api/v1/insights/categories/top?limit=5",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"insights",
-								"categories",
-								"top"
-							],
-							"query": [
-								{
-									"key": "limit",
-									"value": "5"
-								}
-							]
-						}
-					},
-					"response": [],
 					"event": [
 						{
 							"listen": "test",
@@ -13430,60 +13338,6 @@
 							]
 						},
 						"description": "Groups of products sharing the same (genericName, brand, packSize, packUnit) profile \u2014 likely duplicates. Within each group, oldest product first.",
-						"auth": {
-							"type": "bearer",
-							"bearer": [
-								{
-									"key": "token",
-									"value": "{{adminToken}}",
-									"type": "string"
-								}
-							]
-						}
-					},
-					"response": [],
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"type": "text/javascript",
-								"exec": [
-									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
-									"    pm.expect(pm.response.code).to.be.below(500);",
-									"});"
-								]
-							}
-						}
-					]
-				},
-				{
-					"name": "COV admin: Recategorize catalog (admin, dry-run report)",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "Bearer {{token}}"
-							},
-							{
-								"key": "Accept-Language",
-								"value": "pt"
-							}
-						],
-						"url": {
-							"raw": "{{baseUrl}}/api/v1/admin/products/recategorize",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"admin",
-								"products",
-								"recategorize"
-							]
-						},
-						"description": "Read-only: re-runs the categorizer over every product and lists where the stored category differs from the freshly extracted one. Preview before POSTing to apply.",
 						"auth": {
 							"type": "bearer",
 							"bearer": [
@@ -16077,7 +15931,7 @@
 								"config"
 							]
 						},
-						"description": "Estado dos canais de alerta operacional: { emailActive, whatsAppEnabled, adminPhoneCount, adminTemplateConfigured, twilioWhatsAppConfigured, templateStatus }. O templateStatus é consultado AO VIVO no Twilio (approved/pending/rejected/unknown/unset) — mostra se o canal WhatsApp já pode ser testado. ADMIN only."
+						"description": "Estado dos canais de alerta operacional: { emailActive, whatsAppEnabled, adminPhoneCount, adminTemplateConfigured, twilioWhatsAppConfigured, templateStatus }. O templateStatus \u00e9 consultado AO VIVO no Twilio (approved/pending/rejected/unknown/unset) \u2014 mostra se o canal WhatsApp j\u00e1 pode ser testado. ADMIN only."
 					},
 					"response": []
 				},
@@ -16104,7 +15958,7 @@
 								"test"
 							]
 						},
-						"description": "Dispara um alerta operacional de teste pelos mesmos canais da produção (e-mail sempre + WhatsApp template quando configurado/aprovado). Serve pra validar os canais de alerta sob demanda, sem esperar um evento real de saldo baixo. 200 { triggered, at, note }. ADMIN only."
+						"description": "Dispara um alerta operacional de teste pelos mesmos canais da produ\u00e7\u00e3o (e-mail sempre + WhatsApp template quando configurado/aprovado). Serve pra validar os canais de alerta sob demanda, sem esperar um evento real de saldo baixo. 200 { triggered, at, note }. ADMIN only."
 					},
 					"response": []
 				},
@@ -18001,74 +17855,6 @@
 					"response": []
 				},
 				{
-					"name": "Recategorize catalog (admin, dry-run report)",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "Bearer {{token}}"
-							},
-							{
-								"key": "Accept-Language",
-								"value": "pt"
-							}
-						],
-						"url": {
-							"raw": "{{baseUrl}}/api/v1/admin/products/recategorize",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"admin",
-								"products",
-								"recategorize"
-							]
-						},
-						"description": "Read-only: re-runs the categorizer over every product and lists where the stored category differs from the freshly extracted one. Preview before POSTing to apply."
-					},
-					"response": []
-				},
-				{
-					"name": "Recategorize catalog (admin, apply)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "Bearer {{token}}"
-							},
-							{
-								"key": "Accept-Language",
-								"value": "pt"
-							}
-						],
-						"url": {
-							"raw": "{{baseUrl}}/api/v1/admin/products/recategorize?includeMl=false",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"admin",
-								"products",
-								"recategorize"
-							],
-							"query": [
-								{
-									"key": "includeMl",
-									"value": "false"
-								}
-							]
-						},
-						"description": "APPLIES re-categorization. By default only trusted dictionary suggestions are applied (ML is currently unreliable); skips manual (source=USER) categories and null suggestions. Pass includeMl=true to also apply ML. Run the dictionary fixes first, then this."
-					},
-					"response": []
-				},
-				{
 					"name": "LLM teacher-layer report (admin)",
 					"request": {
 						"method": "GET",
@@ -18283,6 +18069,69 @@
 							]
 						},
 						"description": "Limpeza dev-only: apaga em lote toda observa\u00e7\u00e3o \u00f3rf\u00e3 (sobras de contas deletadas). 403 a menos que economizaai.admin.dev-cleanup-enabled=true \u2014 em prod s\u00e3o agregados anonimizados preservados por LGPD."
+					},
+					"response": []
+				},
+				{
+					"name": "Set product taxonomy node (fine leaf)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/products/{{productId}}/category-node?slug=queijos",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"products",
+								"{{productId}}",
+								"category-node"
+							],
+							"query": [
+								{
+									"key": "slug",
+									"value": "queijos"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Taxonomy coverage",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/products/taxonomy-coverage",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"products",
+								"taxonomy-coverage"
+							]
+						}
 					},
 					"response": []
 				}

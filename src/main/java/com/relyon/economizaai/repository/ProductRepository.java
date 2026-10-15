@@ -6,8 +6,10 @@ import com.relyon.economizaai.model.enums.ProductCategory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Collection;
@@ -77,10 +79,67 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
 
     Optional<Product> findByEan(String ean);
 
+    /** Distinct non-blank EANs across all products — input for the taxonomy re-fetch sweeper. */
+    @Query("SELECT DISTINCT p.ean FROM Product p WHERE p.ean IS NOT NULL AND p.ean <> ''")
+    List<String> findDistinctEans();
+
+    /** Product ids whose taxonomy node is in the given set — backs the /items category-slug filter. */
+    @Query("SELECT p.id FROM Product p WHERE p.categoryId IN :categoryIds")
+    List<UUID> findIdsByCategoryIdIn(@Param("categoryIds") Collection<UUID> categoryIds);
+
+    /**
+     * Apply the EAN catalog's fine taxonomy node to products: set
+     * {@code products.category_id} from {@code ean_catalog.category_id} wherever
+     * the catalog has a (finer) node and it differs. Returns rows updated.
+     */
+    @Modifying
+    @Transactional
+    @Query(value = """
+            UPDATE products p SET category_id = ec.category_id, updated_at = now()
+            FROM ean_catalog ec
+            WHERE ec.ean = p.ean
+              AND ec.category_id IS NOT NULL
+              AND p.category_id IS DISTINCT FROM ec.category_id
+              AND p.categorization_source <> 'USER'
+            """, nativeQuery = true)
+    int applyCatalogCategoryNodes();
+
+    /**
+     * Reset every product's {@code category_id} to the group default for its legacy
+     * enum — the deterministic baseline the taxonomy sweep rebuilds on each run, so
+     * stale fine-node assignments from older classifier rules are wiped first.
+     */
+    @Modifying
+    @Transactional
+    @Query(value = """
+            UPDATE products p SET category_id = c.id, updated_at = now()
+            FROM categories c
+            WHERE c.legacy_enum = p.category AND p.category IS NOT NULL
+              AND p.category_id IS DISTINCT FROM c.id
+              AND p.categorization_source <> 'USER'
+            """, nativeQuery = true)
+    int resetCategoryIdFromEnumGroup();
+
+    /** Companion to the reset: products with no enum have no group default — clear any
+     *  stale node so the name classifier recomputes from scratch (else old rules linger).
+     *  USER-sourced products are left alone (manual curation is never wiped). */
+    @Modifying
+    @Transactional
+    @Query(value = "UPDATE products SET category_id = NULL, updated_at = now() "
+            + "WHERE category IS NULL AND category_id IS NOT NULL AND categorization_source <> 'USER'",
+            nativeQuery = true)
+    int clearCategoryIdForNullEnum();
+
     List<Product> findByCategorizationSourceIn(Collection<CategorizationSource> sources);
 
     /** Products that have any category assigned — for catalog coverage metrics. */
     long countByCategoryNotNull();
+
+    /** Products already mapped to a fine taxonomy node (category_id) — taxonomy coverage. */
+    long countByCategoryIdNotNull();
+
+    /** Products still missing a fine taxonomy node — the incremental recategorize candidates. */
+    List<Product> findByCategoryIdIsNull();
 
     /**
      * Distinct OTHER-category products that have at least one confirmed,

@@ -108,4 +108,38 @@ class OpenFoodFactsCategoryMapperTest {
                 OpenFoodFactsCategoryMapper.map("en:meats,en:dog-food,en:pet-food"));
         assertEquals(ProductCategory.PET_SUPPLIES, OpenFoodFactsCategoryMapper.map("pt:racao"));
     }
+
+    // ---------------------------------------------------- mapToSlug (fine taxonomy)
+
+    @Test
+    void mapToSlug_splitsDairyFromMeat() {
+        // The whole point of the new taxonomy: yogurt/cheese must NOT bucket as Carnes.
+        assertEquals("iogurtes", OpenFoodFactsCategoryMapper.mapToSlug("en:dairies,en:yogurts"));
+        assertEquals("queijos", OpenFoodFactsCategoryMapper.mapToSlug("pt:laticinios,pt:queijos"));
+        assertEquals("carnes-bovinas", OpenFoodFactsCategoryMapper.mapToSlug("en:meats,en:beef"));
+        assertEquals("aves", OpenFoodFactsCategoryMapper.mapToSlug("en:poultry,en:chicken"));
+    }
+
+    @Test
+    void mapToSlug_splitsAlcoholicFromNonAlcoholic() {
+        assertEquals("cervejas", OpenFoodFactsCategoryMapper.mapToSlug("en:beverages,en:alcoholic-beverages,en:beers"));
+        assertEquals("refrigerantes", OpenFoodFactsCategoryMapper.mapToSlug("en:beverages,en:sodas"));
+        assertEquals("cafe-cha", OpenFoodFactsCategoryMapper.mapToSlug("en:plant-based-foods,en:coffees"));
+    }
+
+    @Test
+    void mapToSlug_fallsBackToGroupWhenSubtypeUnknown() {
+        assertEquals("carnes", OpenFoodFactsCategoryMapper.mapToSlug("en:meats"));
+        assertEquals("laticinios-ovos", OpenFoodFactsCategoryMapper.mapToSlug("en:dairies"));
+        assertEquals("bebidas", OpenFoodFactsCategoryMapper.mapToSlug("en:beverages"));
+    }
+
+    @Test
+    void mapToSlug_nonFoodAndNull() {
+        assertEquals("limpeza", OpenFoodFactsCategoryMapper.mapToSlug("en:detergents"));
+        assertEquals("higiene", OpenFoodFactsCategoryMapper.mapToSlug("pt:xampus"));
+        assertEquals("pet", OpenFoodFactsCategoryMapper.mapToSlug("en:meats,en:pet-food"));
+        assertEquals(null, OpenFoodFactsCategoryMapper.mapToSlug(""));
+        assertEquals(null, OpenFoodFactsCategoryMapper.mapToSlug("en:unknown-weird-tag"));
+    }
 }

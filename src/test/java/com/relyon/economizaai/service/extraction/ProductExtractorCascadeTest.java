@@ -2,6 +2,7 @@ package com.relyon.economizaai.service.extraction;
 
 import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.extraction.DictionaryClassifier.DictEntry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +33,9 @@ class ProductExtractorCascadeTest {
     @Mock
     private DictionaryClassifier dictionaryClassifier;
 
+    @Mock
+    private CategoryResolver categoryResolver;
+
     @InjectMocks
     private ProductExtractor extractor;
 
@@ -53,7 +57,7 @@ class ProductExtractorCascadeTest {
     void dictionaryHitProducesCorrectFields() {
         when(brandExtractor.find(anyString())).thenReturn("Tio João");
         when(dictionaryClassifier.classify(anyString())).thenReturn(
-                new DictEntry("Arroz", null, ProductCategory.GROCERIES, CategorizationSource.DICTIONARY));
+                new DictEntry("Arroz", null, ProductCategory.GROCERIES, null, CategorizationSource.DICTIONARY));
 
         var result = extractor.extract("ARROZ TIO J TP1 5KG");
 
@@ -93,7 +97,7 @@ class ProductExtractorCascadeTest {
     void dictBrandOverridesTakesPrecedenceOverRegistryBrand() {
         // DictEntry supplies brand → BrandExtractor is never consulted
         when(dictionaryClassifier.classify(anyString())).thenReturn(
-                new DictEntry("Arroz", "BrandFromDict", ProductCategory.GROCERIES, CategorizationSource.DICTIONARY));
+                new DictEntry("Arroz", "BrandFromDict", ProductCategory.GROCERIES, null, CategorizationSource.DICTIONARY));
 
         var result = extractor.extract("ARROZ MARCA 5KG");
 

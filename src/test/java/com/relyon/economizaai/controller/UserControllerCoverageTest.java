@@ -23,6 +23,7 @@ import com.relyon.economizaai.service.notifications.NotificationPreferenceServic
 import com.relyon.economizaai.service.notifications.SavingsService;
 import com.relyon.economizaai.service.profile.ProfilePictureService;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
+import com.relyon.economizaai.service.notifications.WhatsAppOptInService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -70,6 +71,7 @@ class UserControllerCoverageTest {
     @MockitoBean private UserDetailsService userDetailsService;
     @MockitoBean private SavingsService savingsService;
     @MockitoBean private SubscriptionService subscriptionService;
+    @MockitoBean private WhatsAppOptInService whatsAppOptInService;
 
     private User principal() {
         var household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();

@@ -5,9 +5,11 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.CategoryView;
 import com.relyon.economizaai.model.enums.MarketScope;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.CustomCategoryService;
 import com.relyon.economizaai.service.ItemQueryService;
 import com.relyon.economizaai.service.ItemQueryService.ItemFilters;
+import com.relyon.economizaai.repository.ProductRepository;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -52,6 +54,8 @@ public class ItemController {
 
     private final ItemQueryService itemQueryService;
     private final CustomCategoryService customCategoryService;
+    private final CategoryResolver categoryResolver;
+    private final ProductRepository productRepository;
 
     @GetMapping
     public ResponseEntity<Page<PurchasedItemResponse>> list(
@@ -66,11 +70,12 @@ public class ItemController {
             @RequestParam(required = false) BigDecimal minReceiptTotal,
             @RequestParam(required = false) BigDecimal maxReceiptTotal,
             @RequestParam(required = false) UUID customCategoryId,
+            @RequestParam(required = false) String categorySlug,
             @RequestParam(defaultValue = "HOUSEHOLD") CategoryView categoryView,
             @RequestParam(defaultValue = "ALL") MarketScope scope,
             @PageableDefault(size = 20) Pageable pageable) {
-        // Filtering by a custom category resolves to the household's products
-        // migrated into it; combine with any explicit productId filter.
+        // Filtering by a custom category OR a new-taxonomy node resolves to the
+        // matching products; both reuse the productId filter mechanism.
         var productIds = productId;
         if (customCategoryId != null) {
             var inCustom = customCategoryService.productIdsIn(user, customCategoryId);
@@ -78,6 +83,13 @@ public class ItemController {
                 return ResponseEntity.ok(Page.empty(pageable));
             }
             productIds = inCustom;
+        } else if (categorySlug != null && !categorySlug.isBlank()) {
+            var nodeIds = categoryResolver.nodeAndDescendantIds(categorySlug);
+            var inNode = nodeIds.isEmpty() ? List.<UUID>of() : productRepository.findIdsByCategoryIdIn(nodeIds);
+            if (inNode.isEmpty()) {
+                return ResponseEntity.ok(Page.empty(pageable));
+            }
+            productIds = inNode;
         }
         var filters = ItemFilters.fromRequest(from, to, marketCnpj, marketCnpjRoot, category,
                 productIds, ean, minReceiptTotal, maxReceiptTotal, categoryView, scope);

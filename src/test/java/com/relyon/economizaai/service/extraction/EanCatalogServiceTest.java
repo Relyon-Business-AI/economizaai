@@ -4,6 +4,7 @@ import com.relyon.economizaai.model.EanCatalogEntry;
 import com.relyon.economizaai.model.enums.EanCatalogSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.EanCatalogRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -13,6 +14,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -28,6 +30,7 @@ import static org.mockito.Mockito.when;
 class EanCatalogServiceTest {
 
     @Mock private EanCatalogRepository eanCatalogRepository;
+    @Mock private CategoryResolver categoryResolver;
     @InjectMocks private EanCatalogService service;
 
     @Test
@@ -110,6 +113,31 @@ class EanCatalogServiceTest {
         assertEquals("Coca-Cola", saved.get(0).getBrand());
         assertEquals(ProductCategory.MEAT_DAIRY, saved.get(1).getCategory());
         assertEquals("Nestlé", saved.get(1).getBrand(), "first brand of a comma list wins");
+    }
+
+    @Test
+    void bulkImportOpenFoodFacts_capturesRawTagsNodeAndExtraOffFields() {
+        when(eanCatalogRepository.findByEanIn(anyCollection())).thenReturn(List.of());
+        when(eanCatalogRepository.count()).thenReturn(1L);
+        var nodeId = UUID.randomUUID();
+        when(categoryResolver.idForSlug("iogurtes")).thenReturn(nodeId);
+
+        service.bulkImportOpenFoodFacts(List.of(
+                new EanCatalogService.OpenFoodFactsRow("7891000053508", "Iogurte Natural",
+                        "Nestlé", "en:dairies,en:yogurts", "https://img/iog.jpg", "170 g",
+                        "en:organic,en:no-lactose", "b", 3)));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<EanCatalogEntry>> captor = ArgumentCaptor.captor();
+        verify(eanCatalogRepository).saveAll(captor.capture());
+        var entry = captor.getValue().get(0);
+        assertEquals(nodeId, entry.getCategoryId(), "fine slug 'iogurtes' resolved to node id");
+        assertEquals("en:dairies,en:yogurts", entry.getCategoriesRaw());
+        assertEquals("https://img/iog.jpg", entry.getImageUrl());
+        assertEquals("170 g", entry.getQuantity());
+        assertEquals("en:organic,en:no-lactose", entry.getLabelsTags());
+        assertEquals("b", entry.getNutriscore());
+        assertEquals(3, entry.getNovaGroup());
     }
 
     @Test

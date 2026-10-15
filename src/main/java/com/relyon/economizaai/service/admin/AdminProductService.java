@@ -10,8 +10,6 @@ import com.relyon.economizaai.dto.response.UnmatchedReportResponse;
 import com.relyon.economizaai.dto.response.ProductDeletionResponse;
 import com.relyon.economizaai.dto.response.ProductMergeResultResponse;
 import com.relyon.economizaai.dto.response.ProductResponse;
-import com.relyon.economizaai.dto.response.RecategorizeReportResponse;
-import com.relyon.economizaai.dto.response.RecategorizeResultResponse;
 import com.relyon.economizaai.exception.InvalidProductDeletionException;
 import com.relyon.economizaai.exception.InvalidProductMergeException;
 import com.relyon.economizaai.exception.ProductNotFoundException;
@@ -20,7 +18,6 @@ import com.relyon.economizaai.model.ProductAlias;
 import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.service.extraction.BrandExtractor;
-import com.relyon.economizaai.service.extraction.ProductExtractor;
 import com.relyon.economizaai.repository.ConsumptionSnoozeRepository;
 import com.relyon.economizaai.repository.HouseholdProductAliasRepository;
 import com.relyon.economizaai.repository.ManualPurchaseRepository;
@@ -29,6 +26,8 @@ import com.relyon.economizaai.repository.ProductAliasRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.repository.ShoppingListItemRepository;
+import com.relyon.economizaai.service.CategoryResolver;
+import com.relyon.economizaai.dto.response.TaxonomyCoverageResponse;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -59,6 +58,7 @@ public class AdminProductService {
     private static final int SAMPLE_DESCRIPTION_LIMIT = 5;
 
     private final ProductRepository productRepository;
+    private final CategoryResolver categoryResolver;
     private final ProductAliasRepository aliasRepository;
     private final ReceiptItemRepository receiptItemRepository;
     private final PriceObservationRepository priceObservationRepository;
@@ -66,7 +66,6 @@ public class AdminProductService {
     private final ShoppingListItemRepository shoppingListItemRepository;
     private final HouseholdProductAliasRepository householdProductAliasRepository;
     private final ConsumptionSnoozeRepository consumptionSnoozeRepository;
-    private final ProductExtractor productExtractor;
     private final BrandExtractor brandExtractor;
 
     /** Full catalog (paged) — for curating the dictionary/brands against real data. */
@@ -185,84 +184,6 @@ public class AdminProductService {
                         .toList()));
     }
 
-    /**
-     * Dry-run: re-run the extraction cascade over every product's stored
-     * description and report where the freshly-computed category differs from
-     * what's stored. Same extractor ingestion uses, so this previews exactly
-     * what {@link #recategorizeApply()} would change. Read-only.
-     */
-    private static boolean isTrusted(CategorizationSource source) {
-        return source == CategorizationSource.DICTIONARY || source == CategorizationSource.LEARNED_DICTIONARY;
-    }
-
-    @Transactional(readOnly = true)
-    public RecategorizeReportResponse recategorizeReport() {
-        var products = productRepository.findAll();
-        var mismatches = new ArrayList<RecategorizeReportResponse.Row>();
-        var applicableFromDictionary = 0;
-        var skippedUser = 0;
-        for (var product : products) {
-            var suggested = productExtractor.extract(product.getNormalizedName());
-            var suggestedCategory = suggested.category();
-            if (suggestedCategory == null || suggestedCategory == product.getCategory()) continue;
-            // USER + MERCHANT are locked against dictionary recategorization (see apply()).
-            var userOverride = product.getCategorizationSource() == CategorizationSource.USER
-                    || product.getCategorizationSource() == CategorizationSource.MERCHANT;
-            if (userOverride) {
-                skippedUser++;
-            } else if (isTrusted(suggested.categorizationSource())) {
-                applicableFromDictionary++;
-            }
-            mismatches.add(new RecategorizeReportResponse.Row(
-                    product.getId(), product.getNormalizedName(), product.getEan(),
-                    product.getCategory(), product.getCategorizationSource(),
-                    suggestedCategory, suggested.categorizationSource(),
-                    userOverride));
-        }
-        log.info("admin.product.recategorize.report total={} mismatches={} dict={} skippedUser={}",
-                products.size(), mismatches.size(), applicableFromDictionary, skippedUser);
-        return new RecategorizeReportResponse(products.size(), mismatches.size(),
-                applicableFromDictionary, skippedUser, mismatches);
-    }
-
-    /**
-     * Apply re-categorization. Only trusted suggestions (DICTIONARY / LEARNED_DICTIONARY)
-     * are applied. Never clobbers a manual category (source=USER) and never
-     * downgrades to no-category (null suggestion).
-     */
-    @Transactional
-    public RecategorizeResultResponse recategorizeApply() {
-        var products = productRepository.findAll();
-        var updated = 0;
-        var skippedUser = 0;
-        var unchanged = 0;
-        for (var product : products) {
-            var suggested = productExtractor.extract(product.getNormalizedName());
-            var suggestedCategory = suggested.category();
-            if (suggestedCategory == null || suggestedCategory == product.getCategory()) {
-                unchanged++;
-                continue;
-            }
-            // USER (manual) and MERCHANT (pharmacy-merchant inference) are locked:
-            // the dictionary cascade here has no merchant context and would wrongly
-            // downgrade a pharmacy-derived category back to OTHER.
-            if (product.getCategorizationSource() == CategorizationSource.USER
-                    || product.getCategorizationSource() == CategorizationSource.MERCHANT) {
-                skippedUser++;
-                continue;
-            }
-            if (!isTrusted(suggested.categorizationSource())) {
-                unchanged++;
-                continue;
-            }
-            product.setCategory(suggestedCategory);
-            product.setCategorizationSource(suggested.categorizationSource());
-            updated++;
-        }
-        log.info("admin.product.recategorize.applied total={} updated={} skippedUser={} unchanged={}",
-                products.size(), updated, skippedUser, unchanged);
-        return new RecategorizeResultResponse(products.size(), updated, skippedUser, unchanged);
-    }
 
     /**
      * Deletes a product and all its household-scoped / collaborative
@@ -316,6 +237,26 @@ public class AdminProductService {
         var saved = productRepository.save(product);
         log.info("admin.product.category_set product={} category={} source=USER", productId, category);
         return ProductResponse.from(saved);
+    }
+
+    /**
+     * Assign a product to a fine taxonomy node (sets {@code category_id}). The slug
+     * is resolved to a node id by the caller; USER source locks it from the sweepers.
+     */
+    public ProductResponse setCategoryNode(UUID productId, UUID categoryNodeId) {
+        var product = productRepository.findById(productId)
+                .orElseThrow(ProductNotFoundException::new);
+        product.setCategoryId(categoryNodeId);
+        product.setCategorizationSource(CategorizationSource.USER);
+        var saved = productRepository.save(product);
+        log.info("admin.product.category_node_set product={} node={} source=USER", productId, categoryNodeId);
+        return ProductResponse.from(saved);
+    }
+
+    /** Taxonomy migration coverage: how many products carry a fine node vs none. */
+    @Transactional(readOnly = true)
+    public TaxonomyCoverageResponse taxonomyCoverage() {
+        return TaxonomyCoverageResponse.of(productRepository.count(), productRepository.countByCategoryIdNotNull());
     }
 
     /**

@@ -1,7 +1,6 @@
 package com.relyon.economizaai.service.extraction;
 
 import com.relyon.economizaai.model.enums.CategorizationQualityTrigger;
-import com.relyon.economizaai.service.admin.AdminProductService;
 import com.relyon.economizaai.service.canonicalization.CanonicalizationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,7 +25,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class CategorizerMaintenanceJob {
 
-    private final AdminProductService adminProductService;
+    private final TaxonomyRecategorizationService taxonomyRecategorizationService;
     private final CategorizationQualityService categorizationQualityService;
     private final CategorizerAdminService categorizerAdminService;
     private final BrandAliasPromotionService brandAliasPromotionService;
@@ -51,10 +50,10 @@ public class CategorizerMaintenanceJob {
         }
         autoPromote();
         try {
-            var recategorized = adminProductService.recategorizeApply();
+            var recategorized = taxonomyRecategorizationService.recategorizeIncremental();
             categorizationQualityService.measureAndRecord(CategorizationQualityTrigger.BACKFILL);
-            log.info("categorizer.maintenance.done recategorized={} skippedUser={} unchanged={} (quality snapshot recorded)",
-                    recategorized.updated(), recategorized.skippedUserOverrides(), recategorized.unchanged());
+            log.info("categorizer.maintenance.done taxonomyKeyword={} taxonomyLlm={} (quality snapshot recorded)",
+                    recategorized.keywordUpdated(), recategorized.llmUpdated());
         } catch (RuntimeException ex) {
             log.error("categorizer.maintenance.failed", ex);
         }

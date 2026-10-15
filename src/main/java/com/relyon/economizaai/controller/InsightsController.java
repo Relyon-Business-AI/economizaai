@@ -66,17 +66,6 @@ public class InsightsController {
         return ResponseEntity.ok(insightsService.topMarketsByDiscount(user, from, to, limit, scope));
     }
 
-    @GetMapping("/categories/top")
-    public ResponseEntity<List<SpendInsightsResponse.CategoryBucket>> topCategories(
-            @AuthenticationPrincipal User user,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
-            @RequestParam(defaultValue = "5") int limit,
-            @RequestParam(defaultValue = "HOUSEHOLD") CategoryView categoryView,
-            @RequestParam(defaultValue = "ALL") MarketScope scope) {
-        return ResponseEntity.ok(insightsService.topCategories(user, from, to, limit, categoryView, scope));
-    }
-
     @GetMapping("/products/{productId}/price-history")
     public ResponseEntity<PriceHistoryResponse> priceHistory(
             @AuthenticationPrincipal User user,

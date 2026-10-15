@@ -18,4 +18,7 @@ public interface HouseholdCustomCategoryRepository extends JpaRepository<Househo
     Optional<HouseholdCustomCategory> findByHouseholdIdAndNameIgnoreCase(UUID householdId, String name);
 
     Optional<HouseholdCustomCategory> findByIdAndHouseholdId(UUID id, UUID householdId);
+
+    /** True when this custom category is already a parent of another custom (so it can't become a subcategory). */
+    boolean existsByParentCustomCategoryId(UUID parentCustomCategoryId);
 }

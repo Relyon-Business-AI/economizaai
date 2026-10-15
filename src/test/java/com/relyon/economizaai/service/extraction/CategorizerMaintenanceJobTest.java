@@ -1,8 +1,6 @@
 package com.relyon.economizaai.service.extraction;
 
-import com.relyon.economizaai.dto.response.RecategorizeResultResponse;
 import com.relyon.economizaai.model.enums.CategorizationQualityTrigger;
-import com.relyon.economizaai.service.admin.AdminProductService;
 import com.relyon.economizaai.service.canonicalization.CanonicalizationService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -19,7 +17,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class CategorizerMaintenanceJobTest {
 
-    @Mock private AdminProductService adminProductService;
+    @Mock private TaxonomyRecategorizationService taxonomyRecategorizationService;
     @Mock private CategorizationQualityService categorizationQualityService;
     @Mock private CategorizerAdminService categorizerAdminService;
     @Mock private BrandAliasPromotionService brandAliasPromotionService;
@@ -27,7 +25,7 @@ class CategorizerMaintenanceJobTest {
     @Mock private AutoPromotionService autoPromotionService;
 
     private CategorizerMaintenanceJob job(boolean enabled) {
-        var j = new CategorizerMaintenanceJob(adminProductService,
+        var j = new CategorizerMaintenanceJob(taxonomyRecategorizationService,
                 categorizationQualityService, categorizerAdminService, brandAliasPromotionService,
                 canonicalizationService, autoPromotionService);
         ReflectionTestUtils.setField(j, "enabled", enabled);
@@ -51,12 +49,12 @@ class CategorizerMaintenanceJobTest {
     @Test
     void maintain_whenEnabled_recategorizesAndSnapshots() {
         stubAutoPromote();
-        when(adminProductService.recategorizeApply()).thenReturn(new RecategorizeResultResponse(10, 2, 0, 8));
+        when(taxonomyRecategorizationService.recategorizeIncremental()).thenReturn(new TaxonomyRecategorizationService.RecategorizeResult(10, 2, 0, 0, 0));
         stubBrandMaintenance();
 
         job(true).maintain();
 
-        verify(adminProductService).recategorizeApply();
+        verify(taxonomyRecategorizationService).recategorizeIncremental();
         verify(categorizationQualityService).measureAndRecord(eq(CategorizationQualityTrigger.BACKFILL));
         verify(categorizerAdminService).deriveBrandsFromEanCatalog(0, true);
         verify(brandAliasPromotionService).promoteFromKnownBrands();
@@ -65,7 +63,7 @@ class CategorizerMaintenanceJobTest {
     @Test
     void maintain_whenEnabled_runsAutoPromotion() {
         stubAutoPromote();
-        when(adminProductService.recategorizeApply()).thenReturn(new RecategorizeResultResponse(10, 2, 0, 8));
+        when(taxonomyRecategorizationService.recategorizeIncremental()).thenReturn(new TaxonomyRecategorizationService.RecategorizeResult(10, 2, 0, 0, 0));
         stubBrandMaintenance();
 
         job(true).maintain();
@@ -77,19 +75,19 @@ class CategorizerMaintenanceJobTest {
     void maintain_whenDisabled_doesNothing() {
         job(false).maintain();
 
-        verifyNoInteractions(adminProductService, categorizationQualityService,
+        verifyNoInteractions(taxonomyRecategorizationService, categorizationQualityService,
                 categorizerAdminService, brandAliasPromotionService, autoPromotionService);
     }
 
     @Test
     void maintain_swallowsRecategorizeFailure_soSchedulerKeepsRunning() {
         stubAutoPromote();
-        when(adminProductService.recategorizeApply()).thenThrow(new RuntimeException("boom"));
+        when(taxonomyRecategorizationService.recategorizeIncremental()).thenThrow(new RuntimeException("boom"));
         stubBrandMaintenance();
 
         job(true).maintain(); // must not throw
 
-        verify(adminProductService).recategorizeApply();
+        verify(taxonomyRecategorizationService).recategorizeIncremental();
         // Brand maintenance is isolated — a recategorize failure must not block it.
         verify(categorizerAdminService).deriveBrandsFromEanCatalog(0, true);
     }
@@ -97,31 +95,31 @@ class CategorizerMaintenanceJobTest {
     @Test
     void maintain_swallowsAutoPromoteFailure_andContinues() {
         when(autoPromotionService.promote()).thenThrow(new RuntimeException("promote boom"));
-        when(adminProductService.recategorizeApply()).thenReturn(new RecategorizeResultResponse(10, 2, 0, 8));
+        when(taxonomyRecategorizationService.recategorizeIncremental()).thenReturn(new TaxonomyRecategorizationService.RecategorizeResult(10, 2, 0, 0, 0));
         stubBrandMaintenance();
 
         job(true).maintain(); // must not throw
 
         // A failure in auto-promote must not block the rest of the maintenance.
-        verify(adminProductService).recategorizeApply();
+        verify(taxonomyRecategorizationService).recategorizeIncremental();
     }
 
     @Test
     void maintain_swallowsBrandMaintenanceFailure_andContinues() {
         stubAutoPromote();
-        when(adminProductService.recategorizeApply()).thenReturn(new RecategorizeResultResponse(10, 2, 0, 8));
+        when(taxonomyRecategorizationService.recategorizeIncremental()).thenReturn(new TaxonomyRecategorizationService.RecategorizeResult(10, 2, 0, 0, 0));
         when(categorizerAdminService.deriveBrandsFromEanCatalog(0, true))
                 .thenThrow(new RuntimeException("brand boom"));
 
         job(true).maintain(); // must not throw
 
-        verify(adminProductService).recategorizeApply();
+        verify(taxonomyRecategorizationService).recategorizeIncremental();
     }
 
     @Test
     void maintain_whenEnabled_callsUnmatchedRetry() {
         stubAutoPromote();
-        when(adminProductService.recategorizeApply()).thenReturn(new RecategorizeResultResponse(10, 2, 0, 8));
+        when(taxonomyRecategorizationService.recategorizeIncremental()).thenReturn(new TaxonomyRecategorizationService.RecategorizeResult(10, 2, 0, 0, 0));
         stubBrandMaintenance();
 
         job(true).maintain();

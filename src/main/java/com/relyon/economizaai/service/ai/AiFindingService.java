@@ -12,6 +12,7 @@ import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.AiFindingRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.admin.AdminProductService;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import com.relyon.economizaai.service.extraction.CategorizerAdminService;
@@ -41,6 +42,7 @@ public class AiFindingService {
     private final AiFindingRepository findingRepository;
     private final CategorizerAdminService categorizerAdminService;
     private final AdminProductService adminProductService;
+    private final CategoryResolver categoryResolver;
     private final ProductRepository productRepository;
     private final ReceiptItemRepository receiptItemRepository;
 
@@ -156,7 +158,8 @@ public class AiFindingService {
                 payload.path("keyword").asText(),
                 blankToNull(payload.path("genericName").asText(null)),
                 blankToNull(brand),
-                ProductCategory.valueOf(payload.path("category").asText()));
+                ProductCategory.valueOf(payload.path("category").asText()),
+                blankToNull(payload.path("categoryNodeSlug").asText(null)));
         var outcome = categorizerAdminService.importCuratedEntries(List.of(request));
         log.info("ai.apply.rule keyword='{}' recanonicalized={}", request.keyword(), outcome.recanonicalized());
     }
@@ -174,9 +177,16 @@ public class AiFindingService {
     }
 
     private void applyCategory(JsonNode payload) {
-        adminProductService.setCategory(
-                UUID.fromString(payload.path("productId").asText()),
-                ProductCategory.valueOf(payload.path("category").asText()));
+        var productId = UUID.fromString(payload.path("productId").asText());
+        var category = ProductCategory.valueOf(payload.path("category").asText());
+        adminProductService.setCategory(productId, category);
+        // Fase 1 do motor na taxonomia: além do enum, grava a FOLHA fina (category_id).
+        // Usa o slug explícito que o admin informar; senão o nó-grupo default do enum —
+        // assim aprovar um achado de categoria sempre dá um nó pro produto.
+        var nodeSlug = blankToNull(payload.path("categoryNodeSlug").asText(null));
+        var nodeId = nodeSlug != null ? categoryResolver.idForSlug(nodeSlug)
+                : categoryResolver.idForLegacyEnum(category);
+        if (nodeId != null) adminProductService.setCategoryNode(productId, nodeId);
     }
 
     private void applyMerge(JsonNode payload) {

@@ -1,22 +1,36 @@
 package com.relyon.economizaai.service;
 
+import com.relyon.economizaai.dto.request.CreateCategoryRequest;
+import com.relyon.economizaai.dto.request.UpdateCategoryRequest;
 import com.relyon.economizaai.dto.response.CategoryMigrationResponse;
 import com.relyon.economizaai.dto.response.CategoryResponse;
+import com.relyon.economizaai.dto.response.TaxonomyCategoryResponse;
 import com.relyon.economizaai.exception.CustomCategoryNotFoundException;
+import com.relyon.economizaai.exception.DuplicateCustomCategoryException;
 import com.relyon.economizaai.exception.InvalidCategoryMigrationException;
+import com.relyon.economizaai.exception.InvalidCategoryNestingException;
+import com.relyon.economizaai.model.Category;
 import com.relyon.economizaai.model.HouseholdCustomCategory;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.repository.CategoryRepository;
 import com.relyon.economizaai.repository.HouseholdCustomCategoryRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.cache.HouseholdCacheGen;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Household-defined custom categories (e.g. "Frutas") + migrating products into
@@ -31,17 +45,189 @@ public class CustomCategoryService {
     private final HouseholdCustomCategoryRepository customCategoryRepository;
     private final ProductRepository productRepository;
     private final HouseholdProductCategoryOverrideService overrideService;
+    private final CategoryRepository categoryRepository;
+    private final HouseholdCacheGen householdCacheGen;
 
-    /** Create a custom category for the household (idempotent on name). */
+    /** The active two-level taxonomy tree (categories + subcategories), localized, for the FE. */
+    @Transactional(readOnly = true)
+    public List<TaxonomyCategoryResponse> taxonomy() {
+        var locale = LocaleContextHolder.getLocale();
+        var all = categoryRepository.findAllByActiveTrueOrderBySortOrderAsc();
+        var byId = all.stream().collect(Collectors.toMap(Category::getId, category -> category));
+        Set<UUID> categoriesWithSubcategories = all.stream()
+                .map(Category::getParent)
+                .filter(parent -> parent != null)
+                .map(Category::getId)
+                .collect(Collectors.toSet());
+        // Ordena cada CATEGORIA seguida das SUAS subcategorias: pela ordem da categoria
+        // (sort_order do pai, ou o próprio se for categoria de topo), categoria antes das
+        // subcategorias, depois a ordem da subcategoria. O sort_order global cru intercala
+        // errado (subcategorias 1-5 vêm antes das categorias 10+).
+        return all.stream()
+                .sorted(Comparator
+                        .comparingInt((Category category) -> categorySortOrder(category, byId))
+                        .thenComparingInt(category -> category.getParent() == null ? 0 : 1)
+                        .thenComparingInt(Category::getSortOrder))
+                .map(category -> new TaxonomyCategoryResponse(
+                        category.getSlug(),
+                        localizedName(category, locale),
+                        parentSlug(category, byId),
+                        categoriesWithSubcategories.contains(category.getId())))
+                .toList();
+    }
+
+    /** The sort_order of the node's top-level CATEGORY — its own when it's a top-level
+     *  category, else the parent's. */
+    private static int categorySortOrder(Category category, Map<UUID, Category> byId) {
+        if (category.getParent() == null) return category.getSortOrder();
+        var parent = byId.get(category.getParent().getId());
+        return parent != null ? parent.getSortOrder() : category.getSortOrder();
+    }
+
+    private static String parentSlug(Category category, Map<UUID, Category> byId) {
+        if (category.getParent() == null) return null;
+        var parent = byId.get(category.getParent().getId());
+        return parent != null ? parent.getSlug() : null;
+    }
+
+    private static String localizedName(Category category, Locale locale) {
+        return locale != null && "en".equals(locale.getLanguage()) ? category.getNameEn() : category.getNamePt();
+    }
+
+    /**
+     * Create a new custom category for the household. The name must be unique (case-insensitive)
+     * within the household AND must not collide with a built-in taxonomy name. Optional visual
+     * (icon/color) and nesting under a taxonomy category OR another TOP-LEVEL custom are applied.
+     * Editing an existing one is done via {@link #update}.
+     */
     @Transactional
-    public CategoryResponse create(User user, String rawName) {
-        var name = rawName.trim();
+    public CategoryResponse create(User user, CreateCategoryRequest request) {
+        requireAtMostOneParent(request.parentGroupSlug(), request.parentCustomCategoryId());
+        var name = request.name().trim();
         var householdId = user.getHousehold().getId();
-        var existing = customCategoryRepository.findByHouseholdIdAndNameIgnoreCase(householdId, name);
-        var category = existing.orElseGet(() -> customCategoryRepository.save(
-                HouseholdCustomCategory.builder().household(user.getHousehold()).name(name).build()));
-        log.info("custom_category.create household={} name='{}' id={}", householdId, name, category.getId());
-        return new CategoryResponse(category.getId(), category.getName(), true);
+        requireNameAvailable(householdId, name, null);
+
+        var category = HouseholdCustomCategory.builder().household(user.getHousehold()).name(name).build();
+        category.setIcon(request.icon());
+        category.setColor(request.color());
+        applyParent(category, householdId, request.parentGroupSlug(), request.parentCustomCategoryId());
+
+        var saved = customCategoryRepository.save(category);
+        log.info("custom_category.create household={} name='{}' id={} parentGroup={} parentCustom={} icon={}",
+                householdId, name, saved.getId(),
+                saved.getParentCategory() != null ? saved.getParentCategory().getSlug() : null,
+                saved.getParentCustomCategory() != null ? saved.getParentCustomCategory().getId() : null,
+                saved.getIcon());
+        return toResponse(saved);
+    }
+
+    /**
+     * Edit a custom category by id (household-scoped). All fields optional — a null field is left
+     * unchanged; a parent is only (re)set when a parent field is provided. Enforces the same name
+     * uniqueness and two-level nesting rules as {@link #create}.
+     */
+    @Transactional
+    public CategoryResponse update(User user, UUID id, UpdateCategoryRequest request) {
+        requireAtMostOneParent(request.parentGroupSlug(), request.parentCustomCategoryId());
+        var householdId = user.getHousehold().getId();
+        var category = customCategoryRepository.findByIdAndHouseholdId(id, householdId)
+                .orElseThrow(CustomCategoryNotFoundException::new);
+
+        if (request.name() != null && !request.name().isBlank()) {
+            var name = request.name().trim();
+            if (!name.equalsIgnoreCase(category.getName())) {
+                requireNameAvailable(householdId, name, id);
+                category.setName(name);
+            }
+        }
+        if (request.icon() != null) category.setIcon(request.icon());
+        if (request.color() != null) category.setColor(request.color());
+        if (request.parentGroupSlug() != null || request.parentCustomCategoryId() != null) {
+            applyParent(category, householdId, request.parentGroupSlug(), request.parentCustomCategoryId());
+        }
+
+        var saved = customCategoryRepository.save(category);
+        log.info("custom_category.update household={} id={} name='{}'", householdId, saved.getId(), saved.getName());
+        return toResponse(saved);
+    }
+
+    private void requireAtMostOneParent(String parentGroupSlug, UUID parentCustomCategoryId) {
+        if (parentGroupSlug != null && parentCustomCategoryId != null) {
+            throw new InvalidCategoryMigrationException(); // no máximo um pai (embutida OU custom)
+        }
+    }
+
+    /** Reject a name already used by another household custom (case-insensitive) or by a built-in taxonomy node. */
+    private void requireNameAvailable(UUID householdId, String name, UUID excludeId) {
+        var customClash = customCategoryRepository.findByHouseholdIdAndNameIgnoreCase(householdId, name)
+                .filter(existing -> !existing.getId().equals(excludeId))
+                .isPresent();
+        if (customClash || categoryRepository.existsByNamePtIgnoreCaseOrNameEnIgnoreCase(name, name)) {
+            throw new DuplicateCustomCategoryException(name);
+        }
+    }
+
+    /**
+     * (Re)set the category's single parent while keeping the taxonomy to two levels:
+     * the parent must be a TOP-LEVEL node (a built-in category or a standalone custom), the
+     * category itself must have no subcategories, and it can't be its own parent. null + null → standalone.
+     */
+    private void applyParent(HouseholdCustomCategory category, UUID householdId,
+                             String parentGroupSlug, UUID parentCustomCategoryId) {
+        if (parentCustomCategoryId != null && parentCustomCategoryId.equals(category.getId())) {
+            throw new InvalidCategoryNestingException(); // não pode ser pai de si mesma
+        }
+        var gainingParent = parentGroupSlug != null || parentCustomCategoryId != null;
+        if (gainingParent && category.getId() != null
+                && customCategoryRepository.existsByParentCustomCategoryId(category.getId())) {
+            throw new InvalidCategoryNestingException(); // já tem subcategorias → cairiam para um 3º nível
+        }
+        if (parentGroupSlug != null) {
+            category.setParentCategory(resolveParentGroup(parentGroupSlug));
+            category.setParentCustomCategory(null);
+        } else if (parentCustomCategoryId != null) {
+            category.setParentCustomCategory(resolveTopLevelParentCustom(householdId, parentCustomCategoryId));
+            category.setParentCategory(null);
+        } else {
+            category.setParentCategory(null);
+            category.setParentCustomCategory(null);
+        }
+    }
+
+    /** Resolve a built-in taxonomy CATEGORY by slug (must be a top-level node). Null slug → standalone. */
+    private Category resolveParentGroup(String slug) {
+        if (slug == null || slug.isBlank()) return null;
+        var category = categoryRepository.findBySlug(slug).orElseThrow(InvalidCategoryMigrationException::new);
+        if (category.getParent() != null) throw new InvalidCategoryNestingException(); // só categoria, não subcategoria
+        return category;
+    }
+
+    /** Resolve a CUSTOM parent owned by this household — must itself be top-level (so nesting stays 2 levels). */
+    private HouseholdCustomCategory resolveTopLevelParentCustom(UUID householdId, UUID id) {
+        var parent = customCategoryRepository.findByIdAndHouseholdId(id, householdId)
+                .orElseThrow(CustomCategoryNotFoundException::new);
+        if (parent.getParentCategory() != null || parent.getParentCustomCategory() != null) {
+            throw new InvalidCategoryNestingException(); // o pai já é subcategoria → seria um 3º nível
+        }
+        return parent;
+    }
+
+    private CategoryResponse toResponse(HouseholdCustomCategory custom) {
+        var locale = LocaleContextHolder.getLocale();
+        var builtinParent = custom.getParentCategory();
+        if (builtinParent != null) {
+            return new CategoryResponse(custom.getId(), custom.getName(), true,
+                    custom.getIcon(), custom.getColor(),
+                    builtinParent.getSlug(), localizedName(builtinParent, locale));
+        }
+        var customParent = custom.getParentCustomCategory();
+        if (customParent != null) {
+            return new CategoryResponse(custom.getId(), custom.getName(), true,
+                    custom.getIcon(), custom.getColor(),
+                    "custom:" + customParent.getId(), customParent.getName());
+        }
+        return new CategoryResponse(custom.getId(), custom.getName(), true,
+                custom.getIcon(), custom.getColor(), null, null);
     }
 
     /** All categories the household can use: global enums + its custom categories. */
@@ -49,11 +235,18 @@ public class CustomCategoryService {
     public List<CategoryResponse> list(User user) {
         var categories = new ArrayList<CategoryResponse>();
         for (var category : ProductCategory.values()) {
-            categories.add(new CategoryResponse(null, category.name(), false));
+            categories.add(CategoryResponse.enumCategory(category.name()));
         }
         customCategoryRepository.findByHouseholdIdOrderByName(user.getHousehold().getId())
-                .forEach(custom -> categories.add(new CategoryResponse(custom.getId(), custom.getName(), true)));
+                .forEach(custom -> categories.add(toResponse(custom)));
         return categories;
+    }
+
+    /** Resolve a custom category owned by this household, or 404. */
+    @Transactional(readOnly = true)
+    public HouseholdCustomCategory requireOwned(User user, UUID id) {
+        return customCategoryRepository.findByIdAndHouseholdId(id, user.getHousehold().getId())
+                .orElseThrow(CustomCategoryNotFoundException::new);
     }
 
     @Transactional
@@ -93,6 +286,7 @@ public class CustomCategoryService {
             }
             migrated++;
         }
+        householdCacheGen.bump(user.getHousehold().getId()); // insights override-aware → invalida
         log.info("custom_category.migrate household={} target={} migrated={} skipped={}",
                 user.getHousehold().getId(),
                 customCategory != null ? "custom:" + customCategory.getId() : targetCategory, migrated, skipped);

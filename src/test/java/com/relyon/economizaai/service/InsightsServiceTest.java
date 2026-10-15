@@ -4,8 +4,6 @@ import com.relyon.economizaai.exception.ProductNotFoundException;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.User;
-import com.relyon.economizaai.model.enums.CategoryView;
-import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.service.geo.MarketNameService;
@@ -47,6 +45,7 @@ class InsightsServiceTest {
     @Mock private ProductRepository productRepository;
     @Mock private MarketNameService marketNameService;
     @Mock private HouseholdProductCategoryOverrideService categoryOverrideService;
+    @Mock private CategoryResolver categoryResolver;
     @Mock private SubscriptionGateService subscriptionGate;
     @Mock private HouseholdProductAliasService householdProductAliasService;
 
@@ -75,7 +74,7 @@ class InsightsServiceTest {
         lenient().when(insightsRepository.spendByMonth(householdId, fromBound, toBound, ALL_SCOPE, ALL_CNPJS)).thenReturn(List.of());
         lenient().when(insightsRepository.spendByWeek(householdId, fromBound, toBound, ALL_SCOPE, ALL_CNPJS)).thenReturn(List.of());
         lenient().when(insightsRepository.spendByMarket(householdId, fromBound, toBound, ALL_SCOPE, ALL_CNPJS)).thenReturn(List.of());
-        lenient().when(insightsRepository.spendByCategory(householdId, fromBound, toBound, ALL_SCOPE, ALL_CNPJS)).thenReturn(List.of());
+        lenient().when(insightsRepository.spendByProductNode(householdId, fromBound, toBound, ALL_SCOPE, ALL_CNPJS)).thenReturn(List.of());
     }
 
     @Test
@@ -92,8 +91,13 @@ class InsightsServiceTest {
                 .thenReturn(List.<Object[]>of(new Object[]{2026, 17, new BigDecimal("25.00"), 1L}));
         when(insightsRepository.spendByMarket(householdId, from, to, ALL_SCOPE, ALL_CNPJS))
                 .thenReturn(List.<Object[]>of(new Object[]{"12345678000190", "Zaffari", new BigDecimal("73.45"), 3L}));
-        when(insightsRepository.spendByCategory(householdId, from, to, ALL_SCOPE, ALL_CNPJS))
-                .thenReturn(List.<Object[]>of(new Object[]{ProductCategory.GROCERIES, new BigDecimal("40.00"), 7L}));
+        var productId = UUID.randomUUID();
+        var categoryId = UUID.randomUUID();
+        when(insightsRepository.spendByProductNode(householdId, from, to, ALL_SCOPE, ALL_CNPJS))
+                .thenReturn(List.<Object[]>of(new Object[]{productId, categoryId, new BigDecimal("40.00"), 7L}));
+        when(categoryOverrideService.effectiveCategoryByProduct(eq(householdId), any())).thenReturn(Map.of());
+        when(categoryResolver.slugForId(categoryId)).thenReturn("mercearia");
+        when(categoryResolver.labelFor(eq(categoryId), any())).thenReturn("Mercearia");
 
         var response = insightsService.spend(user, from, to);
 
@@ -120,7 +124,9 @@ class InsightsServiceTest {
         assertEquals(3L, marketBucket.receiptCount());
 
         var categoryBucket = response.byCategory().get(0);
-        assertEquals(ProductCategory.GROCERIES, categoryBucket.category());
+        assertNull(categoryBucket.category());
+        assertEquals("mercearia", categoryBucket.slug());
+        assertEquals("Mercearia", categoryBucket.label());
         assertEquals(new BigDecimal("40.00"), categoryBucket.total());
         assertEquals(7L, categoryBucket.itemCount());
     }
@@ -140,7 +146,7 @@ class InsightsServiceTest {
         verify(insightsRepository).spendByMonth(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS);
         verify(insightsRepository).spendByWeek(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS);
         verify(insightsRepository).spendByMarket(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS);
-        verify(insightsRepository).spendByCategory(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS);
+        verify(insightsRepository).spendByProductNode(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS);
     }
 
     @Test
@@ -151,8 +157,9 @@ class InsightsServiceTest {
         // double total + null category total exercise the toBigDecimal Number and null branches
         when(insightsRepository.spendByMonth(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS))
                 .thenReturn(List.<Object[]>of(new Object[]{2026, 3, 12.5d, 1L}));
-        when(insightsRepository.spendByCategory(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS))
-                .thenReturn(List.<Object[]>of(new Object[]{ProductCategory.OTHER, null, 4L}));
+        when(insightsRepository.spendByProductNode(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS))
+                .thenReturn(List.<Object[]>of(new Object[]{UUID.randomUUID(), null, null, 4L}));
+        when(categoryOverrideService.effectiveCategoryByProduct(eq(householdId), any())).thenReturn(Map.of());
 
         var response = insightsService.spend(user, null, null);
 
@@ -220,100 +227,6 @@ class InsightsServiceTest {
         var top = insightsService.topMarkets(user, null, null, -1);
 
         assertTrue(top.isEmpty());
-    }
-
-    @Test
-    void topCategories_globalLens_appliesLimitOverGlobalEnumGrouping() {
-        var user = buildUser();
-        var householdId = user.getHousehold().getId();
-        stubEmptyAggregates(householdId, EPOCH_FLOOR, EPOCH_CEIL);
-        when(insightsRepository.spendByCategory(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS))
-                .thenReturn(List.of(
-                        new Object[]{ProductCategory.GROCERIES, new BigDecimal("40.00"), 5L},
-                        new Object[]{ProductCategory.BEVERAGES, new BigDecimal("15.00"), 2L}));
-
-        var top = insightsService.topCategories(user, null, null, 1, CategoryView.GLOBAL);
-
-        assertEquals(1, top.size());
-        assertEquals(ProductCategory.GROCERIES, top.get(0).category());
-        assertEquals("GROCERIES", top.get(0).label());
-    }
-
-    @Test
-    void topCategories_householdLens_reaggregatesByEffectiveCategory_noDoubleCount() {
-        var user = buildUser();
-        var householdId = user.getHousehold().getId();
-        var leite = UUID.randomUUID();      // global MEAT_DAIRY, overridden to GROCERIES
-        var arroz = UUID.randomUUID();      // global GROCERIES, no override
-        var sabao = UUID.randomUUID();      // global CLEANING, moved to a custom category
-        when(insightsRepository.spendByProduct(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS))
-                .thenReturn(List.<Object[]>of(
-                        new Object[]{leite, ProductCategory.MEAT_DAIRY, new BigDecimal("10.00"), 2L},
-                        new Object[]{arroz, ProductCategory.GROCERIES, new BigDecimal("30.00"), 3L},
-                        new Object[]{sabao, ProductCategory.CLEANING, new BigDecimal("5.00"), 1L}));
-        var customId = UUID.randomUUID();
-        when(categoryOverrideService.overrideKeysByProduct(eq(householdId),
-                any())).thenReturn(Map.of(
-                        leite, new HouseholdProductCategoryOverrideService.OverrideKey("enum:GROCERIES", "GROCERIES"),
-                        sabao, new HouseholdProductCategoryOverrideService.OverrideKey(
-                                "custom:" + customId, "Produtos de Limpeza")));
-
-        var buckets = insightsService.topCategories(user, null, null, 10, CategoryView.HOUSEHOLD);
-
-        // GROCERIES bucket = arroz 30 + leite 10 (override) = 40, ranked first.
-        var groceries = buckets.stream().filter(b -> "GROCERIES".equals(b.label())).findFirst().orElseThrow();
-        assertEquals(0, new BigDecimal("40.00").compareTo(groceries.total()));
-        assertEquals(ProductCategory.GROCERIES, groceries.category());
-        // Custom bucket carries the custom name as label and a null enum category.
-        var custom = buckets.stream().filter(b -> "Produtos de Limpeza".equals(b.label())).findFirst().orElseThrow();
-        assertEquals(0, new BigDecimal("5.00").compareTo(custom.total()));
-        assertNull(custom.category());
-        // MEAT_DAIRY no longer appears — leite was moved out of it (no double count).
-        assertTrue(buckets.stream().noneMatch(b -> "MEAT_DAIRY".equals(b.label())));
-        // CLEANING no longer appears — sabao migrated to the custom category.
-        assertTrue(buckets.stream().noneMatch(b -> "CLEANING".equals(b.label())));
-    }
-
-    @Test
-    void topCategories_householdLens_customCategoryNamedLikeEnum_doesNotMergeWithEnumBucket() {
-        var user = buildUser();
-        var householdId = user.getHousehold().getId();
-        var arroz = UUID.randomUUID();   // global OTHER, no override
-        var sabao = UUID.randomUUID();   // moved into a custom category literally named "OTHER"
-        var customId = UUID.randomUUID();
-        when(insightsRepository.spendByProduct(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS))
-                .thenReturn(List.<Object[]>of(
-                        new Object[]{arroz, ProductCategory.OTHER, new BigDecimal("12.00"), 2L},
-                        new Object[]{sabao, ProductCategory.CLEANING, new BigDecimal("7.00"), 1L}));
-        when(categoryOverrideService.overrideKeysByProduct(eq(householdId), any()))
-                .thenReturn(Map.of(sabao,
-                        new HouseholdProductCategoryOverrideService.OverrideKey("custom:" + customId, "OTHER")));
-
-        var buckets = insightsService.topCategories(user, null, null, 10, CategoryView.HOUSEHOLD);
-
-        // Two distinct buckets despite both labeled "OTHER": the enum one (12.00) and
-        // the custom one (7.00) must NOT merge into a single 19.00 bucket.
-        var labeledOther = buckets.stream().filter(b -> "OTHER".equals(b.label())).toList();
-        assertEquals(2, labeledOther.size());
-        var enumBucket = labeledOther.stream().filter(b -> b.category() == ProductCategory.OTHER).findFirst().orElseThrow();
-        var customBucket = labeledOther.stream().filter(b -> b.category() == null).findFirst().orElseThrow();
-        assertEquals(0, new BigDecimal("12.00").compareTo(enumBucket.total()));
-        assertEquals(0, new BigDecimal("7.00").compareTo(customBucket.total()));
-    }
-
-    @Test
-    void topCategories_householdLens_isTheDefault() {
-        var user = buildUser();
-        var householdId = user.getHousehold().getId();
-        var arroz = UUID.randomUUID();
-        when(insightsRepository.spendByProduct(householdId, EPOCH_FLOOR, EPOCH_CEIL, ALL_SCOPE, ALL_CNPJS))
-                .thenReturn(List.<Object[]>of(new Object[]{arroz, ProductCategory.GROCERIES, new BigDecimal("30.00"), 3L}));
-        when(categoryOverrideService.overrideKeysByProduct(eq(householdId), any())).thenReturn(Map.of());
-
-        var buckets = insightsService.topCategories(user, null, null, 10);
-
-        assertEquals(1, buckets.size());
-        assertEquals(ProductCategory.GROCERIES, buckets.get(0).category());
     }
 
     @Test

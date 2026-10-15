@@ -5,6 +5,7 @@ import com.relyon.economizaai.dto.request.PrefetchedReceiptRequest;
 import com.relyon.economizaai.dto.request.SubmitReceiptRequest;
 import com.relyon.economizaai.dto.request.UpdateItemPersonalRequest;
 import com.relyon.economizaai.dto.request.UpdateReceiptItemRequest;
+import com.relyon.economizaai.exception.InvalidCategoryTargetException;
 import com.relyon.economizaai.exception.InvalidItemPriceException;
 import com.relyon.economizaai.exception.ManualChaveUnsupportedException;
 import com.relyon.economizaai.exception.PaywallException;
@@ -15,7 +16,9 @@ import com.relyon.economizaai.exception.ReceiptNotEditableException;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
 import com.relyon.economizaai.exception.UnsupportedMerchantException;
 import com.relyon.economizaai.exception.UnsupportedStateException;
+import com.relyon.economizaai.model.Category;
 import com.relyon.economizaai.model.Household;
+import com.relyon.economizaai.model.HouseholdCustomCategory;
 import com.relyon.economizaai.dto.response.ReceiptItemResponse;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.Receipt;
@@ -102,6 +105,8 @@ class ReceiptServiceTest {
     @Mock private MarketLocationService marketLocationService;
     @Mock private HouseholdProductAliasService householdProductAliasService;
     @Mock private HouseholdProductCategoryOverrideService categoryOverrideService;
+    @Mock private CustomCategoryService customCategoryService;
+    @Mock private CategoryResolver categoryResolver;
     @Mock private HouseholdCacheGen householdCacheGen;
     @Mock private MarketNameService marketNameService;
     @Mock private SubscriptionGateService subscriptionGate;
@@ -166,10 +171,58 @@ class ReceiptServiceTest {
         // Canonicalizer creates/links the product for the unrecognized item.
         when(canonicalizationService.linkOrCreateProduct(receipt, item)).thenReturn(created);
 
-        receiptService.updateItemCategory(user, receipt.getId(), item.getId(), ProductCategory.GROCERIES);
+        receiptService.updateItemCategory(user, receipt.getId(), item.getId(), ProductCategory.GROCERIES, null, null);
 
         verify(canonicalizationService).linkOrCreateProduct(receipt, item);
         verify(categoryOverrideService).setOverride(user, created, ProductCategory.GROCERIES);
+    }
+
+    @Test
+    void updateItemCategory_customCategory_setsCustomOverride() {
+        var user = buildUser();
+        var product = Product.builder().id(UUID.randomUUID()).normalizedName("ABACAXI").build();
+        var receipt = persistedReceipt(user, ReceiptStatus.CONFIRMED);
+        var item = receipt.getItems().get(0);
+        item.setProduct(product);
+        var customId = UUID.randomUUID();
+        var custom = HouseholdCustomCategory.builder().id(customId).household(user.getHousehold()).name("Frutas").build();
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(customCategoryService.requireOwned(user, customId)).thenReturn(custom);
+
+        receiptService.updateItemCategory(user, receipt.getId(), item.getId(), null, customId, null);
+
+        verify(categoryOverrideService).setCustomOverride(user, product, custom);
+        verify(categoryOverrideService, never()).setOverride(any(), any(), any());
+    }
+
+    @Test
+    void updateItemCategory_nodeSlug_setsNodeOverride() {
+        var user = buildUser();
+        var product = Product.builder().id(UUID.randomUUID()).normalizedName("QUEIJO MUSSARELA").build();
+        var receipt = persistedReceipt(user, ReceiptStatus.CONFIRMED);
+        var item = receipt.getItems().get(0);
+        item.setProduct(product);
+        var nodeId = UUID.randomUUID();
+        var node = Category.builder().id(nodeId).slug("queijos").build();
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(categoryResolver.findBySlug("queijos")).thenReturn(Optional.of(node));
+
+        receiptService.updateItemCategory(user, receipt.getId(), item.getId(), null, null, "queijos");
+
+        verify(categoryOverrideService).setNodeOverride(user, product, nodeId);
+        verify(categoryOverrideService, never()).setOverride(any(), any(), any());
+    }
+
+    @Test
+    void updateItemCategory_rejectsWhenNeitherTargetGiven() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.CONFIRMED);
+        var item = receipt.getItems().get(0);
+
+        assertThrows(InvalidCategoryTargetException.class,
+                () -> receiptService.updateItemCategory(user, receipt.getId(), item.getId(), null, null, null));
+        verify(categoryOverrideService, never()).setOverride(any(), any(), any());
+        verify(categoryOverrideService, never()).setCustomOverride(any(), any(), any());
     }
 
     @Test
@@ -184,7 +237,7 @@ class ReceiptServiceTest {
         when(categoryOverrideService.overridesByProduct(eq(user.getHousehold().getId()), any()))
                 .thenReturn(Map.of(product.getId(), "GROCERIES"));
 
-        var response = receiptService.updateItemCategory(user, receipt.getId(), item.getId(), ProductCategory.GROCERIES);
+        var response = receiptService.updateItemCategory(user, receipt.getId(), item.getId(), ProductCategory.GROCERIES, null, null);
 
         verify(categoryOverrideService).setOverride(user, product, ProductCategory.GROCERIES);
         assertEquals("GROCERIES", response.items().get(0).category(), "household override shown, global stays OTHER");

@@ -1,12 +1,20 @@
 package com.relyon.economizaai.service;
 
 import com.relyon.economizaai.exception.CustomCategoryNotFoundException;
+import com.relyon.economizaai.exception.DuplicateCustomCategoryException;
 import com.relyon.economizaai.exception.InvalidCategoryMigrationException;
+import com.relyon.economizaai.exception.InvalidCategoryNestingException;
 import com.relyon.economizaai.model.Household;
+import com.relyon.economizaai.dto.request.CreateCategoryRequest;
+import com.relyon.economizaai.dto.request.UpdateCategoryRequest;
+import com.relyon.economizaai.service.cache.HouseholdCacheGen;
 import com.relyon.economizaai.model.HouseholdCustomCategory;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.dto.response.TaxonomyCategoryResponse;
+import com.relyon.economizaai.model.Category;
+import com.relyon.economizaai.repository.CategoryRepository;
 import com.relyon.economizaai.repository.HouseholdCustomCategoryRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import org.junit.jupiter.api.Test;
@@ -35,6 +43,8 @@ class CustomCategoryServiceTest {
     @Mock private HouseholdCustomCategoryRepository customCategoryRepository;
     @Mock private ProductRepository productRepository;
     @Mock private HouseholdProductCategoryOverrideService overrideService;
+    @Mock private CategoryRepository categoryRepository;
+    @Mock private HouseholdCacheGen householdCacheGen;
     @InjectMocks private CustomCategoryService service;
 
     private User user() {
@@ -58,18 +68,129 @@ class CustomCategoryServiceTest {
     }
 
     @Test
-    void create_isIdempotentOnName() {
+    void create_duplicateNameInHousehold_throws() {
         var user = user();
         var existing = HouseholdCustomCategory.builder().id(UUID.randomUUID())
                 .household(user.getHousehold()).name("Frutas").build();
         when(customCategoryRepository.findByHouseholdIdAndNameIgnoreCase(user.getHousehold().getId(), "Frutas"))
                 .thenReturn(Optional.of(existing));
 
-        var response = service.create(user, " Frutas ");
-
-        assertEquals(existing.getId(), response.id());
-        assertTrue(response.custom());
+        assertThrows(DuplicateCustomCategoryException.class, () ->
+                service.create(user, new CreateCategoryRequest(" Frutas ", null, null, null, null)));
         verify(customCategoryRepository, never()).save(any());
+    }
+
+    @Test
+    void create_nameClashesWithBuiltinTaxonomy_throws() {
+        var user = user();
+        when(customCategoryRepository.findByHouseholdIdAndNameIgnoreCase(user.getHousehold().getId(), "Bebidas"))
+                .thenReturn(Optional.empty());
+        when(categoryRepository.existsByNamePtIgnoreCaseOrNameEnIgnoreCase("Bebidas", "Bebidas")).thenReturn(true);
+
+        assertThrows(DuplicateCustomCategoryException.class, () ->
+                service.create(user, new CreateCategoryRequest("Bebidas", null, null, null, null)));
+        verify(customCategoryRepository, never()).save(any());
+    }
+
+    @Test
+    void create_nestedUnderCustomParent_returnsCustomParentSlug() {
+        var user = user();
+        var parentId = UUID.randomUUID();
+        var parent = HouseholdCustomCategory.builder().id(parentId)
+                .household(user.getHousehold()).name("Transporte").build();
+        when(customCategoryRepository.findByHouseholdIdAndNameIgnoreCase(user.getHousehold().getId(), "Uber"))
+                .thenReturn(Optional.empty());
+        when(categoryRepository.existsByNamePtIgnoreCaseOrNameEnIgnoreCase("Uber", "Uber")).thenReturn(false);
+        when(customCategoryRepository.findByIdAndHouseholdId(parentId, user.getHousehold().getId()))
+                .thenReturn(Optional.of(parent));
+        when(customCategoryRepository.save(any(HouseholdCustomCategory.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = service.create(user, new CreateCategoryRequest("Uber", null, null, null, parentId));
+
+        assertTrue(response.custom());
+        assertEquals("custom:" + parentId, response.parentSlug());
+        assertEquals("Transporte", response.parentName());
+    }
+
+    @Test
+    void create_nestedUnderCustomThatIsAlreadySub_throws() {
+        var user = user();
+        var topLevel = HouseholdCustomCategory.builder().id(UUID.randomUUID())
+                .household(user.getHousehold()).name("Casa").build();
+        var subParentId = UUID.randomUUID();
+        var subParent = HouseholdCustomCategory.builder().id(subParentId)
+                .household(user.getHousehold()).name("Cozinha").parentCustomCategory(topLevel).build();
+        when(customCategoryRepository.findByHouseholdIdAndNameIgnoreCase(user.getHousehold().getId(), "Panelas"))
+                .thenReturn(Optional.empty());
+        when(categoryRepository.existsByNamePtIgnoreCaseOrNameEnIgnoreCase("Panelas", "Panelas")).thenReturn(false);
+        when(customCategoryRepository.findByIdAndHouseholdId(subParentId, user.getHousehold().getId()))
+                .thenReturn(Optional.of(subParent));
+
+        assertThrows(InvalidCategoryNestingException.class, () ->
+                service.create(user, new CreateCategoryRequest("Panelas", null, null, null, subParentId)));
+    }
+
+    @Test
+    void create_bothParents_throws() {
+        var user = user();
+        var customParentId = UUID.randomUUID();
+        assertThrows(InvalidCategoryMigrationException.class, () ->
+                service.create(user, new CreateCategoryRequest("X", null, null, "pet", customParentId)));
+    }
+
+    @Test
+    void update_selfAsParent_throws() {
+        var user = user();
+        var selfId = UUID.randomUUID();
+        var self = HouseholdCustomCategory.builder().id(selfId)
+                .household(user.getHousehold()).name("Transporte").build();
+        when(customCategoryRepository.findByIdAndHouseholdId(selfId, user.getHousehold().getId()))
+                .thenReturn(Optional.of(self));
+
+        assertThrows(InvalidCategoryNestingException.class, () ->
+                service.update(user, selfId, new UpdateCategoryRequest(null, null, null, null, selfId)));
+    }
+
+    @Test
+    void update_givingParentToACategoryThatHasChildren_throws() {
+        var user = user();
+        var id = UUID.randomUUID();
+        var hasChildren = HouseholdCustomCategory.builder().id(id)
+                .household(user.getHousehold()).name("Casa").build();
+        when(customCategoryRepository.findByIdAndHouseholdId(id, user.getHousehold().getId()))
+                .thenReturn(Optional.of(hasChildren));
+        when(customCategoryRepository.existsByParentCustomCategoryId(id)).thenReturn(true);
+
+        assertThrows(InvalidCategoryNestingException.class, () ->
+                service.update(user, id, new UpdateCategoryRequest(null, null, null, "pet", null)));
+    }
+
+    @Test
+    void update_editsIconAndColor() {
+        var user = user();
+        var id = UUID.randomUUID();
+        var category = HouseholdCustomCategory.builder().id(id)
+                .household(user.getHousehold()).name("Frutas").build();
+        when(customCategoryRepository.findByIdAndHouseholdId(id, user.getHousehold().getId()))
+                .thenReturn(Optional.of(category));
+        when(customCategoryRepository.save(any(HouseholdCustomCategory.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = service.update(user, id, new UpdateCategoryRequest(null, "paw-outline", "#F5A623", null, null));
+
+        assertEquals("paw-outline", response.icon());
+        assertEquals("#F5A623", response.color());
+    }
+
+    @Test
+    void update_unknown_throws() {
+        var user = user();
+        var id = UUID.randomUUID();
+        when(customCategoryRepository.findByIdAndHouseholdId(id, user.getHousehold().getId()))
+                .thenReturn(Optional.empty());
+        assertThrows(CustomCategoryNotFoundException.class, () ->
+                service.update(user, id, new UpdateCategoryRequest("X", null, null, null, null)));
     }
 
     @Test
@@ -120,5 +241,35 @@ class CustomCategoryServiceTest {
         when(customCategoryRepository.findByIdAndHouseholdId(id, user.getHousehold().getId()))
                 .thenReturn(Optional.empty());
         assertThrows(CustomCategoryNotFoundException.class, () -> service.delete(user, id));
+    }
+
+    @Test
+    void taxonomy_ordersEachCategoryFollowedByItsSubcategories() {
+        var hortifruti = category("hortifruti", 10);
+        var frutas = subcategory("frutas", hortifruti, 1);
+        var legumes = subcategory("legumes-verduras", hortifruti, 2);
+        var carnes = category("carnes", 20);
+        var bovinos = subcategory("carnes-bovinas", carnes, 1);
+        var outros = category("outros", 150);
+        var naoMercado = subcategory("nao-mercado", outros, 1);
+        // Repo devolve na ordem do sort_order GLOBAL cru (subcategorias 1-2 antes das categorias 10+).
+        when(categoryRepository.findAllByActiveTrueOrderBySortOrderAsc())
+                .thenReturn(List.of(frutas, bovinos, legumes, naoMercado, hortifruti, carnes, outros));
+
+        var slugs = service.taxonomy().stream().map(TaxonomyCategoryResponse::slug).toList();
+
+        assertEquals(
+                List.of("hortifruti", "frutas", "legumes-verduras", "carnes", "carnes-bovinas", "outros", "nao-mercado"),
+                slugs);
+    }
+
+    private static Category category(String slug, int sortOrder) {
+        return Category.builder().id(UUID.randomUUID()).slug(slug).namePt(slug).nameEn(slug)
+                .sortOrder(sortOrder).active(true).build();
+    }
+
+    private static Category subcategory(String slug, Category parent, int sortOrder) {
+        return Category.builder().id(UUID.randomUUID()).slug(slug).namePt(slug).nameEn(slug)
+                .parent(parent).sortOrder(sortOrder).active(true).build();
     }
 }

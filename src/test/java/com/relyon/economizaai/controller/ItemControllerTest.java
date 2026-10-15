@@ -9,6 +9,8 @@ import com.relyon.economizaai.service.CustomCategoryService;
 import com.relyon.economizaai.service.ItemQueryService;
 import com.relyon.economizaai.service.ItemQueryService.ItemFilters;
 import com.relyon.economizaai.service.LocalizedMessageService;
+import com.relyon.economizaai.service.CategoryResolver;
+import com.relyon.economizaai.repository.ProductRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -46,6 +48,8 @@ class ItemControllerTest {
     @MockitoBean private JwtService jwtService;
     @MockitoBean private UserDetailsService userDetailsService;
     @MockitoBean private LocalizedMessageService localizedMessageService;
+    @MockitoBean private CategoryResolver categoryResolver;
+    @MockitoBean private ProductRepository productRepository;
 
     private User principal() {
         var household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();

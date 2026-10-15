@@ -1,10 +1,13 @@
 package com.relyon.economizaai.service;
 
 import com.relyon.economizaai.model.Household;
+import com.relyon.economizaai.dto.request.CreateCategoryRequest;
+import com.relyon.economizaai.service.cache.HouseholdCacheGen;
 import com.relyon.economizaai.model.HouseholdCustomCategory;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.repository.CategoryRepository;
 import com.relyon.economizaai.repository.HouseholdCustomCategoryRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import org.junit.jupiter.api.Test;
@@ -32,6 +35,8 @@ class CustomCategoryServiceCoverageTest {
     @Mock private HouseholdCustomCategoryRepository customCategoryRepository;
     @Mock private ProductRepository productRepository;
     @Mock private HouseholdProductCategoryOverrideService overrideService;
+    @Mock private CategoryRepository categoryRepository;
+    @Mock private HouseholdCacheGen householdCacheGen;
     @InjectMocks private CustomCategoryService service;
 
     private User user() {
@@ -44,11 +49,12 @@ class CustomCategoryServiceCoverageTest {
         var user = user();
         when(customCategoryRepository.findByHouseholdIdAndNameIgnoreCase(user.getHousehold().getId(), "Frutas"))
                 .thenReturn(Optional.empty());
+        when(categoryRepository.existsByNamePtIgnoreCaseOrNameEnIgnoreCase("Frutas", "Frutas")).thenReturn(false);
         var saved = HouseholdCustomCategory.builder().id(UUID.randomUUID())
                 .household(user.getHousehold()).name("Frutas").build();
         when(customCategoryRepository.save(any(HouseholdCustomCategory.class))).thenReturn(saved);
 
-        var response = service.create(user, "  Frutas  ");
+        var response = service.create(user, new CreateCategoryRequest("  Frutas  ", null, null, null, null));
 
         assertEquals(saved.getId(), response.id());
         assertEquals("Frutas", response.name());

@@ -194,48 +194,15 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
                                  @Param("scope") String scope,
                                  @Param("supportedCnpjs") Collection<String> supportedCnpjs);
 
-    // COALESCE must yield the ProductCategory ENUM (the result is cast to
-    // ProductCategory in InsightsService), so the null fallback needs the
-    // fully-qualified enum literal — a string literal makes the projection a
-    // String and breaks both the cast and Postgres enum/text unification.
-    // This is the rare JPQL type-inference exception to the no-FQN rule.
-    // Snapshot-first: confirmed history aggregates by the category frozen at
-    // confirmation (categoryAtConfirmation), so later recategorizations never
-    // rewrite what the household already saw; live p.category is only the
-    // fallback for legacy rows without a snapshot.
-    @Query("""
-        SELECT COALESCE(ri.categoryAtConfirmation, p.category, com.relyon.economizaai.model.enums.ProductCategory.OTHER) AS category,
-               COALESCE(SUM(ri.totalPrice), 0) AS total,
-               COUNT(ri) AS itemCount
-        FROM ReceiptItem ri
-        JOIN ri.receipt r
-        LEFT JOIN ri.product p
-        WHERE r.household.id = :householdId
-          AND r.status = 'CONFIRMED'
-          AND ri.excluded = false
-          AND ri.excludedFromPersonal = false
-          AND r.issuedAt >= :from
-          AND r.issuedAt <= :to
-          AND (:scope = 'ALL'
-               OR (:scope = 'SUPPORTED' AND r.cnpjEmitente IN :supportedCnpjs)
-               OR (:scope = 'OTHER' AND (r.cnpjEmitente IS NULL OR r.cnpjEmitente NOT IN :supportedCnpjs)))
-        GROUP BY COALESCE(ri.categoryAtConfirmation, p.category, com.relyon.economizaai.model.enums.ProductCategory.OTHER)
-        ORDER BY total DESC
-    """)
-    List<Object[]> spendByCategory(@Param("householdId") UUID householdId,
-                                   @Param("from") LocalDateTime from,
-                                   @Param("to") LocalDateTime to,
-                                   @Param("scope") String scope,
-                                   @Param("supportedCnpjs") Collection<String> supportedCnpjs);
 
-    // Product-granularity spend, used by the HOUSEHOLD category lens: the global
-    // p.category is returned per product so InsightsService can re-bucket by the
-    // household's EFFECTIVE category (override custom name / corrected enum / global
-    // enum) in code, without double-counting. Items with no linked product collapse
-    // under a null productId + null category (treated as OTHER downstream).
+    /**
+     * Per-product spend carrying the product's GLOBAL taxonomy node (category_id), so
+     * InsightsService can re-bucket by the household's EFFECTIVE node — applying custom /
+     * node / enum overrides in code (override-aware "Por categoria"). Null product → null node.
+     */
     @Query("""
         SELECT p.id AS productId,
-               COALESCE(ri.categoryAtConfirmation, p.category) AS category,
+               p.categoryId AS categoryId,
                COALESCE(SUM(ri.totalPrice), 0) AS total,
                COUNT(ri) AS itemCount
         FROM ReceiptItem ri
@@ -250,13 +217,13 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
           AND (:scope = 'ALL'
                OR (:scope = 'SUPPORTED' AND r.cnpjEmitente IN :supportedCnpjs)
                OR (:scope = 'OTHER' AND (r.cnpjEmitente IS NULL OR r.cnpjEmitente NOT IN :supportedCnpjs)))
-        GROUP BY p.id, COALESCE(ri.categoryAtConfirmation, p.category)
+        GROUP BY p.id, p.categoryId
     """)
-    List<Object[]> spendByProduct(@Param("householdId") UUID householdId,
-                                  @Param("from") LocalDateTime from,
-                                  @Param("to") LocalDateTime to,
-                                  @Param("scope") String scope,
-                                  @Param("supportedCnpjs") Collection<String> supportedCnpjs);
+    List<Object[]> spendByProductNode(@Param("householdId") UUID householdId,
+                                      @Param("from") LocalDateTime from,
+                                      @Param("to") LocalDateTime to,
+                                      @Param("scope") String scope,
+                                      @Param("supportedCnpjs") Collection<String> supportedCnpjs);
 
     @Query("""
         SELECT r.issuedAt AS issuedAt,

@@ -4,6 +4,7 @@ import com.relyon.economizaai.model.EanCatalogEntry;
 import com.relyon.economizaai.model.enums.EanCatalogSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.EanCatalogRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -37,6 +38,7 @@ public class EanCatalogService {
     private static final int LOOKUP_CHUNK = 1000;
 
     private final EanCatalogRepository eanCatalogRepository;
+    private final CategoryResolver categoryResolver;
 
     private static boolean isImportableEan(String ean) {
         return ean != null && !ean.isBlank() && ean.length() <= MAX_EAN_LENGTH;
@@ -92,6 +94,16 @@ public class EanCatalogService {
             if (req.genericName() != null) entry.setGenericName(truncate(req.genericName(), NAME_MAX));
             if (req.brand() != null) entry.setBrand(truncate(req.brand(), BRAND_MAX));
             if (req.category() != null) entry.setCategory(req.category());
+            if (req.categorySlug() != null) {
+                var nodeId = categoryResolver.idForSlug(req.categorySlug());
+                if (nodeId != null) entry.setCategoryId(nodeId);
+            }
+            if (req.categoriesRaw() != null) entry.setCategoriesRaw(req.categoriesRaw());
+            if (req.imageUrl() != null) entry.setImageUrl(truncate(req.imageUrl(), IMAGE_URL_MAX));
+            if (req.quantity() != null) entry.setQuantity(truncate(req.quantity(), QUANTITY_MAX));
+            if (req.labelsTags() != null) entry.setLabelsTags(req.labelsTags());
+            if (req.nutriscore() != null) entry.setNutriscore(truncate(req.nutriscore(), 1));
+            if (req.novaGroup() != null) entry.setNovaGroup(req.novaGroup());
             entry.setSource(req.source() != null ? req.source() : EanCatalogSource.CURATED_IMPORT);
         }
         var toSave = new ArrayList<>(toSaveByEan.values());
@@ -119,7 +131,7 @@ public class EanCatalogService {
     public BulkImportOutcome bulkImportOpenFoodFacts(List<OpenFoodFactsRow> rows, EanCatalogSource source) {
         if (rows == null || rows.isEmpty()) return new BulkImportOutcome(0, 0);
         var mapped = rows.stream()
-                .map(row -> parseOpenFoodFactsRow(row.code(), row.productName(), row.brands(), row.categoryTags(), source))
+                .map(row -> fromOpenFoodFactsRow(row, source))
                 .toList();
         return bulkImport(mapped);
     }
@@ -134,6 +146,8 @@ public class EanCatalogService {
     // them, so truncate here rather than let the whole batch fail on a constraint.
     private static final int NAME_MAX = 100;
     private static final int BRAND_MAX = 100;
+    private static final int IMAGE_URL_MAX = 500;
+    private static final int QUANTITY_MAX = 50;
 
     public static EanImportRequest parseOpenFoodFactsRow(String ean, String productName,
                                                           String brands, String categoryTags) {
@@ -153,6 +167,35 @@ public class EanCatalogService {
         );
     }
 
+    /**
+     * Builds a full import request from an OFF row: maps both the legacy enum AND
+     * the fine taxonomy slug, and carries the extra OFF metadata (raw tags, image,
+     * quantity, labels, Nutri-Score, NOVA) so a single OFF fetch persists everything.
+     */
+    public static EanImportRequest fromOpenFoodFactsRow(OpenFoodFactsRow row, EanCatalogSource source) {
+        var category = OpenFoodFactsCategoryMapper.map(row.categoryTags());
+        return new EanImportRequest(
+                row.code(),
+                truncate(clean(row.productName()), NAME_MAX),
+                truncate(firstBrand(row.brands()), BRAND_MAX),
+                category == ProductCategory.OTHER ? null : category,
+                source,
+                OpenFoodFactsCategoryMapper.mapToSlug(row.categoryTags()),
+                clean(row.categoryTags()),
+                clean(row.imageUrl()),
+                clean(row.quantity()),
+                clean(row.labelsTags()),
+                cleanGrade(row.nutriscore()),
+                row.novaGroup());
+    }
+
+    /** Nutri-Score grade is a single letter a–e; OFF also returns unknown/not-applicable → null. */
+    private static String cleanGrade(String grade) {
+        if (grade == null) return null;
+        var value = grade.trim().toLowerCase();
+        return value.length() == 1 && value.charAt(0) >= 'a' && value.charAt(0) <= 'e' ? value : null;
+    }
+
     private static String clean(String value) {
         return value != null && !value.isBlank() ? value.trim() : null;
     }
@@ -169,14 +212,34 @@ public class EanCatalogService {
     }
 
     /** Raw Open Food Facts row as returned by its search API. */
-    public record OpenFoodFactsRow(String code, String productName, String brands, String categoryTags) {}
+    public record OpenFoodFactsRow(String code, String productName, String brands, String categoryTags,
+                                   String imageUrl, String quantity, String labelsTags,
+                                   String nutriscore, Integer novaGroup) {
+        /** Back-compat: the original tags-only shape (extra OFF fields default to null). */
+        public OpenFoodFactsRow(String code, String productName, String brands, String categoryTags) {
+            this(code, productName, brands, categoryTags, null, null, null, null, null);
+        }
+    }
 
     public record EanImportRequest(
             String ean,
             String genericName,
             String brand,
             ProductCategory category,
-            EanCatalogSource source) {}
+            EanCatalogSource source,
+            String categorySlug,
+            String categoriesRaw,
+            String imageUrl,
+            String quantity,
+            String labelsTags,
+            String nutriscore,
+            Integer novaGroup) {
+        /** Back-compat: the original 5-field shape (new taxonomy/OFF fields default to null). */
+        public EanImportRequest(String ean, String genericName, String brand,
+                                ProductCategory category, EanCatalogSource source) {
+            this(ean, genericName, brand, category, source, null, null, null, null, null, null, null);
+        }
+    }
 
     public record BulkImportOutcome(int imported, int skipped) {}
 }

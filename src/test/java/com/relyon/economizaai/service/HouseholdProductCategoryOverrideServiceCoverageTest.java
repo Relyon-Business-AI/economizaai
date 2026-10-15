@@ -7,6 +7,7 @@ import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.HouseholdProductCategoryOverrideRepository;
+import com.relyon.economizaai.service.cache.HouseholdCacheGen;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -30,6 +31,7 @@ import static org.mockito.Mockito.when;
 class HouseholdProductCategoryOverrideServiceCoverageTest {
 
     @Mock private HouseholdProductCategoryOverrideRepository overrideRepository;
+    @Mock private HouseholdCacheGen householdCacheGen;
     @InjectMocks private HouseholdProductCategoryOverrideService service;
 
     private User user() {

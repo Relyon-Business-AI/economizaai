@@ -6,9 +6,7 @@ import com.relyon.economizaai.dto.response.SpendInsightsResponse;
 import com.relyon.economizaai.dto.response.SpendInsightsResponse.CategoryBucket;
 import com.relyon.economizaai.exception.ProductNotFoundException;
 import com.relyon.economizaai.model.User;
-import com.relyon.economizaai.model.enums.CategoryView;
 import com.relyon.economizaai.model.enums.MarketScope;
-import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.config.CachingConfig;
 import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.repository.ProductRepository;
@@ -17,6 +15,7 @@ import com.relyon.economizaai.service.geo.MerchantSupportGate;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,7 +39,6 @@ public class InsightsService {
 
     private static final LocalDateTime EPOCH_FLOOR = LocalDateTime.of(1900, Month.JANUARY, 1, 0, 0);
     private static final LocalDateTime EPOCH_CEIL = LocalDateTime.of(2999, Month.DECEMBER, 31, 23, 59, 59);
-    private static final String ENUM_PREFIX = "enum:";
 
     private final InsightsRepository insightsRepository;
     private final ProductRepository productRepository;
@@ -48,6 +46,7 @@ public class InsightsService {
     private final HouseholdProductCategoryOverrideService categoryOverrideService;
     private final SubscriptionGateService subscriptionGate;
     private final HouseholdProductAliasService householdProductAliasService;
+    private final CategoryResolver categoryResolver;
 
     /** Backwards-compatible entry point — every segment (ALL scope). */
     @Transactional(readOnly = true)
@@ -57,7 +56,7 @@ public class InsightsService {
 
     @Transactional(readOnly = true)
     @Cacheable(value = CachingConfig.INSIGHTS_SPEND_CACHE,
-            key = "#user.household.id + ':' + @householdCacheGen.get(#user.household.id) + ':' + #user.subscriptionTier + ':' + #scope + ':' + #from + ':' + #to")
+            key = "#user.household.id + ':' + @householdCacheGen.get(#user.household.id) + ':' + #user.subscriptionTier + ':' + #scope + ':' + #from + ':' + #to + ':' + T(org.springframework.context.i18n.LocaleContextHolder).getLocale().getLanguage()")
     public SpendInsightsResponse spend(User user, LocalDateTime from, LocalDateTime to, MarketScope scope) {
         var householdId = user.getHousehold().getId();
         // FREE tier: clamp the lower bound to the allowed history window. Tier is
@@ -147,12 +146,57 @@ public class InsightsService {
     private List<CategoryBucket> buildCategoryBuckets(UUID householdId,
                                                       LocalDateTime fromBound, LocalDateTime toBound,
                                                       String scope, List<String> cnpjs) {
-        return insightsRepository.spendByCategory(householdId, fromBound, toBound, scope, cnpjs).stream()
-                .map(row -> SpendInsightsResponse.CategoryBucket.ofEnum(
-                        (ProductCategory) row[0],
-                        toBigDecimal(row[1]),
-                        ((Number) row[2]).longValue()))
+        var locale = LocaleContextHolder.getLocale();
+        var rows = insightsRepository.spendByProductNode(householdId, fromBound, toBound, scope, cnpjs);
+        var productIds = rows.stream().map(row -> (UUID) row[0]).filter(Objects::nonNull).distinct().toList();
+        var effective = categoryOverrideService.effectiveCategoryByProduct(householdId, productIds);
+
+        var byKey = new LinkedHashMap<String, BucketAccumulator>();
+        for (var row : rows) {
+            var productId = (UUID) row[0];
+            var globalNodeId = (UUID) row[1];
+            var override = productId != null ? effective.get(productId) : null;
+            String key, slug, label, parentSlug, icon, color;
+            if (override != null) {
+                key = override.key(); slug = override.slug(); label = override.label();
+                parentSlug = override.parentSlug(); icon = override.icon(); color = override.color();
+            } else {
+                slug = globalNodeId != null ? categoryResolver.slugForId(globalNodeId) : null;
+                label = globalNodeId != null ? categoryResolver.labelFor(globalNodeId, locale) : null;
+                key = slug; parentSlug = null; icon = null; color = null;
+            }
+            if (key == null) { key = "outros"; slug = "outros"; label = "en".equals(locale.getLanguage()) ? "Other" : "Outros"; }
+            if (label == null) label = slug;
+            var finalSlug = slug; var finalLabel = label; var finalParent = parentSlug;
+            var finalIcon = icon; var finalColor = color;
+            byKey.computeIfAbsent(key, ignored -> new BucketAccumulator(finalSlug, finalLabel, finalParent, finalIcon, finalColor))
+                    .add(toBigDecimal(row[2]), ((Number) row[3]).longValue());
+        }
+        return byKey.values().stream()
+                .sorted(Comparator.comparing(BucketAccumulator::total).reversed())
+                .map(BucketAccumulator::toBucket)
                 .toList();
+    }
+
+    /** Accumulates spend per EFFECTIVE category (taxonomy node or household custom). */
+    private static final class BucketAccumulator {
+        private final String slug;
+        private final String label;
+        private final String parentSlug;
+        private final String icon;
+        private final String color;
+        private BigDecimal total = BigDecimal.ZERO;
+        private long itemCount = 0;
+        BucketAccumulator(String slug, String label, String parentSlug, String icon, String color) {
+            this.slug = slug; this.label = label; this.parentSlug = parentSlug; this.icon = icon; this.color = color;
+        }
+        void add(BigDecimal amount, long count) { total = total.add(amount); itemCount += count; }
+        BigDecimal total() { return total; }
+        CategoryBucket toBucket() {
+            return (icon != null || color != null || parentSlug != null)
+                    ? CategoryBucket.ofCustom(slug, label, parentSlug, icon, color, total, itemCount)
+                    : CategoryBucket.ofNode(slug, label, total, itemCount);
+        }
     }
 
     /** Index receipt-level discount rows by a bucket key for O(1) lookup when merging into spend buckets. */
@@ -204,105 +248,6 @@ public class InsightsService {
                 .limit(Math.max(0, limit))
                 .map(MarketDiscountResponse::from)
                 .toList();
-    }
-
-    /** Backwards-compatible entry point — uses the default HOUSEHOLD lens, ALL scope. */
-    @Transactional(readOnly = true)
-    public List<CategoryBucket> topCategories(User user, LocalDateTime from, LocalDateTime to, int limit) {
-        return topCategories(user, from, to, limit, CategoryView.HOUSEHOLD, MarketScope.ALL);
-    }
-
-    @Transactional(readOnly = true)
-    public List<CategoryBucket> topCategories(User user, LocalDateTime from, LocalDateTime to,
-                                              int limit, CategoryView categoryView) {
-        return topCategories(user, from, to, limit, categoryView, MarketScope.ALL);
-    }
-
-    @Transactional(readOnly = true)
-    public List<CategoryBucket> topCategories(User user, LocalDateTime from, LocalDateTime to,
-                                              int limit, CategoryView categoryView, MarketScope scope) {
-        var safeLimit = Math.max(0, limit);
-        if (categoryView == CategoryView.GLOBAL) {
-            return spend(user, from, to, scope).byCategory().stream().limit(safeLimit).toList();
-        }
-        return householdCategoryBuckets(user, from, to, scope).stream().limit(safeLimit).toList();
-    }
-
-    /**
-     * HOUSEHOLD-lens category buckets: each product counts once, under its
-     * EFFECTIVE category. We pull product-granularity spend and re-bucket in code
-     * by the override label (custom name / corrected enum) or the global enum —
-     * correct and free of the double-counting a SQL group-by-p.category would
-     * cause once overrides exist.
-     */
-    private List<CategoryBucket> householdCategoryBuckets(User user, LocalDateTime from, LocalDateTime to, MarketScope scope) {
-        var householdId = user.getHousehold().getId();
-        from = subscriptionGate.clampFrom(user, from);
-        var fromBound = from != null ? from : EPOCH_FLOOR;
-        var toBound = to != null ? to : EPOCH_CEIL;
-        var rows = insightsRepository.spendByProduct(householdId, fromBound, toBound, scope.name(), scopeCnpjs(householdId, scope));
-        var productIds = rows.stream()
-                .map(row -> (UUID) row[0])
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
-        var overrides = categoryOverrideService.overrideKeysByProduct(householdId, productIds);
-
-        var accumulators = new LinkedHashMap<String, CategoryAccumulator>();
-        for (var row : rows) {
-            var productId = (UUID) row[0];
-            var globalCategory = (ProductCategory) row[1];
-            var total = toBigDecimal(row[2]);
-            var itemCount = ((Number) row[3]).longValue();
-            var override = productId != null ? overrides.get(productId) : null;
-            var categoryName = globalCategory != null ? globalCategory.name() : ProductCategory.OTHER.name();
-            var label = override != null ? override.label() : categoryName;
-            // Discriminated bucket key so a custom category named like an enum doesn't merge.
-            var bucketKey = override != null ? override.key() : ENUM_PREFIX + categoryName;
-            // Derive the enum category from the (collision-free) key, not the label: a
-            // custom bucket carries a null enum even when its name matches one.
-            var effectiveCategory = categoryFromKey(bucketKey);
-            accumulators.computeIfAbsent(bucketKey, key -> new CategoryAccumulator(effectiveCategory, label))
-                    .add(total, itemCount);
-        }
-        return accumulators.values().stream()
-                .map(CategoryAccumulator::toBucket)
-                .sorted(Comparator.comparing(CategoryBucket::total).reversed())
-                .toList();
-    }
-
-    /**
-     * The enum category a discriminated bucket key maps to. A {@code custom:...} key
-     * has no enum (returns null); an {@code enum:NAME} key resolves to that enum.
-     */
-    private static ProductCategory categoryFromKey(String bucketKey) {
-        if (!bucketKey.startsWith(ENUM_PREFIX)) return null;
-        var name = bucketKey.substring(ENUM_PREFIX.length());
-        for (var category : ProductCategory.values()) {
-            if (category.name().equals(name)) return category;
-        }
-        return null;
-    }
-
-    private static final class CategoryAccumulator {
-        private final ProductCategory category;
-        private final String label;
-        private BigDecimal total = BigDecimal.ZERO;
-        private long itemCount = 0;
-
-        CategoryAccumulator(ProductCategory category, String label) {
-            this.category = category;
-            this.label = label;
-        }
-
-        void add(BigDecimal amount, long items) {
-            total = total.add(amount);
-            itemCount += items;
-        }
-
-        CategoryBucket toBucket() {
-            return new CategoryBucket(category, label, total, itemCount);
-        }
     }
 
     @Transactional(readOnly = true)

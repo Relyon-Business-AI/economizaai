@@ -30,14 +30,24 @@ public record ReceiptItemResponse(
         boolean excludedFromPersonal,
         boolean nfcePromoFlag,
         String category,
-        boolean categorySuggested
+        boolean categorySuggested,
+        // New two-level taxonomy (additive; `category` above keeps the legacy enum
+        // name so the FE picker/icon logic is unchanged). categoryNodeLabel is the
+        // localized fine-category name to DISPLAY; categoryNodeSlug its stable key.
+        // Null when no node resolved OR a household override is in effect.
+        String categoryNodeSlug,
+        String categoryNodeLabel
 ) {
     public static ReceiptItemResponse from(ReceiptItem item) {
-        return from(item, null, false);
+        return from(item, null, false, null, null);
     }
 
     public static ReceiptItemResponse from(ReceiptItem item, String overrideLabel) {
-        return from(item, overrideLabel, false);
+        return from(item, overrideLabel, false, null, null);
+    }
+
+    public static ReceiptItemResponse from(ReceiptItem item, String overrideLabel, boolean suggested) {
+        return from(item, overrideLabel, suggested, null, null);
     }
 
     /**
@@ -54,7 +64,8 @@ public record ReceiptItemResponse(
      *                      than a user choice or confirmed category — the FE
      *                      should render it as a suggestion.
      */
-    public static ReceiptItemResponse from(ReceiptItem item, String overrideLabel, boolean suggested) {
+    public static ReceiptItemResponse from(ReceiptItem item, String overrideLabel, boolean suggested,
+                                           String categoryNodeSlug, String categoryNodeLabel) {
         var friendly = item.getFriendlyDescription();
         var display = friendly != null && !friendly.isBlank() ? friendly : item.getRawDescription();
         var product = item.getProduct();
@@ -63,6 +74,9 @@ public record ReceiptItemResponse(
         var category = overrideLabel != null ? overrideLabel
                 : snapshot != null ? snapshot
                 : liveCategory;
+        // An override is the user's explicit choice — it wins over the node label too.
+        var nodeSlug = overrideLabel != null ? null : categoryNodeSlug;
+        var nodeLabel = overrideLabel != null ? null : categoryNodeLabel;
         return new ReceiptItemResponse(
                 item.getId(),
                 product != null ? product.getId() : null,
@@ -82,7 +96,9 @@ public record ReceiptItemResponse(
                 item.isExcludedFromPersonal(),
                 item.isNfcePromoFlag(),
                 category,
-                suggested
+                suggested,
+                nodeSlug,
+                nodeLabel
         );
     }
 }

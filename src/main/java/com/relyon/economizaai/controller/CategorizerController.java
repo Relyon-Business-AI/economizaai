@@ -18,6 +18,7 @@ import com.relyon.economizaai.service.extraction.CategorizationDebugService;
 import com.relyon.economizaai.service.extraction.CategorizationQualityService;
 import com.relyon.economizaai.service.extraction.EanCatalogService;
 import com.relyon.economizaai.service.extraction.PhraseTokenSimulationService;
+import com.relyon.economizaai.service.extraction.TaxonomyRecategorizationService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -63,6 +64,7 @@ public class CategorizerController {
     private final EanCatalogService eanCatalogService;
     private final BrandAliasPromotionService brandAliasPromotionService;
     private final PhraseTokenSimulationService phraseTokenSimulationService;
+    private final TaxonomyRecategorizationService taxonomyRecategorizationService;
 
     /**
      * Promote user-correction consensus into deterministic knowledge: products
@@ -134,6 +136,28 @@ public class CategorizerController {
     @PostMapping("/auto-promote")
     public ResponseEntity<AutoPromotionService.PromotionOutcome> autoPromote() {
         return ResponseEntity.ok(autoPromotionService.promote());
+    }
+
+    /**
+     * Re-categorizes existing products into the new two-level taxonomy node:
+     * force re-fetches OFF for every product EAN (so catalog rows get the fine
+     * node) then applies {@code ean_catalog.category_id} → {@code products.category_id}.
+     * ADMIN-only. Heavy (one OFF call per distinct EAN) — run deliberately.
+     */
+    @PostMapping("/recategorize-taxonomy")
+    public ResponseEntity<TaxonomyRecategorizationService.RecategorizeResult> recategorizeTaxonomy() {
+        return ResponseEntity.ok(taxonomyRecategorizationService.recategorizeFromEanCatalog());
+    }
+
+    /**
+     * Dry run: measures the keyword classifier's HIGH-confidence precision against the
+     * LLM on a food sample (writes nothing). Use it to decide the hybrid threshold
+     * before a full backlog pass. ADMIN-only.
+     */
+    @GetMapping("/recategorize-taxonomy/calibrate")
+    public ResponseEntity<TaxonomyRecategorizationService.CalibrationResult> calibrateTaxonomy(
+            @RequestParam(defaultValue = "100") int sample) {
+        return ResponseEntity.ok(taxonomyRecategorizationService.calibrate(Math.min(sample, 500)));
     }
 
     /**

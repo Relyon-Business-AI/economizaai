@@ -10,6 +10,7 @@ import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.AiFindingRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.admin.AdminProductService;
 import com.relyon.economizaai.service.extraction.CategorizerAdminService;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +39,7 @@ class AiFindingServiceTest {
     @Mock private AiFindingRepository findingRepository;
     @Mock private CategorizerAdminService categorizerAdminService;
     @Mock private AdminProductService adminProductService;
+    @Mock private CategoryResolver categoryResolver;
     @Mock private ProductRepository productRepository;
     @Mock private ReceiptItemRepository receiptItemRepository;
 
@@ -46,7 +48,7 @@ class AiFindingServiceTest {
     @BeforeEach
     void setUp() {
         service = new AiFindingService(findingRepository, categorizerAdminService,
-                adminProductService, productRepository, receiptItemRepository);
+                adminProductService, categoryResolver, productRepository, receiptItemRepository);
         lenient().when(findingRepository.save(any(AiFinding.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -82,6 +84,34 @@ class AiFindingServiceTest {
         var ufs = service.resolveUfs(finding.getId());
 
         assertEquals(List.of("PE"), ufs);
+    }
+
+    @Test
+    void approveCategory_setsEnumAndFineNode_fromExplicitSlug() {
+        var productId = UUID.randomUUID();
+        var nodeId = UUID.randomUUID();
+        var finding = pending(AiFindingType.SUSPECT_CATEGORY,
+                "{\"productId\":\"" + productId + "\",\"category\":\"MEAT_DAIRY\",\"categoryNodeSlug\":\"queijos\"}");
+        when(categoryResolver.idForSlug("queijos")).thenReturn(nodeId);
+
+        service.approve(finding.getId());
+
+        verify(adminProductService).setCategory(productId, ProductCategory.MEAT_DAIRY);
+        verify(adminProductService).setCategoryNode(productId, nodeId);
+    }
+
+    @Test
+    void approveCategory_fallsBackToEnumDefaultNode_whenNoSlug() {
+        var productId = UUID.randomUUID();
+        var defaultNodeId = UUID.randomUUID();
+        var finding = pending(AiFindingType.SUSPECT_CATEGORY,
+                "{\"productId\":\"" + productId + "\",\"category\":\"GROCERIES\"}");
+        when(categoryResolver.idForLegacyEnum(ProductCategory.GROCERIES)).thenReturn(defaultNodeId);
+
+        service.approve(finding.getId());
+
+        verify(adminProductService).setCategory(productId, ProductCategory.GROCERIES);
+        verify(adminProductService).setCategoryNode(productId, defaultNodeId);
     }
 
     @Test

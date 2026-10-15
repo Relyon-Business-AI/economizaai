@@ -10,8 +10,6 @@ import com.relyon.economizaai.model.ProductAlias;
 import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.service.extraction.BrandExtractor;
-import com.relyon.economizaai.service.extraction.ProductExtraction;
-import com.relyon.economizaai.service.extraction.ProductExtractor;
 import com.relyon.economizaai.repository.ConsumptionSnoozeRepository;
 import com.relyon.economizaai.repository.HouseholdProductAliasRepository;
 import com.relyon.economizaai.repository.ManualPurchaseRepository;
@@ -53,7 +51,6 @@ class AdminProductServiceTest {
     @Mock private ShoppingListItemRepository shoppingListItemRepository;
     @Mock private HouseholdProductAliasRepository householdProductAliasRepository;
     @Mock private ConsumptionSnoozeRepository consumptionSnoozeRepository;
-    @Mock private ProductExtractor productExtractor;
     @Mock private BrandExtractor brandExtractor;
 
     @InjectMocks private AdminProductService service;
@@ -61,10 +58,6 @@ class AdminProductServiceTest {
     private Product product(String name, ProductCategory current, CategorizationSource source) {
         return Product.builder().id(UUID.randomUUID()).normalizedName(name)
                 .category(current).categorizationSource(source).build();
-    }
-
-    private ProductExtraction extracted(ProductCategory category, CategorizationSource source) {
-        return new ProductExtraction(null, null, null, null, category, source);
     }
 
     @Test
@@ -134,44 +127,6 @@ class AdminProductServiceTest {
 
         assertEquals(1, page.getTotalElements());
         assertEquals(ProductCategory.GROCERIES, page.getContent().get(0).category());
-    }
-
-    @Test
-    void recategorizeReport_splitsDictionaryAndFlagsUserOverrides() {
-        var dictFix = product("LIMP VEJA", null, CategorizationSource.NONE);
-        var userLocked = product("ABS", ProductCategory.PERSONAL_CARE, CategorizationSource.USER);
-        var ok = product("ARROZ", ProductCategory.GROCERIES, CategorizationSource.DICTIONARY);
-        when(productRepository.findAll()).thenReturn(List.of(dictFix, userLocked, ok));
-        when(productExtractor.extract("LIMP VEJA")).thenReturn(extracted(ProductCategory.CLEANING, CategorizationSource.DICTIONARY));
-        when(productExtractor.extract("ABS")).thenReturn(extracted(ProductCategory.BAKERY, CategorizationSource.DICTIONARY));
-        when(productExtractor.extract("ARROZ")).thenReturn(extracted(ProductCategory.GROCERIES, CategorizationSource.DICTIONARY));
-
-        var report = service.recategorizeReport();
-
-        assertEquals(2, report.mismatchCount());
-        assertEquals(1, report.applicableFromDictionary());
-        assertEquals(1, report.skippedUserOverrides());
-    }
-
-    @Test
-    void recategorizeApply_appliesDictionarySkipsUserAndNull() {
-        var dictFix = product("LIMP VEJA", null, CategorizationSource.NONE);
-        var userLocked = product("ABS", ProductCategory.PERSONAL_CARE, CategorizationSource.USER);
-        var noSuggestion = product("XYZ", ProductCategory.BEVERAGES, CategorizationSource.DICTIONARY);
-        when(productRepository.findAll()).thenReturn(List.of(dictFix, userLocked, noSuggestion));
-        when(productExtractor.extract("LIMP VEJA")).thenReturn(extracted(ProductCategory.CLEANING, CategorizationSource.DICTIONARY));
-        when(productExtractor.extract("ABS")).thenReturn(extracted(ProductCategory.BAKERY, CategorizationSource.DICTIONARY));
-        when(productExtractor.extract("XYZ")).thenReturn(extracted(null, CategorizationSource.NONE));
-
-        var result = service.recategorizeApply();
-
-        assertEquals(1, result.updated());
-        assertEquals(1, result.skippedUserOverrides());
-        assertEquals(1, result.unchanged());
-        assertEquals(ProductCategory.CLEANING, dictFix.getCategory());
-        assertEquals(CategorizationSource.DICTIONARY, dictFix.getCategorizationSource());
-        assertEquals(ProductCategory.PERSONAL_CARE, userLocked.getCategory(), "USER override untouched");
-        assertEquals(ProductCategory.BEVERAGES, noSuggestion.getCategory(), "null suggestion not downgraded");
     }
 
     @Test

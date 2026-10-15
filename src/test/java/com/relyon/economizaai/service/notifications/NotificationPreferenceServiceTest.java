@@ -18,7 +18,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -71,17 +70,16 @@ class NotificationPreferenceServiceTest {
     }
 
     @Test
-    void updateCreatesNewPreferenceWhenNoneExists() {
+    void updateCreatesPreferenceRowForType() {
         var user = user();
         var request = new UpdateNotificationPreferencesRequest(List.of(
                 new UpdateNotificationPreferencesRequest.Preference(
                         NotificationType.PRICE_DROP, NotificationChannel.EMAIL)));
-        when(preferenceRepository.findByUserIdAndType(user.getId(), NotificationType.PRICE_DROP))
-                .thenReturn(Optional.empty());
         when(preferenceRepository.findAllByUserId(user.getId())).thenReturn(List.of());
 
         preferenceService.update(user, request);
 
+        verify(preferenceRepository).deleteByUserIdAndType(user.getId(), NotificationType.PRICE_DROP);
         var captor = ArgumentCaptor.forClass(NotificationPreference.class);
         verify(preferenceRepository).save(captor.capture());
         var saved = captor.getValue();
@@ -91,39 +89,43 @@ class NotificationPreferenceServiceTest {
     }
 
     @Test
-    void updateMutatesChannelOnExistingPreference() {
+    void updateReplacesTheWholeChannelSetForAType() {
         var user = user();
-        var existing = NotificationPreference.builder().user(user)
-                .type(NotificationType.PROMO_PERSONAL).channel(NotificationChannel.PUSH).build();
+        // user mutes the type → request carries a single NONE for it
         var request = new UpdateNotificationPreferencesRequest(List.of(
                 new UpdateNotificationPreferencesRequest.Preference(
                         NotificationType.PROMO_PERSONAL, NotificationChannel.NONE)));
-        when(preferenceRepository.findByUserIdAndType(user.getId(), NotificationType.PROMO_PERSONAL))
-                .thenReturn(Optional.of(existing));
-        when(preferenceRepository.findAllByUserId(user.getId())).thenReturn(List.of(existing));
+        when(preferenceRepository.findAllByUserId(user.getId())).thenReturn(List.of(
+                NotificationPreference.builder().user(user)
+                        .type(NotificationType.PROMO_PERSONAL).channel(NotificationChannel.NONE).build()));
 
         var result = preferenceService.update(user, request);
 
-        assertEquals(NotificationChannel.NONE, existing.getChannel());
-        verify(preferenceRepository).save(existing);
+        verify(preferenceRepository).deleteByUserIdAndType(user.getId(), NotificationType.PROMO_PERSONAL);
+        var captor = ArgumentCaptor.forClass(NotificationPreference.class);
+        verify(preferenceRepository).save(captor.capture());
+        assertEquals(NotificationChannel.NONE, captor.getValue().getChannel());
         assertEquals(1, result.size());
-        assertEquals(NotificationChannel.NONE, result.get(0).channel());
     }
 
     @Test
-    void updatePersistsEveryPreferenceInRequest() {
+    void updatePersistsMultipleChannelsPerTypeAndAcrossTypes() {
         var user = user();
+        // multi-channel for one type (push + email) + another type
         var request = new UpdateNotificationPreferencesRequest(List.of(
                 new UpdateNotificationPreferencesRequest.Preference(
                         NotificationType.PROMO_PERSONAL, NotificationChannel.PUSH),
                 new UpdateNotificationPreferencesRequest.Preference(
+                        NotificationType.PROMO_PERSONAL, NotificationChannel.EMAIL),
+                new UpdateNotificationPreferencesRequest.Preference(
                         NotificationType.PRICE_DROP, NotificationChannel.EMAIL)));
-        when(preferenceRepository.findByUserIdAndType(any(), any())).thenReturn(Optional.empty());
         when(preferenceRepository.findAllByUserId(user.getId())).thenReturn(List.of());
 
         preferenceService.update(user, request);
 
-        verify(preferenceRepository, times(2)).save(any());
+        verify(preferenceRepository).deleteByUserIdAndType(user.getId(), NotificationType.PROMO_PERSONAL);
+        verify(preferenceRepository).deleteByUserIdAndType(user.getId(), NotificationType.PRICE_DROP);
+        verify(preferenceRepository, times(3)).save(any()); // push+email for promo, email for price_drop
     }
 
     @Test

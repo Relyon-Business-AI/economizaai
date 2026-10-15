@@ -36,7 +36,8 @@ public class OpenFoodFactsApiClient {
 
     private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE =
             new ParameterizedTypeReference<>() {};
-    private static final String FIELDS = "code,product_name,brands,categories_tags";
+    private static final String FIELDS =
+            "code,product_name,brands,categories_tags,image_url,quantity,labels_tags,nutriscore_grade,nova_group";
 
     private final RestClient restClient;
     private final boolean enabled;
@@ -81,16 +82,18 @@ public class OpenFoodFactsApiClient {
                 var status = body.get("status");
                 if (!(status instanceof Number number) || number.intValue() != 1) continue;
                 if (!(body.get("product") instanceof Map<?, ?> product)) continue;
-                var tags = product.get("categories_tags");
-                var categoryTags = tags instanceof List<?> list
-                        ? String.join(",", list.stream().map(String::valueOf).toList())
-                        : String.valueOf(tags == null ? "" : tags);
+                var categoryTags = joinTags(product.get("categories_tags"));
                 log.info("off.api.hit ean={} host={}", ean, host.trim());
                 return Optional.of(new OpenFoodFactsRow(
                         ean,
                         asString(product.get("product_name")),
                         asString(product.get("brands")),
-                        categoryTags));
+                        categoryTags,
+                        asString(product.get("image_url")),
+                        asString(product.get("quantity")),
+                        joinTags(product.get("labels_tags")),
+                        asString(product.get("nutriscore_grade")),
+                        asInteger(product.get("nova_group"))));
             } catch (RuntimeException ex) {
                 log.debug("off.api.error ean={} host={} reason={}", ean, host.trim(), ex.getClass().getSimpleName());
             }
@@ -105,5 +108,25 @@ public class OpenFoodFactsApiClient {
 
     private static String asString(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    /** OFF tag fields come as a JSON array; flatten to a comma-joined string. */
+    private static String joinTags(Object value) {
+        if (value instanceof List<?> list) {
+            return String.join(",", list.stream().map(String::valueOf).toList());
+        }
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private static Integer asInteger(Object value) {
+        if (value instanceof Number number) return number.intValue();
+        if (value instanceof String text && !text.isBlank()) {
+            try {
+                return Integer.valueOf(text.trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 }

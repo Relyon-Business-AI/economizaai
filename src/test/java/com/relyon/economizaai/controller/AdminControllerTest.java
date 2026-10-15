@@ -20,16 +20,13 @@ import com.relyon.economizaai.dto.response.AdminReceiptSummaryResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptStatsResponse;
 import com.relyon.economizaai.dto.response.ReceiptResponse;
 import com.relyon.economizaai.dto.response.ReceiptSummaryResponse;
-import com.relyon.economizaai.dto.response.RecategorizeReportResponse;
 import com.relyon.economizaai.dto.response.NotificationEffectivenessResponse;
 import com.relyon.economizaai.dto.response.RelevanceReportResponse;
-import com.relyon.economizaai.dto.response.RecategorizeResultResponse;
 import com.relyon.economizaai.exception.ProductNotFoundException;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
 import com.relyon.economizaai.exception.UserNotFoundException;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
-import com.relyon.economizaai.model.enums.CategorizationQualityTrigger;
 import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.model.enums.Platform;
@@ -49,11 +46,12 @@ import com.relyon.economizaai.service.analytics.MarketingDashboardService;
 import com.relyon.economizaai.service.merchant.MerchantClaimService;
 import com.relyon.economizaai.service.admin.AdminNotificationEffectivenessService;
 import com.relyon.economizaai.service.admin.AdminNotificationService;
+import com.relyon.economizaai.service.CategoryResolver;
+import com.relyon.economizaai.service.notifications.OperationalAlertService;
 import com.relyon.economizaai.service.admin.AdminProductService;
 import com.relyon.economizaai.service.admin.AdminDevService;
 import com.relyon.economizaai.service.admin.AdminReceiptService;
 import com.relyon.economizaai.service.admin.AdminUserService;
-import com.relyon.economizaai.service.extraction.CategorizationQualityService;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.notifications.RelevanceReportService;
 import com.relyon.economizaai.service.analytics.AdminAnalyticsService;
@@ -130,7 +128,6 @@ class AdminControllerTest {
     @MockitoBean private AdminMerchantService adminMerchantService;
     @MockitoBean private AdminLlmService adminLlmService;
     @MockitoBean private AdminProductService adminProductService;
-    @MockitoBean private CategorizationQualityService categorizationQualityService;
     @MockitoBean private MarketLocationService marketLocationService;
     @MockitoBean private RelevanceReportService relevanceReportService;
     @MockitoBean private CostReportService costReportService;
@@ -144,6 +141,8 @@ class AdminControllerTest {
     @MockitoBean private StateCoverageService stateCoverageService;
     @MockitoBean private SefazIngestionService sefazIngestionService;
     @MockitoBean private AdminDevService adminDevService;
+    @MockitoBean private CategoryResolver categoryResolver;
+    @MockitoBean private OperationalAlertService operationalAlertService;
     @MockitoBean private JwtService jwtService;
     @MockitoBean private UserDetailsService userDetailsService;
     @MockitoBean private LocalizedMessageService localizedMessageService;
@@ -168,7 +167,7 @@ class AdminControllerTest {
                 List.of(new ReceiptItemResponse(
                         UUID.randomUUID(), UUID.randomUUID(), 1, "ARROZ 5KG", null, "ARROZ 5KG",
                         "7891234567890", new BigDecimal("1"), "UN",
-                        new BigDecimal("28.90"), new BigDecimal("28.90"), null, null, false, false, false, false, null, false)));
+                        new BigDecimal("28.90"), new BigDecimal("28.90"), null, null, false, false, false, false, null, false, null, null)));
     }
 
     private ProductResponse sampleProduct() {
@@ -807,41 +806,4 @@ class AdminControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
-    // --- products/recategorize report (GET) ---
-
-    @Test
-    void recategorizeReport_returnsDryRunReport() throws Exception {
-        when(adminProductService.recategorizeReport())
-                .thenReturn(new RecategorizeReportResponse(100L, 3, 1, 1, List.of()));
-
-        mockMvc.perform(get("/api/v1/admin/products/recategorize")
-                        .with(SecurityMockMvcRequestPostProcessors.user(adminUser())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.mismatchCount").value(3))
-                .andExpect(jsonPath("$.applicableFromDictionary").value(1));
-    }
-
-    // --- products/recategorize apply (POST) ---
-
-    @Test
-    void recategorizeApply_appliesAndRecordsQualitySnapshot() throws Exception {
-        when(adminProductService.recategorizeApply())
-                .thenReturn(new RecategorizeResultResponse(100L, 5, 1, 94));
-
-        mockMvc.perform(post("/api/v1/admin/products/recategorize")
-                        .with(SecurityMockMvcRequestPostProcessors.user(adminUser())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.updated").value(5));
-
-        verify(adminProductService).recategorizeApply();
-        verify(categorizationQualityService).measureAndRecord(CategorizationQualityTrigger.BACKFILL);
-    }
-
-    @Test
-    void recategorizeApply_forbiddenForNonAdmin() throws Exception {
-        mockMvc.perform(post("/api/v1/admin/products/recategorize")
-                        .with(SecurityMockMvcRequestPostProcessors.user(regularUser())))
-                .andExpect(status().isForbidden());
-        verify(adminProductService, never()).recategorizeApply();
-    }
 }

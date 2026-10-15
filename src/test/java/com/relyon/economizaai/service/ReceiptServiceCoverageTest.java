@@ -264,7 +264,7 @@ class ReceiptServiceCoverageTest {
         var receiptId = receipt.getId();
         var missingItemId = UUID.randomUUID();
         assertThrows(ReceiptItemNotFoundException.class,
-                () -> receiptService.updateItemCategory(user, receiptId, missingItemId, ProductCategory.GROCERIES));
+                () -> receiptService.updateItemCategory(user, receiptId, missingItemId, ProductCategory.GROCERIES, null, null));
         verify(categoryOverrideService, never()).setOverride(any(), any(), any());
     }
 

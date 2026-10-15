@@ -16,6 +16,110 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-15 — Taxonomia: consistência grosso↔fino, categoria custom com PATCH + nome único
+
+Correções em cima da leva de taxonomia (ainda não foi pra prod — vai junto).
+
+- **Categoria/subcategoria do produto agora nunca se contradizem.** O campo grosso
+  (`category`, enum/grupo) e o fino (`category_id`, nó de 2 níveis) eram escritos
+  separados e divergiam (consenso/edição mexiam só num). Agora um único ponto de
+  reconciliação roda em todo save de produto: o nó fino sempre vive **dentro** do grupo
+  do enum (subcategoria do grupo certo é preservada; nó stale de outro grupo cai pro
+  grupo; enum nulo limpa o nó). **FE:** nenhum contrato mudou, mas `category_id`/subcategoria
+  ficam confiáveis — pode confiar neles pra exibição e filtro.
+- **Refino na entrada da nota.** Quando o dicionário só resolve o **grupo**, o
+  classificador por palavra-chave agora **refina** para a subcategoria (dentro do mesmo
+  grupo). Notas novas passam a sair com subcategoria com muito mais frequência.
+- **`POST /categories` não é mais idempotente por nome** → agora **`409`
+  `customcategory.name.duplicate`** se o nome colidir com uma custom do household **ou**
+  com uma categoria/subcategoria embutida (case-insensitive).
+- **Novo `PATCH /api/v1/categories/{id}`** para editar nome/ícone/cor/pai por id (o antigo
+  "re-POST com o mesmo nome edita" acabou). Campos opcionais; pai só (re)definido se vier.
+- **Nesting travado em 2 níveis.** Pai tem de ser de topo e a categoria não pode ter
+  subcategorias próprias → impede profundidade >2 e ciclos (`400`
+  `customcategory.nesting.invalid`).
+- **Segurança:** `GET /api/v1/categorizer/consensus` agora é **ADMIN** (era acessível a
+  qualquer autenticado) — alinhado aos irmãos `/consensus/audit`, `/dictionary/*`.
+
+---
+
+## 2026-10-14 — Taxonomia redonda: gráfico override-aware, categoria custom c/ visual, motor por nó
+
+Leva grande (vai pra prod junta). Tudo aditivo — o enum legado continua válido.
+
+**"Por categoria" agora reflete correções (override-aware).** `/insights/spend` (e
+`/insights/query`) agrupam pela categoria **efetiva do household**: ao corrigir um item
+(folha/enum/custom) o gráfico muda na hora (antes agrupava pelo `category_id` global e
+ignorava a correção). Cache invalida em `updateItemCategory` e no migrate de categoria.
+
+**`CategoryBucket` ganhou `parentSlug`, `icon`, `color`** (em `/insights/spend` →
+`byCategory`). Preenchidos **só p/ categorias CUSTOM** (slug = `custom:<id>`): a custom
+aparece aninhada no grupo (`parentSlug`) com o ícone/cor escolhidos. Nós da taxonomia
+deixam esses campos null — o FE deriva o grupo pelo slug como antes.
+
+**Categoria custom com ícone + cor + categoria-pai.** `POST /categories` aceita opcionais
+`icon` (Ionicons), `color` (hex) e UM pai: `parentGroupSlug` (categoria embutida) **ou**
+`parentCustomCategoryId` (categoria custom do household) — a custom vira **subcategoria**
+dentro do pai. `CategoryResponse` ganhou `icon`, `color`, `parentSlug`, `parentName`
+(pai custom → `parentSlug="custom:<id>"`).
+
+**`/categories/taxonomy` ordenado categoria → suas subcategorias** (Outros/Não-mercado por
+último). **Rename de contrato:** o booleano `group` do nó virou **`hasSubcategories`**
+(mesmo significado). Vocabulário padronizado: **"categoria"** (nível 1) e **"subcategoria"**
+(nível 2) — "grupo"/"folha" eram jargão interno.
+
+**Admin (não-FE, referência):**
+- NOVO `PATCH /admin/products/{id}/category-node?slug=` (folha fina ao produto) e
+  `GET /admin/products/taxonomy-coverage` (`{total, withLeaf, withoutLeaf}`).
+- `POST /categorizer/dictionary/curated/import` e o override de
+  `POST /categorizer/ai/findings/{id}/approve` aceitam `categoryNodeSlug`.
+- **REMOVIDOS** (morto): `GET`/`POST /admin/products/recategorize` (recategorizador por
+  enum — o scheduler roda a versão taxonomia) e `GET /insights/categories/top` (órfão).
+
+**Motor por nó (dual-write aditivo):** dicionário (curado+aprendido), promoção de consenso
+e a ingestão gravam `products.category_id` (folha) ao lado do enum. Migrations **V104**
+(custom icon/cor/pai), **V105** (dicionário category_id), **V106** (backfill das entradas
+antigas p/ o nó-grupo do enum). Enum segue como camada de compatibilidade — sem regressão.
+
+## 2026-10-14 — Taxonomia de categorias 2 níveis (grupo→folha) começa a aparecer
+
+- Itens de nota (`ReceiptItemResponse`) agora trazem dois campos **aditivos**:
+  `categoryNodeLabel` (nome fino já localizado, ex. "Queijos", "Cervejas") e
+  `categoryNodeSlug` (chave estável p/ ícone/cor). O campo `category` (enum) segue
+  igual — o FE usa o node pra exibir e cai no enum quando ausente. Quando há
+  correção manual do household, o override vence e os campos de node vêm null.
+- Dashboard **"Por categoria"** (lens HOUSEHOLD) passa a agrupar pela folha fina
+  da nova taxonomia (ex. laticínios separados de carnes), com fallback no enum.
+- Admin: `POST /categorizer/recategorize-taxonomy` recategoriza os produtos na
+  taxonomia nova (classificador por nome + OFF). Operacional, não-FE.
+- Enquanto isso o enum legado continua válido em exports/relatórios (sem regressão).
+
+## 2026-10-13 — Preferências de notificação multi-canal (matriz tipo × canal)
+
+- `notification_preferences` passou a aceitar **vários canais por tipo** (antes era 1
+  só). O contrato dos endpoints **não muda de forma** — segue lista de `{ type, channel }`
+  — mas agora dá pra enviar **mais de uma linha por tipo** (ex.: `PROMO_PERSONAL`+`PUSH`
+  e `PROMO_PERSONAL`+`EMAIL` juntos).
+- `PUT /users/me/notification-preferences` agora **substitui o conjunto inteiro de canais**
+  de cada tipo presente no corpo (tipos ausentes ficam intactos).
+- Novo canal **`INBOX`** (lista no app, sempre-ligada, grátis — baseline). Semântica: sem
+  linhas = default (push se tiver token, senão e-mail); `{INBOX}` = só no app; `{INBOX,PUSH,EMAIL}`
+  = app + push + e-mail; `{NONE}` = **mudo total**.
+- Envio dispara em **todos os canais ligados**. WhatsApp **não** entra na matriz por ora
+  (fica no digest). Trava mantida: **FREE = só inbox**; push/e-mail são PRO.
+
+## 2026-10-13 — Correção de categoria do item aceita categoria personalizada
+
+- `PUT /receipts/{id}/items/{itemId}/category` agora aceita **um de dois destinos**:
+  o enum global `{ "category": "MEAT_DAIRY" }` **ou** uma categoria personalizada
+  do household `{ "customCategoryId": "<uuid>" }`. Antes só aceitava o enum — por
+  isso, quando nenhuma das categorias globais servia, o único jeito era jogar em
+  `Outros`. Agora o FE pode (no seletor do item, ao confirmar ou editar) listar
+  as customs de `GET /categories`, criar uma nova inline via `POST /categories` e
+  já atribuí-la ao item sem sair da nota. `400` se vier os dois destinos ou nenhum.
+- Semântica inalterada: segue household-scoped ("evidence, not truth"), não mexe
+  no produto global.
+
 ## 2026-10-13 — Gráfico de pizza no relatório do WhatsApp
 
 - O relatório do WhatsApp (resposta a `CONFIRMAR`/`RELATORIO`) agora vem com uma

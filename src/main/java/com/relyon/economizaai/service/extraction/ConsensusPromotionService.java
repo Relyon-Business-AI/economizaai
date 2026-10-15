@@ -9,6 +9,7 @@ import com.relyon.economizaai.repository.ConsensusGraduationAuditRepository;
 import com.relyon.economizaai.repository.HouseholdProductCategoryOverrideRepository;
 import com.relyon.economizaai.repository.LearnedDictionaryRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -57,6 +58,8 @@ public class ConsensusPromotionService {
     private final LearnedDictionaryRepository learnedRepository;
     private final DictionaryClassifier dictionaryClassifier;
     private final ConsensusGraduationAuditRepository auditRepository;
+    private final CategoryResolver categoryResolver;
+    private final LearnedDictionaryWriteLock learnedDictionaryWriteLock;
 
     // Self-reference so the scheduled trigger's call to @Transactional promote()
     // goes through the Spring proxy. Defaults to `this` for plain unit tests.
@@ -143,6 +146,8 @@ public class ConsensusPromotionService {
             if (product.getCategory() != consensusCategory
                     || product.getCategorizationSource() != CategorizationSource.CONSENSUS) {
                 product.setCategory(consensusCategory);
+                // Fine node reconciled with the winning enum by ProductCategoryNodeListener on save
+                // (preserves a leaf under the winning group, else collapses to it — never a stale leaf).
                 product.setCategorizationSource(CategorizationSource.CONSENSUS);
                 toSave.add(product);
                 auditRows.add(ConsensusGraduationAudit.builder()
@@ -212,21 +217,28 @@ public class ConsensusPromotionService {
     }
 
     private void batchUpsertLearnedTokens(Map<String, ProductCategory> toUpsert) {
-        var existingByToken = learnedRepository.findByNormalizedTokenIn(toUpsert.keySet()).stream()
-                .collect(Collectors.toMap(LearnedDictionaryEntry::getNormalizedToken, Function.identity()));
-        var now = LocalDateTime.now();
-        var toSave = new ArrayList<LearnedDictionaryEntry>();
-        for (var tokenEntry : toUpsert.entrySet()) {
-            var entry = existingByToken.getOrDefault(tokenEntry.getKey(),
-                    LearnedDictionaryEntry.builder()
-                            .normalizedToken(tokenEntry.getKey())
-                            .sampleCount(0)
-                            .build());
-            entry.setCategory(tokenEntry.getValue());
-            entry.setPromotedAt(now);
-            toSave.add(entry);
-        }
-        learnedRepository.saveAll(toSave);
+        // Serialized against AutoPromotionService's upsert (shared lock) so a manual admin run and
+        // the nightly job never both insert the same token and trip the normalized_token UNIQUE.
+        learnedDictionaryWriteLock.runExclusively(() -> {
+            var existingByToken = learnedRepository.findByNormalizedTokenIn(toUpsert.keySet()).stream()
+                    .collect(Collectors.toMap(LearnedDictionaryEntry::getNormalizedToken, Function.identity()));
+            var now = LocalDateTime.now();
+            var toSave = new ArrayList<LearnedDictionaryEntry>();
+            for (var tokenEntry : toUpsert.entrySet()) {
+                var entry = existingByToken.getOrDefault(tokenEntry.getKey(),
+                        LearnedDictionaryEntry.builder()
+                                .normalizedToken(tokenEntry.getKey())
+                                .sampleCount(0)
+                                .build());
+                entry.setCategory(tokenEntry.getValue());
+                // Fase 3: dual-write da folha fina — consenso vota por enum, mapeia pro
+                // nó-grupo default do enum (null-safe).
+                entry.setCategoryId(categoryResolver.idForLegacyEnum(tokenEntry.getValue()));
+                entry.setPromotedAt(now);
+                toSave.add(entry);
+            }
+            learnedRepository.saveAll(toSave);
+        });
     }
 
     private int reloadLearnedEntries() {
@@ -234,7 +246,8 @@ public class ConsensusPromotionService {
         var map = new LinkedHashMap<String, DictionaryClassifier.DictEntry>();
         for (var entry : entries) {
             map.put(entry.getNormalizedToken(), new DictionaryClassifier.DictEntry(
-                    entry.getGenericName(), null, entry.getCategory(), CategorizationSource.LEARNED_DICTIONARY));
+                    entry.getGenericName(), null, entry.getCategory(),
+                    entry.getCategoryId(), CategorizationSource.LEARNED_DICTIONARY));
         }
         dictionaryClassifier.replaceLearnedEntries(map);
         return entries.size();

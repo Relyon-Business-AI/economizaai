@@ -143,6 +143,9 @@ public class ProductService {
                 .genericName(firstNonBlank(request.genericName(), extracted.genericName()))
                 .brand(firstNonBlank(request.brand(), extracted.brand()))
                 .category(category)
+                // Node is kept consistent with the enum by ProductCategoryNodeListener on persist;
+                // we pass the extractor's fine leaf so the listener preserves it (vs collapsing to the group).
+                .categoryId(extracted.categoryId())
                 .unit(blankToNull(request.unit()))
                 .packSize(request.packSize() != null ? request.packSize() : extracted.packSize())
                 .packUnit(firstNonBlank(request.packUnit(), extracted.packUnit()))
@@ -165,6 +168,8 @@ public class ProductService {
         product.setBrand(blankToNull(request.brand()));
         product.setBrandNorm(DescriptionNormalizer.normalizeOrNull(request.brand()));
         product.setCategory(request.category());
+        // Fine node kept in sync with the enum by ProductCategoryNodeListener on update
+        // (preserves a leaf under the right group; a null enum clears the node).
         product.setUnit(blankToNull(request.unit()));
         product.setPackSize(request.packSize());
         product.setPackUnit(blankToNull(request.packUnit()));

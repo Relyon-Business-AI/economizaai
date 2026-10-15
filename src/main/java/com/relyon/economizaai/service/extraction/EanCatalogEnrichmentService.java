@@ -64,12 +64,26 @@ public class EanCatalogEnrichmentService {
      * LIVE_API "checked" marker so they aren't re-queried. Returns rows written.
      */
     public int enrichMissing(Collection<String> eans) {
+        return enrich(eans, true);
+    }
+
+    /**
+     * Re-fetch the given EANs from OFF REGARDLESS of whether they were already
+     * checked — used by the taxonomy re-categorization sweep to backfill the new
+     * fine node (and the extra OFF metadata) onto catalog rows imported before
+     * those columns existed. Heavier than {@link #enrichMissing} (no skip), so
+     * run it deliberately (admin-triggered), not on the ingest hot path.
+     */
+    public int enrichForce(Collection<String> eans) {
+        return enrich(eans, false);
+    }
+
+    private int enrich(Collection<String> eans, boolean skipAlreadyChecked) {
         if (!apiClient.isEnabled() || eans == null || eans.isEmpty()) return 0;
-        var toCheck = eans.stream()
+        var stream = eans.stream()
                 .filter(ean -> ean != null && !ean.isBlank())
-                .distinct()
-                .filter(this::needsLiveCheck)
-                .toList();
+                .distinct();
+        var toCheck = (skipAlreadyChecked ? stream.filter(this::needsLiveCheck) : stream).toList();
         if (toCheck.isEmpty()) return 0;
 
         // Fetch concurrently; a miss becomes a data-less row so the barcode is

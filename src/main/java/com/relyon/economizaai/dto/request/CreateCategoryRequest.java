@@ -2,10 +2,30 @@ package com.relyon.economizaai.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
-/** Create a household custom category (e.g. "Frutas"). */
+import java.util.UUID;
+
+/** Create a household custom category (e.g. "Frutas"), optionally with a visual
+ *  (icon+color) and nested under a built-in taxonomy category OR another custom
+ *  category (at most one parent). */
 public record CreateCategoryRequest(
         @Schema(description = "Display name of the custom category.", example = "Frutas")
-        @NotBlank @Size(max = 60) String name
+        @NotBlank @Size(max = 60) String name,
+
+        @Schema(description = "Ionicons name for the chip/icon.", example = "paw-outline")
+        @Size(max = 40) String icon,
+
+        @Schema(description = "Hex color for the chip.", example = "#F5A623")
+        @Size(max = 9) @Pattern(regexp = "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+                message = "must be a hex color like #F5A623") String color,
+
+        @Schema(description = "Slug of the built-in taxonomy CATEGORY to nest under (null = standalone).",
+                example = "pet")
+        @Size(max = 60) String parentGroupSlug,
+
+        @Schema(description = "Id of a CUSTOM category of the household to nest under "
+                + "(alternative to parentGroupSlug; at most one may be set).")
+        UUID parentCustomCategoryId
 ) {}
