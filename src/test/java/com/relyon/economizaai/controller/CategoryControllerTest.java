@@ -7,6 +7,7 @@ import com.relyon.economizaai.dto.request.MigrateCategoryRequest;
 import com.relyon.economizaai.dto.response.CategoryMigrationResponse;
 import com.relyon.economizaai.dto.response.CategoryResponse;
 import com.relyon.economizaai.exception.CustomCategoryNotFoundException;
+import com.relyon.economizaai.exception.DuplicateCustomCategoryException;
 import com.relyon.economizaai.exception.InvalidCategoryMigrationException;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
@@ -96,6 +97,21 @@ class CategoryControllerTest {
                         .contentType(MediaType.APPLICATION_JSON).content(body)
                         .with(SecurityMockMvcRequestPostProcessors.user(principal())))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void create_duplicateName_returns409() throws Exception {
+        when(customCategoryService.create(any(User.class), any(CreateCategoryRequest.class)))
+                .thenThrow(new DuplicateCustomCategoryException("Frutas"));
+        when(localizedMessageService.translate(any(DuplicateCustomCategoryException.class)))
+                .thenReturn("Já existe uma categoria com o nome \"Frutas\".");
+
+        var body = objectMapper.writeValueAsString(new CreateCategoryRequest("Frutas", null, null, null, null));
+        mockMvc.perform(post("/api/v1/categories")
+                        .contentType(MediaType.APPLICATION_JSON).content(body)
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409));
     }
 
     @Test

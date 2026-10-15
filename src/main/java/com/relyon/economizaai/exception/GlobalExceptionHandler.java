@@ -108,7 +108,7 @@ public class GlobalExceptionHandler {
         return respond(ex, HttpStatus.BAD_REQUEST, "Bad request");
     }
 
-    @ExceptionHandler({ReceiptAlreadyIngestedException.class, ProductAliasConflictException.class, EanConflictException.class, InvalidProductDeletionException.class, AudienceInUseException.class, AudienceNameConflictException.class, WhatsAppOptInRequiredException.class})
+    @ExceptionHandler({ReceiptAlreadyIngestedException.class, ProductAliasConflictException.class, EanConflictException.class, InvalidProductDeletionException.class, AudienceInUseException.class, AudienceNameConflictException.class, WhatsAppOptInRequiredException.class, DuplicateCustomCategoryException.class})
     public ResponseEntity<ErrorResponse> handleConflict(DomainException ex) {
         return respond(ex, HttpStatus.CONFLICT, "Conflict");
     }
