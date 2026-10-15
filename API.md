@@ -844,6 +844,8 @@ GET /api/v1/items
     &marketCnpj=93015006005182        ← list-typed (repeat for OR)
     &marketCnpjRoot=93015006          ← chain-level, list-typed
     &category=MEAT_DAIRY              ← list-typed (repeat for OR)
+    &categorySlug=carnes              ← taxonomy node (category OR subcategory); a category slug also matches its subcategories
+    &customCategoryId=<uuid>          ← items the household moved into a custom category
     &productId=<uuid>                 ← list-typed
     &ean=7891234567890                ← list-typed
     &minReceiptTotal=100.00           ← receipt-total range
@@ -907,7 +909,8 @@ Households can define their own categories ("Frutas", "Bebê", …) and move pro
 ```
 GET    /api/v1/categories                → categories this household can use
 GET    /api/v1/categories/taxonomy       → árvore 2 níveis (categoria→subcategoria), localizada; ordenada categoria→suas subcategorias
-POST   /api/v1/categories                { "name":"Frutas", "icon"?, "color"?, "parentGroupSlug"?, "parentCustomCategoryId"? } → 201, idempotent no nome
+POST   /api/v1/categories                { "name":"Frutas", "icon"?, "color"?, "parentGroupSlug"?, "parentCustomCategoryId"? } → 201
+PATCH  /api/v1/categories/{id}           { "name"?, "icon"?, "color"?, "parentGroupSlug"?, "parentCustomCategoryId"? } → 200 (edita por id)
 DELETE /api/v1/categories/{id}           → 204, removes a custom category (its overrides revert)
 POST   /api/v1/categories/migrate        { "productIds":[...], "targetCategory":..., "targetCustomCategoryId":... }
 ```
@@ -920,8 +923,17 @@ POST   /api/v1/categories/migrate        { "productIds":[...], "targetCategory":
 `"paw-outline"`), **`color`** (hex) e UM pai (no máximo um): **`parentGroupSlug`** (slug de
 uma **CATEGORIA** embutida da taxonomia) **ou** **`parentCustomCategoryId`** (id de uma
 categoria **custom** do household) — a custom vira uma **subcategoria** dentro do pai,
-aninhada no gráfico. Sem pai = categoria principal. Re-enviar um nome existente **edita** o
-estilo/pai. `parentGroupSlug` precisa ser uma categoria embutida (não subcategoria), senão `400`.
+aninhada no gráfico. Sem pai = categoria principal. `parentGroupSlug` precisa ser uma
+categoria embutida (não subcategoria), senão `400`.
+
+> **Mudou (2026-10-15):** o `POST` **não é mais idempotente por nome** — criar com um nome
+> que já existe (entre as custom do household **ou** uma categoria/subcategoria embutida,
+> case-insensitive) agora retorna **`409` `customcategory.name.duplicate`**. Para **editar**
+> ícone/cor/pai/nome use o novo **`PATCH /categories/{id}`** (campos todos opcionais; um
+> campo null fica inalterado; o pai só é (re)definido quando um campo de pai vem no corpo).
+> **Nesting travado em 2 níveis:** o pai (embutido ou custom) tem de ser de **topo** e a
+> categoria editada não pode ter subcategorias próprias; violar (profundidade >2, ciclo,
+> auto-pai) → **`400` `customcategory.nesting.invalid`**.
 
 `GET /categories` returns the 9 global enums **and** the household's custom ones. Buckets
 custom carregam o visual + o grupo-pai (`icon`/`color`/`parentSlug`/`parentName`); nos enums
@@ -933,10 +945,14 @@ esses campos vêm null:
 ]
 ```
 
+> **`parentSlug`/`parentName` são só para aninhar na exibição** (mostrar a custom dentro do
+> grupo-pai). O gasto de uma custom **não** é somado também no pai — no `/insights/spend` a
+> custom vem como bucket próprio com `parentSlug`; **não some pai + filhas** ou conta dobrado.
+
 `GET /categories/taxonomy` retorna a árvore 2 níveis já **ordenada grupo → suas folhas**
 em ordem lógica (Hortifrúti → … → **Outros por último**; "Não-mercado" por último). Cada nó:
-`{ slug, name, parentSlug, group }` (`group=true` p/ grupo). Use os `slug` de folha em
-`categoryNodeSlug` (correção de item, regra de dicionário, aprovar achado).
+`{ slug, name, parentSlug, hasSubcategories }` (`hasSubcategories=true` p/ grupo). Use os `slug`
+de folha em `categoryNodeSlug` (correção de item, regra de dicionário, aprovar achado).
 
 `POST /categories/migrate` moves the selected products into the target. Provide **exactly one** of `targetCategory` (a global enum) or `targetCustomCategoryId` (a custom-category uuid) — `400 customcategory.migration.invalid` otherwise.
 ```json

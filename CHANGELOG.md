@@ -16,6 +16,33 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-15 — Taxonomia: consistência grosso↔fino, categoria custom com PATCH + nome único
+
+Correções em cima da leva de taxonomia (ainda não foi pra prod — vai junto).
+
+- **Categoria/subcategoria do produto agora nunca se contradizem.** O campo grosso
+  (`category`, enum/grupo) e o fino (`category_id`, nó de 2 níveis) eram escritos
+  separados e divergiam (consenso/edição mexiam só num). Agora um único ponto de
+  reconciliação roda em todo save de produto: o nó fino sempre vive **dentro** do grupo
+  do enum (subcategoria do grupo certo é preservada; nó stale de outro grupo cai pro
+  grupo; enum nulo limpa o nó). **FE:** nenhum contrato mudou, mas `category_id`/subcategoria
+  ficam confiáveis — pode confiar neles pra exibição e filtro.
+- **Refino na entrada da nota.** Quando o dicionário só resolve o **grupo**, o
+  classificador por palavra-chave agora **refina** para a subcategoria (dentro do mesmo
+  grupo). Notas novas passam a sair com subcategoria com muito mais frequência.
+- **`POST /categories` não é mais idempotente por nome** → agora **`409`
+  `customcategory.name.duplicate`** se o nome colidir com uma custom do household **ou**
+  com uma categoria/subcategoria embutida (case-insensitive).
+- **Novo `PATCH /api/v1/categories/{id}`** para editar nome/ícone/cor/pai por id (o antigo
+  "re-POST com o mesmo nome edita" acabou). Campos opcionais; pai só (re)definido se vier.
+- **Nesting travado em 2 níveis.** Pai tem de ser de topo e a categoria não pode ter
+  subcategorias próprias → impede profundidade >2 e ciclos (`400`
+  `customcategory.nesting.invalid`).
+- **Segurança:** `GET /api/v1/categorizer/consensus` agora é **ADMIN** (era acessível a
+  qualquer autenticado) — alinhado aos irmãos `/consensus/audit`, `/dictionary/*`.
+
+---
+
 ## 2026-10-14 — Taxonomia redonda: gráfico override-aware, categoria custom c/ visual, motor por nó
 
 Leva grande (vai pra prod junta). Tudo aditivo — o enum legado continua válido.

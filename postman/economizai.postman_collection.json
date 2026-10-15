@@ -5687,7 +5687,41 @@
 					},
 					"response": []
 				},
-				{
+								{
+					"name": "Edit custom category",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categories/{{customCategoryId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categories",
+								"{{customCategoryId}}"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"icon\": \"nutrition-outline\",\n  \"color\": \"#4A90E2\"\n}"
+						},
+						"description": "Edit name/icon/color/parent of a custom category by id (household-scoped). All optional; null field unchanged; parent only (re)set when a parent field is sent. Nesting stays 2 levels (parent must be top-level, category cannot already have subcategories) else 400 customcategory.nesting.invalid. Name clash returns 409 customcategory.name.duplicate."
+					},
+					"response": []
+				},
+{
 					"name": "Migrate products into a category",
 					"request": {
 						"method": "POST",
