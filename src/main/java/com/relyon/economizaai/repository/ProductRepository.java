@@ -100,6 +100,7 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
             WHERE ec.ean = p.ean
               AND ec.category_id IS NOT NULL
               AND p.category_id IS DISTINCT FROM ec.category_id
+              AND p.categorization_source <> 'USER'
             """, nativeQuery = true)
     int applyCatalogCategoryNodes();
 
@@ -115,15 +116,18 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
             FROM categories c
             WHERE c.legacy_enum = p.category AND p.category IS NOT NULL
               AND p.category_id IS DISTINCT FROM c.id
+              AND p.categorization_source <> 'USER'
             """, nativeQuery = true)
     int resetCategoryIdFromEnumGroup();
 
     /** Companion to the reset: products with no enum have no group default — clear any
-     *  stale node so the name classifier recomputes from scratch (else old rules linger). */
+     *  stale node so the name classifier recomputes from scratch (else old rules linger).
+     *  USER-sourced products are left alone (manual curation is never wiped). */
     @Modifying
     @Transactional
     @Query(value = "UPDATE products SET category_id = NULL, updated_at = now() "
-            + "WHERE category IS NULL AND category_id IS NOT NULL", nativeQuery = true)
+            + "WHERE category IS NULL AND category_id IS NOT NULL AND categorization_source <> 'USER'",
+            nativeQuery = true)
     int clearCategoryIdForNullEnum();
 
     List<Product> findByCategorizationSourceIn(Collection<CategorizationSource> sources);

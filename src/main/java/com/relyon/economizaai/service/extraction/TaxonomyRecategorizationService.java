@@ -6,6 +6,7 @@ import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.ai.AiGateway;
+import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import com.relyon.economizaai.service.extraction.ProductNameSubcategoryClassifier.Confidence;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -46,6 +47,7 @@ public class TaxonomyRecategorizationService {
         productRepository.clearCategoryIdForNullEnum();
 
         var food = productRepository.findAll().stream()
+                .filter(product -> product.getCategorizationSource() != CategorizationSource.USER) // nunca re-decide curadoria manual
                 .filter(product -> !isNonFood(product.getCategory()))
                 .toList();
 
@@ -86,7 +88,7 @@ public class TaxonomyRecategorizationService {
         var toSave = new ArrayList<Product>();
         var pending = new ArrayList<Product>();
         for (var product : food) {
-            var result = ProductNameSubcategoryClassifier.classify(product.getNormalizedName());
+            var result = ProductNameSubcategoryClassifier.classify(DescriptionNormalizer.normalize(product.getNormalizedName()));
             if (result.confidence() == Confidence.HIGH) {
                 var nodeId = categoryResolver.idForSlug(result.slug());
                 if (nodeId != null && !nodeId.equals(product.getCategoryId())) {
@@ -151,7 +153,7 @@ public class TaxonomyRecategorizationService {
         var low = 0;
         var none = 0;
         for (var product : food) {
-            var result = ProductNameSubcategoryClassifier.classify(product.getNormalizedName());
+            var result = ProductNameSubcategoryClassifier.classify(DescriptionNormalizer.normalize(product.getNormalizedName()));
             switch (result.confidence()) {
                 case HIGH -> { highItems.add(product); highSlug.put(product.getId(), result.slug()); }
                 case LOW -> low++;

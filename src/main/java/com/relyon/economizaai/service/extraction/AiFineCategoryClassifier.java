@@ -53,7 +53,10 @@ public class AiFineCategoryClassifier {
     public Map<UUID, UUID> classify(List<Product> products) {
         if (products == null || products.isEmpty()) return Map.of();
         var categories = categoryRepository.findAllByActiveTrueOrderBySortOrderAsc();
+        // Leaves only: the LLM must return a SUBCATEGORY, never a group — a group slug is
+        // not in the map, so it's skipped (never guessed) just like an unknown slug.
         var idBySlug = categories.stream()
+                .filter(category -> category.getParent() != null)
                 .collect(Collectors.toMap(Category::getSlug, Category::getId, (first, second) -> first));
         var categoryList = categories.stream()
                 .filter(category -> category.getParent() != null) // leaves are the specific target
