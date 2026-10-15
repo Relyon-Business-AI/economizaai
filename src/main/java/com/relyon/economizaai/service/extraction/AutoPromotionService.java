@@ -58,6 +58,7 @@ public class AutoPromotionService {
     private final LearnedDictionaryRepository learnedRepository;
     private final DictionaryClassifier dictionaryClassifier;
     private final CategoryResolver categoryResolver;
+    private final LearnedDictionaryWriteLock learnedDictionaryWriteLock;
 
     // 7 amostras + 90% de concordância = na prática exige unanimidade em 7 ocorrências
     // (6/7 = 85% reprova). Baixo o bastante pra ter efeito no volume atual, seguro o
@@ -161,28 +162,32 @@ public class AutoPromotionService {
 
     private void batchUpsertLearnedEntries(Map<String, TokenUpsertRequest> toUpsert) {
         if (toUpsert.isEmpty()) return;
-        var existingByToken = learnedRepository.findByNormalizedTokenIn(toUpsert.keySet()).stream()
-                .collect(Collectors.toMap(LearnedDictionaryEntry::getNormalizedToken, Function.identity()));
-        var now = LocalDateTime.now();
-        var toSave = new ArrayList<LearnedDictionaryEntry>();
-        for (var e : toUpsert.entrySet()) {
-            var req = e.getValue();
-            var entry = existingByToken.getOrDefault(e.getKey(),
-                    LearnedDictionaryEntry.builder()
-                            .normalizedToken(e.getKey())
-                            .sampleCount(0)
-                            .promotedAt(now)
-                            .build());
-            entry.setGenericName(req.genericName());
-            entry.setCategory(req.category());
-            // Fase 3: grava também a folha fina (dual-write). A promoção vota por enum,
-            // então mapeia pro nó-grupo default do enum via CategoryResolver (null-safe).
-            entry.setCategoryId(categoryResolver.idForLegacyEnum(req.category()));
-            entry.setSampleCount(req.samples());
-            entry.setPromotedAt(now);
-            toSave.add(entry);
-        }
-        learnedRepository.saveAll(toSave);
+        // Serialized against ConsensusPromotionService's upsert so an admin-triggered run and the
+        // nightly job can't both insert the same token and trip the normalized_token UNIQUE.
+        learnedDictionaryWriteLock.runExclusively(() -> {
+            var existingByToken = learnedRepository.findByNormalizedTokenIn(toUpsert.keySet()).stream()
+                    .collect(Collectors.toMap(LearnedDictionaryEntry::getNormalizedToken, Function.identity()));
+            var now = LocalDateTime.now();
+            var toSave = new ArrayList<LearnedDictionaryEntry>();
+            for (var tokenEntry : toUpsert.entrySet()) {
+                var request = tokenEntry.getValue();
+                var entry = existingByToken.getOrDefault(tokenEntry.getKey(),
+                        LearnedDictionaryEntry.builder()
+                                .normalizedToken(tokenEntry.getKey())
+                                .sampleCount(0)
+                                .promotedAt(now)
+                                .build());
+                entry.setGenericName(request.genericName());
+                entry.setCategory(request.category());
+                // Fase 3: grava também a folha fina (dual-write). A promoção vota por enum,
+                // então mapeia pro nó-grupo default do enum via CategoryResolver (null-safe).
+                entry.setCategoryId(categoryResolver.idForLegacyEnum(request.category()));
+                entry.setSampleCount(request.samples());
+                entry.setPromotedAt(now);
+                toSave.add(entry);
+            }
+            learnedRepository.saveAll(toSave);
+        });
     }
 
     private int refreshClassifierMemory() {

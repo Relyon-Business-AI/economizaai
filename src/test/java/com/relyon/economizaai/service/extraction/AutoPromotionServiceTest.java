@@ -13,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -36,6 +37,7 @@ class AutoPromotionServiceTest {
     @Mock private LearnedDictionaryRepository learnedRepository;
     @Mock private DictionaryClassifier dictionaryClassifier;
     @Mock private CategoryResolver categoryResolver;
+    @Spy private LearnedDictionaryWriteLock learnedDictionaryWriteLock = new LearnedDictionaryWriteLock();
 
     @InjectMocks private AutoPromotionService service;
 

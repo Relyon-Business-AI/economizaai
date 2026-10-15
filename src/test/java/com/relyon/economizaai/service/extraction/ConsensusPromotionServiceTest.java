@@ -46,7 +46,7 @@ class ConsensusPromotionServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ConsensusPromotionService(overrideRepository, productRepository, learnedRepository, dictionaryClassifier, auditRepository, categoryResolver);
+        service = new ConsensusPromotionService(overrideRepository, productRepository, learnedRepository, dictionaryClassifier, auditRepository, categoryResolver, new LearnedDictionaryWriteLock());
         ReflectionTestUtils.setField(service, "minHouseholds", 2);
         ReflectionTestUtils.setField(service, "minTokenProducts", 2);
         lenient().when(learnedRepository.findAll()).thenReturn(List.of());
