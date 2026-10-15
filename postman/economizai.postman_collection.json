@@ -4314,6 +4314,73 @@
 					"response": []
 				},
 				{
+					"name": "AI: sugerir subcategorias (varredura)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/ai/suggest-subcategories?limit=120",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"ai",
+								"suggest-subcategories"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "120"
+								}
+							]
+						},
+						"description": "[ADMIN] Varre produtos sem subcategoria fina (sem n\u00f3 ou s\u00f3 no grupo), pede \u00e0 IA a folha + confian\u00e7a e grava um achado SUSPECT_CATEGORY PENDENTE por produto (com pre\u00e7o/mercado da \u00faltima compra) para o aceite r\u00e1pido. S\u00edncrono e limitado (limit, repet\u00edvel). Retorna {created, scanned, skippedExisting, stopped}. 409 se IA n\u00e3o configurada."
+					},
+					"response": []
+				},
+				{
+					"name": "AI: aceitar subcategorias >= limiar",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/ai/findings/approve-subcategories-above?threshold=0.9",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"ai",
+								"findings",
+								"approve-subcategories-above"
+							],
+							"query": [
+								{
+									"key": "threshold",
+									"value": "0.9"
+								}
+							]
+						},
+						"description": "[ADMIN] Aprova em massa todo achado de subcategoria (SUSPECT_CATEGORY) PENDENTE com confian\u00e7a >= threshold (bot\u00e3o 'Aceitar todos >= 90%'). Retorna {approved, failed}."
+					},
+					"response": []
+				},
+				{
 					"name": "AI: listar achados",
 					"request": {
 						"method": "GET",
@@ -4348,6 +4415,11 @@
 								{
 									"key": "size",
 									"value": "30"
+								},
+								{
+									"key": "sort",
+									"value": "confidence",
+									"disabled": true
 								}
 							]
 						},

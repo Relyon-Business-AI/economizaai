@@ -16,6 +16,33 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-15 — IA sugere subcategoria para produtos sem folha (lista de aceite rápido)
+
+Admin-only. Fecha o buraco deixado pelo recategorizador: produtos que ficaram no
+grupo (sem subcategoria fina) agora podem ser varridos pela IA, que sugere a folha
+mais específica + um nível de confiança, e cada sugestão vira um achado para o admin
+aceitar/editar rápido — sem abrir um por um.
+
+- **`POST /categorizer/ai/suggest-subcategories?limit=120`** — varre produtos sem
+  subcategoria fina (`category_id` nulo **ou** apontando pra um nó-grupo; pula os
+  curados pelo usuário e os não-alimentares), pede à IA folha + confiança em lotes e
+  grava um achado `SUSPECT_CATEGORY` PENDENTE por produto. Síncrono e limitado
+  (`limit`, repetível); para de boa quando o cap/credito da IA acaba. Dedupe contra
+  produtos que já têm sugestão pendente. Retorna `{created, scanned, skippedExisting, stopped}`.
+- **Achado de subcategoria carrega tudo pra decidir na linha:** o `payload` traz
+  `productName`, `currentCategory`/`currentNodeLabel` (de onde está hoje),
+  `categoryNodeSlug` + `suggestedLabel` (sugestão), `confidence` (0..1) e
+  `lastPrice`/`lastMarket` (última compra). O campo `confidence` do achado também é
+  populado (NUMERIC 4,3).
+- **`GET /categorizer/ai/findings?type=SUSPECT_CATEGORY&sort=confidence`** — novo
+  `sort=confidence` ordena os mais confiáveis primeiro (padrão continua `createdAt desc`).
+- **`POST /categorizer/ai/findings/approve-subcategories-above?threshold=0.9`** —
+  aprova em massa todo achado de subcategoria pendente com confiança ≥ limiar
+  ("Aceitar todos ≥ 90%"). Retorna `{approved, failed}`.
+- **Aprovar aplica a folha:** aceitar o achado grava o nó fino no produto (via o
+  mesmo caminho dos outros achados de categoria); editar inline só a subcategoria
+  (mandar só o slug) deriva o enum do grupo da folha automaticamente.
+
 ## 2026-10-15 — Taxonomia: consistência grosso↔fino, categoria custom com PATCH + nome único
 
 Correções em cima da leva de taxonomia (ainda não foi pra prod — vai junto).

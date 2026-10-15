@@ -15,6 +15,7 @@ import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.ai.AiFindingService;
 import com.relyon.economizaai.service.ai.AiItemFallbackService;
+import com.relyon.economizaai.service.ai.AiSubcategorySuggestionService;
 import com.relyon.economizaai.service.ai.AiGateway;
 import com.relyon.economizaai.service.ai.AiSweepService;
 import com.relyon.economizaai.service.ai.AiUsageService;
@@ -29,6 +30,7 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,6 +49,7 @@ class AiControllerTest {
 
     @MockitoBean private AiSweepService aiSweepService;
     @MockitoBean private AiFindingService aiFindingService;
+    @MockitoBean private AiSubcategorySuggestionService aiSubcategorySuggestionService;
     @MockitoBean private AiItemFallbackService aiItemFallbackService;
     @MockitoBean private AiUsageService aiUsageService;
     @MockitoBean private AiGateway aiGateway;
@@ -117,6 +120,42 @@ class AiControllerTest {
                         .with(SecurityMockMvcRequestPostProcessors.user(user))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"genericName\":\"X\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void suggestSubcategories_returnsOutcome() throws Exception {
+        when(aiSubcategorySuggestionService.generate(50))
+                .thenReturn(new AiSubcategorySuggestionService.SuggestOutcome(12, 50, 3, false));
+
+        mockMvc.perform(post("/api/v1/categorizer/ai/suggest-subcategories")
+                        .param("limit", "50")
+                        .with(SecurityMockMvcRequestPostProcessors.user(adminPrincipal())))
+                .andExpect(status().isOk());
+
+        verify(aiSubcategorySuggestionService).generate(50);
+    }
+
+    @Test
+    void approveSubcategoriesAbove_usesThreshold() throws Exception {
+        when(aiFindingService.approveSubcategoriesAbove(any()))
+                .thenReturn(new AiFindingService.BulkOutcome(7, 0));
+
+        mockMvc.perform(post("/api/v1/categorizer/ai/findings/approve-subcategories-above")
+                        .param("threshold", "0.9")
+                        .with(SecurityMockMvcRequestPostProcessors.user(adminPrincipal())))
+                .andExpect(status().isOk());
+
+        verify(aiFindingService).approveSubcategoriesAbove(new BigDecimal("0.9"));
+    }
+
+    @Test
+    void suggestSubcategories_forbiddenForNonAdmin() throws Exception {
+        var household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
+        var user = User.builder().id(UUID.randomUUID()).email("u@economizaai.app").household(household).build();
+
+        mockMvc.perform(post("/api/v1/categorizer/ai/suggest-subcategories")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
                 .andExpect(status().isForbidden());
     }
 }

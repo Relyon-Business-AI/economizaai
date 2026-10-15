@@ -14,6 +14,7 @@ import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.service.ai.AiFindingService;
 import com.relyon.economizaai.service.ai.AiGateway;
 import com.relyon.economizaai.service.ai.AiItemFallbackService;
+import com.relyon.economizaai.service.ai.AiSubcategorySuggestionService;
 import com.relyon.economizaai.service.ai.AiSweepService;
 import com.relyon.economizaai.service.ai.AiUsageService;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,6 +31,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -51,6 +53,7 @@ public class AiController {
 
     private final AiSweepService aiSweepService;
     private final AiFindingService aiFindingService;
+    private final AiSubcategorySuggestionService aiSubcategorySuggestionService;
     private final AiItemFallbackService aiItemFallbackService;
     private final AiUsageService aiUsageService;
     private final AiGateway aiGateway;
@@ -103,8 +106,21 @@ public class AiController {
             @RequestParam(defaultValue = "PENDING") AiFindingStatus status,
             @RequestParam(required = false) AiFindingType type,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "30") int size) {
-        return ResponseEntity.ok(aiFindingService.list(status, type, page, size));
+            @RequestParam(defaultValue = "30") int size,
+            @RequestParam(required = false) String sort) {
+        return ResponseEntity.ok(aiFindingService.list(status, type, page, size, sort));
+    }
+
+    /**
+     * AI subcategory-suggestion sweep: scans products that still lack a fine subcategory,
+     * files one PENDING suggestion each (with confidence + last price/market) for the
+     * admin quick-accept review. Synchronous + bounded ({@code limit}, repeatable) — one
+     * LLM call per ~40 products. Returns {created, scanned, skippedExisting, stopped}.
+     */
+    @PostMapping("/suggest-subcategories")
+    public ResponseEntity<AiSubcategorySuggestionService.SuggestOutcome> suggestSubcategories(
+            @RequestParam(defaultValue = "120") int limit) {
+        return ResponseEntity.ok(aiSubcategorySuggestionService.generate(limit));
     }
 
     /**
@@ -136,6 +152,13 @@ public class AiController {
     @PostMapping("/findings/approve-bulk")
     public ResponseEntity<AiFindingService.BulkOutcome> approveBulk(@RequestBody List<UUID> ids) {
         return ResponseEntity.ok(aiFindingService.approveBulk(ids));
+    }
+
+    /** "Aceitar todos ≥ X%": approves every pending subcategory suggestion above the confidence threshold. */
+    @PostMapping("/findings/approve-subcategories-above")
+    public ResponseEntity<AiFindingService.BulkOutcome> approveSubcategoriesAbove(
+            @RequestParam(defaultValue = "0.9") BigDecimal threshold) {
+        return ResponseEntity.ok(aiFindingService.approveSubcategoriesAbove(threshold));
     }
 
     /**

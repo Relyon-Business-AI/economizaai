@@ -7,6 +7,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -17,6 +18,15 @@ public interface AiFindingRepository extends JpaRepository<AiFinding, UUID> {
     List<AiFinding> findByStatus(AiFindingStatus status);
 
     Page<AiFinding> findByStatusAndTypeOrderByCreatedAtDesc(AiFindingStatus status, AiFindingType type, Pageable pageable);
+
+    /** Confidence-first ordering — the quick-accept review lists the surest suggestions on top. */
+    Page<AiFinding> findByStatusAndTypeOrderByConfidenceDesc(AiFindingStatus status, AiFindingType type, Pageable pageable);
+
+    /** All findings of a status+type (unpaged) — dedupe lookup before creating new suggestions. */
+    List<AiFinding> findByStatusAndType(AiFindingStatus status, AiFindingType type);
+
+    /** Suggestions confident enough to auto-approve in bulk ("Aceitar todos ≥ X%"). */
+    List<AiFinding> findByStatusAndTypeAndConfidenceGreaterThanEqual(AiFindingStatus status, AiFindingType type, BigDecimal confidence);
 
     long countByStatus(AiFindingStatus status);
 

@@ -23,6 +23,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -78,7 +79,20 @@ public class AiFindingService {
 
     @Transactional(readOnly = true)
     public Page<AiFinding> list(AiFindingStatus status, AiFindingType type, int page, int size) {
+        return list(status, type, page, size, null);
+    }
+
+    /**
+     * {@code sort="confidence"} (only meaningful with a {@code type}) lists the surest
+     * proposals first — the quick-accept review's default. Anything else keeps the
+     * newest-first ordering used everywhere else.
+     */
+    @Transactional(readOnly = true)
+    public Page<AiFinding> list(AiFindingStatus status, AiFindingType type, int page, int size, String sort) {
         var pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 100));
+        if ("confidence".equalsIgnoreCase(sort) && type != null) {
+            return findingRepository.findByStatusAndTypeOrderByConfidenceDesc(status, type, pageable);
+        }
         return type == null
                 ? findingRepository.findByStatusOrderByCreatedAtDesc(status, pageable)
                 : findingRepository.findByStatusAndTypeOrderByCreatedAtDesc(status, type, pageable);
@@ -112,6 +126,18 @@ public class AiFindingService {
         finding.setStatus(AiFindingStatus.REJECTED);
         log.info("ai.finding.rejected id={} type={}", id, finding.getType());
         return findingRepository.save(finding);
+    }
+
+    /**
+     * "Aceitar todos ≥ X%": approves every PENDING subcategory suggestion whose confidence
+     * clears the threshold, across ALL pending rows (not just the page the admin is viewing).
+     */
+    public BulkOutcome approveSubcategoriesAbove(BigDecimal threshold) {
+        var ids = findingRepository
+                .findByStatusAndTypeAndConfidenceGreaterThanEqual(
+                        AiFindingStatus.PENDING, AiFindingType.SUSPECT_CATEGORY, threshold)
+                .stream().map(AiFinding::getId).toList();
+        return approveBulk(ids);
     }
 
     /** Applies each id independently — one failure doesn't roll back the batch. */
@@ -178,14 +204,21 @@ public class AiFindingService {
 
     private void applyCategory(JsonNode payload) {
         var productId = UUID.fromString(payload.path("productId").asText());
-        var category = ProductCategory.valueOf(payload.path("category").asText());
-        adminProductService.setCategory(productId, category);
         // Fase 1 do motor na taxonomia: além do enum, grava a FOLHA fina (category_id).
-        // Usa o slug explícito que o admin informar; senão o nó-grupo default do enum —
-        // assim aprovar um achado de categoria sempre dá um nó pro produto.
         var nodeSlug = blankToNull(payload.path("categoryNodeSlug").asText(null));
-        var nodeId = nodeSlug != null ? categoryResolver.idForSlug(nodeSlug)
-                : categoryResolver.idForLegacyEnum(category);
+        var nodeId = nodeSlug != null ? categoryResolver.idForSlug(nodeSlug) : null;
+        // O enum mantém enum↔nó consistentes. Normalmente vem no payload; quando o admin
+        // EDITA inline só a subcategoria (manda só o slug), derivamos o enum do grupo da folha.
+        var categoryText = blankToNull(payload.path("category").asText(null));
+        var category = categoryText != null
+                ? ProductCategory.valueOf(categoryText)
+                : (nodeId != null ? categoryResolver.legacyEnumForNode(nodeId) : null);
+        if (category == null) {
+            throw new IllegalStateException("Achado de categoria sem enum nem nó resolvível");
+        }
+        adminProductService.setCategory(productId, category);
+        // Sem slug explícito → nó-grupo default do enum, pra sempre dar um nó pro produto.
+        if (nodeId == null) nodeId = categoryResolver.idForLegacyEnum(category);
         if (nodeId != null) adminProductService.setCategoryNode(productId, nodeId);
     }
 
