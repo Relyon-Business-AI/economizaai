@@ -17,6 +17,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import lombok.Builder.Default;
 
 import java.util.UUID;
 
@@ -59,8 +60,12 @@ public class Category {
     private ProductCategory legacyEnum;
 
     @Column(name = "sort_order", nullable = false)
-    private int sortOrder;
+    @Default
+    private int sortOrder = 0;
 
+    // A builder-created node is active by default: forgetting active(true) must not
+    // silently hide it from taxonomy() (which filters findAllByActiveTrueOrderBySortOrderAsc).
     @Column(nullable = false)
-    private boolean active;
+    @Default
+    private boolean active = true;
 }

@@ -14,6 +14,9 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -21,6 +24,56 @@ class CategoryResolverTest {
 
     @Mock private CategoryRepository categoryRepository;
     @InjectMocks private CategoryResolver resolver;
+
+    private Category bebidas;
+    private Category refrigerantes;
+    private Category limpeza;
+
+    private void warmSeed() {
+        bebidas = Category.builder().id(UUID.randomUUID()).slug("bebidas").legacyEnum(ProductCategory.BEVERAGES).build();
+        refrigerantes = Category.builder().id(UUID.randomUUID()).slug("refrigerantes").parent(bebidas).build();
+        limpeza = Category.builder().id(UUID.randomUUID()).slug("limpeza").legacyEnum(ProductCategory.CLEANING).build();
+        when(categoryRepository.findAll()).thenReturn(List.of(bebidas, refrigerantes, limpeza));
+        resolver.warmUp();
+    }
+
+    @Test
+    void reconcileNode_nullEnumClearsNode() {
+        warmSeed();
+        assertNull(resolver.reconcileNode(null, refrigerantes.getId()), "null enum → null node");
+    }
+
+    @Test
+    void reconcileNode_noNodeFallsBackToGroup() {
+        warmSeed();
+        assertEquals(bebidas.getId(), resolver.reconcileNode(ProductCategory.BEVERAGES, null),
+                "no node → the enum's group");
+    }
+
+    @Test
+    void reconcileNode_keepsLeafUnderRightGroup() {
+        warmSeed();
+        assertEquals(refrigerantes.getId(), resolver.reconcileNode(ProductCategory.BEVERAGES, refrigerantes.getId()),
+                "a leaf under the enum's group is preserved");
+    }
+
+    @Test
+    void reconcileNode_collapsesStaleLeafFromAnotherGroup() {
+        warmSeed();
+        // product had the BEVERAGES/refrigerantes leaf, enum now says CLEANING → must drop to limpeza group
+        assertEquals(limpeza.getId(), resolver.reconcileNode(ProductCategory.CLEANING, refrigerantes.getId()),
+                "a leaf from another group collapses to the new enum's group");
+    }
+
+    @Test
+    void groupIdOf_andIsLeafNode() {
+        warmSeed();
+        assertEquals(bebidas.getId(), resolver.groupIdOf(bebidas.getId()), "a group is its own group");
+        assertEquals(bebidas.getId(), resolver.groupIdOf(refrigerantes.getId()), "a leaf resolves to its parent group");
+        assertTrue(resolver.isLeafNode(refrigerantes.getId()));
+        assertFalse(resolver.isLeafNode(bebidas.getId()));
+        assertFalse(resolver.isLeafNode(null));
+    }
 
     @Test
     void nodeAndDescendantIds_groupReturnsItselfPlusLeaves() {

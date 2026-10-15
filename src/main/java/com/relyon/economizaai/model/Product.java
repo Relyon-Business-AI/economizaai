@@ -2,8 +2,10 @@ package com.relyon.economizaai.model;
 
 import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.model.listener.ProductCategoryNodeListener;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
@@ -19,6 +21,7 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "products")
+@EntityListeners(ProductCategoryNodeListener.class)
 @Getter
 @Setter
 @NoArgsConstructor

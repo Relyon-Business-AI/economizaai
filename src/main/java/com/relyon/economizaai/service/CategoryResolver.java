@@ -67,9 +67,10 @@ public class CategoryResolver {
     }
 
     /**
-     * The node for a slug PLUS every descendant leaf — so filtering by a GROUP slug
-     * (e.g. "carnes") matches products on the group or any of its leaves. Empty when
-     * the slug is unknown. Never queries.
+     * The node for a slug PLUS its direct child subcategories — so filtering by a GROUP
+     * slug (e.g. "carnes") matches products on the group or any of its subcategories. The
+     * taxonomy is two levels, so one hop covers every descendant. Empty when the slug is
+     * unknown. Never queries.
      */
     public Set<UUID> nodeAndDescendantIds(String slug) {
         var rootId = idBySlug.get(slug);
@@ -87,6 +88,41 @@ public class CategoryResolver {
     /** Category id the given legacy enum maps to by default, or null. Never queries. */
     public UUID idForLegacyEnum(ProductCategory legacyEnum) {
         return legacyEnum == null ? null : idByLegacyEnum.get(legacyEnum);
+    }
+
+    /** The top-level group a node belongs to (itself when it already is a group), or null if unknown. Never queries. */
+    public UUID groupIdOf(UUID categoryId) {
+        if (categoryId == null) return null;
+        var category = byId.get(categoryId);
+        if (category == null) return null;
+        return category.getParent() == null ? category.getId() : category.getParent().getId();
+    }
+
+    /** True when the node is a leaf (subcategory, i.e. has a parent group). False for a group or unknown id. Never queries. */
+    public boolean isLeafNode(UUID categoryId) {
+        if (categoryId == null) return false;
+        var category = byId.get(categoryId);
+        return category != null && category.getParent() != null;
+    }
+
+    /**
+     * The fine node a product should carry given its (coarse) legacy enum and the node it
+     * currently has — the single invariant that keeps {@code category} (enum/group) and
+     * {@code categoryId} (node) from contradicting each other:
+     * <ul>
+     *   <li>null enum → null node (no categorization);</li>
+     *   <li>no current node → the enum's group node (the floor);</li>
+     *   <li>current node is a subcategory under the RIGHT group → kept (preserves the finer leaf);</li>
+     *   <li>current node is stale (a leaf under another group) → collapsed to the enum's group.</li>
+     * </ul>
+     * Call this at every site that writes {@code category}. Never queries.
+     */
+    public UUID reconcileNode(ProductCategory legacyEnum, UUID currentNodeId) {
+        if (legacyEnum == null) return null;
+        var groupId = idByLegacyEnum.get(legacyEnum);
+        if (groupId == null) return currentNodeId; // enum with no mapped node — leave untouched
+        if (currentNodeId == null) return groupId;
+        return groupId.equals(groupIdOf(currentNodeId)) ? currentNodeId : groupId;
     }
 
     /** Category id for a taxonomy slug (group or leaf), or null. Never queries. */

@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.UUID;
+
 /**
  * Orchestrates the extraction cascade:
  *   1. PackSizeExtractor (regex)
@@ -39,15 +41,19 @@ public class ProductExtractor {
         var genericName = dictHit.genericName();
         var category = dictHit.category();
         var categoryId = dictHit.categoryId();
-        // Fase 4: sem nó do dicionário/catálogo, tenta o classificador de keyword (grátis,
-        // determinístico). Só confia em HIGH; não sobrescreve um nó já resolvido.
-        if (categoryId == null) {
+        // Fase 4 + refino: o classificador de keyword (grátis, determinístico, HIGH-only)
+        // preenche a folha fina quando o dicionário/catálogo não deu nó — OU refina um nó
+        // de GRUPO para uma subcategoria, desde que dentro do mesmo grupo (nunca contradiz).
+        if (categoryId == null || !categoryResolver.isLeafNode(categoryId)) {
             // Normaliza igual ao recategorizador (que passa o nome normalizado) e ao
             // dicionário: as regras de keyword casam por fronteira de palavra em tokens
             // limpos, então a descrição crua (com pontuação) perderia matches.
             var leaf = ProductNameSubcategoryClassifier.classify(DescriptionNormalizer.normalize(rawDescription));
             if (leaf.confidence() == Confidence.HIGH) {
-                categoryId = categoryResolver.idForSlug(leaf.slug());
+                var leafId = categoryResolver.idForSlug(leaf.slug());
+                if (categoryId == null || sameGroup(categoryId, leafId)) {
+                    categoryId = leafId;
+                }
             }
         }
         var source = (category != null || genericName != null)
@@ -56,5 +62,12 @@ public class ProductExtractor {
 
         return new ProductExtraction(genericName, brand, packSize.size(), packSize.unit(),
                 category, categoryId, source);
+    }
+
+    /** True when both nodes resolve to the same top-level group — so a keyword refine never crosses groups. */
+    private boolean sameGroup(UUID currentNodeId, UUID leafId) {
+        if (leafId == null) return false;
+        var currentGroup = categoryResolver.groupIdOf(currentNodeId);
+        return currentGroup != null && currentGroup.equals(categoryResolver.groupIdOf(leafId));
     }
 }

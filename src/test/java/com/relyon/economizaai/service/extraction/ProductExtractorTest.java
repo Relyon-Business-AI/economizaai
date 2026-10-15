@@ -86,17 +86,51 @@ class ProductExtractorTest {
     }
 
     @Test
-    void keywordFallbackSkipped_whenDictionaryAlreadyGaveNode() {
-        var dictNode = UUID.randomUUID();
+    void keywordRefineSkipped_whenDictionaryGaveLeafNode() {
+        var dictLeaf = UUID.randomUUID();
+        when(categoryResolver.isLeafNode(dictLeaf)).thenReturn(true);
+        var extractorWithLeaf = extractorWithDictNode(dictLeaf);
+
+        var e = extractorWithLeaf.extract("QUEIJO MUSSARELA 500G");
+
+        assertEquals(dictLeaf, e.categoryId(), "an already-fine leaf is not touched");
+        verify(categoryResolver, never()).idForSlug(any());
+    }
+
+    @Test
+    void keywordRefinesGroupNode_toLeafWithinSameGroup() {
+        var dictGroup = UUID.randomUUID();
+        var queijosLeaf = UUID.randomUUID();
+        when(categoryResolver.isLeafNode(dictGroup)).thenReturn(false);
+        when(categoryResolver.idForSlug("queijos")).thenReturn(queijosLeaf);
+        when(categoryResolver.groupIdOf(dictGroup)).thenReturn(dictGroup);
+        when(categoryResolver.groupIdOf(queijosLeaf)).thenReturn(dictGroup);
+        var extractorWithGroup = extractorWithDictNode(dictGroup);
+
+        var e = extractorWithGroup.extract("QUEIJO MUSSARELA 500G");
+
+        assertEquals(queijosLeaf, e.categoryId(), "a group node is refined to the keyword leaf under it");
+    }
+
+    @Test
+    void keywordRefineRejected_whenLeafBelongsToAnotherGroup() {
+        var dictGroup = UUID.randomUUID();
+        var leafFromOtherGroup = UUID.randomUUID();
+        when(categoryResolver.isLeafNode(dictGroup)).thenReturn(false);
+        when(categoryResolver.idForSlug("queijos")).thenReturn(leafFromOtherGroup);
+        when(categoryResolver.groupIdOf(dictGroup)).thenReturn(dictGroup);
+        when(categoryResolver.groupIdOf(leafFromOtherGroup)).thenReturn(UUID.randomUUID());
+        var extractorWithGroup = extractorWithDictNode(dictGroup);
+
+        var e = extractorWithGroup.extract("QUEIJO MUSSARELA 500G");
+
+        assertEquals(dictGroup, e.categoryId(), "a cross-group keyword leaf never overrides the dictionary group");
+    }
+
+    private ProductExtractor extractorWithDictNode(UUID node) {
         var dictionaryWithNode = mock(DictionaryClassifier.class);
         when(dictionaryWithNode.classify(any())).thenReturn(new DictionaryClassifier.DictEntry(
-                "Queijo", null, ProductCategory.MEAT_DAIRY, dictNode, CategorizationSource.DICTIONARY));
-        var extractorWithNode = new ProductExtractor(
-                SeedFixtures.loadedBrandExtractor(), dictionaryWithNode, categoryResolver);
-
-        var e = extractorWithNode.extract("QUEIJO MUSSARELA 500G");
-
-        assertEquals(dictNode, e.categoryId());
-        verify(categoryResolver, never()).idForSlug(any()); // nó do dicionário não é sobrescrito
+                "Queijo", null, ProductCategory.MEAT_DAIRY, node, CategorizationSource.DICTIONARY));
+        return new ProductExtractor(SeedFixtures.loadedBrandExtractor(), dictionaryWithNode, categoryResolver);
     }
 }
