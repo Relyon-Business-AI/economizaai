@@ -1,11 +1,14 @@
 package com.relyon.economizaai.service;
 
 import com.relyon.economizaai.dto.request.CreateCategoryRequest;
+import com.relyon.economizaai.dto.request.UpdateCategoryRequest;
 import com.relyon.economizaai.dto.response.CategoryMigrationResponse;
 import com.relyon.economizaai.dto.response.CategoryResponse;
 import com.relyon.economizaai.dto.response.TaxonomyCategoryResponse;
 import com.relyon.economizaai.exception.CustomCategoryNotFoundException;
+import com.relyon.economizaai.exception.DuplicateCustomCategoryException;
 import com.relyon.economizaai.exception.InvalidCategoryMigrationException;
+import com.relyon.economizaai.exception.InvalidCategoryNestingException;
 import com.relyon.economizaai.model.Category;
 import com.relyon.economizaai.model.HouseholdCustomCategory;
 import com.relyon.economizaai.model.User;
@@ -92,59 +95,121 @@ public class CustomCategoryService {
     }
 
     /**
-     * Create (or, idempotent on name, update) a custom category for the household.
-     * Optional visual (icon/color) and nesting under a taxonomy GROUP are applied
-     * when provided — so re-submitting an existing name edits its style/group.
+     * Create a new custom category for the household. The name must be unique (case-insensitive)
+     * within the household AND must not collide with a built-in taxonomy name. Optional visual
+     * (icon/color) and nesting under a taxonomy category OR another TOP-LEVEL custom are applied.
+     * Editing an existing one is done via {@link #update}.
      */
     @Transactional
     public CategoryResponse create(User user, CreateCategoryRequest request) {
-        if (request.parentGroupSlug() != null && request.parentCustomCategoryId() != null) {
-            throw new InvalidCategoryMigrationException(); // no máximo um pai (embutida OU custom)
-        }
+        requireAtMostOneParent(request.parentGroupSlug(), request.parentCustomCategoryId());
         var name = request.name().trim();
         var householdId = user.getHousehold().getId();
-        var parentGroup = resolveParentGroup(request.parentGroupSlug());
-        var existing = customCategoryRepository.findByHouseholdIdAndNameIgnoreCase(householdId, name);
-        if (request.parentCustomCategoryId() != null && existing.isPresent()
-                && existing.get().getId().equals(request.parentCustomCategoryId())) {
-            throw new InvalidCategoryMigrationException(); // não pode ser pai de si mesma
-        }
-        var parentCustom = resolveParentCustom(householdId, request.parentCustomCategoryId());
-        var category = existing.orElseGet(
-                () -> HouseholdCustomCategory.builder().household(user.getHousehold()).name(name).build());
-        var mutated = existing.isEmpty();
-        if (request.icon() != null) { category.setIcon(request.icon()); mutated = true; }
-        if (request.color() != null) { category.setColor(request.color()); mutated = true; }
-        if (request.parentGroupSlug() != null) {
-            category.setParentCategory(parentGroup);
-            category.setParentCustomCategory(null);
-            mutated = true;
-        } else if (request.parentCustomCategoryId() != null) {
-            category.setParentCustomCategory(parentCustom);
-            category.setParentCategory(null);
-            mutated = true;
-        }
-        var saved = mutated ? customCategoryRepository.save(category) : category;
-        log.info("custom_category.create household={} name='{}' id={} parent={} parentCustom={} icon={}",
+        requireNameAvailable(householdId, name, null);
+
+        var category = HouseholdCustomCategory.builder().household(user.getHousehold()).name(name).build();
+        category.setIcon(request.icon());
+        category.setColor(request.color());
+        applyParent(category, householdId, request.parentGroupSlug(), request.parentCustomCategoryId());
+
+        var saved = customCategoryRepository.save(category);
+        log.info("custom_category.create household={} name='{}' id={} parentGroup={} parentCustom={} icon={}",
                 householdId, name, saved.getId(),
-                parentGroup != null ? parentGroup.getSlug() : null,
-                parentCustom != null ? parentCustom.getId() : null, saved.getIcon());
+                saved.getParentCategory() != null ? saved.getParentCategory().getSlug() : null,
+                saved.getParentCustomCategory() != null ? saved.getParentCustomCategory().getId() : null,
+                saved.getIcon());
         return toResponse(saved);
+    }
+
+    /**
+     * Edit a custom category by id (household-scoped). All fields optional — a null field is left
+     * unchanged; a parent is only (re)set when a parent field is provided. Enforces the same name
+     * uniqueness and two-level nesting rules as {@link #create}.
+     */
+    @Transactional
+    public CategoryResponse update(User user, UUID id, UpdateCategoryRequest request) {
+        requireAtMostOneParent(request.parentGroupSlug(), request.parentCustomCategoryId());
+        var householdId = user.getHousehold().getId();
+        var category = customCategoryRepository.findByIdAndHouseholdId(id, householdId)
+                .orElseThrow(CustomCategoryNotFoundException::new);
+
+        if (request.name() != null && !request.name().isBlank()) {
+            var name = request.name().trim();
+            if (!name.equalsIgnoreCase(category.getName())) {
+                requireNameAvailable(householdId, name, id);
+                category.setName(name);
+            }
+        }
+        if (request.icon() != null) category.setIcon(request.icon());
+        if (request.color() != null) category.setColor(request.color());
+        if (request.parentGroupSlug() != null || request.parentCustomCategoryId() != null) {
+            applyParent(category, householdId, request.parentGroupSlug(), request.parentCustomCategoryId());
+        }
+
+        var saved = customCategoryRepository.save(category);
+        log.info("custom_category.update household={} id={} name='{}'", householdId, saved.getId(), saved.getName());
+        return toResponse(saved);
+    }
+
+    private void requireAtMostOneParent(String parentGroupSlug, UUID parentCustomCategoryId) {
+        if (parentGroupSlug != null && parentCustomCategoryId != null) {
+            throw new InvalidCategoryMigrationException(); // no máximo um pai (embutida OU custom)
+        }
+    }
+
+    /** Reject a name already used by another household custom (case-insensitive) or by a built-in taxonomy node. */
+    private void requireNameAvailable(UUID householdId, String name, UUID excludeId) {
+        var customClash = customCategoryRepository.findByHouseholdIdAndNameIgnoreCase(householdId, name)
+                .filter(existing -> !existing.getId().equals(excludeId))
+                .isPresent();
+        if (customClash || categoryRepository.existsByNamePtIgnoreCaseOrNameEnIgnoreCase(name, name)) {
+            throw new DuplicateCustomCategoryException(name);
+        }
+    }
+
+    /**
+     * (Re)set the category's single parent while keeping the taxonomy to two levels:
+     * the parent must be a TOP-LEVEL node (a built-in category or a standalone custom), the
+     * category itself must have no subcategories, and it can't be its own parent. null + null → standalone.
+     */
+    private void applyParent(HouseholdCustomCategory category, UUID householdId,
+                             String parentGroupSlug, UUID parentCustomCategoryId) {
+        if (parentCustomCategoryId != null && parentCustomCategoryId.equals(category.getId())) {
+            throw new InvalidCategoryNestingException(); // não pode ser pai de si mesma
+        }
+        var gainingParent = parentGroupSlug != null || parentCustomCategoryId != null;
+        if (gainingParent && category.getId() != null
+                && customCategoryRepository.existsByParentCustomCategoryId(category.getId())) {
+            throw new InvalidCategoryNestingException(); // já tem subcategorias → cairiam para um 3º nível
+        }
+        if (parentGroupSlug != null) {
+            category.setParentCategory(resolveParentGroup(parentGroupSlug));
+            category.setParentCustomCategory(null);
+        } else if (parentCustomCategoryId != null) {
+            category.setParentCustomCategory(resolveTopLevelParentCustom(householdId, parentCustomCategoryId));
+            category.setParentCategory(null);
+        } else {
+            category.setParentCategory(null);
+            category.setParentCustomCategory(null);
+        }
     }
 
     /** Resolve a built-in taxonomy CATEGORY by slug (must be a top-level node). Null slug → standalone. */
     private Category resolveParentGroup(String slug) {
         if (slug == null || slug.isBlank()) return null;
         var category = categoryRepository.findBySlug(slug).orElseThrow(InvalidCategoryMigrationException::new);
-        if (category.getParent() != null) throw new InvalidCategoryMigrationException(); // só categoria, não subcategoria
+        if (category.getParent() != null) throw new InvalidCategoryNestingException(); // só categoria, não subcategoria
         return category;
     }
 
-    /** Resolve a CUSTOM category owned by this household (parent candidate). Null id → none. */
-    private HouseholdCustomCategory resolveParentCustom(UUID householdId, UUID id) {
-        if (id == null) return null;
-        return customCategoryRepository.findByIdAndHouseholdId(id, householdId)
+    /** Resolve a CUSTOM parent owned by this household — must itself be top-level (so nesting stays 2 levels). */
+    private HouseholdCustomCategory resolveTopLevelParentCustom(UUID householdId, UUID id) {
+        var parent = customCategoryRepository.findByIdAndHouseholdId(id, householdId)
                 .orElseThrow(CustomCategoryNotFoundException::new);
+        if (parent.getParentCategory() != null || parent.getParentCustomCategory() != null) {
+            throw new InvalidCategoryNestingException(); // o pai já é subcategoria → seria um 3º nível
+        }
+        return parent;
     }
 
     private CategoryResponse toResponse(HouseholdCustomCategory custom) {

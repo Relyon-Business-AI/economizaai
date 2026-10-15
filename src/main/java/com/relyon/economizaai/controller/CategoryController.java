@@ -2,6 +2,7 @@ package com.relyon.economizaai.controller;
 
 import com.relyon.economizaai.dto.request.CreateCategoryRequest;
 import com.relyon.economizaai.dto.request.MigrateCategoryRequest;
+import com.relyon.economizaai.dto.request.UpdateCategoryRequest;
 import com.relyon.economizaai.dto.response.CategoryMigrationResponse;
 import com.relyon.economizaai.dto.response.CategoryResponse;
 import com.relyon.economizaai.dto.response.TaxonomyCategoryResponse;
@@ -15,6 +16,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -53,6 +55,13 @@ public class CategoryController {
     public ResponseEntity<CategoryResponse> create(@AuthenticationPrincipal User user,
                                                    @Valid @RequestBody CreateCategoryRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(customCategoryService.create(user, request));
+    }
+
+    /** Edit a custom category (name/icon/color/parent) by id. Household-scoped. */
+    @PatchMapping("/{id}")
+    public ResponseEntity<CategoryResponse> update(@AuthenticationPrincipal User user, @PathVariable UUID id,
+                                                   @Valid @RequestBody UpdateCategoryRequest request) {
+        return ResponseEntity.ok(customCategoryService.update(user, id, request));
     }
 
     @DeleteMapping("/{id}")

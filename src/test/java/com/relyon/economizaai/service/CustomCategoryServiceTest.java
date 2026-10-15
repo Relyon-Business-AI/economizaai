@@ -1,9 +1,12 @@
 package com.relyon.economizaai.service;
 
 import com.relyon.economizaai.exception.CustomCategoryNotFoundException;
+import com.relyon.economizaai.exception.DuplicateCustomCategoryException;
 import com.relyon.economizaai.exception.InvalidCategoryMigrationException;
+import com.relyon.economizaai.exception.InvalidCategoryNestingException;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.dto.request.CreateCategoryRequest;
+import com.relyon.economizaai.dto.request.UpdateCategoryRequest;
 import com.relyon.economizaai.service.cache.HouseholdCacheGen;
 import com.relyon.economizaai.model.HouseholdCustomCategory;
 import com.relyon.economizaai.model.Product;
@@ -65,17 +68,27 @@ class CustomCategoryServiceTest {
     }
 
     @Test
-    void create_isIdempotentOnName() {
+    void create_duplicateNameInHousehold_throws() {
         var user = user();
         var existing = HouseholdCustomCategory.builder().id(UUID.randomUUID())
                 .household(user.getHousehold()).name("Frutas").build();
         when(customCategoryRepository.findByHouseholdIdAndNameIgnoreCase(user.getHousehold().getId(), "Frutas"))
                 .thenReturn(Optional.of(existing));
 
-        var response = service.create(user, new CreateCategoryRequest(" Frutas ", null, null, null, null));
+        assertThrows(DuplicateCustomCategoryException.class, () ->
+                service.create(user, new CreateCategoryRequest(" Frutas ", null, null, null, null)));
+        verify(customCategoryRepository, never()).save(any());
+    }
 
-        assertEquals(existing.getId(), response.id());
-        assertTrue(response.custom());
+    @Test
+    void create_nameClashesWithBuiltinTaxonomy_throws() {
+        var user = user();
+        when(customCategoryRepository.findByHouseholdIdAndNameIgnoreCase(user.getHousehold().getId(), "Bebidas"))
+                .thenReturn(Optional.empty());
+        when(categoryRepository.existsByNamePtIgnoreCaseOrNameEnIgnoreCase("Bebidas", "Bebidas")).thenReturn(true);
+
+        assertThrows(DuplicateCustomCategoryException.class, () ->
+                service.create(user, new CreateCategoryRequest("Bebidas", null, null, null, null)));
         verify(customCategoryRepository, never()).save(any());
     }
 
@@ -87,6 +100,7 @@ class CustomCategoryServiceTest {
                 .household(user.getHousehold()).name("Transporte").build();
         when(customCategoryRepository.findByHouseholdIdAndNameIgnoreCase(user.getHousehold().getId(), "Uber"))
                 .thenReturn(Optional.empty());
+        when(categoryRepository.existsByNamePtIgnoreCaseOrNameEnIgnoreCase("Uber", "Uber")).thenReturn(false);
         when(customCategoryRepository.findByIdAndHouseholdId(parentId, user.getHousehold().getId()))
                 .thenReturn(Optional.of(parent));
         when(customCategoryRepository.save(any(HouseholdCustomCategory.class)))
@@ -100,6 +114,24 @@ class CustomCategoryServiceTest {
     }
 
     @Test
+    void create_nestedUnderCustomThatIsAlreadySub_throws() {
+        var user = user();
+        var topLevel = HouseholdCustomCategory.builder().id(UUID.randomUUID())
+                .household(user.getHousehold()).name("Casa").build();
+        var subParentId = UUID.randomUUID();
+        var subParent = HouseholdCustomCategory.builder().id(subParentId)
+                .household(user.getHousehold()).name("Cozinha").parentCustomCategory(topLevel).build();
+        when(customCategoryRepository.findByHouseholdIdAndNameIgnoreCase(user.getHousehold().getId(), "Panelas"))
+                .thenReturn(Optional.empty());
+        when(categoryRepository.existsByNamePtIgnoreCaseOrNameEnIgnoreCase("Panelas", "Panelas")).thenReturn(false);
+        when(customCategoryRepository.findByIdAndHouseholdId(subParentId, user.getHousehold().getId()))
+                .thenReturn(Optional.of(subParent));
+
+        assertThrows(InvalidCategoryNestingException.class, () ->
+                service.create(user, new CreateCategoryRequest("Panelas", null, null, null, subParentId)));
+    }
+
+    @Test
     void create_bothParents_throws() {
         var user = user();
         var customParentId = UUID.randomUUID();
@@ -108,15 +140,57 @@ class CustomCategoryServiceTest {
     }
 
     @Test
-    void create_selfAsCustomParent_throws() {
+    void update_selfAsParent_throws() {
         var user = user();
         var selfId = UUID.randomUUID();
-        var existing = HouseholdCustomCategory.builder().id(selfId)
+        var self = HouseholdCustomCategory.builder().id(selfId)
                 .household(user.getHousehold()).name("Transporte").build();
-        when(customCategoryRepository.findByHouseholdIdAndNameIgnoreCase(user.getHousehold().getId(), "Transporte"))
-                .thenReturn(Optional.of(existing));
-        assertThrows(InvalidCategoryMigrationException.class, () ->
-                service.create(user, new CreateCategoryRequest("Transporte", null, null, null, selfId)));
+        when(customCategoryRepository.findByIdAndHouseholdId(selfId, user.getHousehold().getId()))
+                .thenReturn(Optional.of(self));
+
+        assertThrows(InvalidCategoryNestingException.class, () ->
+                service.update(user, selfId, new UpdateCategoryRequest(null, null, null, null, selfId)));
+    }
+
+    @Test
+    void update_givingParentToACategoryThatHasChildren_throws() {
+        var user = user();
+        var id = UUID.randomUUID();
+        var hasChildren = HouseholdCustomCategory.builder().id(id)
+                .household(user.getHousehold()).name("Casa").build();
+        when(customCategoryRepository.findByIdAndHouseholdId(id, user.getHousehold().getId()))
+                .thenReturn(Optional.of(hasChildren));
+        when(customCategoryRepository.existsByParentCustomCategoryId(id)).thenReturn(true);
+
+        assertThrows(InvalidCategoryNestingException.class, () ->
+                service.update(user, id, new UpdateCategoryRequest(null, null, null, "pet", null)));
+    }
+
+    @Test
+    void update_editsIconAndColor() {
+        var user = user();
+        var id = UUID.randomUUID();
+        var category = HouseholdCustomCategory.builder().id(id)
+                .household(user.getHousehold()).name("Frutas").build();
+        when(customCategoryRepository.findByIdAndHouseholdId(id, user.getHousehold().getId()))
+                .thenReturn(Optional.of(category));
+        when(customCategoryRepository.save(any(HouseholdCustomCategory.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = service.update(user, id, new UpdateCategoryRequest(null, "paw-outline", "#F5A623", null, null));
+
+        assertEquals("paw-outline", response.icon());
+        assertEquals("#F5A623", response.color());
+    }
+
+    @Test
+    void update_unknown_throws() {
+        var user = user();
+        var id = UUID.randomUUID();
+        when(customCategoryRepository.findByIdAndHouseholdId(id, user.getHousehold().getId()))
+                .thenReturn(Optional.empty());
+        assertThrows(CustomCategoryNotFoundException.class, () ->
+                service.update(user, id, new UpdateCategoryRequest("X", null, null, null, null)));
     }
 
     @Test

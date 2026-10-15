@@ -12,4 +12,7 @@ public interface CategoryRepository extends JpaRepository<Category, UUID> {
     Optional<Category> findBySlug(String slug);
 
     List<Category> findAllByActiveTrueOrderBySortOrderAsc();
+
+    /** True when a built-in taxonomy node (category or subcategory) uses this name in either locale. */
+    boolean existsByNamePtIgnoreCaseOrNameEnIgnoreCase(String namePt, String nameEn);
 }
