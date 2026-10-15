@@ -15,6 +15,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * Resolves the new two-level {@link Category} tree. Categories are a static seed,
@@ -96,6 +97,22 @@ public class CategoryResolver {
         var category = byId.get(categoryId);
         if (category == null) return null;
         return category.getParent() == null ? category.getId() : category.getParent().getId();
+    }
+
+    /** All top-level group node ids (the categories a product sits on when it has no finer subcategory). Never queries. */
+    public Set<UUID> groupIds() {
+        return byId.values().stream()
+                .filter(category -> category.getParent() == null)
+                .map(Category::getId)
+                .collect(Collectors.toSet());
+    }
+
+    /** The legacy enum of the group a node belongs to (so approving a leaf keeps enum↔node consistent), or null. Never queries. */
+    public ProductCategory legacyEnumForNode(UUID categoryId) {
+        var groupId = groupIdOf(categoryId);
+        if (groupId == null) return null;
+        var group = byId.get(groupId);
+        return group == null ? null : group.getLegacyEnum();
     }
 
     /** True when the node is a leaf (subcategory, i.e. has a parent group). False for a group or unknown id. Never queries. */

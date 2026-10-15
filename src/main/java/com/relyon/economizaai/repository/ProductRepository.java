@@ -142,6 +142,24 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     List<Product> findByCategoryIdIsNull();
 
     /**
+     * Products WITHOUT a fine subcategory — either no node at all (category_id null) or
+     * sitting on a top-level GROUP node (in :groupIds). Skips human-curated products
+     * (:userSource) and the non-food enums (:nonFood), whose groups have no finer leaf.
+     * The candidate set for the AI subcategory-suggestion sweep (newest first).
+     */
+    @Query("""
+            SELECT product FROM Product product
+            WHERE (product.categoryId IS NULL OR product.categoryId IN :groupIds)
+              AND (product.categorizationSource IS NULL OR product.categorizationSource <> :userSource)
+              AND (product.category IS NULL OR product.category NOT IN :nonFood)
+            ORDER BY product.createdAt DESC
+            """)
+    List<Product> findWithoutSubcategory(@Param("groupIds") Collection<UUID> groupIds,
+                                         @Param("userSource") CategorizationSource userSource,
+                                         @Param("nonFood") Collection<ProductCategory> nonFood,
+                                         Pageable pageable);
+
+    /**
      * Distinct OTHER-category products that have at least one confirmed,
      * non-excluded purchase at the given merchant CNPJ. Used to backfill the
      * HEALTH category onto products that were canonicalized before their

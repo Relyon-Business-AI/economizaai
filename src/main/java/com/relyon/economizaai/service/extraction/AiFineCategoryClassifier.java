@@ -12,7 +12,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -45,13 +44,27 @@ public class AiFineCategoryClassifier {
         return aiGateway.isEnabled();
     }
 
+    /** One LLM subcategory proposal: which leaf node, its slug, and how sure the model is (0..1). */
+    public record FineSuggestion(UUID productId, UUID categoryId, String slug, double confidence) {}
+
     /**
      * Classify a batch of products into fine leaf category ids via the LLM.
      * Returns productId → categoryId for the ones it could place (invalid/absent
      * slugs are skipped — never guessed). One AI call per invocation.
      */
     public Map<UUID, UUID> classify(List<Product> products) {
-        if (products == null || products.isEmpty()) return Map.of();
+        return suggest(products).stream()
+                .collect(Collectors.toMap(FineSuggestion::productId, FineSuggestion::categoryId,
+                        (first, second) -> first));
+    }
+
+    /**
+     * Same LLM pass as {@link #classify}, but keeps the per-item CONFIDENCE so the caller
+     * can order/threshold the proposals (the admin quick-accept review). Invalid/absent
+     * slugs are skipped — never guessed. One AI call per invocation.
+     */
+    public List<FineSuggestion> suggest(List<Product> products) {
+        if (products == null || products.isEmpty()) return List.of();
         var categories = categoryRepository.findAllByActiveTrueOrderBySortOrderAsc();
         // Leaves only: the LLM must return a SUBCATEGORY, never a group — a group slug is
         // not in the map, so it's skipped (never guessed) just like an unknown slug.
@@ -71,25 +84,33 @@ public class AiFineCategoryClassifier {
 
                 Folhas válidas (use o SLUG exato antes do parêntese): %s
 
-                Responda SOMENTE um array JSON: [{"id": "<id recebido>", "slug": "<slug>"}].
-                Pule os que realmente não der para classificar.
+                Responda SOMENTE um array JSON: [{"id": "<id recebido>", "slug": "<slug>", "confidence": <0..1>}].
+                confidence = sua certeza (1.0 = óbvio, 0.5 = em dúvida). Pule os que realmente não der para classificar.
                 """.formatted(lines, categoryList);
 
         var text = aiGateway.complete(AiActivity.FINE_CATEGORY_CLASSIFY, aiGateway.extractorModel(),
                 SYSTEM, userPrompt, 4000);
 
-        var result = new HashMap<UUID, UUID>();
+        var suggestions = new ArrayList<FineSuggestion>();
         for (var node : parseArray(text)) {
-            var categoryId = idBySlug.get(node.path("slug").asText("").trim().toLowerCase());
+            var slug = node.path("slug").asText("").trim().toLowerCase();
+            var categoryId = idBySlug.get(slug);
             if (categoryId == null) continue; // unknown slug → skip, never guess
+            UUID productId;
             try {
-                result.put(UUID.fromString(node.path("id").asText("")), categoryId);
+                productId = UUID.fromString(node.path("id").asText(""));
             } catch (IllegalArgumentException ignored) {
-                // malformed id in the response — skip that row
+                continue; // malformed id in the response — skip that row
             }
+            suggestions.add(new FineSuggestion(productId, categoryId, slug, clampConfidence(node.path("confidence").asDouble(0))));
         }
-        log.info("ai.fine_classify requested={} placed={}", products.size(), result.size());
-        return result;
+        log.info("ai.fine_classify requested={} placed={}", products.size(), suggestions.size());
+        return suggestions;
+    }
+
+    private static double clampConfidence(double value) {
+        if (value < 0) return 0;
+        return Math.min(value, 1);
     }
 
     // Defensive parse: strip markdown fences, isolate the array, tolerate errors.

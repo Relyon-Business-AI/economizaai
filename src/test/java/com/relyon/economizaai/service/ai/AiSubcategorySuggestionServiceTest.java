@@ -1,0 +1,125 @@
+package com.relyon.economizaai.service.ai;
+
+import com.relyon.economizaai.model.AiFinding;
+import com.relyon.economizaai.model.Product;
+import com.relyon.economizaai.model.enums.AiFindingStatus;
+import com.relyon.economizaai.model.enums.AiFindingType;
+import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.repository.AiFindingRepository;
+import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.repository.ReceiptItemRepository;
+import com.relyon.economizaai.service.CategoryResolver;
+import com.relyon.economizaai.service.extraction.AiFineCategoryClassifier;
+import com.relyon.economizaai.service.extraction.AiFineCategoryClassifier.FineSuggestion;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class AiSubcategorySuggestionServiceTest {
+
+    @Mock private ProductRepository productRepository;
+    @Mock private AiFindingRepository findingRepository;
+    @Mock private AiFineCategoryClassifier classifier;
+    @Mock private CategoryResolver categoryResolver;
+    @Mock private ReceiptItemRepository receiptItemRepository;
+
+    private AiSubcategorySuggestionService service;
+
+    @BeforeEach
+    void setUp() {
+        service = new AiSubcategorySuggestionService(
+                productRepository, findingRepository, classifier, categoryResolver, receiptItemRepository);
+        lenient().when(classifier.isEnabled()).thenReturn(true);
+        lenient().when(categoryResolver.groupIds()).thenReturn(Set.of(UUID.randomUUID()));
+    }
+
+    @Test
+    void generate_throwsWhenAiDisabled() {
+        when(classifier.isEnabled()).thenReturn(false);
+        assertThrows(AiGateway.AiUnavailableException.class, () -> service.generate(50));
+    }
+
+    @Test
+    void generate_createsOneFindingPerSuggestion_withPriceAndMarket() {
+        var queijosNode = UUID.randomUUID();
+        var product = Product.builder().id(UUID.randomUUID())
+                .normalizedName("QJO MUSSARELA").category(ProductCategory.MEAT_DAIRY).build();
+        when(productRepository.findWithoutSubcategory(any(), any(), any(), any()))
+                .thenReturn(List.of(product));
+        when(findingRepository.findByStatusAndType(AiFindingStatus.PENDING, AiFindingType.SUSPECT_CATEGORY))
+                .thenReturn(List.of());
+        when(classifier.suggest(anyList()))
+                .thenReturn(List.of(new FineSuggestion(product.getId(), queijosNode, "queijos", 0.95)));
+        when(categoryResolver.labelFor(eq(queijosNode), any(Locale.class))).thenReturn("Queijos");
+        when(categoryResolver.labelFor(eq(null), any(Locale.class))).thenReturn(null);
+        when(categoryResolver.legacyEnumForNode(queijosNode)).thenReturn(ProductCategory.MEAT_DAIRY);
+        when(receiptItemRepository.findLastPriceAndMarket(eq(product.getId()), any()))
+                .thenReturn(List.<Object[]>of(new Object[]{new BigDecimal("13.90"), "ATACADO NILO"}));
+
+        var outcome = service.generate(50);
+
+        assertEquals(1, outcome.created());
+        var captor = ArgumentCaptor.forClass(List.class);
+        verify(findingRepository).saveAll(captor.capture());
+        var finding = (AiFinding) captor.getValue().get(0);
+        assertEquals(AiFindingType.SUSPECT_CATEGORY, finding.getType());
+        assertEquals(AiFindingStatus.PENDING, finding.getStatus());
+        assertEquals(new BigDecimal("0.950"), finding.getConfidence());
+        assertTrue(finding.getPayload().contains("\"categoryNodeSlug\":\"queijos\""));
+        assertTrue(finding.getPayload().contains("\"category\":\"MEAT_DAIRY\""));
+        assertTrue(finding.getPayload().contains("\"suggestedLabel\":\"Queijos\""));
+        assertTrue(finding.getPayload().contains("\"lastPrice\":13.90"));
+        assertTrue(finding.getPayload().contains("\"lastMarket\":\"ATACADO NILO\""));
+    }
+
+    @Test
+    void generate_skipsProductsAlreadyHavingAPendingSuggestion() {
+        var product = Product.builder().id(UUID.randomUUID()).normalizedName("X").build();
+        var existing = AiFinding.builder().type(AiFindingType.SUSPECT_CATEGORY)
+                .payload("{\"productId\":\"" + product.getId() + "\"}").build();
+        when(productRepository.findWithoutSubcategory(any(), any(), any(), any()))
+                .thenReturn(List.of(product));
+        when(findingRepository.findByStatusAndType(AiFindingStatus.PENDING, AiFindingType.SUSPECT_CATEGORY))
+                .thenReturn(List.of(existing));
+
+        var outcome = service.generate(50);
+
+        assertEquals(0, outcome.created());
+        assertEquals(1, outcome.skippedExisting());
+    }
+
+    @Test
+    void generate_stopsGracefullyWhenAiCapRunsOut() {
+        var product = Product.builder().id(UUID.randomUUID()).normalizedName("X").build();
+        when(productRepository.findWithoutSubcategory(any(), any(), any(), any()))
+                .thenReturn(List.of(product));
+        when(findingRepository.findByStatusAndType(AiFindingStatus.PENDING, AiFindingType.SUSPECT_CATEGORY))
+                .thenReturn(List.of());
+        when(classifier.suggest(anyList())).thenThrow(new AiGateway.AiUnavailableException("sem credito"));
+
+        var outcome = service.generate(50);
+
+        assertTrue(outcome.stopped());
+        assertEquals(0, outcome.created());
+    }
+}

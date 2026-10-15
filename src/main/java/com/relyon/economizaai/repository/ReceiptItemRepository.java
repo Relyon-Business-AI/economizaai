@@ -20,6 +20,20 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
     Optional<ReceiptItem> findFirstByProductIdOrderByCreatedAtDesc(UUID productId);
 
     /**
+     * Last purchase of a product as a scalar projection: [unitPrice, marketName]. Used to
+     * decorate AI subcategory findings with "preço/mercado" WITHOUT pulling the lazy receipt
+     * entity — the suggestion sweep runs untransacted, so a lazy nav would detach-fail.
+     * Call with a one-row Pageable; empty when the product has no confirmed purchase.
+     */
+    @Query("""
+            SELECT item.unitPrice, item.receipt.marketName
+            FROM ReceiptItem item
+            WHERE item.product.id = :productId
+            ORDER BY item.createdAt DESC
+            """)
+    List<Object[]> findLastPriceAndMarket(@Param("productId") UUID productId, Pageable pageable);
+
+    /**
      * "Caçador de descontos" ranking: per household, how many confirmed items were bought
      * BELOW the community average unit price for that product in the window, and the total
      * R$ under that average. The community average only counts products bought by at least
