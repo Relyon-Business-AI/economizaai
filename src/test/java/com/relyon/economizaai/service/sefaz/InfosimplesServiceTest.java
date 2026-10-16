@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.sefaz;
 
+import com.relyon.economizaai.exception.InfosimplesNoDataException;
 import com.relyon.economizaai.exception.ReceiptParseException;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.paidapi.InfosimplesAlertService;
@@ -16,6 +17,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -165,6 +167,29 @@ class InfosimplesServiceTest {
         assertThrows(ReceiptParseException.class,
                 () -> service.fetchParsed(CHAVE, UnidadeFederativa.CE));
         verify(alertService).alertConsultFailure("ce", 603, "O token informado não tem autorização");
+    }
+
+    @Test
+    void fetchParsed_deterministicNoDataCode_throwsNoDataSubtype() {
+        // 612 "consulta nao retornou dados" e deterministico por nota - o subtipo sinaliza
+        // ao caller que NAO deve contar pro circuit breaker.
+        server.expect(requestTo(BASE_URL + "/api/v2/consultas/sefaz/ms/nfce?token=test-key&nfce=" + CHAVE))
+                .andRespond(withSuccess("{\"code\":612,\"code_message\":\"A consulta nao retornou dados\",\"data\":[]}", MediaType.APPLICATION_JSON));
+
+        assertThrows(InfosimplesNoDataException.class,
+                () -> service.fetchParsed(CHAVE, UnidadeFederativa.MS));
+    }
+
+    @Test
+    void fetchParsed_transientCode_doesNotUseNoDataSubtype() {
+        // 609 "tentativas de consulta falharam" e instabilidade do provedor - deve continuar
+        // contando pro breaker (excecao generica, nao o subtipo deterministico).
+        server.expect(requestTo(BASE_URL + "/api/v2/consultas/sefaz/ms/nfce?token=test-key&nfce=" + CHAVE))
+                .andRespond(withSuccess("{\"code\":609,\"code_message\":\"Tentativas de consulta falharam\",\"data\":[]}", MediaType.APPLICATION_JSON));
+
+        var thrown = assertThrows(ReceiptParseException.class,
+                () -> service.fetchParsed(CHAVE, UnidadeFederativa.MS));
+        assertFalse(thrown instanceof InfosimplesNoDataException);
     }
 
     @Test

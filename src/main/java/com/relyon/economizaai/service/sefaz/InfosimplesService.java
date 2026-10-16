@@ -2,6 +2,7 @@ package com.relyon.economizaai.service.sefaz;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.relyon.economizaai.exception.InfosimplesNoDataException;
 import com.relyon.economizaai.exception.ReceiptParseException;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.paidapi.InfosimplesAlertService;
@@ -54,6 +55,11 @@ public class InfosimplesService {
             new ParameterizedTypeReference<>() {};
     private static final ParameterizedTypeReference<InfosimplesSaldoResponse> SALDO_RESPONSE_TYPE =
             new ParameterizedTypeReference<>() {};
+
+    // Respostas determinísticas por nota (não são saúde do provedor): 602 serviço errado na URL,
+    // 607 parâmetro inválido (chave corrompida), 612 consulta não retornou dados (nota fora da
+    // retenção do portal / nunca transmitida). Não contam pro circuit breaker.
+    private static final Set<Integer> DETERMINISTIC_NO_DATA_CODES = Set.of(602, 607, 612);
 
     private final String apiKey;
     private final InfosimplesAlertService alertService;
@@ -128,12 +134,17 @@ public class InfosimplesService {
             // The owner must hear about a failing paid consult (esp. sem saldo) —
             // throttled inside, never breaks the flow.
             alertService.alertConsultFailure(ufCode, code, message);
+            // Deterministic per-nota outcomes (no data / bad chave / wrong service) are NOT
+            // provider health signals — they must not count toward the circuit breaker.
+            if (DETERMINISTIC_NO_DATA_CODES.contains(code)) {
+                throw new InfosimplesNoDataException("infosimples.error");
+            }
             throw new ReceiptParseException("infosimples.error");
         }
         if (response.data() == null || response.data().isEmpty()) {
             log.warn("infosimples.fetch.empty chave={} uf={} message='{}'",
                     abbrev(chave), ufCode, response.codeMessage());
-            throw new ReceiptParseException("infosimples.empty-response");
+            throw new InfosimplesNoDataException("infosimples.empty-response");
         }
         log.info("infosimples.fetch.ok chave={} uf={}", abbrev(chave), ufCode);
         return toParsedReceipt(chave, response.data().get(0));

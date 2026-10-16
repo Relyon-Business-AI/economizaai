@@ -28,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -145,6 +146,19 @@ class PaidApiGuardServiceTest {
 
         var captor = ArgumentCaptor.forClass(PaidApiCall.class);
         verify(repository).save(captor.capture());
+        assertFalse(captor.getValue().isSuccess());
+    }
+
+    @Test
+    void recordDeterministicFailure_writesLedgerButNeverTripsBreaker() {
+        // 5 resultados deterministicos "sem dados" (> threshold 3) deixam o circuito FECHADO -
+        // um lote de notas mortas nao pode starvar as recuperaveis.
+        for (var attempt = 0; attempt < 5; attempt++) {
+            service.recordDeterministicFailure(USER, PaidApiService.INFOSIMPLES, "SP", "infosimples");
+        }
+        assertDoesNotThrow(() -> service.assertCircuitClosed(PaidApiService.INFOSIMPLES));
+        var captor = ArgumentCaptor.forClass(PaidApiCall.class);
+        verify(repository, times(5)).save(captor.capture());
         assertFalse(captor.getValue().isSuccess());
     }
 

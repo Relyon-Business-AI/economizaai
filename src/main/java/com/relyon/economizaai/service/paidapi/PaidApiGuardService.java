@@ -135,6 +135,15 @@ public class PaidApiGuardService {
         registerFailureAndMaybeTrip(service);
     }
 
+    /**
+     * Records a DETERMINISTIC failed call (the provider answered fine, the answer is just
+     * "no data for this input") in the ledger WITHOUT counting it toward the breaker — a
+     * retry batch of dead notas must never trip the circuit and starve recoverable ones.
+     */
+    public void recordDeterministicFailure(UUID userId, PaidApiService service, String uf, String provider) {
+        persist(userId, service, uf, provider, false);
+    }
+
     private void registerFailureAndMaybeTrip(PaidApiService service) {
         var threshold = properties.getInfosimplesFailureThreshold();
         if (threshold <= 0) return;

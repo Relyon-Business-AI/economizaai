@@ -3,6 +3,7 @@ package com.relyon.economizaai.service.auth;
 import com.relyon.economizaai.exception.InvalidPhoneNumberException;
 import com.relyon.economizaai.exception.InvalidPhoneVerificationException;
 import com.relyon.economizaai.exception.PaidApiQuotaExceededException;
+import com.relyon.economizaai.exception.PhoneVerificationUnavailableException;
 import com.relyon.economizaai.model.PhoneVerificationToken;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.PaidApiService;
@@ -74,6 +75,12 @@ public class PhoneVerificationService {
         var normalized = phoneNumber == null ? null : phoneNumber.trim();
         if (normalized == null || !E164.matcher(normalized).matches()) {
             throw new InvalidPhoneNumberException();
+        }
+        // Fail-fast: sem provedor de SMS (e sem o log de dev), o código NUNCA chegaria —
+        // melhor recusar com 503 localizado do que gravar o telefone e fingir sucesso.
+        if (!twilioMessageClient.isConfigured(false) && !devCodeLogEnabled) {
+            log.warn("phone_otp.unavailable phone={} reason=twilio_not_configured", LogMasker.phone(normalized));
+            throw new PhoneVerificationUnavailableException();
         }
         assertWithinSmsQuota(user);
         user.setPhoneNumber(normalized);
@@ -150,9 +157,9 @@ public class PhoneVerificationService {
                 log.warn("[DEV-MODE] phone OTP for {} = {} (Twilio not configured)",
                         LogMasker.phone(phoneNumber), code);
             } else {
-                // Prod: an OTP in the logs is an account-takeover vector — record
-                // the misconfiguration, never the code.
-                log.error("phone_otp.not_sent phone={} reason=twilio_not_configured",
+                // Defensivo: o fail-fast em setPhoneAndSendOtp já barra este caminho em prod.
+                // Se chegar aqui, registra a misconfiguração (nunca o código — ATO vector).
+                log.warn("phone_otp.not_sent phone={} reason=twilio_not_configured",
                         LogMasker.phone(phoneNumber));
             }
             return;

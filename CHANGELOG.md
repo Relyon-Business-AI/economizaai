@@ -16,6 +16,25 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-16 — Notificação de nota pronta/falhou quando o processamento demora
+
+Quando uma nota escaneada demora pra processar (portal da SEFAZ instável, device-fetch,
+fallback, sweeper), o usuário agora é avisado **por push** quando ela fica pronta — ou
+falha — pra ele voltar e aprovar. Só dispara quando o scan passou de **2 min** (notas
+rápidas não notificam, o usuário ainda está no app).
+
+- **Novos tipos de notificação:** `RECEIPT_READY` ("Nota pronta!") e `RECEIPT_FAILED`
+  ("Não conseguimos processar sua nota"). Ambos `destination=RECEIPT` + `receiptId` nos
+  extras — o deep-link abre a tela de revisão da nota (igual ao `RECEIPT_RECOVERED`).
+- **Gate:** push só pra PRO (como as demais); FREE recebe a row no inbox do app.
+- **Limiar configurável:** `RECEIPT_READY_THRESHOLD_MINUTES` (default 2).
+- **Bug corrigido (afetava toda notificação pós-commit):** notificações disparadas no
+  `afterCommit` (as de ciclo de vida da nota, incl. o `RECEIPT_RECOVERED` que já existia)
+  **não estavam sendo persistidas nem entregues** — um `save()` dentro do afterCommit não
+  commitava. Agora persistem em transação própria. Se a FE lista o inbox, essas passam a aparecer.
+- **FE (app):** copy de processamento simplificada ("Processando — pode levar alguns
+  minutos") + CTA pós-scan pra ativar notificações. (Vai no próximo build do app.)
+
 ## 2026-10-15 — IA sugere subcategoria para produtos sem folha (lista de aceite rápido)
 
 Admin-only. Fecha o buraco deixado pelo recategorizador: produtos que ficaram no
