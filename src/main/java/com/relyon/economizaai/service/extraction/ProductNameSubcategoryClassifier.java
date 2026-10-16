@@ -32,9 +32,15 @@ public final class ProductNameSubcategoryClassifier {
         public static final Result NONE = new Result(null, Confidence.NONE);
     }
 
-    /** category = parent category slug used for conflict detection. */
-    private record Rule(String slug, String category, List<String> strong, List<String> weak) {
-        Rule(String slug, String category, List<String> strong) { this(slug, category, strong, List.of()); }
+    /**
+     * category = parent category slug usado p/ detectar conflito.
+     * exclude = contextos que DESQUALIFICAM a regra (ex.: "agua" é fruta/bebida, mas "agua
+     * sanitaria" não; "limao" é fruta, mas "suco de limao"/"detergente limao" não). Se qualquer
+     * exclude casar, a regra é ignorada — deixa "agua"/"limao"/"cha" serem fortes no caso puro.
+     */
+    private record Rule(String slug, String category, List<String> strong, List<String> weak, List<String> exclude) {
+        Rule(String slug, String category, List<String> strong) { this(slug, category, strong, List.of(), List.of()); }
+        Rule(String slug, String category, List<String> strong, List<String> weak) { this(slug, category, strong, weak, List.of()); }
     }
 
     private static final List<Rule> RULES = List.of(
@@ -71,9 +77,11 @@ public final class ProductNameSubcategoryClassifier {
             "refrigerante", "coca cola", "coca-cola", "guarana", "pepsi", "fanta", "sprite", "refri"),
             List.of("soda", "tonica")),
         new Rule("sucos", "bebidas", List.of("suco", "nectar", "del valle", "tampico")),
-        new Rule("agua", "bebidas", List.of("agua mineral", "agua com gas", "agua tonica"), List.of("agua")),
+        // "agua" forte, exceto quando é produto de limpeza/saúde (água sanitária/oxigenada).
+        new Rule("agua", "bebidas", List.of("agua"), List.of(), List.of("sanitaria", "oxigenada")),
         new Rule("cafe-cha", "bebidas", List.of(
-            "cafe", "cappuccino", "capuccino", "cha preto", "cha verde", "erva mate"), List.of(" cha ", " mate ")),
+            "cafe", "cappuccino", "capuccino", "cha preto", "cha verde", "cha branco", "cha gelado",
+            "cha mate", "mate leao", "ice tea", "erva mate"), List.of(" cha ", " mate ")),
         new Rule("paes", "padaria", List.of("baguete", "bisnaga", "pao de forma", "pao frances"), List.of("pao")),
         new Rule("bolos-confeitaria", "padaria", List.of("bolo", "torta", "croissant", "sonho", "panetone")),
         new Rule("chocolates", "doces-snacks", List.of(
@@ -87,8 +95,15 @@ public final class ProductNameSubcategoryClassifier {
             "gelatina", "pacoca", "brigadeiro")),
         new Rule("frutas", "hortifruti", List.of(
             "banana", " maca ", "mamao", "abacaxi", "melancia", "manga", "morango",
-            "abacate", "melao", "kiwi", "tangerina", "goiaba", "ameixa"),
-            List.of("laranja", "uva", "limao", "pera")),
+            "abacate", "melao", "kiwi", "goiaba", "ameixa")),
+        // cítricos/uva/pera: fruta no caso puro, mas são sabor comum de suco/refri/doce/limpeza →
+        // fortes SÓ sem esse contexto (exclusões), senão "suco de limão" viraria fruta.
+        new Rule("frutas", "hortifruti",
+            List.of("limao", "laranja", " uva", "pera", "tangerina", "maracuja"),
+            List.of(),
+            List.of("suco", "nectar", "refri", "refrigerante", "detergente", "sabao", "amaciante",
+                "essencia", "desinfetante", "aromatiz", "limpador", " cha ", "gelatina", "iogurte",
+                "bala", "chiclete", "pirulito", "bolacha", "biscoito", "sorvete", "picole")),
         new Rule("legumes-verduras", "hortifruti", List.of(
             "tomate", "batata", "cebola", "alface", "cenoura", "brocolis", "couve", "abobrinha",
             "pepino", "pimentao", "alho", "beterraba", "repolho", "mandioca", "abobora",
@@ -129,6 +144,7 @@ public final class ProductNameSubcategoryClassifier {
         String firstStrongSlug = null;
         String firstAnySlug = null;
         for (var rule : RULES) {
+            if (anyMatch(folded, rule.exclude())) continue; // contexto desqualifica (ex.: "suco de limao")
             var strong = anyMatch(folded, rule.strong());
             var weak = !strong && anyMatch(folded, rule.weak());
             if (!strong && !weak) continue;
