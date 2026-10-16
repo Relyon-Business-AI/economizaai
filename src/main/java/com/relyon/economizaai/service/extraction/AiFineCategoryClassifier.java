@@ -33,7 +33,10 @@ public class AiFineCategoryClassifier {
     private static final String SYSTEM =
             "Você é o curador de dados do economizaai, um app brasileiro que lê cupons fiscais (NFC-e) de "
             + "supermercado/farmácia. Você entende abreviações de cupom (REFRIG=refrigerante, FERM=fermento, "
-            + "C/=com). Classifique cada produto na folha de categoria MAIS específica que couber. Seja "
+            + "C/=com). Classifique cada produto na folha de categoria MAIS específica que couber. "
+            + "Itens não-alimentares de uso doméstico (pilha, cola, fita, lâmpada, ferramenta, utensílio de "
+            + "cozinha, vela) vão em 'utilidades' (de Casa e descartáveis); use 'nao-mercado' SÓ para o que "
+            + "claramente não é consumo da casa (ex.: brinquedo, papelaria, vestuário, presente). Seja "
             + "conservador: se não der para saber, pule. Responda SEMPRE somente JSON válido, sem markdown.";
 
     private final AiGateway aiGateway;

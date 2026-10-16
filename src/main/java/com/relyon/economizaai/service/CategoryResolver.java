@@ -136,6 +136,14 @@ public class CategoryResolver {
      */
     public UUID reconcileNode(ProductCategory legacyEnum, UUID currentNodeId) {
         if (legacyEnum == null) return null;
+        // Finer groups that have NO legacy enum (laticínios e ovos, doces e snacks, congelados,
+        // bebidas alcoólicas, casa e descartáveis) can't be the target of any enum, so the
+        // enum↔node invariant can't anchor them. Keep the explicitly-assigned fine node instead
+        // of collapsing it — otherwise those subcategorias could never hold a product.
+        if (currentNodeId != null) {
+            var nodeGroup = byId.get(groupIdOf(currentNodeId));
+            if (nodeGroup != null && nodeGroup.getLegacyEnum() == null) return currentNodeId;
+        }
         var groupId = idByLegacyEnum.get(legacyEnum);
         if (groupId == null) return currentNodeId; // enum with no mapped node — leave untouched
         if (currentNodeId == null) return groupId;

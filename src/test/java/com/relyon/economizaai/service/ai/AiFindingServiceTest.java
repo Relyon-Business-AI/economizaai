@@ -31,6 +31,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -99,6 +100,23 @@ class AiFindingServiceTest {
 
         verify(adminProductService).setCategory(productId, ProductCategory.MEAT_DAIRY);
         verify(adminProductService).setCategoryNode(productId, nodeId);
+    }
+
+    @Test
+    void approveCategory_enumlessGroup_setsOnlyNode_noThrow() {
+        // Folha de grupo sem enum (ex.: "ovos" em Laticínios e ovos): o payload não traz enum e
+        // legacyEnumForNode devolve null — deve gravar SÓ o nó fino, sem setCategory e sem explodir.
+        var productId = UUID.randomUUID();
+        var ovosNode = UUID.randomUUID();
+        var finding = pending(AiFindingType.SUSPECT_CATEGORY,
+                "{\"productId\":\"" + productId + "\",\"categoryNodeSlug\":\"ovos\",\"suggestedLabel\":\"Ovos\"}");
+        when(categoryResolver.idForSlug("ovos")).thenReturn(ovosNode);
+        lenient().when(categoryResolver.legacyEnumForNode(ovosNode)).thenReturn(null);
+
+        service.approve(finding.getId());
+
+        verify(adminProductService).setCategoryNode(productId, ovosNode);
+        verify(adminProductService, never()).setCategory(any(), any());
     }
 
     @Test

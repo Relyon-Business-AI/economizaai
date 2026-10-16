@@ -211,16 +211,19 @@ public class AiFindingService {
         // Fase 1 do motor na taxonomia: além do enum, grava a FOLHA fina (category_id).
         var nodeSlug = blankToNull(payload.path("categoryNodeSlug").asText(null));
         var nodeId = nodeSlug != null ? categoryResolver.idForSlug(nodeSlug) : null;
-        // O enum mantém enum↔nó consistentes. Normalmente vem no payload; quando o admin
-        // EDITA inline só a subcategoria (manda só o slug), derivamos o enum do grupo da folha.
+        // O enum é o balde grosso legado. Normalmente vem no payload; quando o admin EDITA inline
+        // só a subcategoria (manda só o slug), derivamos o enum do GRUPO da folha. Mas grupos finos
+        // sem enum legado (laticínios, doces, congelados, bebidas alcoólicas, casa) não têm enum —
+        // nesse caso aplica SÓ a folha; o listener agora preserva nós de grupos sem enum, então o
+        // produto mantém o enum atual e ganha a subcategoria.
         var categoryText = blankToNull(payload.path("category").asText(null));
         var category = categoryText != null
                 ? ProductCategory.valueOf(categoryText)
                 : (nodeId != null ? categoryResolver.legacyEnumForNode(nodeId) : null);
-        if (category == null) {
+        if (category == null && nodeId == null) {
             throw new IllegalStateException("Achado de categoria sem enum nem nó resolvível");
         }
-        adminProductService.setCategory(productId, category);
+        if (category != null) adminProductService.setCategory(productId, category);
         // Sem slug explícito → nó-grupo default do enum, pra sempre dar um nó pro produto.
         if (nodeId == null) nodeId = categoryResolver.idForLegacyEnum(category);
         if (nodeId != null) adminProductService.setCategoryNode(productId, nodeId);
