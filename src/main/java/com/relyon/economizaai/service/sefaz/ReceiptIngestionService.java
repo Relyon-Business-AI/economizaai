@@ -433,15 +433,18 @@ public class ReceiptIngestionService {
             if (receipt == null) return;
             receipt.setRawHtml(fetched.html());
             receipt.setSourceUrl(fetched.sourceUrl());
+            // Re-failure of an already-diagnosed nota (admin/auto retry kept the old reason) must
+            // not re-notify the owner — only the FIRST diagnosis pings (see notifyFailedIfSlow).
+            var firstDiagnosis = receipt.getParseErrorReason() == null;
             var reason = parseFailureReason(ex, receipt.getChaveAcesso());
             receipt.setParseErrorReason(reason);
             receipt.setStatus(statusForReason(reason));
             receiptRepository.save(receipt);
-            log.warn("ingest parse-failed status={} reason={} (raw HTML kept for review)",
-                    receipt.getStatus(), reason);
+            log.warn("ingest parse-failed status={} reason={} firstDiagnosis={} (raw HTML kept for review)",
+                    receipt.getStatus(), reason, firstDiagnosis);
             // CONTINGENCY_PENDING is NOT a failure (the note just isn't on SEFAZ yet) — only
             // ping the owner when it truly ended as FAILED_PARSE after a slow scan.
-            if (receipt.getStatus() == ReceiptStatus.FAILED_PARSE) notifyFailedIfSlow(receipt);
+            if (receipt.getStatus() == ReceiptStatus.FAILED_PARSE && firstDiagnosis) notifyFailedIfSlow(receipt);
         });
     }
 
@@ -541,12 +544,15 @@ public class ReceiptIngestionService {
             transactionTemplate.executeWithoutResult(txStatus ->
                     receiptRepository.findById(receiptId).ifPresent(receipt -> {
                         if (receipt.getStatus() == ReceiptStatus.PROCESSING) {
+                            // Admin/auto retries re-enter here with the ORIGINAL diagnosis still on the
+                            // row — a repeated failure must not spam the owner (only the first one pings).
+                            var firstDiagnosis = receipt.getParseErrorReason() == null;
                             if (shouldOverwriteReason(receipt, ex)) {
                                 receipt.setParseErrorReason(failureReason(ex));
                             }
                             receipt.setStatus(ReceiptStatus.FAILED_PARSE);
                             receiptRepository.save(receipt);
-                            notifyFailedIfSlow(receipt);
+                            if (firstDiagnosis) notifyFailedIfSlow(receipt);
                         }
                     }));
         } catch (RuntimeException inner) {

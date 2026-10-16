@@ -486,6 +486,34 @@ class ReceiptIngestionServiceTest {
     }
 
     @Test
+    void markFailed_slowFirstDiagnosis_notifiesOwner() {
+        var receipt = processingReceipt();
+        receipt.setCreatedAt(LocalDateTime.now().minusMinutes(5));
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        service.markFailed(receipt.getId(), new RuntimeException("portal down"));
+
+        var captor = ArgumentCaptor.forClass(NotificationPayload.class);
+        verify(notificationService).notifyAfterCommit(captor.capture());
+        assertEquals(NotificationType.RECEIPT_FAILED, captor.getValue().type());
+    }
+
+    @Test
+    void markFailed_retryOfDiagnosedNota_doesNotRenotify() {
+        // Retries admin/auto re-entram com o diagnostico ORIGINAL na linha - falha repetida
+        // nao pode spammar o dono (a primeira falha ja notificou).
+        var receipt = processingReceipt();
+        receipt.setCreatedAt(LocalDateTime.now().minusMinutes(5));
+        receipt.setParseErrorReason("receipt.parse.failed:infosimples.error");
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        service.markFailed(receipt.getId(), new RuntimeException("still failing"));
+
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+        verify(notificationService, never()).notifyAfterCommit(any());
+    }
+
+    @Test
     void markFailed_poolRejectionWithoutPriorReason_recordsTheRejection() {
         var receipt = processingReceipt();
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
