@@ -73,6 +73,30 @@ A rollback looks like:
 
 <!-- AUTONOMOUS ENTRIES BELOW - newest first. The watchdog inserts here. -->
 
+### [2026-10-16 10:16:56] [NEEDS-HUMAN] NO-TESTREF - E2E: 22. Categorizer AI status (admin)
+- **Detected:**
+```
+A daily E2E run against the live dev server FAILED (12/277 assertions).
+Failing steps:
+- 22. Categorizer AI status (admin): AssertionError: expected response to have status code 200 but got 403
+- 22. Categorizer AI status (admin): AssertionError: expected { status: 403, message: 'Forbidden' } to have property 'enabled'
+- COV admin: List audiences (builtin Admins presente): AssertionError: expected response to have status code 200 but got 403
+- COV admin: Preview da audiencia Admins: AssertionError: expected response to have status code 200 but got 403
+- COV admin: Criar campanha DRAFT (audiencia Admins): AssertionError: expected response to have status code 201 but got 403
+- COV admin: Test-send da campanha pra si (202): AssertionError: expected response to have status code 202 but got 403
+- COV admin: Agendar no passado e rejeitado (400): AssertionError: expected response to have status code 400 but got 403
+- COV admin: Metricas da campanha (zeradas em DRAFT): AssertionError: expected response to have status code 200 but got 403
+
+Server-side errors during the run (the likely root cause):
+```
+2026-10-16 10:16:31.934 WARN  [req=22ea56ff user=a***@economizaai.app ip=172.210.149.50 rcpt= item=] c.r.e.e.GlobalExceptionHandler - Validation failed: {name=must not be blank}
+com.relyon.economizaai.exception.ReceiptParseException
+2026-10-16 10:16:32.057 WARN  [req=b42be84a user=a***@economizaai.app ip=172.210.149.50 rcpt= item=] c.r.e.e.GlobalExceptionHandler - Validation failed: {nam
+```
+- **Claude:** Failed to authenticate. API Error: 401 OAuth access token has been revoked.
+Ignoring 25 permissions.allow entries from .claude/settings.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog, or set projects["/home/runner/work/economizaai/economizaai"].hasTrustDialogAccepted: true in /home/runner/.claude.json.
+- **Outcome:** reply lacked a verifiable test reference; changes discarded.
+
 ### [2026-10-15 10:29:44] [NEEDS-HUMAN] NO-TESTREF - E2E: 22. Categorizer AI status (admin)
 - **Detected:**
 ```
