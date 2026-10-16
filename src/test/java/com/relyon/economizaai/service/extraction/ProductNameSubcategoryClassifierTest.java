@@ -30,6 +30,26 @@ class ProductNameSubcategoryClassifierTest {
     }
 
     @Test
+    void ambiguousPureCase_nowHigh() {
+        // casos puros que antes caíam no LLM (fraco) agora são determinísticos
+        assertEquals("frutas", ProductNameSubcategoryClassifier.classify("LIMAO TAHITI KG").slug());
+        assertEquals(Confidence.HIGH, ProductNameSubcategoryClassifier.classify("LIMAO TAHITI KG").confidence());
+        assertEquals("agua", ProductNameSubcategoryClassifier.classify("AGUA CRYSTAL 1,5L").slug());
+        assertEquals(Confidence.HIGH, ProductNameSubcategoryClassifier.classify("AGUA CRYSTAL 1,5L").confidence());
+        assertEquals("cafe-cha", ProductNameSubcategoryClassifier.classify("CHA GELADO LIPTON LIMAO 1,5L").slug());
+    }
+
+    @Test
+    void contextExclusions_disqualifyTheFruitWaterRules() {
+        // "suco de limão" é suco, não fruta
+        assertEquals("sucos", ProductNameSubcategoryClassifier.classify("SUCO DE LIMAO DEL VALLE 1L").slug());
+        // "água sanitária" NÃO é água (é limpeza → sem folha aqui = NONE)
+        assertEquals(Confidence.NONE, ProductNameSubcategoryClassifier.classify("AGUA SANITARIA YPE 2L").confidence());
+        // "detergente limão" não é fruta
+        assertEquals(Confidence.NONE, ProductNameSubcategoryClassifier.classify("DETERGENTE LIMAO YPE 500ML").confidence());
+    }
+
+    @Test
     void cola_doesNotHijackCocaCola() {
         // "cola" sozinho casaria "coca cola"; por isso usamos "cola bastao"/"cola branca" etc.
         assertEquals("refrigerantes", ProductNameSubcategoryClassifier.classify("COCA COLA 2L").slug());
@@ -38,9 +58,9 @@ class ProductNameSubcategoryClassifierTest {
 
     @Test
     void lowConfidence_conflictAcrossGroups() {
-        // noodle + meat flavor, and juice + fruit — ambiguous → route to LLM
+        // noodle + meat flavor — ambíguo → vai pro LLM
         assertEquals(Confidence.LOW, ProductNameSubcategoryClassifier.classify("MACARRAO NISSIN PICANHA 80G").confidence());
-        assertEquals(Confidence.LOW, ProductNameSubcategoryClassifier.classify("SUCO DE LIMAO NATURAL 1L").confidence());
+        // ("suco de limão" não é mais conflito — a exclusão resolve pra sucos; ver contextExclusions)
     }
 
     @Test
