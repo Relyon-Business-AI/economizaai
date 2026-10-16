@@ -31,6 +31,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -62,8 +64,9 @@ class AiSubcategorySuggestionServiceTest {
     @Test
     void generate_createsOneFindingPerSuggestion_withPriceAndMarket() {
         var queijosNode = UUID.randomUUID();
+        // Nome sem keyword (NONE) → cai no LLM (o caminho que este teste exercita).
         var product = Product.builder().id(UUID.randomUUID())
-                .normalizedName("QJO MUSSARELA").category(ProductCategory.MEAT_DAIRY).build();
+                .normalizedName("ITEM XPTO 500").category(ProductCategory.MEAT_DAIRY).build();
         when(productRepository.findWithoutSubcategory(any(), any(), any(), any()))
                 .thenReturn(List.of(product));
         when(findingRepository.findByStatusAndType(AiFindingStatus.PENDING, AiFindingType.SUSPECT_CATEGORY))
@@ -79,9 +82,11 @@ class AiSubcategorySuggestionServiceTest {
         var outcome = service.generate(50);
 
         assertEquals(1, outcome.created());
+        // saveAll é chamado 2x (lote keyword vazio + lote LLM) — pega o não-vazio.
         var captor = ArgumentCaptor.forClass(List.class);
-        verify(findingRepository).saveAll(captor.capture());
-        var finding = (AiFinding) captor.getValue().get(0);
+        verify(findingRepository, times(2)).saveAll(captor.capture());
+        var saved = captor.getAllValues().stream().filter(list -> !list.isEmpty()).findFirst().orElseThrow();
+        var finding = (AiFinding) saved.get(0);
         assertEquals(AiFindingType.SUSPECT_CATEGORY, finding.getType());
         assertEquals(AiFindingStatus.PENDING, finding.getStatus());
         assertEquals(new BigDecimal("0.950"), finding.getConfidence());
@@ -90,6 +95,27 @@ class AiSubcategorySuggestionServiceTest {
         assertTrue(finding.getPayload().contains("\"suggestedLabel\":\"Queijos\""));
         assertTrue(finding.getPayload().contains("\"lastPrice\":13.90"));
         assertTrue(finding.getPayload().contains("\"lastMarket\":\"ATACADO NILO\""));
+    }
+
+    @Test
+    void generate_keywordHigh_createsFindingWithoutLlm() {
+        var utilidadesNode = UUID.randomUUID();
+        var product = Product.builder().id(UUID.randomUUID())
+                .normalizedName("PILHA DURACELL AA C/4").build();
+        when(productRepository.findWithoutSubcategory(any(), any(), any(), any()))
+                .thenReturn(List.of(product));
+        when(findingRepository.findByStatusAndType(AiFindingStatus.PENDING, AiFindingType.SUSPECT_CATEGORY))
+                .thenReturn(List.of());
+        when(categoryResolver.idForSlug("utilidades")).thenReturn(utilidadesNode);
+        when(categoryResolver.labelFor(eq(utilidadesNode), any(Locale.class))).thenReturn("Utilidades");
+        lenient().when(categoryResolver.labelFor(eq(null), any(Locale.class))).thenReturn(null);
+        lenient().when(categoryResolver.legacyEnumForNode(utilidadesNode)).thenReturn(null);
+        when(receiptItemRepository.findLastPriceAndMarket(eq(product.getId()), any())).thenReturn(List.of());
+
+        var outcome = service.generate(50);
+
+        assertEquals(1, outcome.created());
+        verify(classifier, never()).suggest(anyList()); // keyword resolveu — não chamou o LLM
     }
 
     @Test

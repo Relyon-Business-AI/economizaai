@@ -19,6 +19,24 @@ class ProductNameSubcategoryClassifierTest {
     }
 
     @Test
+    void utilidades_householdNonFood() {
+        // itens que antes caíam em "não-mercado" agora batem em Utilidades/Descartáveis deterministicamente
+        assertEquals("utilidades", ProductNameSubcategoryClassifier.classify("PILHA DURACELL AA C/4").slug());
+        assertEquals(Confidence.HIGH, ProductNameSubcategoryClassifier.classify("PILHA DURACELL AA C/4").confidence());
+        assertEquals("utilidades", ProductNameSubcategoryClassifier.classify("LAMP LED PHILIPS 1521LM 16W").slug());
+        assertEquals("utilidades", ProductNameSubcategoryClassifier.classify("FOSFORO FIAT LUX EXTRA LONGO 50P").slug());
+        assertEquals("utilidades", ProductNameSubcategoryClassifier.classify("CARVAO ACACIA NEGRA 5KG").slug());
+        assertEquals("descartaveis", ProductNameSubcategoryClassifier.classify("LUVAS VINIL G C/100").slug());
+    }
+
+    @Test
+    void cola_doesNotHijackCocaCola() {
+        // "cola" sozinho casaria "coca cola"; por isso usamos "cola bastao"/"cola branca" etc.
+        assertEquals("refrigerantes", ProductNameSubcategoryClassifier.classify("COCA COLA 2L").slug());
+        assertEquals(Confidence.HIGH, ProductNameSubcategoryClassifier.classify("COCA COLA 2L").confidence());
+    }
+
+    @Test
     void lowConfidence_conflictAcrossGroups() {
         // noodle + meat flavor, and juice + fruit — ambiguous → route to LLM
         assertEquals(Confidence.LOW, ProductNameSubcategoryClassifier.classify("MACARRAO NISSIN PICANHA 80G").confidence());

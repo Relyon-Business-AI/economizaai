@@ -108,7 +108,15 @@ public final class ProductNameSubcategoryClassifier {
         new Rule("papel", "casa-descartaveis", List.of(
             "papel higienico", "guardanapo", "toalha de papel", "lenco de papel")),
         new Rule("descartaveis", "casa-descartaveis", List.of(
-            "copo descartavel", "prato descartavel", "papel aluminio", "filme pvc")),
+            "copo descartavel", "prato descartavel", "papel aluminio", "filme pvc",
+            "luva", "luvas", "saco de lixo", "saco para lixo", "saco lixo", "touca descartavel")),
+        // Itens não-alimentares de uso doméstico: antes caíam no LLM e viravam "não-mercado".
+        // Keywords específicas (evita "cola" solto, que casaria "coca cola").
+        new Rule("utilidades", "casa-descartaveis", List.of(
+            "pilha", "bateria", "lampada", "lamp led", "fosforo", "carvao", "isqueiro", "vela",
+            "durepoxi", "super bonder", "cola bastao", "cola branca", "cola instantanea",
+            "cola quente", "fita adesiva", "fita crepe", "durex", "prego", "parafuso",
+            "lanterna", "cadeado", "pregador de roupa")),
         // generic dairy fallbacks LATE + WEAK (ao leite / leite de coco must not force dairy)
         new Rule("leite", "laticinios-ovos", List.of(), List.of("leite")),
         new Rule("ovos", "laticinios-ovos", List.of("duzia de ovos"), List.of("ovo ", "ovos")));

@@ -35,9 +35,10 @@ public class AiFineCategoryClassifier {
             + "supermercado/farmácia. Você entende abreviações de cupom (REFRIG=refrigerante, FERM=fermento, "
             + "C/=com). Classifique cada produto na folha de categoria MAIS específica que couber. "
             + "Itens não-alimentares de uso doméstico (pilha, cola, fita, lâmpada, ferramenta, utensílio de "
-            + "cozinha, vela) vão em 'utilidades' (de Casa e descartáveis); use 'nao-mercado' SÓ para o que "
-            + "claramente não é consumo da casa (ex.: brinquedo, papelaria, vestuário, presente). Seja "
-            + "conservador: se não der para saber, pule. Responda SEMPRE somente JSON válido, sem markdown.";
+            + "cozinha, vela, fósforo, carvão) vão em 'utilidades' ou 'descartaveis' (de Casa e descartáveis). "
+            + "Se o produto realmente não se encaixa em nenhuma folha (ex.: brinquedo, vestuário, papelaria), "
+            + "PULE — não force. Seja conservador: se não der para saber, pule. Responda SEMPRE somente JSON "
+            + "válido, sem markdown.";
 
     private final AiGateway aiGateway;
     private final CategoryRepository categoryRepository;
