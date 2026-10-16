@@ -130,9 +130,13 @@ public class AiSubcategorySuggestionService {
         for (var product : fresh) {
             var keyword = ProductNameSubcategoryClassifier.classify(
                     DescriptionNormalizer.normalize(product.getNormalizedName()));
-            var nodeId = keyword.confidence() == Confidence.HIGH ? categoryResolver.idForSlug(keyword.slug()) : null;
-            if (nodeId != null && !nodeId.equals(product.getCategoryId())) {
-                keywordFindings.add(buildFinding(product, new FineSuggestion(product.getId(), nodeId, keyword.slug(), KEYWORD_CONFIDENCE)));
+            if (keyword.confidence() == Confidence.HIGH) {
+                var nodeId = categoryResolver.idForSlug(keyword.slug());
+                // Só sugere se for uma subcategoria DENTRO da categoria atual (nunca muda de categoria).
+                if (nodeId != null && !nodeId.equals(product.getCategoryId()) && fitsCurrentCategory(product, nodeId)) {
+                    keywordFindings.add(buildFinding(product, new FineSuggestion(product.getId(), nodeId, keyword.slug(), KEYWORD_CONFIDENCE)));
+                }
+                // keyword HIGH de OUTRA categoria (ou já é a folha) → não sugere nem manda pro LLM
             } else {
                 forLlm.add(product);
             }
@@ -180,10 +184,26 @@ public class AiSubcategorySuggestionService {
             var product = byId.get(suggestion.productId());
             if (product == null) continue;
             if (suggestion.categoryId().equals(product.getCategoryId())) continue; // already on that leaf
+            // Nunca muda de categoria: descarta sugestão cuja folha é de OUTRA categoria (ex.:
+            // azeite/Mercearia → folha de Hortifrúti). Uma varredura de subcategoria só refina.
+            if (!fitsCurrentCategory(product, suggestion.categoryId())) continue;
             findings.add(buildFinding(product, suggestion));
         }
         findingRepository.saveAll(findings);
         return findings.size();
+    }
+
+    /**
+     * True se a folha sugerida está DENTRO da categoria atual do produto — a varredura de
+     * subcategoria só refina, nunca muda a categoria. Categoria atual = grupo do nó atual (se
+     * houver) senão o grupo do enum legado. Sem categoria conhecida → qualquer folha serve.
+     */
+    private boolean fitsCurrentCategory(Product product, UUID leafId) {
+        var currentGroup = product.getCategoryId() != null
+                ? categoryResolver.groupIdOf(product.getCategoryId())
+                : categoryResolver.idForLegacyEnum(product.getCategory());
+        if (currentGroup == null) return true;
+        return currentGroup.equals(categoryResolver.groupIdOf(leafId));
     }
 
     private AiFinding buildFinding(Product product, FineSuggestion suggestion) {
