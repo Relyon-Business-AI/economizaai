@@ -73,6 +73,8 @@ public final class ProductNameSubcategoryClassifier {
         new Rule("destilados", "bebidas-alcoolicas", List.of(
             "whisky", "vodka", "cachaca", " gin ", " rum ", "tequila", "conhaque", "licor",
             "aperitivo", "campari", "steinhaeger")),
+        new Rule("bebidas-alcoolicas-outros", "bebidas-alcoolicas", List.of(
+            "bebida alcoolica mista", "sidra", "sake", "saque")),
         new Rule("refrigerantes", "bebidas", List.of(
             "refrigerante", "coca cola", "coca-cola", "guarana", "pepsi", "fanta", "sprite", "refri"),
             List.of("soda", "tonica")),
@@ -82,6 +84,8 @@ public final class ProductNameSubcategoryClassifier {
         new Rule("cafe-cha", "bebidas", List.of(
             "cafe", "cappuccino", "capuccino", "cha preto", "cha verde", "cha branco", "cha gelado",
             "cha mate", "mate leao", "ice tea", "erva mate"), List.of(" cha ", " mate ")),
+        new Rule("bebidas-outros", "bebidas", List.of(
+            "energetico", "red bull", "monster energy", "isotonico", "gatorade", "powerade")),
         new Rule("paes", "padaria", List.of("baguete", "bisnaga", "pao de forma", "pao frances"), List.of("pao")),
         new Rule("bolos-confeitaria", "padaria", List.of("bolo", "torta", "croissant", "sonho", "panetone")),
         new Rule("chocolates", "doces-snacks", List.of(

@@ -119,6 +119,26 @@ class AiSubcategorySuggestionServiceTest {
     }
 
     @Test
+    void generate_discardsCrossCategorySuggestion() {
+        // produto está em Mercearia; LLM sugere folha de Hortifrúti → descarta (não muda categoria)
+        var merceariaGroup = UUID.randomUUID();
+        var hortifrutiGroup = UUID.randomUUID();
+        var hortifrutiLeaf = UUID.randomUUID();
+        var product = Product.builder().id(UUID.randomUUID())
+                .normalizedName("PRODUTO XPTO 500").categoryId(merceariaGroup).build();
+        when(productRepository.findWithoutSubcategory(any(), any(), any(), any())).thenReturn(List.of(product));
+        when(findingRepository.findByStatusAndType(AiFindingStatus.PENDING, AiFindingType.SUSPECT_CATEGORY)).thenReturn(List.of());
+        when(classifier.suggest(anyList()))
+                .thenReturn(List.of(new FineSuggestion(product.getId(), hortifrutiLeaf, "frutas", 0.7)));
+        when(categoryResolver.groupIdOf(merceariaGroup)).thenReturn(merceariaGroup);
+        when(categoryResolver.groupIdOf(hortifrutiLeaf)).thenReturn(hortifrutiGroup);
+
+        var outcome = service.generate(50);
+
+        assertEquals(0, outcome.created());
+    }
+
+    @Test
     void generate_skipsProductsAlreadyHavingAPendingSuggestion() {
         var product = Product.builder().id(UUID.randomUUID()).normalizedName("X").build();
         var existing = AiFinding.builder().type(AiFindingType.SUSPECT_CATEGORY)

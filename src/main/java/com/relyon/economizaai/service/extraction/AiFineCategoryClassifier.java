@@ -36,9 +36,11 @@ public class AiFineCategoryClassifier {
             + "C/=com). Classifique cada produto na folha de categoria MAIS específica que couber. "
             + "Itens não-alimentares de uso doméstico (pilha, cola, fita, lâmpada, ferramenta, utensílio de "
             + "cozinha, vela, fósforo, carvão) vão em 'utilidades' ou 'descartaveis' (de Casa e descartáveis). "
-            + "Se o produto realmente não se encaixa em nenhuma folha (ex.: brinquedo, vestuário, papelaria), "
-            + "PULE — não force. Seja conservador: se não der para saber, pule. Responda SEMPRE somente JSON "
-            + "válido, sem markdown.";
+            + "Se o produto pertence claramente a uma CATEGORIA mas a nenhuma subcategoria específica, use a "
+            + "folha 'Outros …' daquela categoria (ex.: bebida alcoólica mista → bebidas-alcoolicas-outros; "
+            + "energético/isotônico → bebidas-outros) em vez de forçar uma folha específica errada. "
+            + "Se não se encaixa em nenhuma categoria (ex.: brinquedo, vestuário, papelaria), PULE — não force. "
+            + "Seja conservador: se não der para saber, pule. Responda SEMPRE somente JSON válido, sem markdown.";
 
     private final AiGateway aiGateway;
     private final CategoryRepository categoryRepository;

@@ -50,6 +50,14 @@ class ProductNameSubcategoryClassifierTest {
     }
 
     @Test
+    void outrosPerCategory_catchAll() {
+        assertEquals("bebidas-alcoolicas-outros", ProductNameSubcategoryClassifier.classify("BEBIDA ALCOOLICA MISTA ICE 269ML").slug());
+        assertEquals(Confidence.HIGH, ProductNameSubcategoryClassifier.classify("BEBIDA ALCOOLICA MISTA ICE 269ML").confidence());
+        assertEquals("bebidas-outros", ProductNameSubcategoryClassifier.classify("ENERGETICO RED BULL 250ML").slug());
+        assertEquals("bebidas-outros", ProductNameSubcategoryClassifier.classify("ISOTONICO GATORADE 500ML").slug());
+    }
+
+    @Test
     void cola_doesNotHijackCocaCola() {
         // "cola" sozinho casaria "coca cola"; por isso usamos "cola bastao"/"cola branca" etc.
         assertEquals("refrigerantes", ProductNameSubcategoryClassifier.classify("COCA COLA 2L").slug());
