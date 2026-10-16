@@ -66,6 +66,21 @@ class CategoryResolverTest {
     }
 
     @Test
+    void reconcileNode_keepsNodeUnderEnumlessGroup() {
+        // laticínios e ovos é um grupo SEM legacy_enum; seu nó "ovos" deve ser mantido mesmo
+        // com o produto carregando o enum MEAT_DAIRY (senão a subcategoria nunca grudaria).
+        var laticinios = Category.builder().id(UUID.randomUUID()).slug("laticinios-ovos").legacyEnum(null).build();
+        var ovos = Category.builder().id(UUID.randomUUID()).slug("ovos").parent(laticinios).build();
+        var carnes = Category.builder().id(UUID.randomUUID()).slug("carnes").legacyEnum(ProductCategory.MEAT_DAIRY).build();
+        when(categoryRepository.findAll()).thenReturn(List.of(laticinios, ovos, carnes));
+        resolver.warmUp();
+
+        assertEquals(ovos.getId(), resolver.reconcileNode(ProductCategory.MEAT_DAIRY, ovos.getId()),
+                "nó de grupo sem enum é preservado, não colapsa pro grupo do enum");
+        assertNull(resolver.legacyEnumForNode(ovos.getId()), "folha de grupo sem enum → enum nulo");
+    }
+
+    @Test
     void groupIdOf_andIsLeafNode() {
         warmSeed();
         assertEquals(bebidas.getId(), resolver.groupIdOf(bebidas.getId()), "a group is its own group");
