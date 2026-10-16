@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -44,6 +45,7 @@ class NotificationServiceTest {
     @Mock private SubscriptionGateService subscriptionGate;
     @Mock private NotificationDispatcher emailDispatcher;
     @Mock private NotificationDispatcher pushDispatcher;
+    @Mock private PlatformTransactionManager transactionManager;
 
     /** PRO user — delivery (push/email) is allowed. */
     private User userWithPushToken() {
@@ -81,7 +83,8 @@ class NotificationServiceTest {
             lenient().when(pushDispatcher.channel()).thenReturn(NotificationChannel.PUSH);
             dispatchers.add(pushDispatcher);
         }
-        return new NotificationService(preferenceRepository, notificationRepository, subscriptionGate, dispatchers);
+        return new NotificationService(preferenceRepository, notificationRepository, subscriptionGate,
+                transactionManager, dispatchers);
     }
 
     private NotificationPayload payload(User user, NotificationType type) {
@@ -156,7 +159,7 @@ class NotificationServiceTest {
         when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
         when(subscriptionGate.allows(any(), eq(Feature.PUSH_AND_EMAIL_DELIVERY))).thenReturn(false);
         var svc = new NotificationService(preferenceRepository, notificationRepository, subscriptionGate,
-                List.of(emailDispatcher, pushDispatcher));
+                transactionManager, List.of(emailDispatcher, pushDispatcher));
 
         svc.notify(payload(user, NotificationType.PROMO_PERSONAL));
 

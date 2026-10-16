@@ -11,8 +11,11 @@ import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.EnumMap;
@@ -39,14 +42,26 @@ public class NotificationService {
     private final SubscriptionGateService subscriptionGate;
     private final Map<NotificationChannel, NotificationDispatcher> dispatchersByChannel;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    /**
+     * Persists the notification row in a BRAND-NEW transaction. Needed only on the
+     * {@link #notifyAfterCommit} path: a {@code save()} executed inside the
+     * {@code afterCommit} phase of another transaction does not commit on its own
+     * (the original tx is already completing and there is no active tx to join),
+     * so every receipt-lifecycle notification was silently lost. REQUIRES_NEW
+     * suspends the completing tx and commits the row in its own.
+     */
+    private final TransactionTemplate afterCommitTxTemplate;
 
     public NotificationService(NotificationPreferenceRepository preferenceRepository,
                                NotificationRepository notificationRepository,
                                SubscriptionGateService subscriptionGate,
+                               PlatformTransactionManager transactionManager,
                                List<NotificationDispatcher> dispatchers) {
         this.preferenceRepository = preferenceRepository;
         this.notificationRepository = notificationRepository;
         this.subscriptionGate = subscriptionGate;
+        this.afterCommitTxTemplate = new TransactionTemplate(transactionManager);
+        this.afterCommitTxTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.dispatchersByChannel = new EnumMap<>(NotificationChannel.class);
         for (var dispatcher : dispatchers) this.dispatchersByChannel.put(dispatcher.channel(), dispatcher);
         log.info("Notification dispatchers active: {}", this.dispatchersByChannel.keySet());
@@ -64,6 +79,20 @@ public class NotificationService {
      * transaction.
      */
     public Notification notify(NotificationPayload payload) {
+        var plan = planDelivery(payload);
+        if (plan == null) return null;
+        // Persist BEFORE dispatch so the push payload carries the notification id —
+        // the app reports PUSH_OPENED with it on tap (open attribution).
+        var saved = notificationRepository.save(plan.notification());
+        if (plan.dispatch()) {
+            dispatchAll(payload, saved, plan.outbound());
+            saved = notificationRepository.save(saved);
+        }
+        return saved;
+    }
+
+    /** Resolve channels and build the (unsaved) row for a payload, or null when muted. */
+    private Plan planDelivery(NotificationPayload payload) {
         var configured = configuredChannels(payload.user(), payload.type());
         if (configured.contains(NotificationChannel.NONE)) {
             log.debug("notification.skipped user={} type={} reason=muted",
@@ -97,15 +126,12 @@ public class NotificationService {
                 log.info("notification.inbox_only user={} type={} reason=free_tier",
                         payload.user().getEmail(), payload.type());
             }
-            return notificationRepository.save(notification);
+            return new Plan(notification, outbound, false);
         }
-
-        // Persist BEFORE dispatch so the push payload carries the notification id —
-        // the app reports PUSH_OPENED with it on tap (open attribution).
-        var saved = notificationRepository.save(notification);
-        dispatchAll(payload, saved, outbound);
-        return notificationRepository.save(saved);
+        return new Plan(notification, outbound, true);
     }
+
+    private record Plan(Notification notification, Set<NotificationChannel> outbound, boolean dispatch) {}
 
     /** Fan out to every selected outbound channel; the row records aggregate delivery. */
     private void dispatchAll(NotificationPayload payload, Notification saved, Set<NotificationChannel> outbound) {
@@ -159,10 +185,21 @@ public class NotificationService {
         }
     }
 
-    /** After-commit dispatch never propagates — the business result is already committed. */
+    /**
+     * After-commit dispatch never propagates — the business result is already committed.
+     * The row is persisted in its OWN transaction ({@link #afterCommitTxTemplate}) because a
+     * plain {@code save()} inside the afterCommit phase does not commit; the outbound HTTP
+     * dispatch then runs OUTSIDE any transaction (never pin a connection across an HTTP call).
+     */
     private void dispatchDeferred(NotificationPayload payload) {
         try {
-            notify(payload);
+            var plan = planDelivery(payload);
+            if (plan == null) return;
+            var saved = afterCommitTxTemplate.execute(status -> notificationRepository.save(plan.notification()));
+            if (plan.dispatch() && saved != null) {
+                dispatchAll(payload, saved, plan.outbound());
+                afterCommitTxTemplate.executeWithoutResult(status -> notificationRepository.save(saved));
+            }
         } catch (RuntimeException ex) {
             log.warn("notification.after_commit_failed user={} type={} reason={}",
                     payload.user().getEmail(), payload.type(), ex.getMessage());
