@@ -449,6 +449,9 @@ economizaai:
       interval-ms: 600000                      # how often the background classifier scans unclassified markets (10 min)
       initial-delay-ms: 45000                  # wait after startup before first scan
   notifications:
+    # Only ping the owner about a scanned note's outcome (ready / failed) when the scan took
+    # at least this long — fast notas resolve in seconds while the user is still in the app.
+    receipt-ready-threshold-minutes: ${RECEIPT_READY_THRESHOLD_MINUTES:2}
     email:
       enabled: ${NOTIFICATIONS_EMAIL_ENABLED:false}    # turn on once SMTP env vars (host/port/user/pass) are wired in Render
       from: ${EMAIL_FROM:noreply@economizaai.app}

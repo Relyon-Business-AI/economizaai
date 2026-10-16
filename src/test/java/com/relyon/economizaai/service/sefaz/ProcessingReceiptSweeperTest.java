@@ -73,6 +73,22 @@ class ProcessingReceiptSweeperTest {
     }
 
     @Test
+    void sweep_force_failedRows_notifyTheWaitingOwner() {
+        var first = stuckReceipt();
+        var second = stuckReceipt();
+        when(receiptRepository.findByStatusAndUpdatedAtBefore(eq(ReceiptStatus.PROCESSING), any(LocalDateTime.class)))
+                .thenReturn(List.of(first, second));
+        when(receiptRepository.findByStatusAndUpdatedAtBefore(eq(ReceiptStatus.NEEDS_DEVICE_FETCH), any(LocalDateTime.class)))
+                .thenReturn(List.of());
+
+        offSweeper().sweep();
+
+        // A row stuck past the timeout means the owner has been waiting — ping each one.
+        verify(receiptIngestionService).notifyFailedIfSlow(first);
+        verify(receiptIngestionService).notifyFailedIfSlow(second);
+    }
+
+    @Test
     void sweep_flagOff_failsStrandedNeedsDeviceFetchReceipts() {
         var stranded = Receipt.builder().id(UUID.randomUUID()).status(ReceiptStatus.NEEDS_DEVICE_FETCH).build();
         when(receiptRepository.findByStatusAndUpdatedAtBefore(eq(ReceiptStatus.PROCESSING), any(LocalDateTime.class)))

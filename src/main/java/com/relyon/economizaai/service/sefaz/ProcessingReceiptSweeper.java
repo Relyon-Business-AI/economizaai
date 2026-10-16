@@ -138,6 +138,9 @@ public class ProcessingReceiptSweeper {
             receipt.setStatus(ReceiptStatus.FAILED_PARSE);
         });
         receiptRepository.saveAll(stuck);
+        // These rows timed out (always past the ready threshold), so the owner has been waiting —
+        // ping them that it failed (dispatched after this @Transactional sweep commits).
+        stuck.forEach(receiptIngestionService::notifyFailedIfSlow);
         log.warn("sweep {} failed={} olderThanMinutes={}", event, stuck.size(), olderThanMinutes);
     }
 }

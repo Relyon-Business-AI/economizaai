@@ -12,8 +12,12 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.ReceiptRepository;
+import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.geo.MerchantSupportGate;
+import com.relyon.economizaai.service.notifications.NotificationPayload;
+import com.relyon.economizaai.service.notifications.NotificationService;
+import com.relyon.economizaai.model.enums.NotificationType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,6 +29,7 @@ import org.postgresql.util.PSQLException;
 import org.postgresql.util.PSQLState;
 import org.springframework.core.task.TaskRejectedException;
 import org.springframework.dao.TransientDataAccessResourceException;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -64,6 +69,8 @@ class ReceiptIngestionServiceTest {
     @Mock private MarketLocationService marketLocationService;
     @Mock private MerchantSupportGate merchantSupportGate;
     @Mock private PrefetchPolicy prefetchPolicy;
+    @Mock private NotificationService notificationService;
+    @Mock private LocalizedMessageService messageService;
 
     @InjectMocks private ReceiptIngestionService service;
 
@@ -74,6 +81,9 @@ class ReceiptIngestionServiceTest {
             callback.accept(mock(TransactionStatus.class));
             return null;
         }).when(transactionTemplate).executeWithoutResult(any());
+        // @Value field isn't populated by @InjectMocks — pin the threshold so the
+        // slow/fast notification scenarios are deterministic.
+        ReflectionTestUtils.setField(service, "readyThresholdMinutes", 2);
     }
 
     private Receipt processingReceipt() {
@@ -484,5 +494,57 @@ class ReceiptIngestionServiceTest {
 
         assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
         assertTrue(receipt.getParseErrorReason().contains("TaskRejectedException"));
+    }
+
+    @Test
+    void ingest_slowSuccess_notifiesOwnerReceiptReady() {
+        // Scan took longer than the threshold (portal retries / fallback) → the owner likely
+        // left the app, so ping them to come back and confirm.
+        var receipt = processingReceipt();
+        receipt.setCreatedAt(LocalDateTime.now().minusMinutes(5));
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(sampleParsed());
+
+        service.ingest(receipt.getId(), QR);
+
+        var captor = ArgumentCaptor.forClass(NotificationPayload.class);
+        verify(notificationService).notifyAfterCommit(captor.capture());
+        assertEquals(NotificationType.RECEIPT_READY, captor.getValue().type());
+        assertEquals(receipt.getId().toString(), captor.getValue().extras().get("receiptId"));
+    }
+
+    @Test
+    void ingest_fastSuccess_doesNotNotify() {
+        // Resolved within the threshold — the user is still watching the app, no push needed.
+        var receipt = processingReceipt();
+        receipt.setCreatedAt(LocalDateTime.now());
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(sampleParsed());
+
+        service.ingest(receipt.getId(), QR);
+
+        verify(notificationService, never()).notifyAfterCommit(any());
+    }
+
+    @Test
+    void ingest_slowParseFailure_notifiesOwnerReceiptFailed() {
+        // A slow scan that ultimately FAILED_PARSE still pings the owner so they stop waiting.
+        var receipt = processingReceipt();
+        receipt.setCreatedAt(LocalDateTime.now().minusMinutes(5));
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any())).thenThrow(new ReceiptParseException("no items found"));
+
+        service.ingest(receipt.getId(), QR);
+
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+        var captor = ArgumentCaptor.forClass(NotificationPayload.class);
+        verify(notificationService).notifyAfterCommit(captor.capture());
+        assertEquals(NotificationType.RECEIPT_FAILED, captor.getValue().type());
     }
 }
