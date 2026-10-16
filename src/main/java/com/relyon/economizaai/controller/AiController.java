@@ -112,15 +112,16 @@ public class AiController {
     }
 
     /**
-     * AI subcategory-suggestion sweep: scans products that still lack a fine subcategory,
-     * files one PENDING suggestion each (with confidence + last price/market) for the
-     * admin quick-accept review. Synchronous + bounded ({@code limit}, repeatable) — one
-     * LLM call per ~40 products. Returns {created, scanned, skippedExisting, stopped}.
+     * AI subcategory-suggestion sweep: scans products that still lack a fine subcategory and
+     * files one PENDING suggestion each (with confidence + last price/market) for the admin
+     * quick-accept review. Runs in the BACKGROUND (several sequential LLM calls would blow the
+     * request timeout) — returns 202 immediately; the FE reloads the list as findings appear.
      */
     @PostMapping("/suggest-subcategories")
-    public ResponseEntity<AiSubcategorySuggestionService.SuggestOutcome> suggestSubcategories(
+    public ResponseEntity<Map<String, Object>> suggestSubcategories(
             @RequestParam(defaultValue = "120") int limit) {
-        return ResponseEntity.ok(aiSubcategorySuggestionService.generate(limit));
+        aiSubcategorySuggestionService.start(limit);
+        return ResponseEntity.accepted().body(Map.of("status", "running", "limit", limit));
     }
 
     /**

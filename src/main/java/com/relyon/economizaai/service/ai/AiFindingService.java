@@ -129,14 +129,18 @@ public class AiFindingService {
     }
 
     /**
-     * "Aceitar todos ≥ X%": approves every PENDING subcategory suggestion whose confidence
+     * "Aceitar todos ≥ X%": approves every PENDING AI subcategory SUGGESTION whose confidence
      * clears the threshold, across ALL pending rows (not just the page the admin is viewing).
+     * Scoped to our suggestions only (payload carries a {@code suggestedLabel}) so it never
+     * silently approves the older general-sweep category findings that share the type.
      */
     public BulkOutcome approveSubcategoriesAbove(BigDecimal threshold) {
         var ids = findingRepository
                 .findByStatusAndTypeAndConfidenceGreaterThanEqual(
                         AiFindingStatus.PENDING, AiFindingType.SUSPECT_CATEGORY, threshold)
-                .stream().map(AiFinding::getId).toList();
+                .stream()
+                .filter(finding -> !parsePayload(finding.getPayload()).path("suggestedLabel").asText("").isBlank())
+                .map(AiFinding::getId).toList();
         return approveBulk(ids);
     }
 

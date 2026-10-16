@@ -17,8 +17,13 @@ import com.relyon.economizaai.service.extraction.AiFineCategoryClassifier;
 import com.relyon.economizaai.service.extraction.AiFineCategoryClassifier.FineSuggestion;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+
+import static com.relyon.economizaai.config.AsyncConfig.AI_SWEEP_EXECUTOR;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -64,6 +69,34 @@ public class AiSubcategorySuggestionService {
     private final ReceiptItemRepository receiptItemRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    // Self-reference so the @Async call goes through the Spring proxy (same pattern as
+    // AiSweepService). Defaults to `this` for unit tests.
+    @Lazy
+    @Autowired
+    private AiSubcategorySuggestionService self = this;
+
+    /**
+     * Validates the AI is configured, then fires the suggestion run in the BACKGROUND and returns
+     * immediately. The run makes several sequential LLM calls (one per 40-product batch), which far
+     * exceeds the client/proxy HTTP timeout — so it must NOT run inside the request thread. The FE
+     * reloads the suggestion list to see findings appear as they're created.
+     */
+    public void start(int limit) {
+        if (!classifier.isEnabled()) {
+            throw new AiGateway.AiUnavailableException("IA não configurada");
+        }
+        self.runAsync(limit);
+    }
+
+    @Async(AI_SWEEP_EXECUTOR)
+    public void runAsync(int limit) {
+        try {
+            generate(limit);
+        } catch (RuntimeException ex) {
+            log.error("ai.subcat_suggest.failed reason={}", ex.getMessage());
+        }
+    }
 
     /**
      * Scans up to {@code limit} subcategory-less products and files one suggestion finding each.

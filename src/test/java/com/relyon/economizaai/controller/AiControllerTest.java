@@ -124,16 +124,13 @@ class AiControllerTest {
     }
 
     @Test
-    void suggestSubcategories_returnsOutcome() throws Exception {
-        when(aiSubcategorySuggestionService.generate(50))
-                .thenReturn(new AiSubcategorySuggestionService.SuggestOutcome(12, 50, 3, false));
-
+    void suggestSubcategories_startsAsync_returns202() throws Exception {
         mockMvc.perform(post("/api/v1/categorizer/ai/suggest-subcategories")
                         .param("limit", "50")
                         .with(SecurityMockMvcRequestPostProcessors.user(adminPrincipal())))
-                .andExpect(status().isOk());
+                .andExpect(status().isAccepted());
 
-        verify(aiSubcategorySuggestionService).generate(50);
+        verify(aiSubcategorySuggestionService).start(50);
     }
 
     @Test
