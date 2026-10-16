@@ -41,7 +41,11 @@ public enum NotificationType {
     // --- Transactional / one-off ---
     SYSTEM(Scope.SYSTEM, false, false),
     /** A note stuck in contingency ("aguardando SEFAZ") was auto-recovered and now has items. */
-    RECEIPT_RECOVERED(Scope.SYSTEM, false, false);
+    RECEIPT_RECOVERED(Scope.SYSTEM, false, false),
+    /** A scanned note that took a while (portal retries / fallback / sweeper) finished and is ready to review. */
+    RECEIPT_READY(Scope.SYSTEM, false, false),
+    /** A scanned note that took a while could not be processed and ended as FAILED_PARSE. */
+    RECEIPT_FAILED(Scope.SYSTEM, false, false);
 
     public enum Scope { DEFAULT, USER, SYSTEM }
 
@@ -91,7 +95,7 @@ public enum NotificationType {
             case STOCKOUT -> NotificationDestination.REPLENISHMENT;
             case PRICE_DROP -> NotificationDestination.PRODUCT;
             case BUDGET -> NotificationDestination.BUDGET;
-            case RECEIPT_RECOVERED -> NotificationDestination.RECEIPT;
+            case RECEIPT_RECOVERED, RECEIPT_READY, RECEIPT_FAILED -> NotificationDestination.RECEIPT;
             case SYSTEM -> NotificationDestination.INBOX;
         };
     }

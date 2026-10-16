@@ -23,6 +23,7 @@ import com.relyon.economizaai.service.privacy.LogMasker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.task.TaskRejectedException;
 import org.springframework.dao.RecoverableDataAccessException;
 import org.springframework.dao.TransientDataAccessException;
@@ -30,6 +31,9 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
@@ -71,6 +75,16 @@ public class ReceiptIngestionService {
     private final NotificationService notificationService;
     private final LocalizedMessageService messageService;
     private final PrefetchPolicy prefetchPolicy;
+
+    /**
+     * Only ping the owner about a note's outcome when the scan took at least this long —
+     * fast notas resolve in seconds while the user is still watching the app, so a push
+     * would be noise. The slow ones (portal retries, device-fetch, sweeper + paid fallback)
+     * are exactly the cases where the user walked away and needs to come back to confirm.
+     * Field-injected (not a constructor arg) so Lombok's @RequiredArgsConstructor is untouched.
+     */
+    @Value("${economizaai.notifications.receipt-ready-threshold-minutes:2}")
+    private int readyThresholdMinutes;
 
     /**
      * Fetch + parse the PROCESSING receipt, then transition it. Runs on the
@@ -350,17 +364,60 @@ public class ReceiptIngestionService {
             receiptRepository.save(receipt);
             log.info("ingest ok status=PENDING_CONFIRMATION items={} total={} market='{}'",
                     receipt.getItems().size(), receipt.getTotalAmount(), receipt.getMarketName());
+            // Contingency recovery already has its own (unconditional) ping; otherwise only
+            // nudge the owner when the scan was slow enough that they likely left the app.
             if (recoveredFromContingency) notifyContingencyRecovery(receipt);
+            else notifyReadyIfSlow(receipt);
         });
+    }
+
+    /** A slow scan finally produced items — ping the owner to come back and confirm (after commit). */
+    private void notifyReadyIfSlow(Receipt receipt) {
+        if (!tookLongerThanThreshold(receipt)) return;
+        var user = receipt.getUser();
+        var locale = LocalizedMessageService.toLocale(user.getLocale());
+        var marketName = marketNameOrFallback(receipt, locale);
+        var title = messageService.translate("receipt.processing.ready.title", locale);
+        var body = messageService.translate("receipt.processing.ready.body", locale, marketName);
+        notificationService.notifyAfterCommit(new NotificationPayload(
+                user, NotificationType.RECEIPT_READY, title, body, Map.of("receiptId", receipt.getId().toString())));
+        log.info("receipt.ready.notified user={} receipt={}",
+                LogMasker.email(user.getEmail()), abbrev(receipt.getId()));
+    }
+
+    /**
+     * A slow scan ended in FAILED_PARSE — ping the owner so they don't wait forever (after commit).
+     * Package-private so {@link ProcessingReceiptSweeper} can notify the rows it force-fails.
+     */
+    void notifyFailedIfSlow(Receipt receipt) {
+        if (!tookLongerThanThreshold(receipt)) return;
+        var user = receipt.getUser();
+        var locale = LocalizedMessageService.toLocale(user.getLocale());
+        var marketName = marketNameOrFallback(receipt, locale);
+        var title = messageService.translate("receipt.processing.failed.title", locale);
+        var body = messageService.translate("receipt.processing.failed.body", locale, marketName);
+        notificationService.notifyAfterCommit(new NotificationPayload(
+                user, NotificationType.RECEIPT_FAILED, title, body, Map.of("receiptId", receipt.getId().toString())));
+        log.info("receipt.failed.notified user={} receipt={}",
+                LogMasker.email(user.getEmail()), abbrev(receipt.getId()));
+    }
+
+    private boolean tookLongerThanThreshold(Receipt receipt) {
+        if (receipt.getCreatedAt() == null) return false;
+        return Duration.between(receipt.getCreatedAt(), LocalDateTime.now()).toMinutes() >= readyThresholdMinutes;
+    }
+
+    private String marketNameOrFallback(Receipt receipt, Locale locale) {
+        return receipt.getMarketName() != null && !receipt.getMarketName().isBlank()
+                ? receipt.getMarketName()
+                : messageService.translate("receipt.contingency.recovered.market_fallback", locale);
     }
 
     /** The note stuck in contingency just recovered — ping the owner (dispatched after commit). */
     private void notifyContingencyRecovery(Receipt receipt) {
         var user = receipt.getUser();
         var locale = LocalizedMessageService.toLocale(user.getLocale());
-        var marketName = receipt.getMarketName() != null && !receipt.getMarketName().isBlank()
-                ? receipt.getMarketName()
-                : messageService.translate("receipt.contingency.recovered.market_fallback", locale);
+        var marketName = marketNameOrFallback(receipt, locale);
         var title = messageService.translate("receipt.contingency.recovered.title", locale);
         var body = messageService.translate("receipt.contingency.recovered.body", locale, marketName);
         notificationService.notifyAfterCommit(new NotificationPayload(
@@ -382,6 +439,9 @@ public class ReceiptIngestionService {
             receiptRepository.save(receipt);
             log.warn("ingest parse-failed status={} reason={} (raw HTML kept for review)",
                     receipt.getStatus(), reason);
+            // CONTINGENCY_PENDING is NOT a failure (the note just isn't on SEFAZ yet) — only
+            // ping the owner when it truly ended as FAILED_PARSE after a slow scan.
+            if (receipt.getStatus() == ReceiptStatus.FAILED_PARSE) notifyFailedIfSlow(receipt);
         });
     }
 
@@ -486,6 +546,7 @@ public class ReceiptIngestionService {
                             }
                             receipt.setStatus(ReceiptStatus.FAILED_PARSE);
                             receiptRepository.save(receipt);
+                            notifyFailedIfSlow(receipt);
                         }
                     }));
         } catch (RuntimeException inner) {
