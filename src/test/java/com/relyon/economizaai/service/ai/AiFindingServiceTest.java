@@ -20,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -183,5 +184,27 @@ class AiFindingServiceTest {
 
         assertEquals(1, outcome.approved());
         assertEquals(1, outcome.failed());
+    }
+
+    @Test
+    void approveSubcategoriesAbove_onlyAppliesOurSuggestions_notOldCategoryFindings() {
+        var productId = UUID.randomUUID();
+        var nodeId = UUID.randomUUID();
+        // Nossa sugestão: payload traz suggestedLabel + slug.
+        var mine = pending(AiFindingType.SUSPECT_CATEGORY,
+                "{\"productId\":\"" + productId + "\",\"category\":\"MEAT_DAIRY\",\"categoryNodeSlug\":\"queijos\",\"suggestedLabel\":\"Queijos\"}");
+        // Achado antigo da varredura geral: só o enum, sem suggestedLabel — deve ser IGNORADO.
+        var legacy = AiFinding.builder().id(UUID.randomUUID()).type(AiFindingType.SUSPECT_CATEGORY)
+                .status(AiFindingStatus.PENDING).title("Categoria: X").payload("{\"productId\":\"" + UUID.randomUUID() + "\",\"category\":\"GROCERIES\"}").build();
+        when(findingRepository.findByStatusAndTypeAndConfidenceGreaterThanEqual(
+                AiFindingStatus.PENDING, AiFindingType.SUSPECT_CATEGORY, new BigDecimal("0.9")))
+                .thenReturn(List.of(mine, legacy));
+        when(categoryResolver.idForSlug("queijos")).thenReturn(nodeId);
+
+        var outcome = service.approveSubcategoriesAbove(new BigDecimal("0.9"));
+
+        assertEquals(1, outcome.approved());
+        assertEquals(0, outcome.failed());
+        verify(adminProductService).setCategory(productId, ProductCategory.MEAT_DAIRY);
     }
 }
