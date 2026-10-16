@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -280,6 +281,21 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleNotReadable(HttpMessageNotReadableException ex) {
         var message = messageService.translate(VALIDATION_FAILED_KEY);
         log.warn("Malformed request body: {}", ex.getMostSpecificCause().getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse(HttpStatus.BAD_REQUEST.value(), message, LocalDateTime.now()));
+    }
+
+    /** Fail-fast: phone verification refused at submit when the SMS provider isn't configured. */
+    @ExceptionHandler(PhoneVerificationUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handlePhoneVerificationUnavailable(PhoneVerificationUnavailableException ex) {
+        return respond(ex, HttpStatus.SERVICE_UNAVAILABLE, "Phone verification attempted without SMS provider");
+    }
+
+    /** A client-supplied Pageable `sort` naming a property the entity doesn't have is a 400, not a 500. */
+    @ExceptionHandler(PropertyReferenceException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidSortProperty(PropertyReferenceException ex) {
+        var message = messageService.translate(VALIDATION_FAILED_KEY);
+        log.warn("Invalid sort/filter property: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ErrorResponse(HttpStatus.BAD_REQUEST.value(), message, LocalDateTime.now()));
     }
