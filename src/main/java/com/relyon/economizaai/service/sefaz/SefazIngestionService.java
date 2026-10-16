@@ -5,6 +5,7 @@ import com.relyon.economizaai.exception.CaptchaUnavailableException;
 import com.relyon.economizaai.exception.ExperimentalPortalEvidence;
 import com.relyon.economizaai.exception.ExperimentalCaptchaWallException;
 import com.relyon.economizaai.exception.ExperimentalStateFailedException;
+import com.relyon.economizaai.exception.InfosimplesNoDataException;
 import com.relyon.economizaai.exception.InvalidQrPayloadException;
 import com.relyon.economizaai.exception.PaidApiBudgetExceededException;
 import com.relyon.economizaai.exception.PaidApiQuotaExceededException;
@@ -337,6 +338,11 @@ public class SefazIngestionService {
             log.info("sefaz.fetch.infosimples.ok uf={} chave={} items={}",
                     uf, abbrev(chave), preParsed.items().size());
             return new FetchedDocument(null, null, chave, uf, preParsed.sourceUrl(), preParsed);
+        } catch (InfosimplesNoDataException ex) {
+            // "Nota não existe/chave inválida" é resposta válida do provedor — entra no ledger
+            // mas não derruba o breaker (senão um lote de notas mortas starva as vivas).
+            paidApiGuard.recordDeterministicFailure(userId, PaidApiService.INFOSIMPLES, uf.name(), "infosimples");
+            throw ex;
         } catch (RuntimeException ex) {
             paidApiGuard.recordFailure(userId, PaidApiService.INFOSIMPLES, uf.name(), "infosimples");
             throw ex;
