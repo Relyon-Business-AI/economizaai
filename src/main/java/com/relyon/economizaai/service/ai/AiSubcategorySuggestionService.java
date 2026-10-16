@@ -13,8 +13,11 @@ import com.relyon.economizaai.repository.AiFindingRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.service.CategoryResolver;
+import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import com.relyon.economizaai.service.extraction.AiFineCategoryClassifier;
 import com.relyon.economizaai.service.extraction.AiFineCategoryClassifier.FineSuggestion;
+import com.relyon.economizaai.service.extraction.ProductNameSubcategoryClassifier;
+import com.relyon.economizaai.service.extraction.ProductNameSubcategoryClassifier.Confidence;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -55,6 +58,8 @@ public class AiSubcategorySuggestionService {
     /** One synchronous admin run covers at most this many products (≈ LIMIT/40 LLM calls). Repeatable. */
     private static final int MAX_LIMIT = 200;
     private static final int LLM_BATCH = 40;
+    /** Keyword HIGH é bem confiável — entra no topo e cabe no "Aceitar todos ≥ 90%". */
+    private static final double KEYWORD_CONFIDENCE = 0.97;
     private static final Locale PT = Locale.forLanguageTag("pt");
 
     /** Non-food groups have no finer leaf to suggest — skip them (mirrors the recategorizer). */
@@ -100,8 +105,10 @@ public class AiSubcategorySuggestionService {
 
     /**
      * Scans up to {@code limit} subcategory-less products and files one suggestion finding each.
-     * Dedupes against products that already have a pending suggestion. Stops gracefully (without
-     * failing) when the AI daily cap/credit runs out — whatever it filed so far is kept.
+     * HYBRID (como o recategorizador): primeiro o classificador de KEYWORD resolve de graça os
+     * casos HIGH-confidence (determinístico, sem LLM — é aqui que pilha/lâmpada/fósforo caem em
+     * Utilidades sem a IA errar); só o que ele marca LOW/NONE vai pro LLM. Dedupe contra produtos
+     * que já têm sugestão pendente. Para de boa (sem falhar) quando o cap/credito da IA acaba.
      */
     public SuggestOutcome generate(int limit) {
         if (!classifier.isEnabled()) {
@@ -117,10 +124,26 @@ public class AiSubcategorySuggestionService {
                 .toList();
         var skippedExisting = candidates.size() - fresh.size();
 
-        var created = 0;
+        // 1) Keyword HIGH (grátis, determinístico) — o resto vai pro LLM.
+        var keywordFindings = new ArrayList<AiFinding>();
+        var forLlm = new ArrayList<Product>();
+        for (var product : fresh) {
+            var keyword = ProductNameSubcategoryClassifier.classify(
+                    DescriptionNormalizer.normalize(product.getNormalizedName()));
+            var nodeId = keyword.confidence() == Confidence.HIGH ? categoryResolver.idForSlug(keyword.slug()) : null;
+            if (nodeId != null && !nodeId.equals(product.getCategoryId())) {
+                keywordFindings.add(buildFinding(product, new FineSuggestion(product.getId(), nodeId, keyword.slug(), KEYWORD_CONFIDENCE)));
+            } else {
+                forLlm.add(product);
+            }
+        }
+        findingRepository.saveAll(keywordFindings);
+        var created = keywordFindings.size();
+
+        // 2) LLM pro ambíguo (LOW/NONE).
         var stopped = false;
-        for (var start = 0; start < fresh.size(); start += LLM_BATCH) {
-            var batch = fresh.subList(start, Math.min(start + LLM_BATCH, fresh.size()));
+        for (var start = 0; start < forLlm.size(); start += LLM_BATCH) {
+            var batch = forLlm.subList(start, Math.min(start + LLM_BATCH, forLlm.size()));
             List<FineSuggestion> suggestions;
             try {
                 suggestions = classifier.suggest(batch);
@@ -131,8 +154,8 @@ public class AiSubcategorySuggestionService {
             }
             created += persistBatch(batch, suggestions);
         }
-        log.info("ai.subcat_suggest scanned={} created={} skipped_existing={} stopped={}",
-                fresh.size(), created, skippedExisting, stopped);
+        log.info("ai.subcat_suggest scanned={} keyword={} llm_created={} skipped_existing={} stopped={}",
+                fresh.size(), keywordFindings.size(), created - keywordFindings.size(), skippedExisting, stopped);
         return new SuggestOutcome(created, fresh.size(), skippedExisting, stopped);
     }
 
