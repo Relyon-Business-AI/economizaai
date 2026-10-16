@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.ai;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.relyon.economizaai.dto.request.MergeProductRequest;
 import com.relyon.economizaai.model.AiFinding;
 import com.relyon.economizaai.model.Product;
@@ -26,6 +27,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -148,6 +150,26 @@ class AiFindingServiceTest {
         var request = (CategorizerAdminService.CuratedImportRequest) captor.getValue().get(0);
         assertEquals("shamp", request.keyword());
         assertEquals(ProductCategory.PERSONAL_CARE, request.category());
+    }
+
+    @Test
+    void approveRule_withBlankBrandOverride_createsRuleWithoutBrand() throws Exception {
+        // PROVA: o payload traz marca "LUX", mas o override {brand:""} (do botão Aprovar do FE)
+        // tem que zerar a marca da regra criada — senão toda keyword "sabt" viraria marca LUX.
+        var finding = pending(AiFindingType.MISSING_RULE,
+                "{\"keyword\":\"sabt\",\"genericName\":\"sabonete de rosas\",\"brand\":\"LUX\",\"category\":\"PERSONAL_CARE\"}");
+        when(categorizerAdminService.importCuratedEntries(anyList()))
+                .thenReturn(new CategorizerAdminService.CuratedImportOutcome(1, 0, 0));
+        var overrides = new ObjectMapper().readTree("{\"brand\":\"\"}");
+
+        service.approve(finding.getId(), overrides);
+
+        var captor = ArgumentCaptor.forClass(List.class);
+        verify(categorizerAdminService).importCuratedEntries(captor.capture());
+        var request = (CategorizerAdminService.CuratedImportRequest) captor.getValue().get(0);
+        assertEquals("sabt", request.keyword());
+        assertEquals(ProductCategory.PERSONAL_CARE, request.category());
+        assertNull(request.brand(), "override {brand:''} deve criar a regra SEM marca");
     }
 
     @Test
