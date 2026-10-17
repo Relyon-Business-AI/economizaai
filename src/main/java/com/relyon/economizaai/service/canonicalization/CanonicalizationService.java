@@ -524,6 +524,12 @@ public class CanonicalizationService {
     }
 
     private Product buildEnrichedProduct(ReceiptItem item, ProductExtraction extraction) {
+        var product = newProductFrom(item, extraction);
+        categoryResolver.alignNewProduct(product); // enum↔nó consistentes já na criação
+        return product;
+    }
+
+    private Product newProductFrom(ReceiptItem item, ProductExtraction extraction) {
         return Product.builder()
                 .ean(item.getEan())
                 .normalizedName(item.getRawDescription())

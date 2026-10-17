@@ -260,7 +260,8 @@ public class AdminProductService {
     public ProductResponse setCategoryNode(UUID productId, UUID categoryNodeId) {
         var product = productRepository.findById(productId)
                 .orElseThrow(ProductNotFoundException::new);
-        product.setCategoryId(categoryNodeId);
+        // Escritor de NÓ: deriva o enum junto (node-first; @PreUpdate não persiste campo não-sujo).
+        categoryResolver.applyNode(product, categoryNodeId);
         product.setCategorizationSource(CategorizationSource.USER);
         var saved = productRepository.save(product);
         log.info("admin.product.category_node_set product={} node={} source=USER", productId, categoryNodeId);

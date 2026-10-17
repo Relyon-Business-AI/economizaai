@@ -139,6 +139,7 @@ public class AiItemCorrectionService {
                         .category(resolvedCategoryFinal)
                         .categorizationSource(CategorizationSource.LLM)
                         .build();
+                categoryResolver.alignNewProduct(product); // enum↔nó consistentes na criação
                 productRepository.save(product);
                 freshItem.setProduct(product);
             }

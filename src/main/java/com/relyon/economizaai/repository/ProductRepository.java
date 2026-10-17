@@ -113,6 +113,23 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     int applyCatalogCategoryNodes();
 
     /**
+     * Node-first: re-deriva o enum legado a partir do NÓ (enum da categoria do nó) pra linhas
+     * tocadas por updates NATIVOS (que bypassam o listener). Categorias sem enum legado mantêm
+     * o enum atual (aproximação legada). Idempotente.
+     */
+    @Modifying
+    @Transactional
+    @Query(value = """
+            UPDATE products p SET category = parent.legacy_enum, updated_at = now()
+            FROM categories node
+            JOIN categories parent ON parent.id = COALESCE(node.parent_id, node.id)
+            WHERE node.id = p.category_id
+              AND parent.legacy_enum IS NOT NULL
+              AND p.category IS DISTINCT FROM parent.legacy_enum
+            """, nativeQuery = true)
+    int realignEnumFromNode();
+
+    /**
      * Reset every product's {@code category_id} to the group default for its legacy
      * enum — the deterministic baseline the taxonomy sweep rebuilds on each run, so
      * stale fine-node assignments from older classifier rules are wiped first.

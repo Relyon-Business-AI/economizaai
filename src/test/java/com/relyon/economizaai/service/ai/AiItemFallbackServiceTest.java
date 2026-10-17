@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.ai;
 
 import com.relyon.economizaai.model.AiFinding;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.enums.AiFindingStatus;
@@ -42,6 +43,7 @@ class AiItemFallbackServiceTest {
             "{\"genericName\":\"Arroz Branco\",\"brand\":\"Camil\",\"category\":\"GROCERIES\",\"confidence\":0.9}";
 
     @Mock private AiGateway aiGateway;
+    @Mock private CategoryResolver categoryResolver;
     @Mock private ProductRepository productRepository;
     @Mock private ReceiptItemRepository receiptItemRepository;
     @Mock private AiFindingRepository findingRepository;
@@ -55,7 +57,7 @@ class AiItemFallbackServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AiItemFallbackService(aiGateway, productRepository, receiptItemRepository,
+        service = new AiItemFallbackService(aiGateway, productRepository, categoryResolver, receiptItemRepository,
                 findingRepository, transactionTemplate);
         item = ReceiptItem.builder().id(itemId).rawDescription("ARROZ CAMIL 5KG").build();
         lenient().when(transactionTemplate.execute(any())).thenAnswer(invocation -> {

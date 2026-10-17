@@ -19,9 +19,12 @@ import org.springframework.stereotype.Component;
  *   <li>produto SEM nó mas com enum → ganha o nó-grupo do enum (piso — mantém escritores
  *       legados funcionando até migrarem).</li>
  * </ul>
- * Quem escreve o ENUM como intenção (admin coarse, LLM enrich, consenso, farmácia) deve mover o
- * nó junto via {@link CategoryResolver#reconcileNode} — senão o nó atual vence e re-deriva o enum.
- * {@link CategoryResolver} is deliberately query-free: it is safe to call mid-flush.
+ * ⚠️ LIMITAÇÃO (Hibernate 7): em {@code @PreUpdate}, mudança de campo NÃO-sujo feita aqui NÃO é
+ * persistida — este listener só é efetivo de verdade no {@code @PrePersist} (criação). Por isso os
+ * CAMINHOS DE ESCRITA fazem a consistência explicitamente: escritores de ENUM chamam
+ * {@link CategoryResolver#reconcileNode} (movem o nó junto) e escritores de NÓ chamam
+ * {@link CategoryResolver#applyNode} (derivam o enum junto); updates nativos chamam
+ * {@code realignEnumFromNode()}. {@link CategoryResolver} is deliberately query-free: safe mid-flush.
  *
  * <p>The resolver is injected optionally via a setter (not the constructor): JPA entity
  * listeners are instantiated by Hibernate, not always as Spring beans (e.g. {@code @DataJpaTest}

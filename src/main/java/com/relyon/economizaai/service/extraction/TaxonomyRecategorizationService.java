@@ -57,6 +57,8 @@ public class TaxonomyRecategorizationService {
         var eans = productRepository.findDistinctEans();
         var enriched = enrichmentService.enrichForce(eans);
         var byCatalog = productRepository.applyCatalogCategoryNodes();
+        // updates nativos bypassam o listener — re-deriva o enum do nó (node-first)
+        productRepository.realignEnumFromNode();
 
         log.info("taxonomy.recategorize keyword={} llm={} pending={} eans={} enriched={} catalog={}",
                 byKeyword.updated(), byLlm, byKeyword.pending().size(), eans.size(), enriched, byCatalog);
@@ -92,7 +94,7 @@ public class TaxonomyRecategorizationService {
             if (result.confidence() == Confidence.HIGH) {
                 var nodeId = categoryResolver.idForSlug(result.slug());
                 if (nodeId != null && !nodeId.equals(product.getCategoryId())) {
-                    product.setCategoryId(nodeId);
+                    categoryResolver.applyNode(product, nodeId); // node-first: enum derivado junto
                     toSave.add(product);
                 }
             } else {
@@ -117,7 +119,7 @@ public class TaxonomyRecategorizationService {
                 placed.forEach((productId, categoryId) -> {
                     var product = byId.get(productId);
                     if (product != null && !categoryId.equals(product.getCategoryId())) {
-                        product.setCategoryId(categoryId);
+                        categoryResolver.applyNode(product, categoryId); // node-first: enum derivado junto
                         toSave.add(product);
                     }
                 });

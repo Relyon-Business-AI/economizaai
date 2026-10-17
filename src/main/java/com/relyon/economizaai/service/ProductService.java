@@ -139,20 +139,20 @@ public class ProductService {
         // but only if it actually produced one; otherwise there's no categorization.
         var extractedSource = category != null ? extracted.categorizationSource() : CategorizationSource.NONE;
         var source = request.category() != null ? CategorizationSource.USER : extractedSource;
-        var product = productRepository.save(Product.builder()
+        var newProduct = Product.builder()
                 .ean(blankToNull(request.ean()))
                 .normalizedName(request.normalizedName())
                 .genericName(firstNonBlank(request.genericName(), extracted.genericName()))
                 .brand(firstNonBlank(request.brand(), extracted.brand()))
                 .category(category)
-                // Node is kept consistent with the enum by ProductCategoryNodeListener on persist;
-                // we pass the extractor's fine leaf so the listener preserves it (vs collapsing to the group).
-                .categoryId(extracted.categoryId())
+                .categoryId(extracted.categoryId()) // alinhado logo abaixo via alignNewProduct
                 .unit(blankToNull(request.unit()))
                 .packSize(request.packSize() != null ? request.packSize() : extracted.packSize())
                 .packUnit(firstNonBlank(request.packUnit(), extracted.packUnit()))
                 .categorizationSource(source)
-                .build());
+                .build();
+        categoryResolver.alignNewProduct(newProduct); // enum↔nó consistentes (listener não persiste campo cruzado)
+        var product = productRepository.save(newProduct);
         log.info("Product {} created (ean={}, name='{}')", product.getId(), product.getEan(), product.getNormalizedName());
         if (product.getEan() != null) {
             var linked = receiptItemRepository.linkByEan(product, product.getEan());

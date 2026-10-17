@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service;
 
 import com.relyon.economizaai.model.Category;
+import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.CategoryRepository;
 import lombok.RequiredArgsConstructor;
@@ -182,6 +183,29 @@ public class CategoryResolver {
         var derived = group == null ? null : group.getLegacyEnum();
         if (derived != null) return derived;
         return currentEnum != null ? currentEnum : ProductCategory.OTHER;
+    }
+
+    /**
+     * Escritor de NÓ (update de produto): seta o nó e DERIVA o enum na hora. NÃO confie no
+     * listener pra isso — no Hibernate 7, mudança de campo cruzado em @PreUpdate/@PrePersist
+     * não é persistida.
+     */
+    public void applyNode(Product product, UUID nodeId) {
+        product.setCategoryId(nodeId);
+        product.setCategory(deriveCoarseEnum(nodeId, product.getCategory()));
+    }
+
+    /**
+     * Alinha enum↔nó num produto recém-construído (ANTES do primeiro save): com nó, deriva o
+     * enum; com só o enum, dá o piso (nó-grupo). Chame em todo site de criação de Product —
+     * o listener NÃO persiste campo cruzado no Hibernate 7 (@PrePersist incluso).
+     */
+    public void alignNewProduct(Product product) {
+        if (product.getCategoryId() != null) {
+            product.setCategory(deriveCoarseEnum(product.getCategoryId(), product.getCategory()));
+        } else if (product.getCategory() != null) {
+            product.setCategoryId(idForLegacyEnum(product.getCategory()));
+        }
     }
 
     /** Category id for a taxonomy slug (group or leaf), or null. Never queries. */
