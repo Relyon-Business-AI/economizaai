@@ -39,15 +39,16 @@ public class AiFineCategoryClassifier {
     private static final String SYSTEM =
             "Você é o curador de dados do economizaai, um app brasileiro que lê cupons fiscais (NFC-e) de "
             + "supermercado/farmácia. Você entende abreviações de cupom (REFRIG=refrigerante, FERM=fermento, "
-            + "C/=com). Classifique cada produto na SUBCATEGORIA mais específica que couber, usando o gabarito "
-            + "(definição + exemplos) de cada categoria e subcategoria. "
-            + "Cada produto já tem uma CATEGORIA ATUAL: prefira uma subcategoria DENTRO dela. Só proponha uma "
-            + "subcategoria de OUTRA categoria se tiver certeza de que a categoria atual está errada — e reflita "
-            + "isso numa confidence alta. "
+            + "C/=com, LING=linguiça, CHOC=chocolate). Classifique cada produto no nó MAIS específico que "
+            + "couber com segurança, usando o gabarito (definição + exemplos). "
+            + "Prefira a SUBCATEGORIA (os itens com '-' abaixo da categoria). MAS: se você só tem certeza da "
+            + "CATEGORIA (não da subcategoria), OU a categoria não tem subcategorias, retorne o slug da "
+            + "CATEGORIA — categoria certa é melhor que nada. Nunca chute uma subcategoria específica sem certeza. "
+            + "Cada produto já tem uma CATEGORIA ATUAL: prefira ficar DENTRO dela. Só proponha outra categoria "
+            + "se tiver certeza de que a atual está errada — e reflita isso numa confidence alta. "
             + "Se o produto pertence à categoria mas a nenhuma subcategoria específica, use a subcategoria "
-            + "'Outros …' daquela categoria em vez de forçar uma errada. "
-            + "Se não der para classificar com segurança (ou o produto não casa com nenhuma subcategoria), PULE — "
-            + "nunca invente nem chute. "
+            + "'Outros …' quando ela existir. "
+            + "Se não der para classificar com segurança nem a categoria, PULE — nunca invente. "
             + "confidence = sua certeza real (1.0 = óbvio, 0.5 = em dúvida). Responda SEMPRE somente JSON válido, sem markdown.";
 
     private final AiGateway aiGateway;
@@ -94,10 +95,10 @@ public class AiFineCategoryClassifier {
     public List<FineSuggestion> suggest(List<ClassificationInput> inputs) {
         if (inputs == null || inputs.isEmpty()) return List.of();
         var categories = categoryRepository.findAllByActiveTrueOrderBySortOrderAsc();
-        // Subcategorias (folhas) são o único alvo válido: um slug de categoria não está no mapa,
-        // então é pulado (nunca chutado) igual a um slug desconhecido.
+        // Alvos válidos = categorias E subcategorias (o LLM pode devolver o slug de uma CATEGORIA
+        // quando só tem certeza dela, ou quando a categoria não tem subcategoria). Slug fora da
+        // taxonomia é pulado (nunca chutado).
         var idBySlug = categories.stream()
-                .filter(category -> category.getParent() != null)
                 .collect(Collectors.toMap(Category::getSlug, Category::getId, (first, second) -> first));
 
         // Gabarito vai no SYSTEM (prefixo estável por taxonomia) → a Anthropic cacheia esse bloco
@@ -106,15 +107,15 @@ public class AiFineCategoryClassifier {
         var system = SYSTEM + """
 
 
-                GABARITO (categorias e suas subcategorias — use o SLUG exato da subcategoria):
+                GABARITO (use o SLUG exato — da subcategoria quando confiante, senão da categoria):
                 %s""".formatted(buildGabarito(categories));
         var userPrompt = """
-                Classifique cada produto na subcategoria mais específica.
+                Classifique cada produto no nó mais específico que couber com segurança.
 
                 PRODUTOS:
                 %s
 
-                Responda SOMENTE um array JSON: [{"id": "<id recebido>", "slug": "<slug da subcategoria>", "confidence": <0..1>}].
+                Responda SOMENTE um array JSON: [{"id": "<id recebido>", "slug": "<slug da subcategoria OU categoria>", "confidence": <0..1>}].
                 Pule (não inclua no array) o que realmente não der para classificar.
                 """.formatted(buildProductLines(inputs));
 
@@ -149,10 +150,13 @@ public class AiFineCategoryClassifier {
         var builder = new StringBuilder();
         for (var category : categories) {
             if (category.getParent() != null) continue; // só nível 1 aqui; as folhas vêm aninhadas
-            var children = childrenByParent.get(category.getId());
-            if (children == null || children.isEmpty()) continue; // categoria sem subcategoria não é alvo da varredura
-            builder.append("CATEGORIA ").append(category.getNamePt());
+            var children = childrenByParent.getOrDefault(category.getId(), List.of());
+            // Slug da categoria é alvo válido (LLM pode devolver só a categoria). Categorias sem
+            // subcategoria (Pet, Limpeza, Higiene, Congelados) entram também, como alvo único.
+            builder.append("CATEGORIA ").append(category.getSlug())
+                    .append(" (").append(category.getNamePt()).append(")");
             appendGabarito(builder, category);
+            if (children.isEmpty()) builder.append(" [sem subcategorias]");
             builder.append('\n');
             for (var child : children) {
                 builder.append("  - ").append(child.getSlug()).append(" (").append(child.getNamePt()).append(")");

@@ -145,6 +145,21 @@ class ReceiptAiCategorySuggestionServiceTest {
     }
 
     @Test
+    void appliesCategoryOnlySuggestion_whenAiReturnsGroup() {
+        // a IA devolveu só a CATEGORIA (grupo, ex.: Pet) pra um item que o determinístico não pegou
+        var petGroup = UUID.randomUUID();
+        var sache = item("SACHE CAO BALANCE AD", null);
+        when(receiptItemRepository.findByReceiptId(receiptId)).thenReturn(List.of(sache));
+        when(productExtractor.extract(any())).thenReturn(NO_SIGNAL);
+        when(classifier.suggest(anyList()))
+                .thenReturn(List.of(new FineSuggestion(sache.getId(), petGroup, "pet", 0.95)));
+
+        service.suggestForReceipt(receiptId);
+
+        assertEquals(petGroup, sache.getAiCategoryId());
+    }
+
+    @Test
     void skipsSuggestionBelowThreshold() {
         var unresolved = item("PRODUTO XPTO", null);
         when(receiptItemRepository.findByReceiptId(receiptId)).thenReturn(List.of(unresolved));

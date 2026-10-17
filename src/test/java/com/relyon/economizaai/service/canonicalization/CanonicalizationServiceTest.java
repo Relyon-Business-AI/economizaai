@@ -201,6 +201,24 @@ class CanonicalizationServiceTest {
     }
 
     @Test
+    void aiSuggestion_groupNode_setsCoarseCategory_forLeaflessCategory() {
+        // a IA devolveu só a CATEGORIA (nó de grupo, ex.: Pet) — vira categoria grossa, sem folha
+        var petGroup = UUID.randomUUID();
+        var receipt = buildReceipt(itemWithAiSuggestion("SACHE CAO BALANCE AD", "777", petGroup));
+        when(productExtractor.extract(any())).thenReturn(
+                new ProductExtraction(null, null, null, null, null, null, CategorizationSource.NONE));
+        when(categoryResolver.legacyEnumForNode(petGroup)).thenReturn(ProductCategory.PET_SUPPLIES);
+        stubCreateFlow("777");
+
+        service.canonicalize(receipt);
+
+        var product = receipt.getItems().get(0).getProduct();
+        assertEquals(ProductCategory.PET_SUPPLIES, product.getCategory());
+        assertEquals(petGroup, product.getCategoryId());
+        assertEquals(CategorizationSource.LLM, product.getCategorizationSource());
+    }
+
+    @Test
     void aiSuggestion_refinesWithinDictionaryCategory_keepingSource() {
         var bebidasGroup = UUID.randomUUID();
         var sucosLeaf = UUID.randomUUID();

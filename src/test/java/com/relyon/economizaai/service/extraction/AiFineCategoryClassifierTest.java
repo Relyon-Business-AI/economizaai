@@ -35,6 +35,7 @@ class AiFineCategoryClassifierTest {
     private final UUID carnesId = UUID.randomUUID();
     private final UUID avesId = UUID.randomUUID();
     private final UUID suinosId = UUID.randomUUID();
+    private final UUID petId = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
@@ -45,8 +46,11 @@ class AiFineCategoryClassifierTest {
                 .descriptionPt("Aves.").examplesPt("Frango, peru, chester").build();
         var suinos = Category.builder().id(suinosId).slug("suinos").namePt("Suínos").nameEn("Pork").parent(carnes)
                 .descriptionPt("Carne suína e frios.").examplesPt("Bacon, linguiça, presunto").build();
+        // categoria SEM subcategoria — alvo válido (só a categoria)
+        var pet = Category.builder().id(petId).slug("pet").namePt("Pet").nameEn("Pet")
+                .descriptionPt("Produtos para animais.").examplesPt("Ração, petisco").build();
         lenient().when(categoryRepository.findAllByActiveTrueOrderBySortOrderAsc())
-                .thenReturn(List.of(carnes, aves, suinos));
+                .thenReturn(List.of(carnes, aves, suinos, pet));
         lenient().when(aiGateway.curatorModel()).thenReturn("sonnet");
     }
 
@@ -90,15 +94,34 @@ class AiFineCategoryClassifierTest {
     }
 
     @Test
-    void suggest_skipsCategorySlug_onlyLeavesAreValid() {
+    void suggest_acceptsCategorySlug_whenOnlyConfidentOnCategory() {
+        // a LLM pode devolver só a CATEGORIA quando não tem certeza da subcategoria
         var productId = UUID.randomUUID();
-        // "carnes" é CATEGORIA (não folha) → não é alvo válido; o classificador pula
         when(aiGateway.complete(eq(AiActivity.FINE_CATEGORY_CLASSIFY), eq("sonnet"), anyString(), anyString(), anyInt()))
-                .thenReturn("[{\"id\":\"" + productId + "\",\"slug\":\"carnes\",\"confidence\":0.9}]");
+                .thenReturn("[{\"id\":\"" + productId + "\",\"slug\":\"carnes\",\"confidence\":0.7}]");
 
         var result = classifier.suggest(List.of(
-                new ClassificationInput(productId, null, "XPTO", null, "Carnes", null)));
+                new ClassificationInput(productId, null, "CARNE XPTO", null, null, null)));
 
-        assertTrue(result.isEmpty());
+        assertEquals(1, result.size());
+        assertEquals(carnesId, result.get(0).categoryId());
+        assertEquals("carnes", result.get(0).slug());
+    }
+
+    @Test
+    void suggest_acceptsLeaflessCategory() {
+        // categoria sem subcategoria (Pet): o único alvo possível é o slug da categoria
+        var productId = UUID.randomUUID();
+        var systemCaptor = ArgumentCaptor.forClass(String.class);
+        when(aiGateway.complete(eq(AiActivity.FINE_CATEGORY_CLASSIFY), eq("sonnet"), systemCaptor.capture(), anyString(), anyInt()))
+                .thenReturn("[{\"id\":\"" + productId + "\",\"slug\":\"pet\",\"confidence\":0.95}]");
+
+        var result = classifier.suggest(List.of(
+                new ClassificationInput(productId, "SACHE CAO BALANCE", "SACHE CAO BALANCE", null, null, null)));
+
+        assertEquals(1, result.size());
+        assertEquals(petId, result.get(0).categoryId());
+        assertTrue(systemCaptor.getValue().contains("CATEGORIA pet (Pet)"), "categoria sem folha no gabarito");
+        assertTrue(systemCaptor.getValue().contains("[sem subcategorias]"), "marca de sem subcategoria");
     }
 }
