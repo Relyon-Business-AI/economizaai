@@ -11,6 +11,7 @@ import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.ProductAliasRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.HouseholdProductAliasService;
 import com.relyon.economizaai.service.extraction.EanCatalogService;
 import com.relyon.economizaai.service.extraction.ProductExtraction;
@@ -48,6 +49,7 @@ public class CanonicalizationService {
     private final HouseholdProductAliasService householdProductAliasService;
     private final MerchantClassifier merchantClassifier;
     private final EanCatalogService eanCatalogService;
+    private final CategoryResolver categoryResolver;
 
     @Transactional
     public CanonicalizationOutcome canonicalize(Receipt receipt) {
@@ -304,7 +306,7 @@ public class CanonicalizationService {
             log.info("item.catalog_hit ean={} category={} source={}",
                     item.getEan(), catalogEntry.getCategory(), catalogEntry.getSource());
         }
-        var extraction = productExtractor.extract(item.getRawDescription());
+        var extraction = withAiFallback(item, productExtractor.extract(item.getRawDescription()));
         var dedup = tryMetadataDedup(extraction);
         if (dedup != null) {
             item.setProduct(dedup);
@@ -351,7 +353,7 @@ public class CanonicalizationService {
             ensureAlias(fuzzy.getProduct(), item.getRawDescription(), normalized);
             return ItemResult.MATCHED;
         }
-        var extraction = productExtractor.extract(item.getRawDescription());
+        var extraction = withAiFallback(item, productExtractor.extract(item.getRawDescription()));
         if (canCreateFromDescription(extraction, pharmacyMerchant)) {
             return createProductFromDescription(item, normalized, extraction, pharmacyMerchant);
         }
@@ -361,6 +363,44 @@ public class CanonicalizationService {
 
     private boolean canCreateFromDescription(ProductExtraction extraction, boolean pharmacyMerchant) {
         return extraction.genericName() != null || extraction.category() != null || pharmacyMerchant;
+    }
+
+    /**
+     * A camada FINAL do cascade: quando o determinístico não deu a SUBCATEGORIA e o item carrega a
+     * sugestão da IA (gravada assíncrona após a ingestão — ver ReceiptAiCategorySuggestionService),
+     * aplica a folha sugerida. Regras:
+     * <ul>
+     *   <li>a IA nunca sobrepõe uma folha determinística, e nunca contradiz a categoria do
+     *       dicionário (folha de OUTRA categoria é ignorada);</li>
+     *   <li>sem categoria determinística, a folha da IA também define o enum (derivado da
+     *       categoria da folha; categorias sem enum legado ancoram em OTHER — o listener apaga
+     *       nó de produto com enum nulo) e a origem vira LLM.</li>
+     * </ul>
+     */
+    private ProductExtraction withAiFallback(ReceiptItem item, ProductExtraction extraction) {
+        var aiLeaf = item.getAiCategoryId();
+        if (aiLeaf == null) return extraction;
+        if (extraction.categoryId() != null && categoryResolver.isLeafNode(extraction.categoryId())) {
+            return extraction; // determinístico já deu a subcategoria
+        }
+        var currentGroup = extraction.categoryId() != null
+                ? categoryResolver.groupIdOf(extraction.categoryId())
+                : categoryResolver.idForLegacyEnum(extraction.category());
+        if (currentGroup != null && !currentGroup.equals(categoryResolver.groupIdOf(aiLeaf))) {
+            return extraction; // sugestão de OUTRA categoria — determinístico manda
+        }
+        if (extraction.category() != null) {
+            // só refina a subcategoria; categoria e origem continuam do determinístico
+            return new ProductExtraction(extraction.genericName(), extraction.brand(),
+                    extraction.packSize(), extraction.packUnit(),
+                    extraction.category(), aiLeaf, extraction.categorizationSource());
+        }
+        var derivedEnum = categoryResolver.legacyEnumForNode(aiLeaf);
+        var anchor = derivedEnum != null ? derivedEnum : ProductCategory.OTHER;
+        log.info("item.ai_category_applied item={} leaf={} enum={}", abbrev(item.getId()), aiLeaf, anchor);
+        return new ProductExtraction(extraction.genericName(), extraction.brand(),
+                extraction.packSize(), extraction.packUnit(),
+                anchor, aiLeaf, CategorizationSource.LLM);
     }
 
     /**

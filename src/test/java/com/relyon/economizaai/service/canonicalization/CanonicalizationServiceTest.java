@@ -13,6 +13,7 @@ import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.model.EanCatalogEntry;
 import com.relyon.economizaai.model.enums.EanCatalogSource;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.HouseholdProductAliasService;
 import com.relyon.economizaai.service.extraction.EanCatalogService;
 import com.relyon.economizaai.service.extraction.ProductExtraction;
@@ -50,6 +51,7 @@ class CanonicalizationServiceTest {
     @Mock private MerchantClassifier merchantClassifier;
     @Mock private EanCatalogService eanCatalogService;
     @Mock private ReceiptItemRepository receiptItemRepository;
+    @Mock private CategoryResolver categoryResolver;
 
     @InjectMocks private CanonicalizationService service;
 
@@ -140,6 +142,142 @@ class CanonicalizationServiceTest {
         assertNotNull(product);
         assertEquals(ProductCategory.MEAT_DAIRY, product.getCategory());
         assertEquals(nodeId, product.getCategoryId());
+    }
+
+    // ── Camada final do cascade: sugestão de categoria/subcategoria da IA no item ──────────
+
+    private ReceiptItem itemWithAiSuggestion(String desc, String ean, UUID aiLeaf) {
+        var receiptItem = item(desc, ean);
+        receiptItem.setAiCategoryId(aiLeaf);
+        return receiptItem;
+    }
+
+    private void stubCreateFlow(String ean) {
+        when(productRepository.findByEan(ean)).thenReturn(Optional.empty());
+        when(productRepository.save(any(Product.class))).thenAnswer(inv -> {
+            var product = inv.<Product>getArgument(0);
+            product.setId(UUID.randomUUID());
+            return product;
+        });
+        when(aliasRepository.existsByNormalizedDescription(anyString())).thenReturn(false);
+    }
+
+    @Test
+    void aiSuggestion_fillsLeafAndDerivedEnum_whenDeterministicGaveNothing() {
+        var frutasLeaf = UUID.randomUUID();
+        var receipt = buildReceipt(itemWithAiSuggestion("TANGERINA MORGOTE KG", "111", frutasLeaf));
+        when(productExtractor.extract(any())).thenReturn(
+                new ProductExtraction(null, null, null, null, null, null, CategorizationSource.NONE));
+        when(categoryResolver.legacyEnumForNode(frutasLeaf)).thenReturn(ProductCategory.PRODUCE);
+        lenient().when(categoryResolver.idForLegacyEnum(null)).thenReturn(null);
+        stubCreateFlow("111");
+
+        service.canonicalize(receipt);
+
+        var product = receipt.getItems().get(0).getProduct();
+        assertNotNull(product);
+        assertEquals(ProductCategory.PRODUCE, product.getCategory());
+        assertEquals(frutasLeaf, product.getCategoryId());
+        assertEquals(CategorizationSource.LLM, product.getCategorizationSource());
+    }
+
+    @Test
+    void aiSuggestion_anchorsOtherEnum_forEnumlessCategory() {
+        // folha de categoria SEM enum legado (ex.: queijos → Laticínios e ovos): âncora OTHER
+        // pro listener não apagar a folha (reconcileNode devolve null quando o enum é nulo)
+        var queijosLeaf = UUID.randomUUID();
+        var receipt = buildReceipt(itemWithAiSuggestion("QUEIJO COLONIAL KG", "222", queijosLeaf));
+        when(productExtractor.extract(any())).thenReturn(
+                new ProductExtraction(null, null, null, null, null, null, CategorizationSource.NONE));
+        when(categoryResolver.legacyEnumForNode(queijosLeaf)).thenReturn(null);
+        stubCreateFlow("222");
+
+        service.canonicalize(receipt);
+
+        var product = receipt.getItems().get(0).getProduct();
+        assertEquals(ProductCategory.OTHER, product.getCategory());
+        assertEquals(queijosLeaf, product.getCategoryId());
+        assertEquals(CategorizationSource.LLM, product.getCategorizationSource());
+    }
+
+    @Test
+    void aiSuggestion_refinesWithinDictionaryCategory_keepingSource() {
+        var bebidasGroup = UUID.randomUUID();
+        var sucosLeaf = UUID.randomUUID();
+        var receipt = buildReceipt(itemWithAiSuggestion("SUCO INTEGRAL XPTO 1L", "333", sucosLeaf));
+        when(productExtractor.extract(any())).thenReturn(
+                new ProductExtraction("Suco", null, null, null,
+                        ProductCategory.BEVERAGES, null, CategorizationSource.DICTIONARY));
+        when(categoryResolver.idForLegacyEnum(ProductCategory.BEVERAGES)).thenReturn(bebidasGroup);
+        when(categoryResolver.groupIdOf(sucosLeaf)).thenReturn(bebidasGroup);
+        stubCreateFlow("333");
+
+        service.canonicalize(receipt);
+
+        var product = receipt.getItems().get(0).getProduct();
+        assertEquals(ProductCategory.BEVERAGES, product.getCategory());
+        assertEquals(sucosLeaf, product.getCategoryId());
+        assertEquals(CategorizationSource.DICTIONARY, product.getCategorizationSource()); // a categoria veio do dicionário
+    }
+
+    @Test
+    void aiSuggestion_crossCategoryIgnored_deterministicWins() {
+        var merceariaGroup = UUID.randomUUID();
+        var frutasLeaf = UUID.randomUUID();
+        var receipt = buildReceipt(itemWithAiSuggestion("AZEITE EXTRA VIRGEM 500ML", "444", frutasLeaf));
+        when(productExtractor.extract(any())).thenReturn(
+                new ProductExtraction("Azeite", null, null, null,
+                        ProductCategory.GROCERIES, null, CategorizationSource.DICTIONARY));
+        when(categoryResolver.idForLegacyEnum(ProductCategory.GROCERIES)).thenReturn(merceariaGroup);
+        when(categoryResolver.groupIdOf(frutasLeaf)).thenReturn(UUID.randomUUID()); // outra categoria
+        stubCreateFlow("444");
+
+        service.canonicalize(receipt);
+
+        var product = receipt.getItems().get(0).getProduct();
+        assertEquals(ProductCategory.GROCERIES, product.getCategory());
+        assertNull(product.getCategoryId()); // sugestão de outra categoria foi descartada
+    }
+
+    @Test
+    void aiSuggestion_neverOverridesDeterministicLeaf() {
+        var dictLeaf = UUID.randomUUID();
+        var aiLeaf = UUID.randomUUID();
+        var receipt = buildReceipt(itemWithAiSuggestion("QUEIJO MUSSARELA 500G", "555", aiLeaf));
+        when(productExtractor.extract(any())).thenReturn(
+                new ProductExtraction("Queijo", null, null, null,
+                        ProductCategory.MEAT_DAIRY, dictLeaf, CategorizationSource.DICTIONARY));
+        when(categoryResolver.isLeafNode(dictLeaf)).thenReturn(true);
+        stubCreateFlow("555");
+
+        service.canonicalize(receipt);
+
+        assertEquals(dictLeaf, receipt.getItems().get(0).getProduct().getCategoryId());
+    }
+
+    @Test
+    void aiSuggestion_enablesCreation_forNoEanItemWithoutDeterministicSignal() {
+        // sem EAN, sem alias, sem sinal do dicionário: antes ficava UNMATCHED; com a sugestão
+        // da IA o item agora cria produto categorizado
+        var frutasLeaf = UUID.randomUUID();
+        var receipt = buildReceipt(itemWithAiSuggestion("PITAYA KG", null, frutasLeaf));
+        when(productExtractor.extract(any())).thenReturn(
+                new ProductExtraction(null, null, null, null, null, null, CategorizationSource.NONE));
+        when(categoryResolver.legacyEnumForNode(frutasLeaf)).thenReturn(ProductCategory.PRODUCE);
+        when(aliasRepository.findByNormalizedDescription(anyString())).thenReturn(Optional.empty());
+        when(productRepository.save(any(Product.class))).thenAnswer(inv -> {
+            var product = inv.<Product>getArgument(0);
+            product.setId(UUID.randomUUID());
+            return product;
+        });
+        when(aliasRepository.existsByNormalizedDescription(anyString())).thenReturn(false);
+
+        var outcome = service.canonicalize(receipt);
+
+        assertEquals(1, outcome.created());
+        var product = receipt.getItems().get(0).getProduct();
+        assertEquals(ProductCategory.PRODUCE, product.getCategory());
+        assertEquals(frutasLeaf, product.getCategoryId());
     }
 
     @Test

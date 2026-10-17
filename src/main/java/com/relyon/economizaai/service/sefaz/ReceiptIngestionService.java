@@ -18,6 +18,7 @@ import com.relyon.economizaai.service.extraction.EanCatalogEnrichmentService;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.geo.MerchantSupportGate;
 import com.relyon.economizaai.service.notifications.NotificationPayload;
+import com.relyon.economizaai.service.ai.ReceiptAiCategorySuggestionService;
 import com.relyon.economizaai.service.notifications.NotificationService;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +30,8 @@ import org.springframework.dao.RecoverableDataAccessException;
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
@@ -75,6 +78,7 @@ public class ReceiptIngestionService {
     private final NotificationService notificationService;
     private final LocalizedMessageService messageService;
     private final PrefetchPolicy prefetchPolicy;
+    private final ReceiptAiCategorySuggestionService aiCategorySuggestionService;
 
     /**
      * Only ping the owner about a note's outcome when the scan took at least this long —
@@ -368,7 +372,36 @@ public class ReceiptIngestionService {
             // nudge the owner when the scan was slow enough that they likely left the app.
             if (recoveredFromContingency) notifyContingencyRecovery(receipt);
             else notifyReadyIfSlow(receipt);
+            dispatchAiCategorySuggestions(receipt.getId());
         });
+    }
+
+    /**
+     * Camada final do cascade de categorização: pós-COMMIT (a thread async precisa ler itens já
+     * commitados), classifica por IA os itens que o determinístico não resolveu e grava a sugestão
+     * pro preview da revisão/confirm. Best-effort: pool cheio ou IA fora → só loga (o job diário
+     * incremental cobre produtos sem subcategoria).
+     */
+    private void dispatchAiCategorySuggestions(UUID receiptId) {
+        if (!aiCategorySuggestionService.isEnabled()) return;
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    dispatchAiSuggestionsSafely(receiptId);
+                }
+            });
+        } else {
+            dispatchAiSuggestionsSafely(receiptId); // caminho sem tx sync (ex.: testes com template inline)
+        }
+    }
+
+    private void dispatchAiSuggestionsSafely(UUID receiptId) {
+        try {
+            aiCategorySuggestionService.suggestForReceiptAsync(receiptId);
+        } catch (RuntimeException ex) {
+            log.warn("receipt.ai_suggest.dispatch_failed receipt={} reason={}", receiptId, ex.getMessage());
+        }
     }
 
     /** A slow scan finally produced items — ping the owner to come back and confirm (after commit). */

@@ -17,6 +17,8 @@ import java.util.UUID;
 
 public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> {
 
+    List<ReceiptItem> findByReceiptId(UUID receiptId);
+
     /** Latest real purchase of a product — price-math sanity input for LLM pack-size enrichment. */
     Optional<ReceiptItem> findFirstByProductIdOrderByCreatedAtDesc(UUID productId);
 

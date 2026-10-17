@@ -16,6 +16,26 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-17 — IA é a camada final da categorização no scan (sugestão visível na revisão)
+
+Quando a nota fica pronta (PENDING_CONFIRMATION), o backend roda **em background** o
+classificador de IA só pros itens que o determinístico (EAN/alias/dicionário/keyword)
+não resolveu, e grava a sugestão no item.
+
+**O que muda pro FE (campos já existentes, sem breaking):**
+- No `GET /receipts/{id}` de nota pendente, itens não linkados a produto podem vir com
+  `category` (preview — enum ou slug), `categoryNodeSlug` + `categoryNodeLabel`
+  (subcategoria sugerida pela IA) e `categorySuggested: true`. A tela de revisão já
+  renderiza (chip + breadcrumb) sem mudança.
+- A sugestão aparece **segundos depois** da nota ficar pronta (chamada de IA async) —
+  um re-GET/refresh da nota pendente pega os valores novos.
+- No confirm, a sugestão vira a categoria do produto novo **só se** o determinístico
+  não tiver dado uma (o usuário pode ajustar antes, como sempre; a escolha dele vence).
+- IA fora do ar / nota confirmada rápido → comportamento idêntico ao anterior
+  (job diário cobre). Migration V112 (`receipt_items.ai_category_id`).
+
+---
+
 ## 2026-10-17 — `GET /insights/query` aceita `categorySlug` (taxonomia nova)
 
 O `/insights/query` agora aceita o parâmetro **`categorySlug`** (slug de um nó da
