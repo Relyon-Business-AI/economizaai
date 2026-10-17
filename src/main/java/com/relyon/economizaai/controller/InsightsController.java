@@ -9,6 +9,8 @@ import com.relyon.economizaai.model.enums.CategoryView;
 import com.relyon.economizaai.model.enums.InsightsGroupBy;
 import com.relyon.economizaai.model.enums.MarketScope;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.InsightsQueryService;
 import com.relyon.economizaai.service.InsightsQueryService.QueryFilters;
 import com.relyon.economizaai.service.InsightsService;
@@ -36,6 +38,8 @@ public class InsightsController {
 
     private final InsightsService insightsService;
     private final InsightsQueryService insightsQueryService;
+    private final CategoryResolver categoryResolver;
+    private final ProductRepository productRepository;
 
     @GetMapping("/spend")
     public ResponseEntity<SpendInsightsResponse> spend(
@@ -110,10 +114,30 @@ public class InsightsController {
             @RequestParam(required = false) BigDecimal maxReceiptTotal,
             @RequestParam(required = false) InsightsGroupBy groupBy,
             @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String categorySlug,
             @RequestParam(defaultValue = "HOUSEHOLD") CategoryView categoryView,
             @RequestParam(defaultValue = "ALL") MarketScope scope) {
+        // Filtro pela taxonomia nova (grupo OU subcategoria): resolve o slug ao nó + descendentes
+        // e vira filtro por produto — espelha o ItemController. O enum legado (category) segue
+        // valendo; o FE manda um OU outro. Sem isso o FE mandava o slug no param de enum e dava 400.
+        var productIds = productId;
+        if (categorySlug != null && !categorySlug.isBlank()) {
+            var nodeIds = categoryResolver.nodeAndDescendantIds(categorySlug);
+            var inNode = nodeIds.isEmpty() ? List.<UUID>of() : productRepository.findIdsByCategoryIdIn(nodeIds);
+            if (inNode.isEmpty()) return ResponseEntity.ok(emptyQueryResponse(from, to, groupBy));
+            productIds = inNode;
+        }
         var filters = QueryFilters.fromRequest(from, to, marketCnpj, marketCnpjRoot, category,
-                productId, ean, minReceiptTotal, maxReceiptTotal, groupBy, limit, categoryView, scope);
+                productIds, ean, minReceiptTotal, maxReceiptTotal, groupBy, limit, categoryView, scope);
         return ResponseEntity.ok(insightsQueryService.query(user, filters));
+    }
+
+    /** Zeroed response for a categorySlug that resolves to no products — evita tratar lista vazia
+     * como "sem filtro" (que retornaria tudo). O FE usa só o summary.total. */
+    private InsightsQueryResponse emptyQueryResponse(LocalDateTime from, LocalDateTime to, InsightsGroupBy groupBy) {
+        var filters = new InsightsQueryResponse.Filters(from, to, null, null, null, null, null, null, null);
+        var summary = new InsightsQueryResponse.Summary(
+                BigDecimal.ZERO, BigDecimal.ZERO, 0L, 0L, BigDecimal.ZERO);
+        return new InsightsQueryResponse(filters, summary, groupBy, List.of());
     }
 }
