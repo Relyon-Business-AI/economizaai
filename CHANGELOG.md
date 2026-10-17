@@ -16,6 +16,20 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-17 — `GET /insights/query` aceita `categorySlug` (taxonomia nova)
+
+O `/insights/query` agora aceita o parâmetro **`categorySlug`** (slug de um nó da
+taxonomia — grupo OU subcategoria, ex.: `carnes`, `salgadinhos`), além do `category`
+(enum legado). Resolve o nó + descendentes e filtra por produto, igual ao
+`GET /items?categorySlug=…`.
+
+**Por que:** ao filtrar pela taxonomia nova, o FE mandava o slug no param de enum
+(`category=carnes`) → **400 "invalid enum value"** e o total do filtro quebrava.
+**Ação do FE:** mandar o slug em `categorySlug`, nunca em `category` (esse só aceita
+os 10 enums legados). Nó sem produtos devolve resumo zerado (não "sem filtro").
+
+---
+
 ## 2026-10-16 — Notificação de nota pronta/falhou quando o processamento demora
 
 Quando uma nota escaneada demora pra processar (portal da SEFAZ instável, device-fetch,

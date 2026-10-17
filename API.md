@@ -780,7 +780,8 @@ GET /api/v1/insights/query
     &to=2026-04-30T23:59:59
     &marketCnpj=93015006005182        ← repeat for OR: ?marketCnpj=A&marketCnpj=B
     &marketCnpjRoot=93015006          ← chain-level (8-digit CNPJ root), list-typed
-    &category=GROCERIES               ← repeat for OR: ?category=GROCERIES&category=BEVERAGES
+    &category=GROCERIES               ← repeat for OR: ?category=GROCERIES&category=BEVERAGES (enum legado)
+    &categorySlug=carnes              ← taxonomy node (category OR subcategory); a category slug also matches its subcategories. NÃO mande slug em `category`
     &productId=<uuid>                 ← list-typed
     &ean=7891234567890                ← list-typed
     &minReceiptTotal=100.00           ← receipt-total range
