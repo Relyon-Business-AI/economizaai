@@ -34,6 +34,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -66,13 +67,6 @@ public class AiSubcategorySuggestionService {
     /** Keyword HIGH é bem confiável — entra no topo e cabe no "Aceitar todos ≥ 90%". */
     private static final double KEYWORD_CONFIDENCE = 0.97;
     private static final Locale PT = Locale.forLanguageTag("pt");
-
-    /**
-     * Categorias que NÃO têm subcategoria — não há folha pra sugerir, então pula (economiza chamada
-     * de IA). Saúde saiu daqui: ganhou subcategorias (medicamentos/suplementos/outros) e agora é varrida.
-     */
-    private static final Set<ProductCategory> CATEGORIES_WITHOUT_SUBCATEGORY = Set.of(
-            ProductCategory.CLEANING, ProductCategory.PERSONAL_CARE, ProductCategory.PET_SUPPLIES);
 
     /** Quão certa a IA precisa estar conforme o risco da ação (option B — mudar exige mais que preencher). */
     private enum Action { SET, CHANGE_SUBCATEGORY, CHANGE_CATEGORY }
@@ -183,10 +177,13 @@ public class AiSubcategorySuggestionService {
     }
 
     private List<Product> loadCandidates(int limit) {
-        var groupIds = categoryResolver.groupIds();
+        // Node-first: só as categorias que TÊM subcategorias são alvo de refino — as sem folha
+        // (Pet, Limpeza, Higiene, Congelados, Outros) ficam fora por construção.
+        var groupIds = new HashSet<>(categoryResolver.groupIds());
+        groupIds.removeAll(categoryResolver.groupIdsWithoutSubcategories());
         if (groupIds.isEmpty()) return List.of(); // taxonomy not warmed — nothing to sit on
         return productRepository.findWithoutSubcategory(
-                groupIds, CategorizationSource.USER, CATEGORIES_WITHOUT_SUBCATEGORY, PageRequest.of(0, limit));
+                groupIds, CategorizationSource.USER, PageRequest.of(0, limit));
     }
 
     private Set<UUID> pendingProductIds() {

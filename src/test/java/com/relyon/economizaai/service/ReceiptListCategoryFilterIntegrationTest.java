@@ -81,33 +81,33 @@ class ReceiptListCategoryFilterIntegrationTest {
 
     @Test
     void scopeSupported_keepsOnlyGroceryPharmacyMerchants() {
-        var page = receiptService.list(user, null, null, null, null, null, null, MarketScope.SUPPORTED, PageRequest.of(0, 20));
+        var page = receiptService.list(user, null, null, null, null, null, null, null, MarketScope.SUPPORTED, PageRequest.of(0, 20));
         assertEquals(2, page.getTotalElements()); // as duas notas do CNPJ ...5182 (SUPERMARKET)
     }
 
     @Test
     void scopeOther_keepsOnlyNonGroceryMerchants() {
-        var page = receiptService.list(user, null, null, null, null, null, null, MarketScope.OTHER, PageRequest.of(0, 20));
+        var page = receiptService.list(user, null, null, null, null, null, null, null, MarketScope.OTHER, PageRequest.of(0, 20));
         assertEquals(1, page.getTotalElements()); // só a nota do CNPJ ...0111 (OTHER)
     }
 
     @Test
     void noCategory_returnsAll() {
-        var page = receiptService.list(user, null, null, null, null, null, null, MarketScope.ALL, PageRequest.of(0, 20));
+        var page = receiptService.list(user, null, null, null, null, null, null, null, MarketScope.ALL, PageRequest.of(0, 20));
         assertEquals(3, page.getTotalElements());
     }
 
     @Test
     void singleCategory_narrowsToOne() {
         var page = receiptService.list(user, null, null, null,
-                List.of(ProductCategory.GROCERIES), null, null, MarketScope.ALL, PageRequest.of(0, 20));
+                List.of(ProductCategory.GROCERIES), null, null, null, MarketScope.ALL, PageRequest.of(0, 20));
         assertEquals(1, page.getTotalElements());
     }
 
     @Test
     void multipleCategories_orThemTogether() {
         var page = receiptService.list(user, null, null, null,
-                List.of(ProductCategory.GROCERIES, ProductCategory.CLEANING), null, null, MarketScope.ALL, PageRequest.of(0, 20));
+                List.of(ProductCategory.GROCERIES, ProductCategory.CLEANING), null, null, null, MarketScope.ALL, PageRequest.of(0, 20));
         assertEquals(2, page.getTotalElements());
     }
 

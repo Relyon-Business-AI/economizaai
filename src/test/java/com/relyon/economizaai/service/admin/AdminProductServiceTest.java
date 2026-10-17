@@ -37,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -122,7 +123,7 @@ class AdminProductServiceTest {
     @Test
     void listAll_pagesThroughCatalog() {
         var product = product("ARROZ", ProductCategory.GROCERIES, CategorizationSource.DICTIONARY);
-        when(productRepository.findFiltered(null, null, null, PageRequest.of(0, 50)))
+        when(productRepository.findFiltered(eq(null), eq(null), eq(null), eq(false), any(), eq(PageRequest.of(0, 50))))
                 .thenReturn(new PageImpl<>(List.of(product)));
 
         var page = service.listAll(PageRequest.of(0, 50));

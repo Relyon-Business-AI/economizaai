@@ -107,6 +107,19 @@ public class CategoryResolver {
                 .collect(Collectors.toSet());
     }
 
+    /** Categorias SEM subcategoria (Pet, Limpeza, Higiene, Congelados, Outros) — não há folha pra refinar. Never queries. */
+    public Set<UUID> groupIdsWithoutSubcategories() {
+        var parentsWithChildren = byId.values().stream()
+                .filter(category -> category.getParent() != null)
+                .map(category -> category.getParent().getId())
+                .collect(Collectors.toSet());
+        return byId.values().stream()
+                .filter(category -> category.getParent() == null)
+                .map(Category::getId)
+                .filter(groupId -> !parentsWithChildren.contains(groupId))
+                .collect(Collectors.toSet());
+    }
+
     /** The legacy enum of the group a node belongs to (so approving a leaf keeps enum↔node consistent), or null. Never queries. */
     public ProductCategory legacyEnumForNode(UUID categoryId) {
         var groupId = groupIdOf(categoryId);

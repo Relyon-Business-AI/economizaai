@@ -10,6 +10,7 @@ import com.relyon.economizaai.model.enums.AiFindingType;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.AiSweepRunRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.service.ai.AiFindingService;
 import com.relyon.economizaai.service.ai.AiGateway;
@@ -60,6 +61,7 @@ public class AiController {
     private final AiSweepRunRepository sweepRunRepository;
     private final ReceiptItemRepository receiptItemRepository;
     private final ProductRepository productRepository;
+    private final CategoryResolver categoryResolver;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -76,7 +78,7 @@ public class AiController {
                 "itensNaoCasados", receiptItemRepository.countUnmatched(),
                 "produtosSemMarca", productRepository.countByBrandIsNull(),
                 "produtosSemNome", productRepository.countByGenericNameIsNull(),
-                "produtosOutros", productRepository.countByCategory(ProductCategory.OTHER));
+                "produtosOutros", productRepository.countNeedingCategoryReview(categoryResolver.idForSlug("outros")));
         return ResponseEntity.ok(Map.of(
                 "enabled", aiGateway.isEnabled(),
                 "extractorModel", aiGateway.extractorModel(),

@@ -67,7 +67,7 @@ class AiSubcategorySuggestionServiceTest {
         // Nome sem keyword (NONE) → cai no LLM (o caminho que este teste exercita).
         var product = Product.builder().id(UUID.randomUUID())
                 .normalizedName("ITEM XPTO 500").category(ProductCategory.MEAT_DAIRY).build();
-        when(productRepository.findWithoutSubcategory(any(), any(), any(), any()))
+        when(productRepository.findWithoutSubcategory(any(), any(), any()))
                 .thenReturn(List.of(product));
         when(findingRepository.findByStatusAndType(AiFindingStatus.PENDING, AiFindingType.SUSPECT_CATEGORY))
                 .thenReturn(List.of());
@@ -102,7 +102,7 @@ class AiSubcategorySuggestionServiceTest {
         var utilidadesNode = UUID.randomUUID();
         var product = Product.builder().id(UUID.randomUUID())
                 .normalizedName("PILHA DURACELL AA C/4").build();
-        when(productRepository.findWithoutSubcategory(any(), any(), any(), any()))
+        when(productRepository.findWithoutSubcategory(any(), any(), any()))
                 .thenReturn(List.of(product));
         when(findingRepository.findByStatusAndType(AiFindingStatus.PENDING, AiFindingType.SUSPECT_CATEGORY))
                 .thenReturn(List.of());
@@ -127,7 +127,7 @@ class AiSubcategorySuggestionServiceTest {
         var hortifrutiLeaf = UUID.randomUUID();
         var product = Product.builder().id(UUID.randomUUID())
                 .normalizedName("PRODUTO XPTO 500").categoryId(merceariaGroup).build();
-        when(productRepository.findWithoutSubcategory(any(), any(), any(), any())).thenReturn(List.of(product));
+        when(productRepository.findWithoutSubcategory(any(), any(), any())).thenReturn(List.of(product));
         when(findingRepository.findByStatusAndType(AiFindingStatus.PENDING, AiFindingType.SUSPECT_CATEGORY)).thenReturn(List.of());
         when(classifier.suggest(anyList()))
                 .thenReturn(List.of(new FineSuggestion(product.getId(), hortifrutiLeaf, "frutas", 0.7)));
@@ -148,7 +148,7 @@ class AiSubcategorySuggestionServiceTest {
         var hortifrutiLeaf = UUID.randomUUID();
         var product = Product.builder().id(UUID.randomUUID())
                 .normalizedName("PRODUTO XPTO 500").category(ProductCategory.GROCERIES).categoryId(merceariaGroup).build();
-        when(productRepository.findWithoutSubcategory(any(), any(), any(), any())).thenReturn(List.of(product));
+        when(productRepository.findWithoutSubcategory(any(), any(), any())).thenReturn(List.of(product));
         when(findingRepository.findByStatusAndType(AiFindingStatus.PENDING, AiFindingType.SUSPECT_CATEGORY)).thenReturn(List.of());
         when(classifier.suggest(anyList()))
                 .thenReturn(List.of(new FineSuggestion(product.getId(), hortifrutiLeaf, "frutas", 0.95)));
@@ -180,7 +180,7 @@ class AiSubcategorySuggestionServiceTest {
         var suinosNode = UUID.randomUUID();
         var product = Product.builder().id(UUID.randomUUID())
                 .normalizedName("PRODUTO XPTO 500").category(ProductCategory.MEAT_DAIRY).categoryId(avesNode).build();
-        when(productRepository.findWithoutSubcategory(any(), any(), any(), any())).thenReturn(List.of(product));
+        when(productRepository.findWithoutSubcategory(any(), any(), any())).thenReturn(List.of(product));
         when(findingRepository.findByStatusAndType(AiFindingStatus.PENDING, AiFindingType.SUSPECT_CATEGORY)).thenReturn(List.of());
         when(classifier.suggest(anyList()))
                 .thenReturn(List.of(new FineSuggestion(product.getId(), suinosNode, "suinos", 0.70)));
@@ -199,7 +199,7 @@ class AiSubcategorySuggestionServiceTest {
         var product = Product.builder().id(UUID.randomUUID()).normalizedName("X").build();
         var existing = AiFinding.builder().type(AiFindingType.SUSPECT_CATEGORY)
                 .payload("{\"productId\":\"" + product.getId() + "\"}").build();
-        when(productRepository.findWithoutSubcategory(any(), any(), any(), any()))
+        when(productRepository.findWithoutSubcategory(any(), any(), any()))
                 .thenReturn(List.of(product));
         when(findingRepository.findByStatusAndType(AiFindingStatus.PENDING, AiFindingType.SUSPECT_CATEGORY))
                 .thenReturn(List.of(existing));
@@ -213,7 +213,7 @@ class AiSubcategorySuggestionServiceTest {
     @Test
     void generate_stopsGracefullyWhenAiCapRunsOut() {
         var product = Product.builder().id(UUID.randomUUID()).normalizedName("X").build();
-        when(productRepository.findWithoutSubcategory(any(), any(), any(), any()))
+        when(productRepository.findWithoutSubcategory(any(), any(), any()))
                 .thenReturn(List.of(product));
         when(findingRepository.findByStatusAndType(AiFindingStatus.PENDING, AiFindingType.SUSPECT_CATEGORY))
                 .thenReturn(List.of());

@@ -289,11 +289,12 @@ public class ReceiptController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
             @RequestParam(required = false) String marketCnpj,
             @RequestParam(required = false) List<ProductCategory> category,
+            @RequestParam(required = false) String categorySlug,
             @RequestParam(required = false) ReceiptStatus status,
             @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "ALL") MarketScope scope,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(receiptService.list(user, from, to, marketCnpj, category, status, q, scope, pageable));
+        return ResponseEntity.ok(receiptService.list(user, from, to, marketCnpj, category, categorySlug, status, q, scope, pageable));
     }
 
     /**

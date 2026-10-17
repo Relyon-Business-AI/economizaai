@@ -41,6 +41,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -81,8 +82,18 @@ public class AdminProductService {
      */
     @Transactional(readOnly = true)
     public Page<ProductResponse> listAll(String q, ProductCategory category, CategorizationSource source, Pageable pageable) {
+        return listAll(q, category, null, source, pageable);
+    }
+
+    /** {@code categoryNodeSlug} filtra pela taxonomia (categoria OU subcategoria, nó + descendentes). */
+    public Page<ProductResponse> listAll(String q, ProductCategory category, String categoryNodeSlug,
+                                         CategorizationSource source, Pageable pageable) {
         var query = (q == null || q.isBlank()) ? null : q.trim();
-        return productRepository.findFiltered(query, category, source, pageable).map(ProductResponse::from);
+        var nodeIds = (categoryNodeSlug == null || categoryNodeSlug.isBlank())
+                ? Set.<UUID>of()
+                : categoryResolver.nodeAndDescendantIds(categoryNodeSlug);
+        return productRepository.findFiltered(query, category, source, !nodeIds.isEmpty(), nodeIds, pageable)
+                .map(ProductResponse::from);
     }
 
     /**

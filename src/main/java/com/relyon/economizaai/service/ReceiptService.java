@@ -548,6 +548,7 @@ public class ReceiptService {
                                              LocalDateTime to,
                                              String cnpjEmitente,
                                              List<ProductCategory> categories,
+                                             String categorySlug,
                                              ReceiptStatus status,
                                              String search,
                                              MarketScope scope,
@@ -559,8 +560,19 @@ public class ReceiptService {
                 ? PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
                         Sort.by(Sort.Direction.DESC, "issuedAt"))
                 : pageable;
+        // Filtro pela taxonomia (categoria OU subcategoria): nó + descendentes. Paridade:
+        // 'outros' equivale ao enum OTHER (mesma semântica do /items).
+        Set<UUID> categoryNodeIds = null;
+        if (categorySlug != null && !categorySlug.isBlank()) {
+            var slugNode = categoryResolver.idForSlug(categorySlug);
+            if (slugNode != null && categoryResolver.legacyEnumForNode(slugNode) == ProductCategory.OTHER) {
+                categories = List.of(ProductCategory.OTHER);
+            } else {
+                categoryNodeIds = categoryResolver.nodeAndDescendantIds(categorySlug);
+            }
+        }
         var spec = ReceiptSpecifications.forSearch(
-                householdId, from, to, cnpj, categories, status, trimmedSearch, true, null);
+                householdId, from, to, cnpj, categories, status, trimmedSearch, true, null, null, categoryNodeIds);
         if (scope != null && scope != MarketScope.ALL) {
             spec = spec.and(scopeSpec(scope,
                     insightsRepository.supportedCnpjs(householdId, MerchantSupportGate.supportedSegments())));

@@ -12,6 +12,7 @@ import org.springframework.data.jpa.domain.Specification;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -58,6 +59,22 @@ public final class ReceiptSpecifications {
                                                    boolean hideFailedParse,
                                                    UnidadeFederativa uf,
                                                    String parseErrorReason) {
+        return forSearch(householdId, from, to, cnpj, categories, status, search, hideFailedParse, uf,
+                parseErrorReason, null);
+    }
+
+    /** @param categoryNodeIds filtro pela taxonomia (nó + descendentes) — o par node-first do filtro por enum. */
+    public static Specification<Receipt> forSearch(UUID householdId,
+                                                   LocalDateTime from,
+                                                   LocalDateTime to,
+                                                   String cnpj,
+                                                   List<ProductCategory> categories,
+                                                   ReceiptStatus status,
+                                                   String search,
+                                                   boolean hideFailedParse,
+                                                   UnidadeFederativa uf,
+                                                   String parseErrorReason,
+                                                   Collection<UUID> categoryNodeIds) {
         return (root, query, cb) -> {
             var predicates = new ArrayList<Predicate>();
             if (householdId != null) {
@@ -88,12 +105,17 @@ public final class ReceiptSpecifications {
             // category + search both require joining items, so do it once and
             // reuse — apply distinct, since a receipt can have many matching items.
             var hasCategories = categories != null && !categories.isEmpty();
-            if (hasCategories || search != null) {
+            var hasNodeIds = categoryNodeIds != null && !categoryNodeIds.isEmpty();
+            if (hasCategories || hasNodeIds || search != null) {
                 if (query != null) query.distinct(true);
                 var items = root.join("items", JoinType.INNER);
                 if (hasCategories) {
                     var product = items.join("product", JoinType.INNER);
                     predicates.add(product.get("category").in(categories));
+                }
+                if (hasNodeIds) {
+                    var product = items.join("product", JoinType.INNER);
+                    predicates.add(product.get("categoryId").in(categoryNodeIds));
                 }
                 if (search != null) {
                     // Escape LIKE wildcards so user input matches literally —

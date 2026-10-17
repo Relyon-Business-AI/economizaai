@@ -2,6 +2,7 @@ package com.relyon.economizaai.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.relyon.economizaai.config.SecurityConfig;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.model.AiFinding;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
@@ -48,6 +49,7 @@ class AiControllerTest {
     @Autowired private MockMvc mockMvc;
 
     @MockitoBean private AiSweepService aiSweepService;
+    @MockitoBean private CategoryResolver categoryResolver;
     @MockitoBean private AiFindingService aiFindingService;
     @MockitoBean private AiSubcategorySuggestionService aiSubcategorySuggestionService;
     @MockitoBean private AiItemFallbackService aiItemFallbackService;

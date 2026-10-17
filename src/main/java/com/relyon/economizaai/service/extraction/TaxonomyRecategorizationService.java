@@ -48,7 +48,7 @@ public class TaxonomyRecategorizationService {
 
         var food = productRepository.findAll().stream()
                 .filter(product -> product.getCategorizationSource() != CategorizationSource.USER) // nunca re-decide curadoria manual
-                .filter(product -> !hasNoSubcategories(product.getCategory()))
+                .filter(product -> !hasNoSubcategories(product))
                 .toList();
 
         var byKeyword = applyKeywordHighConfidence(food);  // HIGH only; returns LOW/NONE pending
@@ -72,7 +72,7 @@ public class TaxonomyRecategorizationService {
     public RecategorizeResult recategorizeIncremental() {
         var pending = productRepository.findByCategoryIdIsNull().stream()
                 .filter(product -> product.getCategorizationSource() != CategorizationSource.USER)
-                .filter(product -> !hasNoSubcategories(product.getCategory()))
+                .filter(product -> !hasNoSubcategories(product))
                 .toList();
         if (pending.isEmpty()) return new RecategorizeResult(0, 0, 0, 0, 0);
         var byKeyword = applyKeywordHighConfidence(pending);
@@ -131,11 +131,11 @@ public class TaxonomyRecategorizationService {
         return updated;
     }
 
-    // Categorias sem subcategoria: não há folha pra recategorizar → mantêm o nó da categoria.
-    // Saúde saiu (ganhou medicamentos/suplementos/outros e agora é recategorizada).
-    private static boolean hasNoSubcategories(ProductCategory category) {
-        return category == ProductCategory.CLEANING || category == ProductCategory.PERSONAL_CARE
-                || category == ProductCategory.PET_SUPPLIES;
+    // Node-first: categoria sem subcategoria (Pet/Limpeza/Higiene/Congelados/Outros) não tem folha
+    // pra recategorizar → produto mantém o nó da categoria. Decidido pelo NÓ, não pelo enum.
+    private boolean hasNoSubcategories(Product product) {
+        var group = categoryResolver.groupIdOf(product.getCategoryId());
+        return group != null && categoryResolver.groupIdsWithoutSubcategories().contains(group);
     }
 
     /**
@@ -146,7 +146,7 @@ public class TaxonomyRecategorizationService {
      */
     public CalibrationResult calibrate(int sampleSize) {
         var food = productRepository.findAll().stream()
-                .filter(product -> !hasNoSubcategories(product.getCategory()))
+                .filter(product -> !hasNoSubcategories(product))
                 .filter(product -> product.getNormalizedName() != null)
                 .limit(sampleSize)
                 .toList();
