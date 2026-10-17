@@ -110,6 +110,11 @@ public class ReceiptItem extends BaseEntity {
     @Column(name = "category_at_confirmation", length = 30)
     private ProductCategory categoryAtConfirmation;
 
+    /** Snapshot do NÓ (categoria/subcategoria da taxonomia) congelado na confirmação — par do
+     * {@link #categoryAtConfirmation}; substitui o enum quando ele for aposentado (Fase D). */
+    @Column(name = "category_node_at_confirmation")
+    private UUID categoryNodeAtConfirmation;
+
     /**
      * Sugestão de categoria/subcategoria da IA (nó da taxonomia) — a camada FINAL do cascade,
      * preenchida assíncrona assim que a nota fica PENDING_CONFIRMATION, só quando o determinístico

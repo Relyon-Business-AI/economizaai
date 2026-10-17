@@ -43,6 +43,40 @@ class CategoryResolverTest {
         assertNull(resolver.reconcileNode(null, refrigerantes.getId()), "null enum → null node");
     }
 
+    // ── Fase 2 (nó é a verdade): o enum é derivado do nó ─────────────────────
+
+    @Test
+    void deriveCoarseEnum_nodeGroupHasEnum_enumFollowsTheNode() {
+        warmSeed();
+        // produto marcado GROCERIES mas o nó é refrigerantes (bebidas) → o nó manda
+        assertEquals(ProductCategory.BEVERAGES,
+                resolver.deriveCoarseEnum(refrigerantes.getId(), ProductCategory.GROCERIES));
+        assertEquals(ProductCategory.BEVERAGES,
+                resolver.deriveCoarseEnum(bebidas.getId(), null), "nó-grupo também deriva");
+    }
+
+    @Test
+    void deriveCoarseEnum_enumlessGroup_keepsCurrentEnum_orAnchorsOther() {
+        warmSeed();
+        var laticinios = Category.builder().id(UUID.randomUUID()).slug("laticinios-ovos").build(); // sem legacy_enum
+        var queijos = Category.builder().id(UUID.randomUUID()).slug("queijos").parent(laticinios).build();
+        when(categoryRepository.findAll()).thenReturn(List.of(bebidas, refrigerantes, limpeza, laticinios, queijos));
+        resolver.warmUp();
+        // mantém a aproximação legada quando existe…
+        assertEquals(ProductCategory.MEAT_DAIRY,
+                resolver.deriveCoarseEnum(queijos.getId(), ProductCategory.MEAT_DAIRY));
+        // …e ancora OTHER quando não há enum nenhum (produto com nó nunca fica com enum nulo)
+        assertEquals(ProductCategory.OTHER, resolver.deriveCoarseEnum(queijos.getId(), null));
+    }
+
+    @Test
+    void deriveCoarseEnum_unknownNode_keepsCurrentEnum() {
+        warmSeed();
+        assertEquals(ProductCategory.GROCERIES,
+                resolver.deriveCoarseEnum(UUID.randomUUID(), ProductCategory.GROCERIES), "nó fora do cache → não inventa");
+        assertNull(resolver.deriveCoarseEnum(UUID.randomUUID(), null));
+    }
+
     @Test
     void reconcileNode_noNodeFallsBackToGroup() {
         warmSeed();

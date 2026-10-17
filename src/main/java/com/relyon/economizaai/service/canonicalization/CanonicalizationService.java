@@ -517,6 +517,8 @@ public class CanonicalizationService {
         if (!pharmacyMerchant) return;
         if (product.getCategory() != null && product.getCategory() != ProductCategory.OTHER) return;
         product.setCategory(ProductCategory.HEALTH);
+        // Escritor de ENUM: move o nó junto (listener é node-first — um nó 'outros' venceria o HEALTH).
+        product.setCategoryId(categoryResolver.reconcileNode(ProductCategory.HEALTH, product.getCategoryId()));
         product.setCategorizationSource(CategorizationSource.MERCHANT);
         log.info("item.category_from_pharmacy_merchant description='{}'", product.getNormalizedName());
     }

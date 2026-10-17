@@ -123,16 +123,17 @@ public class CategoryResolver {
     }
 
     /**
-     * The fine node a product should carry given its (coarse) legacy enum and the node it
-     * currently has — the single invariant that keeps {@code category} (enum/group) and
-     * {@code categoryId} (node) from contradicting each other:
+     * CONVERSOR DE BORDA pros escritores LEGADOS (que recebem o enum como intenção): dado o enum
+     * novo e o nó atual, devolve o nó que acompanha a mudança:
      * <ul>
-     *   <li>null enum → null node (no categorization);</li>
+     *   <li>null enum → null node (reset de categorização);</li>
      *   <li>no current node → the enum's group node (the floor);</li>
      *   <li>current node is a subcategory under the RIGHT group → kept (preserves the finer leaf);</li>
      *   <li>current node is stale (a leaf under another group) → collapsed to the enum's group.</li>
      * </ul>
-     * Call this at every site that writes {@code category}. Never queries.
+     * FASE 2: o listener agora é node-first ({@link #deriveCoarseEnum}); quem escreve o ENUM como
+     * intenção (admin coarse, LLM enrich, consenso, farmácia) DEVE chamar isto pra mover o nó
+     * junto — senão o nó antigo vence e a escrita de enum é desfeita. Never queries.
      */
     public UUID reconcileNode(ProductCategory legacyEnum, UUID currentNodeId) {
         if (legacyEnum == null) return null;
@@ -148,6 +149,26 @@ public class CategoryResolver {
         if (groupId == null) return currentNodeId; // enum with no mapped node — leave untouched
         if (currentNodeId == null) return groupId;
         return groupId.equals(groupIdOf(currentNodeId)) ? currentNodeId : groupId;
+    }
+
+    /**
+     * FASE 2 (nó é a verdade): o enum que um produto deve carregar DERIVADO do seu nó — a
+     * projeção legada, não mais a origem. Regras:
+     * <ul>
+     *   <li>categoria do nó tem legacy_enum → esse enum (o nó manda);</li>
+     *   <li>categoria sem enum legado (laticínios, doces, congelados, alcoólicas, casa) → mantém o
+     *       enum atual (aproximação legada, ex.: queijos continua MEAT_DAIRY), senão OTHER (âncora:
+     *       produto com nó nunca fica com enum nulo);</li>
+     *   <li>nó desconhecido pro cache → mantém o enum atual (não inventa).</li>
+     * </ul>
+     */
+    public ProductCategory deriveCoarseEnum(UUID nodeId, ProductCategory currentEnum) {
+        var groupId = groupIdOf(nodeId);
+        if (groupId == null) return currentEnum;
+        var group = byId.get(groupId);
+        var derived = group == null ? null : group.getLegacyEnum();
+        if (derived != null) return derived;
+        return currentEnum != null ? currentEnum : ProductCategory.OTHER;
     }
 
     /** Category id for a taxonomy slug (group or leaf), or null. Never queries. */

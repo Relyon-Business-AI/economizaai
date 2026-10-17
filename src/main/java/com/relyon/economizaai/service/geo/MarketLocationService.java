@@ -8,6 +8,7 @@ import com.relyon.economizaai.model.enums.MerchantSegment;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.MarketLocationRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.ContactService;
 import com.relyon.economizaai.service.priceindex.PriceIndexService;
 import lombok.RequiredArgsConstructor;
@@ -49,6 +50,7 @@ public class MarketLocationService {
     private final NominatimGeocoder geocoder;
     private final CnpjActivityClient cnpjActivityClient;
     private final ProductRepository productRepository;
+    private final CategoryResolver categoryResolver;
     private final ContactService contactService;
 
     // Self-reference so per-item @Transactional calls go through the Spring proxy
@@ -291,6 +293,8 @@ public class MarketLocationService {
         var products = productRepository.findOtherCategoryProductsByMerchant(cnpj);
         for (var product : products) {
             product.setCategory(ProductCategory.HEALTH);
+            // Escritor de ENUM: move o nó junto (listener é node-first).
+            product.setCategoryId(categoryResolver.reconcileNode(ProductCategory.HEALTH, product.getCategoryId()));
             product.setCategorizationSource(CategorizationSource.MERCHANT);
         }
         if (!products.isEmpty()) {

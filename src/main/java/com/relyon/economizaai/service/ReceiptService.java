@@ -774,8 +774,14 @@ public class ReceiptService {
      */
     private void snapshotCategories(Receipt receipt) {
         for (var item : receipt.getItems()) {
-            if (item.getProduct() != null && item.getProduct().getCategory() != null) {
+            if (item.getProduct() == null) continue;
+            if (item.getProduct().getCategory() != null) {
                 item.setCategoryAtConfirmation(item.getProduct().getCategory());
+            }
+            // Congela também o NÓ (categoria/subcategoria da taxonomia) — par do enum; é o
+            // snapshot que fica quando o enum for aposentado (Fase D).
+            if (item.getProduct().getCategoryId() != null) {
+                item.setCategoryNodeAtConfirmation(item.getProduct().getCategoryId());
             }
         }
     }

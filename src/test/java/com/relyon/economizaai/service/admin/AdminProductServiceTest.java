@@ -16,6 +16,7 @@ import com.relyon.economizaai.repository.ManualPurchaseRepository;
 import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.repository.ProductAliasRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.repository.ShoppingListItemRepository;
 import org.junit.jupiter.api.Test;
@@ -44,6 +45,7 @@ import static org.mockito.Mockito.when;
 class AdminProductServiceTest {
 
     @Mock private ProductRepository productRepository;
+    @Mock private CategoryResolver categoryResolver;
     @Mock private ProductAliasRepository aliasRepository;
     @Mock private ReceiptItemRepository receiptItemRepository;
     @Mock private PriceObservationRepository priceObservationRepository;

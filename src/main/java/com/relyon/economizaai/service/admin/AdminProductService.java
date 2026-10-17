@@ -233,6 +233,9 @@ public class AdminProductService {
         var product = productRepository.findById(productId)
                 .orElseThrow(ProductNotFoundException::new);
         product.setCategory(category);
+        // Escritor de ENUM (intenção = categoria grossa): move o nó junto — o listener agora é
+        // node-first, então sem isto o nó atual venceria e desfaria a mudança.
+        product.setCategoryId(categoryResolver.reconcileNode(category, product.getCategoryId()));
         product.setCategorizationSource(CategorizationSource.USER);
         var saved = productRepository.save(product);
         log.info("admin.product.category_set product={} category={} source=USER", productId, category);

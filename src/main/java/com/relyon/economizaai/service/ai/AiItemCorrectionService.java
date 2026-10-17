@@ -13,6 +13,7 @@ import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.AiFindingRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -47,6 +48,7 @@ public class AiItemCorrectionService {
 
     private final AiGateway aiGateway;
     private final ProductRepository productRepository;
+    private final CategoryResolver categoryResolver;
     private final ReceiptItemRepository receiptItemRepository;
     private final AiFindingRepository findingRepository;
     private final TransactionTemplate transactionTemplate;
@@ -124,6 +126,8 @@ public class AiItemCorrectionService {
                 product.setGenericNameNorm(DescriptionNormalizer.normalizeOrNull(resolvedGenericName));
                 product.setBrand(resolvedBrandFinal);
                 product.setCategory(resolvedCategoryFinal);
+                // Escritor de ENUM: move o nó junto (listener é node-first).
+                product.setCategoryId(categoryResolver.reconcileNode(resolvedCategoryFinal, product.getCategoryId()));
                 product.setCategorizationSource(CategorizationSource.LLM);
                 productRepository.save(product);
             } else {
