@@ -74,9 +74,12 @@ public record ReceiptItemResponse(
         var category = overrideLabel != null ? overrideLabel
                 : snapshot != null ? snapshot
                 : liveCategory;
-        // An override is the user's explicit choice — it wins over the node label too.
-        var nodeSlug = overrideLabel != null ? null : categoryNodeSlug;
-        var nodeLabel = overrideLabel != null ? null : categoryNodeLabel;
+        // Um override REAL (escolha do usuário) vence o node. Mas no preview da revisão o
+        // overrideLabel é só a categoria SUGERIDA (suggested=true) — aí o node (subcategoria da IA)
+        // deve aparecer junto, não ser suprimido.
+        var realOverride = overrideLabel != null && !suggested;
+        var nodeSlug = realOverride ? null : categoryNodeSlug;
+        var nodeLabel = realOverride ? null : categoryNodeLabel;
         return new ReceiptItemResponse(
                 item.getId(),
                 product != null ? product.getId() : null,

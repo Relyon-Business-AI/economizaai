@@ -55,6 +55,26 @@ class ReceiptResponseAiSuggestionTest {
     }
 
     @Test
+    void unlinkedItem_showsBothSuggestedCategoryAndAiNode() {
+        // caso real da revisão: o determinístico deu a CATEGORIA (preview) e a IA deu a SUBCATEGORIA.
+        // A categoria sugerida (overrideLabel) NÃO pode suprimir o node sugerido.
+        var receiptItem = item();
+        var receipt = pendingReceipt(receiptItem);
+
+        var response = ReceiptResponse.from(receipt, Map.of(),
+                Map.of(receiptItem.getId(), "GROCERIES"),          // categoria sugerida (preview determinístico)
+                Map.of(), Map.of(),
+                Map.of(receiptItem.getId(), "mercearia-outros"),   // subcategoria sugerida pela IA
+                Map.of(receiptItem.getId(), "Outros da mercearia"));
+
+        var itemResponse = response.items().get(0);
+        assertEquals("GROCERIES", itemResponse.category());
+        assertEquals("mercearia-outros", itemResponse.categoryNodeSlug());
+        assertEquals("Outros da mercearia", itemResponse.categoryNodeLabel());
+        assertTrue(itemResponse.categorySuggested());
+    }
+
+    @Test
     void linkedItem_usesProductNodeNotAiSuggestion() {
         var receiptItem = item();
         var product = Product.builder().id(UUID.randomUUID()).normalizedName("Torrone").build();
