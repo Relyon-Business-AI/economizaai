@@ -2,12 +2,15 @@ package com.relyon.economizaai.service.ai;
 
 import com.anthropic.client.AnthropicClient;
 import com.anthropic.client.okhttp.AnthropicOkHttpClient;
+import com.anthropic.models.messages.CacheControlEphemeral;
 import com.anthropic.models.messages.MessageCreateParams;
+import com.anthropic.models.messages.TextBlockParam;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.List;
 
 /**
  * Anthropic implementation of {@link AiChatPort}. The client is built lazily on
@@ -33,17 +36,26 @@ public class AnthropicChatAdapter implements AiChatPort {
 
     @Override
     public ChatResult complete(String model, String systemPrompt, String userPrompt, int maxTokens) {
-        var response = clientInstance().messages().create(MessageCreateParams.builder()
+        var params = MessageCreateParams.builder()
                 .model(model)
                 .maxTokens((long) maxTokens)
-                .system(systemPrompt)
-                .addUserMessage(userPrompt)
-                .build());
+                .addUserMessage(userPrompt);
+        // System vira um bloco com cache_control: o prefixo estável (ex.: gabarito da taxonomia) é
+        // cacheado pela Anthropic. Se ficar abaixo do mínimo cacheável, o provedor só ignora (sem erro).
+        if (systemPrompt != null && !systemPrompt.isBlank()) {
+            params.systemOfTextBlockParams(List.of(TextBlockParam.builder()
+                    .text(systemPrompt)
+                    .cacheControl(CacheControlEphemeral.builder().build())
+                    .build()));
+        }
+        var response = clientInstance().messages().create(params.build());
         var text = response.content().stream()
                 .flatMap(block -> block.text().stream())
                 .map(textBlock -> textBlock.text())
                 .reduce("", String::concat);
-        return new ChatResult(text, response.usage().inputTokens(), response.usage().outputTokens());
+        var usage = response.usage();
+        return new ChatResult(text, usage.inputTokens(), usage.outputTokens(),
+                usage.cacheCreationInputTokens().orElse(0L), usage.cacheReadInputTokens().orElse(0L));
     }
 
     private AnthropicClient clientInstance() {

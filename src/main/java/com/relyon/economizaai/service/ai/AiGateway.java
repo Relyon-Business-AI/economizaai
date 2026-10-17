@@ -87,8 +87,8 @@ public class AiGateway {
         try {
             var result = chatAdapter.complete(model, systemPrompt, userPrompt, maxTokens);
             recordUsage(activity, model, result.inputTokens(), result.outputTokens(), true);
-            log.info("ai.call activity={} model={} in={} out={}", activity, model,
-                    result.inputTokens(), result.outputTokens());
+            log.info("ai.call activity={} model={} in={} out={} cache_write={} cache_read={}", activity, model,
+                    result.inputTokens(), result.outputTokens(), result.cacheWriteTokens(), result.cacheReadTokens());
             return result.text();
         } catch (AiUnavailableException unavailable) {
             throw unavailable;

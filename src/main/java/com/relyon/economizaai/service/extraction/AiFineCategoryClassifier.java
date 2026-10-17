@@ -100,21 +100,26 @@ public class AiFineCategoryClassifier {
                 .filter(category -> category.getParent() != null)
                 .collect(Collectors.toMap(Category::getSlug, Category::getId, (first, second) -> first));
 
-        var userPrompt = """
-                Classifique cada produto na subcategoria mais específica.
+        // Gabarito vai no SYSTEM (prefixo estável por taxonomia) → a Anthropic cacheia esse bloco
+        // grande e fixo; só os PRODUTOS (que variam por nota) ficam no user. Corta custo no lote e
+        // no real-time de volume. Ver AnthropicChatAdapter (cache_control no system).
+        var system = SYSTEM + """
+
 
                 GABARITO (categorias e suas subcategorias — use o SLUG exato da subcategoria):
-                %s
+                %s""".formatted(buildGabarito(categories));
+        var userPrompt = """
+                Classifique cada produto na subcategoria mais específica.
 
                 PRODUTOS:
                 %s
 
                 Responda SOMENTE um array JSON: [{"id": "<id recebido>", "slug": "<slug da subcategoria>", "confidence": <0..1>}].
                 Pule (não inclua no array) o que realmente não der para classificar.
-                """.formatted(buildGabarito(categories), buildProductLines(inputs));
+                """.formatted(buildProductLines(inputs));
 
         var text = aiGateway.complete(AiActivity.FINE_CATEGORY_CLASSIFY, aiGateway.curatorModel(),
-                SYSTEM, userPrompt, 4000);
+                system, userPrompt, 4000);
 
         var suggestions = new ArrayList<FineSuggestion>();
         for (var node : parseArray(text)) {

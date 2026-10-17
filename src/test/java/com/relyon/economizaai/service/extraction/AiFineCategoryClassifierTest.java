@@ -53,7 +53,8 @@ class AiFineCategoryClassifierTest {
     @Test
     void suggest_placesValidLeaf_andPromptCarriesGabaritoAndContext() {
         var productId = UUID.randomUUID();
-        var promptCaptor = ArgumentCaptor.forClass(String.class);
+        var systemCaptor = ArgumentCaptor.forClass(String.class);
+        var userCaptor = ArgumentCaptor.forClass(String.class);
         when(aiGateway.complete(eq(AiActivity.FINE_CATEGORY_CLASSIFY), eq("sonnet"), anyString(), anyString(), anyInt()))
                 .thenReturn("[{\"id\":\"" + productId + "\",\"slug\":\"aves\",\"confidence\":0.9}]");
 
@@ -65,14 +66,15 @@ class AiFineCategoryClassifierTest {
         assertEquals("aves", result.get(0).slug());
         assertEquals(0.9, result.get(0).confidence());
 
-        // curator model usado; prompt carrega o gabarito (definição + exemplos) e o contexto do produto
+        // modelo curator; gabarito (definição + exemplos) vai no SYSTEM (cacheável); contexto do produto no USER
         verify(aiGateway).complete(eq(AiActivity.FINE_CATEGORY_CLASSIFY), eq("sonnet"),
-                anyString(), promptCaptor.capture(), anyInt());
-        var prompt = promptCaptor.getValue();
-        assertTrue(prompt.contains("aves (Aves)"), "lista de subcategorias");
-        assertTrue(prompt.contains("Frango, peru, chester"), "exemplos do gabarito");
-        assertTrue(prompt.contains("nota: \"FRANGO RESF KG\""), "nome da nota no contexto");
-        assertTrue(prompt.contains("categoria atual: Carnes"), "categoria atual no contexto");
+                systemCaptor.capture(), userCaptor.capture(), anyInt());
+        var system = systemCaptor.getValue();
+        var user = userCaptor.getValue();
+        assertTrue(system.contains("aves (Aves)"), "lista de subcategorias no system");
+        assertTrue(system.contains("Frango, peru, chester"), "exemplos do gabarito no system");
+        assertTrue(user.contains("nota: \"FRANGO RESF KG\""), "nome da nota no contexto (user)");
+        assertTrue(user.contains("categoria atual: Carnes"), "categoria atual no contexto (user)");
     }
 
     @Test
