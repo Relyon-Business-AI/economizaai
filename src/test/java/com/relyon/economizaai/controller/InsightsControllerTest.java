@@ -1,13 +1,16 @@
 package com.relyon.economizaai.controller;
 
 import com.relyon.economizaai.config.SecurityConfig;
+import com.relyon.economizaai.dto.response.InsightsQueryResponse;
 import com.relyon.economizaai.dto.response.PriceHistoryResponse;
 import com.relyon.economizaai.dto.response.MarketDiscountResponse;
 import com.relyon.economizaai.dto.response.SpendInsightsResponse;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.security.JwtService;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.InsightsQueryService;
 import com.relyon.economizaai.service.InsightsService;
 import com.relyon.economizaai.service.LocalizedMessageService;
@@ -23,11 +26,14 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -41,6 +47,8 @@ class InsightsControllerTest {
 
     @MockitoBean private InsightsService insightsService;
     @MockitoBean private InsightsQueryService insightsQueryService;
+    @MockitoBean private CategoryResolver categoryResolver;
+    @MockitoBean private ProductRepository productRepository;
     @MockitoBean private JwtService jwtService;
     @MockitoBean private UserDetailsService userDetailsService;
     @MockitoBean private LocalizedMessageService localizedMessageService;
@@ -97,6 +105,38 @@ class InsightsControllerTest {
                 .andExpect(jsonPath("$[0].marketName").value("Mercado X"))
                 .andExpect(jsonPath("$[0].discount").value(9.00))
                 .andExpect(jsonPath("$[0].discountRate").value(0.09));
+    }
+
+    @Test
+    void query_byCategorySlug_resolvesNodeToProductFilter() throws Exception {
+        var user = buildUser();
+        var nodeId = UUID.randomUUID();
+        var productId = UUID.randomUUID();
+        var response = new InsightsQueryResponse(
+                new InsightsQueryResponse.Filters(null, null, null, null, null, List.of(productId), null, null, null),
+                new InsightsQueryResponse.Summary(new BigDecimal("42.00"), BigDecimal.ZERO, 1L, 1L, new BigDecimal("42.00")),
+                null, List.of());
+        when(categoryResolver.nodeAndDescendantIds("carnes")).thenReturn(Set.of(nodeId));
+        when(productRepository.findIdsByCategoryIdIn(any())).thenReturn(List.of(productId));
+        when(insightsQueryService.query(any(User.class), any())).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/insights/query?categorySlug=carnes")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary.total").value(42.00));
+    }
+
+    @Test
+    void query_byCategorySlug_noProducts_returnsZeroedSummaryWithoutQuerying() throws Exception {
+        var user = buildUser();
+        when(categoryResolver.nodeAndDescendantIds("salgadinhos")).thenReturn(Set.of(UUID.randomUUID()));
+        when(productRepository.findIdsByCategoryIdIn(any())).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/insights/query?categorySlug=salgadinhos")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary.total").value(0));
+        verify(insightsQueryService, never()).query(any(), any());
     }
 
     @Test
