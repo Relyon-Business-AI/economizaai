@@ -67,10 +67,12 @@ public class AiSubcategorySuggestionService {
     private static final double KEYWORD_CONFIDENCE = 0.97;
     private static final Locale PT = Locale.forLanguageTag("pt");
 
-    /** Non-food groups have no finer leaf to suggest — skip them (mirrors the recategorizer). */
-    private static final Set<ProductCategory> NON_FOOD = Set.of(
-            ProductCategory.CLEANING, ProductCategory.PERSONAL_CARE,
-            ProductCategory.HEALTH, ProductCategory.PET_SUPPLIES);
+    /**
+     * Categorias que NÃO têm subcategoria — não há folha pra sugerir, então pula (economiza chamada
+     * de IA). Saúde saiu daqui: ganhou subcategorias (medicamentos/suplementos/outros) e agora é varrida.
+     */
+    private static final Set<ProductCategory> CATEGORIES_WITHOUT_SUBCATEGORY = Set.of(
+            ProductCategory.CLEANING, ProductCategory.PERSONAL_CARE, ProductCategory.PET_SUPPLIES);
 
     /** Quão certa a IA precisa estar conforme o risco da ação (option B — mudar exige mais que preencher). */
     private enum Action { SET, CHANGE_SUBCATEGORY, CHANGE_CATEGORY }
@@ -184,7 +186,7 @@ public class AiSubcategorySuggestionService {
         var groupIds = categoryResolver.groupIds();
         if (groupIds.isEmpty()) return List.of(); // taxonomy not warmed — nothing to sit on
         return productRepository.findWithoutSubcategory(
-                groupIds, CategorizationSource.USER, NON_FOOD, PageRequest.of(0, limit));
+                groupIds, CategorizationSource.USER, CATEGORIES_WITHOUT_SUBCATEGORY, PageRequest.of(0, limit));
     }
 
     private Set<UUID> pendingProductIds() {

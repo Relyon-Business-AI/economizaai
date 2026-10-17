@@ -28,7 +28,7 @@ import java.util.UUID;
  *       {@link AiFineCategoryClassifier} in batches — shares the AI daily cap + ledger.</li>
  *   <li><b>OFF catalog:</b> force re-fetch, apply any fine node OFF knows.</li>
  * </ol>
- * Non-food enums (CLEANING/PERSONAL_CARE/HEALTH/PET) keep their category node. Admin-triggered.
+ * Categorias sem subcategoria (CLEANING/PERSONAL_CARE/PET) mantêm o nó da categoria. Admin-triggered.
  */
 @Slf4j
 @Service
@@ -48,7 +48,7 @@ public class TaxonomyRecategorizationService {
 
         var food = productRepository.findAll().stream()
                 .filter(product -> product.getCategorizationSource() != CategorizationSource.USER) // nunca re-decide curadoria manual
-                .filter(product -> !isNonFood(product.getCategory()))
+                .filter(product -> !hasNoSubcategories(product.getCategory()))
                 .toList();
 
         var byKeyword = applyKeywordHighConfidence(food);  // HIGH only; returns LOW/NONE pending
@@ -72,7 +72,7 @@ public class TaxonomyRecategorizationService {
     public RecategorizeResult recategorizeIncremental() {
         var pending = productRepository.findByCategoryIdIsNull().stream()
                 .filter(product -> product.getCategorizationSource() != CategorizationSource.USER)
-                .filter(product -> !isNonFood(product.getCategory()))
+                .filter(product -> !hasNoSubcategories(product.getCategory()))
                 .toList();
         if (pending.isEmpty()) return new RecategorizeResult(0, 0, 0, 0, 0);
         var byKeyword = applyKeywordHighConfidence(pending);
@@ -131,9 +131,11 @@ public class TaxonomyRecategorizationService {
         return updated;
     }
 
-    private static boolean isNonFood(ProductCategory category) {
+    // Categorias sem subcategoria: não há folha pra recategorizar → mantêm o nó da categoria.
+    // Saúde saiu (ganhou medicamentos/suplementos/outros e agora é recategorizada).
+    private static boolean hasNoSubcategories(ProductCategory category) {
         return category == ProductCategory.CLEANING || category == ProductCategory.PERSONAL_CARE
-                || category == ProductCategory.HEALTH || category == ProductCategory.PET_SUPPLIES;
+                || category == ProductCategory.PET_SUPPLIES;
     }
 
     /**
@@ -144,7 +146,7 @@ public class TaxonomyRecategorizationService {
      */
     public CalibrationResult calibrate(int sampleSize) {
         var food = productRepository.findAll().stream()
-                .filter(product -> !isNonFood(product.getCategory()))
+                .filter(product -> !hasNoSubcategories(product.getCategory()))
                 .filter(product -> product.getNormalizedName() != null)
                 .limit(sampleSize)
                 .toList();
