@@ -15,12 +15,14 @@ import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import com.relyon.economizaai.service.extraction.AiFineCategoryClassifier;
+import com.relyon.economizaai.service.extraction.AiFineCategoryClassifier.ClassificationInput;
 import com.relyon.economizaai.service.extraction.AiFineCategoryClassifier.FineSuggestion;
 import com.relyon.economizaai.service.extraction.ProductNameSubcategoryClassifier;
 import com.relyon.economizaai.service.extraction.ProductNameSubcategoryClassifier.Confidence;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Async;
@@ -31,9 +33,12 @@ import static com.relyon.economizaai.config.AsyncConfig.AI_SWEEP_EXECUTOR;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -67,6 +72,9 @@ public class AiSubcategorySuggestionService {
             ProductCategory.CLEANING, ProductCategory.PERSONAL_CARE,
             ProductCategory.HEALTH, ProductCategory.PET_SUPPLIES);
 
+    /** Quão certa a IA precisa estar conforme o risco da ação (option B — mudar exige mais que preencher). */
+    private enum Action { SET, CHANGE_SUBCATEGORY, CHANGE_CATEGORY }
+
     private final ProductRepository productRepository;
     private final AiFindingRepository findingRepository;
     private final AiFineCategoryClassifier classifier;
@@ -74,6 +82,15 @@ public class AiSubcategorySuggestionService {
     private final ReceiptItemRepository receiptItemRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    // Limiares assimétricos: preencher subcategoria vazia é baixo risco; trocar uma existente pede
+    // mais; mudar a CATEGORIA (azeite→Hortifrúti) pede o máximo. Inline default = valor de teste.
+    @Value("${economizaai.ai.subcategory-suggestion.set-min-confidence:0.55}")
+    private double setMinConfidence = 0.55;
+    @Value("${economizaai.ai.subcategory-suggestion.change-subcategory-min-confidence:0.80}")
+    private double changeSubcategoryMinConfidence = 0.80;
+    @Value("${economizaai.ai.subcategory-suggestion.change-category-min-confidence:0.90}")
+    private double changeCategoryMinConfidence = 0.90;
 
     // Self-reference so the @Async call goes through the Spring proxy (same pattern as
     // AiSweepService). Defaults to `this` for unit tests.
@@ -124,7 +141,8 @@ public class AiSubcategorySuggestionService {
                 .toList();
         var skippedExisting = candidates.size() - fresh.size();
 
-        // 1) Keyword HIGH (grátis, determinístico) — o resto vai pro LLM.
+        // 1) Keyword HIGH (grátis, determinístico) — o resto vai pro LLM. Passa pelo mesmo gating
+        // de confiança do LLM; como KEYWORD_CONFIDENCE é altíssimo, ele cobre até mudança de categoria.
         var keywordFindings = new ArrayList<AiFinding>();
         var forLlm = new ArrayList<Product>();
         for (var product : fresh) {
@@ -132,11 +150,10 @@ public class AiSubcategorySuggestionService {
                     DescriptionNormalizer.normalize(product.getNormalizedName()));
             if (keyword.confidence() == Confidence.HIGH) {
                 var nodeId = categoryResolver.idForSlug(keyword.slug());
-                // Só sugere se for uma subcategoria DENTRO da categoria atual (nunca muda de categoria).
-                if (nodeId != null && !nodeId.equals(product.getCategoryId()) && fitsCurrentCategory(product, nodeId)) {
-                    keywordFindings.add(buildFinding(product, new FineSuggestion(product.getId(), nodeId, keyword.slug(), KEYWORD_CONFIDENCE)));
+                if (nodeId != null) {
+                    tryBuildFinding(product, new FineSuggestion(product.getId(), nodeId, keyword.slug(), KEYWORD_CONFIDENCE))
+                            .ifPresent(keywordFindings::add);
                 }
-                // keyword HIGH de OUTRA categoria (ou já é a folha) → não sugere nem manda pro LLM
             } else {
                 forLlm.add(product);
             }
@@ -144,13 +161,13 @@ public class AiSubcategorySuggestionService {
         findingRepository.saveAll(keywordFindings);
         var created = keywordFindings.size();
 
-        // 2) LLM pro ambíguo (LOW/NONE).
+        // 2) LLM pro ambíguo (LOW/NONE), com contexto rico (nota, normalizado, marca, categoria atual).
         var stopped = false;
         for (var start = 0; start < forLlm.size(); start += LLM_BATCH) {
             var batch = forLlm.subList(start, Math.min(start + LLM_BATCH, forLlm.size()));
             List<FineSuggestion> suggestions;
             try {
-                suggestions = classifier.suggest(batch);
+                suggestions = classifier.suggest(buildClassificationInputs(batch));
             } catch (AiGateway.AiUnavailableException unavailable) {
                 log.warn("ai.subcat_suggest stopped reason={}", unavailable.getMessage());
                 stopped = true;
@@ -183,31 +200,76 @@ public class AiSubcategorySuggestionService {
         for (var suggestion : suggestions) {
             var product = byId.get(suggestion.productId());
             if (product == null) continue;
-            if (suggestion.categoryId().equals(product.getCategoryId())) continue; // already on that leaf
-            // Nunca muda de categoria: descarta sugestão cuja folha é de OUTRA categoria (ex.:
-            // azeite/Mercearia → folha de Hortifrúti). Uma varredura de subcategoria só refina.
-            if (!fitsCurrentCategory(product, suggestion.categoryId())) continue;
-            findings.add(buildFinding(product, suggestion));
+            tryBuildFinding(product, suggestion).ifPresent(findings::add);
         }
         findingRepository.saveAll(findings);
         return findings.size();
     }
 
     /**
-     * True se a folha sugerida está DENTRO da categoria atual do produto — a varredura de
-     * subcategoria só refina, nunca muda a categoria. Categoria atual = grupo do nó atual (se
-     * houver) senão o grupo do enum legado. Sem categoria conhecida → qualquer folha serve.
+     * Decide se a sugestão vira finding. Classifica a AÇÃO (preencher subcategoria vazia / trocar
+     * uma existente / mudar a categoria) e só passa se a confiança atinge o limiar daquela ação —
+     * mudar algo já certo exige mais certeza do que preencher o que está vazio (option B).
      */
-    private boolean fitsCurrentCategory(Product product, UUID leafId) {
+    private Optional<AiFinding> tryBuildFinding(Product product, FineSuggestion suggestion) {
+        if (suggestion.categoryId().equals(product.getCategoryId())) return Optional.empty(); // já está nessa folha
+        var action = classifyAction(product, suggestion.categoryId());
+        var threshold = switch (action) {
+            case SET -> setMinConfidence;
+            case CHANGE_SUBCATEGORY -> changeSubcategoryMinConfidence;
+            case CHANGE_CATEGORY -> changeCategoryMinConfidence;
+        };
+        if (suggestion.confidence() < threshold) return Optional.empty();
+        return Optional.of(buildFinding(product, suggestion, action));
+    }
+
+    /**
+     * SET = produto sem subcategoria (preenche). CHANGE_SUBCATEGORY = já tem folha, troca por outra
+     * da MESMA categoria. CHANGE_CATEGORY = a folha sugerida é de OUTRA categoria (azeite→Hortifrúti).
+     * Categoria atual = grupo do nó atual (se houver) senão o grupo do enum legado.
+     */
+    private Action classifyAction(Product product, UUID leafId) {
         var currentGroup = product.getCategoryId() != null
                 ? categoryResolver.groupIdOf(product.getCategoryId())
                 : categoryResolver.idForLegacyEnum(product.getCategory());
-        if (currentGroup == null) return true;
-        return currentGroup.equals(categoryResolver.groupIdOf(leafId));
+        var suggestedGroup = categoryResolver.groupIdOf(leafId);
+        if (currentGroup != null && suggestedGroup != null && !suggestedGroup.equals(currentGroup)) {
+            return Action.CHANGE_CATEGORY;
+        }
+        var hasSubcategory = product.getCategoryId() != null && categoryResolver.isLeafNode(product.getCategoryId());
+        return hasSubcategory ? Action.CHANGE_SUBCATEGORY : Action.SET;
     }
 
-    private AiFinding buildFinding(Product product, FineSuggestion suggestion) {
+    /** Monta o contexto por produto pro LLM: nome na nota, normalizado, marca e categoria/subcategoria atual. */
+    private List<ClassificationInput> buildClassificationInputs(List<Product> batch) {
+        var rawNames = latestRawNames(batch.stream().map(Product::getId).toList());
+        return batch.stream().map(product -> {
+            var currentGroup = product.getCategoryId() != null
+                    ? categoryResolver.groupIdOf(product.getCategoryId())
+                    : categoryResolver.idForLegacyEnum(product.getCategory());
+            var currentCategory = currentGroup != null ? categoryResolver.labelFor(currentGroup, PT) : null;
+            var currentSubcategory = (product.getCategoryId() != null && categoryResolver.isLeafNode(product.getCategoryId()))
+                    ? categoryResolver.labelFor(product.getCategoryId(), PT) : null;
+            return new ClassificationInput(product.getId(), rawNames.get(product.getId()),
+                    product.getNormalizedName(), product.getBrand(), currentCategory, currentSubcategory);
+        }).toList();
+    }
+
+    /** productId → descrição ORIGINAL mais recente da nota (driver pode devolver UUID ou texto). */
+    private Map<UUID, String> latestRawNames(List<UUID> productIds) {
+        var rawNames = new HashMap<UUID, String>();
+        if (productIds.isEmpty()) return rawNames;
+        for (var row : receiptItemRepository.findLatestRawDescriptions(productIds)) {
+            if (row[0] == null || row[1] == null) continue;
+            var productId = row[0] instanceof UUID uuid ? uuid : UUID.fromString(row[0].toString());
+            rawNames.put(productId, row[1].toString());
+        }
+        return rawNames;
+    }
+
+    private AiFinding buildFinding(Product product, FineSuggestion suggestion, Action action) {
         var suggestedLabel = categoryResolver.labelFor(suggestion.categoryId(), PT);
+        var suggestedCategoryLabel = categoryResolver.labelFor(categoryResolver.groupIdOf(suggestion.categoryId()), PT);
         var leafEnum = categoryResolver.legacyEnumForNode(suggestion.categoryId());
         var currentNodeLabel = categoryResolver.labelFor(product.getCategoryId(), PT);
         var productName = product.getGenericName() != null ? product.getGenericName() : product.getNormalizedName();
@@ -217,18 +279,28 @@ public class AiSubcategorySuggestionService {
         payload.put("productName", productName);
         payload.put("categoryNodeSlug", suggestion.slug());
         payload.put("suggestedLabel", suggestedLabel);
+        if (suggestedCategoryLabel != null) payload.put("suggestedCategory", suggestedCategoryLabel);
         payload.put("confidence", suggestion.confidence());
+        // Marca a ação pra o admin ver que é uma MUDANÇA (não só preenchimento) — ver option B.
+        payload.put("action", action.name());
+        payload.put("changesCategory", action == Action.CHANGE_CATEGORY);
         if (leafEnum != null) payload.put("category", leafEnum.name());
         if (product.getCategory() != null) payload.put("currentCategory", product.getCategory().name());
         if (currentNodeLabel != null) payload.put("currentNodeLabel", currentNodeLabel);
         applyLastPurchase(product.getId(), payload);
 
         var title = "Subcategoria: \"" + product.getNormalizedName() + "\" → " + suggestedLabel;
+        var detail = switch (action) {
+            case CHANGE_CATEGORY -> "Muda categoria: " + (currentNodeLabel != null ? currentNodeLabel : "—")
+                    + " → " + (suggestedCategoryLabel != null ? suggestedCategoryLabel + " › " : "") + suggestedLabel;
+            case CHANGE_SUBCATEGORY -> "Troca: " + (currentNodeLabel != null ? currentNodeLabel : "—") + " → " + suggestedLabel;
+            case SET -> currentNodeLabel != null ? "Hoje: " + currentNodeLabel : "Sem subcategoria";
+        };
         return AiFinding.builder()
                 .type(AiFindingType.SUSPECT_CATEGORY)
                 .status(AiFindingStatus.PENDING)
                 .title(title.length() > 290 ? title.substring(0, 290) : title)
-                .detail(currentNodeLabel != null ? "Hoje: " + currentNodeLabel : "Sem subcategoria")
+                .detail(detail.length() > 290 ? detail.substring(0, 290) : detail)
                 .payload(payload.toString())
                 .confidence(BigDecimal.valueOf(suggestion.confidence()).setScale(3, RoundingMode.HALF_UP))
                 .activity(AiActivity.FINE_CATEGORY_CLASSIFY)

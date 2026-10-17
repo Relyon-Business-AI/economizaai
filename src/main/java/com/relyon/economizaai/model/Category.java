@@ -54,6 +54,14 @@ public class Category {
     @Column(name = "name_en", nullable = false, length = 60)
     private String nameEn;
 
+    /** Gabarito: o que PERTENCE a esta categoria/subcategoria (e exclusões). Alimenta o prompt do classificador de IA. */
+    @Column(name = "description_pt", columnDefinition = "TEXT")
+    private String descriptionPt;
+
+    /** Gabarito: exemplos clássicos de itens desta categoria/subcategoria (lista separada por vírgula). */
+    @Column(name = "examples_pt", columnDefinition = "TEXT")
+    private String examplesPt;
+
     /** The old flat enum that defaults to this category (migration bridge). */
     @Enumerated(EnumType.STRING)
     @Column(name = "legacy_enum", length = 30)

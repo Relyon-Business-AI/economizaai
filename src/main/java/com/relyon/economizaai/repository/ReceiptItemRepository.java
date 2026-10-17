@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -32,6 +33,20 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
             ORDER BY item.createdAt DESC
             """)
     List<Object[]> findLastPriceAndMarket(@Param("productId") UUID productId, Pageable pageable);
+
+    /**
+     * A descrição ORIGINAL (como saiu na nota) mais recente de cada produto do lote — contexto
+     * pro classificador de IA, que vê o nome normalizado mas se beneficia do texto cru do cupom.
+     * DISTINCT ON pega a linha mais recente por produto numa única varredura. Retorna
+     * (productId, rawDescription).
+     */
+    @Query(value = """
+            SELECT DISTINCT ON (ri.product_id) ri.product_id, ri.raw_description
+            FROM receipt_items ri
+            WHERE ri.product_id IN (:productIds)
+            ORDER BY ri.product_id, ri.created_at DESC
+            """, nativeQuery = true)
+    List<Object[]> findLatestRawDescriptions(@Param("productIds") Collection<UUID> productIds);
 
     /**
      * "Caçador de descontos" ranking: per household, how many confirmed items were bought
