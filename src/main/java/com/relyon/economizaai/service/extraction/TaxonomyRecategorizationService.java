@@ -28,7 +28,7 @@ import java.util.UUID;
  *       {@link AiFineCategoryClassifier} in batches — shares the AI daily cap + ledger.</li>
  *   <li><b>OFF catalog:</b> force re-fetch, apply any fine node OFF knows.</li>
  * </ol>
- * Non-food enums (CLEANING/PERSONAL_CARE/HEALTH/PET) keep their category node. Admin-triggered.
+ * Categorias sem subcategoria (CLEANING/PERSONAL_CARE/PET) mantêm o nó da categoria. Admin-triggered.
  */
 @Slf4j
 @Service
@@ -48,7 +48,7 @@ public class TaxonomyRecategorizationService {
 
         var food = productRepository.findAll().stream()
                 .filter(product -> product.getCategorizationSource() != CategorizationSource.USER) // nunca re-decide curadoria manual
-                .filter(product -> !isNonFood(product.getCategory()))
+                .filter(product -> !hasNoSubcategories(product))
                 .toList();
 
         var byKeyword = applyKeywordHighConfidence(food);  // HIGH only; returns LOW/NONE pending
@@ -57,6 +57,8 @@ public class TaxonomyRecategorizationService {
         var eans = productRepository.findDistinctEans();
         var enriched = enrichmentService.enrichForce(eans);
         var byCatalog = productRepository.applyCatalogCategoryNodes();
+        // updates nativos bypassam o listener — re-deriva o enum do nó (node-first)
+        productRepository.realignEnumFromNode();
 
         log.info("taxonomy.recategorize keyword={} llm={} pending={} eans={} enriched={} catalog={}",
                 byKeyword.updated(), byLlm, byKeyword.pending().size(), eans.size(), enriched, byCatalog);
@@ -72,7 +74,7 @@ public class TaxonomyRecategorizationService {
     public RecategorizeResult recategorizeIncremental() {
         var pending = productRepository.findByCategoryIdIsNull().stream()
                 .filter(product -> product.getCategorizationSource() != CategorizationSource.USER)
-                .filter(product -> !isNonFood(product.getCategory()))
+                .filter(product -> !hasNoSubcategories(product))
                 .toList();
         if (pending.isEmpty()) return new RecategorizeResult(0, 0, 0, 0, 0);
         var byKeyword = applyKeywordHighConfidence(pending);
@@ -92,7 +94,7 @@ public class TaxonomyRecategorizationService {
             if (result.confidence() == Confidence.HIGH) {
                 var nodeId = categoryResolver.idForSlug(result.slug());
                 if (nodeId != null && !nodeId.equals(product.getCategoryId())) {
-                    product.setCategoryId(nodeId);
+                    categoryResolver.applyNode(product, nodeId); // node-first: enum derivado junto
                     toSave.add(product);
                 }
             } else {
@@ -117,7 +119,7 @@ public class TaxonomyRecategorizationService {
                 placed.forEach((productId, categoryId) -> {
                     var product = byId.get(productId);
                     if (product != null && !categoryId.equals(product.getCategoryId())) {
-                        product.setCategoryId(categoryId);
+                        categoryResolver.applyNode(product, categoryId); // node-first: enum derivado junto
                         toSave.add(product);
                     }
                 });
@@ -131,9 +133,11 @@ public class TaxonomyRecategorizationService {
         return updated;
     }
 
-    private static boolean isNonFood(ProductCategory category) {
-        return category == ProductCategory.CLEANING || category == ProductCategory.PERSONAL_CARE
-                || category == ProductCategory.HEALTH || category == ProductCategory.PET_SUPPLIES;
+    // Node-first: categoria sem subcategoria (Pet/Limpeza/Higiene/Congelados/Outros) não tem folha
+    // pra recategorizar → produto mantém o nó da categoria. Decidido pelo NÓ, não pelo enum.
+    private boolean hasNoSubcategories(Product product) {
+        var group = categoryResolver.groupIdOf(product.getCategoryId());
+        return group != null && categoryResolver.groupIdsWithoutSubcategories().contains(group);
     }
 
     /**
@@ -144,7 +148,7 @@ public class TaxonomyRecategorizationService {
      */
     public CalibrationResult calibrate(int sampleSize) {
         var food = productRepository.findAll().stream()
-                .filter(product -> !isNonFood(product.getCategory()))
+                .filter(product -> !hasNoSubcategories(product))
                 .filter(product -> product.getNormalizedName() != null)
                 .limit(sampleSize)
                 .toList();

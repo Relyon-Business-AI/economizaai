@@ -13,6 +13,7 @@ import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.LocalizedMessageService;
+import com.relyon.economizaai.service.ai.ReceiptAiCategorySuggestionService;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.geo.MerchantSupportGate;
 import com.relyon.economizaai.service.notifications.NotificationPayload;
@@ -71,6 +72,7 @@ class ReceiptIngestionServiceTest {
     @Mock private PrefetchPolicy prefetchPolicy;
     @Mock private NotificationService notificationService;
     @Mock private LocalizedMessageService messageService;
+    @Mock private ReceiptAiCategorySuggestionService aiCategorySuggestionService;
 
     @InjectMocks private ReceiptIngestionService service;
 
@@ -137,6 +139,35 @@ class ReceiptIngestionServiceTest {
         assertEquals("ARROZ TIO J 5KG", receipt.getItems().get(0).getRawDescription());
         assertEquals("Mercado X", receipt.getMarketName());
         verify(receiptRepository).save(receipt);
+    }
+
+    @Test
+    void ingest_success_dispatchesAiCategorySuggestions() {
+        var receipt = processingReceipt();
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(sampleParsed());
+        when(aiCategorySuggestionService.isEnabled()).thenReturn(true);
+
+        service.ingest(receipt.getId(), QR);
+
+        // camada final do cascade: a sugestão de IA é despachada quando a nota fica pronta
+        verify(aiCategorySuggestionService).suggestForReceiptAsync(receipt.getId());
+    }
+
+    @Test
+    void ingest_success_skipsAiDispatchWhenDisabled() {
+        var receipt = processingReceipt();
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(sampleParsed());
+        when(aiCategorySuggestionService.isEnabled()).thenReturn(false);
+
+        service.ingest(receipt.getId(), QR);
+
+        verify(aiCategorySuggestionService, never()).suggestForReceiptAsync(any());
     }
 
     @Test

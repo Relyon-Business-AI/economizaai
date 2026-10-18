@@ -11,6 +11,7 @@ import com.relyon.economizaai.repository.HouseholdProductCategoryOverrideReposit
 import com.relyon.economizaai.repository.LlmDisagreementRepository;
 import com.relyon.economizaai.repository.PaidApiCallRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -34,6 +35,7 @@ import java.util.UUID;
 public class AdminLlmService {
 
     private final ProductRepository productRepository;
+    private final CategoryResolver categoryResolver;
     private final LlmDisagreementRepository disagreementRepository;
     private final CuratedDictionaryEntryRepository curatedRepository;
     private final HouseholdProductCategoryOverrideRepository overrideRepository;
@@ -80,8 +82,11 @@ public class AdminLlmService {
         if (accept) {
             var product = disagreement.getProduct();
             if ("category".equals(disagreement.getField()) && disagreement.getSuggestedValue() != null) {
-                product.setCategory(ProductCategory.valueOf(
-                        disagreement.getSuggestedValue().trim().toUpperCase(Locale.ROOT)));
+                var acceptedCategory = ProductCategory.valueOf(
+                        disagreement.getSuggestedValue().trim().toUpperCase(Locale.ROOT));
+                product.setCategory(acceptedCategory);
+                // Escritor de ENUM: move o nó junto (listener é node-first).
+                product.setCategoryId(categoryResolver.reconcileNode(acceptedCategory, product.getCategoryId()));
                 product.setCategorizationSource(CategorizationSource.USER);
             } else if ("brand".equals(disagreement.getField())) {
                 product.setBrand(disagreement.getSuggestedValue());

@@ -19,6 +19,7 @@ import com.relyon.economizaai.repository.ProductAliasRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import com.relyon.economizaai.service.extraction.EanCatalogService;
 import com.relyon.economizaai.service.extraction.BrandAliasPromotionService;
@@ -47,6 +48,7 @@ public class ProductService {
     private static final double PRODUCT_SEARCH_NEARBY_RADIUS_KM = 20.0;
 
     private final ProductRepository productRepository;
+    private final CategoryResolver categoryResolver;
     private final ProductAliasRepository aliasRepository;
     private final HouseholdProductAliasRepository householdProductAliasRepository;
     private final ReceiptItemRepository receiptItemRepository;
@@ -137,20 +139,20 @@ public class ProductService {
         // but only if it actually produced one; otherwise there's no categorization.
         var extractedSource = category != null ? extracted.categorizationSource() : CategorizationSource.NONE;
         var source = request.category() != null ? CategorizationSource.USER : extractedSource;
-        var product = productRepository.save(Product.builder()
+        var newProduct = Product.builder()
                 .ean(blankToNull(request.ean()))
                 .normalizedName(request.normalizedName())
                 .genericName(firstNonBlank(request.genericName(), extracted.genericName()))
                 .brand(firstNonBlank(request.brand(), extracted.brand()))
                 .category(category)
-                // Node is kept consistent with the enum by ProductCategoryNodeListener on persist;
-                // we pass the extractor's fine leaf so the listener preserves it (vs collapsing to the group).
-                .categoryId(extracted.categoryId())
+                .categoryId(extracted.categoryId()) // alinhado logo abaixo via alignNewProduct
                 .unit(blankToNull(request.unit()))
                 .packSize(request.packSize() != null ? request.packSize() : extracted.packSize())
                 .packUnit(firstNonBlank(request.packUnit(), extracted.packUnit()))
                 .categorizationSource(source)
-                .build());
+                .build();
+        categoryResolver.alignNewProduct(newProduct); // enum↔nó consistentes (listener não persiste campo cruzado)
+        var product = productRepository.save(newProduct);
         log.info("Product {} created (ean={}, name='{}')", product.getId(), product.getEan(), product.getNormalizedName());
         if (product.getEan() != null) {
             var linked = receiptItemRepository.linkByEan(product, product.getEan());
@@ -168,8 +170,8 @@ public class ProductService {
         product.setBrand(blankToNull(request.brand()));
         product.setBrandNorm(DescriptionNormalizer.normalizeOrNull(request.brand()));
         product.setCategory(request.category());
-        // Fine node kept in sync with the enum by ProductCategoryNodeListener on update
-        // (preserves a leaf under the right group; a null enum clears the node).
+        // Escritor de ENUM: move o nó junto (listener é node-first — sem isto o nó atual venceria).
+        product.setCategoryId(categoryResolver.reconcileNode(request.category(), product.getCategoryId()));
         product.setUnit(blankToNull(request.unit()));
         product.setPackSize(request.packSize());
         product.setPackUnit(blankToNull(request.packUnit()));

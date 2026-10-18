@@ -15,6 +15,7 @@ import com.relyon.economizaai.repository.AiFindingRepository;
 import com.relyon.economizaai.repository.AiSweepRunRepository;
 import com.relyon.economizaai.repository.ConsensusGraduationAuditRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.admin.AdminProductService;
@@ -60,6 +61,7 @@ public class AiSweepService {
     private final AiSweepRunRepository sweepRunRepository;
     private final ReceiptItemRepository receiptItemRepository;
     private final ProductRepository productRepository;
+    private final CategoryResolver categoryResolver;
     private final ReceiptRepository receiptRepository;
     private final ConsensusGraduationAuditRepository consensusAuditRepository;
     private final AdminProductService adminProductService;
@@ -229,7 +231,7 @@ public class AiSweepService {
     private int sweepSuspectCategories(UUID runId, int maxPages) {
         var created = 0;
         for (var page = 0; page < maxPages; page++) {
-            var products = productRepository.findByCategoryOrderByCreatedAtDesc(ProductCategory.OTHER, PageRequest.of(page, BATCH_SIZE));
+            var products = productRepository.findNeedingCategoryReview(categoryResolver.idForSlug("outros"), PageRequest.of(page, BATCH_SIZE));
             if (products.isEmpty()) break;
             var productIdToName = products.stream().collect(
                     Collectors.toMap(product -> product.getId().toString(), product -> product.getNormalizedName()));

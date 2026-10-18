@@ -11,6 +11,7 @@ import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.AiFindingRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import lombok.RequiredArgsConstructor;
@@ -46,6 +47,7 @@ public class AiItemFallbackService {
 
     private final AiGateway aiGateway;
     private final ProductRepository productRepository;
+    private final CategoryResolver categoryResolver;
     private final ReceiptItemRepository receiptItemRepository;
     private final AiFindingRepository findingRepository;
     private final TransactionTemplate transactionTemplate;
@@ -188,6 +190,7 @@ public class AiItemFallbackService {
                     .category(resolvedCategory)
                     .categorizationSource(CategorizationSource.LLM)
                     .build();
+            categoryResolver.alignNewProduct(product); // enum↔nó consistentes na criação
             productRepository.save(product);
 
             item.setProduct(product);

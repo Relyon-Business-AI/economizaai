@@ -13,8 +13,13 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+/**
+ * FASE 2 (nó é a verdade): com nó presente, o enum é DERIVADO dele; sem nó, o enum ainda
+ * dá o piso (nó-grupo) pros escritores legados.
+ */
 @ExtendWith(MockitoExtension.class)
 class ProductCategoryNodeListenerTest {
 
@@ -27,24 +32,49 @@ class ProductCategoryNodeListenerTest {
     }
 
     @Test
-    void reconcilesCategoryNodeOnSave() {
+    void nodePresent_enumIsDerivedFromNode() {
         var leaf = UUID.randomUUID();
-        var group = UUID.randomUUID();
-        var product = Product.builder().category(ProductCategory.CLEANING).categoryId(leaf).build();
-        when(categoryResolver.reconcileNode(ProductCategory.CLEANING, leaf)).thenReturn(group);
+        var product = Product.builder().category(ProductCategory.GROCERIES).categoryId(leaf).build();
+        when(categoryResolver.deriveCoarseEnum(leaf, ProductCategory.GROCERIES)).thenReturn(ProductCategory.PRODUCE);
 
         listener.reconcileCategoryNode(product);
 
-        assertEquals(group, product.getCategoryId(), "listener writes the reconciled node back onto the product");
+        assertEquals(ProductCategory.PRODUCE, product.getCategory(), "o nó manda; o enum segue");
+        assertEquals(leaf, product.getCategoryId(), "o nó nunca é alterado pelo listener");
     }
 
     @Test
-    void clearsNodeWhenEnumNull() {
-        var product = Product.builder().category(null).categoryId(UUID.randomUUID()).build();
-        when(categoryResolver.reconcileNode(null, product.getCategoryId())).thenReturn(null);
+    void noNode_enumFloorsTheGroupNode() {
+        var group = UUID.randomUUID();
+        var product = Product.builder().category(ProductCategory.CLEANING).categoryId(null).build();
+        when(categoryResolver.idForLegacyEnum(ProductCategory.CLEANING)).thenReturn(group);
 
         listener.reconcileCategoryNode(product);
 
+        assertEquals(group, product.getCategoryId(), "escritor legado (só enum) ganha o nó-grupo");
+        assertEquals(ProductCategory.CLEANING, product.getCategory());
+    }
+
+    @Test
+    void nothingSet_noops() {
+        var product = Product.builder().build();
+
+        listener.reconcileCategoryNode(product);
+
+        assertNull(product.getCategory());
         assertNull(product.getCategoryId());
+        verifyNoInteractions(categoryResolver);
+    }
+
+    @Test
+    void unwiredResolver_noops() {
+        var unwired = new ProductCategoryNodeListener();
+        var leaf = UUID.randomUUID();
+        var product = Product.builder().category(ProductCategory.GROCERIES).categoryId(leaf).build();
+
+        unwired.reconcileCategoryNode(product);
+
+        assertEquals(ProductCategory.GROCERIES, product.getCategory());
+        assertEquals(leaf, product.getCategoryId());
     }
 }

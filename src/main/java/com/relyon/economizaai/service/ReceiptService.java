@@ -81,6 +81,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -547,6 +548,7 @@ public class ReceiptService {
                                              LocalDateTime to,
                                              String cnpjEmitente,
                                              List<ProductCategory> categories,
+                                             String categorySlug,
                                              ReceiptStatus status,
                                              String search,
                                              MarketScope scope,
@@ -558,8 +560,19 @@ public class ReceiptService {
                 ? PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
                         Sort.by(Sort.Direction.DESC, "issuedAt"))
                 : pageable;
+        // Filtro pela taxonomia (categoria OU subcategoria): nó + descendentes. Paridade:
+        // 'outros' equivale ao enum OTHER (mesma semântica do /items).
+        Set<UUID> categoryNodeIds = null;
+        if (categorySlug != null && !categorySlug.isBlank()) {
+            var slugNode = categoryResolver.idForSlug(categorySlug);
+            if (slugNode != null && categoryResolver.legacyEnumForNode(slugNode) == ProductCategory.OTHER) {
+                categories = List.of(ProductCategory.OTHER);
+            } else {
+                categoryNodeIds = categoryResolver.nodeAndDescendantIds(categorySlug);
+            }
+        }
         var spec = ReceiptSpecifications.forSearch(
-                householdId, from, to, cnpj, categories, status, trimmedSearch, true, null);
+                householdId, from, to, cnpj, categories, status, trimmedSearch, true, null, null, categoryNodeIds);
         if (scope != null && scope != MarketScope.ALL) {
             spec = spec.and(scopeSpec(scope,
                     insightsRepository.supportedCnpjs(householdId, MerchantSupportGate.supportedSegments())));
@@ -663,27 +676,54 @@ public class ReceiptService {
             nodeSlugByProduct.putIfAbsent(product.getId(), categoryResolver.slugForId(product.getCategoryId()));
             nodeLabelByProduct.putIfAbsent(product.getId(), categoryResolver.labelFor(product.getCategoryId(), locale));
         }
+        var aiNodeSlugByItem = new HashMap<UUID, String>();
+        var aiNodeLabelByItem = new HashMap<UUID, String>();
+        collectAiNodeSuggestions(receipt, locale, aiNodeSlugByItem, aiNodeLabelByItem);
         return withFriendlyName(user.getHousehold().getId(), receipt,
                 ReceiptResponse.from(receipt, overrides, suggestedCategories(receipt),
-                        nodeSlugByProduct, nodeLabelByProduct));
+                        nodeSlugByProduct, nodeLabelByProduct, aiNodeSlugByItem, aiNodeLabelByItem));
     }
 
     /**
      * Best-effort category preview for items not yet linked to a product, so
      * the review screen shows what confirm() will apply instead of everything
      * uncategorized. Mirrors the confirm-time cascade (EAN product → EAN
-     * catalog → alias → dictionary) read-only — nothing persisted until confirm,
-     * and dictionary improvements show up instantly.
+     * catalog → alias → dictionary — and the async AI suggestion, the final
+     * layer) read-only — nothing persisted until confirm, and dictionary
+     * improvements show up instantly.
      */
     private Map<UUID, String> suggestedCategories(Receipt receipt) {
         if (receipt.getStatus() != ReceiptStatus.PENDING_CONFIRMATION) return Map.of();
         var suggestions = new HashMap<UUID, String>();
         for (var item : receipt.getItems()) {
             if (item.getProduct() != null) continue;
-            canonicalizationService.previewCategory(item)
-                    .ifPresent(category -> suggestions.put(item.getId(), category.name()));
+            var deterministic = canonicalizationService.previewCategory(item);
+            if (deterministic.isPresent()) {
+                suggestions.put(item.getId(), deterministic.get().name());
+                continue;
+            }
+            // Camada final: sugestão da IA (gravada assíncrona pós-ingestão). Enum derivado da
+            // categoria da folha; categoria sem enum legado usa o slug (o FE resolve ícone/cor por slug).
+            if (item.getAiCategoryId() != null) {
+                var aiEnum = categoryResolver.legacyEnumForNode(item.getAiCategoryId());
+                suggestions.put(item.getId(),
+                        aiEnum != null ? aiEnum.name() : categoryResolver.slugForId(item.getAiCategoryId()));
+            }
         }
         return suggestions;
+    }
+
+    /** Subcategoria sugerida pela IA (slug + rótulo localizado) por ITEM ainda sem produto — só no preview. */
+    private void collectAiNodeSuggestions(Receipt receipt, Locale locale,
+                                          Map<UUID, String> slugByItem, Map<UUID, String> labelByItem) {
+        if (receipt.getStatus() != ReceiptStatus.PENDING_CONFIRMATION) return;
+        for (var item : receipt.getItems()) {
+            if (item.getProduct() != null || item.getAiCategoryId() == null) continue;
+            var slug = categoryResolver.slugForId(item.getAiCategoryId());
+            var label = categoryResolver.labelFor(item.getAiCategoryId(), locale);
+            if (slug != null) slugByItem.put(item.getId(), slug);
+            if (label != null) labelByItem.put(item.getId(), label);
+        }
     }
 
     /**
@@ -746,8 +786,14 @@ public class ReceiptService {
      */
     private void snapshotCategories(Receipt receipt) {
         for (var item : receipt.getItems()) {
-            if (item.getProduct() != null && item.getProduct().getCategory() != null) {
+            if (item.getProduct() == null) continue;
+            if (item.getProduct().getCategory() != null) {
                 item.setCategoryAtConfirmation(item.getProduct().getCategory());
+            }
+            // Congela também o NÓ (categoria/subcategoria da taxonomia) — par do enum; é o
+            // snapshot que fica quando o enum for aposentado (Fase D).
+            if (item.getProduct().getCategoryId() != null) {
+                item.setCategoryNodeAtConfirmation(item.getProduct().getCategoryId());
             }
         }
     }

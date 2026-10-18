@@ -23,14 +23,22 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     // Paginado: usado pelo modo full-sweep (percorre toda a fila).
     List<Product> findByBrandIsNullOrderByCreatedAtDesc(Pageable pageable);
     List<Product> findByGenericNameIsNullOrderByCreatedAtDesc(Pageable pageable);
-    List<Product> findByCategoryOrderByCreatedAtDesc(ProductCategory category, Pageable pageable);
+
+    /** Fila de revisão de categoria (node-first): sem nó nenhum OU estacionado no nó 'outros'. */
+    @Query("""
+            SELECT product FROM Product product
+            WHERE product.categoryId IS NULL OR product.categoryId = :outrosId
+            ORDER BY product.createdAt DESC
+            """)
+    List<Product> findNeedingCategoryReview(@Param("outrosId") UUID outrosId, Pageable pageable);
+
+    @Query("SELECT count(product) FROM Product product WHERE product.categoryId IS NULL OR product.categoryId = :outrosId")
+    long countNeedingCategoryReview(@Param("outrosId") UUID outrosId);
 
     // "Fila aguardando IA" counters (status panel): what the next sweep will cover.
     long countByBrandIsNull();
 
     long countByGenericNameIsNull();
-
-    long countByCategory(ProductCategory category);
 
     /**
      * Products the strong (free) layers left wanting: unmatched/weak category
@@ -105,6 +113,23 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     int applyCatalogCategoryNodes();
 
     /**
+     * Node-first: re-deriva o enum legado a partir do NÓ (enum da categoria do nó) pra linhas
+     * tocadas por updates NATIVOS (que bypassam o listener). Categorias sem enum legado mantêm
+     * o enum atual (aproximação legada). Idempotente.
+     */
+    @Modifying
+    @Transactional
+    @Query(value = """
+            UPDATE products p SET category = parent.legacy_enum, updated_at = now()
+            FROM categories node
+            JOIN categories parent ON parent.id = COALESCE(node.parent_id, node.id)
+            WHERE node.id = p.category_id
+              AND parent.legacy_enum IS NOT NULL
+              AND p.category IS DISTINCT FROM parent.legacy_enum
+            """, nativeQuery = true)
+    int realignEnumFromNode();
+
+    /**
      * Reset every product's {@code category_id} to the group default for its legacy
      * enum — the deterministic baseline the taxonomy sweep rebuilds on each run, so
      * stale fine-node assignments from older classifier rules are wiped first.
@@ -143,20 +168,19 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
 
     /**
      * Products WITHOUT a fine subcategory — either no node at all (category_id null) or
-     * sitting on a top-level GROUP node (in :groupIds). Skips human-curated products
-     * (:userSource) and the non-food enums (:nonFood), whose groups have no finer leaf.
-     * The candidate set for the AI subcategory-suggestion sweep (newest first).
+     * sitting on a top-level GROUP node in :groupIds (callers pass only the groups que TÊM
+     * subcategorias, então categorias sem folha ficam fora por construção). Skips
+     * human-curated products (:userSource). The candidate set for the AI
+     * subcategory-suggestion sweep (newest first).
      */
     @Query("""
             SELECT product FROM Product product
             WHERE (product.categoryId IS NULL OR product.categoryId IN :groupIds)
               AND (product.categorizationSource IS NULL OR product.categorizationSource <> :userSource)
-              AND (product.category IS NULL OR product.category NOT IN :nonFood)
             ORDER BY product.createdAt DESC
             """)
     List<Product> findWithoutSubcategory(@Param("groupIds") Collection<UUID> groupIds,
                                          @Param("userSource") CategorizationSource userSource,
-                                         @Param("nonFood") Collection<ProductCategory> nonFood,
                                          Pageable pageable);
 
     /**
@@ -183,17 +207,21 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     """)
     Page<Product> search(@Param("query") String query, Pageable pageable);
 
-    /** Admin catalog list with optional filters — any null param is ignored (matches all). */
+    /** Admin catalog list with optional filters — any null param is ignored (matches all).
+     * {@code applyNodeFilter}=false ignora {@code nodeIds} (JPQL não aceita null-check em coleção). */
     @Query("""
         SELECT p FROM Product p
         WHERE (:query IS NULL OR LOWER(p.normalizedName) LIKE LOWER(CONCAT('%', :query, '%')) OR p.ean = :query)
           AND (:category IS NULL OR p.category = :category)
           AND (:source IS NULL OR p.categorizationSource = :source)
+          AND (:applyNodeFilter = false OR p.categoryId IN :nodeIds)
         ORDER BY p.normalizedName ASC
     """)
     Page<Product> findFiltered(@Param("query") String query,
                                @Param("category") ProductCategory category,
                                @Param("source") CategorizationSource source,
+                               @Param("applyNodeFilter") boolean applyNodeFilter,
+                               @Param("nodeIds") Collection<UUID> nodeIds,
                                Pageable pageable);
 
     @Query("""

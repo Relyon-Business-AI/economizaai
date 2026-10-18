@@ -711,7 +711,7 @@ GET /api/v1/receipts
 → Page<ReceiptSummaryResponse>  (each row has marketName, issuedAt, totalAmount, householdTotalAmount, discountTotal, approxTaxTotal, itemCount, status)
 ```
 
-Default sort is `issuedAt DESC`. All filters optional. `category` accepts one or many (same as `/items` and `/insights/query`).
+Default sort is `issuedAt DESC`. All filters optional. `category` accepts one or many (same as `/items` and `/insights/query`); **prefer `categorySlug=<slug da taxonomia>`** (categoria OU subcategoria, inclui descendentes) — o param `category` (enum legado) está deprecado. `categorySlug=outros` equivale ao enum `OTHER` (inclui itens sem produto).
 
 **Content search (`q`)** — case-insensitive substring match against `rawDescription`, `friendlyDescription`, the linked product's normalized name, AND the receipt's market name. So `q=leite` finds every receipt that includes a milk item OR was issued by a market with "leite" in the name. Combine with `from`/`to`/`category` freely.
 

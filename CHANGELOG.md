@@ -16,6 +16,47 @@ says `economizai-app-prod`):
 
 ---
 
+## 2026-10-17 — Taxonomia é a fonte da verdade (refactor node-first) + `categorySlug` em tudo
+
+O enum legado de categoria (`GROCERIES`, `MEAT_DAIRY`, …) virou **projeção derivada** da
+taxonomia (categoria/subcategoria) — internamente o backend decide tudo pelo nó. **Nada
+quebra pro FE**: todos os campos/params de enum continuam funcionando (compatibilidade),
+mas estão **deprecados** — migrar para slug quando conveniente.
+
+**Novos params (aditivo):**
+- `GET /receipts?categorySlug=carnes` — filtra pela taxonomia (categoria OU subcategoria,
+  inclui descendentes), igual ao `/items`.
+- `GET /admin/products?categoryNodeSlug=salgadinhos` — lista do admin filtrada por nó.
+- Paridade em `/items` e `/insights/query`: `categorySlug=outros` agora equivale ao enum
+  `OTHER` (inclui itens ainda sem produto), como o filtro legado.
+
+**Comportamento novo (sem ação do FE):** definir a subcategoria de um produto atualiza a
+categoria legada automaticamente (antes era o contrário). Snapshot de confirmação agora
+congela também o nó (`category_node_at_confirmation`). Migration V113.
+Plano de remoção total do enum: `docs/ENUM_RETIREMENT.md` (Fase D, gated na migração do app).
+
+---
+
+## 2026-10-17 — IA é a camada final da categorização no scan (sugestão visível na revisão)
+
+Quando a nota fica pronta (PENDING_CONFIRMATION), o backend roda **em background** o
+classificador de IA só pros itens que o determinístico (EAN/alias/dicionário/keyword)
+não resolveu, e grava a sugestão no item.
+
+**O que muda pro FE (campos já existentes, sem breaking):**
+- No `GET /receipts/{id}` de nota pendente, itens não linkados a produto podem vir com
+  `category` (preview — enum ou slug), `categoryNodeSlug` + `categoryNodeLabel`
+  (subcategoria sugerida pela IA) e `categorySuggested: true`. A tela de revisão já
+  renderiza (chip + breadcrumb) sem mudança.
+- A sugestão aparece **segundos depois** da nota ficar pronta (chamada de IA async) —
+  um re-GET/refresh da nota pendente pega os valores novos.
+- No confirm, a sugestão vira a categoria do produto novo **só se** o determinístico
+  não tiver dado uma (o usuário pode ajustar antes, como sempre; a escolha dele vence).
+- IA fora do ar / nota confirmada rápido → comportamento idêntico ao anterior
+  (job diário cobre). Migration V112 (`receipt_items.ai_category_id`).
+
+---
+
 ## 2026-10-17 — `GET /insights/query` aceita `categorySlug` (taxonomia nova)
 
 O `/insights/query` agora aceita o parâmetro **`categorySlug`** (slug de um nó da

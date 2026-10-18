@@ -16,6 +16,7 @@ import com.relyon.economizaai.repository.ManualPurchaseRepository;
 import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.repository.ProductAliasRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.repository.ShoppingListItemRepository;
 import org.junit.jupiter.api.Test;
@@ -36,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -44,6 +46,7 @@ import static org.mockito.Mockito.when;
 class AdminProductServiceTest {
 
     @Mock private ProductRepository productRepository;
+    @Mock private CategoryResolver categoryResolver;
     @Mock private ProductAliasRepository aliasRepository;
     @Mock private ReceiptItemRepository receiptItemRepository;
     @Mock private PriceObservationRepository priceObservationRepository;
@@ -120,7 +123,7 @@ class AdminProductServiceTest {
     @Test
     void listAll_pagesThroughCatalog() {
         var product = product("ARROZ", ProductCategory.GROCERIES, CategorizationSource.DICTIONARY);
-        when(productRepository.findFiltered(null, null, null, PageRequest.of(0, 50)))
+        when(productRepository.findFiltered(eq(null), eq(null), eq(null), eq(false), any(), eq(PageRequest.of(0, 50))))
                 .thenReturn(new PageImpl<>(List.of(product)));
 
         var page = service.listAll(PageRequest.of(0, 50));

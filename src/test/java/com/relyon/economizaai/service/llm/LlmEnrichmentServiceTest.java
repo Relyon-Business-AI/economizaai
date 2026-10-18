@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.llm;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.model.CuratedDictionaryEntry;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.ReceiptItem;
@@ -45,6 +46,7 @@ import static org.mockito.Mockito.when;
 class LlmEnrichmentServiceTest {
 
     @Mock private ProductRepository productRepository;
+    @Mock private CategoryResolver categoryResolver;
     @Mock private ReceiptItemRepository receiptItemRepository;
     @Mock private CuratedDictionaryEntryRepository curatedRepository;
     @Mock private LlmDisagreementRepository disagreementRepository;
@@ -58,7 +60,7 @@ class LlmEnrichmentServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new LlmEnrichmentService(productRepository, receiptItemRepository, curatedRepository,
+        service = new LlmEnrichmentService(productRepository, categoryResolver, receiptItemRepository, curatedRepository,
                 disagreementRepository, dictionaryClassifier, openAiClient, paidApiGuard, transactionTemplate,
                 true, 25, 3, 0.7);
         lenient().when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
@@ -198,7 +200,7 @@ class LlmEnrichmentServiceTest {
 
     @Test
     void enrich_disabled_neverCalls() {
-        var disabled = new LlmEnrichmentService(productRepository, receiptItemRepository, curatedRepository,
+        var disabled = new LlmEnrichmentService(productRepository, categoryResolver, receiptItemRepository, curatedRepository,
                 disagreementRepository, dictionaryClassifier, openAiClient, paidApiGuard, transactionTemplate,
                 false, 25, 3, 0.7);
 

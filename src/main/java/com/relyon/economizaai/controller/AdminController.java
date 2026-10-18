@@ -590,9 +590,10 @@ public class AdminController {
     public ResponseEntity<Page<ProductResponse>> listProducts(
             @RequestParam(required = false) String q,
             @RequestParam(required = false) ProductCategory category,
+            @RequestParam(required = false) String categoryNodeSlug,
             @RequestParam(required = false) CategorizationSource source,
             @PageableDefault(size = 50) Pageable pageable) {
-        return ResponseEntity.ok(adminProductService.listAll(q, category, source, pageable));
+        return ResponseEntity.ok(adminProductService.listAll(q, category, categoryNodeSlug, source, pageable));
     }
 
     /**

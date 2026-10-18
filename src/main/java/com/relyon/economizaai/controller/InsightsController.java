@@ -117,17 +117,24 @@ public class InsightsController {
             @RequestParam(required = false) String categorySlug,
             @RequestParam(defaultValue = "HOUSEHOLD") CategoryView categoryView,
             @RequestParam(defaultValue = "ALL") MarketScope scope) {
-        // Filtro pela taxonomia nova (grupo OU subcategoria): resolve o slug ao nó + descendentes
+        // Filtro pela taxonomia nova (categoria OU subcategoria): resolve o slug ao nó + descendentes
         // e vira filtro por produto — espelha o ItemController. O enum legado (category) segue
         // valendo; o FE manda um OU outro. Sem isso o FE mandava o slug no param de enum e dava 400.
         var productIds = productId;
+        var categories = category;
         if (categorySlug != null && !categorySlug.isBlank()) {
-            var nodeIds = categoryResolver.nodeAndDescendantIds(categorySlug);
-            var inNode = nodeIds.isEmpty() ? List.<UUID>of() : productRepository.findIdsByCategoryIdIn(nodeIds);
-            if (inNode.isEmpty()) return ResponseEntity.ok(emptyQueryResponse(from, to, groupBy));
-            productIds = inNode;
+            var slugNode = categoryResolver.idForSlug(categorySlug);
+            // Paridade: 'outros' ↔ enum OTHER (inclui itens sem produto — ver ItemController).
+            if (slugNode != null && categoryResolver.legacyEnumForNode(slugNode) == ProductCategory.OTHER) {
+                categories = List.of(ProductCategory.OTHER);
+            } else {
+                var nodeIds = categoryResolver.nodeAndDescendantIds(categorySlug);
+                var inNode = nodeIds.isEmpty() ? List.<UUID>of() : productRepository.findIdsByCategoryIdIn(nodeIds);
+                if (inNode.isEmpty()) return ResponseEntity.ok(emptyQueryResponse(from, to, groupBy));
+                productIds = inNode;
+            }
         }
-        var filters = QueryFilters.fromRequest(from, to, marketCnpj, marketCnpjRoot, category,
+        var filters = QueryFilters.fromRequest(from, to, marketCnpj, marketCnpjRoot, categories,
                 productIds, ean, minReceiptTotal, maxReceiptTotal, groupBy, limit, categoryView, scope);
         return ResponseEntity.ok(insightsQueryService.query(user, filters));
     }

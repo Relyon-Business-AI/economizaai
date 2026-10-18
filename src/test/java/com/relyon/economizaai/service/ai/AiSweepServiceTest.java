@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.ai;
 
 import com.relyon.economizaai.model.AiFinding;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.model.AiSweepRun;
 import com.relyon.economizaai.model.enums.AiFindingType;
 import com.relyon.economizaai.repository.AiFindingRepository;
@@ -34,6 +35,7 @@ import static org.mockito.Mockito.when;
 class AiSweepServiceTest {
 
     @Mock private AiGateway aiGateway;
+    @Mock private CategoryResolver categoryResolver;
     @Mock private AiFindingRepository findingRepository;
     @Mock private AiSweepRunRepository sweepRunRepository;
     @Mock private ReceiptItemRepository receiptItemRepository;
@@ -47,7 +49,7 @@ class AiSweepServiceTest {
     @BeforeEach
     void setUp() {
         service = new AiSweepService(aiGateway, findingRepository, sweepRunRepository,
-                receiptItemRepository, productRepository, receiptRepository,
+                receiptItemRepository, productRepository, categoryResolver, receiptRepository,
                 consensusAuditRepository, adminProductService);
     }
 

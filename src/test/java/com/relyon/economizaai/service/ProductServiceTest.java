@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service;
 
 import com.relyon.economizaai.dto.request.CreateAliasRequest;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.dto.request.CreateProductRequest;
 import com.relyon.economizaai.exception.EanConflictException;
 import com.relyon.economizaai.exception.ProductAliasConflictException;
@@ -47,6 +48,7 @@ import static org.mockito.Mockito.when;
 class ProductServiceTest {
 
     @Mock private ProductRepository productRepository;
+    @Mock private CategoryResolver categoryResolver;
     @Mock private ProductAliasRepository aliasRepository;
     @Mock private HouseholdProductAliasRepository householdProductAliasRepository;
     @Mock private ReceiptItemRepository receiptItemRepository;

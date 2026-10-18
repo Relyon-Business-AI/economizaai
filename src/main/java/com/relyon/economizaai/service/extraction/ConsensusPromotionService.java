@@ -146,8 +146,9 @@ public class ConsensusPromotionService {
             if (product.getCategory() != consensusCategory
                     || product.getCategorizationSource() != CategorizationSource.CONSENSUS) {
                 product.setCategory(consensusCategory);
-                // Fine node reconciled with the winning enum by ProductCategoryNodeListener on save
-                // (preserves a leaf under the winning group, else collapses to it — never a stale leaf).
+                // Escritor de ENUM (voto do consenso é por enum): move o nó junto — o listener é
+                // node-first, um nó de outra categoria venceria o veredito sem isto.
+                product.setCategoryId(categoryResolver.reconcileNode(consensusCategory, product.getCategoryId()));
                 product.setCategorizationSource(CategorizationSource.CONSENSUS);
                 toSave.add(product);
                 auditRows.add(ConsensusGraduationAudit.builder()

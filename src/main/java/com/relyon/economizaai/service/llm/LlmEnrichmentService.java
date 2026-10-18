@@ -11,6 +11,7 @@ import com.relyon.economizaai.repository.CuratedDictionaryEntryRepository;
 import com.relyon.economizaai.repository.LlmDisagreementRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import com.relyon.economizaai.service.extraction.DictionaryClassifier;
 import com.relyon.economizaai.service.extraction.LearnableTokenFilter;
@@ -62,6 +63,7 @@ public class LlmEnrichmentService {
     private static final BigDecimal MAX_PLAUSIBLE_PRICE_PER_KG = new BigDecimal("1000");
 
     private final ProductRepository productRepository;
+    private final CategoryResolver categoryResolver;
     private final ReceiptItemRepository receiptItemRepository;
     private final CuratedDictionaryEntryRepository curatedRepository;
     private final LlmDisagreementRepository disagreementRepository;
@@ -75,6 +77,7 @@ public class LlmEnrichmentService {
     private final BigDecimal confidenceThreshold;
 
     public LlmEnrichmentService(ProductRepository productRepository,
+                                CategoryResolver categoryResolver,
                                 ReceiptItemRepository receiptItemRepository,
                                 CuratedDictionaryEntryRepository curatedRepository,
                                 LlmDisagreementRepository disagreementRepository,
@@ -87,6 +90,7 @@ public class LlmEnrichmentService {
                                 @Value("${economizaai.llm.enrichment.max-attempts:3}") int maxAttempts,
                                 @Value("${economizaai.llm.enrichment.confidence-threshold:0.7}") double confidenceThreshold) {
         this.productRepository = productRepository;
+        this.categoryResolver = categoryResolver;
         this.receiptItemRepository = receiptItemRepository;
         this.curatedRepository = curatedRepository;
         this.disagreementRepository = disagreementRepository;
@@ -220,6 +224,8 @@ public class LlmEnrichmentService {
             return false;
         }
         product.setCategory(suggested);
+        // Escritor de ENUM: move o nó junto (listener é node-first).
+        product.setCategoryId(categoryResolver.reconcileNode(suggested, product.getCategoryId()));
         product.setCategorizationSource(CategorizationSource.LLM);
         return true;
     }

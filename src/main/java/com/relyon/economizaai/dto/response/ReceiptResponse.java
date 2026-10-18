@@ -66,6 +66,21 @@ public record ReceiptResponse(
                                        Map<UUID, String> suggestionsByItemId,
                                        Map<UUID, String> nodeSlugByProduct,
                                        Map<UUID, String> nodeLabelByProduct) {
+        return from(receipt, categoryOverrides, suggestionsByItemId, nodeSlugByProduct, nodeLabelByProduct,
+                Map.of(), Map.of());
+    }
+
+    /**
+     * @param aiNodeSlugByItem   itemId → subcategoria SUGERIDA pela IA (slug) pra itens ainda sem
+     *                           produto no preview da revisão — renderizada como sugestão
+     * @param aiNodeLabelByItem  itemId → rótulo localizado da subcategoria sugerida
+     */
+    public static ReceiptResponse from(Receipt receipt, Map<UUID, String> categoryOverrides,
+                                       Map<UUID, String> suggestionsByItemId,
+                                       Map<UUID, String> nodeSlugByProduct,
+                                       Map<UUID, String> nodeLabelByProduct,
+                                       Map<UUID, String> aiNodeSlugByItem,
+                                       Map<UUID, String> aiNodeLabelByItem) {
         var householdTotal = receipt.getItems().stream()
                 .filter(item -> !item.isExcluded() && !item.isExcludedFromPersonal())
                 .map(ReceiptItem::getTotalPrice)
@@ -94,10 +109,15 @@ public record ReceiptResponse(
                 receipt.getItems().stream()
                         .map(item -> {
                             var label = labelFor(item, categoryOverrides, suggestionsByItemId);
-                            var suggested = label != null && item.getProduct() == null;
                             var productId = item.getProduct() != null ? item.getProduct().getId() : null;
-                            var nodeSlug = productId != null ? nodeSlugByProduct.get(productId) : null;
-                            var nodeLabel = productId != null ? nodeLabelByProduct.get(productId) : null;
+                            var itemId = item.getId(); // pode ser null em entidades ainda não persistidas
+                            // Item linkado mostra o nó do PRODUTO; não linkado mostra a subcategoria
+                            // SUGERIDA pela IA (preview da revisão) quando houver.
+                            var nodeSlug = productId != null ? nodeSlugByProduct.get(productId)
+                                    : itemId != null ? aiNodeSlugByItem.get(itemId) : null;
+                            var nodeLabel = productId != null ? nodeLabelByProduct.get(productId)
+                                    : itemId != null ? aiNodeLabelByItem.get(itemId) : null;
+                            var suggested = (label != null || nodeSlug != null) && item.getProduct() == null;
                             return ReceiptItemResponse.from(item, label, suggested, nodeSlug, nodeLabel);
                         })
                         .toList()

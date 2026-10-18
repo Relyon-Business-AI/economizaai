@@ -49,6 +49,7 @@ import static org.mockito.Mockito.mock;
 class ProductServiceSearchGetUpdateTest {
 
     @Mock private ProductRepository productRepository;
+    @Mock private CategoryResolver categoryResolver;
     @Mock private ProductAliasRepository aliasRepository;
     @Mock private HouseholdProductAliasRepository householdProductAliasRepository;
     @Mock private ReceiptItemRepository receiptItemRepository;
@@ -65,7 +66,7 @@ class ProductServiceSearchGetUpdateTest {
     void setUp() {
         var householdProductAliasService =
                 new HouseholdProductAliasService(householdProductAliasRepository, receiptItemRepository);
-        productService = new ProductService(productRepository, aliasRepository, householdProductAliasRepository,
+        productService = new ProductService(productRepository, categoryResolver, aliasRepository, householdProductAliasRepository,
                 receiptItemRepository, priceObservationRepository, productExtractor, eanCatalogService,
                 householdProductAliasService, brandAliasPromotionService);
     }

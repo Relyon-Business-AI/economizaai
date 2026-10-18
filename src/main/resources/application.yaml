@@ -125,6 +125,12 @@ economizaai:
     # Prepaid credit budget in USD — shown in the spend panel as "saldo estimado".
     # Set to 0 to hide the balance indicator.
     budget-usd: ${ECONOMIZAAI_AI_BUDGET_USD:0}
+    # Limiares de confiança da varredura de subcategoria (sugestão da IA). Assimétrico: preencher
+    # subcategoria vazia é baixo risco; trocar uma existente pede mais; mudar a CATEGORIA pede o máximo.
+    subcategory-suggestion:
+      set-min-confidence: ${AI_SUBCAT_SET_MIN:0.55}
+      change-subcategory-min-confidence: ${AI_SUBCAT_CHANGE_SUB_MIN:0.80}
+      change-category-min-confidence: ${AI_SUBCAT_CHANGE_CAT_MIN:0.90}
   ingestion:
     # Async-ingest safety net: PROCESSING receipts older than this are failed by
     # the sweeper so the FE never polls forever. Must exceed the worst-case

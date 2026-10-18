@@ -41,6 +41,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -81,8 +82,18 @@ public class AdminProductService {
      */
     @Transactional(readOnly = true)
     public Page<ProductResponse> listAll(String q, ProductCategory category, CategorizationSource source, Pageable pageable) {
+        return listAll(q, category, null, source, pageable);
+    }
+
+    /** {@code categoryNodeSlug} filtra pela taxonomia (categoria OU subcategoria, nó + descendentes). */
+    public Page<ProductResponse> listAll(String q, ProductCategory category, String categoryNodeSlug,
+                                         CategorizationSource source, Pageable pageable) {
         var query = (q == null || q.isBlank()) ? null : q.trim();
-        return productRepository.findFiltered(query, category, source, pageable).map(ProductResponse::from);
+        var nodeIds = (categoryNodeSlug == null || categoryNodeSlug.isBlank())
+                ? Set.<UUID>of()
+                : categoryResolver.nodeAndDescendantIds(categoryNodeSlug);
+        return productRepository.findFiltered(query, category, source, !nodeIds.isEmpty(), nodeIds, pageable)
+                .map(ProductResponse::from);
     }
 
     /**
@@ -233,6 +244,9 @@ public class AdminProductService {
         var product = productRepository.findById(productId)
                 .orElseThrow(ProductNotFoundException::new);
         product.setCategory(category);
+        // Escritor de ENUM (intenção = categoria grossa): move o nó junto — o listener agora é
+        // node-first, então sem isto o nó atual venceria e desfaria a mudança.
+        product.setCategoryId(categoryResolver.reconcileNode(category, product.getCategoryId()));
         product.setCategorizationSource(CategorizationSource.USER);
         var saved = productRepository.save(product);
         log.info("admin.product.category_set product={} category={} source=USER", productId, category);
@@ -246,7 +260,8 @@ public class AdminProductService {
     public ProductResponse setCategoryNode(UUID productId, UUID categoryNodeId) {
         var product = productRepository.findById(productId)
                 .orElseThrow(ProductNotFoundException::new);
-        product.setCategoryId(categoryNodeId);
+        // Escritor de NÓ: deriva o enum junto (node-first; @PreUpdate não persiste campo não-sujo).
+        categoryResolver.applyNode(product, categoryNodeId);
         product.setCategorizationSource(CategorizationSource.USER);
         var saved = productRepository.save(product);
         log.info("admin.product.category_node_set product={} node={} source=USER", productId, categoryNodeId);

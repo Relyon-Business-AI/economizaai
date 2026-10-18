@@ -132,7 +132,7 @@ public class CategorizerAdminService {
         for (var product : consensusProducts) {
             product.setCategorizationSource(CategorizationSource.NONE);
             product.setCategory(null);
-            // ProductCategoryNodeListener clears categoryId on save when the enum is null.
+            product.setCategoryId(null); // reset explícito: listener é node-first, o nó venceria o reset
         }
         productRepository.saveAll(consensusProducts);
         log.info("categorizer.reset_consensus reverted={}", consensusProducts.size());

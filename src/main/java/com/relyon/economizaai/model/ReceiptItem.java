@@ -17,6 +17,7 @@ import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 @Entity
 @Table(name = "receipt_items")
@@ -108,6 +109,20 @@ public class ReceiptItem extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "category_at_confirmation", length = 30)
     private ProductCategory categoryAtConfirmation;
+
+    /** Snapshot do NÓ (categoria/subcategoria da taxonomia) congelado na confirmação — par do
+     * {@link #categoryAtConfirmation}; substitui o enum quando ele for aposentado (Fase D). */
+    @Column(name = "category_node_at_confirmation")
+    private UUID categoryNodeAtConfirmation;
+
+    /**
+     * Sugestão de categoria/subcategoria da IA (nó da taxonomia) — a camada FINAL do cascade,
+     * preenchida assíncrona assim que a nota fica PENDING_CONFIRMATION, só quando o determinístico
+     * não resolveu. A revisão a mostra como sugestão (ajustável) e o confirm a aplica ao criar o
+     * produto canônico. Nunca sobrepõe dicionário/keyword nem a escolha do usuário.
+     */
+    @Column(name = "ai_category_id")
+    private UUID aiCategoryId;
 
     /** True when a manual paid total is recorded below the as-printed total — i.e. the line was on promotion. */
     public boolean isPromotional() {

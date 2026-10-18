@@ -77,6 +77,7 @@ public class ItemController {
         // Filtering by a custom category OR a new-taxonomy node resolves to the
         // matching products; both reuse the productId filter mechanism.
         var productIds = productId;
+        var categories = category;
         if (customCategoryId != null) {
             var inCustom = customCategoryService.productIdsIn(user, customCategoryId);
             if (inCustom.isEmpty()) {
@@ -84,15 +85,27 @@ public class ItemController {
             }
             productIds = inCustom;
         } else if (categorySlug != null && !categorySlug.isBlank()) {
-            var nodeIds = categoryResolver.nodeAndDescendantIds(categorySlug);
-            var inNode = nodeIds.isEmpty() ? List.<UUID>of() : productRepository.findIdsByCategoryIdIn(nodeIds);
-            if (inNode.isEmpty()) {
-                return ResponseEntity.ok(Page.empty(pageable));
+            // Paridade com o filtro legado: o slug 'outros' equivale ao enum OTHER, que também
+            // inclui itens SEM produto (unmatched) — o caminho por productIds os excluiria.
+            if (isLegacyOther(categorySlug)) {
+                categories = List.of(ProductCategory.OTHER);
+            } else {
+                var nodeIds = categoryResolver.nodeAndDescendantIds(categorySlug);
+                var inNode = nodeIds.isEmpty() ? List.<UUID>of() : productRepository.findIdsByCategoryIdIn(nodeIds);
+                if (inNode.isEmpty()) {
+                    return ResponseEntity.ok(Page.empty(pageable));
+                }
+                productIds = inNode;
             }
-            productIds = inNode;
         }
-        var filters = ItemFilters.fromRequest(from, to, marketCnpj, marketCnpjRoot, category,
+        var filters = ItemFilters.fromRequest(from, to, marketCnpj, marketCnpjRoot, categories,
                 productIds, ean, minReceiptTotal, maxReceiptTotal, categoryView, scope);
         return ResponseEntity.ok(itemQueryService.query(user, filters, pageable));
+    }
+
+    /** True quando o slug resolve pra categoria cujo enum legado é OTHER (hoje, o grupo 'outros'). */
+    private boolean isLegacyOther(String categorySlug) {
+        var nodeId = categoryResolver.idForSlug(categorySlug);
+        return nodeId != null && categoryResolver.legacyEnumForNode(nodeId) == ProductCategory.OTHER;
     }
 }

@@ -8,16 +8,23 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
- * Single enforcement point for the taxonomy invariant: a product's fine
- * {@link Product#getCategoryId() categoryId} (two-level node) must never
- * contradict its coarse {@link Product#getCategory() category} (legacy enum/group).
+ * Single enforcement point for the taxonomy invariant — FASE 2 (nó é a verdade): o
+ * {@link Product#getCategoryId() categoryId} (nó da taxonomia) manda; o
+ * {@link Product#getCategory() category} (enum legado) é uma PROJEÇÃO derivada dele.
  *
- * <p>Fires on every persist/update so EVERY write path — user edits, consensus
- * graduation, LLM/AI corrections, pharmacy defaults, admin assignment — gets the
- * node reconciled to the enum's group (a finer leaf under the right group is kept;
- * a stale leaf from another group collapses to the group; a null enum clears it).
- * This is why {@link CategoryResolver} is deliberately query-free: it is safe to
- * call mid-flush.
+ * <p>Fires on every persist/update:
+ * <ul>
+ *   <li>produto COM nó → o enum é derivado do nó ({@link CategoryResolver#deriveCoarseEnum}:
+ *       enum da categoria do nó; categoria sem enum legado mantém o enum atual, senão OTHER);</li>
+ *   <li>produto SEM nó mas com enum → ganha o nó-grupo do enum (piso — mantém escritores
+ *       legados funcionando até migrarem).</li>
+ * </ul>
+ * ⚠️ LIMITAÇÃO (Hibernate 7): em {@code @PreUpdate}, mudança de campo NÃO-sujo feita aqui NÃO é
+ * persistida — este listener só é efetivo de verdade no {@code @PrePersist} (criação). Por isso os
+ * CAMINHOS DE ESCRITA fazem a consistência explicitamente: escritores de ENUM chamam
+ * {@link CategoryResolver#reconcileNode} (movem o nó junto) e escritores de NÓ chamam
+ * {@link CategoryResolver#applyNode} (derivam o enum junto); updates nativos chamam
+ * {@code realignEnumFromNode()}. {@link CategoryResolver} is deliberately query-free: safe mid-flush.
  *
  * <p>The resolver is injected optionally via a setter (not the constructor): JPA entity
  * listeners are instantiated by Hibernate, not always as Spring beans (e.g. {@code @DataJpaTest}
@@ -39,6 +46,10 @@ public class ProductCategoryNodeListener {
     @PreUpdate
     void reconcileCategoryNode(Product product) {
         if (categoryResolver == null) return;
-        product.setCategoryId(categoryResolver.reconcileNode(product.getCategory(), product.getCategoryId()));
+        if (product.getCategoryId() != null) {
+            product.setCategory(categoryResolver.deriveCoarseEnum(product.getCategoryId(), product.getCategory()));
+        } else if (product.getCategory() != null) {
+            product.setCategoryId(categoryResolver.idForLegacyEnum(product.getCategory()));
+        }
     }
 }
