@@ -14,6 +14,7 @@ import com.relyon.economizaai.dto.response.ReceiptImportResponse.RejectedChave;
 import com.relyon.economizaai.dto.response.ReceiptResponse;
 import com.relyon.economizaai.dto.response.ReceiptSummaryResponse;
 import com.relyon.economizaai.exception.ManualChaveUnsupportedException;
+import com.relyon.economizaai.exception.InvalidChaveException;
 import com.relyon.economizaai.exception.PaywallException;
 import com.relyon.economizaai.exception.ReceiptAlreadyIngestedException;
 import com.relyon.economizaai.exception.UnsupportedStateException;
@@ -412,6 +413,13 @@ public class ReceiptService {
                 && stateCoverageService.hasEnoughEvidence(uf)) {
             log.info("submit rejected reason=experimental_evidence_cap uf={}", uf);
             throw new UnsupportedStateException(uf.name());
+        }
+        // Chave digitada com dígito verificador errado = typo. Decidível síncrono e de graça —
+        // sem este guard ela entra no pipeline, gasta uma chamada Infosimples (607, determinístico)
+        // e dispara alertas de ops, só pra falhar FAILED_PARSE do mesmo jeito.
+        if (ChaveAcessoParser.isBareChave(qrPayload) && !ChaveAcessoParser.hasValidCheckDigit(chave)) {
+            log.info("submit rejected reason=invalid_check_digit chave={}", LogMasker.chave(chave));
+            throw new InvalidChaveException();
         }
         // A manually-typed bare chave has no QR signature. Portals that require it
         // can only be served by the paid by-chave fallback — and RS not even by that

@@ -7,6 +7,7 @@ import com.relyon.economizaai.dto.request.UpdateItemPersonalRequest;
 import com.relyon.economizaai.dto.request.UpdateReceiptItemRequest;
 import com.relyon.economizaai.exception.InvalidCategoryTargetException;
 import com.relyon.economizaai.exception.InvalidItemPriceException;
+import com.relyon.economizaai.exception.InvalidChaveException;
 import com.relyon.economizaai.exception.ManualChaveUnsupportedException;
 import com.relyon.economizaai.exception.PaywallException;
 import com.relyon.economizaai.exception.PrefetchedUnsupportedException;
@@ -87,7 +88,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ReceiptServiceTest {
 
-    private static final String CHAVE_RS = "43260412345678000190650010000123451123456780";
+    private static final String CHAVE_RS = "43260412345678000190650010000123451123456782"; // DV válido — o guard de typo dispara antes dos demais
     // A scanned RS QR (full signed URL). Submit's manual-chave guard rejects a
     // BARE RS chave (gov.br wall), so the happy-path submit tests use the URL a
     // real scan produces; it still resolves to CHAVE_RS server-side.
@@ -700,6 +701,19 @@ class ReceiptServiceTest {
 
         assertEquals(ReceiptStatus.PROCESSING, response.status());
         verify(stateCoverageService, never()).hasEnoughEvidence(any());
+    }
+
+    @Test
+    void submit_rejectsTypedChaveWithWrongCheckDigit_beforeSpendingAnything() {
+        var user = buildUser();
+        // chave SP digitada com DV errado (typo) — fail-fast: nada persistido, nada gasto
+        var typo = "35260952069348000139651020000767401640168352";
+
+        assertThrows(InvalidChaveException.class,
+                () -> receiptService.submit(user, new SubmitReceiptRequest(typo)));
+
+        verify(receiptRepository, never()).save(any());
+        verify(receiptIngestionService, never()).ingest(any(), any());
     }
 
     @Test
