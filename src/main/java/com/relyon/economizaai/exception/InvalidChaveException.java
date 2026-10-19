@@ -9,6 +9,6 @@ package com.relyon.economizaai.exception;
 public class InvalidChaveException extends DomainException {
 
     public InvalidChaveException() {
-        super("receipt.import.invalid_chave");
+        super("receipt.chave.typo");
     }
 }
