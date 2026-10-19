@@ -85,6 +85,17 @@ class ReceiptImportServiceTest {
     }
 
     @Test
+    void rejectsTypedChaveWithWrongCheckDigit_asTypoMessage() {
+        // 44 dígitos mas DV mod-11 errado = quase certeza de typo → mensagem acionável
+        var typo = "35260952069348000139651020000767401640168352";
+
+        var response = service.importChaves(user, List.of(typo));
+
+        assertThat(response.rejected()).isEqualTo(1);
+        assertThat(response.rejectedChaves().get(0).reason()).isEqualTo("receipt.chave.typo");
+    }
+
+    @Test
     void rejectsSupportedFormatButUnsupportedState() {
         // Valid 44-digit chave with a good check digit, but UF=SP → not reconsultable (RS-only import).
         // Fail-fast at classify, before any queue/spend.

@@ -145,8 +145,13 @@ public class ReceiptImportService {
      * (FAILED/PENDING/QUEUED…) is stale — delete it so this import retries the chave.
      */
     private RejectedChave classify(User user, String chave) {
-        if (chave.length() != 44 || !ChaveAcessoParser.hasValidCheckDigit(chave)) {
+        if (chave.length() != 44) {
             return reject(chave, "receipt.import.invalid_chave");
+        }
+        // 44 dígitos mas DV mod-11 errado = quase certeza de erro de digitação — mensagem
+        // acionável ("confira e tente de novo") em vez do jargão de dígito verificador.
+        if (!ChaveAcessoParser.hasValidCheckDigit(chave)) {
+            return reject(chave, "receipt.chave.typo");
         }
         if (!RsChaveReconsultService.isReconsultable(chave)) {
             return reject(chave, "receipt.import.unsupported");
