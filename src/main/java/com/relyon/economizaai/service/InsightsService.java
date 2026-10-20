@@ -179,7 +179,7 @@ public class InsightsService {
     }
 
     /** Accumulates spend per EFFECTIVE category (taxonomy node or household custom). */
-    private static final class BucketAccumulator {
+    private final class BucketAccumulator {
         private final String slug;
         private final String label;
         private final String parentSlug;
@@ -193,9 +193,13 @@ public class InsightsService {
         void add(BigDecimal amount, long count) { total = total.add(amount); itemCount += count; }
         BigDecimal total() { return total; }
         CategoryBucket toBucket() {
-            return (icon != null || color != null || parentSlug != null)
-                    ? CategoryBucket.ofCustom(slug, label, parentSlug, icon, color, total, itemCount)
-                    : CategoryBucket.ofNode(slug, label, total, itemCount);
+            if (icon != null || color != null || parentSlug != null) {
+                return CategoryBucket.ofCustom(slug, label, parentSlug, icon, color, total, itemCount);
+            }
+            // Enum derivado do nó — compat com bundles ANTIGOS do app (renderizam por enum e
+            // mostravam tudo "Outros" com category nulo). Categoria sem enum legado fica nula.
+            var legacy = categoryResolver.legacyEnumForNode(categoryResolver.idForSlug(slug));
+            return CategoryBucket.ofNode(slug, label, legacy, total, itemCount);
         }
     }
 
