@@ -50,9 +50,15 @@ public record SpendInsightsResponse(
                     null, null, null, total, itemCount);
         }
 
-        /** New taxonomy node bucket: {@code slug} drives the FE icon, {@code label} the text. */
-        public static CategoryBucket ofNode(String slug, String label, BigDecimal total, long itemCount) {
-            return new CategoryBucket(null, slug, label, null, null, null, total, itemCount);
+        /**
+         * New taxonomy node bucket: {@code slug} drives the FE icon, {@code label} the text.
+         * {@code legacyCategory} = enum derivado da categoria do nó — SÓ pra compatibilidade com
+         * bundles ANTIGOS do app (pré-taxonomia), que renderizam por {@code category} e mostravam
+         * tudo como "Outros" quando ele vinha nulo. Clientes novos usam slug/label e o ignoram.
+         */
+        public static CategoryBucket ofNode(String slug, String label, ProductCategory legacyCategory,
+                                            BigDecimal total, long itemCount) {
+            return new CategoryBucket(legacyCategory, slug, label, null, null, null, total, itemCount);
         }
 
         /** Household custom category bucket: carries its visual + the group it nests under. */

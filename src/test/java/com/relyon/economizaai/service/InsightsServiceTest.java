@@ -4,6 +4,7 @@ import com.relyon.economizaai.exception.ProductNotFoundException;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.service.geo.MarketNameService;
@@ -98,6 +99,9 @@ class InsightsServiceTest {
         when(categoryOverrideService.effectiveCategoryByProduct(eq(householdId), any())).thenReturn(Map.of());
         when(categoryResolver.slugForId(categoryId)).thenReturn("mercearia");
         when(categoryResolver.labelFor(eq(categoryId), any())).thenReturn("Mercearia");
+        // compat: o bucket de nó carrega o enum DERIVADO pra bundles antigos do app
+        when(categoryResolver.idForSlug("mercearia")).thenReturn(categoryId);
+        when(categoryResolver.legacyEnumForNode(categoryId)).thenReturn(ProductCategory.GROCERIES);
 
         var response = insightsService.spend(user, from, to);
 
@@ -124,7 +128,8 @@ class InsightsServiceTest {
         assertEquals(3L, marketBucket.receiptCount());
 
         var categoryBucket = response.byCategory().get(0);
-        assertNull(categoryBucket.category());
+        assertEquals(ProductCategory.GROCERIES, categoryBucket.category(),
+                "enum derivado do nó — compat com bundles antigos do app (senão viravam 'Outros')");
         assertEquals("mercearia", categoryBucket.slug());
         assertEquals("Mercearia", categoryBucket.label());
         assertEquals(new BigDecimal("40.00"), categoryBucket.total());
