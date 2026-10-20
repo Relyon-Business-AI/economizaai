@@ -8,6 +8,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.when;
@@ -17,6 +18,17 @@ class GlobalExceptionHandlerTest {
 
     @Mock private LocalizedMessageService messageService;
     @InjectMocks private GlobalExceptionHandler handler;
+
+    @Test
+    void missingRequiredParameter_returns400_notInternalServerError() {
+        when(messageService.translate("validation.failed")).thenReturn("Dados inválidos");
+
+        var response = handler.handleMissingParameter(new MissingServletRequestParameterException("userIds", "List"));
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals(400, response.getBody().status());
+        assertEquals("Dados inválidos", response.getBody().message());
+    }
 
     @Test
     void unsupportedMethod_returns405_notInternalServerError() {
