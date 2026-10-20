@@ -83,7 +83,8 @@ public class DictionaryClassifier {
         for (var entry : curatedRepository.findAll()) {
             var dictEntry = new DictEntry(
                     entry.getGenericName(), entry.getBrand(), entry.getCategory(),
-                    entry.getCategoryId(), CategorizationSource.DICTIONARY);
+                    entry.getCategoryId(), CategorizationSource.DICTIONARY,
+                    parseExcludedTerms(entry.getExcludedTerms()));
             entries.put(entry.getKeyword(), dictEntry);
             var keyword = entry.getKeyword();
             if (keyword != null && !keyword.isBlank()) {
@@ -127,7 +128,7 @@ public class DictionaryClassifier {
             for (var i = 0; i + size <= tokens.length; i++) {
                 var phrase = String.join(" ", Arrays.copyOfRange(tokens, i, i + size));
                 var curatedEntry = curated.get(phrase);
-                if (curatedEntry != null) return curatedEntry;
+                if (curatedEntry != null && !curatedEntry.vetoedBy(normalized)) return curatedEntry;
                 var learnedEntry = learned.get(phrase);
                 if (learnedEntry != null) return learnedEntry;
             }
@@ -189,10 +190,29 @@ public class DictionaryClassifier {
         return hasAbbreviation;
     }
 
+    private static List<String> parseExcludedTerms(String rawTerms) {
+        if (rawTerms == null || rawTerms.isBlank()) return List.of();
+        return Arrays.stream(rawTerms.split(","))
+                .map(String::trim)
+                .map(DescriptionNormalizer::normalize)
+                .filter(term -> !term.isBlank())
+                .toList();
+    }
+
     private record KeyedEntry(String[] keyTokens, DictEntry entry) {}
 
     public record DictEntry(String genericName, String brand, ProductCategory category,
-                            UUID categoryId, CategorizationSource source) {
-        public static final DictEntry EMPTY = new DictEntry(null, null, null, null, CategorizationSource.NONE);
+                            UUID categoryId, CategorizationSource source, List<String> excludedTerms) {
+        public static final DictEntry EMPTY = new DictEntry(null, null, null, null, CategorizationSource.NONE, List.of());
+
+        public DictEntry(String genericName, String brand, ProductCategory category,
+                         UUID categoryId, CategorizationSource source) {
+            this(genericName, brand, category, categoryId, source, List.of());
+        }
+
+        /** Contexto veta o match: regra não vale quando o nome contém um termo excluído. */
+        public boolean vetoedBy(String normalizedDescription) {
+            return excludedTerms.stream().anyMatch(normalizedDescription::contains);
+        }
     }
 }

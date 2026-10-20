@@ -25,6 +25,7 @@ final class SeedFixtures {
                 curated("arroz", "Arroz", ProductCategory.GROCERIES),
                 curated("leite", "Leite", ProductCategory.MEAT_DAIRY),
                 curated("veja", null, ProductCategory.CLEANING),
+                curatedWithExclusions("agua", "Água", ProductCategory.BEVERAGES, "micelar,oxigenada"),
                 curated("saco", "Saco", ProductCategory.OTHER),
                 curated("saco lixo", "Saco de Lixo", ProductCategory.CLEANING),
                 curated("limp", "Limpador", ProductCategory.CLEANING),
@@ -77,6 +78,16 @@ final class SeedFixtures {
                 .keyword(keyword)
                 .genericName(genericName)
                 .category(category)
+                .build();
+    }
+
+    private static CuratedDictionaryEntry curatedWithExclusions(String keyword, String genericName,
+                                                                ProductCategory category, String excludedTerms) {
+        return CuratedDictionaryEntry.builder()
+                .keyword(keyword)
+                .genericName(genericName)
+                .category(category)
+                .excludedTerms(excludedTerms)
                 .build();
     }
 
