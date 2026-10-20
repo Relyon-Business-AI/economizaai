@@ -65,7 +65,7 @@ class ShoppingListOptimizerControllerTest {
         var body = "{\"items\":[{\"productId\":\"" + productId + "\",\"quantity\":2}," +
                 "{\"productId\":\"" + unpricedId + "\",\"quantity\":1}]}";
 
-        mockMvc.perform(post("/api/v1/shopping-list/optimize")
+        mockMvc.perform(post("/api/v1/shopping-lists/optimize")
                         .with(SecurityMockMvcRequestPostProcessors.user(user))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
@@ -82,7 +82,7 @@ class ShoppingListOptimizerControllerTest {
         when(localizedMessageService.translate(anyString())).thenReturn("validation failed");
         var body = "{\"items\":[]}";
 
-        mockMvc.perform(post("/api/v1/shopping-list/optimize")
+        mockMvc.perform(post("/api/v1/shopping-lists/optimize")
                         .with(SecurityMockMvcRequestPostProcessors.user(buildUser()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
@@ -96,7 +96,7 @@ class ShoppingListOptimizerControllerTest {
         when(localizedMessageService.translate(anyString())).thenReturn("validation failed");
         var body = "{\"items\":[{\"productId\":\"" + UUID.randomUUID() + "\",\"quantity\":0}]}";
 
-        mockMvc.perform(post("/api/v1/shopping-list/optimize")
+        mockMvc.perform(post("/api/v1/shopping-lists/optimize")
                         .with(SecurityMockMvcRequestPostProcessors.user(buildUser()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
@@ -109,6 +109,7 @@ class ShoppingListOptimizerControllerTest {
     void optimize_unauthenticated_returns401() throws Exception {
         var body = "{\"items\":[{\"productId\":\"" + UUID.randomUUID() + "\",\"quantity\":1}]}";
 
+        // alias singular: apps 1.3.x em campo ainda chamam este path — não remover
         mockMvc.perform(post("/api/v1/shopping-list/optimize")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
