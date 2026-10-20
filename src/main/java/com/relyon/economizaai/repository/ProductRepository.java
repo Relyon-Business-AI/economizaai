@@ -226,7 +226,12 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
 
     @Query("""
         SELECT p FROM Product p
-        WHERE (:query IS NULL OR LOWER(p.normalizedName) LIKE LOWER(CONCAT('%', :query, '%')) OR p.ean = :query)
+        WHERE (:query IS NULL
+            OR LOWER(p.normalizedName) LIKE LOWER(CONCAT('%', :query, '%'))
+            OR p.ean = :query
+            OR LOWER(COALESCE(p.genericName, '')) LIKE LOWER(CONCAT('%', :query, '%'))
+            OR EXISTS (SELECT 1 FROM ProductAlias alias WHERE alias.product = p
+                       AND LOWER(alias.normalizedDescription) LIKE LOWER(CONCAT('%', :query, '%'))))
         ORDER BY p.normalizedName ASC
     """)
     List<Product> searchAll(@Param("query") String query);
