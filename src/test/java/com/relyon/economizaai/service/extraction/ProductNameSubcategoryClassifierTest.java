@@ -50,6 +50,26 @@ class ProductNameSubcategoryClassifierTest {
     }
 
     @Test
+    void industrializedPotato_isSnackNotProduce() {
+        // caso real de prod: BATATA PALHA caía em Legumes e verduras pela keyword "batata"
+        assertEquals("salgadinhos", ProductNameSubcategoryClassifier.classify("BATATA PALHA KIFRIT 120G").slug());
+        assertEquals(Confidence.HIGH, ProductNameSubcategoryClassifier.classify("BATATA PALHA KIFRIT 120G").confidence());
+        assertEquals("salgadinhos", ProductNameSubcategoryClassifier.classify("BATATA FRITA ONDULADA 90G").slug());
+        // batata de verdade continua hortifrúti
+        assertEquals("legumes-verduras", ProductNameSubcategoryClassifier.classify("BATATA DOCE KG").slug());
+    }
+
+    @Test
+    void saltCompounds_areSeasonings_butFlavorSalIsNot() {
+        // compostos de sal → molhos-temperos; "SAL" solto nunca é regra (RUFFLES SAL, MARG C/SAL)
+        assertEquals("molhos-temperos", ProductNameSubcategoryClassifier.classify("SAL GROSSO CHURRASCO CISNE 1KG").slug());
+        assertEquals("molhos-temperos", ProductNameSubcategoryClassifier.classify("SAL REFINADO LEBRE 1KG").slug());
+        assertEquals("salgadinhos", ProductNameSubcategoryClassifier.classify("RUFFLES SAL 68G").slug());
+        // manteiga C/SAL não vira tempero
+        assertEquals(Confidence.NONE, ProductNameSubcategoryClassifier.classify("MANT ELEGE EXTRA S/SAL TAB200G").confidence());
+    }
+
+    @Test
     void outrosPerCategory_catchAll() {
         assertEquals("bebidas-alcoolicas-outros", ProductNameSubcategoryClassifier.classify("BEBIDA ALCOOLICA MISTA ICE 269ML").slug());
         assertEquals(Confidence.HIGH, ProductNameSubcategoryClassifier.classify("BEBIDA ALCOOLICA MISTA ICE 269ML").confidence());

@@ -92,8 +92,8 @@ public final class ProductNameSubcategoryClassifier {
             "chocolate", "bombom", "nescau", "toddy", "achocolatado", "kitkat", "lacta",
             "garoto", "diamante negro", "talento")),
         new Rule("salgadinhos", "doces-snacks", List.of(
-            "salgadinho", "batata frita", "chips", "doritos", "ruffles", "cheetos", "pipoca",
-            "amendoim", "torcida", "fandangos")),
+            "salgadinho", "batata frita", "batata palha", "chips", "doritos", "ruffles", "cheetos",
+            "pipoca", "amendoim", "torcida", "fandangos")),
         new Rule("doces", "doces-snacks", List.of(
             "bala", "pirulito", "chiclete", "biscoito", "bolacha", "cookie", "wafer",
             "gelatina", "pacoca", "brigadeiro")),
@@ -111,7 +111,10 @@ public final class ProductNameSubcategoryClassifier {
         new Rule("legumes-verduras", "hortifruti", List.of(
             "tomate", "batata", "cebola", "alface", "cenoura", "brocolis", "couve", "abobrinha",
             "pepino", "pimentao", "alho", "beterraba", "repolho", "mandioca", "abobora",
-            "chuchu", "berinjela", "quiabo", "vagem", "espinafre", "rucula")),
+            "chuchu", "berinjela", "quiabo", "vagem", "espinafre", "rucula"),
+            List.of(),
+            // batata PALHA/FRITA/CHIPS é snack industrializado, não hortifrúti (BATATA PALHA KIFRIT)
+            List.of("palha", "frita", "chips")),
         new Rule("temperos-ervas", "hortifruti", List.of(
             "salsa", "cebolinha", "coentro", "manjericao", "alecrim", "hortela", "tomilho")),
         new Rule("enlatados-conservas", "mercearia", List.of(
@@ -119,7 +122,10 @@ public final class ProductNameSubcategoryClassifier {
             "palmito", "azeitona", "seleta")),
         new Rule("molhos-temperos", "mercearia", List.of(
             "ketchup", "catchup", "maionese", "mostarda", "azeite", "vinagre", "oregano",
-            "pimenta do reino", "shoyu"), List.of("molho", " oleo ", "oleo de", "tempero", "caldo")),
+            "pimenta do reino", "shoyu",
+            // compostos de sal (NUNCA "sal" solto: RUFFLES SAL, MARG C/SAL, MANT S/SAL)
+            "sal grosso", "sal refinado", "sal marinho", "sal rosa", "flor de sal", "sal light",
+            "sal para churrasco", "sal churrasco"), List.of("molho", " oleo ", "oleo de", "tempero", "caldo")),
         new Rule("matinais", "mercearia", List.of("granola", "sucrilhos", "aveia em flocos", "mingau"), List.of("cereal")),
         new Rule("graos-massas", "mercearia", List.of(
             "arroz", "feijao", "farinha", "lentilha", "grao de bico", "polenta", "fuba",

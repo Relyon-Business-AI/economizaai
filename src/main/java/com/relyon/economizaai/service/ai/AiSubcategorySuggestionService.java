@@ -195,11 +195,12 @@ public class AiSubcategorySuggestionService {
 
     private int persistBatch(List<Product> batch, List<FineSuggestion> suggestions) {
         var byId = batch.stream().collect(Collectors.toMap(Product::getId, product -> product, (first, second) -> first));
+        var rawNames = latestRawNames(batch.stream().map(Product::getId).toList());
         var findings = new ArrayList<AiFinding>();
         for (var suggestion : suggestions) {
             var product = byId.get(suggestion.productId());
             if (product == null) continue;
-            tryBuildFinding(product, suggestion).ifPresent(findings::add);
+            tryBuildFinding(product, suggestion, rawNames.get(product.getId())).ifPresent(findings::add);
         }
         findingRepository.saveAll(findings);
         return findings.size();
@@ -211,6 +212,10 @@ public class AiSubcategorySuggestionService {
      * mudar algo já certo exige mais certeza do que preencher o que está vazio (option B).
      */
     private Optional<AiFinding> tryBuildFinding(Product product, FineSuggestion suggestion) {
+        return tryBuildFinding(product, suggestion, null);
+    }
+
+    private Optional<AiFinding> tryBuildFinding(Product product, FineSuggestion suggestion, String receiptName) {
         if (suggestion.categoryId().equals(product.getCategoryId())) return Optional.empty(); // já está nessa folha
         var action = classifyAction(product, suggestion.categoryId());
         var threshold = switch (action) {
@@ -219,7 +224,7 @@ public class AiSubcategorySuggestionService {
             case CHANGE_CATEGORY -> changeCategoryMinConfidence;
         };
         if (suggestion.confidence() < threshold) return Optional.empty();
-        return Optional.of(buildFinding(product, suggestion, action));
+        return Optional.of(buildFinding(product, suggestion, action, receiptName));
     }
 
     /**
@@ -267,6 +272,10 @@ public class AiSubcategorySuggestionService {
     }
 
     private AiFinding buildFinding(Product product, FineSuggestion suggestion, Action action) {
+        return buildFinding(product, suggestion, action, null);
+    }
+
+    private AiFinding buildFinding(Product product, FineSuggestion suggestion, Action action, String receiptName) {
         var suggestedLabel = categoryResolver.labelFor(suggestion.categoryId(), PT);
         var suggestedCategoryLabel = categoryResolver.labelFor(categoryResolver.groupIdOf(suggestion.categoryId()), PT);
         var leafEnum = categoryResolver.legacyEnumForNode(suggestion.categoryId());
@@ -276,6 +285,14 @@ public class AiSubcategorySuggestionService {
         var payload = objectMapper.createObjectNode();
         payload.put("productId", product.getId().toString());
         payload.put("productName", productName);
+        // Nome REAL por trás do card: o genericName do dicionário pode enganar (ex.: regra 'sal'
+        // exibia "Sal" pra RUFFLES SAL 68G). O admin precisa ver o que o produto é de verdade.
+        if (!productName.equals(product.getNormalizedName())) {
+            payload.put("normalizedName", product.getNormalizedName());
+        }
+        if (receiptName != null && !receiptName.isBlank() && !receiptName.equals(product.getNormalizedName())) {
+            payload.put("receiptName", receiptName);
+        }
         payload.put("categoryNodeSlug", suggestion.slug());
         payload.put("suggestedLabel", suggestedLabel);
         if (suggestedCategoryLabel != null) payload.put("suggestedCategory", suggestedCategoryLabel);
