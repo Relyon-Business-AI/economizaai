@@ -39,6 +39,16 @@ class DictionaryClassifierTest {
     }
 
     @Test
+    void excludedTermVetoesMatch_contextWins() {
+        // 'agua' sozinha/com marca casa; com termo excluído (micelar) o contexto veta a regra
+        var plain = classifier.classify("AGUA CRYSTAL S GAS 500ML");
+        assertEquals("Água", plain.genericName());
+
+        var vetoed = classifier.classify("AGUA MICELAR LOREAL 200ML");
+        assertNull(vetoed.category());
+    }
+
+    @Test
     void returnsEmptyForUnknown() {
         var entry = classifier.classify("PRODUTO ALIENIGENA XYZ");
         assertNull(entry.genericName());

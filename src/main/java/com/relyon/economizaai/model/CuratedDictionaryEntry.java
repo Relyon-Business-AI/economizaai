@@ -31,6 +31,14 @@ public class CuratedDictionaryEntry extends BaseEntity {
     @Column(nullable = false, unique = true, length = 120)
     private String keyword;
 
+    /**
+     * Termos que VETAM o match (separados por vírgula): se o nome normalizado do
+     * produto contém qualquer um deles, esta regra não se aplica — contexto manda
+     * (ex.: 'agua' não vale em AGUA MICELAR; 'pate' não vale em WHISKAS PATE).
+     */
+    @Column(name = "excluded_terms")
+    private String excludedTerms;
+
     @Column(name = "generic_name", length = 120)
     private String genericName;
 
