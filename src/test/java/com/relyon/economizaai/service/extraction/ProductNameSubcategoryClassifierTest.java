@@ -82,6 +82,17 @@ class ProductNameSubcategoryClassifierTest {
     }
 
     @Test
+    void iceCreamAndAcai_areTreats_notFrozenMeals() {
+        // decisão de produto: sorvete/picolé/açaí = guloseima (doces), não congelados
+        assertEquals("doces", ProductNameSubcategoryClassifier.classify("SORV CREME MEL EXCL").slug());
+        assertEquals("doces", ProductNameSubcategoryClassifier.classify("PICOLE BACIO PISTACCHIO 70G").slug());
+        assertEquals("doces", ProductNameSubcategoryClassifier.classify("ACAI BUFALO 3,3KG CGUARANA").slug());
+        // açaí como SABOR de bebida/iogurte não vira doce
+        assertEquals("bebidas-outros", ProductNameSubcategoryClassifier.classify("BEB.ENERG.BALY UVA VDE LT.473ML").slug());
+        assertEquals(Confidence.NONE, ProductNameSubcategoryClassifier.classify("BEB.BASE GUARANA GUARAVITON 500ML ACAI").confidence());
+    }
+
+    @Test
     void outrosPerCategory_catchAll() {
         assertEquals("bebidas-alcoolicas-outros", ProductNameSubcategoryClassifier.classify("BEBIDA ALCOOLICA MISTA ICE 269ML").slug());
         assertEquals(Confidence.HIGH, ProductNameSubcategoryClassifier.classify("BEBIDA ALCOOLICA MISTA ICE 269ML").confidence());

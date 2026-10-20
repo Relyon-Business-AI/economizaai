@@ -77,7 +77,8 @@ public final class ProductNameSubcategoryClassifier {
             "bebida alcoolica mista", "sidra", "sake", "saque")),
         new Rule("refrigerantes", "bebidas", List.of(
             "refrigerante", "coca cola", "coca-cola", "guarana", "pepsi", "fanta", "sprite", "refri"),
-            List.of("soda", "tonica")),
+            List.of("soda", "tonica"),
+            List.of("acai")),
         new Rule("sucos", "bebidas", List.of("suco", "nectar", "del valle", "tampico")),
         // "agua" forte, exceto quando é produto de limpeza/saúde (água sanitária/oxigenada).
         new Rule("agua", "bebidas", List.of("agua"), List.of(), List.of("sanitaria", "oxigenada")),
@@ -85,7 +86,8 @@ public final class ProductNameSubcategoryClassifier {
             "cafe", "cappuccino", "capuccino", "cha preto", "cha verde", "cha branco", "cha gelado",
             "cha mate", "mate leao", "ice tea", "erva mate"), List.of(" cha ", " mate ")),
         new Rule("bebidas-outros", "bebidas", List.of(
-            "energetico", "red bull", "monster energy", "isotonico", "gatorade", "powerade")),
+            "energetico", "beb energ", "beb.energ", "red bull", "monster energy", "isotonico",
+            "beb isot", "beb.isot", "gatorade", "powerade")),
         new Rule("paes", "padaria", List.of("baguete", "bisnaga", "pao de forma", "pao frances"), List.of("pao")),
         new Rule("bolos-confeitaria", "padaria", List.of("bolo", "torta", "croissant", "sonho", "panetone")),
         new Rule("chocolates", "doces-snacks", List.of(
@@ -96,14 +98,19 @@ public final class ProductNameSubcategoryClassifier {
             "ruffles", "cheetos", "pipoca", "amendoim", "torcida", "fandangos")),
         new Rule("doces", "doces-snacks", List.of(
             "bala", "pirulito", "chiclete", "chicle", "drops", "halls", "tic tac", "biscoito",
-            "bolacha", "cookie", "wafer", "gelatina", "pacoca", "brigadeiro")),
+            "bolacha", "cookie", "wafer", "gelatina", "pacoca", "brigadeiro",
+            // decisão do dono (2026-10-20): sorvete/picolé/açaí são guloseima, não "congelados"
+            "sorvete", "sorv", "picole", "gelato", "acai"),
+            List.of(),
+            // açaí/sorvete como SABOR de bebida/iogurte não entra (GUARAVITON ACAI, IOG WHEY ACAI)
+            List.of(" beb", "iog", "energ", "whey", "refri")),
         new Rule("frutas", "hortifruti", List.of(
             "banana", " maca ", "mamao", "abacaxi", "melancia", "manga", "morango",
             "abacate", "melao", "kiwi", "goiaba", "ameixa"),
             List.of(),
             // fruta é SABOR comum de doce/bebida/industrializado — só vale no caso puro
             // (casos reais de prod: DROPS HALLS MORANGO, RED BULL MACA, CHICLE UVA, BANANA CHIPS)
-            List.of("suco", "nectar", "refri", "refres", "energet", "isot", "drops", "halls",
+            List.of("suco", "nectar", "refri", "refres", "energ", "isot", "drops", "halls",
                 "chicle", "goma", "bala", "pirulito", "tic tac", "gelat", "iogurte", " iog ",
                 "sorvete", "picole", "doce", "chips", "palha", "vinagre", "vinag", "choc",
                 "bolacha", "biscoito", "bisc", "cuca", "bolo", "trufa", "tru ")),
@@ -114,7 +121,8 @@ public final class ProductNameSubcategoryClassifier {
             List.of(),
             List.of("suco", "nectar", "refri", "refrigerante", "detergente", "sabao", "amaciante",
                 "essencia", "desinfetante", "aromatiz", "limpador", " cha ", "gelatina", "iogurte",
-                "bala", "chiclete", "pirulito", "bolacha", "biscoito", "sorvete", "picole")),
+                "bala", "chiclete", "pirulito", "bolacha", "biscoito", "sorvete", "picole",
+                " beb", "energ", "isot", "vinho", "cerv")),
         new Rule("legumes-verduras", "hortifruti", List.of(
             "tomate", "batata", "cebola", "alface", "cenoura", "brocolis", "couve", "abobrinha",
             "pepino", "pimentao", "alho", "beterraba", "repolho", "mandioca", "abobora",
