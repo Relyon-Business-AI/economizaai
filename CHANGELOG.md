@@ -1,5 +1,10 @@
 # economizai — what's new
 
+## 2026-10-20 — Otimizador de lista: path canônico no plural
+- `POST /api/v1/shopping-lists/optimize` é o path canônico (padrão REST do projeto).
+- O antigo `POST /api/v1/shopping-list/optimize` (singular) segue funcionando como alias
+  de compatibilidade pros apps em campo — FE novo deve usar o plural.
+
 FE-facing diary of meaningful backend changes — new endpoints, response-shape
 changes, behavior changes, gotchas worth knowing about. **Newest at the top.**
 Skim from the top until you hit a date you've already read.

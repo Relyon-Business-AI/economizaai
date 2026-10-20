@@ -6118,7 +6118,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{baseUrl}}/api/v1/shopping-list/optimize",
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/optimize",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -9455,7 +9455,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{baseUrl}}/api/v1/shopping-list/optimize",
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/optimize",
 							"host": [
 								"{{baseUrl}}"
 							],

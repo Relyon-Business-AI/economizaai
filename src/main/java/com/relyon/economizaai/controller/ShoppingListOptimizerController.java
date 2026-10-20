@@ -15,7 +15,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/shopping-list")
+// Canônico no plural (padrão REST do projeto); o singular fica como alias de
+// compatibilidade pros apps 1.3.x já em campo — remover só quando a telemetria
+// mostrar zero chamadas no path antigo.
+@RequestMapping({"/api/v1/shopping-lists", "/api/v1/shopping-list"})
 @RequiredArgsConstructor
 @Tag(name = "Shopping list optimizer", description = "Stateless multi-market basket optimization (PRO-52)")
 public class ShoppingListOptimizerController {
