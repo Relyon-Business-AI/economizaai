@@ -70,6 +70,18 @@ class ProductNameSubcategoryClassifierTest {
     }
 
     @Test
+    void flavorContexts_doNotHijackFruitRules() {
+        // casos reais de prod: fruta como SABOR não é hortifrúti
+        assertEquals("doces", ProductNameSubcategoryClassifier.classify("DROPS HALLS MORANGO 28G").slug());
+        assertEquals("bebidas-outros", ProductNameSubcategoryClassifier.classify("BEB ENERGETICO RED BULL MACA 250ML").slug());
+        assertEquals("doces", ProductNameSubcategoryClassifier.classify("CHICLE BUBBALOO 300G UVA").slug());
+        assertEquals("salgadinhos", ProductNameSubcategoryClassifier.classify("BANANA CHIPS KG NATURAL").slug());
+        // fruta pura continua fruta
+        assertEquals("frutas", ProductNameSubcategoryClassifier.classify("MORANGO 250G").slug());
+        assertEquals("frutas", ProductNameSubcategoryClassifier.classify("BANANA PRATA KG").slug());
+    }
+
+    @Test
     void outrosPerCategory_catchAll() {
         assertEquals("bebidas-alcoolicas-outros", ProductNameSubcategoryClassifier.classify("BEBIDA ALCOOLICA MISTA ICE 269ML").slug());
         assertEquals(Confidence.HIGH, ProductNameSubcategoryClassifier.classify("BEBIDA ALCOOLICA MISTA ICE 269ML").confidence());

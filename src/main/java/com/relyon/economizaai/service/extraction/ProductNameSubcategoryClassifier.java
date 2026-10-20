@@ -92,14 +92,21 @@ public final class ProductNameSubcategoryClassifier {
             "chocolate", "bombom", "nescau", "toddy", "achocolatado", "kitkat", "lacta",
             "garoto", "diamante negro", "talento")),
         new Rule("salgadinhos", "doces-snacks", List.of(
-            "salgadinho", "batata frita", "batata palha", "chips", "doritos", "ruffles", "cheetos",
-            "pipoca", "amendoim", "torcida", "fandangos")),
+            "salgadinho", "batata frita", "batata palha", "banana chips", "chips", "doritos",
+            "ruffles", "cheetos", "pipoca", "amendoim", "torcida", "fandangos")),
         new Rule("doces", "doces-snacks", List.of(
-            "bala", "pirulito", "chiclete", "biscoito", "bolacha", "cookie", "wafer",
-            "gelatina", "pacoca", "brigadeiro")),
+            "bala", "pirulito", "chiclete", "chicle", "drops", "halls", "tic tac", "biscoito",
+            "bolacha", "cookie", "wafer", "gelatina", "pacoca", "brigadeiro")),
         new Rule("frutas", "hortifruti", List.of(
             "banana", " maca ", "mamao", "abacaxi", "melancia", "manga", "morango",
-            "abacate", "melao", "kiwi", "goiaba", "ameixa")),
+            "abacate", "melao", "kiwi", "goiaba", "ameixa"),
+            List.of(),
+            // fruta é SABOR comum de doce/bebida/industrializado — só vale no caso puro
+            // (casos reais de prod: DROPS HALLS MORANGO, RED BULL MACA, CHICLE UVA, BANANA CHIPS)
+            List.of("suco", "nectar", "refri", "refres", "energet", "isot", "drops", "halls",
+                "chicle", "goma", "bala", "pirulito", "tic tac", "gelat", "iogurte", " iog ",
+                "sorvete", "picole", "doce", "chips", "palha", "vinagre", "vinag", "choc",
+                "bolacha", "biscoito", "bisc", "cuca", "bolo", "trufa", "tru ")),
         // cítricos/uva/pera: fruta no caso puro, mas são sabor comum de suco/refri/doce/limpeza →
         // fortes SÓ sem esse contexto (exclusões), senão "suco de limão" viraria fruta.
         new Rule("frutas", "hortifruti",
