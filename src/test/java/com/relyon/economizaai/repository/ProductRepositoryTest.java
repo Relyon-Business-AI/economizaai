@@ -2,6 +2,7 @@ package com.relyon.economizaai.repository;
 
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.Product;
+import com.relyon.economizaai.model.ProductAlias;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
@@ -39,6 +40,7 @@ class ProductRepositoryTest {
     private static final String CNPJ_OTHER = "55666777000188";
 
     @Autowired private ProductRepository productRepository;
+    @Autowired private ProductAliasRepository productAliasRepository;
     @Autowired private HouseholdRepository householdRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private ReceiptRepository receiptRepository;
@@ -50,6 +52,26 @@ class ProductRepositoryTest {
     }
 
     // ---------------------------------------------------------- search
+
+    @Test
+    void searchAll_findsMergedProductByAbsorbedAlias_andByGenericName() {
+        // pós-merge: o sobrevivente fica com o alias do absorvido — a busca acha pelos DOIS nomes
+        var survivor = productRepository.save(Product.builder()
+                .normalizedName("COCA-COLA S/ACUCAR LATA 350ML")
+                .genericName("Refrigerante")
+                .category(ProductCategory.BEVERAGES).build());
+        productAliasRepository.save(ProductAlias.builder()
+                .product(survivor)
+                .rawDescription("COCA COLA ZERO 350ML")
+                .normalizedDescription("coca cola zero 350ml").build());
+
+        var byAbsorbedName = productRepository.searchAll("coca cola zero");
+        assertEquals(1, byAbsorbedName.size());
+        assertEquals(survivor.getId(), byAbsorbedName.get(0).getId());
+
+        var byGeneric = productRepository.searchAll("refrigerante");
+        assertEquals(1, byGeneric.size());
+    }
 
     @Test
     void search_matchesNameCaseInsensitivelyAndEanExactly() {
