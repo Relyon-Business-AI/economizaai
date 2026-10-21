@@ -15,6 +15,9 @@ import java.util.UUID;
 
 public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificationExecutor<User> {
 
+    List<User> findByPushDeviceTokenIsNull();
+
+
     Optional<User> findByEmail(String email);
 
     Optional<User> findByAuthProviderAndProviderSubject(AuthProvider authProvider, String providerSubject);

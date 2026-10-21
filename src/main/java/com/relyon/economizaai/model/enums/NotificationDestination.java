@@ -20,5 +20,7 @@ public enum NotificationDestination {
     /** Gastos por categoria — o resumo (digest) deep-linka pra onde o valor foi. */
     SPENDING,
     /** Generic inbox — transactional/system notifications and the fallback. */
-    INBOX
+    INBOX,
+    /** CTA pra ativar push: o app dispara o pedido de permissão, não navega. */
+    ENABLE_PUSH
 }
