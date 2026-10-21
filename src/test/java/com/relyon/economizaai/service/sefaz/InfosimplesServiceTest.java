@@ -176,8 +176,10 @@ class InfosimplesServiceTest {
         server.expect(requestTo(BASE_URL + "/api/v2/consultas/sefaz/ms/nfce?token=test-key&nfce=" + CHAVE))
                 .andRespond(withSuccess("{\"code\":612,\"code_message\":\"A consulta nao retornou dados\",\"data\":[]}", MediaType.APPLICATION_JSON));
 
-        assertThrows(InfosimplesNoDataException.class,
+        var thrown = assertThrows(InfosimplesNoDataException.class,
                 () -> service.fetchParsed(CHAVE, UnidadeFederativa.MS));
+        // Final per-nota outcome → user message says "não adianta tentar".
+        assertEquals("infosimples.not-found", thrown.getArguments()[0]);
     }
 
     @Test
@@ -190,6 +192,8 @@ class InfosimplesServiceTest {
         var thrown = assertThrows(ReceiptParseException.class,
                 () -> service.fetchParsed(CHAVE, UnidadeFederativa.MS));
         assertFalse(thrown instanceof InfosimplesNoDataException);
+        // Transient → user message says "tente novamente".
+        assertEquals("infosimples.error", thrown.getArguments()[0]);
     }
 
     @Test
@@ -197,8 +201,10 @@ class InfosimplesServiceTest {
         server.expect(requestTo(BASE_URL + "/api/v2/consultas/sefaz/ms/nfce?token=test-key&nfce=" + CHAVE))
                 .andRespond(withSuccess("{\"code\":200,\"data\":[]}", MediaType.APPLICATION_JSON));
 
-        assertThrows(ReceiptParseException.class,
+        // Empty data = deterministic "no data for this chave" → final (not-found), not transient.
+        var thrown = assertThrows(InfosimplesNoDataException.class,
                 () -> service.fetchParsed(CHAVE, UnidadeFederativa.MS));
+        assertEquals("infosimples.not-found", thrown.getArguments()[0]);
     }
 
     @Test

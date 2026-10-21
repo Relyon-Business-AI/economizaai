@@ -36,7 +36,11 @@ public record ReceiptSummaryResponse(
         BigDecimal discountTotal,
         BigDecimal approxTaxTotal,
         int itemCount,
-        ReceiptStatus status
+        ReceiptStatus status,
+        // Machine key (FE never renders it raw) — lets the list decide if a FAILED nota is
+        // worth retrying (transient) or final. parseErrorMessage is the localized text to show.
+        String parseErrorReason,
+        String parseErrorMessage
 ) {
     public static ReceiptSummaryResponse from(Receipt receipt) {
         var householdTotal = receipt.getItems().stream()
@@ -53,14 +57,24 @@ public record ReceiptSummaryResponse(
                 receipt.getDiscountTotal(),
                 approxTaxTotal(receipt),
                 receipt.getItems().size(),
-                receipt.getStatus()
+                receipt.getStatus(),
+                receipt.getParseErrorReason(),
+                null
         );
     }
 
     /** Copy with the household's custom display name applied; leaves the original {@code marketName} intact. */
     public ReceiptSummaryResponse withMarketFriendlyName(String marketFriendlyName) {
         return new ReceiptSummaryResponse(id, marketName, marketFriendlyName, issuedAt,
-                totalAmount, householdTotalAmount, discountTotal, approxTaxTotal, itemCount, status);
+                totalAmount, householdTotalAmount, discountTotal, approxTaxTotal, itemCount, status,
+                parseErrorReason, parseErrorMessage);
+    }
+
+    /** Copy with the localized failure message (null for non-failed rows). */
+    public ReceiptSummaryResponse withParseErrorMessage(String parseErrorMessage) {
+        return new ReceiptSummaryResponse(id, marketName, marketFriendlyName, issuedAt,
+                totalAmount, householdTotalAmount, discountTotal, approxTaxTotal, itemCount, status,
+                parseErrorReason, parseErrorMessage);
     }
 
     private static BigDecimal approxTaxTotal(Receipt receipt) {

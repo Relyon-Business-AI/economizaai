@@ -1,5 +1,19 @@
 # economizai — what's new
 
+## 2026-10-21 — Nota falhada: usuário sabe se vale retentar ou se é final
+- As falhas do Infosimples deixaram de ser uma mensagem única. Agora:
+  - **transitório** (portal/SEFAZ instável, ex. código 609) → `infosimples.error`:
+    *"...Tente novamente em alguns minutos."*
+  - **final** (nota inexistente/cancelada/chave inválida, códigos 602/607/612 e
+    resposta vazia) → nova chave `infosimples.not-found`:
+    *"Não encontramos esta nota na SEFAZ ... Não adianta tentar de novo; confirme com o mercado."*
+- **`GET /receipts`** (e `recentReceipts` do dashboard) agora traz, por linha,
+  **`parseErrorReason`** (chave-máquina, nunca renderizar crua) e
+  **`parseErrorMessage`** (texto localizado) — antes só o detalhe (`GET /receipts/{id}`)
+  carregava. Campos nulos em notas não-falhadas. Mudança aditiva, retrocompatível.
+- App: no erro **final**, o alerta da nota não oferece mais "Tentar novamente" (só
+  "Escanear novamente" / "Remover"), pra não empurrar retentativa paga que nunca resolve.
+
 ## 2026-10-21 — NF-e (modelo 55) digitada funciona em qualquer estado
 - Chave de NF-e digitada agora roteia pra consulta NACIONAL (receita-federal/nfe do
   provedor pago) — validado com nota real de prod. RS continua grátis via SVRS.

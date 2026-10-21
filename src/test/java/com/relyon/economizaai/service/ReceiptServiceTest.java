@@ -465,6 +465,36 @@ class ReceiptServiceTest {
     }
 
     @Test
+    void get_failedInfosimplesNotFound_showsFinalMessageFromSemanticKey() {
+        // "não adianta tentar": the deterministic reason resolves to its OWN message,
+        // not the generic "receipt.parse.failed (motivo: <raw-key>)" wrapper.
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        receipt.setParseErrorReason("receipt.parse.failed:infosimples.not-found");
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(localizedMessageService.translate("infosimples.not-found")).thenReturn("Não adianta tentar de novo; confirme com o mercado.");
+
+        var response = receiptService.get(user, receipt.getId());
+
+        assertEquals("Não adianta tentar de novo; confirme com o mercado.", response.parseErrorMessage());
+        verify(localizedMessageService).translate("infosimples.not-found");
+    }
+
+    @Test
+    void get_failedInfosimplesTransient_showsRetryMessageFromSemanticKey() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        receipt.setParseErrorReason("receipt.parse.failed:infosimples.error");
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(localizedMessageService.translate("infosimples.error")).thenReturn("Tente novamente em alguns minutos.");
+
+        var response = receiptService.get(user, receipt.getId());
+
+        assertEquals("Tente novamente em alguns minutos.", response.parseErrorMessage());
+        verify(localizedMessageService).translate("infosimples.error");
+    }
+
+    @Test
     void submit_persistsProcessingAndDispatchesIngestion() {
         var user = buildUser();
         when(receiptRepository.findByHouseholdIdAndChaveAcesso(any(), eq(CHAVE_RS))).thenReturn(Optional.empty());

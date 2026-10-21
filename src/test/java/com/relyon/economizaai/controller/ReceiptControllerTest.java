@@ -378,7 +378,7 @@ class ReceiptControllerTest {
     void list_returnsPagedSummaries() throws Exception {
         var user = buildUser();
         var summary = new ReceiptSummaryResponse(UUID.randomUUID(), "Mercado X", "Mercado X", LocalDateTime.now(),
-                new BigDecimal("57.80"), new BigDecimal("57.80"), null, null, 1, ReceiptStatus.CONFIRMED);
+                new BigDecimal("57.80"), new BigDecimal("57.80"), null, null, 1, ReceiptStatus.CONFIRMED, null, null);
         Page<ReceiptSummaryResponse> page = new PageImpl<>(List.of(summary));
         when(receiptService.list(any(User.class), isNull(), isNull(), isNull(), isNull(List.class), isNull(), isNull(), isNull(), any(MarketScope.class), any(Pageable.class)))
                 .thenReturn(page);
@@ -394,7 +394,7 @@ class ReceiptControllerTest {
     void list_validStatus_isAccepted() throws Exception {
         var user = buildUser();
         var summary = new ReceiptSummaryResponse(UUID.randomUUID(), "Mercado X", "Mercado X", LocalDateTime.now(),
-                new BigDecimal("57.80"), new BigDecimal("57.80"), null, null, 1, ReceiptStatus.CONFIRMED);
+                new BigDecimal("57.80"), new BigDecimal("57.80"), null, null, 1, ReceiptStatus.CONFIRMED, null, null);
         Page<ReceiptSummaryResponse> page = new PageImpl<>(List.of(summary));
         when(receiptService.list(any(User.class), isNull(), isNull(), isNull(), isNull(List.class), isNull(),
                 eq(ReceiptStatus.CONFIRMED), isNull(), any(MarketScope.class), any(Pageable.class)))
