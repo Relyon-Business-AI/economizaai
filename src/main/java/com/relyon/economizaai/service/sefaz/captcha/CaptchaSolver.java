@@ -34,4 +34,13 @@ public interface CaptchaSolver {
     default String solveCloudflareTurnstile(String siteKey, String pageUrl) {
         throw new CaptchaUnavailableException("captcha");
     }
+
+    /**
+     * Solves a classic image captcha (distorted text) and returns the text to
+     * type into the form. Used by portals with home-grown "anti-robô" images
+     * (BA's NFCEC_anti_robo.aspx).
+     */
+    default String solveImageToText(byte[] imageBytes) {
+        throw new CaptchaUnavailableException("captcha");
+    }
 }

@@ -1,5 +1,12 @@
 # economizai — what's new
 
+## 2026-10-21 — Import por chave agora cobre a BAHIA
+- Importar nota digitando a chave (44 dígitos) funciona pra BA além do RS. O portal
+  público da BA é gated por captcha de imagem — resolvido automaticamente (CapSolver,
+  ~R$0,003/nota). Validado ao vivo com 2 notas reais de prod (2 mercados diferentes).
+- Nenhuma mudança de contrato: o mesmo POST /receipts/import aceita chaves BA que
+  antes eram rejeitadas com receipt.import.unsupported.
+
 ## 2026-10-20 — Otimizador de lista: path canônico no plural
 - `POST /api/v1/shopping-lists/optimize` é o path canônico (padrão REST do projeto).
 - O antigo `POST /api/v1/shopping-list/optimize` (singular) segue funcionando como alias

@@ -1,6 +1,8 @@
 package com.relyon.economizaai.service.sefaz.captcha;
 
 import com.relyon.economizaai.exception.CaptchaSolveFailedException;
+
+import java.util.Base64;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -60,6 +62,33 @@ public class CapSolverCaptchaSolver implements CaptchaSolver {
     @Override
     public String solveCloudflareTurnstile(String siteKey, String pageUrl) {
         return solve("AntiTurnstileTaskProxyLess", "token", siteKey, pageUrl);
+    }
+
+    @Override
+    public String solveImageToText(byte[] imageBytes) {
+        var encoded = Base64.getEncoder().encodeToString(imageBytes);
+        for (var attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                var body = Map.of("clientKey", apiKey,
+                        "task", Map.of("type", "ImageToTextTask", "body", encoded));
+                var response = post("/createTask", body);
+                assertNoError(response, "create-task");
+                // ImageToText costuma resolver INLINE na própria createTask; poll é o fallback.
+                @SuppressWarnings("unchecked")
+                var inline = (Map<String, Object>) response.get("solution");
+                var text = inline != null ? (String) inline.get("text") : null;
+                if (text == null || text.isBlank()) {
+                    text = pollForToken((String) response.get("taskId"), "text");
+                }
+                log.info("captcha.task.solved type=ImageToTextTask attempt={}/{}", attempt, MAX_RETRIES);
+                CaptchaSolveTracker.recordSolve();
+                return text;
+            } catch (CaptchaSolveFailedException ex) {
+                if (attempt >= MAX_RETRIES) throw ex;
+                log.warn("captcha.image.failed attempt={}/{} reason={} retrying", attempt, MAX_RETRIES, ex.getMessage());
+            }
+        }
+        throw new CaptchaSolveFailedException("all-retries-exhausted");
     }
 
     private String solve(String taskType, String solutionField, String siteKey, String pageUrl) {
