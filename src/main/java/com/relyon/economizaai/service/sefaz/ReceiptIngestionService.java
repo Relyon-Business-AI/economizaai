@@ -74,7 +74,7 @@ public class ReceiptIngestionService {
     private final EanCatalogEnrichmentService eanCatalogEnrichmentService;
     private final MarketLocationService marketLocationService;
     private final MerchantSupportGate merchantSupportGate;
-    private final RsChaveReconsultService rsChaveReconsultService;
+    private final ChaveReconsultService chaveReconsultService;
     private final NotificationService notificationService;
     private final LocalizedMessageService messageService;
     private final PrefetchPolicy prefetchPolicy;
@@ -207,12 +207,12 @@ public class ReceiptIngestionService {
      * As {@link #ingest} but the item data is <b>reconsulted from the bare chave</b>
      * (no QR scan) on a public RS portal — the engine of the CSV/chaves bulk import.
      * Reuses the whole persist pipeline (merchant gate, EAN warm-up, parse-failure
-     * keeps the raw HTML) via {@link RsChaveReconsultService}. Not device-retryable:
+     * keeps the raw HTML) via {@link ChaveReconsultService} (RS gratis; BA custa 1 solve de captcha). Not device-retryable:
      * a reconsult dead end is a plain FAILED_PARSE.
      */
     @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
     public void ingestReconsult(UUID receiptId, String chave) {
-        ingestResolved(receiptId, receipt -> rsChaveReconsultService.reconsult(chave), false, null);
+        ingestResolved(receiptId, receipt -> chaveReconsultService.reconsult(chave), false, null);
     }
 
     /**

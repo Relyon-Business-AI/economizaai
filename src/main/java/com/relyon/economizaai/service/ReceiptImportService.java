@@ -11,7 +11,7 @@ import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.geo.MerchantSupportGate;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import com.relyon.economizaai.service.sefaz.ChaveAcessoParser;
-import com.relyon.economizaai.service.sefaz.RsChaveReconsultService;
+import com.relyon.economizaai.service.sefaz.ChaveReconsultService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -109,7 +109,7 @@ public class ReceiptImportService {
             if (receipt == null || !receipt.getHousehold().getId().equals(householdId)) continue;
             if (receipt.getStatus() != ReceiptStatus.FAILED_PARSE) continue;
             var chave = receipt.getChaveAcesso();
-            if (chave == null || !RsChaveReconsultService.isReconsultable(chave)) continue;
+            if (chave == null || !ChaveReconsultService.isReconsultable(chave)) continue;
             receipt.setStatus(ReceiptStatus.IMPORT_QUEUED);
             receipt.setParseErrorReason(null);
             receiptRepository.save(receipt);
@@ -153,7 +153,7 @@ public class ReceiptImportService {
         if (!ChaveAcessoParser.hasValidCheckDigit(chave)) {
             return reject(chave, "receipt.chave.typo");
         }
-        if (!RsChaveReconsultService.isReconsultable(chave)) {
+        if (!ChaveReconsultService.isReconsultable(chave)) {
             return reject(chave, "receipt.import.unsupported");
         }
         if (merchantSupportGate.isKnownBlockedCnpj(ChaveAcessoParser.extractCnpj(chave))) {
