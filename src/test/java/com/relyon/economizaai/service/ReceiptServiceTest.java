@@ -730,6 +730,22 @@ class ReceiptServiceTest {
     }
 
     @Test
+    void submit_rejectsTypedNfe55OutsideRs_beforeSpendingPaidFallback() {
+        var user = buildUser();
+        // NF-e SP (modelo 55) com DV VÁLIDO digitada — a rota paga só consulta NFC-e,
+        // então seria falha DETERMINÍSTICA paga. Rejeita síncrono com mensagem honesta.
+        var nfeSp = "35260642284150000114550020000817071866483587";
+        when(sefazIngestionService.supportsBareChave(any())).thenReturn(true);
+
+        var rejection = assertThrows(ManualChaveUnsupportedException.class,
+                () -> receiptService.submit(user, new SubmitReceiptRequest(nfeSp)));
+
+        assertEquals("receipt.manual-chave.nfe-unsupported", rejection.getMessageKey());
+        verify(receiptRepository, never()).save(any());
+        verify(receiptIngestionService, never()).ingest(any(), any());
+    }
+
+    @Test
     void submit_throwsPaywallWhenFreeUserAtMonthlyCap() {
         var user = buildUser();
         when(subscriptionGate.monthlyReceiptLimit(any())).thenReturn(5);
