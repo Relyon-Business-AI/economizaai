@@ -3,6 +3,7 @@ package com.relyon.economizaai.service.sefaz;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.web.client.RestClient;
 
 import java.nio.charset.StandardCharsets;
 import java.util.stream.Stream;
@@ -40,6 +41,16 @@ class SupportedStatesRegressionTest {
 
     static Stream<StateCase> supportedStates() {
         return Stream.of(
+                // BA entra pelo import por chave pura (BahiaChaveConsultClient) — a DANFE
+                // devolvida é o layout responsivo compartilhado. Fixture real (2026-10-21).
+                new StateCase("BA", "ba/nfce-real-consulta-chave.html",
+                        "29260816587844000110650010004061381036664035", ResponsiveDanfeParser::parse),
+                // CE responde JSON com o HTML embutido — o adapter extrai antes de parsear.
+                new StateCase("CE", "ce/nfce-real-centerbox.html",
+                        "23260311497712000346651050000140211138967393",
+                        (content, chave, url) -> new CearaNfcePortalAdapter(
+                                RestClient.builder(), 1000, 3, 0L, "test-agent")
+                                .parseHtml(content, chave, url)),
                 new StateCase("DF", "df/marcosbko-atacadista.html",
                         "53261007738069000328653050000125721251741713", DfNfceDanfeParser::parse),
                 // GO embeds the DANFE as a JS-escaped string in the render page; the
