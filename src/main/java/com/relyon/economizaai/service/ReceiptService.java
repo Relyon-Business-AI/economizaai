@@ -602,7 +602,8 @@ public class ReceiptService {
         var overrides = marketNameService.resolveNames(householdId, cnpjs);
         return page.map(receipt -> ReceiptSummaryResponse.from(receipt)
                 .withMarketFriendlyName(marketNameService.applyOverride(
-                        overrides, receipt.getCnpjEmitente(), receipt.getMarketName())));
+                        overrides, receipt.getCnpjEmitente(), receipt.getMarketName()))
+                .withParseErrorMessage(localizedParseError(receipt)));
     }
 
     /**
@@ -1143,6 +1144,17 @@ public class ReceiptService {
         var separatorIndex = reason.indexOf(':');
         var key = separatorIndex < 0 ? reason : reason.substring(0, separatorIndex);
         var argument = separatorIndex < 0 ? "" : reason.substring(separatorIndex + 1);
+        // The generic parse-failure wrapper carries the real reason as its argument
+        // (e.g. "infosimples.not-found"). When that argument is itself a known message
+        // key, show ITS sentence — so the user reads the specific "não adianta tentar /
+        // tente de novo" guidance instead of a raw code embedded in the generic message.
+        if ("receipt.parse.failed".equals(key) && !argument.isBlank()) {
+            try {
+                return localizedMessageService.translate(argument);
+            } catch (RuntimeException notAStandaloneKey) {
+                // fall through to the generic wrapper below
+            }
+        }
         try {
             return localizedMessageService.translate(key, argument);
         } catch (RuntimeException ex) {

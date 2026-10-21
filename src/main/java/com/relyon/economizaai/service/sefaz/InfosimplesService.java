@@ -147,16 +147,19 @@ public class InfosimplesService {
             // throttled inside, never breaks the flow.
             alertService.alertConsultFailure(ufCode, code, message);
             // Deterministic per-nota outcomes (no data / bad chave / wrong service) are NOT
-            // provider health signals — they must not count toward the circuit breaker.
+            // provider health signals — they must not count toward the circuit breaker, AND
+            // the user must be told it's FINAL (não adianta retentar), not transient. The
+            // reason key splits the user message: "infosimples.not-found" (final) vs
+            // "infosimples.error" (provider instável → tente de novo mais tarde).
             if (DETERMINISTIC_NO_DATA_CODES.contains(code)) {
-                throw new InfosimplesNoDataException("infosimples.error");
+                throw new InfosimplesNoDataException("infosimples.not-found");
             }
             throw new ReceiptParseException("infosimples.error");
         }
         if (response.data() == null || response.data().isEmpty()) {
             log.warn("infosimples.fetch.empty chave={} uf={} message='{}'",
                     abbrev(chave), ufCode, response.codeMessage());
-            throw new InfosimplesNoDataException("infosimples.empty-response");
+            throw new InfosimplesNoDataException("infosimples.not-found");
         }
         log.info("infosimples.fetch.ok chave={} uf={}", abbrev(chave), ufCode);
         return toParsedReceipt(chave, response.data().get(0));
