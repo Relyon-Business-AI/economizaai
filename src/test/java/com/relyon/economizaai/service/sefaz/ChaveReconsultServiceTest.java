@@ -19,6 +19,9 @@ class ChaveReconsultServiceTest {
     void isReconsultable_rsAndBaNfce_butNotOtherStates() {
         assertTrue(ChaveReconsultService.isReconsultable(RS_NFCE));
         assertTrue(ChaveReconsultService.isReconsultable(BA_NFCE));
+        // CE (23): qrcodev3 consulta por chave pura, sem captcha
+        assertTrue(ChaveReconsultService.isReconsultable(
+                "23260816587844000110650010004061381036664035"));
         // SP (35) segue fora do import por chave pura
         assertFalse(ChaveReconsultService.isReconsultable(
                 "35260816587844000110650010004061381036664035"));
