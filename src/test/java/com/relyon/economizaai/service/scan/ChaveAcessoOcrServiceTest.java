@@ -1,5 +1,8 @@
 package com.relyon.economizaai.service.scan;
 
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.client.j2se.MatrixToImageWriter;
+import com.google.zxing.qrcode.QRCodeWriter;
 import com.relyon.economizaai.exception.InvalidReceiptPhotoException;
 import com.relyon.economizaai.exception.OcrUnavailableException;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
@@ -30,7 +33,23 @@ class ChaveAcessoOcrServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ChaveAcessoOcrService(new PhotoUploadValidator(5), ocrEngine);
+        var validator = new PhotoUploadValidator(5);
+        service = new ChaveAcessoOcrService(validator, ocrEngine, new QrCodePhotoDecoder(validator));
+    }
+
+    @Test
+    void qrCodeInPhoto_returnsSignedPayload_withoutTouchingOcr() throws Exception {
+        var payload = "https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx?p=" + CHAVE_VALID_DV + "|2|1|1|ABCDEF";
+        var matrix = new QRCodeWriter().encode(payload, BarcodeFormat.QR_CODE, 400, 400);
+        var photo = new MockMultipartFile("file", "qr.png", "image/png",
+                PhotoUploadValidatorTest.pngBytes(MatrixToImageWriter.toBufferedImage(matrix)));
+
+        var extracted = service.extractChave(photo);
+
+        assertEquals(payload, extracted.qrPayload());
+        assertEquals(CHAVE_VALID_DV, extracted.chaveAcesso());
+        assertEquals(UnidadeFederativa.RS, extracted.uf());
+        // nem consultou o OCR — o caminho assinado tem prioridade (funciona em qualquer estado)
     }
 
     private static MockMultipartFile anyPhoto() throws IOException {

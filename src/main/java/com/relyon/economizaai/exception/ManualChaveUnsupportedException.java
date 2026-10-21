@@ -11,4 +11,8 @@ public class ManualChaveUnsupportedException extends DomainException {
     public ManualChaveUnsupportedException(String state) {
         super("receipt.manual-chave.unsupported", state);
     }
+
+    public ManualChaveUnsupportedException(String messageKey, String state) {
+        super(messageKey, state);
+    }
 }

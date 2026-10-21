@@ -50,7 +50,7 @@ class TesseractOcrEngineTest {
     void fullPipeline_extractsChaveFromRenderedPhoto() throws Exception {
         assumeTrue(engine.isAvailable(), "native Tesseract not installed — skipping");
 
-        var service = new ChaveAcessoOcrService(new PhotoUploadValidator(5), engine);
+        var service = new ChaveAcessoOcrService(new PhotoUploadValidator(5), engine, new QrCodePhotoDecoder(new PhotoUploadValidator(5)));
         var photoBytes = PhotoUploadValidatorTest.pngBytes(renderedChave(CHAVE_VALID_DV));
         var photo = new MockMultipartFile("file", "chave.png", "image/png", photoBytes);
 

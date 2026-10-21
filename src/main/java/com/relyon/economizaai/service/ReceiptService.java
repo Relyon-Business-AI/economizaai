@@ -428,6 +428,14 @@ public class ReceiptService {
             log.info("submit rejected reason=manual_chave_unsupported uf={}", uf);
             throw new ManualChaveUnsupportedException(uf.name());
         }
+        // NF-e (modelo 55) digitada: a rota paga só consulta NFC-e — mandar um 55
+        // pra lá é falha DETERMINÍSTICA paga. Só RS tem consulta 55 pública (SVRS).
+        if (ChaveAcessoParser.isBareChave(qrPayload)
+                && "55".equals(ChaveAcessoParser.extractModel(chave))
+                && uf != UnidadeFederativa.RS) {
+            log.info("submit rejected reason=manual_nfe55_unsupported uf={}", uf);
+            throw new ManualChaveUnsupportedException("receipt.manual-chave.nfe-unsupported", uf.name());
+        }
         // A CNPJ we've already classified as food service (or admin-blocked) fails
         // right here with the localized message — nothing is stored at all. The
         // chave embeds the CNPJ, so no fetch is needed. First-time merchants pass
