@@ -428,11 +428,11 @@ public class ReceiptService {
             log.info("submit rejected reason=manual_chave_unsupported uf={}", uf);
             throw new ManualChaveUnsupportedException(uf.name());
         }
-        // NF-e (modelo 55) digitada: a rota paga só consulta NFC-e — mandar um 55
-        // pra lá é falha DETERMINÍSTICA paga. Só RS tem consulta 55 pública (SVRS).
+        // NF-e (modelo 55) digitada: RS grátis (SVRS); demais UFs via consulta
+        // nacional paga. Sem caminho viável, rejeita honesto antes de gastar.
         if (ChaveAcessoParser.isBareChave(qrPayload)
                 && "55".equals(ChaveAcessoParser.extractModel(chave))
-                && uf != UnidadeFederativa.RS) {
+                && !sefazIngestionService.supportsTypedNfe55(uf)) {
             log.info("submit rejected reason=manual_nfe55_unsupported uf={}", uf);
             throw new ManualChaveUnsupportedException("receipt.manual-chave.nfe-unsupported", uf.name());
         }

@@ -389,6 +389,22 @@ class InfosimplesServiceTest {
                 InfosimplesService.extractGtin("SEM GTIN", "07891000098950"));                // first valid wins
     }
 
+    @Test
+    void fetchParsed_model55_routesToNationalNfeConsult_andParsesRealResponse() {
+        var chave55 = "35260642284150000114550020000817071866483587"; // NF-e SP real (falha recuperada)
+        server.expect(requestTo(BASE_URL + "/api/v2/consultas/receita-federal/nfe?token=" + API_KEY
+                        + "&nfe=" + chave55))
+                .andRespond(withSuccess(fixture("nfe-nacional-sp55"), MediaType.APPLICATION_JSON));
+
+        var parsed = service.fetchParsed(chave55, UnidadeFederativa.SP);
+
+        assertEquals("42284150000114", parsed.cnpjEmitente());
+        assertTrue(parsed.marketName().contains("WAY UP"));
+        assertEquals(1, parsed.items().size());
+        assertTrue(parsed.items().get(0).rawDescription().contains("Pipe de Vidro"));
+        assertEquals(0, parsed.totalAmount().compareTo(new BigDecimal("33.94")));
+    }
+
     private static String fixture(String name) {
         try {
             return new String(new ClassPathResource("fixtures/infosimples/" + name + ".json")

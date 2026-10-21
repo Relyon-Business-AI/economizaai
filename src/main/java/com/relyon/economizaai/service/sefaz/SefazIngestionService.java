@@ -137,6 +137,14 @@ public class SefazIngestionService {
     }
 
     /**
+     * NF-e (modelo 55) digitada: RS resolve de graça (SVRS); o resto depende da
+     * consulta nacional paga. Sem provedor, rejeita no submit com mensagem honesta.
+     */
+    public boolean supportsTypedNfe55(UnidadeFederativa uf) {
+        return uf == UnidadeFederativa.RS || infosimples.isPresent();
+    }
+
+    /**
      * Resolve a QR payload to the 44-digit chave. Most payloads contain it
      * directly; captcha/security wrappers such as SC's SecurityVerify URL need
      * a portal-specific preflight fetch before submit can route by UF.
