@@ -45,7 +45,9 @@ public enum NotificationType {
     /** A scanned note that took a while (portal retries / fallback / sweeper) finished and is ready to review. */
     RECEIPT_READY(Scope.SYSTEM, false, false),
     /** A scanned note that took a while could not be processed and ended as FAILED_PARSE. */
-    RECEIPT_FAILED(Scope.SYSTEM, false, false);
+    RECEIPT_FAILED(Scope.SYSTEM, false, false),
+    /** Convite in-app (sininho) pra ativar push — só pra quem nunca registrou token. */
+    PUSH_OPTIN(Scope.SYSTEM, false, false);
 
     public enum Scope { DEFAULT, USER, SYSTEM }
 
@@ -97,6 +99,7 @@ public enum NotificationType {
             case BUDGET -> NotificationDestination.BUDGET;
             case RECEIPT_RECOVERED, RECEIPT_READY, RECEIPT_FAILED -> NotificationDestination.RECEIPT;
             case SYSTEM -> NotificationDestination.INBOX;
+            case PUSH_OPTIN -> NotificationDestination.ENABLE_PUSH;
         };
     }
 }

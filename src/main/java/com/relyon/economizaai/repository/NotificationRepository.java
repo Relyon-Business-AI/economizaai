@@ -24,6 +24,8 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
 
     long countByUserIdAndReadAtIsNull(UUID userId);
 
+    boolean existsByUserIdAndPayloadContainingAndCreatedAtAfter(UUID userId, String payloadFragment, LocalDateTime after);
+
     @Modifying
     @Query("UPDATE Notification n SET n.readAt = :now WHERE n.user.id = :userId AND n.readAt IS NULL")
     int markAllReadForUser(@Param("userId") UUID userId, @Param("now") LocalDateTime now);
