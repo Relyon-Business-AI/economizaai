@@ -736,6 +736,8 @@ class ReceiptServiceTest {
         // então seria falha DETERMINÍSTICA paga. Rejeita síncrono com mensagem honesta.
         var nfeSp = "35260642284150000114550020000817071866483587";
         when(sefazIngestionService.supportsBareChave(any())).thenReturn(true);
+        // sem RS e sem provedor pago configurado → não há caminho pro 55
+        when(sefazIngestionService.supportsTypedNfe55(any())).thenReturn(false);
 
         var rejection = assertThrows(ManualChaveUnsupportedException.class,
                 () -> receiptService.submit(user, new SubmitReceiptRequest(nfeSp)));

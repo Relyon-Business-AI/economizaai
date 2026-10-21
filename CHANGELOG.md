@@ -1,5 +1,10 @@
 # economizai — what's new
 
+## 2026-10-21 — NF-e (modelo 55) digitada funciona em qualquer estado
+- Chave de NF-e digitada agora roteia pra consulta NACIONAL (receita-federal/nfe do
+  provedor pago) — validado com nota real de prod. RS continua grátis via SVRS.
+- Sem provedor configurado, rejeição honesta no submit (receipt.manual-chave.nfe-unsupported).
+
 ## 2026-10-21 — Foto da chave lê o QR também + mensagens honestas na chave digitada
 - `POST /receipts/chave/photo` agora tenta decodificar o **QR code na foto** antes do OCR:
   resposta ganha o campo `qrPayload` (payload assinado). Quando presente, o FE deve

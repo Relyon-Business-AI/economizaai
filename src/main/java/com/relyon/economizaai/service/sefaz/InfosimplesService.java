@@ -115,15 +115,27 @@ public class InfosimplesService {
      */
     public ParsedReceipt fetchParsed(String chave, UnidadeFederativa uf) {
         var ufCode = uf.name().toLowerCase();
-        var resource = resumidaStates.contains(uf) ? "nfce-resumida"
-                : completaStates.contains(uf) ? "nfce-completa"
-                : "nfce";
-        log.info("infosimples.fetch chave={} uf={} resource={}", abbrev(chave), ufCode, resource);
-        var response = restClient.get()
-                .uri("/api/v2/consultas/sefaz/{uf}/{resource}?token={token}&nfce={nfce}",
-                        ufCode, resource, apiKey, chave)
-                .retrieve()
-                .body(RESPONSE_TYPE);
+        InfosimplesResponse response;
+        // NF-e (modelo 55, atacado/loja) tem consulta NACIONAL própria — mandar um 55
+        // pra rota de NFC-e falha deterministicamente. Validado com nota real (2026-10-21):
+        // a resposta usa o MESMO shape "completa" (emitente/nfe/totais/produtos).
+        if ("55".equals(ChaveAcessoParser.extractModel(chave))) {
+            log.info("infosimples.fetch chave={} uf={} resource=receita-federal/nfe", abbrev(chave), ufCode);
+            response = restClient.get()
+                    .uri("/api/v2/consultas/receita-federal/nfe?token={token}&nfe={nfe}", apiKey, chave)
+                    .retrieve()
+                    .body(RESPONSE_TYPE);
+        } else {
+            var resource = resumidaStates.contains(uf) ? "nfce-resumida"
+                    : completaStates.contains(uf) ? "nfce-completa"
+                    : "nfce";
+            log.info("infosimples.fetch chave={} uf={} resource={}", abbrev(chave), ufCode, resource);
+            response = restClient.get()
+                    .uri("/api/v2/consultas/sefaz/{uf}/{resource}?token={token}&nfce={nfce}",
+                            ufCode, resource, apiKey, chave)
+                    .retrieve()
+                    .body(RESPONSE_TYPE);
+        }
 
         if (response == null || response.code() != 200) {
             var code = response == null ? -1 : response.code();
