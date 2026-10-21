@@ -1,5 +1,14 @@
 # economizai — what's new
 
+## 2026-10-21 — Foto da chave lê o QR também + mensagens honestas na chave digitada
+- `POST /receipts/chave/photo` agora tenta decodificar o **QR code na foto** antes do OCR:
+  resposta ganha o campo `qrPayload` (payload assinado). Quando presente, o FE deve
+  submetê-lo como qrPayload — o caminho assinado funciona para QUALQUER estado.
+- Chave digitada de estado sem consulta pública → mensagem explica que a limitação é do
+  portal da SEFAZ, não do app (`receipt.manual-chave.unsupported` reescrita).
+- Chave digitada de NF-e (modelo 55) fora do RS → rejeição imediata e honesta
+  (`receipt.manual-chave.nfe-unsupported`) em vez de falha paga assíncrona.
+
 ## 2026-10-21 — Import por chave agora cobre a BAHIA
 - Importar nota digitando a chave (44 dígitos) funciona pra BA além do RS. O portal
   público da BA é gated por captcha de imagem — resolvido automaticamente (CapSolver,

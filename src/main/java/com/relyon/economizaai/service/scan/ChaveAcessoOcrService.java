@@ -32,8 +32,19 @@ public class ChaveAcessoOcrService {
 
     private final PhotoUploadValidator photoUploadValidator;
     private final OcrEngine ocrEngine;
+    private final QrCodePhotoDecoder qrCodePhotoDecoder;
 
     public ChaveExtractionResponse extractChave(MultipartFile file) {
+        // QR na foto primeiro: o payload ASSINADO funciona em qualquer estado,
+        // enquanto a chave pura (OCR) só onde há consulta pública por chave.
+        try {
+            var qrPayload = qrCodePhotoDecoder.decode(file);
+            var chave = ChaveAcessoParser.extractChave(qrPayload);
+            log.info("chave_ocr.qr_in_photo chave={} uf={}", LogMasker.chave(chave), ChaveAcessoParser.extractUf(chave));
+            return new ChaveExtractionResponse(chave, ChaveAcessoParser.extractUf(chave), qrPayload);
+        } catch (RuntimeException qrMiss) {
+            log.debug("chave_ocr.qr_not_found reason={}", qrMiss.getClass().getSimpleName());
+        }
         if (!ocrEngine.isAvailable()) {
             throw new OcrUnavailableException();
         }
