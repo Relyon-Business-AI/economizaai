@@ -54,4 +54,8 @@ public class AiUsageLog extends BaseEntity {
      */
     @Column(name = "user_id")
     private UUID userId;
+
+    /** Latência da chamada em ms — compara velocidade entre modelos (null nas antigas). */
+    @Column(name = "duration_ms")
+    private Integer durationMs;
 }

@@ -80,6 +80,8 @@ public class AiUsageService {
             var calls = ((Number) usageRow[1]).longValue();
             var cost = (BigDecimal) usageRow[4];
             var successCalls = ((Number) usageRow[5]).longValue();
+            var avgLatencyMs = usageRow[6] == null ? null
+                    : BigDecimal.valueOf(((Number) usageRow[6]).doubleValue()).setScale(0, RoundingMode.HALF_UP);
             var avgCostPerCall = calls == 0 ? BigDecimal.ZERO
                     : cost.divide(BigDecimal.valueOf(calls), 6, RoundingMode.HALF_UP);
             var successRate = calls == 0 ? null
@@ -97,7 +99,7 @@ public class AiUsageService {
                         : BigDecimal.valueOf(100.0 * approved / reviewed).setScale(1, RoundingMode.HALF_UP);
             }
             return new ModelComparison(model, aiProviderFor(model), calls, cost, avgCostPerCall, successRate,
-                    created, approved, rejected, acceptanceRate, avgConfidence);
+                    avgLatencyMs, created, approved, rejected, acceptanceRate, avgConfidence);
         }).toList();
     }
 
@@ -108,7 +110,7 @@ public class AiUsageService {
     }
 
     public record ModelComparison(String model, String provider, long calls, BigDecimal costUsd,
-                                  BigDecimal avgCostPerCallUsd, BigDecimal successRatePct,
+                                  BigDecimal avgCostPerCallUsd, BigDecimal successRatePct, BigDecimal avgLatencyMs,
                                   long findingsCreated, long findingsApproved, long findingsRejected,
                                   BigDecimal acceptanceRatePct, BigDecimal avgConfidence) {}
 

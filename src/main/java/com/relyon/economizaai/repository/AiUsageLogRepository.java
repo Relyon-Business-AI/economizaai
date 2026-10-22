@@ -31,10 +31,11 @@ public interface AiUsageLogRepository extends JpaRepository<AiUsageLog, UUID> {
     """)
     List<Object[]> summarizeByActivityAllTime();
 
-    /** model, calls, inputTokens, outputTokens, costUsd, successCalls — comparação entre modelos. */
+    /** model, calls, inputTokens, outputTokens, costUsd, successCalls, avgDurationMs — comparação entre modelos. */
     @Query("""
         SELECT u.model, count(u), coalesce(sum(u.inputTokens),0), coalesce(sum(u.outputTokens),0),
-               coalesce(sum(u.costUsd),0), coalesce(sum(case when u.success then 1 else 0 end),0)
+               coalesce(sum(u.costUsd),0), coalesce(sum(case when u.success then 1 else 0 end),0),
+               avg(u.durationMs)
         FROM AiUsageLog u
         WHERE u.model IS NOT NULL AND (:since IS NULL OR u.createdAt >= :since)
         GROUP BY u.model

@@ -67,6 +67,8 @@ public class AiController {
     private final AiItemFallbackService aiItemFallbackService;
     private final AiUsageService aiUsageService;
     private final AiProviderSettingsService aiProviderSettingsService;
+    private final com.relyon.economizaai.service.ai.AiModelBenchmarkService aiModelBenchmarkService;
+    private final com.relyon.economizaai.repository.AiModelBenchmarkRunRepository benchmarkRunRepository;
     private final AiGateway aiGateway;
     private final AiSweepRunRepository sweepRunRepository;
     private final ReceiptItemRepository receiptItemRepository;
@@ -198,14 +200,49 @@ public class AiController {
     }
 
     /**
-     * Comparação entre modelos no período: custo/volume/confiabilidade + taxa de
-     * aceitação dos achados. Compara "mês do GPT" vs "mês do Claude" pelos números
-     * de cada modelo no mesmo intervalo (days=0 → tudo).
+     * Comparação entre modelos no período: custo/volume/confiabilidade/latência +
+     * taxa de aceitação dos achados. Compara "mês do GPT" vs "mês do Claude" pelos
+     * números de cada modelo no mesmo intervalo (days=0 → tudo).
      */
     @GetMapping("/model-comparison")
     public ResponseEntity<List<AiUsageService.ModelComparison>> modelComparison(
             @RequestParam(defaultValue = "30") int days) {
         return ResponseEntity.ok(aiUsageService.modelComparison(days));
+    }
+
+    /**
+     * Dispara o benchmark de ACURÁCIA de um modelo contra o golden set (assíncrono,
+     * amostrado). Mede qualidade pura (independe da revisão humana). As chamadas
+     * entram no painel de comparação com custo/latência.
+     */
+    @PostMapping("/benchmark-model")
+    public ResponseEntity<Map<String, Object>> startModelBenchmark(
+            @RequestParam String model, @RequestParam(required = false) Integer sample) {
+        var runId = aiModelBenchmarkService.start(model, sample);
+        return ResponseEntity.accepted().body(Map.of("runId", runId, "status", "RUNNING", "model", model));
+    }
+
+    /** Histórico de rodadas de benchmark — compara a acurácia de cada modelo lado a lado. */
+    @GetMapping("/benchmark-model/runs")
+    public ResponseEntity<List<Map<String, Object>>> modelBenchmarkRuns() {
+        var runs = benchmarkRunRepository.findTop20ByOrderByCreatedAtDesc().stream()
+                .map(run -> {
+                    Map<String, Object> view = new LinkedHashMap<>();
+                    view.put("id", run.getId());
+                    view.put("model", run.getModel());
+                    view.put("provider", run.getProvider());
+                    view.put("status", run.getStatus());
+                    view.put("sampleSize", run.getSampleSize());
+                    view.put("correct", run.getCorrect());
+                    view.put("uncategorized", run.getUncategorized());
+                    view.put("accuracyPct", run.getAccuracyPct());
+                    view.put("error", run.getError());
+                    view.put("createdAt", String.valueOf(run.getCreatedAt()));
+                    view.put("finishedAt", String.valueOf(run.getFinishedAt()));
+                    return view;
+                })
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(runs);
     }
 
     /**
