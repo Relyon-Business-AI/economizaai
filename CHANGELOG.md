@@ -1,5 +1,13 @@
 # economizai — what's new
 
+## 2026-10-22 — Comparação de IA: latência + benchmark de acurácia por modelo
+- Latência: cada chamada de IA registra o tempo (ms); o painel de comparação ganha
+  "segundos/chamada" por modelo (velocidade).
+- Benchmark por modelo: `POST /categorizer/ai/benchmark-model?model=X` roda uma amostra
+  do golden set no modelo e mede ACURÁCIA pura (independe da revisão humana). Assíncrono,
+  amostrado (respeita o cap diário). `GET /categorizer/ai/benchmark-model/runs` lista o
+  histórico pra comparar modelos lado a lado.
+
 ## 2026-10-22 — Comparação entre modelos de IA + remoção de serviços legados
 - `GET /categorizer/ai/model-comparison?days=N`: por modelo, custo/volume/confiabilidade
   (do usage log) + taxa de ACEITAÇÃO dos achados (qualidade). Cada achado agora guarda o

@@ -72,14 +72,19 @@ public class AiUsageService {
      */
     @Transactional(readOnly = true)
     public List<ModelComparison> modelComparison(int days) {
-        var since = days == 0 ? null : LocalDateTime.now().minusDays(Math.max(1, Math.min(days, 3650)));
-        var findingStats = findingRepository.statsByModel(since).stream()
+        var allTime = days == 0;
+        var since = allTime ? null : LocalDateTime.now().minusDays(Math.max(1, Math.min(days, 3650)));
+        var findingRows = allTime ? findingRepository.statsByModelAllTime() : findingRepository.statsByModel(since);
+        var usageRows = allTime ? usageRepository.summarizeByModelAllTime() : usageRepository.summarizeByModel(since);
+        var findingStats = findingRows.stream()
                 .collect(java.util.stream.Collectors.toMap(row -> String.valueOf(row[0]), row -> row));
-        return usageRepository.summarizeByModel(since).stream().map(usageRow -> {
+        return usageRows.stream().map(usageRow -> {
             var model = String.valueOf(usageRow[0]);
             var calls = ((Number) usageRow[1]).longValue();
-            var cost = (BigDecimal) usageRow[4];
+            var cost = toBigDecimal(usageRow[4]);
             var successCalls = ((Number) usageRow[5]).longValue();
+            var avgLatencyMs = usageRow[6] == null ? null
+                    : BigDecimal.valueOf(((Number) usageRow[6]).doubleValue()).setScale(0, RoundingMode.HALF_UP);
             var avgCostPerCall = calls == 0 ? BigDecimal.ZERO
                     : cost.divide(BigDecimal.valueOf(calls), 6, RoundingMode.HALF_UP);
             var successRate = calls == 0 ? null
@@ -91,14 +96,21 @@ public class AiUsageService {
                 created = ((Number) fs[1]).longValue();
                 approved = ((Number) fs[2]).longValue();
                 rejected = ((Number) fs[3]).longValue();
-                avgConfidence = ((BigDecimal) fs[4]).setScale(3, RoundingMode.HALF_UP);
+                avgConfidence = toBigDecimal(fs[4]).setScale(3, RoundingMode.HALF_UP);
                 var reviewed = approved + rejected;
                 acceptanceRate = reviewed == 0 ? null
                         : BigDecimal.valueOf(100.0 * approved / reviewed).setScale(1, RoundingMode.HALF_UP);
             }
             return new ModelComparison(model, aiProviderFor(model), calls, cost, avgCostPerCall, successRate,
-                    created, approved, rejected, acceptanceRate, avgConfidence);
+                    avgLatencyMs, created, approved, rejected, acceptanceRate, avgConfidence);
         }).toList();
+    }
+
+    /** Agregados do Hibernate variam entre BigDecimal/Double/Long — extrai robusto. */
+    private static BigDecimal toBigDecimal(Object value) {
+        if (value == null) return BigDecimal.ZERO;
+        if (value instanceof BigDecimal bigDecimal) return bigDecimal;
+        return BigDecimal.valueOf(((Number) value).doubleValue());
     }
 
     private String aiProviderFor(String model) {
@@ -108,7 +120,7 @@ public class AiUsageService {
     }
 
     public record ModelComparison(String model, String provider, long calls, BigDecimal costUsd,
-                                  BigDecimal avgCostPerCallUsd, BigDecimal successRatePct,
+                                  BigDecimal avgCostPerCallUsd, BigDecimal successRatePct, BigDecimal avgLatencyMs,
                                   long findingsCreated, long findingsApproved, long findingsRejected,
                                   BigDecimal acceptanceRatePct, BigDecimal avgConfidence) {}
 

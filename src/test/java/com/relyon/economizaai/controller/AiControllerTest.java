@@ -55,6 +55,8 @@ class AiControllerTest {
     @MockitoBean private AiItemFallbackService aiItemFallbackService;
     @MockitoBean private AiUsageService aiUsageService;
     @MockitoBean private com.relyon.economizaai.service.ai.AiProviderSettingsService aiProviderSettingsService;
+    @MockitoBean private com.relyon.economizaai.service.ai.AiModelBenchmarkService aiModelBenchmarkService;
+    @MockitoBean private com.relyon.economizaai.repository.AiModelBenchmarkRunRepository benchmarkRunRepository;
     @MockitoBean private AiGateway aiGateway;
     @MockitoBean private AiSweepRunRepository aiSweepRunRepository;
     @MockitoBean private ReceiptItemRepository receiptItemRepository;

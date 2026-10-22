@@ -22,10 +22,21 @@ public interface AiFindingRepository extends JpaRepository<AiFinding, UUID> {
                coalesce(sum(case when f.status = com.relyon.economizaai.model.enums.AiFindingStatus.REJECTED then 1 else 0 end),0),
                coalesce(avg(f.confidence),0)
         FROM AiFinding f
-        WHERE f.model IS NOT NULL AND (:since IS NULL OR f.createdAt >= :since)
+        WHERE f.model IS NOT NULL AND f.createdAt >= :since
         GROUP BY f.model
     """)
     List<Object[]> statsByModel(@org.springframework.data.repository.query.Param("since") java.time.LocalDateTime since);
+
+    @org.springframework.data.jpa.repository.Query("""
+        SELECT f.model, count(f),
+               coalesce(sum(case when f.status = com.relyon.economizaai.model.enums.AiFindingStatus.APPROVED then 1 else 0 end),0),
+               coalesce(sum(case when f.status = com.relyon.economizaai.model.enums.AiFindingStatus.REJECTED then 1 else 0 end),0),
+               coalesce(avg(f.confidence),0)
+        FROM AiFinding f
+        WHERE f.model IS NOT NULL
+        GROUP BY f.model
+    """)
+    List<Object[]> statsByModelAllTime();
 
     List<AiFinding> findByStatus(AiFindingStatus status);
 

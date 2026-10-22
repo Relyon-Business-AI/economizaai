@@ -81,6 +81,11 @@ public class AiGateway {
         return adapter != null && adapter.isConfigured();
     }
 
+    /** Rótulo do provedor que serve este modelo (ANTHROPIC/OPENAI) — pro benchmark. */
+    public String providerLabelForModel(String model) {
+        return providerForModel(model).name();
+    }
+
     public String extractorModel() {
         return providerSettings.config(AiModelTier.EXTRACTOR).model();
     }
@@ -146,16 +151,18 @@ public class AiGateway {
             throw new AiUnavailableException(
                     "Cap diário de chamadas de IA atingido (" + dailyRequestCap + "). Ajuste ECONOMIZAAI_AI_DAILY_REQUEST_CAP se necessário.");
         }
+        var startNanos = System.nanoTime();
         try {
             var result = adapterForModel(model).complete(model, systemPrompt, userPrompt, maxTokens);
-            recordUsage(activity, model, result.inputTokens(), result.outputTokens(), true, userId);
-            log.info("ai.call activity={} model={} in={} out={} cache_write={} cache_read={}", activity, model,
-                    result.inputTokens(), result.outputTokens(), result.cacheWriteTokens(), result.cacheReadTokens());
+            recordUsage(activity, model, result.inputTokens(), result.outputTokens(), true, userId, elapsedMs(startNanos));
+            log.info("ai.call activity={} model={} in={} out={} cache_write={} cache_read={} ms={}", activity, model,
+                    result.inputTokens(), result.outputTokens(), result.cacheWriteTokens(), result.cacheReadTokens(),
+                    elapsedMs(startNanos));
             return result.text();
         } catch (AiUnavailableException unavailable) {
             throw unavailable;
         } catch (RuntimeException ex) {
-            recordUsage(activity, model, 0, 0, false, userId);
+            recordUsage(activity, model, 0, 0, false, userId, elapsedMs(startNanos));
             log.warn("ai.call_failed activity={} model={} reason={}", activity, model, ex.getMessage());
             if (isCreditExhausted(ex)) {
                 // NOTHING is lost: the deterministic result stands and the pending
@@ -188,22 +195,27 @@ public class AiGateway {
         if (usageRepository.countByCreatedAtAfter(todayStart) >= dailyRequestCap) {
             throw new AiUnavailableException("Cap diário de chamadas de IA atingido (" + dailyRequestCap + ").");
         }
+        var startNanos = System.nanoTime();
         try {
             var result = adapterForModel(model).completeWithImage(model, systemPrompt, userPrompt, imageBytes, imageMediaType, maxTokens);
-            recordUsage(activity, model, result.inputTokens(), result.outputTokens(), true, userId);
-            log.info("ai.call activity={} model={} in={} out={} (vision)", activity, model,
-                    result.inputTokens(), result.outputTokens());
+            recordUsage(activity, model, result.inputTokens(), result.outputTokens(), true, userId, elapsedMs(startNanos));
+            log.info("ai.call activity={} model={} in={} out={} ms={} (vision)", activity, model,
+                    result.inputTokens(), result.outputTokens(), elapsedMs(startNanos));
             return result.text();
         } catch (AiUnavailableException unavailable) {
             throw unavailable;
         } catch (RuntimeException ex) {
-            recordUsage(activity, model, 0, 0, false, userId);
+            recordUsage(activity, model, 0, 0, false, userId, elapsedMs(startNanos));
             log.warn("ai.call_failed activity={} model={} reason={}", activity, model, ex.getMessage());
             if (isCreditExhausted(ex)) {
                 throw new AiUnavailableException("Créditos da API de IA esgotados — recarregue em console.anthropic.com.");
             }
             throw new AiUnavailableException("Falha na chamada de IA: " + ex.getMessage());
         }
+    }
+
+    private static int elapsedMs(long startNanos) {
+        return (int) ((System.nanoTime() - startNanos) / 1_000_000);
     }
 
     /** Anthropic billing/credit failures ("credit balance is too low", billing_error). */
@@ -214,7 +226,7 @@ public class AiGateway {
     }
 
     private void recordUsage(AiActivity activity, String model, long inputTokens, long outputTokens, boolean success,
-                             UUID userId) {
+                             UUID userId, int durationMs) {
         try {
             usageRepository.save(AiUsageLog.builder()
                     .activity(activity)
@@ -224,6 +236,7 @@ public class AiGateway {
                     .costUsd(estimateCostUsd(model, inputTokens, outputTokens))
                     .success(success)
                     .userId(userId)
+                    .durationMs(durationMs)
                     .build());
         } catch (RuntimeException ex) {
             log.warn("ai.usage_log_failed activity={} reason={}", activity, ex.getMessage());
