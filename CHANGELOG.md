@@ -1,5 +1,12 @@
 # economizai — what's new
 
+## 2026-10-22 — Comparação entre modelos de IA + remoção de serviços legados
+- `GET /categorizer/ai/model-comparison?days=N`: por modelo, custo/volume/confiabilidade
+  (do usage log) + taxa de ACEITAÇÃO dos achados (qualidade). Cada achado agora guarda o
+  modelo que o produziu. É assim que se compara "mês do GPT" vs "mês do Claude".
+- Removidos os serviços OpenAI legados inertes (LlmEnrichmentService, LlmAuditorService,
+  OpenAiClient): substituídos pelo fallback de scan + varredura de sugestões.
+
 ## 2026-10-22 — Falha de nota: nunca mais código técnico pro usuário
 A mensagem de uma nota que falhou (`parseErrorMessage`, mostrada na lista/detalhe)
 podia vazar um **código interno** — ex. *"...(motivo: client-content-chave-mismatch)"*,

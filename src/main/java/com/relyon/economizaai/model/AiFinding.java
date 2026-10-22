@@ -65,4 +65,8 @@ public class AiFinding extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "activity", length = 40)
     private AiActivity activity;
+
+    /** Modelo de IA que produziu o achado — compara aceitação entre modelos (null nos antigos). */
+    @Column(name = "model", length = 80)
+    private String model;
 }

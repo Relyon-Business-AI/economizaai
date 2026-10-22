@@ -485,6 +485,7 @@ public class AiSweepService {
                 .type(type)
                 .status(AiFindingStatus.PENDING)
                 .activity(activity)
+                .model(aiGateway.modelFor(activity))
                 .title(safeTitle)
                 .detail(detail)
                 .payload(payload.toString())

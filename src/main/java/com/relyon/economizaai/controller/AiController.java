@@ -198,6 +198,17 @@ public class AiController {
     }
 
     /**
+     * Comparação entre modelos no período: custo/volume/confiabilidade + taxa de
+     * aceitação dos achados. Compara "mês do GPT" vs "mês do Claude" pelos números
+     * de cada modelo no mesmo intervalo (days=0 → tudo).
+     */
+    @GetMapping("/model-comparison")
+    public ResponseEntity<List<AiUsageService.ModelComparison>> modelComparison(
+            @RequestParam(defaultValue = "30") int days) {
+        return ResponseEntity.ok(aiUsageService.modelComparison(days));
+    }
+
+    /**
      * Provedor de IA por tier: config atual + catálogo de opções e quais
      * provedores têm credencial. Dirige o toggle "GPT aqui, Claude ali".
      */

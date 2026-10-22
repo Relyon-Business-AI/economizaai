@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.ai;
 
+import com.relyon.economizaai.repository.AiFindingRepository;
 import com.relyon.economizaai.repository.AiUsageLogRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -16,6 +17,7 @@ import java.util.List;
 public class AiUsageService {
 
     private final AiUsageLogRepository usageRepository;
+    private final AiFindingRepository findingRepository;
     private final AiGateway aiGateway;
 
     /**
@@ -62,6 +64,53 @@ public class AiUsageService {
                 allTimeCost, budgetUsd > 0 ? BigDecimal.valueOf(budgetUsd).setScale(2, RoundingMode.HALF_UP) : null,
                 estimatedBalance, byActivity, byDay);
     }
+
+    /**
+     * Comparação ENTRE MODELOS no período: custo/volume/confiabilidade (do usage log) +
+     * qualidade (taxa de aceitação dos achados). É assim que se compara "mês do GPT" vs
+     * "mês do Claude" — cada modelo aparece com seus números no período escolhido.
+     */
+    @Transactional(readOnly = true)
+    public List<ModelComparison> modelComparison(int days) {
+        var since = days == 0 ? null : LocalDateTime.now().minusDays(Math.max(1, Math.min(days, 3650)));
+        var findingStats = findingRepository.statsByModel(since).stream()
+                .collect(java.util.stream.Collectors.toMap(row -> String.valueOf(row[0]), row -> row));
+        return usageRepository.summarizeByModel(since).stream().map(usageRow -> {
+            var model = String.valueOf(usageRow[0]);
+            var calls = ((Number) usageRow[1]).longValue();
+            var cost = (BigDecimal) usageRow[4];
+            var successCalls = ((Number) usageRow[5]).longValue();
+            var avgCostPerCall = calls == 0 ? BigDecimal.ZERO
+                    : cost.divide(BigDecimal.valueOf(calls), 6, RoundingMode.HALF_UP);
+            var successRate = calls == 0 ? null
+                    : BigDecimal.valueOf(100.0 * successCalls / calls).setScale(1, RoundingMode.HALF_UP);
+            var fs = findingStats.get(model);
+            long created = 0, approved = 0, rejected = 0;
+            BigDecimal avgConfidence = null, acceptanceRate = null;
+            if (fs != null) {
+                created = ((Number) fs[1]).longValue();
+                approved = ((Number) fs[2]).longValue();
+                rejected = ((Number) fs[3]).longValue();
+                avgConfidence = ((BigDecimal) fs[4]).setScale(3, RoundingMode.HALF_UP);
+                var reviewed = approved + rejected;
+                acceptanceRate = reviewed == 0 ? null
+                        : BigDecimal.valueOf(100.0 * approved / reviewed).setScale(1, RoundingMode.HALF_UP);
+            }
+            return new ModelComparison(model, aiProviderFor(model), calls, cost, avgCostPerCall, successRate,
+                    created, approved, rejected, acceptanceRate, avgConfidence);
+        }).toList();
+    }
+
+    private String aiProviderFor(String model) {
+        var lower = model == null ? "" : model.toLowerCase();
+        return lower.startsWith("gpt") || lower.startsWith("o1") || lower.startsWith("o3") || lower.startsWith("o4")
+                ? "OPENAI" : "ANTHROPIC";
+    }
+
+    public record ModelComparison(String model, String provider, long calls, BigDecimal costUsd,
+                                  BigDecimal avgCostPerCallUsd, BigDecimal successRatePct,
+                                  long findingsCreated, long findingsApproved, long findingsRejected,
+                                  BigDecimal acceptanceRatePct, BigDecimal avgConfidence) {}
 
     public record ActivityUsage(String activity, long calls, long inputTokens, long outputTokens, BigDecimal costUsd) {}
 

@@ -566,25 +566,7 @@ economizaai:
   # LLM layers (OpenAI by default — cheapest suitable tier). Each capability has
   # its own switch so any of them can be disabled or later gated to premium.
   llm:
-    api-key: ${OPENAI_API_KEY:}
-    base-url: ${LLM_BASE_URL:https://api.openai.com/v1}
-    model: ${LLM_MODEL:gpt-4o-mini}
-    timeout-ms: ${LLM_TIMEOUT_MS:45000}
-    enrichment:
-      # "LLM as teacher": batch-enriches products the free layers left wanting
-      # and writes reusable keyword rules back into the curated dictionary.
-      enabled: ${LLM_ENRICHMENT_ENABLED:true}
-      batch-size: ${LLM_ENRICH_BATCH_SIZE:25}
-      interval-ms: ${LLM_ENRICH_INTERVAL_MS:600000}
-      initial-delay-ms: ${LLM_ENRICH_INITIAL_DELAY_MS:90000}
-      max-attempts: ${LLM_ENRICH_MAX_ATTEMPTS:3}
-      confidence-threshold: ${LLM_ENRICH_CONFIDENCE:0.7}
-    auditor:
-      # Nightly verification of machine labels — flags disagreements for the
-      # admin (GET /admin/llm/report); never auto-corrects.
-      enabled: ${LLM_AUDITOR_ENABLED:true}
-      cron: ${LLM_AUDITOR_CRON:0 0 4 * * *}
-      sample-size: ${LLM_AUDITOR_SAMPLE:50}
+    # Camadas de visão/resgate (a IA de categorização vive em economizaai.ai).
     photo-extraction:
       # Vision fallback: items from a photographed receipt (origin=PHOTO,
       # excluded from the collaborative index). Per-user daily cap under

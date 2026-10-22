@@ -89,6 +89,11 @@ public class AiGateway {
         return providerSettings.config(AiModelTier.CURATOR).model();
     }
 
+    /** Modelo que serve esta atividade (pelo tier) — usado pra atribuir o achado ao modelo. */
+    public String modelFor(AiActivity activity) {
+        return providerSettings.config(activity.tier()).model();
+    }
+
     /** Resolve o adapter que serve este modelo (via config de tier; fallback por prefixo). */
     private AiChatPort adapterForModel(String model) {
         var provider = providerForModel(model);
