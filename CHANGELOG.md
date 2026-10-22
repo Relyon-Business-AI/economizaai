@@ -19,7 +19,7 @@ Investigação das falhas do Infosimples: **os erros 607 "parâmetro inválido" 
 todos chaves com dígito verificador inválido** — leitura do QR corrompida. Dois ajustes:
 
 - **Fim da cegueira:** o ledger `paid_api_call` agora grava `result_code` (migration
-  V118). Dá pra distinguir 607 (chave inválida), 612 (nota não existe) e 609 (provedor
+  V120). Dá pra distinguir 607 (chave inválida), 612 (nota não existe) e 609 (provedor
   instável) — antes só tínhamos sucesso/falha.
 - **Não gastar à toa:** antes de chamar o Infosimples, validamos o DV (mod-11) da
   chave. Chave corrompida **não** dispara a chamada paga (sempre daria 607) e falha
