@@ -1,5 +1,19 @@
 # economizai — what's new
 
+## 2026-10-22 — Falha de nota: nunca mais código técnico pro usuário
+A mensagem de uma nota que falhou (`parseErrorMessage`, mostrada na lista/detalhe)
+podia vazar um **código interno** — ex. *"...(motivo: client-content-chave-mismatch)"*,
+`no-items-found`, `mg-*`, `sc-*`, ou até um nome de classe (`SefazFetchException`).
+Corrigido na origem: `localizedParseError` **nunca** renderiza código técnico.
+
+- **Códigos internos de portal/parser** (instabilidade da SEFAZ, glitch de scraping)
+  → mensagem amigável **temporária**: *"O portal da SEFAZ do seu estado está instável
+  no momento e não conseguimos buscar os dados desta nota. Tente novamente mais tarde."*
+- **Motivos finais** (nota cancelada/inexistente) seguem com a mensagem própria
+  (*"...não adianta tentar de novo; confirme com o mercado"*) — inalterado.
+- **Motivo desconhecido** → genérico amigável (nunca o código).
+- FE não muda contrato — só o texto de `parseErrorMessage` ficou amigável em todos os casos.
+
 ## 2026-10-22 — Custo de IA (LLM) no painel de custos + atribuição por usuário
 Admin. O painel de custos (`GET /admin/costs`) agora inclui o gasto de **IA/LLM**,
 que vivia num ledger separado (`ai_usage_log`, custo real por token em USD) e não

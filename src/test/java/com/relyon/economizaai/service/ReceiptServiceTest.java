@@ -495,6 +495,41 @@ class ReceiptServiceTest {
     }
 
     @Test
+    void get_failedInternalPortalCode_neverLeaksRawCode_showsPortalUnstable() {
+        // An internal portal/parser code (client-content-chave-mismatch, mg-*, sc-*, …) is NOT a
+        // message key — it must NEVER reach the user. It maps to the friendly transient message.
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        receipt.setParseErrorReason("receipt.parse.failed:client-content-chave-mismatch");
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(localizedMessageService.translate("client-content-chave-mismatch"))
+                .thenThrow(new RuntimeException("no such message"));
+        when(localizedMessageService.translate("receipt.fail.portal_unstable"))
+                .thenReturn("O portal da SEFAZ do seu estado está instável. Tente novamente mais tarde.");
+
+        var response = receiptService.get(user, receipt.getId());
+
+        assertEquals("O portal da SEFAZ do seu estado está instável. Tente novamente mais tarde.",
+                response.parseErrorMessage());
+    }
+
+    @Test
+    void get_sefazFetchFailedWithExceptionClassArg_showsPortalUnstable_notClassName() {
+        // The fetch failure stores the exception class as its argument — never show that.
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        receipt.setParseErrorReason("receipt.sefaz.fetch.failed:SefazFetchException");
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(localizedMessageService.translate("receipt.fail.portal_unstable"))
+                .thenReturn("O portal da SEFAZ do seu estado está instável. Tente novamente mais tarde.");
+
+        var response = receiptService.get(user, receipt.getId());
+
+        assertEquals("O portal da SEFAZ do seu estado está instável. Tente novamente mais tarde.",
+                response.parseErrorMessage());
+    }
+
+    @Test
     void submit_persistsProcessingAndDispatchesIngestion() {
         var user = buildUser();
         when(receiptRepository.findByHouseholdIdAndChaveAcesso(any(), eq(CHAVE_RS))).thenReturn(Optional.empty());

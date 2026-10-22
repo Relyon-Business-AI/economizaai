@@ -1144,21 +1144,38 @@ public class ReceiptService {
         var separatorIndex = reason.indexOf(':');
         var key = separatorIndex < 0 ? reason : reason.substring(0, separatorIndex);
         var argument = separatorIndex < 0 ? "" : reason.substring(separatorIndex + 1);
-        // The generic parse-failure wrapper carries the real reason as its argument
-        // (e.g. "infosimples.not-found"). When that argument is itself a known message
-        // key, show ITS sentence — so the user reads the specific "não adianta tentar /
-        // tente de novo" guidance instead of a raw code embedded in the generic message.
-        if ("receipt.parse.failed".equals(key) && !argument.isBlank()) {
-            try {
-                return localizedMessageService.translate(argument);
-            } catch (RuntimeException notAStandaloneKey) {
-                // fall through to the generic wrapper below
+
+        // The generic parse-failure wrapper carries the real detail as its argument. If the
+        // detail is itself a known friendly message key (e.g. infosimples.error /
+        // infosimples.not-found), show ITS sentence. Otherwise the detail is an INTERNAL
+        // portal/parser code (no-items-found, client-content-chave-mismatch, mg-*, sc-*,
+        // df-*, …) that must NEVER reach the user — treat it as a transient portal glitch.
+        if ("receipt.parse.failed".equals(key)) {
+            if (!argument.isBlank()) {
+                try {
+                    return localizedMessageService.translate(argument);
+                } catch (RuntimeException notAStandaloneKey) {
+                    // not a friendly key — fall through to the portal-unstable message
+                }
             }
+            return localizedMessageService.translate("receipt.fail.portal_unstable");
         }
+
+        // These keys store a TECHNICAL argument (an exception class name, an HTTP status) —
+        // never render it. They're transient portal/solver hiccups: the state's SEFAZ portal
+        // (or the captcha step) failed momentarily, so tell the user to try again later.
+        if ("receipt.sefaz.fetch.failed".equals(key) || "receipt.captcha.failed".equals(key)) {
+            return localizedMessageService.translate("receipt.fail.portal_unstable");
+        }
+
+        // Known friendly keys (unsupported state/merchant, limits, contingency, rejected QR…)
+        // take a SAFE argument (UF, service, numeric code). Anything we don't recognize — or
+        // that fails to translate — falls back to a friendly generic. A raw code must never
+        // reach the user.
         try {
             return localizedMessageService.translate(key, argument);
-        } catch (RuntimeException ex) {
-            return localizedMessageService.translate("receipt.parse.failed", argument);
+        } catch (RuntimeException unknownOrUnfriendly) {
+            return localizedMessageService.translate("receipt.fail.generic");
         }
     }
 
