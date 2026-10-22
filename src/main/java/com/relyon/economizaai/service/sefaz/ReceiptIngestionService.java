@@ -492,12 +492,27 @@ public class ReceiptIngestionService {
     static final String CONTINGENCY_PENDING_REASON = "receipt.contingency.pending";
 
     static String parseFailureReason(ReceiptParseException ex, String chaveAcesso) {
-        // Reuse the existing contingency key — same honest story as a portal REJECTION page, but for
-        // the case where SEFAZ serves an EMPTY DANFE (no items, no error div) for the offline note.
-        if (ex.isNoItemsFound() && ChaveAcessoParser.isContingencyEmission(chaveAcesso)) {
+        // A note emitted in contingency (tpEmis != 1) with an INTACT chave (valid DV) that we
+        // couldn't retrieve — SEFAZ served nothing, or an empty DANFE — is "not transmitted yet"
+        // (the store emitted it offline, up to 72h to send), NOT an app failure. Park it
+        // CONTINGENCY_PENDING so the resync sweeper re-fetches it within the window; past 72h it
+        // becomes FAILED_PARSE. A corrupted chave (bad DV) is excluded — it would never resolve.
+        if (isRecoverableContingency(chaveAcesso)) {
             return CONTINGENCY_PENDING_REASON + ":";
         }
         return ex.getMessageKey() + ":" + String.join(",", ex.getArguments());
+    }
+
+    /**
+     * A contingency note (tpEmis != 1) whose chave is intact (valid mod-11 DV): a fetch/parse
+     * failure for it is almost always "SEFAZ doesn't have it yet", so it's recoverable via the
+     * resync sweeper within the window. A bad-DV chave is corruption (OCR/typo), not contingency —
+     * it must stay a hard failure, never parked as pending (it would never resolve).
+     */
+    static boolean isRecoverableContingency(String chaveAcesso) {
+        return chaveAcesso != null
+                && ChaveAcessoParser.hasValidCheckDigit(chaveAcesso)
+                && ChaveAcessoParser.isContingencyEmission(chaveAcesso);
     }
 
     /**
@@ -580,12 +595,17 @@ public class ReceiptIngestionService {
                             // Admin/auto retries re-enter here with the ORIGINAL diagnosis still on the
                             // row — a repeated failure must not spam the owner (only the first one pings).
                             var firstDiagnosis = receipt.getParseErrorReason() == null;
+                            // A fetch/solve failure for an intact contingency chave means "SEFAZ
+                            // doesn't have it yet" — recoverable, not a dead end. Park it pending
+                            // (the sweeper gives up after the 72h window) instead of failing now.
+                            var contingency = isRecoverableContingency(receipt.getChaveAcesso());
                             if (shouldOverwriteReason(receipt, ex)) {
-                                receipt.setParseErrorReason(failureReason(ex));
+                                receipt.setParseErrorReason(contingency ? CONTINGENCY_PENDING_REASON + ":" : failureReason(ex));
                             }
-                            receipt.setStatus(ReceiptStatus.FAILED_PARSE);
+                            receipt.setStatus(contingency ? ReceiptStatus.CONTINGENCY_PENDING : ReceiptStatus.FAILED_PARSE);
                             receiptRepository.save(receipt);
-                            if (firstDiagnosis) notifyFailedIfSlow(receipt);
+                            // CONTINGENCY_PENDING is not a failure (note not on SEFAZ yet) — don't ping the owner.
+                            if (!contingency && firstDiagnosis) notifyFailedIfSlow(receipt);
                         }
                     }));
         } catch (RuntimeException inner) {
