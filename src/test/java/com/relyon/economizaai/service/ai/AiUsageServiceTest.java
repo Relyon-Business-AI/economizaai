@@ -68,6 +68,18 @@ class AiUsageServiceTest {
     }
 
     @Test
+    void modelComparison_days0_usesAllTimeQueries() {
+        when(usageRepository.summarizeByModelAllTime()).thenReturn(List.<Object[]>of(
+                new Object[]{"claude-haiku-4-5", 5L, 1000L, 500L, new BigDecimal("0.02"), 5L, 700.0}));
+        when(findingRepository.statsByModelAllTime()).thenReturn(List.<Object[]>of());
+
+        var result = service.modelComparison(0);
+
+        assertEquals(1, result.size());
+        assertEquals("claude-haiku-4-5", result.get(0).model());
+    }
+
+    @Test
     void modelComparison_handlesModelWithoutReviewedFindings() {
         when(usageRepository.summarizeByModel(any(LocalDateTime.class))).thenReturn(List.<Object[]>of(
                 new Object[]{"gpt-5-nano", 10L, 5000L, 1000L, new BigDecimal("0.01"), 10L, 400.0}));

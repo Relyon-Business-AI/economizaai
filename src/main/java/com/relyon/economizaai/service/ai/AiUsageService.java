@@ -72,10 +72,13 @@ public class AiUsageService {
      */
     @Transactional(readOnly = true)
     public List<ModelComparison> modelComparison(int days) {
-        var since = days == 0 ? null : LocalDateTime.now().minusDays(Math.max(1, Math.min(days, 3650)));
-        var findingStats = findingRepository.statsByModel(since).stream()
+        var allTime = days == 0;
+        var since = allTime ? null : LocalDateTime.now().minusDays(Math.max(1, Math.min(days, 3650)));
+        var findingRows = allTime ? findingRepository.statsByModelAllTime() : findingRepository.statsByModel(since);
+        var usageRows = allTime ? usageRepository.summarizeByModelAllTime() : usageRepository.summarizeByModel(since);
+        var findingStats = findingRows.stream()
                 .collect(java.util.stream.Collectors.toMap(row -> String.valueOf(row[0]), row -> row));
-        return usageRepository.summarizeByModel(since).stream().map(usageRow -> {
+        return usageRows.stream().map(usageRow -> {
             var model = String.valueOf(usageRow[0]);
             var calls = ((Number) usageRow[1]).longValue();
             var cost = toBigDecimal(usageRow[4]);

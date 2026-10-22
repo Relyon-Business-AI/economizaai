@@ -37,11 +37,22 @@ public interface AiUsageLogRepository extends JpaRepository<AiUsageLog, UUID> {
                coalesce(sum(u.costUsd),0), coalesce(sum(case when u.success then 1 else 0 end),0),
                avg(u.durationMs)
         FROM AiUsageLog u
-        WHERE u.model IS NOT NULL AND (:since IS NULL OR u.createdAt >= :since)
+        WHERE u.model IS NOT NULL AND u.createdAt >= :since
         GROUP BY u.model
         ORDER BY sum(u.costUsd) DESC
     """)
     List<Object[]> summarizeByModel(@Param("since") LocalDateTime since);
+
+    @Query("""
+        SELECT u.model, count(u), coalesce(sum(u.inputTokens),0), coalesce(sum(u.outputTokens),0),
+               coalesce(sum(u.costUsd),0), coalesce(sum(case when u.success then 1 else 0 end),0),
+               avg(u.durationMs)
+        FROM AiUsageLog u
+        WHERE u.model IS NOT NULL
+        GROUP BY u.model
+        ORDER BY sum(u.costUsd) DESC
+    """)
+    List<Object[]> summarizeByModelAllTime();
 
     /** day, calls, costUsd — daily trend line. */
     @Query(value = """
