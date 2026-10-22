@@ -98,7 +98,7 @@ public class PhotoReceiptExtractionService {
             // HTTP untransacted — a chamada de visão leva segundos. Anthropic (mesma
             // infra do resto da IA): ledger/caps no AiGateway + ledger por-usuário aqui.
             var raw = aiGateway.completeWithImage(AiActivity.PHOTO_EXTRACT, aiGateway.extractorModel(),
-                    systemPrompt(), "Extraia os itens desta nota.", fileBytes(file), mediaType(file), 8000);
+                    systemPrompt(), "Extraia os itens desta nota.", fileBytes(file), mediaType(file), 8000, user.getId());
             extraction = parseJson(raw);
             paidApiGuard.recordSuccess(user.getId(), PaidApiService.LLM_VISION, null, "anthropic");
         } catch (AiGateway.AiUnavailableException ex) {
