@@ -8,7 +8,20 @@ package com.relyon.economizaai.exception;
  * of dead notas must never trip the breaker and starve the recoverable ones.
  */
 public class InfosimplesNoDataException extends ReceiptParseException {
+
+    /** The provider result code (602/607/612), or 0 when none applies (empty data, local skip). */
+    private final int code;
+
     public InfosimplesNoDataException(String reason) {
+        this(reason, 0);
+    }
+
+    public InfosimplesNoDataException(String reason, int code) {
         super(reason);
+        this.code = code;
+    }
+
+    public int getCode() {
+        return code;
     }
 }

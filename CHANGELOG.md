@@ -1,5 +1,17 @@
 # economizai — what's new
 
+## 2026-10-22 — Infosimples: por que falha (ledger) + chave corrompida não gasta chamada
+Investigação das falhas do Infosimples: **os erros 607 "parâmetro inválido" eram
+todos chaves com dígito verificador inválido** — leitura do QR corrompida. Dois ajustes:
+
+- **Fim da cegueira:** o ledger `paid_api_call` agora grava `result_code` (migration
+  V118). Dá pra distinguir 607 (chave inválida), 612 (nota não existe) e 609 (provedor
+  instável) — antes só tínhamos sucesso/falha.
+- **Não gastar à toa:** antes de chamar o Infosimples, validamos o DV (mod-11) da
+  chave. Chave corrompida **não** dispara a chamada paga (sempre daria 607) e falha
+  com mensagem acionável *"A leitura desta nota veio incompleta. Escaneie o QR code
+  da nota novamente."* (`chave-corrupted`) — em vez do genérico "confirme com o mercado".
+
 ## 2026-10-22 — Comparação de IA: latência + benchmark de acurácia por modelo
 - Latência: cada chamada de IA registra o tempo (ms); o painel de comparação ganha
   "segundos/chamada" por modelo (velocidade).

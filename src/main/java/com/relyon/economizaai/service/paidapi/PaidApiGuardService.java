@@ -124,14 +124,24 @@ public class PaidApiGuardService {
 
     /** Records a successful paid call and closes the breaker for the service. */
     public void recordSuccess(UUID userId, PaidApiService service, String uf, String provider) {
+        recordSuccess(userId, service, uf, provider, null);
+    }
+
+    /** As {@link #recordSuccess(UUID, PaidApiService, String, String)} but with the provider result code. */
+    public void recordSuccess(UUID userId, PaidApiService service, String uf, String provider, Integer resultCode) {
         recentFailures.remove(service);
         openUntil.remove(service);
-        persist(userId, service, uf, provider, true);
+        persist(userId, service, uf, provider, true, resultCode);
     }
 
     /** Records a failed paid call and trips the breaker if failures cross the threshold. */
     public void recordFailure(UUID userId, PaidApiService service, String uf, String provider) {
-        persist(userId, service, uf, provider, false);
+        recordFailure(userId, service, uf, provider, null);
+    }
+
+    /** As {@link #recordFailure(UUID, PaidApiService, String, String)} but with the provider result code. */
+    public void recordFailure(UUID userId, PaidApiService service, String uf, String provider, Integer resultCode) {
+        persist(userId, service, uf, provider, false, resultCode);
         registerFailureAndMaybeTrip(service);
     }
 
@@ -141,7 +151,12 @@ public class PaidApiGuardService {
      * retry batch of dead notas must never trip the circuit and starve recoverable ones.
      */
     public void recordDeterministicFailure(UUID userId, PaidApiService service, String uf, String provider) {
-        persist(userId, service, uf, provider, false);
+        recordDeterministicFailure(userId, service, uf, provider, null);
+    }
+
+    /** As {@link #recordDeterministicFailure(UUID, PaidApiService, String, String)} but with the provider result code. */
+    public void recordDeterministicFailure(UUID userId, PaidApiService service, String uf, String provider, Integer resultCode) {
+        persist(userId, service, uf, provider, false, resultCode);
     }
 
     private void registerFailureAndMaybeTrip(PaidApiService service) {
@@ -165,7 +180,8 @@ public class PaidApiGuardService {
         }
     }
 
-    private void persist(UUID userId, PaidApiService service, String uf, String provider, boolean success) {
+    private void persist(UUID userId, PaidApiService service, String uf, String provider,
+                         boolean success, Integer resultCode) {
         try {
             repository.save(PaidApiCall.builder()
                     .userId(userId)
@@ -173,6 +189,7 @@ public class PaidApiGuardService {
                     .uf(uf)
                     .provider(provider)
                     .success(success)
+                    .resultCode(resultCode)
                     .estimatedCostCents(service.defaultCostCents())
                     .build());
         } catch (RuntimeException ex) {

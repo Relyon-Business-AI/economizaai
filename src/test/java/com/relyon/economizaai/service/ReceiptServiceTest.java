@@ -530,6 +530,23 @@ class ReceiptServiceTest {
     }
 
     @Test
+    void get_failedCorruptedChave_showsFriendlyRescanMessage() {
+        // A chave rejected for a bad check digit surfaces an actionable "re-scan" message,
+        // not a raw code and not the misleading "confirme com o mercado" of a genuine not-found.
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        receipt.setParseErrorReason("receipt.parse.failed:chave-corrupted");
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(localizedMessageService.translate("chave-corrupted"))
+                .thenReturn("A leitura desta nota veio incompleta. Escaneie o QR code da nota novamente.");
+
+        var response = receiptService.get(user, receipt.getId());
+
+        assertEquals("A leitura desta nota veio incompleta. Escaneie o QR code da nota novamente.",
+                response.parseErrorMessage());
+    }
+
+    @Test
     void submit_persistsProcessingAndDispatchesIngestion() {
         var user = buildUser();
         when(receiptRepository.findByHouseholdIdAndChaveAcesso(any(), eq(CHAVE_RS))).thenReturn(Optional.empty());
