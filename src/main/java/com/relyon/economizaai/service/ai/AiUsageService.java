@@ -78,7 +78,7 @@ public class AiUsageService {
         return usageRepository.summarizeByModel(since).stream().map(usageRow -> {
             var model = String.valueOf(usageRow[0]);
             var calls = ((Number) usageRow[1]).longValue();
-            var cost = (BigDecimal) usageRow[4];
+            var cost = toBigDecimal(usageRow[4]);
             var successCalls = ((Number) usageRow[5]).longValue();
             var avgLatencyMs = usageRow[6] == null ? null
                     : BigDecimal.valueOf(((Number) usageRow[6]).doubleValue()).setScale(0, RoundingMode.HALF_UP);
@@ -93,7 +93,7 @@ public class AiUsageService {
                 created = ((Number) fs[1]).longValue();
                 approved = ((Number) fs[2]).longValue();
                 rejected = ((Number) fs[3]).longValue();
-                avgConfidence = ((BigDecimal) fs[4]).setScale(3, RoundingMode.HALF_UP);
+                avgConfidence = toBigDecimal(fs[4]).setScale(3, RoundingMode.HALF_UP);
                 var reviewed = approved + rejected;
                 acceptanceRate = reviewed == 0 ? null
                         : BigDecimal.valueOf(100.0 * approved / reviewed).setScale(1, RoundingMode.HALF_UP);
@@ -101,6 +101,13 @@ public class AiUsageService {
             return new ModelComparison(model, aiProviderFor(model), calls, cost, avgCostPerCall, successRate,
                     avgLatencyMs, created, approved, rejected, acceptanceRate, avgConfidence);
         }).toList();
+    }
+
+    /** Agregados do Hibernate variam entre BigDecimal/Double/Long — extrai robusto. */
+    private static BigDecimal toBigDecimal(Object value) {
+        if (value == null) return BigDecimal.ZERO;
+        if (value instanceof BigDecimal bigDecimal) return bigDecimal;
+        return BigDecimal.valueOf(((Number) value).doubleValue());
     }
 
     private String aiProviderFor(String model) {

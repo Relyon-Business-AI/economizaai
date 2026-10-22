@@ -52,6 +52,22 @@ class AiUsageServiceTest {
     }
 
     @Test
+    void modelComparison_handlesDoubleAggregatesFromHibernate() {
+        // Hibernate pode devolver avg()/sum() como Double — não pode estourar ClassCastException.
+        when(usageRepository.summarizeByModel(any(LocalDateTime.class))).thenReturn(List.<Object[]>of(
+                new Object[]{"gpt-5", 10L, 5000L, 1000L, 0.15d, 10L, 950.0d}));  // custo como Double
+        when(findingRepository.statsByModel(any(LocalDateTime.class))).thenReturn(List.<Object[]>of(
+                new Object[]{"gpt-5", 5L, 4L, 1L, 0.88d}));  // avgConfidence como Double
+
+        var result = service.modelComparison(30);
+
+        assertEquals(1, result.size());
+        assertEquals(0, result.get(0).costUsd().compareTo(new BigDecimal("0.15")));
+        assertEquals(0, result.get(0).avgConfidence().compareTo(new BigDecimal("0.880")));
+        assertEquals(0, result.get(0).acceptanceRatePct().compareTo(new BigDecimal("80.0")));
+    }
+
+    @Test
     void modelComparison_handlesModelWithoutReviewedFindings() {
         when(usageRepository.summarizeByModel(any(LocalDateTime.class))).thenReturn(List.<Object[]>of(
                 new Object[]{"gpt-5-nano", 10L, 5000L, 1000L, new BigDecimal("0.01"), 10L, 400.0}));
