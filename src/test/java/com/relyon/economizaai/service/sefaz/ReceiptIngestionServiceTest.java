@@ -272,10 +272,34 @@ class ReceiptIngestionServiceTest {
     }
 
     @Test
+    void ingestPrefetched_contingencyChave_allPathsFail_parksAsContingencyPending() {
+        // Broadened contingency handling: when the device parse AND the Infosimples fallback both
+        // fail for an INTACT (valid-DV) contingency note, it's "not on SEFAZ yet" — park it
+        // CONTINGENCY_PENDING for the resync sweeper instead of a hard FAILED_PARSE.
+        var contingencyChave = "43250612345678000190650010000012349000012340"; // tpEmis=9, valid DV
+        var receipt = processingReceipt();
+        receipt.setChaveAcesso(contingencyChave);
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<xml/>", contingencyChave, UnidadeFederativa.RS, null);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fromClientContent(any(), eq(contingencyChave), eq(UnidadeFederativa.RS), any()))
+                .thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any()))
+                .thenThrow(new ReceiptParseException("client-content-chave-mismatch"));
+        when(sefazIngestionService.fetchViaInfosimplesFallback(eq(contingencyChave), eq(UnidadeFederativa.RS), any()))
+                .thenThrow(new SefazFetchException("RS"));
+
+        service.ingestPrefetched(receipt.getId(), contingencyChave, "<xml/>");
+
+        assertEquals(ReceiptStatus.CONTINGENCY_PENDING, receipt.getStatus());
+    }
+
+    @Test
     void ingestPrefetched_contingencyNoItems_staysContingencyPending_noInfosimplesSpend() {
         // A contingency note with no items on-device isn't a rescuable failure (SEFAZ doesn't
         // have it yet) — it must stay CONTINGENCY_PENDING, NOT burn an Infosimples query.
-        var contingencyChave = CHAVE_RS.substring(0, 34) + "9" + CHAVE_RS.substring(35); // tpEmis != 1
+        // tpEmis=9 (contingency) with a VALID check digit — a corrupted-DV chave is intentionally
+        // NOT treated as recoverable contingency (see ReceiptIngestionService.isRecoverableContingency).
+        var contingencyChave = "43250612345678000190650010000012349000012340";
         var receipt = processingReceipt();
         receipt.setChaveAcesso(contingencyChave);
         var fetched = new SefazIngestionService.FetchedDocument(null, "<xml/>", contingencyChave, UnidadeFederativa.RS, null);

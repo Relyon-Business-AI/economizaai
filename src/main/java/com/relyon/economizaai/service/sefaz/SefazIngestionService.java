@@ -6,6 +6,7 @@ import com.relyon.economizaai.exception.ExperimentalPortalEvidence;
 import com.relyon.economizaai.exception.ExperimentalCaptchaWallException;
 import com.relyon.economizaai.exception.ExperimentalStateFailedException;
 import com.relyon.economizaai.exception.InfosimplesNoDataException;
+import com.relyon.economizaai.exception.InfosimplesProviderException;
 import com.relyon.economizaai.exception.InvalidQrPayloadException;
 import com.relyon.economizaai.exception.PaidApiBudgetExceededException;
 import com.relyon.economizaai.exception.PaidApiQuotaExceededException;
@@ -337,22 +338,35 @@ public class SefazIngestionService {
      * success or failure — is written to the ledger. A failure trips the breaker.
      */
     private FetchedDocument fetchViaInfosimples(String chave, UnidadeFederativa uf, UUID userId) {
+        // A chave whose mod-11 check digit is wrong was corrupted on read (QR decode / typo):
+        // Infosimples ALWAYS rejects it as 607 "parâmetro inválido". Don't spend a paid call
+        // on a dead chave — fail fast with an honest "re-scan" reason (no ledger row: no call).
+        if (!ChaveAcessoParser.hasValidCheckDigit(chave)) {
+            log.warn("infosimples.skip.invalid_chave uf={} chave={} — DV inválido (leitura corrompida), sem chamada paga",
+                    uf, abbrev(chave));
+            throw new ReceiptParseException("chave-corrupted");
+        }
         paidApiGuard.assertUnderGlobalBudget();
         paidApiGuard.assertCircuitClosed(PaidApiService.INFOSIMPLES);
         paidApiGuard.assertWithinDailyCap(userId, PaidApiService.INFOSIMPLES);
         try {
             var preParsed = infosimples.get().fetchParsed(chave, uf);
-            paidApiGuard.recordSuccess(userId, PaidApiService.INFOSIMPLES, uf.name(), "infosimples");
+            paidApiGuard.recordSuccess(userId, PaidApiService.INFOSIMPLES, uf.name(), "infosimples", 200);
             log.info("sefaz.fetch.infosimples.ok uf={} chave={} items={}",
                     uf, abbrev(chave), preParsed.items().size());
             return new FetchedDocument(null, null, chave, uf, preParsed.sourceUrl(), preParsed);
         } catch (InfosimplesNoDataException ex) {
             // "Nota não existe/chave inválida" é resposta válida do provedor — entra no ledger
             // mas não derruba o breaker (senão um lote de notas mortas starva as vivas).
-            paidApiGuard.recordDeterministicFailure(userId, PaidApiService.INFOSIMPLES, uf.name(), "infosimples");
+            paidApiGuard.recordDeterministicFailure(userId, PaidApiService.INFOSIMPLES, uf.name(), "infosimples", ex.getCode());
+            throw ex;
+        } catch (InfosimplesProviderException ex) {
+            // Provider/portal momentarily unstable (609…) — counts toward the breaker.
+            paidApiGuard.recordFailure(userId, PaidApiService.INFOSIMPLES, uf.name(), "infosimples", ex.getCode());
             throw ex;
         } catch (RuntimeException ex) {
-            paidApiGuard.recordFailure(userId, PaidApiService.INFOSIMPLES, uf.name(), "infosimples");
+            // No provider code (I/O error, timeout) — record null.
+            paidApiGuard.recordFailure(userId, PaidApiService.INFOSIMPLES, uf.name(), "infosimples", null);
             throw ex;
         }
     }

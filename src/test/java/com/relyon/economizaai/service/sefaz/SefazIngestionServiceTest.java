@@ -3,6 +3,7 @@ package com.relyon.economizaai.service.sefaz;
 import com.relyon.economizaai.exception.CaptchaUnavailableException;
 import com.relyon.economizaai.exception.ExperimentalCaptchaWallException;
 import com.relyon.economizaai.exception.ExperimentalStateFailedException;
+import com.relyon.economizaai.exception.InfosimplesNoDataException;
 import com.relyon.economizaai.exception.InvalidQrPayloadException;
 import com.relyon.economizaai.exception.ReceiptParseException;
 import com.relyon.economizaai.exception.SefazDeterministicFetchException;
@@ -52,7 +53,7 @@ import static org.mockito.Mockito.when;
 class SefazIngestionServiceTest {
 
     // UF code 43 → RS.
-    private static final String CHAVE_RS = "43260412345678000190650010000123451123456780";
+    private static final String CHAVE_RS = "43260412345678000190650010000123451123456782";
     // UF code 42 → SC.
     private static final String CHAVE_SC = "42260650552333000100650080001188891101255904";
     // UF code 35 → SP.
@@ -520,7 +521,7 @@ class SefazIngestionServiceTest {
     // ── Experimental fallback chain (states without a dedicated adapter) ──────
 
     // UF code 29 → BA (no dedicated adapter — served by the experimental chain).
-    private static final String CHAVE_BA = "29260412345678000190650010000123451123456780";
+    private static final String CHAVE_BA = "29260412345678000190650010000123451123456783";
     private static final String QR_URL_BA = "https://nfe.sefaz.ba.gov.br/servicos/nfce/qrcode.aspx?p="
             + CHAVE_BA + "|2|1|1|deadbeef";
 
@@ -1102,15 +1103,49 @@ class SefazIngestionServiceTest {
 
     @Test
     void fetchViaInfosimplesFallback_returnsPreParsedOnSuccess() {
+        // CHAVE_SP has a valid check digit — the fallback proceeds to the provider and records 200.
         var infosimples = mock(InfosimplesService.class);
         var preParsed = sampleParsed();
-        when(infosimples.fetchParsed(eq(CHAVE_RS), eq(UnidadeFederativa.RS))).thenReturn(preParsed);
-        var service = new SefazIngestionService(List.of(mockAdapterFor(UnidadeFederativa.RS)), Optional.of(infosimples),
+        when(infosimples.fetchParsed(eq(CHAVE_SP), eq(UnidadeFederativa.SP))).thenReturn(preParsed);
+        var service = new SefazIngestionService(List.of(mockAdapterFor(UnidadeFederativa.SP)), Optional.of(infosimples),
                 paidApiGuard, stateCoverage, rsChaveReconsult, prefetchPolicy, htmlReceiptRescue);
 
-        var fetched = service.fetchViaInfosimplesFallback(CHAVE_RS, UnidadeFederativa.RS, null);
+        var fetched = service.fetchViaInfosimplesFallback(CHAVE_SP, UnidadeFederativa.SP, null);
 
         assertSame(preParsed, fetched.preParsed());
+        verify(paidApiGuard).recordSuccess(null, PaidApiService.INFOSIMPLES, "SP", "infosimples", 200);
+    }
+
+    @Test
+    void fetchViaInfosimplesFallback_corruptedChave_skipsPaidCall() {
+        // A chave with a broken mod-11 check digit (QR read corrupted) must NOT reach the paid
+        // provider — it would always 607. Fail fast with "chave-corrupted", no ledger row.
+        var corrupted = CHAVE_SP.substring(0, 43) + (CHAVE_SP.charAt(43) == '0' ? '1' : '0');
+        var infosimples = mock(InfosimplesService.class);
+        var service = new SefazIngestionService(List.of(mockAdapterFor(UnidadeFederativa.SP)), Optional.of(infosimples),
+                paidApiGuard, stateCoverage, rsChaveReconsult, prefetchPolicy, htmlReceiptRescue);
+
+        var thrown = assertThrows(ReceiptParseException.class,
+                () -> service.fetchViaInfosimplesFallback(corrupted, UnidadeFederativa.SP, null));
+
+        assertEquals("chave-corrupted", thrown.getArguments()[0]);
+        verifyNoInteractions(infosimples);
+        verifyNoInteractions(paidApiGuard);
+    }
+
+    @Test
+    void fetchViaInfosimplesFallback_recordsDeterministicCodeOnNoData() {
+        // Item 2: the provider's result code (612) lands in the ledger, no longer blind.
+        var infosimples = mock(InfosimplesService.class);
+        when(infosimples.fetchParsed(eq(CHAVE_SP), eq(UnidadeFederativa.SP)))
+                .thenThrow(new InfosimplesNoDataException("infosimples.not-found", 612));
+        var service = new SefazIngestionService(List.of(mockAdapterFor(UnidadeFederativa.SP)), Optional.of(infosimples),
+                paidApiGuard, stateCoverage, rsChaveReconsult, prefetchPolicy, htmlReceiptRescue);
+
+        assertThrows(InfosimplesNoDataException.class,
+                () -> service.fetchViaInfosimplesFallback(CHAVE_SP, UnidadeFederativa.SP, null));
+
+        verify(paidApiGuard).recordDeterministicFailure(null, PaidApiService.INFOSIMPLES, "SP", "infosimples", 612);
     }
 
     @Test

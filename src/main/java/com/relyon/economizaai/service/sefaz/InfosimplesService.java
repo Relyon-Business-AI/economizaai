@@ -3,6 +3,7 @@ package com.relyon.economizaai.service.sefaz;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.relyon.economizaai.exception.InfosimplesNoDataException;
+import com.relyon.economizaai.exception.InfosimplesProviderException;
 import com.relyon.economizaai.exception.ReceiptParseException;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.paidapi.InfosimplesAlertService;
@@ -152,14 +153,14 @@ public class InfosimplesService {
             // reason key splits the user message: "infosimples.not-found" (final) vs
             // "infosimples.error" (provider instável → tente de novo mais tarde).
             if (DETERMINISTIC_NO_DATA_CODES.contains(code)) {
-                throw new InfosimplesNoDataException("infosimples.not-found");
+                throw new InfosimplesNoDataException("infosimples.not-found", code);
             }
-            throw new ReceiptParseException("infosimples.error");
+            throw new InfosimplesProviderException(code);
         }
         if (response.data() == null || response.data().isEmpty()) {
             log.warn("infosimples.fetch.empty chave={} uf={} message='{}'",
                     abbrev(chave), ufCode, response.codeMessage());
-            throw new InfosimplesNoDataException("infosimples.not-found");
+            throw new InfosimplesNoDataException("infosimples.not-found", response.code());
         }
         log.info("infosimples.fetch.ok chave={} uf={}", abbrev(chave), ufCode);
         return toParsedReceipt(chave, response.data().get(0));

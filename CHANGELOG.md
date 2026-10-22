@@ -1,5 +1,31 @@
 # economizai — what's new
 
+## 2026-10-22 — Nota de contingência (loja offline) não falha mais na hora
+Uma nota emitida em **contingência** (`tpEmis≠1` — o caixa estava sem internet) só é
+transmitida à SEFAZ depois (até 72h). Se o usuário escaneia na hora, a SEFAZ ainda não
+tem a nota → antes isso virava `FAILED_PARSE` (perdia a nota). Agora:
+
+- Quando **todos os caminhos de busca falham** e a chave é de contingência **com DV
+  válido**, a nota vira `CONTINGENCY_PENDING` (mensagem transparente "aguardando SEFAZ,
+  aparece em até 72h", sem botão de retry) em vez de `FAILED_PARSE`.
+- O `ContingencyResyncSweeper` (a cada 6h, janela 72h) **re-busca sozinho** — itens
+  apareceram → `PENDING_CONFIRMATION`; passou de 72h sem aparecer → aí sim `FAILED_PARSE`.
+- Como guardamos o QR, isso recupera a nota **sem a nota física** (cobre o caso de
+  escanear no caixa e jogar o papel fora). Chave corrompida (DV inválido) **não** entra
+  aqui — continua falha honesta de "re-escaneie".
+
+## 2026-10-22 — Infosimples: por que falha (ledger) + chave corrompida não gasta chamada
+Investigação das falhas do Infosimples: **os erros 607 "parâmetro inválido" eram
+todos chaves com dígito verificador inválido** — leitura do QR corrompida. Dois ajustes:
+
+- **Fim da cegueira:** o ledger `paid_api_call` agora grava `result_code` (migration
+  V118). Dá pra distinguir 607 (chave inválida), 612 (nota não existe) e 609 (provedor
+  instável) — antes só tínhamos sucesso/falha.
+- **Não gastar à toa:** antes de chamar o Infosimples, validamos o DV (mod-11) da
+  chave. Chave corrompida **não** dispara a chamada paga (sempre daria 607) e falha
+  com mensagem acionável *"A leitura desta nota veio incompleta. Escaneie o QR code
+  da nota novamente."* (`chave-corrupted`) — em vez do genérico "confirme com o mercado".
+
 ## 2026-10-22 — Comparação de IA: latência + benchmark de acurácia por modelo
 - Latência: cada chamada de IA registra o tempo (ms); o painel de comparação ganha
   "segundos/chamada" por modelo (velocidade).

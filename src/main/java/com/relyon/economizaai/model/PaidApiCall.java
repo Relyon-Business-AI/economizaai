@@ -57,6 +57,11 @@ public class PaidApiCall {
     @Column(name = "estimated_cost_cents", nullable = false)
     private int estimatedCostCents;
 
+    // Provider result code for this call (Infosimples 200/607/612/609…). Null when the
+    // provider gave no code — I/O errors, timeouts, or a call we skipped locally.
+    @Column(name = "result_code")
+    private Integer resultCode;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
