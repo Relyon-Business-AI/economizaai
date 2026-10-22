@@ -44,13 +44,14 @@ class AiSubcategorySuggestionServiceTest {
     @Mock private AiFineCategoryClassifier classifier;
     @Mock private CategoryResolver categoryResolver;
     @Mock private ReceiptItemRepository receiptItemRepository;
+    @Mock private AiGateway aiGateway;
 
     private AiSubcategorySuggestionService service;
 
     @BeforeEach
     void setUp() {
         service = new AiSubcategorySuggestionService(
-                productRepository, findingRepository, classifier, categoryResolver, receiptItemRepository);
+                productRepository, findingRepository, classifier, categoryResolver, receiptItemRepository, aiGateway);
         lenient().when(classifier.isEnabled()).thenReturn(true);
         lenient().when(categoryResolver.groupIds()).thenReturn(Set.of(UUID.randomUUID()));
     }

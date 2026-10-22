@@ -13,6 +13,7 @@ import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 /**
  * One row per AI API call, labeled by activity — the raw material for the admin
@@ -45,4 +46,12 @@ public class AiUsageLog extends BaseEntity {
 
     @Column(nullable = false)
     private boolean success;
+
+    /**
+     * The user whose action triggered this AI call — for the per-user COGS panel.
+     * NULL for admin/batch activities (rule/brand suggestion, consensus, enrichment
+     * sweeps) that aren't attributable to a single user.
+     */
+    @Column(name = "user_id")
+    private UUID userId;
 }

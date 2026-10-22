@@ -76,6 +76,7 @@ public class AiSubcategorySuggestionService {
     private final AiFineCategoryClassifier classifier;
     private final CategoryResolver categoryResolver;
     private final ReceiptItemRepository receiptItemRepository;
+    private final AiGateway aiGateway;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -320,6 +321,7 @@ public class AiSubcategorySuggestionService {
                 .payload(payload.toString())
                 .confidence(BigDecimal.valueOf(suggestion.confidence()).setScale(3, RoundingMode.HALF_UP))
                 .activity(AiActivity.FINE_CATEGORY_CLASSIFY)
+                .model(aiGateway.modelFor(AiActivity.FINE_CATEGORY_CLASSIFY))
                 .build();
     }
 

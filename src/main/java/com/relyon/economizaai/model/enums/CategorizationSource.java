@@ -18,5 +18,5 @@ public enum CategorizationSource {
     MERCHANT,            // inferred from the merchant type (e.g. pharmacy) when otherwise OTHER
     USER,                // explicit PATCH/create from an admin user
     CONSENSUS,           // graduated by ConsensusPromotionService (≥N households agreed)
-    LLM                  // enriched by the LLM teacher layer (LlmEnrichmentService)
+    LLM                  // categoria vinda da camada de IA (AiGateway)
 }

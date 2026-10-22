@@ -1,5 +1,51 @@
 # economizai — what's new
 
+## 2026-10-22 — Comparação entre modelos de IA + remoção de serviços legados
+- `GET /categorizer/ai/model-comparison?days=N`: por modelo, custo/volume/confiabilidade
+  (do usage log) + taxa de ACEITAÇÃO dos achados (qualidade). Cada achado agora guarda o
+  modelo que o produziu. É assim que se compara "mês do GPT" vs "mês do Claude".
+- Removidos os serviços OpenAI legados inertes (LlmEnrichmentService, LlmAuditorService,
+  OpenAiClient): substituídos pelo fallback de scan + varredura de sugestões.
+
+## 2026-10-22 — Falha de nota: nunca mais código técnico pro usuário
+A mensagem de uma nota que falhou (`parseErrorMessage`, mostrada na lista/detalhe)
+podia vazar um **código interno** — ex. *"...(motivo: client-content-chave-mismatch)"*,
+`no-items-found`, `mg-*`, `sc-*`, ou até um nome de classe (`SefazFetchException`).
+Corrigido na origem: `localizedParseError` **nunca** renderiza código técnico.
+
+- **Códigos internos de portal/parser** (instabilidade da SEFAZ, glitch de scraping)
+  → mensagem amigável **temporária**: *"O portal da SEFAZ do seu estado está instável
+  no momento e não conseguimos buscar os dados desta nota. Tente novamente mais tarde."*
+- **Motivos finais** (nota cancelada/inexistente) seguem com a mensagem própria
+  (*"...não adianta tentar de novo; confirme com o mercado"*) — inalterado.
+- **Motivo desconhecido** → genérico amigável (nunca o código).
+- FE não muda contrato — só o texto de `parseErrorMessage` ficou amigável em todos os casos.
+
+## 2026-10-22 — Custo de IA (LLM) no painel de custos + atribuição por usuário
+Admin. O painel de custos (`GET /admin/costs`) agora inclui o gasto de **IA/LLM**,
+que vivia num ledger separado (`ai_usage_log`, custo real por token em USD) e não
+aparecia junto com Infosimples/captcha/Twilio.
+
+- **`GET /admin/costs`** ganhou o campo **`ai`** (`AiCostSummary`): `totalReais`,
+  `userReais` (o que a ação do usuário dispara — foto + resgate de parse),
+  `platformReais` (custo compartilhado = categorização + varreduras admin, que é
+  **amortizável**), `activeUsers`, `platformPerUserReais` (platform ÷ usuários) e
+  `usdBrlRate`. Mudança aditiva. Taxa USD→BRL via `ECONOMIZAAI_COSTS_USD_BRL_RATE` (default 5,50).
+- **Atribuição:** `ai_usage_log` ganhou `user_id` (migration V115) — preenchido nas
+  chamadas de IA **do usuário** (extração por foto, resgate de HTML); categorização e
+  varreduras admin ficam sem usuário (custo de plataforma, por design).
+- **Modelo de custo pra precificar:** custo **direto por usuário** = Infosimples +
+  captcha + Twilio + LLM (foto/resgate) [já no painel por-usuário]; custo de
+  **plataforma** = categorização LLM, amortizável pelo nº de usuários.
+
+## 2026-10-22 — IA multi-provedor: toggle Claude/ChatGPT por tier no admin
+- `AiChatPort` agora tem duas implementações (Anthropic + OpenAI); o provedor+modelo
+  de cada tier (Volume/Julgamento) é editável em runtime no admin (Categorização →
+  Provedor de IA), sem redeploy. Novos endpoints `GET/PUT /categorizer/ai/providers`.
+- Fica tudo pronto esperando apenas `OPENAI_API_KEY`: setada a chave, o ChatGPT vira
+  opção selecionável nos toggles. Serviços legados OpenAI (enrichment/auditor) agora
+  default-OFF pra não acordarem sozinhos ao setar a key.
+
 ## 2026-10-21 — Nota falhada: usuário sabe se vale retentar ou se é final
 - As falhas do Infosimples deixaram de ser uma mensagem única. Agora:
   - **transitório** (portal/SEFAZ instável, ex. código 609) → `infosimples.error`:

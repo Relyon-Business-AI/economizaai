@@ -86,7 +86,7 @@ class PhotoReceiptExtractionServiceTest {
     void extract_buildsPendingPhotoReceiptExcludedFromIndexPath() throws Exception {
         when(aiGateway.isEnabled()).thenReturn(true);
         when(aiGateway.extractorModel()).thenReturn("claude-haiku");
-        when(aiGateway.completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt()))
+        when(aiGateway.completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt(), any()))
                 .thenReturn("""
                         {"is_receipt": true, "market_name": "Bar do Ze", "issued_at": "2026-07-15 15:45",
                          "total_amount": 47.00,
@@ -116,7 +116,7 @@ class PhotoReceiptExtractionServiceTest {
     void extract_rejectsNonReceiptImages() throws Exception {
         when(aiGateway.isEnabled()).thenReturn(true);
         when(aiGateway.extractorModel()).thenReturn("claude-haiku");
-        when(aiGateway.completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt()))
+        when(aiGateway.completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt(), any()))
                 .thenReturn("{\"is_receipt\": false}");
 
         assertThrows(InvalidReceiptPhotoException.class, () -> service.extract(user, photo()));
@@ -129,14 +129,14 @@ class PhotoReceiptExtractionServiceTest {
                 subscriptionGate, receiptRepository, receiptService, transactionTemplate, false, 60);
 
         assertThrows(PhotoExtractionUnavailableException.class, () -> disabled.extract(user, photo()));
-        verify(aiGateway, never()).completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt());
+        verify(aiGateway, never()).completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt(), any());
     }
 
     @Test
     void extract_llmFailure_recordsFailureAndSurfacesUnavailable() {
         when(aiGateway.isEnabled()).thenReturn(true);
         when(aiGateway.extractorModel()).thenReturn("claude-haiku");
-        when(aiGateway.completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt()))
+        when(aiGateway.completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt(), any()))
                 .thenThrow(new AiGateway.AiUnavailableException("timeout"));
 
         assertThrows(PhotoExtractionUnavailableException.class, () -> service.extract(user, photo()));

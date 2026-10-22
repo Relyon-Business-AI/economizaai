@@ -55,7 +55,7 @@ class HtmlReceiptRescueServiceTest {
     private void givenAiResponds(String json) {
         when(aiGateway.isEnabled()).thenReturn(true);
         when(aiGateway.extractorModel()).thenReturn("claude-haiku-4-5");
-        when(aiGateway.complete(eq(AiActivity.RECEIPT_RESCUE), anyString(), anyString(), anyString(), anyInt()))
+        when(aiGateway.complete(eq(AiActivity.RECEIPT_RESCUE), anyString(), anyString(), anyString(), anyInt(), any()))
                 .thenReturn(json);
     }
 
@@ -121,7 +121,7 @@ class HtmlReceiptRescueServiceTest {
                 argThat(userPrompt -> userPrompt.contains("ARROZ TIO JOAO")
                         && userPrompt.contains("Chave de acesso: " + CHAVE)
                         && !userPrompt.contains("<table>")
-                        && !userPrompt.contains("var tracker")), anyInt());
+                        && !userPrompt.contains("var tracker")), anyInt(), any());
     }
 
     @Test
@@ -154,7 +154,7 @@ class HtmlReceiptRescueServiceTest {
         doThrow(new PaidApiBudgetExceededException()).when(paidApiGuard).assertUnderGlobalBudget();
 
         assertNull(service(true).rescue(HTML, CHAVE, UnidadeFederativa.RS, SOURCE_URL, USER_ID));
-        verify(aiGateway, never()).complete(any(), anyString(), anyString(), anyString(), anyInt());
+        verify(aiGateway, never()).complete(any(), anyString(), anyString(), anyString(), anyInt(), any());
     }
 
     @Test
@@ -163,7 +163,7 @@ class HtmlReceiptRescueServiceTest {
 
         assertNull(service(true).rescue("<html><body>Erro</body></html>", CHAVE,
                 UnidadeFederativa.RS, SOURCE_URL, USER_ID));
-        verify(aiGateway, never()).complete(any(), anyString(), anyString(), anyString(), anyInt());
+        verify(aiGateway, never()).complete(any(), anyString(), anyString(), anyString(), anyInt(), any());
         verify(paidApiGuard, never()).recordSuccess(any(), any(), any(), any());
     }
 
@@ -171,7 +171,7 @@ class HtmlReceiptRescueServiceTest {
     void rescue_aiUnavailable_returnsNullWithoutPaidApiLedgerRow() {
         when(aiGateway.isEnabled()).thenReturn(true);
         when(aiGateway.extractorModel()).thenReturn("claude-haiku-4-5");
-        when(aiGateway.complete(any(), anyString(), anyString(), anyString(), anyInt()))
+        when(aiGateway.complete(any(), anyString(), anyString(), anyString(), anyInt(), any()))
                 .thenThrow(new AiGateway.AiUnavailableException("cap diario"));
 
         assertNull(service(true).rescue(HTML, CHAVE, UnidadeFederativa.RS, SOURCE_URL, USER_ID));
@@ -271,7 +271,7 @@ class HtmlReceiptRescueServiceTest {
         manyItems.append("]}");
         when(aiGateway.isEnabled()).thenReturn(true);
         when(aiGateway.extractorModel()).thenReturn("claude-haiku-4-5");
-        when(aiGateway.complete(any(), anyString(), anyString(), anyString(), anyInt()))
+        when(aiGateway.complete(any(), anyString(), anyString(), anyString(), anyInt(), any()))
                 .thenReturn(manyItems.toString());
         var cappedService = new HtmlReceiptRescueService(aiGateway, paidApiGuard, true, 2, 60000);
 

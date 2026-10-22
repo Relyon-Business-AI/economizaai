@@ -2,8 +2,9 @@ package com.relyon.economizaai.service.ai;
 
 import com.relyon.economizaai.model.AiUsageLog;
 import com.relyon.economizaai.model.enums.AiActivity;
+import com.relyon.economizaai.model.enums.AiModelTier;
+import com.relyon.economizaai.model.enums.AiProvider;
 import com.relyon.economizaai.repository.AiUsageLogRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -12,6 +13,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Single entry point for every AI call in the app. Responsibilities:
@@ -28,24 +30,30 @@ import java.util.Map;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class AiGateway {
 
-    /** USD per 1M tokens (input, output) — local estimate for the spend panel. */
-    private static final Map<String, double[]> PRICES_PER_MTOK = Map.of(
-            "claude-haiku-4-5", new double[]{1.0, 5.0},
-            "claude-sonnet-4-6", new double[]{3.0, 15.0},
-            "claude-opus-4-8", new double[]{5.0, 25.0});
+    /** USD per 1M tokens (input, output) — estimativa local pro painel de gastos. */
+    private static final Map<String, double[]> PRICES_PER_MTOK = new java.util.HashMap<>();
+    static {
+        // Anthropic
+        PRICES_PER_MTOK.put("claude-haiku-4-5", new double[]{1.0, 5.0});
+        PRICES_PER_MTOK.put("claude-sonnet-4-6", new double[]{3.0, 15.0});
+        PRICES_PER_MTOK.put("claude-opus-4-8", new double[]{5.0, 25.0});
+        // OpenAI (estimativa; só afeta o painel, não a cobrança real)
+        PRICES_PER_MTOK.put("gpt-5", new double[]{1.25, 10.0});
+        PRICES_PER_MTOK.put("gpt-5-mini", new double[]{0.25, 2.0});
+        PRICES_PER_MTOK.put("gpt-5-nano", new double[]{0.05, 0.40});
+        PRICES_PER_MTOK.put("gpt-4.1", new double[]{2.0, 8.0});
+        PRICES_PER_MTOK.put("gpt-4.1-mini", new double[]{0.40, 1.60});
+        PRICES_PER_MTOK.put("gpt-4o", new double[]{2.5, 10.0});
+        PRICES_PER_MTOK.put("gpt-4o-mini", new double[]{0.15, 0.60});
+        PRICES_PER_MTOK.put("o4-mini", new double[]{1.10, 4.40});
+    }
     private static final double[] DEFAULT_PRICE = {3.0, 15.0};
 
-    private final AnthropicChatAdapter chatAdapter;
+    private final Map<AiProvider, AiChatPort> adapters;
+    private final AiProviderSettingsService providerSettings;
     private final AiUsageLogRepository usageRepository;
-
-    @Value("${economizaai.ai.extractor-model:claude-haiku-4-5}")
-    private String extractorModel;
-
-    @Value("${economizaai.ai.curator-model:claude-sonnet-4-6}")
-    private String curatorModel;
 
     @Value("${economizaai.ai.daily-request-cap:300}")
     private int dailyRequestCap;
@@ -53,16 +61,64 @@ public class AiGateway {
     @Value("${economizaai.ai.budget-usd:0}")
     private double budgetUsd;
 
+    public AiGateway(java.util.List<AiChatPort> chatAdapters,
+                     AiProviderSettingsService providerSettings,
+                     AiUsageLogRepository usageRepository) {
+        this.adapters = chatAdapters.stream()
+                .collect(java.util.stream.Collectors.toMap(AiChatPort::provider, adapter -> adapter));
+        this.providerSettings = providerSettings;
+        this.usageRepository = usageRepository;
+    }
+
+    /** Ligado se QUALQUER provedor tem credencial — o adapter específico é validado por chamada. */
     public boolean isEnabled() {
-        return chatAdapter.isConfigured();
+        return adapters.values().stream().anyMatch(AiChatPort::isConfigured);
+    }
+
+    /** Se um provedor específico tem credencial (dirige o toggle do admin). */
+    public boolean providerConfigured(AiProvider provider) {
+        var adapter = adapters.get(provider);
+        return adapter != null && adapter.isConfigured();
     }
 
     public String extractorModel() {
-        return extractorModel;
+        return providerSettings.config(AiModelTier.EXTRACTOR).model();
     }
 
     public String curatorModel() {
-        return curatorModel;
+        return providerSettings.config(AiModelTier.CURATOR).model();
+    }
+
+    /** Modelo que serve esta atividade (pelo tier) — usado pra atribuir o achado ao modelo. */
+    public String modelFor(AiActivity activity) {
+        return providerSettings.config(activity.tier()).model();
+    }
+
+    /** Resolve o adapter que serve este modelo (via config de tier; fallback por prefixo). */
+    private AiChatPort adapterForModel(String model) {
+        var provider = providerForModel(model);
+        var adapter = adapters.get(provider);
+        if (adapter == null || !adapter.isConfigured()) {
+            throw new AiUnavailableException("Provedor de IA " + provider
+                    + " não configurado (falta a API key). Ajuste em Admin → Categorização → Provedor de IA.");
+        }
+        return adapter;
+    }
+
+    private AiProvider providerForModel(String model) {
+        if (model != null) {
+            if (model.equals(providerSettings.config(AiModelTier.EXTRACTOR).model())) {
+                return providerSettings.config(AiModelTier.EXTRACTOR).provider();
+            }
+            if (model.equals(providerSettings.config(AiModelTier.CURATOR).model())) {
+                return providerSettings.config(AiModelTier.CURATOR).provider();
+            }
+            var lower = model.toLowerCase();
+            if (lower.startsWith("gpt") || lower.startsWith("o1") || lower.startsWith("o3") || lower.startsWith("o4")) {
+                return AiProvider.OPENAI;
+            }
+        }
+        return AiProvider.ANTHROPIC;
     }
 
     public double budgetUsd() {
@@ -75,8 +131,14 @@ public class AiGateway {
      * surface that as a clean admin-facing message instead of a stack trace.
      */
     public String complete(AiActivity activity, String model, String systemPrompt, String userPrompt, int maxTokens) {
+        return complete(activity, model, systemPrompt, userPrompt, maxTokens, null);
+    }
+
+    /** As {@link #complete(AiActivity, String, String, String, int)} but attributes the cost to {@code userId}. */
+    public String complete(AiActivity activity, String model, String systemPrompt, String userPrompt, int maxTokens,
+                           UUID userId) {
         if (!isEnabled()) {
-            throw new AiUnavailableException("IA desabilitada: ANTHROPIC_API_KEY não configurada.");
+            throw new AiUnavailableException("IA desabilitada: nenhum provedor com API key configurada.");
         }
         var todayStart = LocalDate.now().atStartOfDay();
         var callsToday = usageRepository.countByCreatedAtAfter(todayStart);
@@ -85,15 +147,15 @@ public class AiGateway {
                     "Cap diário de chamadas de IA atingido (" + dailyRequestCap + "). Ajuste ECONOMIZAAI_AI_DAILY_REQUEST_CAP se necessário.");
         }
         try {
-            var result = chatAdapter.complete(model, systemPrompt, userPrompt, maxTokens);
-            recordUsage(activity, model, result.inputTokens(), result.outputTokens(), true);
+            var result = adapterForModel(model).complete(model, systemPrompt, userPrompt, maxTokens);
+            recordUsage(activity, model, result.inputTokens(), result.outputTokens(), true, userId);
             log.info("ai.call activity={} model={} in={} out={} cache_write={} cache_read={}", activity, model,
                     result.inputTokens(), result.outputTokens(), result.cacheWriteTokens(), result.cacheReadTokens());
             return result.text();
         } catch (AiUnavailableException unavailable) {
             throw unavailable;
         } catch (RuntimeException ex) {
-            recordUsage(activity, model, 0, 0, false);
+            recordUsage(activity, model, 0, 0, false, userId);
             log.warn("ai.call_failed activity={} model={} reason={}", activity, model, ex.getMessage());
             if (isCreditExhausted(ex)) {
                 // NOTHING is lost: the deterministic result stands and the pending
@@ -113,23 +175,29 @@ public class AiGateway {
      */
     public String completeWithImage(AiActivity activity, String model, String systemPrompt, String userPrompt,
                                     byte[] imageBytes, String imageMediaType, int maxTokens) {
+        return completeWithImage(activity, model, systemPrompt, userPrompt, imageBytes, imageMediaType, maxTokens, null);
+    }
+
+    /** As the 7-arg {@link #completeWithImage} but attributes the cost to {@code userId}. */
+    public String completeWithImage(AiActivity activity, String model, String systemPrompt, String userPrompt,
+                                    byte[] imageBytes, String imageMediaType, int maxTokens, UUID userId) {
         if (!isEnabled()) {
-            throw new AiUnavailableException("IA desabilitada: ANTHROPIC_API_KEY não configurada.");
+            throw new AiUnavailableException("IA desabilitada: nenhum provedor com API key configurada.");
         }
         var todayStart = LocalDate.now().atStartOfDay();
         if (usageRepository.countByCreatedAtAfter(todayStart) >= dailyRequestCap) {
             throw new AiUnavailableException("Cap diário de chamadas de IA atingido (" + dailyRequestCap + ").");
         }
         try {
-            var result = chatAdapter.completeWithImage(model, systemPrompt, userPrompt, imageBytes, imageMediaType, maxTokens);
-            recordUsage(activity, model, result.inputTokens(), result.outputTokens(), true);
+            var result = adapterForModel(model).completeWithImage(model, systemPrompt, userPrompt, imageBytes, imageMediaType, maxTokens);
+            recordUsage(activity, model, result.inputTokens(), result.outputTokens(), true, userId);
             log.info("ai.call activity={} model={} in={} out={} (vision)", activity, model,
                     result.inputTokens(), result.outputTokens());
             return result.text();
         } catch (AiUnavailableException unavailable) {
             throw unavailable;
         } catch (RuntimeException ex) {
-            recordUsage(activity, model, 0, 0, false);
+            recordUsage(activity, model, 0, 0, false, userId);
             log.warn("ai.call_failed activity={} model={} reason={}", activity, model, ex.getMessage());
             if (isCreditExhausted(ex)) {
                 throw new AiUnavailableException("Créditos da API de IA esgotados — recarregue em console.anthropic.com.");
@@ -145,7 +213,8 @@ public class AiGateway {
                 || message.contains("purchase credits") || message.contains("insufficient credit");
     }
 
-    private void recordUsage(AiActivity activity, String model, long inputTokens, long outputTokens, boolean success) {
+    private void recordUsage(AiActivity activity, String model, long inputTokens, long outputTokens, boolean success,
+                             UUID userId) {
         try {
             usageRepository.save(AiUsageLog.builder()
                     .activity(activity)
@@ -154,6 +223,7 @@ public class AiGateway {
                     .outputTokens((int) outputTokens)
                     .costUsd(estimateCostUsd(model, inputTokens, outputTokens))
                     .success(success)
+                    .userId(userId)
                     .build());
         } catch (RuntimeException ex) {
             log.warn("ai.usage_log_failed activity={} reason={}", activity, ex.getMessage());

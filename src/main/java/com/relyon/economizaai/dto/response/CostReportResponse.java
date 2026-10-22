@@ -23,12 +23,26 @@ public record CostReportResponse(
         BigDecimal infosimplesConsumoMes,
         BigDecimal infosimplesFranquiaMinima,
         List<ServiceSpendLine> byService,
-        List<StateSpendLine> byState) {
+        List<StateSpendLine> byState,
+        // LLM/AI spend over the window. Lives in a separate ledger (ai_usage_log,
+        // real token cost in USD) — converted to R$ here. Split between what a user's
+        // own action triggered (photo/rescue) and the shared platform cost
+        // (categorization + admin sweeps) which is amortized across active users.
+        AiCostSummary ai) {
 
     public record ServiceSpendLine(String service, long calls, long failures,
                                    long costCents, BigDecimal costReais) {
     }
 
     public record StateSpendLine(String uf, long calls, long costCents, BigDecimal costReais) {
+    }
+
+    public record AiCostSummary(
+            BigDecimal totalReais,            // all LLM cost in the window (user + platform)
+            BigDecimal userReais,             // attributable to a user's action (photo extract + HTML rescue)
+            BigDecimal platformReais,         // shared cost (categorization + admin sweeps) — amortizable
+            long activeUsers,                 // basis for amortizing the platform cost
+            BigDecimal platformPerUserReais,  // platformReais / activeUsers
+            BigDecimal usdBrlRate) {          // the conversion rate used (for transparency)
     }
 }

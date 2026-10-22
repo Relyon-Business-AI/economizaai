@@ -8,6 +8,7 @@ import com.anthropic.models.messages.ContentBlockParam;
 import com.anthropic.models.messages.ImageBlockParam;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.TextBlockParam;
+import com.relyon.economizaai.model.enums.AiProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -34,7 +35,13 @@ public class AnthropicChatAdapter implements AiChatPort {
 
     private volatile AnthropicClient client;
 
-    boolean isConfigured() {
+    @Override
+    public AiProvider provider() {
+        return AiProvider.ANTHROPIC;
+    }
+
+    @Override
+    public boolean isConfigured() {
         return apiKey != null && !apiKey.isBlank();
     }
 

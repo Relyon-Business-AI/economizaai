@@ -2,15 +2,18 @@ package com.relyon.economizaai.service.paidapi;
 
 import com.relyon.economizaai.config.PaidApiGuardProperties;
 import com.relyon.economizaai.model.enums.PaidApiService;
+import com.relyon.economizaai.repository.AiUsageLogRepository;
 import com.relyon.economizaai.repository.PaidApiCallRepository;
 import com.relyon.economizaai.repository.PaidApiCallRepository.ServiceSpend;
 import com.relyon.economizaai.repository.PaidApiCallRepository.StateSpend;
+import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.sefaz.InfosimplesService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -19,6 +22,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -27,13 +31,21 @@ class CostReportServiceTest {
 
     @Mock private PaidApiCallRepository repository;
     @Mock private InfosimplesService infosimples;
+    @Mock private AiUsageLogRepository aiUsageLogRepository;
+    @Mock private UserRepository userRepository;
     private CostReportService service;
 
     @BeforeEach
     void setUp() {
         var properties = new PaidApiGuardProperties();
         properties.setDailyGlobalBudgetCents(5000);
-        service = new CostReportService(repository, properties, Optional.of(infosimples));
+        service = new CostReportService(repository, properties, Optional.of(infosimples),
+                aiUsageLogRepository, userRepository);
+        ReflectionTestUtils.setField(service, "usdBrlRate", new BigDecimal("5.50"));
+        // AI ledger defaults (no spend) unless a test overrides — keeps the other tests focused.
+        lenient().when(aiUsageLogRepository.totalCostUsdSince(any())).thenReturn(BigDecimal.ZERO);
+        lenient().when(aiUsageLogRepository.platformCostUsdSince(any())).thenReturn(BigDecimal.ZERO);
+        lenient().when(userRepository.count()).thenReturn(0L);
     }
 
     @Test
@@ -81,9 +93,34 @@ class CostReportServiceTest {
         when(repository.spendByService(any())).thenReturn(List.of());
         when(repository.spendByState(any())).thenReturn(List.of());
         when(repository.sumCostCentsSince(any())).thenReturn(0L);
-        var withoutProvider = new CostReportService(repository, propertiesWithBudget(), Optional.empty());
+        var withoutProvider = new CostReportService(repository, propertiesWithBudget(), Optional.empty(),
+                aiUsageLogRepository, userRepository);
+        ReflectionTestUtils.setField(withoutProvider, "usdBrlRate", new BigDecimal("5.50"));
 
         assertNull(withoutProvider.report(30).infosimplesSaldo());
+    }
+
+    @Test
+    void report_includesAiCostSplitUserVsPlatformAndAmortizes() {
+        when(repository.spendByService(any())).thenReturn(List.of());
+        when(repository.spendByState(any())).thenReturn(List.of());
+        when(repository.sumCostCentsSince(any())).thenReturn(0L);
+        when(infosimples.fetchAccount()).thenReturn(Optional.empty());
+        // US$ 10 total AI, US$ 8 of it platform (categorization) → US$ 2 user-triggered.
+        when(aiUsageLogRepository.totalCostUsdSince(any())).thenReturn(new BigDecimal("10.00"));
+        when(aiUsageLogRepository.platformCostUsdSince(any())).thenReturn(new BigDecimal("8.00"));
+        when(userRepository.count()).thenReturn(4L);
+
+        var ai = service.report(30).ai();
+
+        // 10 * 5.50 = 55.00 total; 8 * 5.50 = 44.00 platform; 2 * 5.50 = 11.00 user.
+        assertEquals(new BigDecimal("55.0000"), ai.totalReais());
+        assertEquals(new BigDecimal("44.0000"), ai.platformReais());
+        assertEquals(new BigDecimal("11.0000"), ai.userReais());
+        assertEquals(4L, ai.activeUsers());
+        // 44.00 / 4 users = 11.00 per user.
+        assertEquals(new BigDecimal("11.0000"), ai.platformPerUserReais());
+        assertEquals(new BigDecimal("5.50"), ai.usdBrlRate());
     }
 
     private static PaidApiGuardProperties propertiesWithBudget() {
