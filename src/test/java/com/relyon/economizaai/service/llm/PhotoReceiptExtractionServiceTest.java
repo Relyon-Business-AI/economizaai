@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.llm;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.relyon.economizaai.service.ai.AiGateway;
 import com.relyon.economizaai.exception.InvalidReceiptPhotoException;
 import com.relyon.economizaai.exception.PhotoExtractionUnavailableException;
 import com.relyon.economizaai.model.Household;
@@ -42,7 +43,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class PhotoReceiptExtractionServiceTest {
 
-    @Mock private OpenAiClient openAiClient;
+    @Mock private AiGateway aiGateway;
     @Mock private PhotoUploadValidator photoUploadValidator;
     @Mock private PaidApiGuardService paidApiGuard;
     @Mock private SubscriptionGateService subscriptionGate;
@@ -56,7 +57,7 @@ class PhotoReceiptExtractionServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new PhotoReceiptExtractionService(openAiClient, photoUploadValidator, paidApiGuard,
+        service = new PhotoReceiptExtractionService(aiGateway, photoUploadValidator, paidApiGuard,
                 subscriptionGate, receiptRepository, receiptService, transactionTemplate, true, 60);
         var household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
         user = User.builder().id(UUID.randomUUID()).email("alexandre+photo@economizaai.app")
@@ -83,16 +84,17 @@ class PhotoReceiptExtractionServiceTest {
 
     @Test
     void extract_buildsPendingPhotoReceiptExcludedFromIndexPath() throws Exception {
-        when(openAiClient.isConfigured()).thenReturn(true);
-        when(openAiClient.completeJsonWithImage(anyString(), anyString(), any(), anyString(), anyInt()))
-                .thenReturn(objectMapper.readTree("""
+        when(aiGateway.isEnabled()).thenReturn(true);
+        when(aiGateway.extractorModel()).thenReturn("claude-haiku");
+        when(aiGateway.completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt()))
+                .thenReturn("""
                         {"is_receipt": true, "market_name": "Bar do Ze", "issued_at": "2026-07-15 15:45",
                          "total_amount": 47.00,
                          "items": [
                            {"description": "Chopp Brahma 440ml", "quantity": 1, "unit": "UN",
                             "unit_price": 14.00, "total_price": 14.00},
                            {"description": "Bandeja de Pasteis", "quantity": 1, "unit": "UN",
-                            "unit_price": 33.00, "total_price": 33.00}]}"""));
+                            "unit_price": 33.00, "total_price": 33.00}]}""");
 
         var receiptId = service.extract(user, photo());
 
@@ -107,14 +109,15 @@ class PhotoReceiptExtractionServiceTest {
         assertThat(receipt.getTotalAmount()).isEqualByComparingTo("47.00");
         verify(receiptService).enforceMonthlyReceiptCap(user);
         verify(paidApiGuard).assertWithinDailyCap(user.getId(), PaidApiService.LLM_VISION);
-        verify(paidApiGuard).recordSuccess(user.getId(), PaidApiService.LLM_VISION, null, "openai");
+        verify(paidApiGuard).recordSuccess(user.getId(), PaidApiService.LLM_VISION, null, "anthropic");
     }
 
     @Test
     void extract_rejectsNonReceiptImages() throws Exception {
-        when(openAiClient.isConfigured()).thenReturn(true);
-        when(openAiClient.completeJsonWithImage(anyString(), anyString(), any(), anyString(), anyInt()))
-                .thenReturn(objectMapper.readTree("{\"is_receipt\": false}"));
+        when(aiGateway.isEnabled()).thenReturn(true);
+        when(aiGateway.extractorModel()).thenReturn("claude-haiku");
+        when(aiGateway.completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt()))
+                .thenReturn("{\"is_receipt\": false}");
 
         assertThrows(InvalidReceiptPhotoException.class, () -> service.extract(user, photo()));
         verify(receiptRepository, never()).save(any());
@@ -122,20 +125,21 @@ class PhotoReceiptExtractionServiceTest {
 
     @Test
     void extract_disabledFlag_returns503Semantics() {
-        var disabled = new PhotoReceiptExtractionService(openAiClient, photoUploadValidator, paidApiGuard,
+        var disabled = new PhotoReceiptExtractionService(aiGateway, photoUploadValidator, paidApiGuard,
                 subscriptionGate, receiptRepository, receiptService, transactionTemplate, false, 60);
 
         assertThrows(PhotoExtractionUnavailableException.class, () -> disabled.extract(user, photo()));
-        verify(openAiClient, never()).completeJsonWithImage(anyString(), anyString(), any(), anyString(), anyInt());
+        verify(aiGateway, never()).completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt());
     }
 
     @Test
     void extract_llmFailure_recordsFailureAndSurfacesUnavailable() {
-        when(openAiClient.isConfigured()).thenReturn(true);
-        when(openAiClient.completeJsonWithImage(anyString(), anyString(), any(), anyString(), anyInt()))
-                .thenThrow(new LlmCallFailedException("timeout"));
+        when(aiGateway.isEnabled()).thenReturn(true);
+        when(aiGateway.extractorModel()).thenReturn("claude-haiku");
+        when(aiGateway.completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt()))
+                .thenThrow(new AiGateway.AiUnavailableException("timeout"));
 
         assertThrows(PhotoExtractionUnavailableException.class, () -> service.extract(user, photo()));
-        verify(paidApiGuard).recordFailure(user.getId(), PaidApiService.LLM_VISION, null, "openai");
+        verify(paidApiGuard).recordFailure(user.getId(), PaidApiService.LLM_VISION, null, "anthropic");
     }
 }

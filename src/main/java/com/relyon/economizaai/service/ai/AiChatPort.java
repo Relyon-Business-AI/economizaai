@@ -18,4 +18,10 @@ public interface AiChatPort {
             this(text, inputTokens, outputTokens, 0, 0);
         }
     }
+
+    /** Multimodal: one user turn with an image + text. Adapters without vision support throw. */
+    default ChatResult completeWithImage(String model, String systemPrompt, String userPrompt,
+                                         byte[] imageBytes, String imageMediaType, int maxTokens) {
+        throw new UnsupportedOperationException("vision not supported by this adapter");
+    }
 }

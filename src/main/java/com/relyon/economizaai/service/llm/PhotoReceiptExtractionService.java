@@ -1,6 +1,9 @@
 package com.relyon.economizaai.service.llm;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.relyon.economizaai.model.enums.AiActivity;
+import com.relyon.economizaai.service.ai.AiGateway;
 import com.relyon.economizaai.exception.InvalidReceiptPhotoException;
 import com.relyon.economizaai.exception.PhotoExtractionUnavailableException;
 import com.relyon.economizaai.model.Receipt;
@@ -48,7 +51,9 @@ public class PhotoReceiptExtractionService {
 
     private static final DateTimeFormatter ISSUED_AT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
-    private final OpenAiClient openAiClient;
+    private final AiGateway aiGateway;
+    // fasterxml local: o bean Spring do SB4 é o Jackson 3 (tools.jackson), tipo incompatível
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private final PhotoUploadValidator photoUploadValidator;
     private final PaidApiGuardService paidApiGuard;
     private final SubscriptionGateService subscriptionGate;
@@ -58,7 +63,7 @@ public class PhotoReceiptExtractionService {
     private final boolean enabled;
     private final int maxItems;
 
-    public PhotoReceiptExtractionService(OpenAiClient openAiClient,
+    public PhotoReceiptExtractionService(AiGateway aiGateway,
                                          PhotoUploadValidator photoUploadValidator,
                                          PaidApiGuardService paidApiGuard,
                                          SubscriptionGateService subscriptionGate,
@@ -67,7 +72,7 @@ public class PhotoReceiptExtractionService {
                                          TransactionTemplate transactionTemplate,
                                          @Value("${economizaai.llm.photo-extraction.enabled:true}") boolean enabled,
                                          @Value("${economizaai.llm.photo-extraction.max-items:60}") int maxItems) {
-        this.openAiClient = openAiClient;
+        this.aiGateway = aiGateway;
         this.photoUploadValidator = photoUploadValidator;
         this.paidApiGuard = paidApiGuard;
         this.subscriptionGate = subscriptionGate;
@@ -79,7 +84,7 @@ public class PhotoReceiptExtractionService {
     }
 
     public UUID extract(User user, MultipartFile file) {
-        if (!enabled || !openAiClient.isConfigured()) {
+        if (!enabled || !aiGateway.isEnabled()) {
             throw new PhotoExtractionUnavailableException();
         }
         subscriptionGate.require(user, Feature.PHOTO_EXTRACTION);
@@ -90,12 +95,14 @@ public class PhotoReceiptExtractionService {
 
         JsonNode extraction;
         try {
-            // HTTP untransacted — the vision call can take several seconds.
-            extraction = openAiClient.completeJsonWithImage(systemPrompt(), "Extraia os itens desta nota.",
-                    fileBytes(file), mediaType(file), 8000);
-            paidApiGuard.recordSuccess(user.getId(), PaidApiService.LLM_VISION, null, "openai");
-        } catch (LlmCallFailedException ex) {
-            paidApiGuard.recordFailure(user.getId(), PaidApiService.LLM_VISION, null, "openai");
+            // HTTP untransacted — a chamada de visão leva segundos. Anthropic (mesma
+            // infra do resto da IA): ledger/caps no AiGateway + ledger por-usuário aqui.
+            var raw = aiGateway.completeWithImage(AiActivity.PHOTO_EXTRACT, aiGateway.extractorModel(),
+                    systemPrompt(), "Extraia os itens desta nota.", fileBytes(file), mediaType(file), 8000);
+            extraction = parseJson(raw);
+            paidApiGuard.recordSuccess(user.getId(), PaidApiService.LLM_VISION, null, "anthropic");
+        } catch (AiGateway.AiUnavailableException ex) {
+            paidApiGuard.recordFailure(user.getId(), PaidApiService.LLM_VISION, null, "anthropic");
             log.warn("photo_extract.call_failed user={} reason={}", user.getId(), ex.getMessage());
             throw new PhotoExtractionUnavailableException();
         }
@@ -107,6 +114,20 @@ public class PhotoReceiptExtractionService {
         log.info("photo_extract.ok user={} receipt={} items={}",
                 user.getId(), receiptId, extraction.path("items").size());
         return receiptId;
+    }
+
+    /** O modelo responde JSON puro; tolera cercas de markdown que às vezes escapam. */
+    private JsonNode parseJson(String raw) {
+        var cleaned = raw.strip();
+        if (cleaned.startsWith("```")) {
+            cleaned = cleaned.replaceAll("^```(?:json)?\\s*", "").replaceAll("```\\s*$", "");
+        }
+        try {
+            return OBJECT_MAPPER.readTree(cleaned);
+        } catch (Exception ex) {
+            log.warn("photo_extract.bad_json len={}", raw.length());
+            throw new PhotoExtractionUnavailableException();
+        }
     }
 
     private String systemPrompt() {
