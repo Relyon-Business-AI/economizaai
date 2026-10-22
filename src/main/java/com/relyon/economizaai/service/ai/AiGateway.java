@@ -107,6 +107,37 @@ public class AiGateway {
         }
     }
 
+    /**
+     * Multimodal variant of {@link #complete} — one image + prompt. Same enablement
+     * check, daily cap, ledger and credit-exhaustion handling.
+     */
+    public String completeWithImage(AiActivity activity, String model, String systemPrompt, String userPrompt,
+                                    byte[] imageBytes, String imageMediaType, int maxTokens) {
+        if (!isEnabled()) {
+            throw new AiUnavailableException("IA desabilitada: ANTHROPIC_API_KEY não configurada.");
+        }
+        var todayStart = LocalDate.now().atStartOfDay();
+        if (usageRepository.countByCreatedAtAfter(todayStart) >= dailyRequestCap) {
+            throw new AiUnavailableException("Cap diário de chamadas de IA atingido (" + dailyRequestCap + ").");
+        }
+        try {
+            var result = chatAdapter.completeWithImage(model, systemPrompt, userPrompt, imageBytes, imageMediaType, maxTokens);
+            recordUsage(activity, model, result.inputTokens(), result.outputTokens(), true);
+            log.info("ai.call activity={} model={} in={} out={} (vision)", activity, model,
+                    result.inputTokens(), result.outputTokens());
+            return result.text();
+        } catch (AiUnavailableException unavailable) {
+            throw unavailable;
+        } catch (RuntimeException ex) {
+            recordUsage(activity, model, 0, 0, false);
+            log.warn("ai.call_failed activity={} model={} reason={}", activity, model, ex.getMessage());
+            if (isCreditExhausted(ex)) {
+                throw new AiUnavailableException("Créditos da API de IA esgotados — recarregue em console.anthropic.com.");
+            }
+            throw new AiUnavailableException("Falha na chamada de IA: " + ex.getMessage());
+        }
+    }
+
     /** Anthropic billing/credit failures ("credit balance is too low", billing_error). */
     static boolean isCreditExhausted(RuntimeException ex) {
         var message = String.valueOf(ex.getMessage()).toLowerCase();
