@@ -1,5 +1,22 @@
 # economizai — what's new
 
+## 2026-10-22 — Custo de IA (LLM) no painel de custos + atribuição por usuário
+Admin. O painel de custos (`GET /admin/costs`) agora inclui o gasto de **IA/LLM**,
+que vivia num ledger separado (`ai_usage_log`, custo real por token em USD) e não
+aparecia junto com Infosimples/captcha/Twilio.
+
+- **`GET /admin/costs`** ganhou o campo **`ai`** (`AiCostSummary`): `totalReais`,
+  `userReais` (o que a ação do usuário dispara — foto + resgate de parse),
+  `platformReais` (custo compartilhado = categorização + varreduras admin, que é
+  **amortizável**), `activeUsers`, `platformPerUserReais` (platform ÷ usuários) e
+  `usdBrlRate`. Mudança aditiva. Taxa USD→BRL via `ECONOMIZAAI_COSTS_USD_BRL_RATE` (default 5,50).
+- **Atribuição:** `ai_usage_log` ganhou `user_id` (migration V115) — preenchido nas
+  chamadas de IA **do usuário** (extração por foto, resgate de HTML); categorização e
+  varreduras admin ficam sem usuário (custo de plataforma, por design).
+- **Modelo de custo pra precificar:** custo **direto por usuário** = Infosimples +
+  captcha + Twilio + LLM (foto/resgate) [já no painel por-usuário]; custo de
+  **plataforma** = categorização LLM, amortizável pelo nº de usuários.
+
 ## 2026-10-22 — IA multi-provedor: toggle Claude/ChatGPT por tier no admin
 - `AiChatPort` agora tem duas implementações (Anthropic + OpenAI); o provedor+modelo
   de cada tier (Volume/Julgamento) é editável em runtime no admin (Categorização →

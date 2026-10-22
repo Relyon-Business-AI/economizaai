@@ -299,7 +299,9 @@ class AdminControllerTest {
         var report = new CostReportResponse(30, 40L, 330L, new BigDecimal("3.30"),
                 5000L, new BigDecimal("1.20"), new BigDecimal("87.52"), new BigDecimal("7.68"), new BigDecimal("100"),
                 List.of(new CostReportResponse.ServiceSpendLine("INFOSIMPLES", 10L, 2L, 240L, new BigDecimal("2.40"))),
-                List.of(new CostReportResponse.StateSpendLine("CE", 10L, 240L, new BigDecimal("2.40"))));
+                List.of(new CostReportResponse.StateSpendLine("CE", 10L, 240L, new BigDecimal("2.40"))),
+                new CostReportResponse.AiCostSummary(new BigDecimal("55.00"), new BigDecimal("11.00"),
+                        new BigDecimal("44.00"), 4L, new BigDecimal("11.00"), new BigDecimal("5.50")));
         when(costReportService.report(30)).thenReturn(report);
 
         mockMvc.perform(get("/api/v1/admin/costs")

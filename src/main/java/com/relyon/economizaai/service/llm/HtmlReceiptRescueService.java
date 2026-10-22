@@ -107,7 +107,7 @@ public class HtmlReceiptRescueService {
         String responseText;
         try {
             responseText = aiGateway.complete(AiActivity.RECEIPT_RESCUE, aiGateway.extractorModel(),
-                    systemPrompt(), userContent(chave, pageText), MAX_COMPLETION_TOKENS);
+                    systemPrompt(), userContent(chave, pageText), MAX_COMPLETION_TOKENS, userId);
         } catch (AiGateway.AiUnavailableException unavailableEx) {
             // Disabled / daily cap / provider failure — tokens and failures are already
             // accounted in the gateway's own usage log, so no paid_api_call row here.

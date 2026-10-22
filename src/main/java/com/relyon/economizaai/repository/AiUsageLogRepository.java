@@ -49,4 +49,37 @@ public interface AiUsageLogRepository extends JpaRepository<AiUsageLog, UUID> {
 
     @Query("SELECT coalesce(sum(u.costUsd), 0) FROM AiUsageLog u")
     java.math.BigDecimal totalCostAllTime();
+
+    // ── Per-user COGS (lifetime LLM cost attributed to a user) ──────────────────
+
+    /** Lifetime LLM cost (USD) for one user — the real token-based cost (not the flat paid_api_call estimate). */
+    @Query("SELECT coalesce(sum(u.costUsd), 0) FROM AiUsageLog u WHERE u.userId = :userId")
+    java.math.BigDecimal costUsdForUser(@Param("userId") UUID userId);
+
+    /** userId, calls, costUsd per user for a batch — the admin list's per-user LLM column. */
+    @Query("""
+        SELECT u.userId, count(u), coalesce(sum(u.costUsd), 0)
+        FROM AiUsageLog u
+        WHERE u.userId IN :userIds
+        GROUP BY u.userId
+    """)
+    List<Object[]> costUsdByUserIds(@Param("userIds") List<UUID> userIds);
+
+    /** activity, calls, costUsd for one user — the LLM breakdown in the user detail. */
+    @Query("""
+        SELECT u.activity, count(u), coalesce(sum(u.costUsd), 0)
+        FROM AiUsageLog u
+        WHERE u.userId = :userId
+        GROUP BY u.activity
+        ORDER BY sum(u.costUsd) DESC
+    """)
+    List<Object[]> costUsdByActivityForUser(@Param("userId") UUID userId);
+
+    /** Platform (non-user-attributable) LLM cost since — categorization + admin sweeps, amortized across users. */
+    @Query("SELECT coalesce(sum(u.costUsd), 0) FROM AiUsageLog u WHERE u.userId IS NULL AND u.createdAt >= :since")
+    java.math.BigDecimal platformCostUsdSince(@Param("since") LocalDateTime since);
+
+    /** Total LLM cost since (user + platform) — the global AI spend figure. */
+    @Query("SELECT coalesce(sum(u.costUsd), 0) FROM AiUsageLog u WHERE u.createdAt >= :since")
+    java.math.BigDecimal totalCostUsdSince(@Param("since") LocalDateTime since);
 }
