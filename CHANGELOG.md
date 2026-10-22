@@ -1,5 +1,13 @@
 # economizai — what's new
 
+## 2026-10-22 — IA multi-provedor: toggle Claude/ChatGPT por tier no admin
+- `AiChatPort` agora tem duas implementações (Anthropic + OpenAI); o provedor+modelo
+  de cada tier (Volume/Julgamento) é editável em runtime no admin (Categorização →
+  Provedor de IA), sem redeploy. Novos endpoints `GET/PUT /categorizer/ai/providers`.
+- Fica tudo pronto esperando apenas `OPENAI_API_KEY`: setada a chave, o ChatGPT vira
+  opção selecionável nos toggles. Serviços legados OpenAI (enrichment/auditor) agora
+  default-OFF pra não acordarem sozinhos ao setar a key.
+
 ## 2026-10-21 — Nota falhada: usuário sabe se vale retentar ou se é final
 - As falhas do Infosimples deixaram de ser uma mensagem única. Agora:
   - **transitório** (portal/SEFAZ instável, ex. código 609) → `infosimples.error`:

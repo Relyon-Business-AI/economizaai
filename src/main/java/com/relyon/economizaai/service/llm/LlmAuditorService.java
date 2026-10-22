@@ -44,7 +44,7 @@ public class LlmAuditorService {
                              OpenAiClient openAiClient,
                              PaidApiGuardService paidApiGuard,
                              TransactionTemplate transactionTemplate,
-                             @Value("${economizaai.llm.auditor.enabled:true}") boolean enabled,
+                             @Value("${economizaai.llm.auditor.enabled:false}") boolean enabled,
                              @Value("${economizaai.llm.auditor.sample-size:50}") int sampleSize) {
         this.productRepository = productRepository;
         this.disagreementRepository = disagreementRepository;

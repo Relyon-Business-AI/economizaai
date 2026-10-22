@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -27,15 +28,21 @@ import static org.mockito.Mockito.when;
 class AiGatewayTest {
 
     @Mock private AnthropicChatAdapter chatAdapter;
+    @Mock private AiProviderSettingsService providerSettings;
     @Mock private AiUsageLogRepository usageRepository;
 
     private AiGateway gateway;
 
     @BeforeEach
     void setUp() {
-        gateway = new AiGateway(chatAdapter, usageRepository);
-        ReflectionTestUtils.setField(gateway, "extractorModel", "claude-haiku-4-5");
-        ReflectionTestUtils.setField(gateway, "curatorModel", "claude-sonnet-4-6");
+        when(chatAdapter.provider()).thenReturn(com.relyon.economizaai.model.enums.AiProvider.ANTHROPIC);
+        lenient().when(providerSettings.config(com.relyon.economizaai.model.enums.AiModelTier.EXTRACTOR))
+                .thenReturn(new AiProviderSettingsService.TierConfig(
+                        com.relyon.economizaai.model.enums.AiProvider.ANTHROPIC, "claude-haiku-4-5"));
+        lenient().when(providerSettings.config(com.relyon.economizaai.model.enums.AiModelTier.CURATOR))
+                .thenReturn(new AiProviderSettingsService.TierConfig(
+                        com.relyon.economizaai.model.enums.AiProvider.ANTHROPIC, "claude-sonnet-4-6"));
+        gateway = new AiGateway(java.util.List.of(chatAdapter), providerSettings, usageRepository);
         ReflectionTestUtils.setField(gateway, "dailyRequestCap", 10);
     }
 
@@ -111,5 +118,26 @@ class AiGatewayTest {
         // Unknown model → default $3/$15 pricing.
         assertEquals(0, AiGateway.estimateCostUsd("mystery-model", 1_000_000, 0)
                 .compareTo(new BigDecimal("3.000000")));
+    }
+
+    @Test
+    void routesToOpenAiAdapter_whenTierConfiguredForOpenAi() {
+        // Curator = OpenAI/gpt-5 → o gateway roteia pro adapter OpenAI, não pro Anthropic.
+        var openAi = org.mockito.Mockito.mock(OpenAiChatAdapter.class);
+        when(openAi.provider()).thenReturn(com.relyon.economizaai.model.enums.AiProvider.OPENAI);
+        when(openAi.isConfigured()).thenReturn(true);
+        when(providerSettings.config(com.relyon.economizaai.model.enums.AiModelTier.CURATOR))
+                .thenReturn(new AiProviderSettingsService.TierConfig(
+                        com.relyon.economizaai.model.enums.AiProvider.OPENAI, "gpt-5"));
+        var mixed = new AiGateway(java.util.List.of(chatAdapter, openAi), providerSettings, usageRepository);
+        ReflectionTestUtils.setField(mixed, "dailyRequestCap", 10);
+        when(usageRepository.countByCreatedAtAfter(any(LocalDateTime.class))).thenReturn(0L);
+        when(openAi.complete("gpt-5", "s", "u", 100)).thenReturn(new AiChatPort.ChatResult("via-gpt", 10, 5));
+
+        var text = mixed.complete(AiActivity.DUPLICATE_JUDGE, "gpt-5", "s", "u", 100);
+
+        assertEquals("via-gpt", text);
+        verify(openAi).complete("gpt-5", "s", "u", 100);
+        verify(chatAdapter, never()).complete(anyString(), anyString(), anyString(), anyInt());
     }
 }

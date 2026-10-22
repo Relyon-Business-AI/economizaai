@@ -125,6 +125,12 @@ economizaai:
     # Prepaid credit budget in USD — shown in the spend panel as "saldo estimado".
     # Set to 0 to hide the balance indicator.
     budget-usd: ${ECONOMIZAAI_AI_BUDGET_USD:0}
+  # Provedor OpenAI do AiChatPort (segundo provedor, selecionável por tier no admin).
+  # Inerte até OPENAI_API_KEY ser setada; aí o toggle "GPT aqui, Claude ali" fica ativo.
+  openai:
+    api-key: ${OPENAI_API_KEY:}
+    base-url: ${LLM_BASE_URL:https://api.openai.com/v1}
+    timeout-ms: ${OPENAI_TIMEOUT_MS:60000}
     # Limiares de confiança da varredura de subcategoria (sugestão da IA). Assimétrico: preencher
     # subcategoria vazia é baixo risco; trocar uma existente pede mais; mudar a CATEGORIA pede o máximo.
     subcategory-suggestion:

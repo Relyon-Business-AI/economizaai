@@ -1,10 +1,19 @@
 package com.relyon.economizaai.service.ai;
 
+import com.relyon.economizaai.model.enums.AiProvider;
+
 /**
  * Thin seam over the LLM provider so every AI feature (and its tests) depends on
- * this interface instead of the vendor SDK. One implementation: Anthropic.
+ * this interface instead of the vendor SDK. Implementações: Anthropic e OpenAI,
+ * selecionáveis por tier em runtime (ver {@code AiProviderSettingsService}).
  */
 public interface AiChatPort {
+
+    /** Qual provedor este adapter atende — usado pelo gateway pra rotear por tier. */
+    AiProvider provider();
+
+    /** True quando a credencial do provedor está configurada. */
+    boolean isConfigured();
 
     ChatResult complete(String model, String systemPrompt, String userPrompt, int maxTokens);
 

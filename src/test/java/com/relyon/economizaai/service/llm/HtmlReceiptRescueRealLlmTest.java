@@ -19,7 +19,10 @@ import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import com.relyon.economizaai.service.ai.AiProviderSettingsService;
+
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * REAL-AI validation of the parse-rescue layer: one REAL receipt per covered
@@ -43,8 +46,11 @@ class HtmlReceiptRescueRealLlmTest {
         var chatAdapter = new AnthropicChatAdapter();
         ReflectionTestUtils.setField(chatAdapter, "apiKey", System.getenv("ANTHROPIC_API_KEY"));
         ReflectionTestUtils.setField(chatAdapter, "timeoutSeconds", 90);
-        var aiGateway = new AiGateway(chatAdapter, mock(AiUsageLogRepository.class));
-        ReflectionTestUtils.setField(aiGateway, "extractorModel", "claude-haiku-4-5");
+        var settings = mock(AiProviderSettingsService.class);
+        when(settings.config(com.relyon.economizaai.model.enums.AiModelTier.EXTRACTOR))
+                .thenReturn(new AiProviderSettingsService.TierConfig(
+                        com.relyon.economizaai.model.enums.AiProvider.ANTHROPIC, "claude-haiku-4-5"));
+        var aiGateway = new AiGateway(java.util.List.of(chatAdapter), settings, mock(AiUsageLogRepository.class));
         ReflectionTestUtils.setField(aiGateway, "dailyRequestCap", 1000);
         return new HtmlReceiptRescueService(aiGateway, mock(PaidApiGuardService.class), true, 80, 60000);
     }

@@ -85,7 +85,7 @@ public class LlmEnrichmentService {
                                 OpenAiClient openAiClient,
                                 PaidApiGuardService paidApiGuard,
                                 TransactionTemplate transactionTemplate,
-                                @Value("${economizaai.llm.enrichment.enabled:true}") boolean enabled,
+                                @Value("${economizaai.llm.enrichment.enabled:false}") boolean enabled,
                                 @Value("${economizaai.llm.enrichment.batch-size:25}") int batchSize,
                                 @Value("${economizaai.llm.enrichment.max-attempts:3}") int maxAttempts,
                                 @Value("${economizaai.llm.enrichment.confidence-threshold:0.7}") double confidenceThreshold) {

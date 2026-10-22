@@ -4,9 +4,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.relyon.economizaai.model.AiFinding;
 import com.relyon.economizaai.model.AiSweepRun;
+import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.AiActivity;
 import com.relyon.economizaai.model.enums.AiFindingStatus;
 import com.relyon.economizaai.model.enums.AiFindingType;
+import com.relyon.economizaai.model.enums.AiModelTier;
+import com.relyon.economizaai.model.enums.AiProvider;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.AiSweepRunRepository;
 import com.relyon.economizaai.repository.ProductRepository;
@@ -15,18 +18,24 @@ import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.service.ai.AiFindingService;
 import com.relyon.economizaai.service.ai.AiGateway;
 import com.relyon.economizaai.service.ai.AiItemFallbackService;
+import com.relyon.economizaai.service.ai.AiProviderSettingsService;
 import com.relyon.economizaai.service.ai.AiSubcategorySuggestionService;
 import com.relyon.economizaai.service.ai.AiSweepService;
 import com.relyon.economizaai.service.ai.AiUsageService;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -57,6 +66,7 @@ public class AiController {
     private final AiSubcategorySuggestionService aiSubcategorySuggestionService;
     private final AiItemFallbackService aiItemFallbackService;
     private final AiUsageService aiUsageService;
+    private final AiProviderSettingsService aiProviderSettingsService;
     private final AiGateway aiGateway;
     private final AiSweepRunRepository sweepRunRepository;
     private final ReceiptItemRepository receiptItemRepository;
@@ -186,6 +196,45 @@ public class AiController {
     public ResponseEntity<AiUsageService.UsageSummary> usage(@RequestParam(defaultValue = "30") int days) {
         return ResponseEntity.ok(aiUsageService.summary(days));
     }
+
+    /**
+     * Provedor de IA por tier: config atual + catálogo de opções e quais
+     * provedores têm credencial. Dirige o toggle "GPT aqui, Claude ali".
+     */
+    @GetMapping("/providers")
+    public ResponseEntity<Map<String, Object>> aiProviders() {
+        return ResponseEntity.ok(Map.of(
+                "tiers", List.of(
+                        tierView(AiModelTier.EXTRACTOR), tierView(AiModelTier.CURATOR)),
+                "providers", List.of(
+                        Map.of("provider", AiProvider.ANTHROPIC, "configured", isConfigured(AiProvider.ANTHROPIC),
+                                "models", List.of("claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-8")),
+                        Map.of("provider", AiProvider.OPENAI, "configured", isConfigured(AiProvider.OPENAI),
+                                "models", List.of("gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-4.1", "gpt-4.1-mini", "gpt-4o-mini", "o4-mini")))));
+    }
+
+    private Map<String, Object> tierView(AiModelTier tier) {
+        var config = aiProviderSettingsService.config(tier);
+        return Map.of("tier", tier, "provider", config.provider(), "model", config.model(),
+                "configured", isConfigured(config.provider()));
+    }
+
+    private boolean isConfigured(AiProvider provider) {
+        return aiGateway.providerConfigured(provider);
+    }
+
+    /** Troca o provedor/modelo de um tier — efeito imediato, sem redeploy. */
+    @PutMapping("/providers/{tier}")
+    public ResponseEntity<Map<String, Object>> updateAiProvider(
+            @PathVariable AiModelTier tier,
+            @Valid @RequestBody AiProviderUpdateRequest request,
+            @AuthenticationPrincipal User user) {
+        aiProviderSettingsService.update(tier, request.provider(), request.model(),
+                user == null ? "admin" : user.getEmail());
+        return ResponseEntity.ok((Map<String, Object>) tierView(tier));
+    }
+
+    public record AiProviderUpdateRequest(@NotNull AiProvider provider, @NotBlank String model) {}
 
     /**
      * AI engine for the admin Testar screen's toggle: classifies ONE description
