@@ -1,6 +1,7 @@
 package com.relyon.economizaai.repository;
 
 import com.relyon.economizaai.model.Receipt;
+import com.relyon.economizaai.model.enums.ReceiptEntryMethod;
 import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import org.springframework.data.domain.Pageable;
@@ -22,6 +23,25 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
     // AI merchant-review input: the distinct merchants we've seen (bounded sample).
     @Query("SELECT DISTINCT r.cnpjEmitente, r.marketName FROM Receipt r WHERE r.marketName IS NOT NULL")
     List<Object[]> findDistinctMerchants(Pageable pageable);
+
+    // Admin: how users are entering their notas — count + confirmed/failed split per entry method.
+    @Query("""
+            SELECT r.entryMethod AS entryMethod,
+                   count(r) AS total,
+                   sum(case when r.status = 'CONFIRMED' then 1L else 0L end) AS confirmed,
+                   sum(case when r.status = 'FAILED_PARSE' then 1L else 0L end) AS failed
+            FROM Receipt r
+            WHERE r.createdAt >= :since
+            GROUP BY r.entryMethod
+            """)
+    List<EntryMethodStat> entryMethodStatsSince(@Param("since") LocalDateTime since);
+
+    interface EntryMethodStat {
+        ReceiptEntryMethod getEntryMethod();
+        long getTotal();
+        long getConfirmed();
+        long getFailed();
+    }
 
     // Sweepers (processing timeout + pending auto-confirm): rows older than the
     // window are stuck/stale. updatedAt, not createdAt: retried/rescued rows are

@@ -10,6 +10,7 @@ import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.PaidApiService;
+import com.relyon.economizaai.model.enums.ReceiptEntryMethod;
 import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.ReceiptRepository;
@@ -149,6 +150,7 @@ public class PhotoReceiptExtractionService {
                 .chaveAcesso(syntheticChave())
                 .qrPayload("PHOTO")
                 .origin(ReceiptOrigin.PHOTO)
+                .entryMethod(ReceiptEntryMethod.PHOTO_RECEIPT)
                 .status(ReceiptStatus.PENDING_CONFIRMATION)
                 .marketName(textOrNull(extraction, "market_name"))
                 .issuedAt(parseIssuedAt(extraction))

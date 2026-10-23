@@ -5,6 +5,7 @@ import com.relyon.economizaai.dto.response.ReceiptImportResponse.RejectedChave;
 import com.relyon.economizaai.exception.PaywallException;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.ReceiptEntryMethod;
 import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.ReceiptRepository;
@@ -180,6 +181,7 @@ public class ReceiptImportService {
                 .uf(ChaveAcessoParser.extractUf(chave))
                 .qrPayload(chave)
                 .origin(ReceiptOrigin.IMPORT)
+                .entryMethod(ReceiptEntryMethod.IMPORT)
                 .status(ReceiptStatus.IMPORT_QUEUED)
                 .build());
         log.info("import.queued rcpt={} chave={}", abbrev(receipt.getId()), LogMasker.chave(chave));

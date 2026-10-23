@@ -339,10 +339,17 @@ mine, was already resolved, or expired.
 ```
 POST /api/v1/receipts
 {
-  "qrPayload": "<whatever the camera scanned>"
+  "qrPayload": "<whatever the camera scanned>",
+  "entryMethod": "QR_SCAN"   // OPTIONAL — see below
 }
 → 201 ReceiptResponse with status="PENDING_CONFIRMATION"
 ```
+
+**Optional `entryMethod`** (analytics only, doesn't change behavior): tells us HOW the
+user entered the nota — `QR_SCAN`, `MANUAL_CHAVE` (typed the key), or `PHOTO_CHAVE`
+(photographed the printed key). If omitted, the server derives it from the payload
+(URL → `QR_SCAN`, bare chave → `MANUAL_CHAVE`) — but then a typed key and a
+photographed-and-OCR'd key are indistinguishable, so **send it** to split those two.
 
 **`qrPayload` accepts five shapes** — they're all parsed into the 44-digit chave
 de acesso server-side. Pass exactly what the QR scanner returned, or the chave

@@ -3,6 +3,7 @@ package com.relyon.economizaai.service.admin;
 import com.relyon.economizaai.dto.response.AdminReceiptDetailResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptStatsResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptSummaryResponse;
+import com.relyon.economizaai.dto.response.EntryMethodStatsResponse;
 import com.relyon.economizaai.dto.response.FailureReasonCount;
 import com.relyon.economizaai.dto.response.ReceiptResponse;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
@@ -25,6 +26,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
@@ -71,6 +74,35 @@ public class AdminReceiptService {
                 parseErrorReason, includeInternal);
         return receiptRepository.findAll(spec, sortedPageable)
                 .map(receipt -> AdminReceiptSummaryResponse.of(receipt, localizedParseError(receipt)));
+    }
+
+    /**
+     * How users entered their notas over the last {@code days}: total + a per-method breakdown
+     * with each method's share of the total and its own failure rate (surfaces, e.g., that a
+     * typed/photographed chave fails far more than a QR scan).
+     */
+    @Transactional(readOnly = true)
+    public EntryMethodStatsResponse entryMethodStats(int days) {
+        var window = Math.max(1, days);
+        var since = LocalDateTime.now().minusDays(window);
+        var stats = receiptRepository.entryMethodStatsSince(since);
+        var total = stats.stream().mapToLong(ReceiptRepository.EntryMethodStat::getTotal).sum();
+        var lines = stats.stream()
+                .sorted(Comparator.comparingLong(ReceiptRepository.EntryMethodStat::getTotal).reversed())
+                .map(stat -> new EntryMethodStatsResponse.Line(
+                        stat.getEntryMethod() == null ? "UNKNOWN" : stat.getEntryMethod().name(),
+                        stat.getTotal(),
+                        pct(stat.getTotal(), total),
+                        stat.getConfirmed(),
+                        stat.getFailed(),
+                        pct(stat.getFailed(), stat.getTotal())))
+                .toList();
+        return new EntryMethodStatsResponse(window, total, lines);
+    }
+
+    private static BigDecimal pct(long part, long whole) {
+        return whole == 0 ? BigDecimal.ZERO
+                : BigDecimal.valueOf(part * 100.0 / whole).setScale(1, RoundingMode.HALF_UP);
     }
 
     /** Count + total value of the notes matching the same filters as {@link #list} — the list header total. */

@@ -7,6 +7,7 @@ import com.relyon.economizaai.model.PriceObservationAudit;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.model.enums.ReceiptEntryMethod;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
@@ -229,5 +230,38 @@ class AdminReceiptServiceTest {
 
         assertEquals(607, service.deleteOrphanedObservations());
         verify(observationRepository).deleteOrphaned();
+    }
+
+    @Test
+    void entryMethodStats_computesShareAndPerMethodFailureRate() {
+        // Build the projection stubs BEFORE the outer when() — nesting them inside thenReturn(...)
+        // trips Mockito's strict UnfinishedStubbing check.
+        var qrStat = entryMethodStat(ReceiptEntryMethod.QR_SCAN, 80, 76, 4);
+        var manualStat = entryMethodStat(ReceiptEntryMethod.MANUAL_CHAVE, 20, 12, 8);
+        when(receiptRepository.entryMethodStatsSince(any())).thenReturn(List.of(qrStat, manualStat));
+
+        var response = service.entryMethodStats(30);
+
+        assertEquals(30, response.windowDays());
+        assertEquals(100, response.total());
+        // sorted by total desc → QR_SCAN leads
+        var qr = response.lines().get(0);
+        assertEquals("QR_SCAN", qr.method());
+        assertEquals(new BigDecimal("80.0"), qr.sharePct());  // 80 of 100
+        assertEquals(new BigDecimal("5.0"), qr.failPct());    // 4 of 80
+        var manual = response.lines().get(1);
+        assertEquals("MANUAL_CHAVE", manual.method());
+        assertEquals(new BigDecimal("20.0"), manual.sharePct());
+        assertEquals(new BigDecimal("40.0"), manual.failPct()); // typed/photo chave fails 8 of 20
+    }
+
+    private static ReceiptRepository.EntryMethodStat entryMethodStat(
+            ReceiptEntryMethod method, long total, long confirmed, long failed) {
+        var stat = mock(ReceiptRepository.EntryMethodStat.class);
+        when(stat.getEntryMethod()).thenReturn(method);
+        when(stat.getTotal()).thenReturn(total);
+        when(stat.getConfirmed()).thenReturn(confirmed);
+        when(stat.getFailed()).thenReturn(failed);
+        return stat;
     }
 }

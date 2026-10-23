@@ -1,5 +1,19 @@
 # economizai — what's new
 
+## 2026-10-23 — Método de entrada da nota (QR vs digitada vs foto vs import) + painel admin
+Agora rastreamos COMO cada nota entrou, separado do `origin` (que governa o pipeline).
+
+- Novo campo **`entryMethod`** no receipt: `QR_SCAN`, `MANUAL_CHAVE` (chave digitada),
+  `PHOTO_CHAVE` (foto da chave/OCR), `PHOTO_RECEIPT` (foto da nota inteira), `IMPORT`.
+  Derivado no servidor pela forma do payload (URL = QR_SCAN, chave pura = MANUAL_CHAVE) e
+  **backfillado** em todas as notas antigas (migration V121).
+- **`POST /receipts`** aceita um campo **opcional `entryMethod`** no corpo — o app pode mandar
+  pra distinguir **digitado de foto-da-chave** (que o servidor não consegue separar sozinho,
+  ambos chegam como chave pura). Quando omitido, o servidor deriva. Aditivo, não quebra nada.
+- Novo endpoint admin **`GET /admin/receipts/entry-methods?days=30`** → total + % de cada método
+  + taxa de falha por método (mostra, ex., que chave digitada falha muito mais que QR scan).
+- **Limite honesto:** sem o app mandar `entryMethod`, `MANUAL_CHAVE` engloba digitado+foto-da-chave.
+
 ## 2026-10-22 — Nota de contingência (loja offline) não falha mais na hora
 Uma nota emitida em **contingência** (`tpEmis≠1` — o caixa estava sem internet) só é
 transmitida à SEFAZ depois (até 72h). Se o usuário escaneia na hora, a SEFAZ ainda não
