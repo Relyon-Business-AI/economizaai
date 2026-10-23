@@ -23,6 +23,7 @@ import com.relyon.economizaai.dto.response.AcquisitionReportResponse;
 import com.relyon.economizaai.dto.response.AdminAlertsConfigResponse;
 import com.relyon.economizaai.dto.response.AdminNotificationSummaryResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptDetailResponse;
+import com.relyon.economizaai.dto.response.EntryMethodStatsResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptStatsResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptSummaryResponse;
 import com.relyon.economizaai.dto.response.AdminUserDetailResponse;
@@ -388,6 +389,14 @@ public class AdminController {
             @RequestParam(defaultValue = "false") boolean includeInternal) {
         return ResponseEntity.ok(adminReceiptService.failureBreakdown(
                 from, to, marketCnpj, category, q, householdId, uf, includeInternal));
+    }
+
+    /** How users are entering their notas (QR scan vs typed/photographed chave vs photo vs import):
+     * totals + % share + per-method failure rate over the last {@code days}. */
+    @GetMapping("/receipts/entry-methods")
+    public ResponseEntity<EntryMethodStatsResponse> entryMethods(
+            @RequestParam(defaultValue = "30") int days) {
+        return ResponseEntity.ok(adminReceiptService.entryMethodStats(days));
     }
 
     @GetMapping("/receipts/{id}")

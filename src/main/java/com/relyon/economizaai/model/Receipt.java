@@ -1,6 +1,7 @@
 package com.relyon.economizaai.model;
 
 import com.relyon.economizaai.model.enums.ReceiptChannel;
+import com.relyon.economizaai.model.enums.ReceiptEntryMethod;
 import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
@@ -64,6 +65,12 @@ public class Receipt extends BaseEntity implements HouseholdScoped {
     @Column(nullable = false, length = 10)
     @Builder.Default
     private ReceiptOrigin origin = ReceiptOrigin.SCAN;
+
+    /** HOW the user entered it (QR scan vs typed/photographed chave vs photo vs import) — analytics
+     * only, a finer cut than {@link ReceiptOrigin}. See {@link ReceiptEntryMethod}. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "entry_method", length = 20)
+    private ReceiptEntryMethod entryMethod;
 
     /** IN_STORE (default) or ONLINE — from the nota's indPres. Orthogonal to origin/segment. */
     @Enumerated(EnumType.STRING)

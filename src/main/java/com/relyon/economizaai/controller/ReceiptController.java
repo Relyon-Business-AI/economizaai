@@ -255,7 +255,7 @@ public class ReceiptController {
                                                        @RequestParam("file") MultipartFile file) {
         var qrPayload = qrCodePhotoDecoder.decode(file);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(receiptService.submit(user, new SubmitReceiptRequest(qrPayload)));
+                .body(receiptService.submit(user, new SubmitReceiptRequest(qrPayload, null)));
     }
 
     /**

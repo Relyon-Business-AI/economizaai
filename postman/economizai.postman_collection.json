@@ -12553,6 +12553,62 @@
 					]
 				},
 				{
+					"name": "Admin - Receipt entry methods (como o user inputa)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/receipts/entry-methods?days=30",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"receipts",
+								"entry-methods"
+							],
+							"query": [
+								{
+									"key": "days",
+									"value": "30"
+								}
+							]
+						},
+						"description": "Como os usu\u00e1rios inputam suas notas: total + % de cada entryMethod (QR_SCAN, MANUAL_CHAVE, PHOTO_CHAVE, PHOTO_RECEIPT, IMPORT) + taxa de falha por m\u00e9todo, nos \u00faltimos `days` (default 30). ADMIN only.",
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(pm.info.requestName + ' \u2014 no server error (<500)', function () {",
+									"    pm.expect(pm.response.code).to.be.below(500);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
 					"name": "Admin - Retry failed by reason (lote)",
 					"request": {
 						"method": "POST",

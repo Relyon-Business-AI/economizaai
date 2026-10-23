@@ -31,6 +31,7 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
+import com.relyon.economizaai.model.enums.ReceiptEntryMethod;
 import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
@@ -139,7 +140,7 @@ public class ReceiptService {
     public ReceiptResponse submit(User user, SubmitReceiptRequest request) {
         var qrPayload = request.qrPayload();
         var chave = sefazIngestionService.resolveChave(qrPayload);
-        var receipt = validateAndPersistProcessing(user, qrPayload, chave);
+        var receipt = validateAndPersistProcessing(user, qrPayload, chave, request.entryMethod());
         var receiptId = receipt.getId();
         dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload));
         return withFriendlyName(user.getHousehold().getId(), receipt, ReceiptResponse.from(receipt));
@@ -156,7 +157,7 @@ public class ReceiptService {
     public ReceiptResponse submit(User user, SubmitReceiptRequest request, boolean deviceCapable) {
         var qrPayload = request.qrPayload();
         var chave = sefazIngestionService.resolveChave(qrPayload);
-        var receipt = validateAndPersistProcessing(user, qrPayload, chave);
+        var receipt = validateAndPersistProcessing(user, qrPayload, chave, request.entryMethod());
         var receiptId = receipt.getId();
         dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload, deviceCapable));
         return withFriendlyName(user.getHousehold().getId(), receipt, ReceiptResponse.from(receipt));
@@ -175,7 +176,9 @@ public class ReceiptService {
         // Client-authored content is only trusted for UFs the server cannot
         // fetch itself — everywhere else the server fetch is the integrity check.
         prefetchPolicy.requireAllowed(ChaveAcessoParser.extractUf(chave));
-        var receipt = validateAndPersistProcessing(user, qrPayload, chave);
+        // A prefetched receipt started as a QR scan (the app scanned the QR, then fetched the
+        // page on-device) — let the derivation read QR_SCAN from the URL payload.
+        var receipt = validateAndPersistProcessing(user, qrPayload, chave, null);
         var receiptId = receipt.getId();
         dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingestPrefetched(receiptId, qrPayload, rawContent));
         return withFriendlyName(user.getHousehold().getId(), receipt, ReceiptResponse.from(receipt));
@@ -397,7 +400,8 @@ public class ReceiptService {
      * already resolved (see {@link #submit}) — resolution can hit HTTP and never
      * belongs anywhere near a transaction.
      */
-    private Receipt validateAndPersistProcessing(User user, String qrPayload, String chave) {
+    private Receipt validateAndPersistProcessing(User user, String qrPayload, String chave,
+                                                 ReceiptEntryMethod entryMethod) {
         log.info("submit chave={}", LogMasker.chave(chave));
 
         // Fail unsupported UFs up front with a localized 400 — the async path
@@ -447,7 +451,7 @@ public class ReceiptService {
         enforceMonthlyReceiptCap(user);
         replaceStalePriorOrRejectConfirmedDuplicate(user, chave);
 
-        var receipt = persistProcessing(user, qrPayload, chave);
+        var receipt = persistProcessing(user, qrPayload, chave, ReceiptOrigin.SCAN, entryMethod);
         MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receipt.getId()));
         log.info("submit ok status=PROCESSING (ingestion dispatched)");
         return receipt;
@@ -488,11 +492,18 @@ public class ReceiptService {
      * rest of the fields + items are filled in by the async ingestion once the
      * DANFE is parsed.
      */
-    private Receipt persistProcessing(User user, String qrPayload, String chave) {
-        return persistProcessing(user, qrPayload, chave, ReceiptOrigin.SCAN);
+    private Receipt persistProcessing(User user, String qrPayload, String chave, ReceiptOrigin origin) {
+        return persistProcessing(user, qrPayload, chave, origin, null);
     }
 
-    private Receipt persistProcessing(User user, String qrPayload, String chave, ReceiptOrigin origin) {
+    /**
+     * {@code entryMethodOverride} is the client-reported entry method (lets the app split a typed
+     * chave from a photographed one); when null it's derived from the payload shape.
+     */
+    private Receipt persistProcessing(User user, String qrPayload, String chave, ReceiptOrigin origin,
+                                      ReceiptEntryMethod entryMethodOverride) {
+        var entryMethod = entryMethodOverride != null ? entryMethodOverride
+                : ReceiptEntryMethod.derive(origin, ChaveAcessoParser.isBareChave(qrPayload));
         var receipt = Receipt.builder()
                 .user(user)
                 .household(user.getHousehold())
@@ -500,6 +511,7 @@ public class ReceiptService {
                 .uf(ChaveAcessoParser.extractUf(chave))
                 .qrPayload(qrPayload)
                 .origin(origin)
+                .entryMethod(entryMethod)
                 .status(ReceiptStatus.PROCESSING)
                 .build();
         try {

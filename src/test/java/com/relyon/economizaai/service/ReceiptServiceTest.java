@@ -27,6 +27,7 @@ import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.ReceiptOrigin;
+import com.relyon.economizaai.model.enums.ReceiptEntryMethod;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
@@ -564,6 +565,10 @@ class ReceiptServiceTest {
         verify(sefazIngestionService, never()).fetch(any(), any());
         // the slow ingestion is handed off to the background service
         verify(receiptIngestionService).ingest(eq(response.id()), eq(QR_RS));
+        // a URL payload (live QR scan) is tagged QR_SCAN
+        var saved = ArgumentCaptor.forClass(Receipt.class);
+        verify(receiptRepository).save(saved.capture());
+        assertEquals(ReceiptEntryMethod.QR_SCAN, saved.getValue().getEntryMethod());
     }
 
     @Test
