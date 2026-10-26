@@ -24,10 +24,17 @@ public record MarketResponse(
         BigDecimal longitude,
         Double distanceKm,
         boolean visited,
-        boolean watching
+        boolean watching,
+        String chainName,
+        String chainLogoUrl
 ) {
     public static MarketResponse from(MarketLocation location, Double distanceKm,
                                       boolean visited, boolean watching) {
+        var chain = location.getChain();
+        String chainName = chain != null ? chain.getName() : null;
+        String chainLogoUrl = (chain != null && chain.getLogoUrl() != null)
+                ? "/api/v1/chains/logo/" + chain.getId()
+                : null;
         return new MarketResponse(
                 location.getCnpj(),
                 location.getCnpjRoot(),
@@ -38,13 +45,15 @@ public record MarketResponse(
                 location.getLongitude(),
                 distanceKm,
                 visited,
-                watching
+                watching,
+                chainName,
+                chainLogoUrl
         );
     }
 
     /** Copy with the household's custom display name applied. */
     public MarketResponse withFriendlyName(String friendlyName) {
         return new MarketResponse(cnpj, cnpjRoot, name, friendlyName, address,
-                latitude, longitude, distanceKm, visited, watching);
+                latitude, longitude, distanceKm, visited, watching, chainName, chainLogoUrl);
     }
 }

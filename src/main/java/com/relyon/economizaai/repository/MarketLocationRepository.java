@@ -33,4 +33,6 @@ public interface MarketLocationRepository extends JpaRepository<MarketLocation, 
     /** Grey-zone merchants pending an admin verdict (no override, segment outside
      *  every supported/blocked bucket) — the admin review queue. */
     List<MarketLocation> findAllBySupportOverrideIsNullAndSegmentIn(List<MerchantSegment> segments);
+
+    List<MarketLocation> findAllByCnpjRootAndChainIsNull(String cnpjRoot);
 }

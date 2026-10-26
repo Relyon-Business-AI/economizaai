@@ -74,7 +74,7 @@ public class WatchedMarketService {
                     var loc = locations.get(p.getMarketCnpj());
                     if (loc == null) {
                         return new MarketResponse(p.getMarketCnpj(), null, null, null, null, null, null, null,
-                                visitedCnpjs.contains(p.getMarketCnpj()), true);
+                                visitedCnpjs.contains(p.getMarketCnpj()), true, null, null);
                     }
                     return MarketResponse.from(loc, distanceFromHome(user, loc),
                             visitedCnpjs.contains(p.getMarketCnpj()), true);

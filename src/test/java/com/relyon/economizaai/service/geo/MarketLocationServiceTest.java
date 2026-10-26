@@ -7,6 +7,7 @@ import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.MerchantSegment;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.repository.MarketChainRepository;
 import com.relyon.economizaai.repository.MarketLocationRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.service.ContactService;
@@ -39,6 +40,7 @@ import static org.mockito.Mockito.when;
 class MarketLocationServiceTest {
 
     @Mock private MarketLocationRepository repository;
+    @Mock private MarketChainRepository chainRepository;
     @Mock private CategoryResolver categoryResolver;
     @Mock private NominatimGeocoder geocoder;
     @Mock private CnpjActivityClient cnpjActivityClient;
@@ -49,7 +51,7 @@ class MarketLocationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new MarketLocationService(repository, geocoder, cnpjActivityClient, productRepository,
+        service = new MarketLocationService(repository, chainRepository, geocoder, cnpjActivityClient, productRepository,
                 categoryResolver, contactService);
     }
 
