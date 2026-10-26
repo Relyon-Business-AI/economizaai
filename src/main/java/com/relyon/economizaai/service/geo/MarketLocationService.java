@@ -6,6 +6,7 @@ import com.relyon.economizaai.service.geo.CnpjActivityClient.CnpjLookup;
 import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.MerchantSegment;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.repository.MarketChainRepository;
 import com.relyon.economizaai.repository.MarketLocationRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.service.CategoryResolver;
@@ -47,6 +48,7 @@ public class MarketLocationService {
     private static final String BRASIL_SUFFIX = ", Brasil";
 
     private final MarketLocationRepository repository;
+    private final MarketChainRepository chainRepository;
     private final NominatimGeocoder geocoder;
     private final CnpjActivityClient cnpjActivityClient;
     private final ProductRepository productRepository;
@@ -74,11 +76,14 @@ public class MarketLocationService {
     public MarketLocation register(String cnpj, String name, String address) {
         var existing = repository.findByCnpj(cnpj);
         if (existing.isPresent()) return existing.get();
+        var cnpjRoot = PriceIndexService.cnpjRoot(cnpj);
+        var chain = chainRepository.findByCnpjRoot(cnpjRoot).orElse(null);
         var location = MarketLocation.builder()
                 .cnpj(cnpj)
-                .cnpjRoot(PriceIndexService.cnpjRoot(cnpj))
+                .cnpjRoot(cnpjRoot)
                 .name(name)
                 .address(address)
+                .chain(chain)
                 .build();
         var saved = repository.save(location);
         log.info("market_location.registered cnpj={} name='{}'", cnpj, name);

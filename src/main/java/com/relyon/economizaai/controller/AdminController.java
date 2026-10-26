@@ -1,7 +1,9 @@
 package com.relyon.economizaai.controller;
 
+import com.relyon.economizaai.dto.request.CreateMarketChainRequest;
 import com.relyon.economizaai.dto.request.MergeProductRequest;
 import com.relyon.economizaai.dto.request.MerchantSupportOverrideRequest;
+import com.relyon.economizaai.dto.request.UpdateMarketChainRequest;
 import com.relyon.economizaai.dto.request.ReceiptIdsRequest;
 import com.relyon.economizaai.dto.request.RetryByReasonRequest;
 import com.relyon.economizaai.dto.response.BatchResultResponse;
@@ -45,6 +47,7 @@ import com.relyon.economizaai.dto.response.GreyMerchantResponse;
 import com.relyon.economizaai.dto.response.LlmReportResponse;
 import com.relyon.economizaai.dto.response.MissingBrandProductResponse;
 import com.relyon.economizaai.dto.response.ProductDeletionResponse;
+import com.relyon.economizaai.dto.response.MarketChainResponse;
 import com.relyon.economizaai.dto.response.OrphanedObservationsResponse;
 import com.relyon.economizaai.dto.response.ProductMergeResultResponse;
 import com.relyon.economizaai.dto.response.PurgeObservationsResponse;
@@ -69,6 +72,7 @@ import com.relyon.economizaai.service.admin.AdminProductService;
 import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.dto.response.TaxonomyCoverageResponse;
 import com.relyon.economizaai.service.admin.AdminDevService;
+import com.relyon.economizaai.service.admin.AdminMarketChainService;
 import com.relyon.economizaai.service.admin.AdminReceiptService;
 import com.relyon.economizaai.service.admin.AdminUserService;
 import com.relyon.economizaai.service.analytics.AdminAnalyticsService;
@@ -109,6 +113,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -151,6 +156,7 @@ public class AdminController {
     private final MarketingDashboardService marketingDashboardService;
     private final StateCoverageService stateCoverageService;
     private final SefazIngestionService sefazIngestionService;
+    private final AdminMarketChainService adminMarketChainService;
     private final AdminDevService adminDevService;
 
     // Dev-only guard for the orphaned-observation bulk delete (off on prod).
@@ -723,5 +729,33 @@ public class AdminController {
     public ResponseEntity<ProductMergeResultResponse> mergeProduct(
             @PathVariable UUID id, @Valid @RequestBody MergeProductRequest request) {
         return ResponseEntity.ok(adminProductService.merge(id, request));
+    }
+
+    @GetMapping("/chains")
+    public ResponseEntity<List<MarketChainResponse>> listChains() {
+        return ResponseEntity.ok(adminMarketChainService.listAll());
+    }
+
+    @PostMapping("/chains")
+    public ResponseEntity<MarketChainResponse> createChain(@Valid @RequestBody CreateMarketChainRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(adminMarketChainService.create(request));
+    }
+
+    @PutMapping("/chains/{id}")
+    public ResponseEntity<MarketChainResponse> updateChain(
+            @PathVariable UUID id, @Valid @RequestBody UpdateMarketChainRequest request) {
+        return ResponseEntity.ok(adminMarketChainService.update(id, request));
+    }
+
+    @PostMapping("/chains/{id}/logo")
+    public ResponseEntity<MarketChainResponse> uploadChainLogo(
+            @PathVariable UUID id, @RequestParam("file") MultipartFile file) throws java.io.IOException {
+        return ResponseEntity.ok(adminMarketChainService.uploadLogo(id, file));
+    }
+
+    @DeleteMapping("/chains/{id}/logo")
+    public ResponseEntity<Void> deleteChainLogo(@PathVariable UUID id) throws java.io.IOException {
+        adminMarketChainService.deleteLogo(id);
+        return ResponseEntity.noContent().build();
     }
 }

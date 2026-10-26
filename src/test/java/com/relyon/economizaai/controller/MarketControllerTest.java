@@ -51,7 +51,7 @@ class MarketControllerTest {
     void list_returnsCatalogue() throws Exception {
         when(watchedMarketService.listForPicker(any(), any())).thenReturn(List.of(
                 new MarketResponse("11111111000111", "11111111", "Mercado A", "Mercado A", "Rua X",
-                        null, null, null, true, false)
+                        null, null, null, true, false, null, null)
         ));
 
         mockMvc.perform(get("/api/v1/markets")
@@ -65,7 +65,7 @@ class MarketControllerTest {
     void watched_returnsOnlyPinned() throws Exception {
         when(watchedMarketService.listWatched(any())).thenReturn(List.of(
                 new MarketResponse("22222222000111", "22222222", "Mercado B", "Mercado B", null,
-                        null, null, null, false, true)
+                        null, null, null, false, true, null, null)
         ));
 
         mockMvc.perform(get("/api/v1/markets/watched")
@@ -79,7 +79,7 @@ class MarketControllerTest {
     void pin_returnsRow() throws Exception {
         when(watchedMarketService.watch(any(), eq("33333333000111"))).thenReturn(
                 new MarketResponse("33333333000111", "33333333", "Mercado C", "Mercado C", null,
-                        null, null, null, false, true));
+                        null, null, null, false, true, null, null));
 
         mockMvc.perform(post("/api/v1/markets/watched/33333333000111")
                         .with(SecurityMockMvcRequestPostProcessors.user(principal())))

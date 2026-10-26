@@ -6,6 +6,9 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -94,6 +97,10 @@ public class MarketLocation extends BaseEntity {
     /** When the admin was emailed about this grey-zone merchant (dedup — one alert per CNPJ, ever). */
     @Column(name = "gray_sighting_notified_at")
     private LocalDateTime graySightingNotifiedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "chain_id")
+    private MarketChain chain;
 
     public boolean hasCoordinates() {
         return latitude != null && longitude != null;
