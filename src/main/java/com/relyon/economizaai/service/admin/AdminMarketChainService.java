@@ -42,7 +42,9 @@ public class AdminMarketChainService {
                     var name = (String) row[2];
                     var logoUrlKey = (String) row[3];
                     var marketCount = ((Number) row[4]).intValue();
-                    String logoUrl = logoUrlKey != null ? "/chains/logo/" + id : null;
+                    String logoUrl = logoUrlKey != null
+                            ? "/chains/logo/" + id + "?v=" + Math.abs(logoUrlKey.hashCode())
+                            : null;
                     return new MarketChainResponse(id, cnpjRoot, name, logoUrl, marketCount);
                 });
     }
