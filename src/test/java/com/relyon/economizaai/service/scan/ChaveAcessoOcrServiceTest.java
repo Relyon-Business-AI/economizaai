@@ -19,6 +19,8 @@ import java.io.IOException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -97,6 +99,33 @@ class ChaveAcessoOcrServiceTest {
         var photo = anyPhoto();
         var exception = assertThrows(InvalidReceiptPhotoException.class, () -> service.extractChave(photo));
         assertEquals("receipt.photo.chave.unreadable", exception.getMessageKey());
+    }
+
+    @Test
+    void extractChave_fallsBackToHardPreprocessWhenLightPassMisses() throws IOException {
+        // Passe leve não acha chave válida (lixo sem janela que case DV+UF+modelo);
+        // o passe forte (preprocessHard: upscale+unsharp+binarização) roda em seguida
+        // e lê a chave. Garante que a foto degradada é resgatada, não rejeitada.
+        when(ocrEngine.isAvailable()).thenReturn(true);
+        when(ocrEngine.recognizeDigits(any(BufferedImage.class)))
+                .thenReturn("0000 1111 2222 3333", CHAVE_VALID_DV);
+
+        var response = service.extractChave(anyPhoto());
+
+        assertEquals(CHAVE_VALID_DV, response.chaveAcesso());
+        assertEquals(UnidadeFederativa.RS, response.uf());
+        verify(ocrEngine, times(2)).recognizeDigits(any(BufferedImage.class));
+    }
+
+    @Test
+    void extractChave_skipsHardPassWhenLightPassAlreadyFindsChave() throws IOException {
+        when(ocrEngine.isAvailable()).thenReturn(true);
+        when(ocrEngine.recognizeDigits(any(BufferedImage.class))).thenReturn(CHAVE_VALID_DV);
+
+        service.extractChave(anyPhoto());
+
+        // passe leve bastou — o forte (mais caro) não é acionado
+        verify(ocrEngine, times(1)).recognizeDigits(any(BufferedImage.class));
     }
 
     @Test
