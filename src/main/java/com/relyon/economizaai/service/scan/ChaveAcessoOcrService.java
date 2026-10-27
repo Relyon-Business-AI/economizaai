@@ -14,6 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Reads the printed 44-digit chave de acesso off a receipt photo — the
@@ -29,6 +30,9 @@ public class ChaveAcessoOcrService {
 
     private static final int CHAVE_LENGTH = 44;
     private static final int MIN_OCR_WIDTH_PX = 1200;
+    // Modelos fiscais válidos (posições 21-22): 65 = NFC-e, 55 = NF-e. Nada mais
+    // existe — serve de terceira trava contra janelas falsas do OCR.
+    private static final Set<String> KNOWN_MODELS = Set.of("55", "65");
 
     private final PhotoUploadValidator photoUploadValidator;
     private final OcrEngine ocrEngine;
@@ -85,15 +89,20 @@ public class ChaveAcessoOcrService {
      * The chave is printed in eleven groups of four digits, often wrapped
      * across two lines, and the OCR text carries other digit runs (totals,
      * CNPJ line). Concatenate every digit and slide a 44-wide window; a
-     * window only wins if BOTH the mod-11 check digit and the UF prefix
-     * hold, which makes an accidental match across unrelated digit runs
-     * practically impossible.
+     * window only wins if the mod-11 check digit, the UF prefix AND the fiscal
+     * model (65/55) all hold. The check digit alone is weak — it passes for
+     * ~1 in 11 random windows — so on a crumpled/faded shot a garbage window
+     * can clear DV by luck; requiring a valid UF and model makes that window
+     * practically impossible (a real OCR miss from 2026 cleared DV with UF 12
+     * but carried model 52, which this gate now rejects).
      */
     private Optional<String> findValidChave(String recognizedText) {
         var digits = recognizedText.replaceAll("\\D", "");
         for (var start = 0; start + CHAVE_LENGTH <= digits.length(); start++) {
             var candidate = digits.substring(start, start + CHAVE_LENGTH);
-            if (ChaveAcessoParser.hasValidCheckDigit(candidate) && hasKnownUf(candidate)) {
+            if (ChaveAcessoParser.hasValidCheckDigit(candidate)
+                    && hasKnownUf(candidate)
+                    && hasKnownModel(candidate)) {
                 return Optional.of(candidate);
             }
         }
@@ -107,5 +116,9 @@ public class ChaveAcessoOcrService {
         } catch (InvalidQrPayloadException ex) {
             return false;
         }
+    }
+
+    private boolean hasKnownModel(String candidate) {
+        return KNOWN_MODELS.contains(ChaveAcessoParser.extractModel(candidate));
     }
 }
