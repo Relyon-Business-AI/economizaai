@@ -21,6 +21,12 @@ public interface MarketChainRepository extends JpaRepository<MarketChain, UUID> 
             LEFT JOIN market_locations m ON m.chain_id = c.id
             WHERE (:state IS NULL OR m.state = :state)
             AND (:search IS NULL OR c.name ILIKE '%' || :search || '%')
+            AND (:city IS NULL OR m.city ILIKE :city)
+            AND (
+                :hasLogo IS NULL
+                OR (:hasLogo = true AND c.logo_url IS NOT NULL)
+                OR (:hasLogo = false AND c.logo_url IS NULL)
+            )
             GROUP BY c.id
             ORDER BY c.name
             """,
@@ -30,10 +36,31 @@ public interface MarketChainRepository extends JpaRepository<MarketChain, UUID> 
             LEFT JOIN market_locations m ON m.chain_id = c.id
             WHERE (:state IS NULL OR m.state = :state)
             AND (:search IS NULL OR c.name ILIKE '%' || :search || '%')
+            AND (:city IS NULL OR m.city ILIKE :city)
+            AND (
+                :hasLogo IS NULL
+                OR (:hasLogo = true AND c.logo_url IS NOT NULL)
+                OR (:hasLogo = false AND c.logo_url IS NULL)
+            )
             """,
             nativeQuery = true)
-    Page<Object[]> findAllFiltered(@Param("state") String state, @Param("search") String search, Pageable pageable);
+    Page<Object[]> findAllFiltered(
+            @Param("state") String state,
+            @Param("search") String search,
+            @Param("city") String city,
+            @Param("hasLogo") Boolean hasLogo,
+            Pageable pageable);
 
     @Query(value = "SELECT DISTINCT m.state FROM market_locations m WHERE m.chain_id IS NOT NULL AND m.state IS NOT NULL ORDER BY m.state", nativeQuery = true)
     List<String> findDistinctStatesWithChains();
+
+    @Query(value = """
+            SELECT DISTINCT m.city
+            FROM market_locations m
+            WHERE m.chain_id IS NOT NULL
+            AND m.city IS NOT NULL
+            AND (:state IS NULL OR m.state = :state)
+            ORDER BY m.city
+            """, nativeQuery = true)
+    List<String> findDistinctCitiesWithChains(@Param("state") String state);
 }
