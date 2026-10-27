@@ -9,7 +9,8 @@ import com.relyon.economizaai.repository.MarketLocationRepository;
 import com.relyon.economizaai.service.chain.ChainLogoStorage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -32,14 +33,23 @@ public class AdminMarketChainService {
     private final MarketLocationRepository marketLocationRepository;
     private final ChainLogoStorage logoStorage;
 
-    @Value("${economizaai.base-url:http://localhost:8080}")
-    private String baseUrl;
+    @Transactional(readOnly = true)
+    public Page<MarketChainResponse> listAll(String state, String search, Pageable pageable) {
+        return chainRepository.findAllFiltered(state, search, pageable)
+                .map(row -> {
+                    var id = (UUID) row[0];
+                    var cnpjRoot = (String) row[1];
+                    var name = (String) row[2];
+                    var logoUrlKey = (String) row[3];
+                    var marketCount = ((Number) row[4]).intValue();
+                    String logoUrl = logoUrlKey != null ? "/chains/logo/" + id : null;
+                    return new MarketChainResponse(id, cnpjRoot, name, logoUrl, marketCount);
+                });
+    }
 
     @Transactional(readOnly = true)
-    public List<MarketChainResponse> listAll() {
-        return chainRepository.findAll().stream()
-                .map(chain -> MarketChainResponse.from(chain, baseUrl))
-                .toList();
+    public List<String> listStates() {
+        return chainRepository.findDistinctStatesWithChains();
     }
 
     @Transactional
@@ -54,7 +64,7 @@ public class AdminMarketChainService {
         var saved = chainRepository.save(chain);
         linkOrphanedMarkets(saved);
         log.info("market_chain.created id={} cnpjRoot={} name='{}'", saved.getId(), saved.getCnpjRoot(), saved.getName());
-        return MarketChainResponse.from(saved, baseUrl);
+        return MarketChainResponse.from(saved, marketLocationRepository.countByChain(saved));
     }
 
     @Transactional
@@ -64,7 +74,7 @@ public class AdminMarketChainService {
         chain.setName(request.name());
         var saved = chainRepository.save(chain);
         log.info("market_chain.updated id={} name='{}'", saved.getId(), saved.getName());
-        return MarketChainResponse.from(saved, baseUrl);
+        return MarketChainResponse.from(saved, marketLocationRepository.countByChain(saved));
     }
 
     @Transactional
@@ -79,7 +89,7 @@ public class AdminMarketChainService {
         chain.setLogoUrl(key);
         var saved = chainRepository.save(chain);
         log.info("market_chain.logo_uploaded id={} key={}", id, key);
-        return MarketChainResponse.from(saved, baseUrl);
+        return MarketChainResponse.from(saved, marketLocationRepository.countByChain(saved));
     }
 
     @Transactional

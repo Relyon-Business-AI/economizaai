@@ -8,12 +8,13 @@ public record MarketChainResponse(
         UUID id,
         String cnpjRoot,
         String name,
-        String logoUrl
+        String logoUrl,
+        int marketCount
 ) {
-    public static MarketChainResponse from(MarketChain chain, String baseUrl) {
+    public static MarketChainResponse from(MarketChain chain, long marketCount) {
         String logoUrl = chain.getLogoUrl() != null
-                ? baseUrl + "/api/v1/chains/logo/" + chain.getId()
+                ? "/chains/logo/" + chain.getId()
                 : null;
-        return new MarketChainResponse(chain.getId(), chain.getCnpjRoot(), chain.getName(), logoUrl);
+        return new MarketChainResponse(chain.getId(), chain.getCnpjRoot(), chain.getName(), logoUrl, (int) marketCount);
     }
 }

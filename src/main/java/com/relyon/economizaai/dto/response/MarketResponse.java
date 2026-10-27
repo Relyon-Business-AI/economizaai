@@ -33,7 +33,7 @@ public record MarketResponse(
         var chain = location.getChain();
         String chainName = chain != null ? chain.getName() : null;
         String chainLogoUrl = (chain != null && chain.getLogoUrl() != null)
-                ? "/api/v1/chains/logo/" + chain.getId()
+                ? "/chains/logo/" + chain.getId()
                 : null;
         return new MarketResponse(
                 location.getCnpj(),
