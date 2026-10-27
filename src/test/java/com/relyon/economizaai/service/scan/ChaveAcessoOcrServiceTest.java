@@ -100,6 +100,21 @@ class ChaveAcessoOcrServiceTest {
     }
 
     @Test
+    void extractChave_rejectsFalsePositiveWindowWithInvalidModel() throws IOException {
+        // Regressão real (nota RS amassada, 2026): o OCR devolveu uma janela de 44
+        // dígitos que CASOU o DV e tinha UF válida (12 = AC), mas com modelo 52 —
+        // inexistente (NFC-e=65, NF-e=55). Sem o gate de modelo isso voltava como
+        // chave "válida" e o app preenchia 44/44 ✓ com lixo.
+        var falsePositive = "12000546334172860617522432619999925942008202";
+        when(ocrEngine.isAvailable()).thenReturn(true);
+        when(ocrEngine.recognizeDigits(any(BufferedImage.class))).thenReturn(falsePositive);
+
+        var photo = anyPhoto();
+        var exception = assertThrows(InvalidReceiptPhotoException.class, () -> service.extractChave(photo));
+        assertEquals("receipt.photo.chave.unreadable", exception.getMessageKey());
+    }
+
+    @Test
     void extractChave_rejectsWhenOcrReturnsTooFewDigits() throws IOException {
         when(ocrEngine.isAvailable()).thenReturn(true);
         when(ocrEngine.recognizeDigits(any(BufferedImage.class))).thenReturn("1234 5678");
