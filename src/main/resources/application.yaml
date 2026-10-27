@@ -539,6 +539,15 @@ economizaai:
       access-key: ${R2_ACCESS_KEY_ID:}
       secret-key: ${R2_SECRET_ACCESS_KEY:}
       region: ${R2_REGION:auto}
+  chain-logo:
+    storage: ${CHAIN_LOGO_STORAGE:local}
+    local-dir: ${CHAIN_LOGO_DIR:/tmp/economizai/chain-logos}
+    r2:
+      endpoint: ${R2_ENDPOINT:}
+      bucket: ${R2_BUCKET:}
+      access-key: ${R2_ACCESS_KEY_ID:}
+      secret-key: ${R2_SECRET_ACCESS_KEY:}
+      region: ${R2_REGION:auto}
   receipt-photo:
     max-size-mb: 5            # QR-photo submit and chave-OCR uploads (multipart cap above must stay higher)
   ocr:
