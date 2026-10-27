@@ -28,7 +28,7 @@ public class MarketChainController {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(Duration.ofDays(7)).cachePublic())
+                .cacheControl(CacheControl.maxAge(Duration.ofHours(1)).cachePublic())
                 .contentType(MediaType.IMAGE_PNG)
                 .body(bytes);
     }

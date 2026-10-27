@@ -13,7 +13,7 @@ public record MarketChainResponse(
 ) {
     public static MarketChainResponse from(MarketChain chain, long marketCount) {
         String logoUrl = chain.getLogoUrl() != null
-                ? "/chains/logo/" + chain.getId() + "?v=" + Math.abs(chain.getLogoUrl().hashCode())
+                ? "/chains/logo/" + chain.getId()
                 : null;
         return new MarketChainResponse(chain.getId(), chain.getCnpjRoot(), chain.getName(), logoUrl, (int) marketCount);
     }
