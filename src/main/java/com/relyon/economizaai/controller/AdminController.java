@@ -732,8 +732,18 @@ public class AdminController {
     }
 
     @GetMapping("/chains")
-    public ResponseEntity<List<MarketChainResponse>> listChains() {
-        return ResponseEntity.ok(adminMarketChainService.listAll());
+    public ResponseEntity<Page<MarketChainResponse>> listChains(
+            @RequestParam(required = false) String state,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        var pageable = org.springframework.data.domain.PageRequest.of(page, Math.min(size, 100));
+        return ResponseEntity.ok(adminMarketChainService.listAll(state, search, pageable));
+    }
+
+    @GetMapping("/chains/states")
+    public ResponseEntity<List<String>> listChainStates() {
+        return ResponseEntity.ok(adminMarketChainService.listStates());
     }
 
     @PostMapping("/chains")

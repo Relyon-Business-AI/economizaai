@@ -1,5 +1,6 @@
 package com.relyon.economizaai.repository;
 
+import com.relyon.economizaai.model.MarketChain;
 import com.relyon.economizaai.model.MarketLocation;
 import com.relyon.economizaai.model.enums.MerchantSegment;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -35,4 +36,6 @@ public interface MarketLocationRepository extends JpaRepository<MarketLocation, 
     List<MarketLocation> findAllBySupportOverrideIsNullAndSegmentIn(List<MerchantSegment> segments);
 
     List<MarketLocation> findAllByCnpjRootAndChainIsNull(String cnpjRoot);
+
+    long countByChain(MarketChain chain);
 }
