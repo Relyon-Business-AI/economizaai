@@ -34,8 +34,8 @@ public class AdminMarketChainService {
     private final ChainLogoStorage logoStorage;
 
     @Transactional(readOnly = true)
-    public Page<MarketChainResponse> listAll(String state, String search, Pageable pageable) {
-        return chainRepository.findAllFiltered(state, search, pageable)
+    public Page<MarketChainResponse> listAll(String state, String search, String city, Boolean hasLogo, Pageable pageable) {
+        return chainRepository.findAllFiltered(state, search, city, hasLogo, pageable)
                 .map(row -> {
                     var id = (UUID) row[0];
                     var cnpjRoot = (String) row[1];
@@ -50,6 +50,11 @@ public class AdminMarketChainService {
     @Transactional(readOnly = true)
     public List<String> listStates() {
         return chainRepository.findDistinctStatesWithChains();
+    }
+
+    @Transactional(readOnly = true)
+    public List<String> listCities(String state) {
+        return chainRepository.findDistinctCitiesWithChains(state);
     }
 
     @Transactional
