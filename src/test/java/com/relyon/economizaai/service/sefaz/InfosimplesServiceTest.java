@@ -39,13 +39,14 @@ class InfosimplesServiceTest {
     private MockRestServiceServer server;
     private InfosimplesService service;
     private InfosimplesAlertService alertService;
+    private RestClient.Builder builder;
 
     @BeforeEach
     void setUp() {
-        var builder = RestClient.builder();
+        builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
         alertService = mock(InfosimplesAlertService.class);
-        service = new InfosimplesService(builder, alertService, API_KEY, BASE_URL, "MG", "RJ");
+        service = new InfosimplesService(builder, alertService, API_KEY, BASE_URL, "", "");
     }
 
     @Test
@@ -138,10 +139,46 @@ class InfosimplesServiceTest {
 
     @Test
     void fetchParsed_usesUfCodeLowercasedInUrl() {
-        server.expect(requestTo(BASE_URL + "/api/v2/consultas/sefaz/rs/nfce?token=test-key&nfce=" + CHAVE))
+        // PA maps to the plain `nfce` slug — keeps this focused on the lowercasing (PA→pa).
+        server.expect(requestTo(BASE_URL + "/api/v2/consultas/sefaz/pa/nfce?token=test-key&nfce=" + CHAVE))
                 .andRespond(withSuccess(MINIMAL_RESPONSE_JSON, MediaType.APPLICATION_JSON));
 
-        service.fetchParsed(CHAVE, UnidadeFederativa.RS);
+        service.fetchParsed(CHAVE, UnidadeFederativa.PA);
+
+        server.verify();
+    }
+
+    @Test
+    void fetchParsed_routesRnToResumidaSlug() {
+        // RN só existe em `.../rn/nfce-resumida` no Infosimples — o `/nfce` genérico
+        // devolve code 602 (foi o que estourou em prod). O mapa roteia explícito.
+        server.expect(requestTo(BASE_URL + "/api/v2/consultas/sefaz/rn/nfce-resumida?token=test-key&nfce=" + CHAVE))
+                .andRespond(withSuccess(MINIMAL_RESPONSE_JSON, MediaType.APPLICATION_JSON));
+
+        service.fetchParsed(CHAVE, UnidadeFederativa.RN);
+
+        server.verify();
+    }
+
+    @Test
+    void fetchParsed_routesRoToCompletaSlug() {
+        server.expect(requestTo(BASE_URL + "/api/v2/consultas/sefaz/ro/nfce-completa?token=test-key&nfce=" + CHAVE))
+                .andRespond(withSuccess(MINIMAL_RESPONSE_JSON, MediaType.APPLICATION_JSON));
+
+        service.fetchParsed(CHAVE, UnidadeFederativa.RO);
+
+        server.verify();
+    }
+
+    @Test
+    void fetchParsed_envOverrideFlipsSlug() {
+        // Override por env tem prioridade sobre o mapa: força MS (normalmente /nfce)
+        // pro slug resumida sem deploy.
+        var overridden = new InfosimplesService(builder, alertService, API_KEY, BASE_URL, "MS", "");
+        server.expect(requestTo(BASE_URL + "/api/v2/consultas/sefaz/ms/nfce-resumida?token=test-key&nfce=" + CHAVE))
+                .andRespond(withSuccess(MINIMAL_RESPONSE_JSON, MediaType.APPLICATION_JSON));
+
+        overridden.fetchParsed(CHAVE, UnidadeFederativa.MS);
 
         server.verify();
     }

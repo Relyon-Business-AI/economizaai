@@ -264,13 +264,12 @@ economizaai:
     # saldo abaixo deste valor — CE (rota exclusiva Infosimples) para sem saldo.
     # Falhas de consulta paga também alertam (throttle de 6h no código).
     low-balance-threshold: ${INFOSIMPLES_LOW_BALANCE_THRESHOLD:5.00}
-    # UFs whose NFC-e consultation lives at `.../sefaz/{uf}/nfce-resumida` (distinct
-    # "resumida" schema) instead of the default `.../sefaz/{uf}/nfce`. MG only, so far
-    # — the default endpoint returns code 602 "serviço não é válido" for it.
-    resumida-states: ${SEFAZ_INFOSIMPLES_RESUMIDA_STATES:MG}
-    # UFs that only exist under `.../sefaz/{uf}/nfce-completa` (same "completa"
-    # schema as the default). RJ has no plain `nfce` service — it 602'd every call.
-    completa-states: ${SEFAZ_INFOSIMPLES_COMPLETA_STATES:RJ}
+    # A rota NFC-e por UF é explícita no código (NFCE_SLUG_BY_UF em InfosimplesService):
+    # MG/RN em nfce-resumida, RJ/RO em nfce-completa, as demais em nfce. Estas duas keys
+    # são OVERRIDES sem deploy (vazias por padrão) caso o Infosimples remaneje a rota de
+    # um estado — forçam a UF pro slug resumida/completa sem mexer no código.
+    resumida-states: ${SEFAZ_INFOSIMPLES_RESUMIDA_STATES:}
+    completa-states: ${SEFAZ_INFOSIMPLES_COMPLETA_STATES:}
   # Cost control for paid external calls (captcha solves + Infosimples). Every paid
   # call is always logged to paid_api_call for invoice reconciliation. `enabled`
   # gates enforcement: per-user daily caps (a hard cost/abuse guard, independent of

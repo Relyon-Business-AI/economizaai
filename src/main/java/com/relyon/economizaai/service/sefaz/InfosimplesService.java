@@ -39,11 +39,14 @@ import java.util.Set;
  * this is intentionally a last resort, called only after the primary scraper
  * exhausts its retries.
  *
- * <p>Most UFs use the {@code /api/v2/consultas/sefaz/{uf}/nfce} endpoint — the UF
- * code is lowercased from the chave's IBGE prefix (50→ms, 43→rs, etc.). A few UFs
- * (MG) are only exposed under {@code .../{uf}/nfce-resumida} and return a different
- * "resumida" JSON schema (produtos_servicos/valores); those UFs are listed in
- * {@code economizaai.infosimples.resumida-states} and handled by the same mapping.
+ * <p>The UF code is lowercased from the chave's IBGE prefix (50→ms, 43→rs, etc.).
+ * The NFC-e route per UF is NOT guessed — it comes from the explicit
+ * {@code NFCE_SLUG_BY_UF} map (verified against api.infosimples.com/consultas/status):
+ * most UFs use {@code .../{uf}/nfce}, but MG/RN only exist under {@code nfce-resumida}
+ * and RJ/RO only under {@code nfce-completa} (the plain {@code /nfce} returns code 602
+ * there). {@code economizaai.infosimples.{resumida,completa}-states} stay as no-deploy
+ * overrides on top of the map. The parser auto-detects the resumida vs completa JSON
+ * schema from the fields present, so the slug only drives the URL.
  */
 @Slf4j
 @Service
@@ -62,17 +65,49 @@ public class InfosimplesService {
     // retenção do portal / nunca transmitida). Não contam pro circuit breaker.
     private static final Set<Integer> DETERMINISTIC_NO_DATA_CODES = Set.of(602, 607, 612);
 
+    // Rota NFC-e autoritativa por UF, conferida contra api.infosimples.com/consultas/status
+    // (2026-10-27). A maioria das UFs expõe .../sefaz/{uf}/nfce; algumas NÃO têm o slug
+    // simples — MG e RN só existem em nfce-resumida; RJ e RO só em nfce-completa — e
+    // devolvem code 602 "serviço informado na URL não é válido" no /nfce. Chutar "nfce"
+    // pra essas gasta uma consulta paga à toa (foi o que falhou com RN), então cada UF é
+    // roteada explicitamente aqui em vez de adivinhar o padrão da URL.
+    private static final Map<UnidadeFederativa, String> NFCE_SLUG_BY_UF = Map.ofEntries(
+            Map.entry(UnidadeFederativa.AC, "nfce"),
+            Map.entry(UnidadeFederativa.AL, "nfce"),
+            Map.entry(UnidadeFederativa.AM, "nfce"),
+            Map.entry(UnidadeFederativa.AP, "nfce"),
+            Map.entry(UnidadeFederativa.BA, "nfce"),
+            Map.entry(UnidadeFederativa.CE, "nfce"),
+            Map.entry(UnidadeFederativa.DF, "nfce"),
+            Map.entry(UnidadeFederativa.ES, "nfce"),
+            Map.entry(UnidadeFederativa.GO, "nfce"),
+            Map.entry(UnidadeFederativa.MA, "nfce"),
+            Map.entry(UnidadeFederativa.MG, "nfce-resumida"),
+            Map.entry(UnidadeFederativa.MS, "nfce"),
+            Map.entry(UnidadeFederativa.MT, "nfce"),
+            Map.entry(UnidadeFederativa.PA, "nfce"),
+            Map.entry(UnidadeFederativa.PB, "nfce"),
+            Map.entry(UnidadeFederativa.PE, "nfce"),
+            Map.entry(UnidadeFederativa.PI, "nfce"),
+            Map.entry(UnidadeFederativa.PR, "nfce"),
+            Map.entry(UnidadeFederativa.RJ, "nfce-completa"),
+            Map.entry(UnidadeFederativa.RN, "nfce-resumida"),
+            Map.entry(UnidadeFederativa.RO, "nfce-completa"),
+            Map.entry(UnidadeFederativa.RR, "nfce"),
+            Map.entry(UnidadeFederativa.RS, "nfce-resumida"),
+            Map.entry(UnidadeFederativa.SC, "nfce"),
+            Map.entry(UnidadeFederativa.SE, "nfce"),
+            Map.entry(UnidadeFederativa.SP, "nfce"),
+            Map.entry(UnidadeFederativa.TO, "nfce"));
+
     private final String apiKey;
     private final InfosimplesAlertService alertService;
     private final RestClient restClient;
-    // UFs whose Infosimples NFC-e consultation lives at the `.../sefaz/{uf}/nfce-resumida`
-    // slug and returns the "resumida" schema (produtos_servicos/valores) rather than the
-    // default `.../sefaz/{uf}/nfce`. MG is the only one verified so far — the default
-    // path returns code 602 "serviço informado na URL não é válido" for it.
+    // Overrides em cima do mapa NFCE_SLUG_BY_UF — forçam uma UF pro slug
+    // `-resumida` / `-completa` sem deploy (env SEFAZ_INFOSIMPLES_RESUMIDA_STATES /
+    // _COMPLETA_STATES), caso o Infosimples remaneje a rota de um estado. Vazio por
+    // padrão: o mapa já carrega as rotas corretas (MG/RN resumida, RJ/RO completa).
     private final Set<UnidadeFederativa> resumidaStates;
-    // UFs that only exist under the `.../sefaz/{uf}/nfce-completa` slug (same
-    // "completa" schema as the default). RJ has NO plain `nfce` service — every
-    // call returned 602 until this routing (5 wasted queries, set 2026-09-29).
     private final Set<UnidadeFederativa> completaStates;
 
     public InfosimplesService(
@@ -80,15 +115,15 @@ public class InfosimplesService {
             InfosimplesAlertService alertService,
             @Value("${economizaai.infosimples.api-key}") String apiKey,
             @Value("${economizaai.infosimples.base-url:https://api.infosimples.com}") String baseUrl,
-            @Value("${economizaai.infosimples.resumida-states:MG}") String resumidaStatesCsv,
-            @Value("${economizaai.infosimples.completa-states:RJ}") String completaStatesCsv) {
+            @Value("${economizaai.infosimples.resumida-states:}") String resumidaStatesCsv,
+            @Value("${economizaai.infosimples.completa-states:}") String completaStatesCsv) {
         this.apiKey = apiKey;
         this.alertService = alertService;
         this.restClient = builder.baseUrl(baseUrl).build();
         this.resumidaStates = parseStates(resumidaStatesCsv);
         this.completaStates = parseStates(completaStatesCsv);
-        log.info("infosimples.service enabled base-url={} resumida-states={} completa-states={}",
-                baseUrl, resumidaStates, completaStates);
+        log.info("infosimples.service enabled base-url={} mapped-ufs={} resumida-override={} completa-override={}",
+                baseUrl, NFCE_SLUG_BY_UF.size(), resumidaStates, completaStates);
     }
 
     private static Set<UnidadeFederativa> parseStates(String csv) {
@@ -105,6 +140,19 @@ public class InfosimplesService {
                     }
                 });
         return states;
+    }
+
+    // Slug da rota NFC-e pra UF: override por env tem prioridade, senão o mapa autoritativo.
+    // UF sem rota mapeada falha determinístico (sem gastar consulta) em vez de chutar "nfce".
+    private String resourceFor(UnidadeFederativa uf) {
+        if (resumidaStates.contains(uf)) return "nfce-resumida";
+        if (completaStates.contains(uf)) return "nfce-completa";
+        var slug = NFCE_SLUG_BY_UF.get(uf);
+        if (slug == null) {
+            log.error("infosimples.slug.unmapped uf={} — sem rota NFC-e conhecida, recusando chutar /nfce", uf);
+            throw new InfosimplesNoDataException("infosimples.not-found", -1);
+        }
+        return slug;
     }
 
     /**
@@ -127,9 +175,7 @@ public class InfosimplesService {
                     .retrieve()
                     .body(RESPONSE_TYPE);
         } else {
-            var resource = resumidaStates.contains(uf) ? "nfce-resumida"
-                    : completaStates.contains(uf) ? "nfce-completa"
-                    : "nfce";
+            var resource = resourceFor(uf);
             log.info("infosimples.fetch chave={} uf={} resource={}", abbrev(chave), ufCode, resource);
             response = restClient.get()
                     .uri("/api/v2/consultas/sefaz/{uf}/{resource}?token={token}&nfce={nfce}",
