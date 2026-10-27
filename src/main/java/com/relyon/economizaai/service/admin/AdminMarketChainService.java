@@ -9,7 +9,7 @@ import com.relyon.economizaai.repository.MarketLocationRepository;
 import com.relyon.economizaai.service.chain.ChainLogoStorage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -32,13 +32,10 @@ public class AdminMarketChainService {
     private final MarketLocationRepository marketLocationRepository;
     private final ChainLogoStorage logoStorage;
 
-    @Value("${economizaai.base-url:http://localhost:8080}")
-    private String baseUrl;
-
     @Transactional(readOnly = true)
     public List<MarketChainResponse> listAll() {
-        return chainRepository.findAll().stream()
-                .map(chain -> MarketChainResponse.from(chain, baseUrl))
+        return chainRepository.findAll(Sort.by("name")).stream()
+                .map(MarketChainResponse::from)
                 .toList();
     }
 
@@ -54,7 +51,7 @@ public class AdminMarketChainService {
         var saved = chainRepository.save(chain);
         linkOrphanedMarkets(saved);
         log.info("market_chain.created id={} cnpjRoot={} name='{}'", saved.getId(), saved.getCnpjRoot(), saved.getName());
-        return MarketChainResponse.from(saved, baseUrl);
+        return MarketChainResponse.from(saved);
     }
 
     @Transactional
@@ -64,7 +61,7 @@ public class AdminMarketChainService {
         chain.setName(request.name());
         var saved = chainRepository.save(chain);
         log.info("market_chain.updated id={} name='{}'", saved.getId(), saved.getName());
-        return MarketChainResponse.from(saved, baseUrl);
+        return MarketChainResponse.from(saved);
     }
 
     @Transactional
@@ -79,7 +76,7 @@ public class AdminMarketChainService {
         chain.setLogoUrl(key);
         var saved = chainRepository.save(chain);
         log.info("market_chain.logo_uploaded id={} key={}", id, key);
-        return MarketChainResponse.from(saved, baseUrl);
+        return MarketChainResponse.from(saved);
     }
 
     @Transactional

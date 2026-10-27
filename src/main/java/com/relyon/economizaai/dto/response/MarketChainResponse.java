@@ -10,9 +10,9 @@ public record MarketChainResponse(
         String name,
         String logoUrl
 ) {
-    public static MarketChainResponse from(MarketChain chain, String baseUrl) {
+    public static MarketChainResponse from(MarketChain chain) {
         String logoUrl = chain.getLogoUrl() != null
-                ? baseUrl + "/api/v1/chains/logo/" + chain.getId()
+                ? "/chains/logo/" + chain.getId()
                 : null;
         return new MarketChainResponse(chain.getId(), chain.getCnpjRoot(), chain.getName(), logoUrl);
     }
