@@ -91,6 +91,21 @@ class ChaveAcessoOcrServiceTest {
     }
 
     @Test
+    void extractChave_returnsBestEffortGuessWhenCheckDigitFailsButStructureValid() throws IOException {
+        // UF + modelo + AAMM válidos, mas o DV não fecha (1 dígito trocado) — provável
+        // erro de OCR. Volta como melhor-esforço (uncertain=true) pro usuário conferir.
+        var dvBroken = CHAVE_VALID_DV.substring(0, 43) + (CHAVE_VALID_DV.charAt(43) == '2' ? "3" : "2");
+        when(ocrEngine.isAvailable()).thenReturn(true);
+        when(ocrEngine.recognizeDigits(any(BufferedImage.class))).thenReturn(dvBroken);
+
+        var response = service.extractChave(anyPhoto());
+
+        assertEquals(dvBroken, response.chaveAcesso());
+        assertEquals(UnidadeFederativa.RS, response.uf());
+        assertEquals(true, response.uncertain());
+    }
+
+    @Test
     void extractChave_rejectsWhenNoWindowPassesCheckDigit() throws IOException {
         var misread = CHAVE_VALID_DV.substring(0, 20) + "0" + CHAVE_VALID_DV.substring(21);
         when(ocrEngine.isAvailable()).thenReturn(true);
