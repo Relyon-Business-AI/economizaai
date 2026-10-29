@@ -16,7 +16,6 @@ import java.awt.image.BufferedImage;
 import java.awt.image.ConvolveOp;
 import java.awt.image.Kernel;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * Reads the printed 44-digit chave de acesso off a receipt photo — the
@@ -32,9 +31,6 @@ public class ChaveAcessoOcrService {
 
     private static final int CHAVE_LENGTH = 44;
     private static final int MIN_OCR_WIDTH_PX = 1200;
-    // Modelos fiscais válidos (posições 21-22): 65 = NFC-e, 55 = NF-e. Nada mais
-    // existe — serve de terceira trava contra janelas falsas do OCR.
-    private static final Set<String> KNOWN_MODELS = Set.of("55", "65");
     // Passe "forte" (fallback): upscale maior + unsharp + binarização de limiar
     // fixo. Validado contra fotos degradadas (amassadas/apagadas) subindo a leitura
     // de ~3/15 pra ~12/15 em relação ao passe leve. Só roda quando o leve falha.
@@ -214,12 +210,13 @@ public class ChaveAcessoOcrService {
      * The chave is printed in eleven groups of four digits, often wrapped
      * across two lines, and the OCR text carries other digit runs (totals,
      * CNPJ line). Concatenate every digit and slide a 44-wide window; a
-     * window only wins if the mod-11 check digit, the UF prefix AND the fiscal
-     * model (65/55) all hold. The check digit alone is weak — it passes for
-     * ~1 in 11 random windows — so on a crumpled/faded shot a garbage window
-     * can clear DV by luck; requiring a valid UF and model makes that window
-     * practically impossible (a real OCR miss from 2026 cleared DV with UF 12
-     * but carried model 52, which this gate now rejects).
+     * window only wins if the mod-11 check digit, the UF prefix AND the whole
+     * structural shape (model 65/55, month 01-12, tpEmis 1-9) all hold. The
+     * check digit alone is weak — it passes for ~1 in 11 random windows — so on
+     * a crumpled/faded shot a garbage window can clear DV by luck; requiring a
+     * valid UF and structure makes that window practically impossible (a real
+     * OCR miss from 2026 cleared DV with UF 12 but carried model 52, which this
+     * gate now rejects).
      */
     private Optional<String> findValidChave(String recognizedText) {
         var digits = recognizedText.replaceAll("\\D", "");
@@ -227,7 +224,7 @@ public class ChaveAcessoOcrService {
             var candidate = digits.substring(start, start + CHAVE_LENGTH);
             if (ChaveAcessoParser.hasValidCheckDigit(candidate)
                     && hasKnownUf(candidate)
-                    && hasKnownModel(candidate)) {
+                    && ChaveAcessoParser.hasPlausibleStructure(candidate)) {
                 return Optional.of(candidate);
             }
         }
@@ -243,14 +240,10 @@ public class ChaveAcessoOcrService {
         }
     }
 
-    private boolean hasKnownModel(String candidate) {
-        return KNOWN_MODELS.contains(ChaveAcessoParser.extractModel(candidate));
-    }
-
     /**
-     * Strongest structurally-plausible 44-window — valid UF, valid model (65/55) and a
-     * plausible AAMM month — whose mod-11 digit did NOT close (so findValidChave already
-     * rejected it). Returned only as a best-effort guess for the user to review/fix.
+     * Strongest structurally-plausible 44-window — valid UF plus a valid model (65/55),
+     * month (01-12) and tpEmis (1-9) — whose mod-11 digit did NOT close (so findValidChave
+     * already rejected it). Returned only as a best-effort guess for the user to review/fix.
      */
     private Optional<String> findBestEffortChave(String recognizedText) {
         if (recognizedText == null) {
@@ -259,8 +252,8 @@ public class ChaveAcessoOcrService {
         var digits = recognizedText.replaceAll("\\D", "");
         for (var start = 0; start + CHAVE_LENGTH <= digits.length(); start++) {
             var candidate = digits.substring(start, start + CHAVE_LENGTH);
-            if (hasKnownUf(candidate) && hasKnownModel(candidate)
-                    && ChaveAcessoParser.hasPlausibleYearMonth(candidate)
+            if (hasKnownUf(candidate)
+                    && ChaveAcessoParser.hasPlausibleStructure(candidate)
                     && !ChaveAcessoParser.hasValidCheckDigit(candidate)) {
                 return Optional.of(candidate);
             }

@@ -425,6 +425,15 @@ public class ReceiptService {
             log.info("submit rejected reason=invalid_check_digit chave={}", LogMasker.chave(chave));
             throw new InvalidChaveException();
         }
+        // Chave pura estruturalmente impossível (modelo ≠ 65/55, mês fora de 01-12 ou tpEmis
+        // fora de 1-9) que casou o DV por acaso (~1/11) — é scan/OCR corrompido, não nota real.
+        // Sem este guard ela entra no pipeline, vira CONTINGENCY_PENDING e alerta a cada resync
+        // de 6h (foi o caso da chave-lixo RN). Rejeita síncrono com a mesma msg de "confira os
+        // dígitos / tente de novo" — spec-invariante, nenhuma nota válida é barrada.
+        if (ChaveAcessoParser.isBareChave(qrPayload) && !ChaveAcessoParser.hasPlausibleStructure(chave)) {
+            log.info("submit rejected reason=implausible_chave_structure chave={}", LogMasker.chave(chave));
+            throw new InvalidChaveException();
+        }
         // A manually-typed bare chave has no QR signature. Portals that require it
         // can only be served by the paid by-chave fallback — and RS not even by that
         // (gov.br wall). Reject up front instead of failing (or spending) async.
