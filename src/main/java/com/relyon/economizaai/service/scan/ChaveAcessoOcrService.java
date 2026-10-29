@@ -39,6 +39,10 @@ public class ChaveAcessoOcrService {
     // fixo. Validado contra fotos degradadas (amassadas/apagadas) subindo a leitura
     // de ~3/15 pra ~12/15 em relação ao passe leve. Só roda quando o leve falha.
     private static final int HARD_OCR_WIDTH_PX = 2400;
+    // Passe "médio" só pro best-effort: fotos grandes (3-4 mil px) rodam em full-res
+    // no passe leve e saem ruidosas; reduzir pra ~1600 (glifos num tamanho que o
+    // Tesseract lê melhor) costuma dar a leitura com menos dígitos errados.
+    private static final int MEDIUM_OCR_WIDTH_PX = 1600;
     private static final double UNSHARP_SIGMA = 2.5;
     private static final int UNSHARP_RADIUS = 8;
     private static final float UNSHARP_AMOUNT = 1.0f;
@@ -68,20 +72,37 @@ public class ChaveAcessoOcrService {
         // DV+UF+modelo em findValidChave garante que nenhum dos dois devolva lixo.
         var primaryText = ocrEngine.recognizeDigits(preprocess(image));
         var chave = findValidChave(primaryText).orElse(null);
+        var hardText = chave == null ? ocrEngine.recognizeDigits(preprocessHard(image)) : null;
         if (chave == null) {
-            chave = findValidChave(ocrEngine.recognizeDigits(preprocessHard(image))).orElse(null);
+            chave = findValidChave(hardText).orElse(null);
             if (chave != null) {
                 log.info("chave_ocr.rescued_by_hard_pass");
             }
         }
-        if (chave == null) {
-            log.info("chave_ocr.unreadable digits={} size={}x{}",
-                    primaryText.replaceAll("\\D", "").length(), image.getWidth(), image.getHeight());
-            throw new InvalidReceiptPhotoException("receipt.photo.chave.unreadable");
+        if (chave != null) {
+            var uf = ChaveAcessoParser.extractUf(chave);
+            log.info("chave_ocr.extracted chave={} uf={}", LogMasker.chave(chave), uf);
+            return new ChaveExtractionResponse(chave, uf);
         }
-        var uf = ChaveAcessoParser.extractUf(chave);
-        log.info("chave_ocr.extracted chave={} uf={}", LogMasker.chave(chave), uf);
-        return new ChaveExtractionResponse(chave, uf);
+        // Nenhuma janela fechou o DV. Tenta um melhor-esforço: a janela mais plausível
+        // ESTRUTURALMENTE (UF + modelo + AAMM válidos) cujo DV não fechou — provável erro
+        // de 1-2 dígitos. Volta pro usuário CONFERIR/corrigir (uncertain=true); nunca
+        // entra sozinha, e o gate de DV no submit impede gastar em chave errada.
+        // Palpite: tenta o passe médio (downscale ~1600, costuma ler foto grande com
+        // menos erro), depois o forte (2400 binarizado) e por fim o leve.
+        var mediumText = ocrEngine.recognizeDigits(scaleToGray(image, MEDIUM_OCR_WIDTH_PX));
+        var guess = findBestEffortChave(mediumText)
+                .or(() -> findBestEffortChave(hardText))
+                .or(() -> findBestEffortChave(primaryText))
+                .orElse(null);
+        if (guess != null) {
+            var uf = ChaveAcessoParser.extractUf(guess);
+            log.info("chave_ocr.best_effort chave={} uf={}", LogMasker.chave(guess), uf);
+            return new ChaveExtractionResponse(guess, uf, null, true);
+        }
+        log.info("chave_ocr.unreadable digits={} size={}x{}",
+                primaryText.replaceAll("\\D", "").length(), image.getWidth(), image.getHeight());
+        throw new InvalidReceiptPhotoException("receipt.photo.chave.unreadable");
     }
 
     /**
@@ -224,5 +245,26 @@ public class ChaveAcessoOcrService {
 
     private boolean hasKnownModel(String candidate) {
         return KNOWN_MODELS.contains(ChaveAcessoParser.extractModel(candidate));
+    }
+
+    /**
+     * Strongest structurally-plausible 44-window — valid UF, valid model (65/55) and a
+     * plausible AAMM month — whose mod-11 digit did NOT close (so findValidChave already
+     * rejected it). Returned only as a best-effort guess for the user to review/fix.
+     */
+    private Optional<String> findBestEffortChave(String recognizedText) {
+        if (recognizedText == null) {
+            return Optional.empty();
+        }
+        var digits = recognizedText.replaceAll("\\D", "");
+        for (var start = 0; start + CHAVE_LENGTH <= digits.length(); start++) {
+            var candidate = digits.substring(start, start + CHAVE_LENGTH);
+            if (hasKnownUf(candidate) && hasKnownModel(candidate)
+                    && ChaveAcessoParser.hasPlausibleYearMonth(candidate)
+                    && !ChaveAcessoParser.hasValidCheckDigit(candidate)) {
+                return Optional.of(candidate);
+            }
+        }
+        return Optional.empty();
     }
 }

@@ -108,6 +108,19 @@ public final class ChaveAcessoParser {
     }
 
     /**
+     * True when positions 3-6 (AAMM — emission year/month) carry a plausible month
+     * (01-12). Used as a structural sanity check on best-effort OCR reads, where the
+     * mod-11 digit alone isn't enough to trust a window.
+     */
+    public static boolean hasPlausibleYearMonth(String chave) {
+        if (chave == null || !CHAVE_PATTERN.matcher(chave).matches()) {
+            return false;
+        }
+        var month = Integer.parseInt(chave.substring(4, 6));
+        return month >= 1 && month <= 12;
+    }
+
+    /**
      * True when the note was NOT issued in normal mode (tpEmis, position 35 of
      * the chave, != 1) — e.g. 9 = NFC-e offline contingency. A contingency note
      * may take up to 24h to reach SEFAZ, so a portal rejection for it means
