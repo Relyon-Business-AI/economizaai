@@ -160,4 +160,30 @@ class ChaveAcessoParserTest {
         assertFalse(ChaveAcessoParser.isContingencyEmission(null));
         assertFalse(ChaveAcessoParser.isContingencyEmission("123"));
     }
+
+    // Chave-lixo real (nota RN, 2026): OCR/typo montou 44 dígitos que CASARAM o DV por
+    // acaso (1/11), mas os campos fixos são impossíveis — modelo 60, mês 98, tpEmis 0.
+    private static final String CHAVE_LIXO_RN = "24009899180236001500600516265112000546334172";
+
+    @Test
+    void hasKnownModel_trueFor65or55_falseForGarbage() {
+        assertTrue(ChaveAcessoParser.hasKnownModel(CHAVE_RS), "modelo 65");
+        assertFalse(ChaveAcessoParser.hasKnownModel(CHAVE_LIXO_RN), "modelo 60 inexistente");
+        assertFalse(ChaveAcessoParser.hasKnownModel(null));
+    }
+
+    @Test
+    void hasValidTpEmis_trueFor1to9_falseForZero() {
+        assertTrue(ChaveAcessoParser.hasValidTpEmis(CHAVE_RS), "tpEmis 1 (normal)");
+        assertFalse(ChaveAcessoParser.hasValidTpEmis(CHAVE_LIXO_RN), "tpEmis 0 impossível");
+        assertFalse(ChaveAcessoParser.hasValidTpEmis(null));
+    }
+
+    @Test
+    void hasPlausibleStructure_trueForRealChave_falseForDvLuckyGarbage() {
+        // A chave-lixo passa no DV mas falha na estrutura — é o caso que o gate precisa barrar.
+        assertTrue(ChaveAcessoParser.hasValidCheckDigit(CHAVE_LIXO_RN), "DV casou por acaso");
+        assertFalse(ChaveAcessoParser.hasPlausibleStructure(CHAVE_LIXO_RN));
+        assertTrue(ChaveAcessoParser.hasPlausibleStructure(CHAVE_RS), "nota real é plausível");
+    }
 }

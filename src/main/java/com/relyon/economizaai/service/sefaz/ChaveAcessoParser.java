@@ -4,11 +4,14 @@ import com.relyon.economizaai.exception.CaptchaUnavailableException;
 import com.relyon.economizaai.exception.InvalidQrPayloadException;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 
+import java.util.Set;
 import java.util.regex.Pattern;
 
 public final class ChaveAcessoParser {
 
     private static final Pattern CHAVE_PATTERN = Pattern.compile("\\d{44}");
+    // Modelos fiscais válidos (posições 21-22): 65 = NFC-e, 55 = NF-e. Nada mais existe.
+    private static final Set<String> KNOWN_MODELS = Set.of("55", "65");
     private static final Pattern P_PARAM_PATTERN = Pattern.compile("[?&]p=([^&]+)", Pattern.CASE_INSENSITIVE);
 
     private ChaveAcessoParser() {}
@@ -107,6 +110,14 @@ public final class ChaveAcessoParser {
         return chave.substring(20, 22);
     }
 
+    /** True when the fiscal model (positions 21-22) is a real one: 65 (NFC-e) or 55 (NF-e). */
+    public static boolean hasKnownModel(String chave) {
+        if (chave == null || !CHAVE_PATTERN.matcher(chave).matches()) {
+            return false;
+        }
+        return KNOWN_MODELS.contains(chave.substring(20, 22));
+    }
+
     /**
      * True when positions 3-6 (AAMM — emission year/month) carry a plausible month
      * (01-12). Used as a structural sanity check on best-effort OCR reads, where the
@@ -131,5 +142,29 @@ public final class ChaveAcessoParser {
             return false;
         }
         return chave.charAt(34) != '1';
+    }
+
+    /**
+     * True when tpEmis (position 35) is a real emission type: 1 (normal) or 2-9
+     * (the contingency modes). A {@code 0} is impossible in a genuine nota — it
+     * only shows up on a corrupted/misread key that happened to clear the DV.
+     */
+    public static boolean hasValidTpEmis(String chave) {
+        if (chave == null || !CHAVE_PATTERN.matcher(chave).matches()) {
+            return false;
+        }
+        var tpEmis = chave.charAt(34);
+        return tpEmis >= '1' && tpEmis <= '9';
+    }
+
+    /**
+     * Structural sanity on the chave's fixed NFe-key fields: fiscal model (65/55),
+     * a real emission month (01-12) and a valid tpEmis (1-9). UF and the mod-11 DV
+     * are checked separately. These are spec invariants — EVERY genuine nota
+     * satisfies them — so a failure means a corrupted/misread key (e.g. an OCR
+     * window that cleared the DV by luck), never a valid nota rejected by mistake.
+     */
+    public static boolean hasPlausibleStructure(String chave) {
+        return hasKnownModel(chave) && hasPlausibleYearMonth(chave) && hasValidTpEmis(chave);
     }
 }

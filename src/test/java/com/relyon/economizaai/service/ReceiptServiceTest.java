@@ -804,6 +804,21 @@ class ReceiptServiceTest {
     }
 
     @Test
+    void submit_rejectsStructurallyImpossibleChaveThatClearedDvByLuck_beforeSpendingAnything() {
+        var user = buildUser();
+        // Chave-lixo real (nota RN, 2026): casou o DV por acaso mas é impossível —
+        // modelo 60, mês 98, tpEmis 0. Sem o guard estrutural ela viraria CONTINGENCY_PENDING
+        // e alertaria a cada resync; aqui é rejeitada síncrona, sem persistir nem gastar.
+        var garbage = "24009899180236001500600516265112000546334172";
+
+        assertThrows(InvalidChaveException.class,
+                () -> receiptService.submit(user, new SubmitReceiptRequest(garbage)));
+
+        verify(receiptRepository, never()).save(any());
+        verify(receiptIngestionService, never()).ingest(any(), any());
+    }
+
+    @Test
     void submit_rejectsBareRsChaveWithLocalizedError() {
         var user = buildUser();
 
