@@ -39,6 +39,10 @@ public class ChaveAcessoOcrService {
     // fixo. Validado contra fotos degradadas (amassadas/apagadas) subindo a leitura
     // de ~3/15 pra ~12/15 em relação ao passe leve. Só roda quando o leve falha.
     private static final int HARD_OCR_WIDTH_PX = 2400;
+    // Passe "médio" só pro best-effort: fotos grandes (3-4 mil px) rodam em full-res
+    // no passe leve e saem ruidosas; reduzir pra ~1600 (glifos num tamanho que o
+    // Tesseract lê melhor) costuma dar a leitura com menos dígitos errados.
+    private static final int MEDIUM_OCR_WIDTH_PX = 1600;
     private static final double UNSHARP_SIGMA = 2.5;
     private static final int UNSHARP_RADIUS = 8;
     private static final float UNSHARP_AMOUNT = 1.0f;
@@ -84,8 +88,12 @@ public class ChaveAcessoOcrService {
         // ESTRUTURALMENTE (UF + modelo + AAMM válidos) cujo DV não fechou — provável erro
         // de 1-2 dígitos. Volta pro usuário CONFERIR/corrigir (uncertain=true); nunca
         // entra sozinha, e o gate de DV no submit impede gastar em chave errada.
-        var guess = findBestEffortChave(primaryText)
+        // Palpite: tenta o passe médio (downscale ~1600, costuma ler foto grande com
+        // menos erro), depois o forte (2400 binarizado) e por fim o leve.
+        var mediumText = ocrEngine.recognizeDigits(scaleToGray(image, MEDIUM_OCR_WIDTH_PX));
+        var guess = findBestEffortChave(mediumText)
                 .or(() -> findBestEffortChave(hardText))
+                .or(() -> findBestEffortChave(primaryText))
                 .orElse(null);
         if (guess != null) {
             var uf = ChaveAcessoParser.extractUf(guess);
