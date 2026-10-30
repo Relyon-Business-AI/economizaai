@@ -114,7 +114,8 @@ class ChaveAcessoOcrServiceTest {
         var pass2 = flipDigit(CHAVE_VALID_DV, 25);
         var pass3 = flipDigit(CHAVE_VALID_DV, 38);
         when(ocrEngine.isAvailable()).thenReturn(true);
-        when(ocrEngine.recognizeDigits(any(BufferedImage.class))).thenReturn(pass1, pass2, pass3);
+        // 1-2: passe leve/forte (findValidChave falha nos dois); 3-5: o voto.
+        when(ocrEngine.recognizeDigits(any(BufferedImage.class))).thenReturn(pass1, pass2, pass1, pass2, pass3);
 
         var response = service.extractChave(anyPhoto());
 
@@ -129,7 +130,9 @@ class ChaveAcessoOcrServiceTest {
         // certo. O voto mantém o erro → DV não fecha → uncertain + posição 10 marcada.
         var wrongAt10 = flipDigit(CHAVE_VALID_DV, 10);
         when(ocrEngine.isAvailable()).thenReturn(true);
-        when(ocrEngine.recognizeDigits(any(BufferedImage.class))).thenReturn(wrongAt10, wrongAt10, CHAVE_VALID_DV);
+        // 1-2: leve/forte; 3-5: voto = [errado, errado, certo] → erro vence 2x1.
+        when(ocrEngine.recognizeDigits(any(BufferedImage.class)))
+                .thenReturn(wrongAt10, wrongAt10, wrongAt10, wrongAt10, CHAVE_VALID_DV);
 
         var response = service.extractChave(anyPhoto());
 
