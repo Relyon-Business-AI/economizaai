@@ -3,6 +3,8 @@ package com.relyon.economizaai.dto.response;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import java.util.List;
+
 public record ChaveExtractionResponse(
         @Schema(description = "The 44-digit chave de acesso read from the photo. Show it to the user "
                 + "for confirmation, then submit via POST /api/v1/receipts with this value as qrPayload.",
@@ -18,13 +20,17 @@ public record ChaveExtractionResponse(
                 + "year-month) is valid but the mod-11 check digit did NOT close, so one or more "
                 + "digits were likely misread. The FE must warn the user to review every digit "
                 + "against the printed note and fix before submitting.")
-        boolean uncertain
+        boolean uncertain,
+        @Schema(description = "0-based positions (within the 44 digits) the OCR passes DISAGREED on — "
+                + "the digits most likely misread, for the FE to highlight so the user only checks "
+                + "those. Empty when the read is confident or the uncertain digits can't be pinpointed.")
+        List<Integer> uncertainPositions
 ) {
     public ChaveExtractionResponse(String chaveAcesso, UnidadeFederativa uf) {
-        this(chaveAcesso, uf, null, false);
+        this(chaveAcesso, uf, null, false, List.of());
     }
 
     public ChaveExtractionResponse(String chaveAcesso, UnidadeFederativa uf, String qrPayload) {
-        this(chaveAcesso, uf, qrPayload, false);
+        this(chaveAcesso, uf, qrPayload, false, List.of());
     }
 }
