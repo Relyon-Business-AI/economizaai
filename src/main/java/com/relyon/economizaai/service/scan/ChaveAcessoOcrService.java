@@ -15,7 +15,12 @@ import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.awt.image.ConvolveOp;
 import java.awt.image.Kernel;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * Reads the printed 44-digit chave de acesso off a receipt photo — the
@@ -80,21 +85,24 @@ public class ChaveAcessoOcrService {
             log.info("chave_ocr.extracted chave={} uf={}", LogMasker.chave(chave), uf);
             return new ChaveExtractionResponse(chave, uf);
         }
-        // Nenhuma janela fechou o DV. Tenta um melhor-esforço: a janela mais plausível
-        // ESTRUTURALMENTE (UF + modelo + AAMM válidos) cujo DV não fechou — provável erro
-        // de 1-2 dígitos. Volta pro usuário CONFERIR/corrigir (uncertain=true); nunca
-        // entra sozinha, e o gate de DV no submit impede gastar em chave errada.
-        // Palpite: tenta o passe médio (downscale ~1600, costuma ler foto grande com
-        // menos erro), depois o forte (2400 binarizado) e por fim o leve.
+        // Nenhuma janela fechou o DV. Melhor-esforço: VOTA entre os 3 passes (leve/forte/
+        // médio) nas janelas estruturalmente plausíveis (UF + modelo + AAMM + tpEmis). O
+        // voto por posição lê melhor que um passe só; onde os passes DISCORDAM é o provável
+        // dígito errado — marcado pro FE destacar. Se o voto fecha o DV, vira confiável.
+        // Nunca entra sozinho; o gate de DV no submit impede gastar em chave errada.
         var mediumText = ocrEngine.recognizeDigits(scaleToGray(image, MEDIUM_OCR_WIDTH_PX));
-        var guess = findBestEffortChave(mediumText)
-                .or(() -> findBestEffortChave(hardText))
-                .or(() -> findBestEffortChave(primaryText))
-                .orElse(null);
+        var guess = findBestEffortGuess(List.of(mediumText, hardText, primaryText)).orElse(null);
         if (guess != null) {
-            var uf = ChaveAcessoParser.extractUf(guess);
-            log.info("chave_ocr.best_effort chave={} uf={}", LogMasker.chave(guess), uf);
-            return new ChaveExtractionResponse(guess, uf, null, true);
+            var guessedChave = guess.chave();
+            var confident = ChaveAcessoParser.hasValidCheckDigit(guessedChave)
+                    && hasKnownUf(guessedChave)
+                    && ChaveAcessoParser.hasPlausibleStructure(guessedChave);
+            var uf = ChaveAcessoParser.extractUf(guessedChave);
+            log.info("chave_ocr.{} chave={} uf={} uncertain_positions={}",
+                    confident ? "rescued_by_vote" : "best_effort",
+                    LogMasker.chave(guessedChave), uf, guess.uncertainPositions().size());
+            return new ChaveExtractionResponse(guessedChave, uf, null, !confident,
+                    confident ? List.of() : guess.uncertainPositions());
         }
         log.info("chave_ocr.unreadable digits={} size={}x{}",
                 primaryText.replaceAll("\\D", "").length(), image.getWidth(), image.getHeight());
@@ -241,23 +249,54 @@ public class ChaveAcessoOcrService {
     }
 
     /**
-     * Strongest structurally-plausible 44-window — valid UF plus a valid model (65/55),
-     * month (01-12) and tpEmis (1-9) — whose mod-11 digit did NOT close (so findValidChave
-     * already rejected it). Returned only as a best-effort guess for the user to review/fix.
+     * Votes across the OCR passes to build the best guess + flag the uncertain digits.
+     * Takes the first structurally-plausible 44-window of each pass, groups them by the
+     * chave identity (first 6 digits = UF + AAMM, almost always read right) so false
+     * windows from elsewhere on the note drop out, then majority-votes per position.
+     * A position where the passes disagree is a likely misread → reported so the FE
+     * highlights only those. Empty when no pass found a plausible window.
      */
-    private Optional<String> findBestEffortChave(String recognizedText) {
+    private Optional<BestEffortGuess> findBestEffortGuess(List<String> texts) {
+        var windows = texts.stream()
+                .map(this::firstStructuralWindow)
+                .flatMap(Optional::stream)
+                .toList();
+        if (windows.isEmpty()) {
+            return Optional.empty();
+        }
+        var group = windows.stream()
+                .collect(Collectors.groupingBy(window -> window.substring(0, 6)))
+                .values().stream()
+                .max(Comparator.comparingInt(List::size))
+                .orElseThrow();
+        var voted = new StringBuilder();
+        var uncertainPositions = new ArrayList<Integer>();
+        for (var position = 0; position < CHAVE_LENGTH; position++) {
+            var index = position;
+            var tally = group.stream()
+                    .collect(Collectors.groupingBy(window -> window.charAt(index), Collectors.counting()));
+            voted.append(tally.entrySet().stream().max(Map.Entry.comparingByValue()).orElseThrow().getKey());
+            if (tally.size() > 1) {
+                uncertainPositions.add(position);
+            }
+        }
+        return Optional.of(new BestEffortGuess(voted.toString(), uncertainPositions));
+    }
+
+    /** First 44-window that is structurally plausible (valid UF + model/month/tpEmis), DV aside. */
+    private Optional<String> firstStructuralWindow(String recognizedText) {
         if (recognizedText == null) {
             return Optional.empty();
         }
         var digits = recognizedText.replaceAll("\\D", "");
         for (var start = 0; start + CHAVE_LENGTH <= digits.length(); start++) {
             var candidate = digits.substring(start, start + CHAVE_LENGTH);
-            if (hasKnownUf(candidate)
-                    && ChaveAcessoParser.hasPlausibleStructure(candidate)
-                    && !ChaveAcessoParser.hasValidCheckDigit(candidate)) {
+            if (hasKnownUf(candidate) && ChaveAcessoParser.hasPlausibleStructure(candidate)) {
                 return Optional.of(candidate);
             }
         }
         return Optional.empty();
     }
+
+    private record BestEffortGuess(String chave, List<Integer> uncertainPositions) {}
 }

@@ -15,6 +15,7 @@ import org.springframework.mock.web.MockMultipartFile;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -103,6 +104,42 @@ class ChaveAcessoOcrServiceTest {
         assertEquals(dvBroken, response.chaveAcesso());
         assertEquals(UnidadeFederativa.RS, response.uf());
         assertEquals(true, response.uncertain());
+    }
+
+    @Test
+    void extractChave_votingAcrossPassesRecoversConfidentRead() throws IOException {
+        // Cada passe erra 1 dígito DIFERENTE (cada um falha o DV sozinho); o voto por
+        // posição recupera a chave correta → DV fecha → leitura confiável, sem incerteza.
+        var pass1 = flipDigit(CHAVE_VALID_DV, 10);
+        var pass2 = flipDigit(CHAVE_VALID_DV, 25);
+        var pass3 = flipDigit(CHAVE_VALID_DV, 38);
+        when(ocrEngine.isAvailable()).thenReturn(true);
+        when(ocrEngine.recognizeDigits(any(BufferedImage.class))).thenReturn(pass1, pass2, pass3);
+
+        var response = service.extractChave(anyPhoto());
+
+        assertEquals(CHAVE_VALID_DV, response.chaveAcesso());
+        assertEquals(false, response.uncertain());
+        assertEquals(0, response.uncertainPositions().size());
+    }
+
+    @Test
+    void extractChave_flagsDisagreementPositionWhenVoteStillFailsDv() throws IOException {
+        // Dois passes leem o MESMO dígito errado na posição 10 (vencem o voto) e um lê
+        // certo. O voto mantém o erro → DV não fecha → uncertain + posição 10 marcada.
+        var wrongAt10 = flipDigit(CHAVE_VALID_DV, 10);
+        when(ocrEngine.isAvailable()).thenReturn(true);
+        when(ocrEngine.recognizeDigits(any(BufferedImage.class))).thenReturn(wrongAt10, wrongAt10, CHAVE_VALID_DV);
+
+        var response = service.extractChave(anyPhoto());
+
+        assertEquals(true, response.uncertain());
+        assertEquals(List.of(10), response.uncertainPositions());
+    }
+
+    private static String flipDigit(String chave, int position) {
+        var replacement = (char) ('0' + ((chave.charAt(position) - '0' + 1) % 10));
+        return chave.substring(0, position) + replacement + chave.substring(position + 1);
     }
 
     @Test
