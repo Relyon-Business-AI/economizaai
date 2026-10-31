@@ -1,6 +1,7 @@
 package com.relyon.economizaai.dto.response;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * Cross-area snapshot for the admin home: the top-line numbers from every part
@@ -28,5 +29,11 @@ public record AdminOverviewResponse(
         BigDecimal totalSpendConfirmed,
         /** Price-index size + how many households ever contributed. */
         long priceObservations,
-        long contributingHouseholds) {
+        long contributingHouseholds,
+        /** Distribuição por estado (UF): notas confirmadas, gasto e usuários. Ordenado por notas desc. */
+        List<StateDistributionRow> byState) {
+
+    /** Uma UF no corte geográfico: notas confirmadas, gasto confirmado e nº de usuários (UF predominante). */
+    public record StateDistributionRow(String uf, long receipts, BigDecimal spend, long users) {
+    }
 }
