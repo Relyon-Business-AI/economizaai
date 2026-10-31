@@ -2,6 +2,7 @@ package com.relyon.economizaai.service.admin;
 
 import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.dto.response.AdminOverviewResponse;
+import com.relyon.economizaai.dto.response.AdminOverviewResponse.StateDistributionRow;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.SubscriptionStatus;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
@@ -17,7 +18,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -64,11 +69,40 @@ public class AdminOverviewService {
         var observations = priceObservationRepository.count();
         var contributingHouseholds = priceObservationAuditRepository.countDistinctContributingHouseholds();
 
-        log.info("admin.overview internal={} users={} today={} receipts={} parse30d={} dau={} wau={} mau={} spend={} obs={}",
-                includeInternal, usersTotal, usersToday, receiptsTotal, parseRate30d, dau, wau, mau, totalSpend, observations);
+        var byState = buildByState(includeInternal);
+
+        log.info("admin.overview internal={} users={} today={} receipts={} parse30d={} dau={} wau={} mau={} spend={} obs={} ufs={}",
+                includeInternal, usersTotal, usersToday, receiptsTotal, parseRate30d, dau, wau, mau, totalSpend, observations, byState.size());
         return new AdminOverviewResponse(usersTotal, usersToday, usersThisWeek, usersPro, payingActive,
                 receiptsTotal, receiptsToday, parseRate30d, dau, wau, mau, stickiness, totalSpend,
-                observations, contributingHouseholds);
+                observations, contributingHouseholds, byState);
+    }
+
+    /**
+     * Corte geográfico: funde notas+gasto por UF (confirmadas) com usuários por UF predominante.
+     * A união das UFs das duas fontes garante que um estado com usuário mas sem nota confirmada
+     * (ou vice-versa) ainda apareça. Ordenado por nº de notas desc.
+     */
+    private List<StateDistributionRow> buildByState(boolean includeInternal) {
+        var merged = new LinkedHashMap<String, long[]>(); // uf -> [receipts, users]; spend à parte
+        var spendByUf = new HashMap<String, BigDecimal>();
+        for (var row : receiptRepository.confirmedReceiptsByUf(includeInternal)) {
+            if (row[0] == null) continue;
+            var uf = row[0].toString();
+            merged.computeIfAbsent(uf, key -> new long[2])[0] = ((Number) row[1]).longValue();
+            spendByUf.put(uf, scale((BigDecimal) row[2]));
+        }
+        for (var row : receiptRepository.usersByPredominantUf(includeInternal)) {
+            if (row[0] == null) continue;
+            merged.computeIfAbsent(row[0].toString(), key -> new long[2])[1] = ((Number) row[1]).longValue();
+        }
+        var rows = new ArrayList<StateDistributionRow>();
+        for (var entry : merged.entrySet()) {
+            rows.add(new StateDistributionRow(entry.getKey(), entry.getValue()[0],
+                    spendByUf.getOrDefault(entry.getKey(), BigDecimal.ZERO.setScale(2)), entry.getValue()[1]));
+        }
+        rows.sort((left, right) -> Long.compare(right.receipts(), left.receipts()));
+        return rows;
     }
 
     /** Parsed (confirmed/pending/rejected) ÷ (parsed + failed) over the window. */

@@ -207,6 +207,24 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
             + " GROUP BY receipt.uf ORDER BY count(receipt) DESC")
     List<Object[]> confirmedReceiptsByUf(boolean includeInternal);
 
+    /** Users by their PREDOMINANT UF (the state they scan most): (uf, userCount). The UF comes
+     * from the mode of each user's notas; users with no UF'd nota are simply absent. Honors the
+     * internal-account filter. Powers the admin "distribuição por estado". */
+    @Query(value = """
+            SELECT user_uf.uf AS uf, COUNT(*) AS users
+            FROM (
+                SELECT ranked.user_id, ranked.uf FROM (
+                    SELECT r.user_id, r.uf,
+                           ROW_NUMBER() OVER (PARTITION BY r.user_id ORDER BY COUNT(*) DESC) AS rn
+                    FROM receipts r WHERE r.uf IS NOT NULL
+                    GROUP BY r.user_id, r.uf) ranked
+                WHERE ranked.rn = 1) user_uf
+            JOIN users u ON u.id = user_uf.user_id
+            WHERE 1 = 1""" + NATIVE_RECEIPT_INTERNAL_FILTER + """
+            GROUP BY user_uf.uf ORDER BY COUNT(*) DESC
+            """, nativeQuery = true)
+    List<Object[]> usersByPredominantUf(@Param("includeInternal") boolean includeInternal);
+
     /** (householdId, receiptCount) for the given households — batch enrichment for the admin user list. */
     @Query("SELECT receipt.household.id, count(receipt) FROM Receipt receipt "
             + "WHERE receipt.household.id IN :householdIds GROUP BY receipt.household.id")

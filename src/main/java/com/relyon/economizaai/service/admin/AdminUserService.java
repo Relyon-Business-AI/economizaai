@@ -73,18 +73,19 @@ public class AdminUserService {
     private static final int AGGREGATE_SORT_CAP = 5000;
 
     @Transactional(readOnly = true)
-    public Page<AdminUserSummaryResponse> list(String search, boolean includeInternal, Pageable pageable) {
+    public Page<AdminUserSummaryResponse> list(String search, LocalDateTime createdFrom, LocalDateTime createdTo,
+                                               boolean includeInternal, Pageable pageable) {
         var trimmed = Optional.ofNullable(search).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
         var aggregateOrder = pageable.getSort().stream()
                 .filter(order -> AGGREGATE_SORTS.contains(order.getProperty()))
                 .findFirst().orElse(null);
         if (aggregateOrder != null) {
-            return listRankedByAggregate(trimmed, includeInternal, pageable, aggregateOrder);
+            return listRankedByAggregate(trimmed, createdFrom, createdTo, includeInternal, pageable, aggregateOrder);
         }
         var sortedPageable = pageable.getSort().isUnsorted()
                 ? PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by(Sort.Direction.DESC, "createdAt"))
                 : pageable;
-        var page = userRepository.findAll(searchSpec(trimmed, includeInternal), sortedPageable);
+        var page = userRepository.findAll(searchSpec(trimmed, createdFrom, createdTo, includeInternal), sortedPageable);
         var counts = receiptCountsFor(page.getContent());
         var spend = spendFor(page.getContent());
         return page.map(user -> summaryFor(user, counts, spend));
@@ -96,9 +97,10 @@ public class AdminUserService {
      * cap), so we load the matching users, enrich with the batched aggregates, sort in
      * memory and paginate manually — correct and simple at this scale.
      */
-    private Page<AdminUserSummaryResponse> listRankedByAggregate(String search, boolean includeInternal,
+    private Page<AdminUserSummaryResponse> listRankedByAggregate(String search, LocalDateTime createdFrom,
+                                                                 LocalDateTime createdTo, boolean includeInternal,
                                                                  Pageable pageable, Sort.Order order) {
-        var all = userRepository.findAll(searchSpec(search, includeInternal),
+        var all = userRepository.findAll(searchSpec(search, createdFrom, createdTo, includeInternal),
                 PageRequest.of(0, AGGREGATE_SORT_CAP, Sort.by(Sort.Direction.DESC, "createdAt"))).getContent();
         var counts = receiptCountsFor(all);
         var spend = spendFor(all);
@@ -313,7 +315,8 @@ public class AdminUserService {
         );
     }
 
-    private Specification<User> searchSpec(String search, boolean includeInternal) {
+    private Specification<User> searchSpec(String search, LocalDateTime createdFrom, LocalDateTime createdTo,
+                                           boolean includeInternal) {
         return (root, query, cb) -> {
             var predicates = new ArrayList<Predicate>();
             if (search != null) {
@@ -322,6 +325,13 @@ public class AdminUserService {
                         cb.like(cb.lower(root.get("email")), like),
                         cb.like(cb.lower(root.get("name")), like)
                 ));
+            }
+            // Filtro de período por data de cadastro (Hoje / 7 dias / mês), igual às Notas.
+            if (createdFrom != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), createdFrom));
+            }
+            if (createdTo != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), createdTo));
             }
             // Off by default: hide admins / test accounts / metrics-excluded from the list.
             if (!includeInternal) {
