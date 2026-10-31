@@ -222,9 +222,11 @@ public class AdminController {
     @GetMapping("/users")
     public ResponseEntity<Page<AdminUserSummaryResponse>> listUsers(
             @RequestParam(required = false) String q,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
             @RequestParam(defaultValue = "false") boolean includeInternal,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(adminUserService.list(q, includeInternal, pageable));
+        return ResponseEntity.ok(adminUserService.list(q, from, to, includeInternal, pageable));
     }
 
     /**
