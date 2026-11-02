@@ -58,7 +58,7 @@ class PhotoReceiptExtractionServiceTest {
     @BeforeEach
     void setUp() {
         service = new PhotoReceiptExtractionService(aiGateway, photoUploadValidator, paidApiGuard,
-                subscriptionGate, receiptRepository, receiptService, transactionTemplate, true, 60);
+                subscriptionGate, receiptRepository, receiptService, transactionTemplate, true, 60, 5);
         var household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
         user = User.builder().id(UUID.randomUUID()).email("alexandre+photo@economizaai.app")
                 .household(household).build();
@@ -126,7 +126,7 @@ class PhotoReceiptExtractionServiceTest {
     @Test
     void extract_disabledFlag_returns503Semantics() {
         var disabled = new PhotoReceiptExtractionService(aiGateway, photoUploadValidator, paidApiGuard,
-                subscriptionGate, receiptRepository, receiptService, transactionTemplate, false, 60);
+                subscriptionGate, receiptRepository, receiptService, transactionTemplate, false, 60, 5);
 
         assertThrows(PhotoExtractionUnavailableException.class, () -> disabled.extract(user, photo()));
         verify(aiGateway, never()).completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt(), any());

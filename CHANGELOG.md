@@ -1,5 +1,16 @@
 # economizai — what's new
 
+## 2026-11-02 — Foto dos itens aceita VÁRIAS fotos por nota
+Nota longa (ou com mercado/total em pontos distantes) agora pode ser enviada em mais de uma foto.
+
+- **`POST /receipts/items-photo`** passa a aceitar o campo **`files`** (multipart, N fotos).
+  O `file` (single) antigo **continua funcionando** — compat com builds instalados.
+- Os itens de todas as fotos são **concatenados numa só nota** (origem=FOTO,
+  `PENDING_CONFIRMATION`). Mercado/data/total vêm da 1ª foto que os tiver.
+- Cada foto é uma chamada de visão (custo + cap diário por usuário). Foto cuja IA falha é
+  **pulada** (as outras seguem); nenhuma responde → indisponível; nenhuma é cupom → "não é nota".
+  Teto de `max-photos` (default 5).
+
 ## 2026-10-23 — Método de entrada da nota (QR vs digitada vs foto vs import) + painel admin
 Agora rastreamos COMO cada nota entrou, separado do `origin` (que governa o pipeline).
 

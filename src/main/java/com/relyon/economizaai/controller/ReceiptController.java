@@ -259,15 +259,22 @@ public class ReceiptController {
     }
 
     /**
-     * Extract items from a PHOTO of the printed receipt via vision LLM — the
-     * fallback when SEFAZ can't serve the nota (contingency, unreadable QR).
-     * Creates a PENDING_CONFIRMATION receipt with origin=PHOTO (personal
-     * history only; never contributes to the collaborative index).
+     * Extract items from one or MORE photos of the printed receipt via vision LLM —
+     * the fallback when SEFAZ can't serve the nota (contingency, unreadable QR). A
+     * long receipt can be split across several photos; the items are merged into one
+     * PENDING_CONFIRMATION receipt (origin=PHOTO; personal history only, never the
+     * collaborative index). Accepts {@code files} (multi) or {@code file} (single,
+     * backward-compat with older app builds).
      */
     @PostMapping("/items-photo")
-    public ResponseEntity<ReceiptResponse> extractItemsFromPhoto(@AuthenticationPrincipal User user,
-                                                                 @RequestParam("file") MultipartFile file) {
-        var receiptId = photoReceiptExtractionService.extract(user, file);
+    public ResponseEntity<ReceiptResponse> extractItemsFromPhoto(
+            @AuthenticationPrincipal User user,
+            @RequestParam(value = "files", required = false) List<MultipartFile> files,
+            @RequestParam(value = "file", required = false) MultipartFile file) {
+        var photos = files != null && !files.isEmpty()
+                ? files
+                : (file != null ? List.of(file) : List.<MultipartFile>of());
+        var receiptId = photoReceiptExtractionService.extract(user, photos);
         return ResponseEntity.status(HttpStatus.CREATED).body(receiptService.get(user, receiptId));
     }
 
