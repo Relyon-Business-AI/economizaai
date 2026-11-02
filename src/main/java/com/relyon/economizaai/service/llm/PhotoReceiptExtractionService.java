@@ -30,6 +30,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -63,6 +66,7 @@ public class PhotoReceiptExtractionService {
     private final TransactionTemplate transactionTemplate;
     private final boolean enabled;
     private final int maxItems;
+    private final int maxPhotos;
 
     public PhotoReceiptExtractionService(AiGateway aiGateway,
                                          PhotoUploadValidator photoUploadValidator,
@@ -72,7 +76,8 @@ public class PhotoReceiptExtractionService {
                                          ReceiptService receiptService,
                                          TransactionTemplate transactionTemplate,
                                          @Value("${economizaai.llm.photo-extraction.enabled:true}") boolean enabled,
-                                         @Value("${economizaai.llm.photo-extraction.max-items:60}") int maxItems) {
+                                         @Value("${economizaai.llm.photo-extraction.max-items:60}") int maxItems,
+                                         @Value("${economizaai.llm.photo-extraction.max-photos:5}") int maxPhotos) {
         this.aiGateway = aiGateway;
         this.photoUploadValidator = photoUploadValidator;
         this.paidApiGuard = paidApiGuard;
@@ -82,38 +87,62 @@ public class PhotoReceiptExtractionService {
         this.transactionTemplate = transactionTemplate;
         this.enabled = enabled;
         this.maxItems = maxItems;
+        this.maxPhotos = maxPhotos;
     }
 
     public UUID extract(User user, MultipartFile file) {
+        return extract(user, List.of(file));
+    }
+
+    /**
+     * Nota longa / dados em pontos diferentes: aceita VÁRIAS fotos e junta os itens
+     * numa nota só. Cada foto é uma chamada de visão (paga, com cap por-usuário);
+     * mercado/data/total vêm da 1ª foto que os tiver. Uma foto cuja IA falha é
+     * PULADA (as outras seguem); se nenhuma IA responde → indisponível; se nenhuma
+     * é cupom → "não é nota".
+     */
+    public UUID extract(User user, List<MultipartFile> files) {
         if (!enabled || !aiGateway.isEnabled()) {
             throw new PhotoExtractionUnavailableException();
         }
+        if (files == null || files.isEmpty()) {
+            throw new InvalidReceiptPhotoException("receipt.photo.empty");
+        }
+        var photos = files.size() > maxPhotos ? files.subList(0, maxPhotos) : files;
         subscriptionGate.require(user, Feature.PHOTO_EXTRACTION);
         receiptService.enforceMonthlyReceiptCap(user); // photo receipts count toward the FREE cap
-        paidApiGuard.assertUnderGlobalBudget();
-        paidApiGuard.assertWithinDailyCap(user.getId(), PaidApiService.LLM_VISION);
-        photoUploadValidator.readImage(file); // size/format validation; bytes go to the LLM raw
 
-        JsonNode extraction;
-        try {
-            // HTTP untransacted — a chamada de visão leva segundos. Anthropic (mesma
-            // infra do resto da IA): ledger/caps no AiGateway + ledger por-usuário aqui.
-            var raw = aiGateway.completeWithImage(AiActivity.PHOTO_EXTRACT, aiGateway.extractorModel(),
-                    systemPrompt(), "Extraia os itens desta nota.", fileBytes(file), mediaType(file), 8000, user.getId());
-            extraction = parseJson(raw);
-            paidApiGuard.recordSuccess(user.getId(), PaidApiService.LLM_VISION, null, "anthropic");
-        } catch (AiGateway.AiUnavailableException ex) {
-            paidApiGuard.recordFailure(user.getId(), PaidApiService.LLM_VISION, null, "anthropic");
-            log.warn("photo_extract.call_failed user={} reason={}", user.getId(), ex.getMessage());
+        var receiptExtractions = new ArrayList<JsonNode>();
+        var anyVisionCallSucceeded = false;
+        for (var file : photos) {
+            photoUploadValidator.readImage(file); // size/format validation; bytes go to the LLM raw
+            paidApiGuard.assertUnderGlobalBudget();
+            paidApiGuard.assertWithinDailyCap(user.getId(), PaidApiService.LLM_VISION);
+            try {
+                // HTTP untransacted — a chamada de visão leva segundos. Anthropic (mesma
+                // infra do resto da IA): ledger/caps no AiGateway + ledger por-usuário aqui.
+                var raw = aiGateway.completeWithImage(AiActivity.PHOTO_EXTRACT, aiGateway.extractorModel(),
+                        systemPrompt(), "Extraia os itens desta nota.", fileBytes(file), mediaType(file), 8000, user.getId());
+                var extraction = parseJson(raw);
+                paidApiGuard.recordSuccess(user.getId(), PaidApiService.LLM_VISION, null, "anthropic");
+                anyVisionCallSucceeded = true;
+                if (extraction.path("is_receipt").asBoolean(false)) {
+                    receiptExtractions.add(extraction);
+                }
+            } catch (AiGateway.AiUnavailableException | PhotoExtractionUnavailableException ex) {
+                paidApiGuard.recordFailure(user.getId(), PaidApiService.LLM_VISION, null, "anthropic");
+                log.warn("photo_extract.photo_failed user={} reason={} — pulando essa foto", user.getId(), ex.getMessage());
+            }
+        }
+        if (!anyVisionCallSucceeded) {
             throw new PhotoExtractionUnavailableException();
         }
-        if (!extraction.path("is_receipt").asBoolean(false)) {
-            log.info("photo_extract.rejected reason=not_a_receipt user={}", user.getId());
+        if (receiptExtractions.isEmpty()) {
+            log.info("photo_extract.rejected reason=not_a_receipt user={} photos={}", user.getId(), photos.size());
             throw new InvalidReceiptPhotoException("receipt.photo.not-receipt");
         }
-        var receiptId = transactionTemplate.execute(txStatus -> persistPhotoReceipt(user, extraction));
-        log.info("photo_extract.ok user={} receipt={} items={}",
-                user.getId(), receiptId, extraction.path("items").size());
+        var receiptId = transactionTemplate.execute(txStatus -> persistPhotoReceipt(user, receiptExtractions));
+        log.info("photo_extract.ok user={} receipt={} photos={}", user.getId(), receiptId, photos.size());
         return receiptId;
     }
 
@@ -142,7 +171,9 @@ public class PhotoReceiptExtractionService {
                 "unit_price": <numero|null>, "total_price": <numero|null>}]}""";
     }
 
-    private UUID persistPhotoReceipt(User user, JsonNode extraction) {
+    private UUID persistPhotoReceipt(User user, List<JsonNode> extractions) {
+        // Cabeçalho (mercado/data/total) vem da 1ª foto que o tiver; itens de TODAS,
+        // na ordem das fotos (nota longa partida em várias).
         var receipt = Receipt.builder()
                 .user(user)
                 .household(user.getHousehold())
@@ -152,29 +183,43 @@ public class PhotoReceiptExtractionService {
                 .origin(ReceiptOrigin.PHOTO)
                 .entryMethod(ReceiptEntryMethod.PHOTO_RECEIPT)
                 .status(ReceiptStatus.PENDING_CONFIRMATION)
-                .marketName(textOrNull(extraction, "market_name"))
-                .issuedAt(parseIssuedAt(extraction))
-                .totalAmount(decimalOrNull(extraction, "total_amount"))
+                .marketName(firstText(extractions, "market_name"))
+                .issuedAt(firstIssuedAt(extractions))
+                .totalAmount(firstDecimal(extractions, "total_amount"))
                 .build();
         var lineNumber = 1;
-        for (var item : extraction.path("items")) {
-            if (lineNumber > maxItems) break;
-            var description = textOrNull(item, "description");
-            if (description == null) continue;
-            receipt.addItem(ReceiptItem.builder()
-                    .lineNumber(lineNumber++)
-                    .rawDescription(description)
-                    .quantity(decimalOrDefault(item, "quantity", BigDecimal.ONE))
-                    .unit(unitOrDefault(item))
-                    .unitPrice(scaled(decimalOrNull(item, "unit_price")))
-                    .totalPrice(scaled(decimalOrNull(item, "total_price")))
-                    .nfcePromoFlag(false)
-                    .build());
+        for (var extraction : extractions) {
+            for (var item : extraction.path("items")) {
+                if (lineNumber > maxItems) break;
+                var description = textOrNull(item, "description");
+                if (description == null) continue;
+                receipt.addItem(ReceiptItem.builder()
+                        .lineNumber(lineNumber++)
+                        .rawDescription(description)
+                        .quantity(decimalOrDefault(item, "quantity", BigDecimal.ONE))
+                        .unit(unitOrDefault(item))
+                        .unitPrice(scaled(decimalOrNull(item, "unit_price")))
+                        .totalPrice(scaled(decimalOrNull(item, "total_price")))
+                        .nfcePromoFlag(false)
+                        .build());
+            }
         }
         if (receipt.getItems().isEmpty()) {
             throw new InvalidReceiptPhotoException("receipt.photo.no-items");
         }
         return receiptRepository.save(receipt).getId();
+    }
+
+    private static String firstText(List<JsonNode> extractions, String field) {
+        return extractions.stream().map(extraction -> textOrNull(extraction, field)).filter(Objects::nonNull).findFirst().orElse(null);
+    }
+
+    private static BigDecimal firstDecimal(List<JsonNode> extractions, String field) {
+        return extractions.stream().map(extraction -> decimalOrNull(extraction, field)).filter(Objects::nonNull).findFirst().orElse(null);
+    }
+
+    private static LocalDateTime firstIssuedAt(List<JsonNode> extractions) {
+        return extractions.stream().map(PhotoReceiptExtractionService::parseIssuedAt).filter(Objects::nonNull).findFirst().orElse(null);
     }
 
     /** 44 chars like a real chave, PH-prefixed so it can never collide with a SEFAZ one. */
