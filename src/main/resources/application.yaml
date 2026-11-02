@@ -143,6 +143,13 @@ economizaai:
     # legitimate ingest (MS captcha wall-clock cap 3 min + fallback).
     processing-timeout-minutes: ${INGEST_PROCESSING_TIMEOUT_MINUTES:10}
     sweeper-delay-ms: ${INGEST_SWEEPER_DELAY_MS:60000}
+    # Probe de estados "pausados" no Infosimples (portal da SEFAZ fora): sonda a cada 6h
+    # e alerta o dono UMA vez quando a rota volta a responder 200, pra onboardar o estado.
+    # SE é o caso atual (funcionou 100% em out, portal caiu ~22/10). Vazio = desliga.
+    paused-state-probe:
+      ufs: ${SEFAZ_PAUSED_STATE_PROBE_UFS:SE}
+    paused-state-probe-delay-ms: ${SEFAZ_PAUSED_STATE_PROBE_DELAY_MS:21600000}
+    paused-state-probe-initial-delay-ms: ${SEFAZ_PAUSED_STATE_PROBE_INITIAL_DELAY_MS:60000}
     device-fetch:
       # Generic reactive device-fetch (OFF by default = long-standing behavior).
       # When ON, ANY state's rescuable server-fetch failure (IP block / portal

@@ -375,6 +375,26 @@ public class InfosimplesService {
      * minimum franchise that sweeps unused credit). Empty when the call fails —
      * the dashboard shows "indisponível" instead of breaking the cost report.
      */
+    /**
+     * Sonda LEVE de saúde de uma rota NFC-e: chama o endpoint da UF e devolve o code do
+     * Infosimples (200 = respondeu com dados; 615 = origem/portal fora; 600 = erro; -1 =
+     * falha de rede). SEM alertas, SEM circuit breaker, SEM exceção — usada pelo probe que
+     * detecta quando um estado "pausado" (ex.: SE) volta, pra então onboardar.
+     */
+    public int probeRouteCode(String chave, UnidadeFederativa uf) {
+        try {
+            var response = restClient.get()
+                    .uri("/api/v2/consultas/sefaz/{uf}/{resource}?token={token}&nfce={nfce}",
+                            uf.name().toLowerCase(), resourceFor(uf), apiKey, chave)
+                    .retrieve()
+                    .body(RESPONSE_TYPE);
+            return response == null ? -1 : response.code();
+        } catch (Exception ex) {
+            log.debug("infosimples.probe.failed uf={} reason={}", uf, ex.getClass().getSimpleName());
+            return -1;
+        }
+    }
+
     public Optional<InfosimplesAccount> fetchAccount() {
         try {
             var response = restClient.get()
