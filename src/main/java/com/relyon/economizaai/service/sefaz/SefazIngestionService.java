@@ -21,11 +21,14 @@ import com.relyon.economizaai.model.enums.StateIngestionOutcome;
 import com.relyon.economizaai.model.enums.StateIngestionStrategy;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.llm.HtmlReceiptRescueService;
+import com.relyon.economizaai.service.notifications.OperationalAlertService;
 import com.relyon.economizaai.service.paidapi.PaidApiGuardService;
 import com.relyon.economizaai.service.sefaz.captcha.CaptchaSolveTracker;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
@@ -33,10 +36,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
 public class SefazIngestionService {
+
+    private static final ZoneId BRAZIL = ZoneId.of("America/Sao_Paulo");
 
     private final Map<UnidadeFederativa, SefazAdapter> adapters;
     private final Set<UnidadeFederativa> verifiedStates;
@@ -44,14 +50,20 @@ public class SefazIngestionService {
     private final PaidApiGuardService paidApiGuard;
     private final StateCoverageService stateCoverage;
     private final RsChaveReconsultService rsChaveReconsult;
+    private final ChaveReconsultService chaveReconsult;
+    private final OperationalAlertService operationalAlert;
     private final PrefetchPolicy prefetchPolicy;
     private final HtmlReceiptRescueService htmlReceiptRescue;
+    // Alerta de "chave manual sem caminho" no máximo 1×/UF/dia (padrão do codebase).
+    private final Map<UnidadeFederativa, LocalDate> lastNoPathAlert = new ConcurrentHashMap<>();
 
     public SefazIngestionService(List<SefazAdapter> adapters,
                                  Optional<InfosimplesService> infosimples,
                                  PaidApiGuardService paidApiGuard,
                                  StateCoverageService stateCoverage,
                                  RsChaveReconsultService rsChaveReconsult,
+                                 ChaveReconsultService chaveReconsult,
+                                 OperationalAlertService operationalAlert,
                                  PrefetchPolicy prefetchPolicy,
                                  HtmlReceiptRescueService htmlReceiptRescue) {
         var byState = new EnumMap<UnidadeFederativa, SefazAdapter>(UnidadeFederativa.class);
@@ -83,6 +95,8 @@ public class SefazIngestionService {
         this.paidApiGuard = paidApiGuard;
         this.stateCoverage = stateCoverage;
         this.rsChaveReconsult = rsChaveReconsult;
+        this.chaveReconsult = chaveReconsult;
+        this.operationalAlert = operationalAlert;
         this.prefetchPolicy = prefetchPolicy;
         this.htmlReceiptRescue = htmlReceiptRescue;
         log.info("Registered SEFAZ adapters: verified={} experimental={} infosimples-fallback={}",
@@ -125,16 +139,25 @@ public class SefazIngestionService {
     }
 
     /**
-     * Whether a bare 44-digit chave (manual entry — no QR signature) can be
-     * ingested for this UF. RS is a hard no (its SEFAZ needs a gov.br login to
-     * consult by chave; not even Infosimples rescues it). Portals that require
-     * the QR signature are served by the paid by-chave fallback when enabled.
+     * Whether a bare 44-digit chave (manual entry / OCR — no QR signature) can be
+     * served for this chave. The portal can't be scraped without the QR signature
+     * (SVRS family), so it works when ANY of these covers it:
+     * <ul>
+     *   <li>the portal doesn't need the signature at all (MS/SC consult by chave);</li>
+     *   <li>a FREE legacy reconsult exists (RS SAT-WEB, CE qrcodev3, BA captcha) —
+     *       {@link ChaveReconsultService#isReconsultable};</li>
+     *   <li>the paid Infosimples by-chave fallback is enabled (covers all 27 UFs).</li>
+     * </ul>
+     * RS is NO LONGER a hard no: it has a free legacy portal (SAT-WEB, logged-out)
+     * AND Infosimples (nfce-resumida). The actual fetch chain (see {@link #fetch})
+     * tries free reconsult first, then Infosimples.
      */
-    public boolean supportsBareChave(UnidadeFederativa uf) {
-        if (uf == UnidadeFederativa.RS) return false;
-        var adapter = adapters.get(uf);
+    public boolean supportsBareChave(String chave) {
+        var adapter = adapters.get(ChaveAcessoParser.extractUf(chave));
         if (adapter == null) return false;
-        return !adapter.requiresQrSignature() || infosimples.isPresent();
+        return !adapter.requiresQrSignature()
+                || ChaveReconsultService.isReconsultable(chave)
+                || infosimples.isPresent();
     }
 
     /**
@@ -200,21 +223,41 @@ public class SefazIngestionService {
         if (adapter == null) {
             throw new UnsupportedStateException(uf.name());
         }
-        // A manually-typed bare chave (damaged QR) has no signature. Portals that
-        // need it (SVRS family — PR/SP) can't be scraped, so go straight to the
-        // Infosimples by-chave fallback instead of a doomed scrape. RS is rejected
-        // up front at submit (gov.br wall), so it doesn't reach here.
+        // Chave pura (QR danificado / digitada / OCR) não tem assinatura → o portal
+        // SVRS não pode ser raspado. Cadeia única, igual pra todo estado:
+        //   1) reconsulta legada GRÁTIS (RS SAT-WEB / CE qrcodev3 / BA captcha), se houver;
+        //   2) Infosimples (pago, ~R$0,24) cobrindo as 27 UFs;
+        //   3) nada funcionou → alerta WhatsApp admin (1×/UF/dia) e falha honesta.
         if (adapter.requiresQrSignature() && ChaveAcessoParser.isBareChave(qrPayload)) {
-            if (infosimples.isEmpty()) {
-                log.warn("sefaz.fetch.bare_chave uf={} chave={} — no by-chave fallback configured", uf, abbrev(chave));
-                throw new SefazFetchException(uf.name());
+            if (ChaveReconsultService.isReconsultable(chave)) {
+                try {
+                    var reconsulted = chaveReconsult.reconsult(chave);
+                    log.info("sefaz.fetch.bare_chave.reconsult_ok uf={} chave={}", uf, abbrev(chave));
+                    return reconsulted;
+                } catch (RuntimeException legacyEx) {
+                    log.info("sefaz.fetch.bare_chave.reconsult_failed uf={} chave={} reason={} — tentando Infosimples",
+                            uf, abbrev(chave), describe(legacyEx));
+                }
             }
-            log.info("sefaz.fetch.bare_chave uf={} chave={} — routing to infosimples (no QR signature to scrape)", uf, abbrev(chave));
-            var rescued = fetchViaInfosimples(chave, uf, userId);
-            if (isExperimental(adapter)) {
-                stateCoverage.recordSuccess(uf, StateIngestionStrategy.INFOSIMPLES, null);
+            if (infosimples.isPresent()) {
+                try {
+                    var rescued = fetchViaInfosimples(chave, uf, userId);
+                    if (isExperimental(adapter)) {
+                        stateCoverage.recordSuccess(uf, StateIngestionStrategy.INFOSIMPLES, null);
+                    }
+                    return rescued;
+                } catch (PaidApiQuotaExceededException | PaidApiBudgetExceededException | PaidApiUnavailableException guardEx) {
+                    throw guardEx; // cap/budget/breaker — não é "sem suporte", propaga o motivo real
+                } catch (RuntimeException infosimplesEx) {
+                    log.warn("sefaz.fetch.bare_chave.infosimples_failed uf={} chave={} reason={}",
+                            uf, abbrev(chave), describe(infosimplesEx));
+                    alertManualChaveNoPath(uf, chave, describe(infosimplesEx));
+                    throw infosimplesEx;
+                }
             }
-            return rescued;
+            log.warn("sefaz.fetch.bare_chave.no_path uf={} chave={} — sem legado e Infosimples desabilitado", uf, abbrev(chave));
+            alertManualChaveNoPath(uf, chave, "sem reconsulta legada e Infosimples desabilitado");
+            throw new SefazFetchException(uf.name());
         }
         // A scrape MAY solve captchas (paid, per token) — the solver tracks the
         // actual solves and they're ledgered after the fetch. Global kill-switch
@@ -315,6 +358,23 @@ public class SefazIngestionService {
 
     private static String joinDetail(String description, String portalEvidence) {
         return portalEvidence == null ? description : description + "\n" + portalEvidence;
+    }
+
+    /**
+     * Alerta o admin (WhatsApp + e-mail) quando uma chave manual não teve NENHUM
+     * caminho (reconsulta legada e Infosimples falharam/indisponíveis). No máximo
+     * 1×/UF/dia pra não floodar. Nunca lança — alertAdmin trata os próprios erros.
+     */
+    private void alertManualChaveNoPath(UnidadeFederativa uf, String chave, String reason) {
+        var today = LocalDate.now(BRAZIL);
+        if (today.equals(lastNoPathAlert.put(uf, today))) {
+            return; // já alertou hoje por essa UF
+        }
+        operationalAlert.alertAdmin(
+                "Chave manual sem caminho: " + uf,
+                ("Uma chave digitada/fotografada de %s não pôde ser processada — nem a reconsulta legada "
+                        + "nem o Infosimples resolveram.%nchave=%s%nmotivo=%s%n%nVale ver se esse estado "
+                        + "precisa de um fallback/legado novo.").formatted(uf, abbrev(chave), reason));
     }
 
     /**

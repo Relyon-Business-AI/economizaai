@@ -78,7 +78,7 @@ community wins."
   4. Parser extracts receipt + items into our domain model.
   5. Async job runs canonicalization and writes PriceObservations.
 - Each state adapter is an interface implementation — start with RS (where the user lives), expand by demand.
-- Fallback path: manual entry / OCR of printed receipt for damaged QRs (post-MVP).
+- Fallback path (shipped): manual entry / OCR / photo of the printed chave for damaged QRs. A bare chave (no QR signature) runs a **unified fallback chain** per UF — free legacy reconsult (RS SAT-WEB / CE / BA) → paid Infosimples → WhatsApp admin alert + honest fail. No state is hard-blocked (RS included). See CLAUDE.md → SEFAZ Portal Adapters.
 - Keep the **raw HTML snapshot** per receipt — parsing rules will evolve and we'll want to reprocess.
 
 ### Anonymization & Collaboration
