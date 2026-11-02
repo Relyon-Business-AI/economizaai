@@ -434,10 +434,11 @@ public class ReceiptService {
             log.info("submit rejected reason=implausible_chave_structure chave={}", LogMasker.chave(chave));
             throw new InvalidChaveException();
         }
-        // A manually-typed bare chave has no QR signature. Portals that require it
-        // can only be served by the paid by-chave fallback — and RS not even by that
-        // (gov.br wall). Reject up front instead of failing (or spending) async.
-        if (ChaveAcessoParser.isBareChave(qrPayload) && !sefazIngestionService.supportsBareChave(uf)) {
+        // Chave pura (digitada/foto) não tem assinatura de QR. Só rejeita no submit se
+        // NÃO houver caminho pra essa UF (nem portal direto, nem reconsulta legada
+        // grátis, nem Infosimples). Com qualquer caminho, segue pro fetch (que tenta
+        // legado → Infosimples). RS agora passa (SAT-WEB grátis / Infosimples).
+        if (ChaveAcessoParser.isBareChave(qrPayload) && !sefazIngestionService.supportsBareChave(chave)) {
             log.info("submit rejected reason=manual_chave_unsupported uf={}", uf);
             throw new ManualChaveUnsupportedException(uf.name());
         }
