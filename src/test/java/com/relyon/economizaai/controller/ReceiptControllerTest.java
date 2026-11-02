@@ -47,14 +47,17 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.multipart.MultipartFile;
+import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
@@ -246,6 +249,44 @@ class ReceiptControllerTest {
                 .andExpect(jsonPath("$.status").value("PENDING_CONFIRMATION"))
                 .andExpect(jsonPath("$.items[0].rawDescription").value("ARROZ TIO J 5KG"))
                 .andExpect(jsonPath("$.uf").value("RS"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void itemsPhoto_multipleFiles_passesAllToExtraction() throws Exception {
+        var user = buildUser();
+        var receiptId = UUID.randomUUID();
+        when(photoReceiptExtractionService.extract(any(User.class), anyList())).thenReturn(receiptId);
+        when(receiptService.get(any(User.class), eq(receiptId))).thenReturn(sampleReceipt(ReceiptStatus.PENDING_CONFIRMATION));
+
+        var first = new MockMultipartFile("files", "nota-1.jpg", "image/jpeg", new byte[]{1, 2, 3});
+        var second = new MockMultipartFile("files", "nota-2.jpg", "image/jpeg", new byte[]{4, 5, 6});
+        mockMvc.perform(multipart("/api/v1/receipts/items-photo").file(first).file(second)
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("PENDING_CONFIRMATION"));
+
+        var captor = ArgumentCaptor.forClass(List.class);
+        verify(photoReceiptExtractionService).extract(any(User.class), captor.capture());
+        assertThat((List<MultipartFile>) captor.getValue()).hasSize(2);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void itemsPhoto_legacySingleFileField_stillWorks() throws Exception {
+        var user = buildUser();
+        var receiptId = UUID.randomUUID();
+        when(photoReceiptExtractionService.extract(any(User.class), anyList())).thenReturn(receiptId);
+        when(receiptService.get(any(User.class), eq(receiptId))).thenReturn(sampleReceipt(ReceiptStatus.PENDING_CONFIRMATION));
+
+        var legacy = new MockMultipartFile("file", "nota.jpg", "image/jpeg", new byte[]{1, 2, 3});
+        mockMvc.perform(multipart("/api/v1/receipts/items-photo").file(legacy)
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isCreated());
+
+        var captor = ArgumentCaptor.forClass(List.class);
+        verify(photoReceiptExtractionService).extract(any(User.class), captor.capture());
+        assertThat((List<MultipartFile>) captor.getValue()).hasSize(1);
     }
 
     @Test
