@@ -4,6 +4,7 @@ import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.enums.ReceiptEntryMethod;
 import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
+import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -224,6 +225,11 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
             GROUP BY user_uf.uf ORDER BY COUNT(*) DESC
             """, nativeQuery = true)
     List<Object[]> usersByPredominantUf(@Param("includeInternal") boolean includeInternal);
+
+    /** Chaves de notas de uma UF (mais recentes primeiro) — amostra pro probe de saúde da rota. */
+    @Query("SELECT r.chaveAcesso FROM Receipt r WHERE r.uf = :uf AND r.chaveAcesso IS NOT NULL "
+            + "ORDER BY r.createdAt DESC")
+    List<String> chavesByUf(@Param("uf") UnidadeFederativa uf, Pageable pageable);
 
     /** (householdId, receiptCount) for the given households — batch enrichment for the admin user list. */
     @Query("SELECT receipt.household.id, count(receipt) FROM Receipt receipt "
