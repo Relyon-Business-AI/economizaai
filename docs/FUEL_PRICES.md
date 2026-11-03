@@ -8,10 +8,21 @@ posto ficam guardadas normalmente — um backfill (mesmo mecanismo do botão
 
 **Mockups (2026-11-03) em `docs/mockups/` — decisão de UX em aberto com a FE dev:**
 - `fuel-variante-a-tile.html` — entrada por TILE grande "Combustível" na home.
-- `fuel-variante-b-chips.html` — escopo discreto por CHIPS no card de gasto
-  (`Mercado · Farmácia · Combustível · Tudo`) + atalho pill na tela Mercados.
-  As telas internas (comparação por combustível + detalhe do posto) são iguais
-  nas duas variantes e já foram aprovadas pelo dono. Abrir direto no navegador.
+- `fuel-variante-b-chips.html` — escopo discreto por CHIPS no card de gasto.
+- `fuel-variante-c-escopos.html` — **favorita do dono (2026-11-03)**: escopos
+  PROGRESSIVOS na home real (`Mercado (default) · Farmácia · Combustível ·
+  Outras · Tudo`): as abas NEM EXISTEM até o household ter nota daquele tipo
+  (escaneou farmácia → nasce a aba Farmácia + Tudo; posto → Combustível; etc.).
+  Na lente Combustível as métricas trocam (abastecimentos, R$/L) e a ENTRADA do
+  comparador de postos aparece ali — sem tile na home, sem roubar foco de
+  mercado. Direção: 1 identidade (mercado) · escopos contextuais · 1 tela
+  satélite só pra combustível. Infra já existente: componente `ScopeFilter`
+  (chips+banner, hoje atrás de `splitVisibleFor`=admin) e filtro por segmento
+  no backend. ATENÇÃO no rollout: hoje o usuário comum vê escopo TUDO fixo —
+  default virar Mercado muda o número do hero pra quem tem notas de outros
+  tipos (planejar transição/banner).
+  As telas internas (comparação + detalhe do posto) são iguais em A/B/C e já
+  foram aprovadas pelo dono. Abrir direto no navegador.
 
 ## Por que vale
 - Muita gente já escaneia nota de posto (observação do dono na moderação).

@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Variante C — escopos progressivos</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --green:#14BA5E;--green-dark:#0E9A4D;--green-soft:#DFF5E8;--green-tint:#F1FCF6;
+    --white:#fff;--snow:#F9FAFB;--cloud:#F3F4F6;--ink:#111827;--ink-muted:#6B7280;--ink-faint:#9CA3AF;
+    --line:#E5E7EB;--gold:#FFC53A;--coral:#EE6C4D;--sky:#57C4E5;--citron:#C5D86D;
+    --font:'Inter',sans-serif;--display:'Plus Jakarta Sans',sans-serif;
+  }
+  body{margin:0;background:#E8EAEE;font-family:var(--font);display:flex;gap:22px;padding:22px;align-items:flex-start;flex-wrap:wrap}
+  .phone{width:360px;background:var(--white);border-radius:32px;box-shadow:0 16px 44px rgba(17,24,39,.18);overflow:hidden;border:6px solid #0f172a}
+  .screen{background:var(--snow);min-height:640px;position:relative}
+  .mock-label{font-family:var(--display);font-weight:800;font-size:14px;color:#334155;text-align:center;margin:8px 0 6px;max-width:360px}
+  .hero{background:var(--green);padding:26px 18px 18px;color:#fff}
+  .hero .brandrow{display:flex;justify-content:space-between;align-items:flex-start}
+  .hero .brand{font-family:var(--display);font-weight:800;font-size:22px}
+  .hero .ola{font-size:13px;opacity:.95;margin-top:2px}
+  .roundicons{display:flex;gap:8px}
+  .roundicons div{width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.25);display:grid;place-items:center;font-size:14px}
+  .gastorow{display:flex;justify-content:space-between;align-items:center;margin-top:16px}
+  .gastolabel{font-size:11px;font-weight:700;letter-spacing:.08em}
+  .period{display:flex;background:rgba(255,255,255,.22);border-radius:999px;padding:2px;gap:2px}
+  .period div{font-size:11px;font-weight:600;padding:4px 9px;border-radius:999px;color:#fff}
+  .period .on{background:#fff;color:var(--green-dark)}
+  .valor{font-family:var(--display);font-weight:800;font-size:34px;margin-top:6px}
+  /* escopos — a estrela do mockup */
+  .scopes{display:flex;gap:6px;margin-top:11px;flex-wrap:wrap}
+  .scopes div{font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.18);color:rgba(255,255,255,.92);border:1px solid rgba(255,255,255,.28)}
+  .scopes .on{background:#fff;color:var(--green-dark);border-color:#fff}
+  .subcard{background:rgba(255,255,255,.2);border-radius:14px;display:flex;margin-top:12px;padding:10px 0}
+  .subcard div{flex:1;text-align:center}
+  .subcard b{font-family:var(--display);font-size:16px;display:block}
+  .subcard small{font-size:10px;opacity:.9}
+  .scope-banner{background:var(--green-tint);border:1px solid var(--green-soft);margin:10px 14px 0;border-radius:12px;padding:8px 12px;font-size:11.5px;color:var(--ink-muted);display:flex;gap:6px;align-items:center}
+  .tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 14px}
+  .tile{border-radius:16px;padding:12px;color:#fff;min-height:58px}
+  .tile b{font-family:var(--display);font-size:13px;display:block;margin-top:4px}
+  .tile small{font-size:10px;opacity:.95}
+  .tile span{font-size:17px}
+  .t1{background:var(--citron)} .t2{background:var(--gold)} .t3{background:var(--coral)} .t4{background:var(--sky)}
+  .catcard{background:var(--white);margin:2px 14px 10px;border-radius:16px;padding:12px 14px;box-shadow:0 1px 3px rgba(17,24,39,.05)}
+  .catcard .h{display:flex;justify-content:space-between;font-size:13px}
+  .catcard .h b{font-family:var(--display)}
+  .catcard .h a{color:var(--green-dark);font-weight:700;text-decoration:none;font-size:12px}
+  .catcard .empty{color:var(--ink-faint);font-size:12px;text-align:center;padding:12px 0 6px}
+  .row{display:flex;justify-content:space-between;font-size:12.5px;padding:7px 0;border-bottom:1px solid var(--cloud)}
+  .row b{font-family:var(--display)}
+  .fuelcta{margin:0 14px 10px;background:var(--white);border:1px solid var(--green-soft);border-radius:14px;padding:11px 14px;font-size:12.5px;display:flex;justify-content:space-between;align-items:center}
+  .fuelcta b{color:var(--green-dark)}
+  .tabbar{display:flex;background:var(--white);border-top:1px solid var(--line);padding:7px 6px 12px;position:absolute;bottom:0;left:0;right:0}
+  .tabbar div{flex:1;text-align:center;font-size:9.5px;color:var(--ink-faint)}
+  .tabbar .on{color:var(--green-dark);font-weight:700}
+  .tabbar span{display:block;font-size:15px}
+  .wrap{display:flex;flex-direction:column;align-items:center}
+  .note{font-size:11px;color:#64748b;max-width:340px;text-align:center;margin-top:6px;line-height:1.5}
+</style>
+</head>
+<body>
+
+<!-- ESTADO 1: só mercado — nada de novo aparece -->
+<div class="wrap">
+  <div class="mock-label">1 · Só notas de mercado — NADA muda (sem abas)</div>
+  <div class="phone"><div class="screen">
+    <div class="hero">
+      <div class="brandrow"><div><div class="brand">Economiza AI</div><div class="ola">Olá, Teste</div></div><div class="roundicons"><div>🔔</div><div>👤</div></div></div>
+      <div class="gastorow"><div class="gastolabel">GASTO ESTE MÊS</div><div class="period"><div class="on">Este mês</div><div>Mês passado</div><div>Tudo</div></div></div>
+      <div class="valor">R$ 163,61</div>
+      <div class="subcard"><div><b>3</b><small>notas</small></div><div><b>R$ 54,54</b><small>média por compra</small></div></div>
+    </div>
+    <div class="tiles">
+      <div class="tile t1"><span>🏷️</span><b>Ofertas</b><small>Economize nos produtos</small></div>
+      <div class="tile t2"><span>🛒</span><b>Lista</b><small>Planeje suas compras</small></div>
+      <div class="tile t3"><span>✨</span><b>Previsões</b><small>O que está acabando</small></div>
+      <div class="tile t4"><span>🏪</span><b>Mercados</b><small>Compare preços</small></div>
+    </div>
+    <div class="catcard"><div class="h"><b>Por categoria</b><a>Ver todas ›</a></div>
+      <div class="row"><span>🥦 Hortifrúti</span><b>R$ 62,10</b></div>
+      <div class="row"><span>🥩 Carnes</span><b>R$ 48,90</b></div>
+    </div>
+    <div class="tabbar"><div class="on"><span>🏠</span>Início</div><div><span>🧾</span>Notas</div><div><span>▣</span></div><div><span>🛍️</span>Produtos</div><div><span>⚙️</span>Ajustes</div></div>
+  </div></div>
+  <div class="note">Household sem notas de farmácia/posto/outras: a home é exatamente a de hoje. Zero abas, zero mudança.</div>
+</div>
+
+<!-- ESTADO 2: escaneou farmácia — aparecem Mercado/Farmácia/Tudo -->
+<div class="wrap">
+  <div class="mock-label">2 · Escaneou 1ª nota de FARMÁCIA — abas nascem</div>
+  <div class="phone"><div class="screen">
+    <div class="hero">
+      <div class="brandrow"><div><div class="brand">Economiza AI</div><div class="ola">Olá, Teste</div></div><div class="roundicons"><div>🔔</div><div>👤</div></div></div>
+      <div class="gastorow"><div class="gastolabel">GASTO ESTE MÊS</div><div class="period"><div class="on">Este mês</div><div>Mês passado</div><div>Tudo</div></div></div>
+      <div class="scopes"><div class="on">🛒 Mercado</div><div>💊 Farmácia</div><div>Tudo</div></div>
+      <div class="valor">R$ 163,61</div>
+      <div class="subcard"><div><b>3</b><small>notas</small></div><div><b>R$ 54,54</b><small>média por compra</small></div></div>
+    </div>
+    <div class="tiles">
+      <div class="tile t1"><span>🏷️</span><b>Ofertas</b><small>Economize nos produtos</small></div>
+      <div class="tile t2"><span>🛒</span><b>Lista</b><small>Planeje suas compras</small></div>
+      <div class="tile t3"><span>✨</span><b>Previsões</b><small>O que está acabando</small></div>
+      <div class="tile t4"><span>🏪</span><b>Mercados</b><small>Compare preços</small></div>
+    </div>
+    <div class="catcard"><div class="h"><b>Por categoria</b><a>Ver todas ›</a></div>
+      <div class="row"><span>🥦 Hortifrúti</span><b>R$ 62,10</b></div>
+      <div class="row"><span>🥩 Carnes</span><b>R$ 48,90</b></div>
+    </div>
+    <div class="tabbar"><div class="on"><span>🏠</span>Início</div><div><span>🧾</span>Notas</div><div><span>▣</span></div><div><span>🛍️</span>Produtos</div><div><span>⚙️</span>Ajustes</div></div>
+  </div></div>
+  <div class="note">Default continua Mercado (número não muda). As abas só nasceram porque agora existe nota de farmácia.</div>
+</div>
+
+<!-- ESTADO 3: tem tudo — linha completa -->
+<div class="wrap">
+  <div class="mock-label">3 · Também escaneou POSTO e outras — linha completa</div>
+  <div class="phone"><div class="screen">
+    <div class="hero">
+      <div class="brandrow"><div><div class="brand">Economiza AI</div><div class="ola">Olá, Teste</div></div><div class="roundicons"><div>🔔</div><div>👤</div></div></div>
+      <div class="gastorow"><div class="gastolabel">GASTO ESTE MÊS</div><div class="period"><div class="on">Este mês</div><div>Mês passado</div><div>Tudo</div></div></div>
+      <div class="scopes"><div class="on">🛒 Mercado</div><div>💊 Farmácia</div><div>⛽ Combustível</div><div>Outras</div><div>Tudo</div></div>
+      <div class="valor">R$ 163,61</div>
+      <div class="subcard"><div><b>3</b><small>notas</small></div><div><b>R$ 54,54</b><small>média por compra</small></div></div>
+    </div>
+    <div class="tiles">
+      <div class="tile t1"><span>🏷️</span><b>Ofertas</b><small>Economize nos produtos</small></div>
+      <div class="tile t2"><span>🛒</span><b>Lista</b><small>Planeje suas compras</small></div>
+      <div class="tile t3"><span>✨</span><b>Previsões</b><small>O que está acabando</small></div>
+      <div class="tile t4"><span>🏪</span><b>Mercados</b><small>Compare preços</small></div>
+    </div>
+    <div class="catcard"><div class="h"><b>Por categoria</b><a>Ver todas ›</a></div>
+      <div class="row"><span>🥦 Hortifrúti</span><b>R$ 62,10</b></div>
+      <div class="row"><span>🥩 Carnes</span><b>R$ 48,90</b></div>
+    </div>
+    <div class="tabbar"><div class="on"><span>🏠</span>Início</div><div><span>🧾</span>Notas</div><div><span>▣</span></div><div><span>🛍️</span>Produtos</div><div><span>⚙️</span>Ajustes</div></div>
+  </div></div>
+  <div class="note">Com os 4 tipos, a linha fica cheia (com scroll horizontal se precisar). Mercado segue default e selecionado.</div>
+</div>
+
+<!-- ESTADO 4: escopo Combustível selecionado -->
+<div class="wrap">
+  <div class="mock-label">4 · Aba Combustível ativa — conteúdo muda de lente</div>
+  <div class="phone"><div class="screen">
+    <div class="hero">
+      <div class="brandrow"><div><div class="brand">Economiza AI</div><div class="ola">Olá, Teste</div></div><div class="roundicons"><div>🔔</div><div>👤</div></div></div>
+      <div class="gastorow"><div class="gastolabel">GASTO ESTE MÊS</div><div class="period"><div class="on">Este mês</div><div>Mês passado</div><div>Tudo</div></div></div>
+      <div class="scopes"><div>🛒 Mercado</div><div>💊 Farmácia</div><div class="on">⛽ Combustível</div><div>Outras</div><div>Tudo</div></div>
+      <div class="valor">R$ 418,70</div>
+      <div class="subcard"><div><b>2</b><small>abastecimentos</small></div><div><b>R$ 5,83</b><small>preço médio /L</small></div></div>
+    </div>
+    <div class="scope-banner">ⓘ Você está vendo só notas de combustível. Volte em "Mercado" pra ver as compras.</div>
+    <div class="fuelcta"><span>⛽ <b>Gasolina a R$ 5,79/L</b> no Ipiranga Protásio (1,2 km)</span><b>›</b></div>
+    <div class="catcard"><div class="h"><b>Abastecimentos</b><a>Ver todos ›</a></div>
+      <div class="row"><span>Posto Ipiranga Protásio · gasolina 36 L</span><b>R$ 212,40</b></div>
+      <div class="row"><span>Shell Assis Brasil · gasolina 35 L</span><b>R$ 206,30</b></div>
+    </div>
+    <div class="tabbar"><div class="on"><span>🏠</span>Início</div><div><span>🧾</span>Notas</div><div><span>▣</span></div><div><span>🛍️</span>Produtos</div><div><span>⚙️</span>Ajustes</div></div>
+  </div></div>
+  <div class="note">Na lente combustível: métricas trocam (abastecimentos, R$/L), banner explica a lente, e a ENTRADA pro comparador de postos aparece aqui — descobrível no contexto certo, sem tile na home.</div>
+</div>
+
+</body>
+</html>
