@@ -1,5 +1,19 @@
 # economizai — what's new
 
+## 2026-11-03 — Admin market-intel: "Gasto por categoria" na taxonomia nova (grupo → subcategoria)
+
+- **`GET /admin/market-intel` mudou o shape de `categorySpend`**: era
+  `{category: "MEAT_DAIRY", spend, items}` (enum antigo); agora é
+  `{slug, name, spend, items, children: [{slug, name, spend, items}]}` — um
+  registro por GRUPO da taxonomia (Carnes, Mercearia, Combustível…), com o
+  detalhamento por subcategoria em `children` (expansível no dashboard, já
+  implementado). Itens confirmados antes da taxonomia caem no grupo default do
+  enum legado; sem sinal → `sem-categoria`/"Sem categoria".
+- **Taxonomia ganhou o grupo `combustivel`** (gasolina-comum, gasolina-aditivada,
+  etanol, diesel, gnv, lubrificantes-aditivos) — V129. Saúde já cobria farmácia
+  (medicamentos, suplementos).
+
+
 ## 2026-11-03 — Foto de itens: >5 fotos agora é 400 (antes truncava em silêncio)
 - `POST /receipts/items-photo`: mandar mais fotos que o máximo (5) retorna **400**
   com a chave `receipt.photo.too-many` em vez de truncar silenciosamente e perder o

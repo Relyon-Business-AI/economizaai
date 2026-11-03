@@ -26,8 +26,14 @@ public record MarketIntelResponse(
     public record TopMarket(String cnpj, String name, long scans, BigDecimal spend) {
     }
 
-    /** Category name (or "UNCATEGORIZED" when the confirmation snapshot had none). */
-    public record CategorySpend(String category, BigDecimal spend, long items) {
+    /**
+     * Spend bucketed by the NEW 2-level taxonomy: one row per GROUP (Carnes,
+     * Mercearia, Combustível…), with the per-LEAF breakdown in {@code children}
+     * (expansível no dashboard). Items confirmed before the taxonomy fall back
+     * to the legacy enum's default group; no signal at all → "Sem categoria".
+     */
+    public record CategorySpend(String slug, String name, BigDecimal spend, long items,
+                                List<CategorySpend> children) {
     }
 
     public record UfRow(String uf, long receipts, BigDecimal spend) {

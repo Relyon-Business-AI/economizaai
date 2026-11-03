@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Variante C2 — chips melhorados</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --green:#14BA5E;--green-dark:#0E9A4D;--green-soft:#DFF5E8;--green-tint:#F1FCF6;
+    --white:#fff;--snow:#F9FAFB;--cloud:#F3F4F6;--ink:#111827;--ink-muted:#6B7280;--ink-faint:#9CA3AF;
+    --line:#E5E7EB;--citron:#C5D86D;--gold:#FFC53A;--coral:#EE6C4D;--sky:#57C4E5;
+    --font:'Inter',sans-serif;--display:'Plus Jakarta Sans',sans-serif;
+  }
+  body{margin:0;background:#E8EAEE;font-family:var(--font);display:flex;gap:22px;padding:22px;align-items:flex-start;flex-wrap:wrap}
+  .phone{width:360px;background:var(--white);border-radius:32px;box-shadow:0 16px 44px rgba(17,24,39,.18);overflow:hidden;border:6px solid #0f172a}
+  .screen{background:var(--snow);min-height:560px;position:relative}
+  .mock-label{font-family:var(--display);font-weight:800;font-size:14px;color:#334155;text-align:center;margin:8px 0 6px;max-width:360px}
+  .hero{background:var(--green);padding:26px 18px 18px;color:#fff}
+  .brandrow{display:flex;justify-content:space-between;align-items:flex-start}
+  .brand{font-family:var(--display);font-weight:800;font-size:22px}
+  .ola{font-size:13px;opacity:.95;margin-top:2px}
+  .roundicons{display:flex;gap:8px}
+  .roundicons div{width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.25);display:grid;place-items:center;font-size:14px}
+  .gastorow{display:flex;justify-content:space-between;align-items:center;margin-top:16px}
+  .gastolabel{font-size:11px;font-weight:700;letter-spacing:.08em}
+  .period{display:flex;background:rgba(255,255,255,.22);border-radius:999px;padding:2px;gap:2px}
+  .period div{font-size:11px;font-weight:600;padding:4px 9px;border-radius:999px;color:#fff}
+  .period .on{background:#fff;color:var(--green-dark)}
+  .valor{font-family:var(--display);font-weight:800;font-size:34px;margin-top:6px}
+  .subcard{background:rgba(255,255,255,.2);border-radius:14px;display:flex;margin-top:12px;padding:10px 0}
+  .subcard div{flex:1;text-align:center}
+  .subcard b{font-family:var(--display);font-size:16px;display:block}
+  .subcard small{font-size:10px;opacity:.9}
+  .tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 14px}
+  .tile{border-radius:16px;padding:12px;color:#fff;min-height:52px}
+  .tile b{font-family:var(--display);font-size:13px;display:block;margin-top:4px}
+  .tile span{font-size:17px}
+  .t1{background:var(--citron)} .t2{background:var(--gold)} .t3{background:var(--coral)} .t4{background:var(--sky)}
+  .wrap{display:flex;flex-direction:column;align-items:center}
+  .note{font-size:11px;color:#64748b;max-width:340px;text-align:center;margin-top:6px;line-height:1.5}
+
+  /* ALTERNATIVA 1: linha única, inativos só ícone */
+  .scopes-compact{display:flex;gap:6px;margin-top:11px;align-items:center}
+  .scopes-compact .chip{display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:999px;background:#fff;color:var(--green-dark)}
+  .scopes-compact .ico{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);display:grid;place-items:center;font-size:13px}
+
+  /* ALTERNATIVA 2: lente única (dropdown) */
+  .lens{display:inline-flex;align-items:center;gap:6px;margin-top:11px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.32);border-radius:999px;padding:5px 12px;font-size:12px;font-weight:700}
+  .lens b{font-weight:700}
+  .sheet-backdrop{position:absolute;inset:0;background:rgba(17,24,39,.45);display:flex;align-items:flex-end}
+  .sheet{background:#fff;border-radius:22px 22px 0 0;width:100%;padding:16px 16px 26px}
+  .sheet h4{font-family:var(--display);font-size:15px;margin:2px 4px 10px;color:var(--ink)}
+  .sheet .opt{display:flex;align-items:center;justify-content:space-between;padding:12px 10px;border-radius:12px;font-size:14px;color:var(--ink)}
+  .sheet .opt small{color:var(--ink-faint);font-size:11.5px;display:block;margin-top:1px}
+  .sheet .on{background:var(--green-tint)}
+  .sheet .check{color:var(--green-dark);font-weight:800}
+  .grabber{width:36px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 10px}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="mock-label">C2·A — Linha única: ativo com nome, inativos só ícone</div>
+  <div class="phone"><div class="screen">
+    <div class="hero">
+      <div class="brandrow"><div><div class="brand">Economiza AI</div><div class="ola">Olá, Teste</div></div><div class="roundicons"><div>🔔</div><div>👤</div></div></div>
+      <div class="gastorow"><div class="gastolabel">GASTO ESTE MÊS</div><div class="period"><div class="on">Este mês</div><div>Mês passado</div><div>Tudo</div></div></div>
+      <div class="scopes-compact">
+        <div class="chip">🛒 Mercado</div>
+        <div class="ico">💊</div>
+        <div class="ico">⛽</div>
+        <div class="ico">🧾</div>
+        <div class="ico">∑</div>
+      </div>
+      <div class="valor">R$ 1.284,50</div>
+      <div class="subcard"><div><b>12</b><small>notas</small></div><div><b>R$ 107,04</b><small>média por compra</small></div></div>
+    </div>
+    <div class="tiles">
+      <div class="tile t1"><span>🏷️</span><b>Ofertas</b></div>
+      <div class="tile t2"><span>🛒</span><b>Lista</b></div>
+      <div class="tile t3"><span>✨</span><b>Previsões</b></div>
+      <div class="tile t4"><span>🏪</span><b>Mercados</b></div>
+    </div>
+  </div></div>
+  <div class="note">Sempre UMA linha, sem quebra: só o escopo ativo mostra o nome; os outros viram ícones redondos (🧾 = outras notas, ∑ = tudo). Tocar num ícone ativa e o nome "viaja" pra ele.</div>
+</div>
+
+<div class="wrap">
+  <div class="mock-label">C2·B — Lente única (pill + sheet)</div>
+  <div class="phone"><div class="screen">
+    <div class="hero">
+      <div class="brandrow"><div><div class="brand">Economiza AI</div><div class="ola">Olá, Teste</div></div><div class="roundicons"><div>🔔</div><div>👤</div></div></div>
+      <div class="gastorow"><div class="gastolabel">GASTO ESTE MÊS</div><div class="period"><div class="on">Este mês</div><div>Mês passado</div><div>Tudo</div></div></div>
+      <div class="lens">🛒 <b>Mercado</b> ▾</div>
+      <div class="valor">R$ 1.284,50</div>
+      <div class="subcard"><div><b>12</b><small>notas</small></div><div><b>R$ 107,04</b><small>média por compra</small></div></div>
+    </div>
+    <div class="tiles">
+      <div class="tile t1"><span>🏷️</span><b>Ofertas</b></div>
+      <div class="tile t2"><span>🛒</span><b>Lista</b></div>
+      <div class="tile t3"><span>✨</span><b>Previsões</b></div>
+      <div class="tile t4"><span>🏪</span><b>Mercados</b></div>
+    </div>
+  </div></div>
+  <div class="note">Um pill só, sempre discreto, escala pra quantos escopos existirem. Toque abre o sheet ao lado.</div>
+</div>
+
+<div class="wrap">
+  <div class="mock-label">C2·B — o sheet aberto</div>
+  <div class="phone"><div class="screen">
+    <div class="hero">
+      <div class="brandrow"><div><div class="brand">Economiza AI</div><div class="ola">Olá, Teste</div></div><div class="roundicons"><div>🔔</div><div>👤</div></div></div>
+      <div class="gastorow"><div class="gastolabel">GASTO ESTE MÊS</div><div class="period"><div class="on">Este mês</div><div>Mês passado</div><div>Tudo</div></div></div>
+      <div class="lens">🛒 <b>Mercado</b> ▾</div>
+      <div class="valor">R$ 1.284,50</div>
+    </div>
+    <div class="sheet-backdrop"><div class="sheet">
+      <div class="grabber"></div>
+      <h4>Ver gastos de</h4>
+      <div class="opt on"><span>🛒 Mercado<small>Supermercados, atacarejos, padarias…</small></span><span class="check">✓</span></div>
+      <div class="opt"><span>💊 Farmácia<small>Medicamentos e suplementos</small></span></div>
+      <div class="opt"><span>⛽ Combustível<small>Abastecimentos em postos</small></span></div>
+      <div class="opt"><span>🧾 Outras notas<small>Compras fora desses ramos</small></span></div>
+      <div class="opt"><span>∑ Tudo<small>Todas as notas somadas</small></span></div>
+    </div></div>
+  </div></div>
+  <div class="note">O sheet dá espaço pra EXPLICAR cada escopo (resolve a dúvida "o que é Outras?") — coisa que chips apertados nunca conseguem.</div>
+</div>
+
+</body>
+</html>

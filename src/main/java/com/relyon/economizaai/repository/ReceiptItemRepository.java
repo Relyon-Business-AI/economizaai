@@ -107,6 +107,15 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
             + " GROUP BY item.categoryAtConfirmation")
     List<Object[]> categorySpendGlobal(boolean includeInternal);
 
+    /** Global spend by the confirmation-time TAXONOMY node, carrying the legacy enum as
+     *  fallback for items confirmed before the taxonomy existed (node null). */
+    @Query("SELECT item.categoryNodeAtConfirmation, item.categoryAtConfirmation, "
+            + "COALESCE(sum(item.totalPrice), 0), count(item) "
+            + "FROM ReceiptItem item JOIN item.receipt.user receiptUser "
+            + "WHERE item.receipt.status = 'CONFIRMED' AND item.excluded = false" + ITEM_INTERNAL_FILTER
+            + " GROUP BY item.categoryNodeAtConfirmation, item.categoryAtConfirmation")
+    List<Object[]> categoryNodeSpendGlobal(boolean includeInternal);
+
     /**
      * The household's own friendly name for each of the given products, taken from its
      * confirmed, non-excluded receipt items — i.e. what the household last called the
