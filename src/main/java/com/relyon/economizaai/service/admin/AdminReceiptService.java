@@ -65,13 +65,14 @@ public class AdminReceiptService {
                                              UnidadeFederativa uf,
                                              ReceiptStatus status,
                                              String parseErrorReason,
+                                             String userQ,
                                              boolean includeInternal,
                                              Pageable pageable) {
         var sortedPageable = pageable.getSort().isUnsorted()
                 ? PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by(Sort.Direction.DESC, "issuedAt"))
                 : pageable;
         var spec = buildSearchSpec(from, to, marketCnpj, categories, search, householdId, uf, status,
-                parseErrorReason, includeInternal);
+                parseErrorReason, userQ, includeInternal);
         return receiptRepository.findAll(spec, sortedPageable)
                 .map(receipt -> AdminReceiptSummaryResponse.of(receipt, localizedParseError(receipt)));
     }
@@ -116,9 +117,10 @@ public class AdminReceiptService {
                                            UnidadeFederativa uf,
                                            ReceiptStatus status,
                                            String parseErrorReason,
+                                           String userQ,
                                            boolean includeInternal) {
         var spec = buildSearchSpec(from, to, marketCnpj, categories, search, householdId, uf, status,
-                parseErrorReason, includeInternal);
+                parseErrorReason, userQ, includeInternal);
         return new AdminReceiptStatsResponse(receiptRepository.count(spec), receiptRepository.sumTotalAmount(spec));
     }
 
@@ -136,9 +138,10 @@ public class AdminReceiptService {
                                                      String search,
                                                      UUID householdId,
                                                      UnidadeFederativa uf,
+                                                     String userQ,
                                                      boolean includeInternal) {
         var spec = buildSearchSpec(from, to, marketCnpj, categories, search, householdId, uf,
-                ReceiptStatus.FAILED_PARSE, null, includeInternal);
+                ReceiptStatus.FAILED_PARSE, null, userQ, includeInternal);
         return receiptRepository.findAll(spec).stream()
                 .collect(Collectors.groupingBy(
                         receipt -> Optional.ofNullable(receipt.getParseErrorReason()).orElse("unknown"),
@@ -152,16 +155,18 @@ public class AdminReceiptService {
     private Specification<Receipt> buildSearchSpec(LocalDateTime from, LocalDateTime to, String marketCnpj,
                                                    List<ProductCategory> categories, String search, UUID householdId,
                                                    UnidadeFederativa uf, ReceiptStatus status, String parseErrorReason,
-                                                   boolean includeInternal) {
+                                                   String userQ, boolean includeInternal) {
         var trimmedCnpj = Optional.ofNullable(marketCnpj).map(String::trim).filter(trimmed -> !trimmed.isBlank()).orElse(null);
         var trimmedSearch = Optional.ofNullable(search).map(String::trim).filter(trimmed -> !trimmed.isBlank()).orElse(null);
         var trimmedError = Optional.ofNullable(parseErrorReason).map(String::trim).filter(trimmed -> !trimmed.isBlank()).orElse(null);
+        var trimmedUserQ = Optional.ofNullable(userQ).map(String::trim).filter(trimmed -> !trimmed.isBlank()).orElse(null);
         // Admin sees FAILED_PARSE rows too (useful for parser triage) — but an
         // explicit status filter narrows to one bucket when passed.
         var spec = ReceiptSpecifications.forSearch(
                 householdId, from, to, trimmedCnpj, categories, status, trimmedSearch, false, uf, trimmedError);
         // Off by default: hide receipts from admin/test accounts so a bulk import doesn't flood the list.
         if (!includeInternal) spec = spec.and(ReceiptSpecifications.excludeInternal());
+        if (trimmedUserQ != null) spec = spec.and(ReceiptSpecifications.byUserQ(trimmedUserQ));
         return spec;
     }
 

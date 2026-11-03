@@ -76,7 +76,7 @@ class AdminReceiptServiceTest {
         when(receiptRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(receipt)));
 
-        var page = service.list(null, null, null, null, null, null, null, null, null, false, PageRequest.of(0, 20));
+        var page = service.list(null, null, null, null, null, null, null, null, null, null, false, PageRequest.of(0, 20));
 
         assertEquals(1, page.getTotalElements());
         assertEquals("Mercado X", page.getContent().get(0).receipt().marketName());
@@ -95,7 +95,7 @@ class AdminReceiptServiceTest {
                 .thenReturn(new PageImpl<>(List.of()));
 
         service.list(LocalDateTime.now().minusDays(7), LocalDateTime.now(),
-                "  12345678000190  ", List.of(ProductCategory.GROCERIES), "  arroz  ", UUID.randomUUID(), null, null, null, false, requested);
+                "  12345678000190  ", List.of(ProductCategory.GROCERIES), "  arroz  ", UUID.randomUUID(), null, null, null, null, false, requested);
 
         verify(receiptRepository)
                 .findAll(any(Specification.class), sortedPageableCaptor.capture());
@@ -113,7 +113,7 @@ class AdminReceiptServiceTest {
         when(localizedMessageService.translate("receipt.parse.failed", "no-items-found"))
                 .thenReturn("Não foi possível extrair os dados da NFC-e.");
 
-        var row = service.list(null, null, null, null, null, null, null, null, null, false, PageRequest.of(0, 20))
+        var row = service.list(null, null, null, null, null, null, null, null, null, null, false, PageRequest.of(0, 20))
                 .getContent().get(0);
 
         assertEquals(owner.getId(), row.owner().id());
@@ -130,7 +130,7 @@ class AdminReceiptServiceTest {
         when(receiptRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
 
-        var page = service.list(null, null, "   ", List.of(), "   ", null, null, null, null, false, PageRequest.of(0, 20));
+        var page = service.list(null, null, "   ", List.of(), "   ", null, null, null, null, null, false, PageRequest.of(0, 20));
 
         assertEquals(0, page.getTotalElements());
     }
@@ -176,7 +176,7 @@ class AdminReceiptServiceTest {
         when(receiptRepository.count(any(Specification.class))).thenReturn(9L);
         when(receiptRepository.sumTotalAmount(any(Specification.class))).thenReturn(new BigDecimal("1234.56"));
 
-        var stats = service.stats(null, null, null, null, null, null, null, null, null, false);
+        var stats = service.stats(null, null, null, null, null, null, null, null, null, null, false);
 
         assertEquals(9L, stats.count());
         assertEquals(new BigDecimal("1234.56"), stats.totalAmount());

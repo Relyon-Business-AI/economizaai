@@ -368,10 +368,11 @@ public class AdminController {
             @RequestParam(required = false) UnidadeFederativa uf,
             @RequestParam(required = false) ReceiptStatus status,
             @RequestParam(required = false) String parseErrorReason,
+            @RequestParam(required = false) String userQ,
             @RequestParam(defaultValue = "false") boolean includeInternal,
             @PageableDefault(size = 20) Pageable pageable) {
         return ResponseEntity.ok(adminReceiptService.list(
-                from, to, marketCnpj, category, q, householdId, uf, status, parseErrorReason, includeInternal, pageable));
+                from, to, marketCnpj, category, q, householdId, uf, status, parseErrorReason, userQ, includeInternal, pageable));
     }
 
     /** Count + total value of the notes matching the given filters (list header total). */
@@ -386,9 +387,10 @@ public class AdminController {
             @RequestParam(required = false) UnidadeFederativa uf,
             @RequestParam(required = false) ReceiptStatus status,
             @RequestParam(required = false) String parseErrorReason,
+            @RequestParam(required = false) String userQ,
             @RequestParam(defaultValue = "false") boolean includeInternal) {
         return ResponseEntity.ok(adminReceiptService.stats(
-                from, to, marketCnpj, category, q, householdId, uf, status, parseErrorReason, includeInternal));
+                from, to, marketCnpj, category, q, householdId, uf, status, parseErrorReason, userQ, includeInternal));
     }
 
     /**
@@ -405,9 +407,10 @@ public class AdminController {
             @RequestParam(required = false) String q,
             @RequestParam(required = false) UUID householdId,
             @RequestParam(required = false) UnidadeFederativa uf,
+            @RequestParam(required = false) String userQ,
             @RequestParam(defaultValue = "false") boolean includeInternal) {
         return ResponseEntity.ok(adminReceiptService.failureBreakdown(
-                from, to, marketCnpj, category, q, householdId, uf, includeInternal));
+                from, to, marketCnpj, category, q, householdId, uf, userQ, includeInternal));
     }
 
     /** How users are entering their notas (QR scan vs typed/photographed chave vs photo vs import):

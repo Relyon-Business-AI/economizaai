@@ -440,7 +440,7 @@ class AdminControllerTest {
         var row = new AdminReceiptSummaryResponse(summary, owner, UnidadeFederativa.RS, LocalDateTime.now(),
                 "receipt.parse.failed:no-items-found", "Não foi possível extrair os dados da NFC-e.");
         Page<AdminReceiptSummaryResponse> page = new PageImpl<>(List.of(row));
-        when(adminReceiptService.list(any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(Pageable.class)))
+        when(adminReceiptService.list(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(Pageable.class)))
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/v1/admin/receipts")
@@ -462,7 +462,7 @@ class AdminControllerTest {
 
     @Test
     void receiptStats_returnsCountAndTotal() throws Exception {
-        when(adminReceiptService.stats(any(), any(), any(), any(), any(), any(), any(), any(), any(), eq(false)))
+        when(adminReceiptService.stats(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), eq(false)))
                 .thenReturn(new AdminReceiptStatsResponse(12, new BigDecimal("3456.78")));
 
         mockMvc.perform(get("/api/v1/admin/receipts/stats")
