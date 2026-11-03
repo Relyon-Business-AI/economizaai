@@ -11,6 +11,8 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.model.enums.SubscriptionTier;
+import com.relyon.economizaai.model.enums.AcquisitionChannel;
+import com.relyon.economizaai.model.enums.Platform;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.repository.MerchantAccessRepository;
@@ -73,19 +75,29 @@ public class AdminUserService {
     private static final int AGGREGATE_SORT_CAP = 5000;
 
     @Transactional(readOnly = true)
+    /** Filtros da listagem de usuários — agrupados pra não estourar a assinatura. ufUserIds:
+     *  null = sem filtro de UF; lista (possivelmente vazia) = ids cujo estado predominante bate. */
+    private record UserFilters(String search, LocalDateTime createdFrom, LocalDateTime createdTo,
+                               Platform platform, AcquisitionChannel channel, List<UUID> ufUserIds,
+                               boolean includeInternal) {
+    }
+
     public Page<AdminUserSummaryResponse> list(String search, LocalDateTime createdFrom, LocalDateTime createdTo,
+                                               Platform platform, AcquisitionChannel channel, UnidadeFederativa uf,
                                                boolean includeInternal, Pageable pageable) {
         var trimmed = Optional.ofNullable(search).map(String::trim).filter(s -> !s.isBlank()).orElse(null);
+        var ufUserIds = uf == null ? null : receiptRepository.userIdsByPredominantUf(uf.name());
+        var filters = new UserFilters(trimmed, createdFrom, createdTo, platform, channel, ufUserIds, includeInternal);
         var aggregateOrder = pageable.getSort().stream()
                 .filter(order -> AGGREGATE_SORTS.contains(order.getProperty()))
                 .findFirst().orElse(null);
         if (aggregateOrder != null) {
-            return listRankedByAggregate(trimmed, createdFrom, createdTo, includeInternal, pageable, aggregateOrder);
+            return listRankedByAggregate(filters, pageable, aggregateOrder);
         }
         var sortedPageable = pageable.getSort().isUnsorted()
                 ? PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by(Sort.Direction.DESC, "createdAt"))
                 : pageable;
-        var page = userRepository.findAll(searchSpec(trimmed, createdFrom, createdTo, includeInternal), sortedPageable);
+        var page = userRepository.findAll(searchSpec(filters), sortedPageable);
         var counts = receiptCountsFor(page.getContent());
         var spend = spendFor(page.getContent());
         return page.map(user -> summaryFor(user, counts, spend));
@@ -97,10 +109,9 @@ public class AdminUserService {
      * cap), so we load the matching users, enrich with the batched aggregates, sort in
      * memory and paginate manually — correct and simple at this scale.
      */
-    private Page<AdminUserSummaryResponse> listRankedByAggregate(String search, LocalDateTime createdFrom,
-                                                                 LocalDateTime createdTo, boolean includeInternal,
+    private Page<AdminUserSummaryResponse> listRankedByAggregate(UserFilters filters,
                                                                  Pageable pageable, Sort.Order order) {
-        var all = userRepository.findAll(searchSpec(search, createdFrom, createdTo, includeInternal),
+        var all = userRepository.findAll(searchSpec(filters),
                 PageRequest.of(0, AGGREGATE_SORT_CAP, Sort.by(Sort.Direction.DESC, "createdAt"))).getContent();
         var counts = receiptCountsFor(all);
         var spend = spendFor(all);
@@ -315,26 +326,39 @@ public class AdminUserService {
         );
     }
 
-    private Specification<User> searchSpec(String search, LocalDateTime createdFrom, LocalDateTime createdTo,
-                                           boolean includeInternal) {
+    private Specification<User> searchSpec(UserFilters filters) {
         return (root, query, cb) -> {
             var predicates = new ArrayList<Predicate>();
-            if (search != null) {
-                var like = "%" + search.toLowerCase() + "%";
+            if (filters.search() != null) {
+                var like = "%" + filters.search().toLowerCase() + "%";
                 predicates.add(cb.or(
                         cb.like(cb.lower(root.get("email")), like),
                         cb.like(cb.lower(root.get("name")), like)
                 ));
             }
             // Filtro de período por data de cadastro (Hoje / 7 dias / mês), igual às Notas.
-            if (createdFrom != null) {
-                predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), createdFrom));
+            if (filters.createdFrom() != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), filters.createdFrom()));
             }
-            if (createdTo != null) {
-                predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), createdTo));
+            if (filters.createdTo() != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), filters.createdTo()));
+            }
+            // Plataforma de cadastro (iOS/Android/Web) e canal de aquisição (origem).
+            if (filters.platform() != null) {
+                predicates.add(cb.equal(root.get("registrationPlatform"), filters.platform()));
+            }
+            if (filters.channel() != null) {
+                predicates.add(cb.equal(root.get("acquisitionChannel"), filters.channel()));
+            }
+            // Filtro por UF predominante: ufUserIds é o conjunto de ids cujo estado-moda bate.
+            // Lista vazia = ninguém naquela UF → nega tudo (senão o filtro seria ignorado).
+            if (filters.ufUserIds() != null) {
+                predicates.add(filters.ufUserIds().isEmpty()
+                        ? cb.disjunction()
+                        : root.get("id").in(filters.ufUserIds()));
             }
             // Off by default: hide admins / test accounts / metrics-excluded from the list.
-            if (!includeInternal) {
+            if (!filters.includeInternal()) {
                 predicates.add(cb.notEqual(root.get("role"), Role.ADMIN));
                 predicates.add(cb.isFalse(root.get("excludedFromMetrics")));
                 predicates.add(cb.notLike(cb.lower(root.get("email")), "%@economizaai.app"));
