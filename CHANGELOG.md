@@ -1,5 +1,15 @@
 # economizai — what's new
 
+## 2026-11-03 — Lente Farmácia/Combustível não mostra mais mercado promovido
+
+- Fix: um mercado com CNAE não-resolvido que um admin marcou como suportado
+  (`support_override=SUPPORTED`, ex.: "JL SUPERMERCADOS") vazava para a lente
+  **`PHARMACY`** e **`FUEL`** — o cabeçalho e o "Por categoria" mostravam gasto
+  e categorias de mercado (padaria, laticínios) dentro de Farmácia. Agora o
+  override só conta para lentes que incluem mercado (`MARKET`/`SUPPORTED`);
+  `PHARMACY`/`FUEL` filtram estritamente pelo segmento. Vale para `/dashboard`,
+  `/insights/spend`, `/insights/query`, `/items` e `/receipts`.
+
 ## 2026-11-03 — `/receipts`: nota sem loja conhecida aparece em TODAS as lentes
 
 - Uma nota ainda sem CNPJ (PROCESSING, IMPORT_QUEUED, NEEDS_DEVICE_FETCH,
