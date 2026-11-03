@@ -17,9 +17,13 @@ posto ficam guardadas normalmente — um backfill (mesmo mecanismo do botão
   os escopos explicados: Mercado (default) · Farmácia · Combustível · Outras
   notas · Tudo. Por ser um pill único e discreto, **aparece pra TODO MUNDO
   sempre** (dispensou o progressive disclosure); escopos sem nota aparecem no
-  sheet mesmo assim (podem vir com contagem/estado vazio). Na lente
-  Combustível as métricas trocam (abastecimentos, R$/L) e a ENTRADA do
-  comparador de postos aparece ali — sem tile na home. Direção: 1 identidade
+  sheet mesmo assim (podem vir com contagem/estado vazio). **Refinamento do dono
+  (2026-11-03): a lente é PURA** — trocar escopo NÃO muda a view: mesmos cards,
+  mesma estrutura; só números e categorias mudam ("Por categoria" da lente
+  Combustível mostra as folhas da taxonomia: gasolina, etanol…). O pill é o
+  próprio indicador de onde se está; cards sem dado no escopo mostram estado
+  vazio natural (não esconder). As abas gasolina/etanol são SÓ da tela satélite
+  de comparação de postos (feature futura), nunca da home. Direção: 1 identidade
   (mercado) · 1 pill de lente · 1 tela satélite só pra combustível.
   Infra existente: `ScopeFilter` (hoje atrás de `splitVisibleFor`=admin) e
   filtro por segmento no backend. ATENÇÃO no rollout: hoje o usuário comum vê
