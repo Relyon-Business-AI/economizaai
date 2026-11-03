@@ -578,6 +578,20 @@ economizaai:
       # to add a Service ID (comma-separated) for web/Android Sign in with Apple.
       client-ids: ${APPLE_OAUTH_CLIENT_IDS:com.economizaaiapp.economizaai}
 
+apple:
+  asc:
+    # App Store Connect Analytics Reports API. Fetches impressions, page views,
+    # and installs by traffic source (search, browse, referral). Data has a 24-72h delay.
+    # To enable: APPLE_ASC_ENABLED=true + APPLE_ASC_PRIVATE_KEY (full PEM of
+    # ~/.config/appstore/economizai.p8). Key ID and Issuer ID are non-secret and
+    # default to the project's known values — no need to set them as env vars.
+    enabled: ${APPLE_ASC_ENABLED:false}
+    app-id: ${APPLE_ASC_APP_ID:6788025621}
+    issuer-id: ${APPLE_ASC_ISSUER_ID:8a41f4c7-c2b0-4afd-9dc7-0e9ee3ccd39e}
+    key-id: ${APPLE_ASC_KEY_ID:B3SKVUKUPS}
+    private-key: ${APPLE_ASC_PRIVATE_KEY:}
+    sync-days: ${APPLE_ASC_SYNC_DAYS:90}
+
   # LLM layers (OpenAI by default — cheapest suitable tier). Each capability has
   # its own switch so any of them can be disabled or later gated to premium.
   llm:

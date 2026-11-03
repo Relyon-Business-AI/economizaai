@@ -60,6 +60,8 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
+import com.relyon.economizaai.model.enums.AcquisitionChannel;
+import com.relyon.economizaai.model.enums.Platform;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.ReceiptService;
 import com.relyon.economizaai.service.admin.AdminLlmService;
@@ -225,9 +227,12 @@ public class AdminController {
             @RequestParam(required = false) String q,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
+            @RequestParam(required = false) Platform platform,
+            @RequestParam(required = false) AcquisitionChannel channel,
+            @RequestParam(required = false) UnidadeFederativa uf,
             @RequestParam(defaultValue = "false") boolean includeInternal,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(adminUserService.list(q, from, to, includeInternal, pageable));
+        return ResponseEntity.ok(adminUserService.list(q, from, to, platform, channel, uf, includeInternal, pageable));
     }
 
     /**
