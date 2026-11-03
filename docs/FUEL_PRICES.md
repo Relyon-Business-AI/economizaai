@@ -29,11 +29,14 @@ posto ficam guardadas normalmente — um backfill (mesmo mecanismo do botão
   NÃO local por tela como o ScopeFilter admin de hoje): Home, Notas e
   Produtos/Itens seguem a lente ao navegar; o sheet mora na Home e as outras
   telas de dados têm só um indicador compacto tocável (abre o mesmo sheet).
-  Tiles NÃO mudam (são atalhos, não dados); dentro de "Mercados" a lente
-  Farmácia filtra o ranking pra farmácias (índice já filtra por segmento) e a
-  lente Combustível mostra vazio honesto até a tela satélite existir. A lente
-  NÃO persiste entre sessões (reabrir = Mercado). Telas não-de-gasto
-  (Scanner/Ajustes/perfil) ignoram a lente.
+  **Tiles (refinado 2026-11-03): a lente é um filtro de EXTRATO, não um modo** —
+  na lente Mercado (default) a home é completa; em QUALQUER outra lente a faixa
+  de tiles some EM BLOCO (um container, uma condição — nunca adaptar card a
+  card) e a home vira extrato do segmento: hero + por categoria + notas. Quando
+  a tela satélite de postos existir, a lente Combustível ganha UM card
+  contextual de entrada ("compare postos ›") — aditivo. A lente NÃO persiste
+  entre sessões (reabrir = Mercado). Telas não-de-gasto (Scanner/Ajustes/perfil)
+  ignoram a lente.
   Infra existente: `ScopeFilter` (hoje atrás de `splitVisibleFor`=admin) e
   filtro por segmento no backend. ATENÇÃO no rollout: hoje o usuário comum vê
   escopo TUDO fixo — default virar Mercado muda o número do hero pra quem tem
