@@ -1,10 +1,17 @@
 # Preço de combustível — candidata a feature (design inicial)
 
-**Status (2026-11-03):** NÃO construída. Terreno preparado: segmento `GAS_STATION`
-(CNAE 4731/4732) classifica postos automaticamente (V128 reclassificou os
-existentes), tirando-os da fila de revisão e marcando-os à parte. As notas de
-posto ficam guardadas normalmente — um backfill (mesmo mecanismo do botão
-"Mercado") gera as observações retroativas quando a feature nascer.
+**Status (2026-11-03, atualizado no fim do dia):** a LENTE está construída e em
+PROD (backend + FE): scope ganhou `MARKET`/`PHARMACY`/`FUEL`/`OTHERS` (tradução
+central no enum `MarketScope` — queries intactas; `SUPPORTED`/`OTHER` viram
+legado), e o FE shipou a C2·B completa — `LensContext` global por sessão
+(default Mercado, sem persistência), pill+sheet no hero, chip compacto em
+Notas/Itens por Categoria, tiles somem em bloco fora do Mercado. Validada em
+dev com partição exata (MARKET+PHARMACY+FUEL+OTHERS == ALL). O que segue NÃO
+construído é a tela satélite de comparação de postos (abaixo). Terreno:
+segmento `GAS_STATION` (CNAE 4731/4732) classifica postos automaticamente
+(V128 reclassificou os existentes), fora da fila de revisão. As notas de posto
+ficam guardadas normalmente — um backfill (mesmo mecanismo do botão "Mercado")
+gera as observações retroativas quando a feature nascer.
 
 **Mockups (2026-11-03) em `docs/mockups/` — decisão de UX em aberto com a FE dev:**
 - `fuel-variante-a-tile.html` — entrada por TILE grande "Combustível" na home.

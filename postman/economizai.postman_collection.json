@@ -3361,9 +3361,9 @@
 								},
 								{
 									"key": "scope",
-									"value": "SUPPORTED",
+									"value": "MARKET",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
+									"description": "ALL | MARKET | PHARMACY | FUEL | OTHERS (legado: SUPPORTED | OTHER) (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						},
@@ -3403,9 +3403,9 @@
 								},
 								{
 									"key": "scope",
-									"value": "SUPPORTED",
+									"value": "MARKET",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
+									"description": "ALL | MARKET | PHARMACY | FUEL | OTHERS (legado: SUPPORTED | OTHER) (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						},
@@ -3445,9 +3445,9 @@
 								},
 								{
 									"key": "scope",
-									"value": "SUPPORTED",
+									"value": "MARKET",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
+									"description": "ALL | MARKET | PHARMACY | FUEL | OTHERS (legado: SUPPORTED | OTHER) (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						},
@@ -3495,9 +3495,9 @@
 								},
 								{
 									"key": "scope",
-									"value": "SUPPORTED",
+									"value": "MARKET",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
+									"description": "ALL | MARKET | PHARMACY | FUEL | OTHERS (legado: SUPPORTED | OTHER) (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						},
@@ -3537,9 +3537,9 @@
 								},
 								{
 									"key": "scope",
-									"value": "SUPPORTED",
+									"value": "MARKET",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
+									"description": "ALL | MARKET | PHARMACY | FUEL | OTHERS (legado: SUPPORTED | OTHER) (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						},
@@ -3579,9 +3579,9 @@
 								},
 								{
 									"key": "scope",
-									"value": "SUPPORTED",
+									"value": "MARKET",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
+									"description": "ALL | MARKET | PHARMACY | FUEL | OTHERS (legado: SUPPORTED | OTHER) (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						},
@@ -3622,9 +3622,9 @@
 								},
 								{
 									"key": "scope",
-									"value": "SUPPORTED",
+									"value": "MARKET",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
+									"description": "ALL | MARKET | PHARMACY | FUEL | OTHERS (legado: SUPPORTED | OTHER) (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						}
@@ -3664,9 +3664,9 @@
 								},
 								{
 									"key": "scope",
-									"value": "SUPPORTED",
+									"value": "MARKET",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
+									"description": "ALL | MARKET | PHARMACY | FUEL | OTHERS (legado: SUPPORTED | OTHER) (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						}
@@ -5640,9 +5640,9 @@
 								},
 								{
 									"key": "scope",
-									"value": "SUPPORTED",
+									"value": "MARKET",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
+									"description": "ALL | MARKET | PHARMACY | FUEL | OTHERS (legado: SUPPORTED | OTHER) (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						}
@@ -5676,9 +5676,9 @@
 								},
 								{
 									"key": "scope",
-									"value": "SUPPORTED",
+									"value": "MARKET",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
+									"description": "ALL | MARKET | PHARMACY | FUEL | OTHERS (legado: SUPPORTED | OTHER) (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						}
@@ -5712,9 +5712,9 @@
 								},
 								{
 									"key": "scope",
-									"value": "SUPPORTED",
+									"value": "MARKET",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
+									"description": "ALL | MARKET | PHARMACY | FUEL | OTHERS (legado: SUPPORTED | OTHER) (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						}
@@ -5753,9 +5753,9 @@
 								},
 								{
 									"key": "scope",
-									"value": "SUPPORTED",
+									"value": "MARKET",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
+									"description": "ALL | MARKET | PHARMACY | FUEL | OTHERS (legado: SUPPORTED | OTHER) (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						}
@@ -5794,9 +5794,9 @@
 								},
 								{
 									"key": "scope",
-									"value": "SUPPORTED",
+									"value": "MARKET",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
+									"description": "ALL | MARKET | PHARMACY | FUEL | OTHERS (legado: SUPPORTED | OTHER) (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						}
@@ -5959,9 +5959,9 @@
 								},
 								{
 									"key": "scope",
-									"value": "SUPPORTED",
+									"value": "MARKET",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
+									"description": "ALL | MARKET | PHARMACY | FUEL | OTHERS (legado: SUPPORTED | OTHER) (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						}
@@ -10198,9 +10198,9 @@
 								},
 								{
 									"key": "scope",
-									"value": "SUPPORTED",
+									"value": "MARKET",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
+									"description": "ALL | MARKET | PHARMACY | FUEL | OTHERS (legado: SUPPORTED | OTHER) (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						}
@@ -10393,9 +10393,9 @@
 								},
 								{
 									"key": "scope",
-									"value": "SUPPORTED",
+									"value": "MARKET",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
+									"description": "ALL | MARKET | PHARMACY | FUEL | OTHERS (legado: SUPPORTED | OTHER) (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						}
@@ -11604,9 +11604,9 @@
 								},
 								{
 									"key": "scope",
-									"value": "SUPPORTED",
+									"value": "MARKET",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
+									"description": "ALL | MARKET | PHARMACY | FUEL | OTHERS (legado: SUPPORTED | OTHER) (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						},
@@ -14589,9 +14589,9 @@
 								},
 								{
 									"key": "scope",
-									"value": "SUPPORTED",
+									"value": "MARKET",
 									"disabled": true,
-									"description": "ALL | SUPPORTED | OTHER (default ALL) \u2014 filtra por segmento do emitente"
+									"description": "ALL | MARKET | PHARMACY | FUEL | OTHERS (legado: SUPPORTED | OTHER) (default ALL) \u2014 filtra por segmento do emitente"
 								}
 							]
 						}

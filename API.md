@@ -786,10 +786,10 @@ GET /api/v1/insights/query
     &groupBy=WEEK                     ← see list below
     &limit=100                        ← bucket cap (default 100, max 500)
     &categoryView=HOUSEHOLD           ← category lens (default HOUSEHOLD; only affects groupBy=CATEGORY)
-    &scope=SUPPORTED                  ← market-segment scope (ALL | SUPPORTED | OTHER, default ALL)
+    &scope=MARKET                     ← segment lens (ALL | MARKET | PHARMACY | FUEL | OTHERS; legacy SUPPORTED | OTHER)
 ```
 
-**Market scope (`scope`)** — filters by the emitter's segment, same as `/dashboard`, `/insights/spend` and `/items`: `ALL` (everything, default), `SUPPORTED` (grocery/pharmacy/food-retail), `OTHER` (the rest). Applies to the summary AND buckets so a scoped view is internally consistent.
+**Segment lens (`scope`)** — filters by the emitter's segment, same as `/dashboard`, `/insights/spend`, `/receipts` and `/items`: `ALL` (everything, default), `MARKET` (supermarket + food retail, pharmacy EXCLUDED), `PHARMACY` (pharmacies only), `FUEL` (gas stations only), `OTHERS` (everything that isn't market/pharmacy/fuel, incl. unregistered merchants). `SUPPORTED` (grocery+pharmacy) and `OTHER` are the legacy pair — still accepted, no client breaks. An inclusion lens with no matching CNPJs returns empty (e.g. `FUEL` with no gas-station notas). Applies to the summary AND buckets so a scoped view is internally consistent.
 
 **Category lens (`categoryView`)** — only affects `groupBy=CATEGORY`. In `HOUSEHOLD` (default), spend is re-bucketed by each household's **effective** category (override custom name / corrected enum / global enum), counting each product **once** — no double-counting. The bucket `key`/`label` is the effective category name; `receiptCount` is a correct distinct-receipt count per effective bucket. `GLOBAL` groups purely by `Product.category` (pre-lens behavior). Other `groupBy` dimensions ignore this param.
 
@@ -867,11 +867,11 @@ GET /api/v1/items
     &minReceiptTotal=100.00           ← receipt-total range
     &maxReceiptTotal=500.00
     &categoryView=HOUSEHOLD           ← category lens (default HOUSEHOLD; or GLOBAL)
-    &scope=SUPPORTED                  ← market-segment scope (ALL | SUPPORTED | OTHER, default ALL)
+    &scope=MARKET                     ← segment lens (ALL | MARKET | PHARMACY | FUEL | OTHERS; legacy SUPPORTED | OTHER)
     &page=0&size=20                   ← standard Spring pagination
 ```
 
-**Market scope (`scope`)** — same segment filter as `/insights/query` and the dashboard: `ALL` (default), `SUPPORTED` (grocery/pharmacy/food-retail), `OTHER`. Pair it with `/insights/query?scope=…` for a matching header total.
+**Segment lens (`scope`)** — same segment filter as `/insights/query` and the dashboard: `ALL` (default), `MARKET`, `PHARMACY`, `FUEL`, `OTHERS` (legacy: `SUPPORTED`, `OTHER`). Pair it with `/insights/query?scope=…` for a matching header total.
 
 **Category lens (`categoryView`)** — each product belongs to **exactly one** category for the household (no double-counting). The lens controls how `&category=<ENUM>` filtering resolves:
 - `HOUSEHOLD` (**default**): filter by the **effective** category — the household's override (a corrected enum) when set, else the global `Product.category`. `?category=GROCERIES` returns products whose *effective* category is GROCERIES and **excludes** any product the household moved to a custom category or to a different enum.
