@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --green:#14BA5E;--green-dark:#0E9A4D;--green-soft:#DFF5E8;--green-tint:#F1FCF6;
+    --white:#fff;--snow:#F9FAFB;--cloud:#F3F4F6;--ink:#111827;--ink-muted:#6B7280;--ink-faint:#9CA3AF;
+    --line:#E5E7EB;--gold:#FFC53A;--coral:#EE6C4D;--sky:#57C4E5;--orange:#EA580C;--indigo:#4F46E5;
+    --citron:#C5D86D;--font:'Inter',sans-serif;--display:'Plus Jakarta Sans',sans-serif;
+  }
+  body{margin:0;background:#E8EAEE;font-family:var(--font);display:flex;gap:28px;padding:28px;align-items:flex-start}
+  .phone{width:375px;background:var(--white);border-radius:34px;box-shadow:0 18px 50px rgba(17,24,39,.18);overflow:hidden;border:7px solid #0f172a}
+  .phone .screen{background:var(--snow);min-height:700px}
+  .mock-label{font-family:var(--display);font-weight:800;font-size:15px;color:#334155;text-align:center;margin:10px 0 8px}
+  .statusbar{height:34px;background:var(--white)}
+  .apphead{background:var(--white);padding:6px 18px 14px;display:flex;justify-content:space-between;align-items:center}
+  .apphead .hi{font-family:var(--display);font-weight:800;font-size:17px;color:var(--ink)}
+  .avatar{width:34px;height:34px;border-radius:50%;background:var(--green-soft);color:var(--green-dark);display:grid;place-items:center;font-weight:800;font-family:var(--display)}
+  .hero{background:var(--white);margin:10px 14px;border-radius:18px;padding:16px;box-shadow:0 1px 3px rgba(17,24,39,.06)}
+  .hero small{color:var(--ink-muted);font-size:12px}
+  .hero .val{font-family:var(--display);font-weight:800;font-size:26px;margin-top:2px}
+  .tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 14px}
+  .tile{border-radius:16px;padding:14px;color:#fff;min-height:64px}
+  .tile b{font-family:var(--display);font-size:14px;display:block;margin-top:6px}
+  .tile span{font-size:20px}
+  .t-gold{background:var(--gold)} .t-coral{background:var(--coral)} .t-sky{background:var(--sky)} .t-fuel{background:var(--orange);outline:3px solid #fff;box-shadow:0 0 0 3px var(--orange)}
+  .section-title{font-family:var(--display);font-weight:800;font-size:15px;margin:16px 16px 8px;color:var(--ink)}
+  .list-card{background:var(--white);margin:0 14px 10px;border-radius:16px;padding:12px 14px;box-shadow:0 1px 3px rgba(17,24,39,.05);display:flex;justify-content:space-between;align-items:center}
+  .seg{display:flex;background:var(--cloud);border-radius:12px;padding:3px;margin:12px 14px;gap:2px}
+  .seg div{flex:1;text-align:center;padding:7px 0;border-radius:10px;font-size:13px;font-weight:600;color:var(--ink-muted)}
+  .seg .on{background:var(--white);color:var(--green-dark);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .big-price{background:var(--green);color:#fff;margin:4px 14px 10px;border-radius:18px;padding:16px}
+  .big-price small{opacity:.92;font-size:12px}
+  .big-price .p{font-family:var(--display);font-weight:800;font-size:30px}
+  .big-price .meta{font-size:12px;opacity:.92;margin-top:4px}
+  .posto{display:flex;justify-content:space-between;align-items:center}
+  .posto .nm{font-weight:600;font-size:14px;color:var(--ink)}
+  .posto .sub{font-size:12px;color:var(--ink-faint);margin-top:2px}
+  .posto .pr{font-family:var(--display);font-weight:800;font-size:17px;color:var(--ink);text-align:right}
+  .posto .pr small{display:block;font-family:var(--font);font-weight:500;font-size:11px;color:var(--ink-faint)}
+  .badge{display:inline-block;background:var(--green-soft);color:var(--green-dark);border-radius:999px;font-size:10px;font-weight:700;padding:2px 8px;margin-left:6px;vertical-align:1px}
+  .flex-banner{background:var(--green-tint);border:1px solid var(--green-soft);margin:0 14px 10px;border-radius:14px;padding:11px 14px;font-size:13px;color:var(--ink)}
+  .chart{background:var(--white);margin:0 14px 10px;border-radius:16px;padding:14px;box-shadow:0 1px 3px rgba(17,24,39,.05)}
+  .chart .ttl{font-weight:600;font-size:13px;margin-bottom:8px}
+  svg{display:block}
+  .alertbtn{margin:0 14px;background:var(--green);color:#fff;border-radius:10px;text-align:center;padding:13px;font-weight:700;font-family:var(--display);font-size:14px}
+  .backrow{display:flex;align-items:center;gap:8px;padding:12px 16px 2px;font-family:var(--display);font-weight:800;font-size:16px}
+  .tabbar{display:flex;background:var(--white);border-top:1px solid var(--line);padding:8px 6px 14px;margin-top:14px}
+  .tabbar div{flex:1;text-align:center;font-size:10px;color:var(--ink-faint)}
+  .tabbar .on{color:var(--green-dark);font-weight:700}
+  .tabbar span{display:block;font-size:17px}
+  .wrap{display:flex;flex-direction:column;align-items:center}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="mock-label">1 · Home — escopo DISCRETO (chips, sem tile novo)</div>
+  <div class="phone"><div class="screen">
+    <div class="statusbar"></div>
+    <div class="apphead"><div class="hi">Oi, Alexandre 👋</div><div class="avatar">A</div></div>
+    <div class="hero">
+      <div class="seg" style="margin:0 0 10px;padding:2px">
+        <div class="on" style="padding:5px 0;font-size:12px">🛒 Mercado</div>
+        <div style="padding:5px 0;font-size:12px">💊 Farmácia</div>
+        <div style="padding:5px 0;font-size:12px">⛽ Combustível</div>
+        <div style="padding:5px 0;font-size:12px">Tudo</div>
+      </div>
+      <small>Gasto do mês — mercado</small><div class="val">R$ 1.284,50</div>
+    </div>
+    <div class="tiles">
+      <div class="tile t-gold"><span>📝</span><b>Lista de compras</b></div>
+      <div class="tile t-coral"><span>📈</span><b>Previsões</b></div>
+      <div class="tile t-sky"><span>🏬</span><b>Mercados</b></div>
+      <div class="tile" style="background:var(--indigo)"><span>🔔</span><b>Alertas</b></div>
+    </div>
+    <div class="section-title">Ofertas pra você</div>
+    <div class="list-card posto"><div><div class="nm">Leite Integral 1L</div><div class="sub">Zaffari · 18% abaixo do normal</div></div><div class="pr">R$ 4,79</div></div>
+    <div class="list-card posto"><div><div class="nm">Café 500g</div><div class="sub">Carrefour · 12% abaixo</div></div><div class="pr">R$ 16,90</div></div>
+    <div class="tabbar"><div class="on"><span>🏠</span>Início</div><div><span>🧾</span>Notas</div><div><span>➕</span></div><div><span>🛒</span>Produtos</div><div><span>⚙️</span>Ajustes</div></div>
+  </div></div>
+</div>
+
+<div class="wrap">
+  <div class="mock-label">2 · Mercados — atalho discreto pro mundo combustível</div>
+  <div class="phone"><div class="screen">
+    <div class="statusbar"></div>
+    <div class="backrow" style="justify-content:space-between;display:flex">‹ &nbsp;Mercados <span style="font-size:12px;font-weight:600;color:var(--green-dark);background:var(--green-tint);border:1px solid var(--green-soft);border-radius:999px;padding:4px 10px">⛽ Combustível ›</span></div>
+    <div class="seg"><div class="on">Perto de mim</div><div>Favoritos</div><div>Por rede</div></div>
+    <div class="list-card posto"><div><div class="nm">Zaffari Lima e Silva</div><div class="sub">0,8 km · cesta típica 4% mais barata</div></div><div class="pr">#1</div></div>
+    <div class="list-card posto"><div><div class="nm">Carrefour Bento</div><div class="sub">2,1 km</div></div><div class="pr">#2</div></div>
+    <div class="tabbar"><div><span>🏠</span>Início</div><div><span>🧾</span>Notas</div><div><span>➕</span></div><div><span>🛒</span>Produtos</div><div><span>⚙️</span>Ajustes</div></div>
+  </div></div>
+</div>
+
+<div class="wrap">
+  <div class="mock-label">3 · Combustível — a tela que você aprovou (igual)</div>
+  <div class="phone"><div class="screen">
+    <div class="statusbar"></div>
+    <div class="backrow">‹ &nbsp;Combustível</div>
+    <div class="seg"><div class="on">Gasolina</div><div>Etanol</div><div>Diesel</div><div>GNV</div></div>
+    <div class="big-price">
+      <small>MAIS BARATO num raio de 5 km</small>
+      <div class="p">R$ 5,79<span style="font-size:14px;font-weight:600">/L</span></div>
+      <div class="meta">Posto Ipiranga Protásio · 1,2 km · visto ontem</div>
+    </div>
+    <div class="flex-banner">⚖️ <b>Etanol vale a pena?</b> Hoje está a <b>67%</b> do preço da gasolina perto de você → <b>compensa etanol</b>.</div>
+    <div class="list-card posto"><div><div class="nm">Posto Ipiranga Protásio<span class="badge">✓ nota real</span></div><div class="sub">1,2 km · visto ontem · 4 famílias</div></div><div class="pr">R$ 5,79<small>/litro</small></div></div>
+    <div class="list-card posto"><div><div class="nm">Shell Av. Assis Brasil</div><div class="sub">2,0 km · visto há 2 dias · 3 famílias</div></div><div class="pr">R$ 5,85<small>/litro</small></div></div>
+    <div class="list-card posto"><div><div class="nm">Posto Baena</div><div class="sub">2,8 km · visto há 4 dias · 2 famílias</div></div><div class="pr">R$ 5,92<small>/litro</small></div></div>
+    <div class="list-card posto"><div><div class="nm">BR Sertório</div><div class="sub">3,5 km · visto há 1 sem · 1 família</div></div><div class="pr">R$ 6,04<small>/litro</small></div></div>
+    <div class="tabbar"><div><span>🏠</span>Início</div><div><span>🧾</span>Notas</div><div><span>➕</span></div><div><span>🛒</span>Produtos</div><div><span>⚙️</span>Ajustes</div></div>
+  </div></div>
+</div>
+
+<div class="wrap">
+  <div class="mock-label">4 · Posto — histórico e alerta (igual)</div>
+  <div class="phone"><div class="screen">
+    <div class="statusbar"></div>
+    <div class="backrow">‹ &nbsp;Posto Ipiranga Protásio</div>
+    <div class="hero" style="margin-top:8px"><small>Gasolina comum — último preço visto</small><div class="val">R$ 5,79/L <span class="badge" style="font-size:11px;vertical-align:4px">✓ de nota fiscal</span></div>
+    <div style="font-size:12px;color:var(--ink-faint);margin-top:2px">ontem · você abasteceu aqui 2× este mês</div></div>
+    <div class="chart">
+      <div class="ttl">Preço do litro — últimos 90 dias</div>
+      <svg width="100%" height="90" viewBox="0 0 300 90" preserveAspectRatio="none">
+        <polyline fill="none" stroke="#14BA5E" stroke-width="3" points="0,30 40,32 80,28 120,45 160,43 200,60 240,55 300,38"/>
+        <line x1="0" y1="80" x2="300" y2="80" stroke="#E5E7EB"/>
+      </svg>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ink-faint)"><span>ago</span><span>set</span><span>out</span><span>nov</span></div>
+    </div>
+    <div class="chart">
+      <div class="ttl">Também neste posto</div>
+      <div class="posto" style="margin-bottom:8px"><div class="nm" style="font-weight:500">Etanol</div><div class="pr" style="font-size:15px">R$ 3,89<small>/litro</small></div></div>
+      <div class="posto"><div class="nm" style="font-weight:500">Diesel S10</div><div class="pr" style="font-size:15px">R$ 6,15<small>/litro</small></div></div>
+    </div>
+    <div class="alertbtn">🔔 Avise-me quando a gasolina baixar aqui</div>
+    <div class="tabbar"><div><span>🏠</span>Início</div><div><span>🧾</span>Notas</div><div><span>➕</span></div><div><span>🛒</span>Produtos</div><div><span>⚙️</span>Ajustes</div></div>
+  </div></div>
+</div>
+
+</body>
+</html>
