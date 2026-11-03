@@ -57,6 +57,18 @@ public enum MarketScope {
     }
 
     /**
+     * True quando a lente deve ABSORVER merchants com override SUPPORTED (admin promoveu um
+     * CNPJ de CNAE não-resolvido a "mercado suportado"): só as lentes que incluem mercado
+     * (SUPERMARKET/FOOD_RETAIL). Lentes específicas (PHARMACY/FUEL) NÃO herdam o override —
+     * senão um supermercado promovido vazaria pra Farmácia (bug real: JL SUPERMERCADOS,
+     * segment=UNKNOWN+override=SUPPORTED, aparecia na lente Farmácia).
+     */
+    public boolean absorbsSupportOverride() {
+        return segments.contains(MerchantSegment.SUPERMARKET)
+                || segments.contains(MerchantSegment.FOOD_RETAIL);
+    }
+
+    /**
      * O modo que as queries entendem ({@code 'ALL'|'SUPPORTED'|'OTHER'}): toda
      * lente de inclusão vira 'SUPPORTED', toda exclusão vira 'OTHER' — o
      * conjunto de CNPJs passado junto é o que muda o significado.

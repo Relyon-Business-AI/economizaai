@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -55,7 +56,7 @@ class InsightsSpendCacheTest {
         when(insightsRepository.spendByWeek(any(), any(), any(), any(), any())).thenReturn(List.of());
         when(insightsRepository.spendByMarket(any(), any(), any(), any(), any())).thenReturn(List.of());
         when(insightsRepository.spendByProductNode(any(), any(), any(), any(), any())).thenReturn(List.of());
-        when(insightsRepository.supportedCnpjs(any(), any())).thenReturn(List.of());
+        when(insightsRepository.supportedCnpjs(any(), any(), anyBoolean())).thenReturn(List.of());
     }
 
     @Test

@@ -83,7 +83,8 @@ public class InsightsService {
      */
     private List<String> scopeCnpjs(UUID householdId, MarketScope scope) {
         if (scope == MarketScope.ALL) return List.of("__none__");
-        var inScope = insightsRepository.supportedCnpjs(householdId, scope.segments());
+        var inScope = insightsRepository.supportedCnpjs(householdId, scope.segments(),
+                scope.absorbsSupportOverride());
         return inScope.isEmpty() ? List.of("__none__") : inScope;
     }
 

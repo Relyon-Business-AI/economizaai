@@ -73,7 +73,8 @@ public class InsightsQueryService {
         // the household's supported CNPJs once and bind them into the filters for the clause builder.
         if (filters.scope() != MarketScope.ALL) {
             filters = filters.withSupportedCnpjs(
-                    insightsRepository.supportedCnpjs(filters.householdId(), filters.scope().segments()));
+                    insightsRepository.supportedCnpjs(filters.householdId(), filters.scope().segments(),
+                            filters.scope().absorbsSupportOverride()));
         }
         var groupBy = filters.groupBy();
         var summary = computeSummary(filters);

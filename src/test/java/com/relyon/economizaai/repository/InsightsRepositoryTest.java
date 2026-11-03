@@ -22,6 +22,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.Month;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -116,7 +117,8 @@ class InsightsRepositoryTest {
     private static final LocalDateTime ALL_TIME_TO = LocalDateTime.of(2999, Month.DECEMBER, 31, 23, 59);
 
     private List<String> supported() {
-        return insightsRepository.supportedCnpjs(household.getId(), MerchantSupportGate.supportedSegments());
+        // Legacy supported lens (mercado+farmácia) includes SUPERMARKET → absorbs the SUPPORTED override.
+        return insightsRepository.supportedCnpjs(household.getId(), MerchantSupportGate.supportedSegments(), true);
     }
 
     // ---------- legacy (ALL scope) behaviour is unchanged ----------
@@ -200,6 +202,21 @@ class InsightsRepositoryTest {
         assertEquals(2, supported.size());
         assertTrue(supported.contains(CNPJ_SUPERMARKET));
         assertTrue(supported.contains(CNPJ_OTHER));
+    }
+
+    @Test
+    void supportedCnpjs_pharmacyLens_excludesSupermarketOverride() {
+        // A mercado stuck UNKNOWN/OTHER that an admin marked SUPPORTED must NOT leak into the
+        // PHARMACY lens (absorbsOverride=false) — it is a mercado, not a farmácia. Regression for
+        // JL SUPERMERCADOS (segment=UNKNOWN+override=SUPPORTED) appearing under Farmácia.
+        overrideSupport(CNPJ_OTHER, MerchantSupportOverride.SUPPORTED);
+        var pharmacyOnly = insightsRepository.supportedCnpjs(
+                household.getId(), Set.of(MerchantSegment.PHARMACY), false);
+        assertTrue(pharmacyOnly.isEmpty());
+        // ...but a mercado-absorbing lens still includes it.
+        var mercado = insightsRepository.supportedCnpjs(household.getId(),
+                Set.of(MerchantSegment.SUPERMARKET, MerchantSegment.FOOD_RETAIL), true);
+        assertTrue(mercado.contains(CNPJ_OTHER));
     }
 
     @Test
