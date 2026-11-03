@@ -82,6 +82,9 @@ import com.relyon.economizaai.service.analytics.AdminAnalyticsService;
 import com.relyon.economizaai.dto.response.MarketingDashboardResponse;
 import com.relyon.economizaai.service.analytics.MarketingDashboardService;
 import com.relyon.economizaai.service.analytics.RetentionCohortService;
+import com.relyon.economizaai.service.analytics.asc.AppStoreAnalyticsService;
+import com.relyon.economizaai.service.analytics.asc.AppStoreAnalyticsSyncJob;
+import com.relyon.economizaai.dto.response.StoreAnalyticsResponse;
 import com.relyon.economizaai.service.analytics.meta.MetaAdSpendSyncJob;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.notifications.OperationalAlertService;
@@ -156,6 +159,8 @@ public class AdminController {
     private final AdminAnalyticsService adminAnalyticsService;
     private final RetentionCohortService retentionCohortService;
     private final MetaAdSpendSyncJob metaAdSpendSyncJob;
+    private final AppStoreAnalyticsService appStoreAnalyticsService;
+    private final AppStoreAnalyticsSyncJob appStoreAnalyticsSyncJob;
     private final MarketingDashboardService marketingDashboardService;
     private final StateCoverageService stateCoverageService;
     private final SefazIngestionService sefazIngestionService;
@@ -599,6 +604,19 @@ public class AdminController {
     @PostMapping("/analytics/ad-spend/sync")
     public ResponseEntity<Map<String, Integer>> syncAdSpend() {
         return ResponseEntity.ok(Map.of("rowsSynced", metaAdSpendSyncJob.syncNow()));
+    }
+
+    @Operation(summary = "Funil iOS pré-instalação (impressões, page views, installs por fonte)")
+    @GetMapping("/analytics/store/ios")
+    public ResponseEntity<StoreAnalyticsResponse> iosStoreAnalytics(
+            @RequestParam(defaultValue = "90") int days) {
+        return ResponseEntity.ok(appStoreAnalyticsService.report(days));
+    }
+
+    @Operation(summary = "Força sincronização imediata dos dados da App Store Connect")
+    @PostMapping("/analytics/store/ios/sync")
+    public ResponseEntity<Map<String, Integer>> syncIosStoreAnalytics() {
+        return ResponseEntity.ok(Map.of("rowsSynced", appStoreAnalyticsSyncJob.syncNow()));
     }
 
     /**
