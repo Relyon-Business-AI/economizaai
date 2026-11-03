@@ -62,7 +62,7 @@ jobs:
           AUTOFIX_SIGNATURE: ${{ inputs.signature }}
           AUTOFIX_CONTEXT: ${{ inputs.error_context }}
           BASE_BRANCH: development
-          SERVICE_ID: srv-d9p4nctbedkc73e3veb0
+          SERVICE_ID: srv-dbklrqnf3r2c73f93cdg
           HEALTH_URL: https://economizai-app-prod.onrender.com/actuator/health
           MAX_FIXES_PER_HOUR: '3'
           CLAUDE_TIMEOUT_SEC: '900'

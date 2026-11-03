@@ -10,6 +10,23 @@ mirror entries here.
 
 ---
 
+## Dev no plano Free do Render + db-dev mínimo (2026-11-03)
+- **Now**: `economizaai-api-dev` roda no plano **Free** (512 MB, CPU mínima, dorme após 15 min
+  sem tráfego) e `economizaai-db-dev` é Basic 256 MB / 1 GB de disco (recriado do dump; o
+  antigo Basic 1 GB / 15 GB foi apagado). Custo do dev caiu de ~US$ 48 pra ~US$ 6/mês.
+- **Como cabe em 512 MB**: env var `JAVA_TOOL_OPTIONS` no serviço dev
+  (`-Xmx220m -XX:MaxMetaspaceSize=150m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=32m
+  -Xss512k -XX:+UseSerialGC -XX:TieredStopAtLevel=1`). `-Xmx` explícito vence o
+  `MaxRAMPercentage=50` do Dockerfile. Memória em repouso fica em ~500 MB: qualquer carga real
+  (parse pesado, OCR) pode OOM-killar o dev.
+- **OK for dev**: quase não usamos o dev; o cold start de ~3 min só atinge autofix/E2E
+  (health wait precisa tolerar) e quem abrir o dashboard-dev depois de 15 min parado.
+- **Before prod / revisitar**: prod NÃO usa nada disso (segue Standard 2 GB). Se o dev virar
+  gargalo (OOM em loop, E2E timeout), voltar pra Standard + agendar suspend/resume via API
+  (`POST /services/{id}/suspend|resume`) em vez de Free. Paid→Free não é permitido pela API,
+  por isso o serviço foi recriado (id novo `srv-dbklrqnf3r2c73f93cdg`, onrender
+  `economizaai-api-dev-free.onrender.com`); env vars via API NÃO disparam redeploy sozinhas.
+
 ## Taxonomia de categorias: dual-write enum↔nó + arestas (2026-10-14)
 - **Now**: a categorização virou 2 níveis (grupo→folha, tabela `categories`). O motor
   faz **dual-write ADITIVO**: grava `products.category_id` (folha) ao lado do `category`

@@ -14,13 +14,25 @@ Bird's-eye map of the WHOLE product (mobile, web, admin, landing, e-mail, costs)
 | Env | Service | Branch | Deploys when | Domain / URL | DB |
 |---|---|---|---|---|---|
 | **prod** | `economizai-api-prod` (`srv-d7odp50k1i2s73ep8o5g`) | `main` | push to `main` (auto-deploy) | **`api.economizaai.app`** (+ `economiz-ai.onrender.com`) | `economizai-db-prod` (real data) |
-| **dev** | `economizai-api-dev` (`srv-d9p4nctbedkc73e3veb0`) | `development` | push to `development` (auto-deploy) | `api-dev.economizaai.app` (+ `economizai-app-prod.onrender.com`) | `economizai-db-dev` (stale copy = test) |
+| **dev** | `economizaai-api-dev` (`srv-dbklrqnf3r2c73f93cdg`, plan **Free**) | `development` | push to `development` (auto-deploy) | `api-dev.economizaai.app` (+ `economizaai-api-dev-free.onrender.com`) | `economizaai-db-dev` (`dpg-dbklrc59fdbs73bmvjsg-a`, Basic 256 MB / 1 GB, stale copy = test) |
 
-> ⚠️ **The `*.onrender.com` subdomains are misleadingly named** (a leftover from the pre-cutover
-> topology; Render can't rename a subdomain without recreating the service). The **dev** service's
-> onrender URL is literally **`economizai-app-prod.onrender.com`**, and **prod**'s is
-> `economiz-ai.onrender.com`. Always use the **custom domains** (`api.` = prod, `api-dev.` = dev)
-> everywhere — code, docs, FE config. Never advertise the onrender URLs.
+> ⚠️ **Prod's `*.onrender.com` subdomain is misleadingly named** (`economiz-ai.onrender.com`, a
+> leftover from the pre-cutover topology; Render can't rename a subdomain without recreating the
+> service). Always use the **custom domains** (`api.` = prod, `api-dev.` = dev) everywhere — code,
+> docs, FE config. Never advertise the onrender URLs.
+
+- **Dev is on the Free plan (since 2026-11-03, cost cut US$ 48 → 6/mo):** 512 MB, minimal CPU,
+  **sleeps after 15 min idle, cold start ~3 min**. It fits in 512 MB only because of the
+  `JAVA_TOOL_OPTIONS` env var on the service (`-Xmx220m … -XX:+UseSerialGC`); resting memory is
+  ~500 MB, so heavy work (OCR, big parses) may OOM-kill it. The service was RECREATED (Render
+  can't switch paid→Free) and `db-dev` was recreated at Basic 256 MB from a dump (disks never
+  shrink). The old `srv-d9p4…` service and the Basic 1 GB / 15 GB DB were deleted. Gotchas:
+  `PUT env-vars` via API does not redeploy (trigger `POST /deploys`); from a service always use
+  the Postgres INTERNAL host (`dpg-…-a:5432`) — the external one goes through the ipAllowList.
+  If dev becomes a bottleneck, go back to Standard + scheduled suspend/resume, not Free.
+- **Prod DB disk watch:** `disk-watch-prod.yml` (daily 09:00 BRT) reads the Render metrics API
+  (`disk-usage` / `disk-capacity`) for `economizaai-db-prod` and opens a `prod-error` issue at
+  80 / 90 / 95 %. Was at 47 % (480 / 1021 MB) on 2026-11-03. Disk only grows — plan the bump.
 
 - **Cutover done 2026-09-22:** the real data + `api.economizaai.app` live on the service that
   is now **prod** on branch **`main`** (`srv-d7odp…`). The old standby (`srv-d9p4…`) became
