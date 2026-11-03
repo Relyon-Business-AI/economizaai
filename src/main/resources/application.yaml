@@ -407,6 +407,7 @@ economizaai:
     community-promo-threshold-pct: 15          # current price < (median - X%) → community promo
     community-promo-recent-window-days: 7      # last N days = "recent" sample; older rows are baseline
     lookback-days: 90                          # observations older than this are excluded from reference + promo calcs
+    best-markets-lookback-days: 180            # wider window for the best-markets ranking + in-store typical price (dated real prices)
   categorizer:
     consensus:
       # User category corrections graduate to global truth (+ learned dictionary)

@@ -1078,6 +1078,20 @@ segment (a marketplace's grocery EAN counts; a book doesn't match a grocery
 product). Same k-anon / min-sample rules as the physical reference.
 
 ```
+GET /api/v1/price-index/products/{productId}/in-store-reference
+→ { "scope": "STATE" | "NATIONAL", "states": ["RS"], "reference": ReferencePrice }
+```
+
+Typical IN-STORE price across **every physical market** (no per-market split), the
+fallback card for the best-markets screen when no chain reaches k-anon yet. Computed
+first over the states the household has confirmed receipts in (`scope: STATE`,
+`states` lists them); when that slice is below K / min-sample it falls back to the
+national in-store series (`scope: NATIONAL`, `states: []`). Same hybrid disclosure
+as the other references: `reference.medianPrice` is `null` with `kAnonBlocked: true`
+and the counts visible when even the national slice is sparse. Uses the wider
+best-markets window (180 days).
+
+```
 GET /api/v1/price-index/products/{productId}/best-markets?limit=10&radiusKm=5[&lat=&lng=]
 GET /api/v1/price-index/promos?radiusKm=5
 ```
@@ -1085,17 +1099,27 @@ GET /api/v1/price-index/promos?radiusKm=5
 `promos` returns currently-detected community promos in the user's area
 (recent median ≥ 15% below baseline, k-anon protected).
 
+`best-markets` returns **one row per market CHAIN** (`cnpjRoot`), not per store:
+stores of a chain practice the same shelf price, so their observations and
+contributing households are pooled, and k-anonymity (≥3 households) is checked at
+chain level. Each row is shown as one concrete store of the chain — `cnpj`,
+`marketName`, `distanceKm` describe that store, picked as: a watched store if any,
+else the closest to the viewer, else the most recently seen. The `cnpj` is therefore
+always a real store the FE can watch/unwatch or route to. Window: 180 days
+(`best-markets-lookback-days`), wider than the 90-day promo baseline.
+
 `best-markets` measures distance from the user's HOME location by default; pass
 `lat`/`lng` to measure from the current position instead (barcode scan inside a
-store — see the flow below).
+store — see the flow below). With a `radiusKm`, a chain stays listed when its
+display store is within range or watched.
 
 Each `best-markets` row carries both an aggregate and a real value:
-`medianPrice`/`minPrice` (the "usual price" baseline) **plus** `latestPrice` +
-`latestObservedAt` — the actual most-recent observed price at that market and when
-it was seen. Show `latestPrice` + "visto em {latestObservedAt}" on the market card
-(a real number the shopper will roughly find, honestly dated); reserve the median
-for "usual price" contexts. Both are k-anon gated (row only appears with ≥3
-contributing households), so the real value never exposes a lone shopper.
+`medianPrice`/`minPrice` (the "usual price" baseline, over the whole chain) **plus**
+`latestPrice` + `latestObservedAt` — the actual most-recent observed price in that
+chain and when it was seen. Show `latestPrice` + "visto em {latestObservedAt}" on the
+market card (a real number the shopper will roughly find, honestly dated); reserve
+the median for "usual price" contexts. Both are k-anon gated (row only appears with
+≥3 contributing households), so the real value never exposes a lone shopper.
 
 ### Barcode scan flow (scan → price nearby)
 

@@ -10,7 +10,8 @@ import com.relyon.economizaai.model.enums.ReceiptChannel;
 import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
-import com.relyon.economizaai.repository.PriceObservationAuditRepository.MarketHouseholdCount;
+import com.relyon.economizaai.repository.PriceObservationAuditRepository.ChainHouseholdCount;
+import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.service.geo.DistanceCalculator;
@@ -32,6 +33,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.LongSupplier;
 import java.util.stream.Collectors;
 
 /**
@@ -51,8 +53,12 @@ import java.util.stream.Collectors;
  * <ul>
  *   <li>{@link #referencePrice} — median + min + sample size for a
  *       (product, market) pair. K-anonymity enforced.</li>
- *   <li>{@link #bestMarkets} — markets ranked by median price for a product.
- *       Each row independently k-anon checked.</li>
+ *   <li>{@link #bestMarkets} — market CHAINS ranked by median price for a product
+ *       (one row per CNPJ root, showing its closest/watched store). Each row
+ *       independently k-anon checked at chain level.</li>
+ *   <li>{@link #inStoreReferencePrice} — "typical in-store price" across every
+ *       market, scoped to the household's states and falling back to national.
+ *       The fallback card for when no chain reaches K yet.</li>
  * </ul>
  */
 @Slf4j
@@ -66,6 +72,7 @@ public class PriceIndexService {
     private final MarketLocationService marketLocationService;
     private final MerchantSupportGate merchantSupportGate;
     private final NotificationRuleEngine notificationRuleEngine;
+    private final ReceiptRepository receiptRepository;
 
     @Transactional
     public int recordContributions(Receipt receipt) {
@@ -221,22 +228,8 @@ public class PriceIndexService {
         if (!properties.getCollaborative().isEnabled()) return ReferencePrice.empty();
         var since = BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getLookbackDays());
         var observations = observationRepository.findRecentByProductAndMarket(productId, marketCnpj, since);
-        var distinctHouseholds = observations.isEmpty()
-                ? 0L
-                : auditRepository.countDistinctHouseholdsForProductMarket(productId, marketCnpj, since);
-
-        // Hybrid disclosure (PRO-54 AC2): when below k-anon or sample threshold,
-        // surface counts so the FE can warn the user ("poucas amostras") without
-        // ever leaking the actual sub-K-anon price. Price stays null in that case.
-        if (observations.size() < properties.getCollaborative().getMinObservationsPerProductMarket()
-                || distinctHouseholds < properties.getCollaborative().getMinHouseholdsForPublic()) {
-            log.debug("reference_price.kanon_blocked product={} market={} samples={} households={}",
-                    productId, marketCnpj, observations.size(), distinctHouseholds);
-            return new ReferencePrice(null, null, null, observations.size(), distinctHouseholds, null, true);
-        }
-        var prices = observations.stream().map(PriceObservation::getUnitPrice).toList();
-        return new ReferencePrice(medianForApi(prices), min(prices), max(prices),
-                observations.size(), distinctHouseholds, observations.get(0).getObservedAt(), false);
+        return aggregateReference("reference_price", productId, observations,
+                () -> auditRepository.countDistinctHouseholdsForProductMarket(productId, marketCnpj, since));
     }
 
     /**
@@ -249,40 +242,88 @@ public class PriceIndexService {
         if (!properties.getCollaborative().isEnabled()) return ReferencePrice.empty();
         var since = BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getLookbackDays());
         var observations = observationRepository.findRecentOnlineByProduct(productId, since);
-        var distinctHouseholds = observations.isEmpty()
-                ? 0L
-                : auditRepository.countDistinctOnlineHouseholdsForProduct(productId, since);
+        return aggregateReference("online_reference_price", productId, observations,
+                () -> auditRepository.countDistinctOnlineHouseholdsForProduct(productId, since));
+    }
 
+    /**
+     * "Typical in-store price" for a product across EVERY physical market — the fallback
+     * for the best-markets screen when no single chain reaches K yet. Scoped first to the
+     * states the household shops in (its confirmed receipts' UFs); when that slice is below
+     * K / min-sample, falls back to the national in-store series. Same k-anon rules as the
+     * other references, applied across markets instead of per market.
+     */
+    @Transactional(readOnly = true)
+    public InStoreReferencePrice inStoreReferencePrice(UUID productId, UUID householdId) {
+        if (!properties.getCollaborative().isEnabled()) return InStoreReferencePrice.empty();
+        var since = bestMarketsSince();
+        var states = receiptRepository.findConfirmedUfsForHousehold(householdId).stream()
+                .map(Enum::name)
+                .toList();
+        if (!states.isEmpty()) {
+            var regional = aggregateReference("in_store_reference_price.state", productId,
+                    observationRepository.findRecentByProductAndStates(productId, states, since),
+                    () -> auditRepository.countDistinctInStoreHouseholdsForProductInStates(productId, states, since));
+            if (regional.hasData()) return new InStoreReferencePrice(ReferenceScope.STATE, states, regional);
+        }
+        var national = aggregateReference("in_store_reference_price.national", productId,
+                observationRepository.findRecentByProduct(productId, since),
+                () -> auditRepository.countDistinctInStoreHouseholdsForProduct(productId, since));
+        return new InStoreReferencePrice(ReferenceScope.NATIONAL, List.of(), national);
+    }
+
+    /**
+     * Hybrid disclosure (PRO-54 AC2): when below k-anon or sample threshold, surface the
+     * counts so the FE can warn the user ("poucas amostras") without ever leaking the
+     * actual sub-K-anon price — price stays null in that case. The household count is a
+     * supplier so the (DB) k-anon query only runs when there are observations to gate.
+     */
+    private ReferencePrice aggregateReference(String logTag, UUID productId,
+                                              List<PriceObservation> observations,
+                                              LongSupplier distinctHouseholdCounter) {
+        var distinctHouseholds = observations.isEmpty() ? 0L : distinctHouseholdCounter.getAsLong();
         if (observations.size() < properties.getCollaborative().getMinObservationsPerProductMarket()
                 || distinctHouseholds < properties.getCollaborative().getMinHouseholdsForPublic()) {
-            log.debug("online_reference_price.kanon_blocked product={} samples={} households={}",
-                    productId, observations.size(), distinctHouseholds);
+            log.debug("{}.kanon_blocked product={} samples={} households={}",
+                    logTag, productId, observations.size(), distinctHouseholds);
             return new ReferencePrice(null, null, null, observations.size(), distinctHouseholds, null, true);
         }
         var prices = observations.stream().map(PriceObservation::getUnitPrice).toList();
+        var mostRecent = observations.stream()
+                .max(Comparator.comparing(PriceObservation::getObservedAt))
+                .orElse(observations.get(0));
         return new ReferencePrice(medianForApi(prices), min(prices), max(prices),
-                observations.size(), distinctHouseholds, observations.get(0).getObservedAt(), false);
+                observations.size(), distinctHouseholds, mostRecent.getObservedAt(), false);
     }
 
+    /**
+     * Markets ranked by price for a product, ONE ROW PER CHAIN (CNPJ root). Stores of the
+     * same chain practice the same shelf price, so pooling them keeps the answer ("where is
+     * it cheapest") intact while reaching k-anonymity far sooner than per store. Each row
+     * surfaces one concrete store of the chain — a watched one if any, else the closest to
+     * the viewer, else the most recently seen — so the FE keeps a real CNPJ to watch/route to.
+     */
     @Transactional(readOnly = true)
     public List<MarketPriceRow> bestMarkets(UUID productId, int limit,
                                             BigDecimal userLatitude, BigDecimal userLongitude, Double radiusKm,
                                             Set<String> watchedCnpjs) {
         if (!properties.getCollaborative().isEnabled()) return List.of();
-        var since = BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getLookbackDays());
+        var since = bestMarketsSince();
         var observations = observationRepository.findRecentByProduct(productId, since);
         if (observations.isEmpty()) return List.of();
 
-        var watched = watchedCnpjs == null ? Set.<String>of() : watchedCnpjs;
-        var byMarket = observations.stream()
-                .collect(Collectors.groupingBy(PriceObservation::getMarketCnpj));
-        var locations = marketLocationService.findByCnpjs(new ArrayList<>(byMarket.keySet()));
-        var householdCounts = auditRepository.countDistinctHouseholdsForProductByMarket(productId, since).stream()
-                .collect(Collectors.toMap(MarketHouseholdCount::getCnpj, MarketHouseholdCount::getHouseholds));
+        var viewer = new Viewer(userLatitude, userLongitude, radiusKm,
+                watchedCnpjs == null ? Set.of() : watchedCnpjs);
+        var byChain = observations.stream()
+                .collect(Collectors.groupingBy(PriceIndexService::chainKey));
+        var storeCnpjs = observations.stream().map(PriceObservation::getMarketCnpj).distinct().toList();
+        var locations = marketLocationService.findByCnpjs(new ArrayList<>(storeCnpjs));
+        var householdsByChain = auditRepository.countDistinctHouseholdsForProductByChain(productId, since).stream()
+                .collect(Collectors.toMap(ChainHouseholdCount::getCnpjRoot, ChainHouseholdCount::getHouseholds));
 
-        return byMarket.entrySet().stream()
-                .map(entry -> toMarketRow(entry.getKey(), entry.getValue(),
-                        householdCounts, locations, watched, userLatitude, userLongitude, radiusKm))
+        return byChain.entrySet().stream()
+                .map(entry -> toChainRow(entry.getKey(), entry.getValue(),
+                        householdsByChain.getOrDefault(entry.getKey(), 0L), locations, viewer))
                 .filter(Objects::nonNull)
                 .sorted(Comparator
                         .comparing(MarketPriceRow::watching, Comparator.reverseOrder())
@@ -291,40 +332,85 @@ public class PriceIndexService {
                 .toList();
     }
 
+    private LocalDateTime bestMarketsSince() {
+        return BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getBestMarketsLookbackDays());
+    }
+
+    private static String chainKey(PriceObservation observation) {
+        return observation.getMarketCnpjRoot() != null
+                ? observation.getMarketCnpjRoot()
+                : cnpjRoot(observation.getMarketCnpj());
+    }
+
     /**
-     * Build a public MarketPriceRow for one market's observations, or null if it
-     * doesn't qualify: too few observations, fails k-anonymity, or (when a radius
-     * is set) is out of range and not watched. Extracted from bestMarkets to keep
-     * that method's cognitive complexity within bounds (S3776).
+     * Build the public row for one chain's observations, or null if it doesn't qualify:
+     * too few observations, fails k-anonymity, or (when a radius is set) none of its
+     * stores is in range or watched.
      */
-    private MarketPriceRow toMarketRow(String cnpj, List<PriceObservation> rows,
-                                       Map<String, Long> householdCounts,
-                                       Map<String, MarketLocation> locations,
-                                       Set<String> watched,
-                                       BigDecimal userLatitude, BigDecimal userLongitude, Double radiusKm) {
+    private MarketPriceRow toChainRow(String cnpjRoot, List<PriceObservation> rows, long distinctHouseholds,
+                                      Map<String, MarketLocation> locations, Viewer viewer) {
         if (rows.size() < properties.getCollaborative().getMinObservationsPerProductMarket()) return null;
-        var distinct = householdCounts.getOrDefault(cnpj, 0L);
-        if (distinct < properties.getCollaborative().getMinHouseholdsForPublic()) return null;
-        var location = locations.get(cnpj);
-        var isWatched = watched.contains(cnpj);
-        Double distanceKm = null;
-        if (userLatitude != null && userLongitude != null && location != null && location.hasCoordinates()) {
-            distanceKm = DistanceCalculator.kmBetween(
-                    userLatitude, userLongitude, location.getLatitude(), location.getLongitude());
-            if (radiusKm != null && distanceKm > radiusKm && !isWatched) return null;
-        } else if (radiusKm != null && userLatitude != null && !isWatched) {
-            return null;
-        }
+        if (distinctHouseholds < properties.getCollaborative().getMinHouseholdsForPublic()) return null;
+        var displayStore = pickDisplayStore(rows, locations, viewer);
+        if (displayStore == null) return null;
         var prices = rows.stream().map(PriceObservation::getUnitPrice).toList();
         // The "onde está mais barato" screen shows a REAL observed price + its date, not the
         // median — a shopper needs the actual number they'll (roughly) see, and the date lets
         // them judge staleness. k-anon still holds via the ≥K-households gate above; the median
-        // stays as the "usual price" baseline (deals). Most recent by observedAt.
-        var mostRecent = rows.stream().max(Comparator.comparing(PriceObservation::getObservedAt)).orElse(rows.get(0));
-        return new MarketPriceRow(cnpj, cnpjRoot(cnpj), mostRecent.getMarketName(),
+        // stays as the "usual price" baseline (deals). Most recent across the chain.
+        var mostRecent = mostRecent(rows);
+        return new MarketPriceRow(displayStore.cnpj(), cnpjRoot, displayStore.name(),
                 medianForApi(prices), min(prices), mostRecent.getUnitPrice(), mostRecent.getObservedAt(),
-                rows.size(), distinct, distanceKm, isWatched);
+                rows.size(), distinctHouseholds, displayStore.distanceKm(), displayStore.watching());
     }
+
+    /**
+     * The concrete store a chain row is shown as: watched first, then closest to the viewer,
+     * then most recently seen. Null when a radius is set, the viewer has coordinates, and
+     * the best candidate is neither watched nor within range (so no store of the chain is).
+     */
+    private DisplayStore pickDisplayStore(List<PriceObservation> rows,
+                                          Map<String, MarketLocation> locations, Viewer viewer) {
+        var candidates = rows.stream()
+                .collect(Collectors.groupingBy(PriceObservation::getMarketCnpj))
+                .entrySet().stream()
+                .map(store -> toDisplayStore(store.getKey(), store.getValue(), locations.get(store.getKey()), viewer))
+                .sorted(Comparator
+                        .comparing(DisplayStore::watching, Comparator.reverseOrder())
+                        .thenComparing(DisplayStore::distanceKm, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(DisplayStore::lastSeenAt, Comparator.reverseOrder()))
+                .toList();
+        var best = candidates.get(0);
+        var radiusApplies = viewer.radiusKm() != null && viewer.hasCoordinates();
+        if (radiusApplies && !best.watching()
+                && (best.distanceKm() == null || best.distanceKm() > viewer.radiusKm())) {
+            return null;
+        }
+        return best;
+    }
+
+    private DisplayStore toDisplayStore(String cnpj, List<PriceObservation> storeRows,
+                                        MarketLocation location, Viewer viewer) {
+        Double distanceKm = null;
+        if (viewer.hasCoordinates() && location != null && location.hasCoordinates()) {
+            distanceKm = DistanceCalculator.kmBetween(
+                    viewer.latitude(), viewer.longitude(), location.getLatitude(), location.getLongitude());
+        }
+        var lastSeen = mostRecent(storeRows);
+        return new DisplayStore(cnpj, lastSeen.getMarketName(), lastSeen.getObservedAt(),
+                distanceKm, viewer.watched().contains(cnpj));
+    }
+
+    private static PriceObservation mostRecent(List<PriceObservation> rows) {
+        return rows.stream().max(Comparator.comparing(PriceObservation::getObservedAt)).orElse(rows.get(0));
+    }
+
+    private record Viewer(BigDecimal latitude, BigDecimal longitude, Double radiusKm, Set<String> watched) {
+        boolean hasCoordinates() { return latitude != null && longitude != null; }
+    }
+
+    private record DisplayStore(String cnpj, String name, LocalDateTime lastSeenAt,
+                                Double distanceKm, boolean watching) {}
 
     /** Median rounded to 2 decimals (R$) for API responses — mirror of DealsService. */
     private static BigDecimal medianForApi(List<BigDecimal> values) {
@@ -364,9 +450,21 @@ public class PriceIndexService {
         public boolean hasData() { return medianPrice != null; }
     }
 
+    /** One chain in the best-markets ranking; {@code cnpj}/{@code marketName}/{@code distanceKm}
+     *  describe the concrete store the chain is shown as (watched → closest → most recent). */
     public record MarketPriceRow(String cnpj, String cnpjRoot, String marketName,
                                  BigDecimal medianPrice, BigDecimal minPrice,
                                  BigDecimal latestPrice, LocalDateTime latestObservedAt,
                                  int sampleCount, long distinctHouseholds,
                                  Double distanceKm, boolean watching) {}
+
+    /** Which slice the in-store typical price was computed over. */
+    public enum ReferenceScope { STATE, NATIONAL }
+
+    /** In-store typical price + the slice it came from ({@code states} is empty when NATIONAL). */
+    public record InStoreReferencePrice(ReferenceScope scope, List<String> states, ReferencePrice reference) {
+        public static InStoreReferencePrice empty() {
+            return new InStoreReferencePrice(ReferenceScope.NATIONAL, List.of(), ReferencePrice.empty());
+        }
+    }
 }

@@ -9,7 +9,8 @@ import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
-import com.relyon.economizaai.repository.PriceObservationAuditRepository.MarketHouseholdCount;
+import com.relyon.economizaai.repository.PriceObservationAuditRepository.ChainHouseholdCount;
+import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.geo.MerchantSupportGate;
@@ -57,6 +58,7 @@ class PriceIndexServiceCoverageTest {
     @Mock private MarketLocationService marketLocationService;
     @Mock private MerchantSupportGate merchantSupportGate;
     @Mock private NotificationRuleEngine notificationRuleEngine;
+    @Mock private ReceiptRepository receiptRepository;
 
     private CollaborativeProperties properties;
     private PriceIndexService service;
@@ -65,7 +67,7 @@ class PriceIndexServiceCoverageTest {
     void setUp() {
         properties = new CollaborativeProperties();
         service = new PriceIndexService(observationRepository, auditRepository, properties,
-                marketLocationService, merchantSupportGate, notificationRuleEngine);
+                marketLocationService, merchantSupportGate, notificationRuleEngine, receiptRepository);
         lenient().when(merchantSupportGate.contributesToIndex(any())).thenReturn(true);
     }
 
@@ -289,9 +291,9 @@ class PriceIndexServiceCoverageTest {
         assertTrue(rows.isEmpty());
     }
 
-    private MarketHouseholdCount hhCount(String cnpj, long households) {
-        return new MarketHouseholdCount() {
-            public String getCnpj() { return cnpj; }
+    private ChainHouseholdCount chainCount(String cnpjRoot, long households) {
+        return new ChainHouseholdCount() {
+            public String getCnpjRoot() { return cnpjRoot; }
             public long getHouseholds() { return households; }
         };
     }
@@ -304,8 +306,8 @@ class PriceIndexServiceCoverageTest {
             observations.add(obsAt(productId, "DDDDDDDD000111", "Distante", new BigDecimal("9")));
         }
         when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(observations);
-        when(auditRepository.countDistinctHouseholdsForProductByMarket(eq(productId), any()))
-                .thenReturn(List.of(hhCount("DDDDDDDD000111", 3L)));
+        when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
+                .thenReturn(List.of(chainCount("DDDDDDDD", 3L)));
         var location = MarketLocation.builder()
                 .cnpj("DDDDDDDD000111").cnpjRoot("DDDDDDDD")
                 .latitude(new BigDecimal("-30.0500000")).longitude(new BigDecimal("-51.2200000"))
@@ -327,8 +329,8 @@ class PriceIndexServiceCoverageTest {
             observations.add(obsAt(productId, "EEEEEEEE000111", "Perto", new BigDecimal("7")));
         }
         when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(observations);
-        when(auditRepository.countDistinctHouseholdsForProductByMarket(eq(productId), any()))
-                .thenReturn(List.of(hhCount("EEEEEEEE000111", 3L)));
+        when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
+                .thenReturn(List.of(chainCount("EEEEEEEE", 3L)));
         var location = MarketLocation.builder()
                 .cnpj("EEEEEEEE000111").cnpjRoot("EEEEEEEE")
                 .latitude(new BigDecimal("-30.0001000")).longitude(new BigDecimal("-51.2000100"))
@@ -352,8 +354,8 @@ class PriceIndexServiceCoverageTest {
             observations.add(obsAt(productId, "FFFFFFFF000111", "SemCoord", new BigDecimal("6")));
         }
         when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(observations);
-        when(auditRepository.countDistinctHouseholdsForProductByMarket(eq(productId), any()))
-                .thenReturn(List.of(hhCount("FFFFFFFF000111", 3L)));
+        when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
+                .thenReturn(List.of(chainCount("FFFFFFFF", 3L)));
         // No location entry → location is null → second else-branch excludes when radius set.
         when(marketLocationService.findByCnpjs(anyList())).thenReturn(Map.of());
 
@@ -372,8 +374,8 @@ class PriceIndexServiceCoverageTest {
             observations.add(obsAt(productId, "GGGGGGGG000111", "Loja", new BigDecimal("4")));
         }
         when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(observations);
-        when(auditRepository.countDistinctHouseholdsForProductByMarket(eq(productId), any()))
-                .thenReturn(List.of(hhCount("GGGGGGGG000111", 3L)));
+        when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
+                .thenReturn(List.of(chainCount("GGGGGGGG", 3L)));
         when(marketLocationService.findByCnpjs(anyList())).thenReturn(Map.of());
 
         var rows = service.bestMarkets(productId, 10, null, null, null, null);

@@ -82,6 +82,26 @@ class PriceIndexControllerTest {
     }
 
     @Test
+    void inStoreReference_scopesByPrincipalHousehold() throws Exception {
+        var pid = UUID.randomUUID();
+        var user = principal();
+        var ref = new PriceIndexService.ReferencePrice(
+                new BigDecimal("7.50"), new BigDecimal("6.90"), new BigDecimal("8.20"),
+                12, 4, LocalDateTime.now(), false);
+        when(priceIndexService.inStoreReferencePrice(eq(pid), eq(user.getHousehold().getId())))
+                .thenReturn(new PriceIndexService.InStoreReferencePrice(
+                        PriceIndexService.ReferenceScope.STATE, List.of("RS"), ref));
+
+        mockMvc.perform(get("/api/v1/price-index/products/" + pid + "/in-store-reference")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scope").value("STATE"))
+                .andExpect(jsonPath("$.states[0]").value("RS"))
+                .andExpect(jsonPath("$.reference.medianPrice").value(7.50))
+                .andExpect(jsonPath("$.reference.distinctHouseholds").value(4));
+    }
+
+    @Test
     void bestMarkets_returnsRanking() throws Exception {
         var pid = UUID.randomUUID();
         when(watchedMarketService.watchedCnpjs(any())).thenReturn(Set.of());
@@ -140,5 +160,6 @@ class PriceIndexControllerTest {
         var pid = UUID.randomUUID();
         mockMvc.perform(get("/api/v1/price-index/promos")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/v1/price-index/products/" + pid + "/best-markets")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/price-index/products/" + pid + "/in-store-reference")).andExpect(status().isUnauthorized());
     }
 }

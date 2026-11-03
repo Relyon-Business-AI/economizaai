@@ -1,5 +1,26 @@
 # economizai — what's new
 
+## 2026-11-03 — "Melhores preços" por REDE + janela de 180 dias + preço típico em loja (fallback)
+Com 72 famílias ativas espalhadas por muitas lojas, NENHUM par produto×loja passava o
+k-anonimato nos 90 dias — a tela ficava "Dados insuficientes" pra todo produto. Três mudanças:
+
+- **`GET /price-index/products/{id}/best-markets` agora devolve UMA linha por REDE**
+  (`cnpjRoot`), não por loja. Lojas da mesma rede praticam o mesmo preço, então as
+  observações e as famílias são agrupadas por raiz do CNPJ e o K≥3 é checado na rede.
+  Cada linha é exibida como UMA loja concreta da rede (`cnpj`/`marketName`/`distanceKm`):
+  loja acompanhada se houver, senão a mais próxima do usuário, senão a vista mais
+  recentemente. O `cnpj` continua sendo uma loja real — o watch/unwatch e o "como chegar"
+  funcionam igual. Shape da resposta **inalterado**.
+- **Janela própria de 180 dias** pra esse ranking (`best-markets-lookback-days`), separada
+  dos 90 dias da baseline de promo. O texto "últimos 90 dias" da tela precisa virar
+  "últimos 6 meses".
+- **Novo endpoint `GET /price-index/products/{id}/in-store-reference`** → preço típico em
+  loja física agregado entre TODOS os mercados: primeiro nos estados em que a família tem
+  notas (`scope: STATE`, `states: [...]`), senão nacional (`scope: NATIONAL`). Mesmo shape
+  `reference: ReferencePrice` do `online-reference` (preço null + `kAnonBlocked` quando
+  nem o nacional passa). É o card de fallback pra quando nenhuma rede atinge o K ainda —
+  espelho em loja física do card "Preço online" que já existe na tela.
+
 ## 2026-11-02 — Foto dos itens aceita VÁRIAS fotos por nota
 Nota longa (ou com mercado/total em pontos distantes) agora pode ser enviada em mais de uma foto.
 

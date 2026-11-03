@@ -153,6 +153,14 @@ public class CollaborativeProperties {
         private int minObservationsForCommunityPromo = 10;
         private int communityPromoThresholdPct = 15;
         private int lookbackDays = 90;
+        /**
+         * Window for the "onde está mais barato" reads (best-markets ranking + in-store
+         * typical price). Wider than {@code lookbackDays} on purpose: those screens show a
+         * dated real price (the shopper judges staleness), and a 90-day window left every
+         * (product, chain) pair below K with the current community size. Promo detection and
+         * the deals digest keep the tighter {@code lookbackDays} baseline.
+         */
+        private int bestMarketsLookbackDays = 180;
         private int communityPromoRecentWindowDays = 7;
         /**
          * TTL of the SHARED community-promo cache (seconds). Detection scans every
@@ -174,6 +182,8 @@ public class CollaborativeProperties {
         public void setCommunityPromoThresholdPct(int v) { this.communityPromoThresholdPct = v; }
         public int getLookbackDays() { return lookbackDays; }
         public void setLookbackDays(int v) { this.lookbackDays = v; }
+        public int getBestMarketsLookbackDays() { return bestMarketsLookbackDays; }
+        public void setBestMarketsLookbackDays(int v) { this.bestMarketsLookbackDays = v; }
         public int getCommunityPromoRecentWindowDays() { return communityPromoRecentWindowDays; }
         public void setCommunityPromoRecentWindowDays(int v) { this.communityPromoRecentWindowDays = v; }
         public int getCommunityPromoCacheSeconds() { return communityPromoCacheSeconds; }

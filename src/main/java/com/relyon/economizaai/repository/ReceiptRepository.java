@@ -204,6 +204,18 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
             + "ORDER BY count(*) DESC", nativeQuery = true)
     List<Object[]> topMarketsByChainScans(Pageable pageable, boolean includeInternal);
 
+    /** The states a household has confirmed receipts from — its "region" for the in-store
+     * typical price. Most-scanned state first. */
+    @Query("""
+        SELECT receipt.uf FROM Receipt receipt
+        WHERE receipt.household.id = :householdId
+          AND receipt.status = 'CONFIRMED'
+          AND receipt.uf IS NOT NULL
+        GROUP BY receipt.uf
+        ORDER BY count(receipt) DESC
+    """)
+    List<UnidadeFederativa> findConfirmedUfsForHousehold(@Param("householdId") UUID householdId);
+
     /** Confirmed receipts + spend by UF (region): (uf, count, spend). */
     @Query("SELECT receipt.uf, count(receipt), COALESCE(sum(receipt.totalAmount), 0) "
             + "FROM Receipt receipt JOIN receipt.user receiptUser "

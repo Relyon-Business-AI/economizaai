@@ -11,8 +11,10 @@ import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ReceiptChannel;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
-import com.relyon.economizaai.repository.PriceObservationAuditRepository.MarketHouseholdCount;
+import com.relyon.economizaai.repository.PriceObservationAuditRepository.ChainHouseholdCount;
 import com.relyon.economizaai.repository.PriceObservationRepository;
+import com.relyon.economizaai.repository.ReceiptRepository;
+import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.geo.MerchantSupportGate;
 import com.relyon.economizaai.service.notifications.NotificationRuleEngine;
@@ -51,6 +53,7 @@ class PriceIndexServiceTest {
     @Mock private MarketLocationService marketLocationService;
     @Mock private MerchantSupportGate merchantSupportGate;
     @Mock private NotificationRuleEngine notificationRuleEngine;
+    @Mock private ReceiptRepository receiptRepository;
 
     private CollaborativeProperties properties;
     private PriceIndexService service;
@@ -59,7 +62,7 @@ class PriceIndexServiceTest {
     void setUp() {
         properties = new CollaborativeProperties();
         service = new PriceIndexService(observationRepository, auditRepository, properties,
-                marketLocationService, merchantSupportGate, notificationRuleEngine);
+                marketLocationService, merchantSupportGate, notificationRuleEngine, receiptRepository);
         lenient().when(merchantSupportGate.contributesToIndex(any())).thenReturn(true);
     }
 
@@ -383,14 +386,161 @@ class PriceIndexServiceTest {
         for (var i = 0; i < 5; i++) observations.add(obsAt(productId, "BBBBBBBB000111", "B", new BigDecimal("8")));
 
         when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(observations);
-        when(auditRepository.countDistinctHouseholdsForProductByMarket(eq(productId), any()))
-                .thenReturn(List.of(hhCount("AAAAAAAA000111", 3L), hhCount("BBBBBBBB000111", 1L)));
+        when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
+                .thenReturn(List.of(chainCount("AAAAAAAA", 3L), chainCount("BBBBBBBB", 1L)));
         when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
 
         var rows = service.bestMarkets(productId, 10, null, null, null, Set.of());
 
         assertEquals(1, rows.size(), "k-anon must hide market B");
         assertEquals("AAAAAAAA000111", rows.get(0).cnpj());
+    }
+
+    @Test
+    void bestMarkets_poolsStoresOfTheSameChainIntoOneRow() {
+        var productId = UUID.randomUUID();
+        // Two stores of chain AAAAAAAA with 3 obs each: per store neither reaches the
+        // 5-observation floor nor K; pooled at chain level they do (K comes from the chain query).
+        var observations = new ArrayList<PriceObservation>();
+        for (var index = 0; index < 3; index++) observations.add(obsAt(productId, "AAAAAAAA000111", "Loja Centro", new BigDecimal("10")));
+        for (var index = 0; index < 3; index++) observations.add(obsAt(productId, "AAAAAAAA000222", "Loja Norte", new BigDecimal("12")));
+        when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(observations);
+        when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
+                .thenReturn(List.of(chainCount("AAAAAAAA", 3L)));
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
+
+        var rows = service.bestMarkets(productId, 10, null, null, null, Set.of());
+
+        assertEquals(1, rows.size(), "stores of one chain must collapse into a single row");
+        assertEquals("AAAAAAAA", rows.get(0).cnpjRoot());
+        assertEquals(6, rows.get(0).sampleCount());
+        assertEquals(3L, rows.get(0).distinctHouseholds());
+        assertEquals(0, new BigDecimal("11.00").compareTo(rows.get(0).medianPrice()));
+    }
+
+    @Test
+    void bestMarkets_chainRowShowsClosestStoreToViewer() {
+        var productId = UUID.randomUUID();
+        var observations = new ArrayList<PriceObservation>();
+        for (var index = 0; index < 3; index++) observations.add(obsAt(productId, "AAAAAAAA000111", "Loja Longe", new BigDecimal("10")));
+        for (var index = 0; index < 3; index++) observations.add(obsAt(productId, "AAAAAAAA000222", "Loja Perto", new BigDecimal("10")));
+        when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(observations);
+        when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
+                .thenReturn(List.of(chainCount("AAAAAAAA", 3L)));
+        var farStore = MarketLocation.builder().cnpj("AAAAAAAA000111").cnpjRoot("AAAAAAAA")
+                .latitude(new BigDecimal("-30.0500000")).longitude(new BigDecimal("-51.2200000")).build();
+        var nearStore = MarketLocation.builder().cnpj("AAAAAAAA000222").cnpjRoot("AAAAAAAA")
+                .latitude(new BigDecimal("-30.0001000")).longitude(new BigDecimal("-51.2000100")).build();
+        when(marketLocationService.findByCnpjs(any()))
+                .thenReturn(Map.of("AAAAAAAA000111", farStore, "AAAAAAAA000222", nearStore));
+
+        var rows = service.bestMarkets(productId, 10,
+                new BigDecimal("-30.0000000"), new BigDecimal("-51.2000000"), null, Set.of());
+
+        assertEquals(1, rows.size());
+        assertEquals("AAAAAAAA000222", rows.get(0).cnpj(), "the chain row must be shown as its closest store");
+        assertEquals("Loja Perto", rows.get(0).marketName());
+        assertTrue(rows.get(0).distanceKm() < 1.0);
+    }
+
+    @Test
+    void bestMarkets_chainRowPrefersWatchedStoreOverCloserOne() {
+        var productId = UUID.randomUUID();
+        var observations = new ArrayList<PriceObservation>();
+        for (var index = 0; index < 3; index++) observations.add(obsAt(productId, "AAAAAAAA000111", "Loja Acompanhada", new BigDecimal("10")));
+        for (var index = 0; index < 3; index++) observations.add(obsAt(productId, "AAAAAAAA000222", "Loja Perto", new BigDecimal("10")));
+        when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(observations);
+        when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
+                .thenReturn(List.of(chainCount("AAAAAAAA", 3L)));
+        var farStore = MarketLocation.builder().cnpj("AAAAAAAA000111").cnpjRoot("AAAAAAAA")
+                .latitude(new BigDecimal("-30.0500000")).longitude(new BigDecimal("-51.2200000")).build();
+        var nearStore = MarketLocation.builder().cnpj("AAAAAAAA000222").cnpjRoot("AAAAAAAA")
+                .latitude(new BigDecimal("-30.0001000")).longitude(new BigDecimal("-51.2000100")).build();
+        when(marketLocationService.findByCnpjs(any()))
+                .thenReturn(Map.of("AAAAAAAA000111", farStore, "AAAAAAAA000222", nearStore));
+
+        var rows = service.bestMarkets(productId, 10,
+                new BigDecimal("-30.0000000"), new BigDecimal("-51.2000000"), 1.0, Set.of("AAAAAAAA000111"));
+
+        assertEquals(1, rows.size(), "a watched store keeps the chain visible even outside the radius");
+        assertEquals("AAAAAAAA000111", rows.get(0).cnpj());
+        assertTrue(rows.get(0).watching());
+    }
+
+    @Test
+    void inStoreReferencePrice_usesHouseholdStatesWhenThatSliceReachesK() {
+        var productId = UUID.randomUUID();
+        var householdId = UUID.randomUUID();
+        var regional = List.of(obs(productId, new BigDecimal("10")), obs(productId, new BigDecimal("12")),
+                obs(productId, new BigDecimal("11")));
+        when(receiptRepository.findConfirmedUfsForHousehold(householdId))
+                .thenReturn(List.of(UnidadeFederativa.RS, UnidadeFederativa.SC));
+        when(observationRepository.findRecentByProductAndStates(eq(productId), eq(List.of("RS", "SC")), any()))
+                .thenReturn(regional);
+        when(auditRepository.countDistinctInStoreHouseholdsForProductInStates(eq(productId), eq(List.of("RS", "SC")), any()))
+                .thenReturn(3L);
+
+        var result = service.inStoreReferencePrice(productId, householdId);
+
+        assertEquals(PriceIndexService.ReferenceScope.STATE, result.scope());
+        assertEquals(List.of("RS", "SC"), result.states());
+        assertTrue(result.reference().hasData());
+        assertEquals(new BigDecimal("11.00"), result.reference().medianPrice());
+        verify(observationRepository, never()).findRecentByProduct(any(), any());
+    }
+
+    @Test
+    void inStoreReferencePrice_fallsBackToNationalWhenStateSliceIsBelowK() {
+        var productId = UUID.randomUUID();
+        var householdId = UUID.randomUUID();
+        var regional = List.of(obs(productId, new BigDecimal("10")), obs(productId, new BigDecimal("12")),
+                obs(productId, new BigDecimal("11")));
+        var national = List.of(obs(productId, new BigDecimal("8")), obs(productId, new BigDecimal("9")),
+                obs(productId, new BigDecimal("10")), obs(productId, new BigDecimal("11")));
+        when(receiptRepository.findConfirmedUfsForHousehold(householdId)).thenReturn(List.of(UnidadeFederativa.RS));
+        when(observationRepository.findRecentByProductAndStates(eq(productId), eq(List.of("RS")), any()))
+                .thenReturn(regional);
+        when(auditRepository.countDistinctInStoreHouseholdsForProductInStates(eq(productId), eq(List.of("RS")), any()))
+                .thenReturn(2L);
+        when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(national);
+        when(auditRepository.countDistinctInStoreHouseholdsForProduct(eq(productId), any())).thenReturn(4L);
+
+        var result = service.inStoreReferencePrice(productId, householdId);
+
+        assertEquals(PriceIndexService.ReferenceScope.NATIONAL, result.scope());
+        assertTrue(result.states().isEmpty());
+        assertTrue(result.reference().hasData());
+        assertEquals(4, result.reference().sampleCount());
+    }
+
+    @Test
+    void inStoreReferencePrice_householdWithoutReceiptsGoesStraightToNationalAndStaysBlockedBelowK() {
+        var productId = UUID.randomUUID();
+        var householdId = UUID.randomUUID();
+        when(receiptRepository.findConfirmedUfsForHousehold(householdId)).thenReturn(List.of());
+        when(observationRepository.findRecentByProduct(eq(productId), any()))
+                .thenReturn(List.of(obs(productId, new BigDecimal("8")), obs(productId, new BigDecimal("9")),
+                        obs(productId, new BigDecimal("10"))));
+        when(auditRepository.countDistinctInStoreHouseholdsForProduct(eq(productId), any())).thenReturn(1L);
+
+        var result = service.inStoreReferencePrice(productId, householdId);
+
+        assertEquals(PriceIndexService.ReferenceScope.NATIONAL, result.scope());
+        assertFalse(result.reference().hasData());
+        assertTrue(result.reference().kAnonBlocked());
+        assertEquals(3, result.reference().sampleCount());
+        assertEquals(1L, result.reference().distinctHouseholds());
+        verify(observationRepository, never()).findRecentByProductAndStates(any(), any(), any());
+    }
+
+    @Test
+    void inStoreReferencePrice_returnsEmptyWhenCollaborativeDisabled() {
+        properties.getCollaborative().setEnabled(false);
+
+        var result = service.inStoreReferencePrice(UUID.randomUUID(), UUID.randomUUID());
+
+        assertFalse(result.reference().hasData());
+        verify(receiptRepository, never()).findConfirmedUfsForHousehold(any());
     }
 
     @Test
@@ -401,8 +551,8 @@ class PriceIndexServiceTest {
         for (var i = 0; i < 5; i++) observations.add(obsAt(productId, "DDDDDDDD000111", "Distante", new BigDecimal("9")));
 
         when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(observations);
-        when(auditRepository.countDistinctHouseholdsForProductByMarket(eq(productId), any()))
-                .thenReturn(List.of(hhCount("DDDDDDDD000111", 3L)));
+        when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
+                .thenReturn(List.of(chainCount("DDDDDDDD", 3L)));
         var loc = MarketLocation.builder()
                 .cnpj("DDDDDDDD000111").cnpjRoot("DDDDDDDD")
                 .latitude(new BigDecimal("-30.0500000")).longitude(new BigDecimal("-51.2200000")) // ~10km away
@@ -425,8 +575,8 @@ class PriceIndexServiceTest {
         for (var i = 0; i < 5; i++) observations.add(obsAt(productId, "AAAAAAAA000111", "A", new BigDecimal("10")));
 
         when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(observations);
-        when(auditRepository.countDistinctHouseholdsForProductByMarket(eq(productId), any()))
-                .thenReturn(List.of(hhCount("AAAAAAAA000111", 3L)));
+        when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
+                .thenReturn(List.of(chainCount("AAAAAAAA", 3L)));
         when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
 
         // limit=-1 (e.g. ?limit=-1 on the endpoint) must not reach Stream.limit(-1),
@@ -436,9 +586,9 @@ class PriceIndexServiceTest {
         assertTrue(rows.isEmpty(), "non-positive limit must return no rows, not throw");
     }
 
-    private MarketHouseholdCount hhCount(String cnpj, long households) {
-        return new MarketHouseholdCount() {
-            public String getCnpj() { return cnpj; }
+    private ChainHouseholdCount chainCount(String cnpjRoot, long households) {
+        return new ChainHouseholdCount() {
+            public String getCnpjRoot() { return cnpjRoot; }
             public long getHouseholds() { return households; }
         };
     }

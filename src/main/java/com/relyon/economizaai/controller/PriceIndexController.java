@@ -59,9 +59,23 @@ public class PriceIndexController {
     }
 
     /**
-     * Cheapest markets for a product. Distance is measured from the user's HOME
-     * location by default; pass {@code lat}/{@code lng} to measure from the
-     * current position instead (barcode scan inside a store).
+     * Typical IN-STORE price for a product across every physical market — scoped to the
+     * states the household shops in, falling back to national. The fallback for the
+     * best-markets screen when no chain reaches k-anon yet. Same hybrid disclosure as the
+     * other references (counts visible, price null when blocked).
+     */
+    @GetMapping("/products/{productId}/in-store-reference")
+    public ResponseEntity<PriceIndexService.InStoreReferencePrice> inStoreReference(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID productId) {
+        return ResponseEntity.ok(priceIndexService.inStoreReferencePrice(productId, user.getHousehold().getId()));
+    }
+
+    /**
+     * Cheapest market CHAINS for a product (one row per CNPJ root, shown as its watched
+     * or closest store). Distance is measured from the user's HOME location by default;
+     * pass {@code lat}/{@code lng} to measure from the current position instead (barcode
+     * scan inside a store).
      */
     @GetMapping("/products/{productId}/best-markets")
     public ResponseEntity<List<PriceIndexService.MarketPriceRow>> bestMarkets(
