@@ -4,6 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Configuration
 @ConfigurationProperties(prefix = "economizaai")
@@ -150,6 +151,20 @@ public class CollaborativeProperties {
         // This is only a noise floor for the median; set to 3 so K (which implies >=3 observations)
         // is the sole gate: the minimum that still respects LGPD, physical and online alike.
         private int minObservationsPerProductMarket = 3;
+        /**
+         * Relaxed thresholds for GROCERY aggregates (best-markets ranking, reference prices):
+         * a disclosed price/date for a grocery item at a store is the same public fact the
+         * state "menor preço" portals publish from NFC-e with n=1, and {@code observedAt} is
+         * truncated to the DAY so observations can't be re-grouped into one receipt by their
+         * timestamp. The full K ({@link #minHouseholdsForPublic}) still applies to anything
+         * SENSITIVE: products in {@link #sensitiveCategoryGroups} (health) and observations
+         * from PHARMACY stores — and to every list-shaped read (admin, exports, B2B), which
+         * never use these. See {@code PrivacyTierResolver}.
+         */
+        private int minHouseholdsForGrocery = 1;
+        private int minObservationsForGrocery = 1;
+        /** Category GROUP slugs whose products keep the full K regardless of the store. */
+        private List<String> sensitiveCategoryGroups = List.of("saude");
         private int minObservationsForCommunityPromo = 10;
         private int communityPromoThresholdPct = 15;
         private int lookbackDays = 90;
@@ -176,6 +191,12 @@ public class CollaborativeProperties {
         public void setMinHouseholdsForPublic(int v) { this.minHouseholdsForPublic = v; }
         public int getMinObservationsPerProductMarket() { return minObservationsPerProductMarket; }
         public void setMinObservationsPerProductMarket(int v) { this.minObservationsPerProductMarket = v; }
+        public int getMinHouseholdsForGrocery() { return minHouseholdsForGrocery; }
+        public void setMinHouseholdsForGrocery(int v) { this.minHouseholdsForGrocery = v; }
+        public int getMinObservationsForGrocery() { return minObservationsForGrocery; }
+        public void setMinObservationsForGrocery(int v) { this.minObservationsForGrocery = v; }
+        public List<String> getSensitiveCategoryGroups() { return sensitiveCategoryGroups; }
+        public void setSensitiveCategoryGroups(List<String> v) { this.sensitiveCategoryGroups = v; }
         public int getMinObservationsForCommunityPromo() { return minObservationsForCommunityPromo; }
         public void setMinObservationsForCommunityPromo(int v) { this.minObservationsForCommunityPromo = v; }
         public int getCommunityPromoThresholdPct() { return communityPromoThresholdPct; }

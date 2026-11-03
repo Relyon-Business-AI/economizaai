@@ -37,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -59,6 +60,7 @@ class PriceIndexServiceCoverageTest {
     @Mock private MerchantSupportGate merchantSupportGate;
     @Mock private NotificationRuleEngine notificationRuleEngine;
     @Mock private ReceiptRepository receiptRepository;
+    @Mock private PrivacyTierResolver privacyTierResolver;
 
     private CollaborativeProperties properties;
     private PriceIndexService service;
@@ -67,8 +69,11 @@ class PriceIndexServiceCoverageTest {
     void setUp() {
         properties = new CollaborativeProperties();
         service = new PriceIndexService(observationRepository, auditRepository, properties,
-                marketLocationService, merchantSupportGate, notificationRuleEngine, receiptRepository);
+                marketLocationService, merchantSupportGate, notificationRuleEngine, receiptRepository,
+                privacyTierResolver);
         lenient().when(merchantSupportGate.contributesToIndex(any())).thenReturn(true);
+        lenient().when(privacyTierResolver.thresholdsFor(anyBoolean()))
+                .thenReturn(new PrivacyTierResolver.Thresholds(3, 3));
     }
 
     private Receipt receiptWith(String cnpj, ReceiptItem... items) {
