@@ -1,5 +1,24 @@
 # economizai — what's new
 
+## 2026-11-03 — Lente de segmento: scope ganha MARKET / PHARMACY / FUEL / OTHERS
+
+- O parâmetro `scope` de **`/dashboard`, `/insights/spend`, `/insights/query`,
+  `/items` e `/receipts`** aceita 4 valores novos, um por lente do app:
+  `MARKET` (mercado SEM farmácia: supermercado + atacado/varejo de alimentos),
+  `PHARMACY` (só farmácias), `FUEL` (só postos — segmento GAS_STATION) e
+  `OTHERS` (tudo que não é mercado/farmácia/posto, incl. loja sem cadastro).
+- `SUPPORTED`/`OTHER` (mercado+farmácia vs resto) seguem funcionando como
+  LEGADO — nenhum client antigo quebra; o app novo não os envia mais.
+- Lente de inclusão sem nenhum CNPJ no segmento retorna vazio (ex.: `FUEL` sem
+  nota de posto → 0 linhas, sem erro). O índice colaborativo e o gate de
+  merchant NÃO mudam (farmácia continua suportada lá).
+- FE (dashboard + app): lente GLOBAL por sessão — pill `Mercado ▾` no hero
+  abre o sheet com as 5 lentes; Notas e Itens por Categoria seguem a lente e
+  têm chip compacto com o mesmo sheet; fora da lente Mercado a Home esconde a
+  faixa de atalhos e vira extrato do segmento. Default = Mercado (não persiste
+  entre sessões).
+
+
 ## 2026-11-03 — Admin market-intel: "Gasto por categoria" na taxonomia nova (grupo → subcategoria)
 
 - **`GET /admin/market-intel` mudou o shape de `categorySpend`**: era
