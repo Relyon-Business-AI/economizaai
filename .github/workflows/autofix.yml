@@ -63,7 +63,7 @@ jobs:
           AUTOFIX_CONTEXT: ${{ inputs.error_context }}
           BASE_BRANCH: development
           SERVICE_ID: srv-dbklrqnf3r2c73f93cdg
-          HEALTH_URL: https://economizai-app-prod.onrender.com/actuator/health
+          HEALTH_URL: https://api-dev.economizaai.app/actuator/health
           MAX_FIXES_PER_HOUR: '3'
           CLAUDE_TIMEOUT_SEC: '900'
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
