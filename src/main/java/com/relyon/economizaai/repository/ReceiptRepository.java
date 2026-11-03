@@ -139,6 +139,11 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
      */
     long countByUserIdAndCreatedAtGreaterThanEqual(UUID userId, LocalDateTime since);
 
+    long countByUserIdAndStatus(UUID userId, ReceiptStatus status);
+
+    long countByUserIdAndStatusInAndUpdatedAtGreaterThanEqual(UUID userId, Collection<ReceiptStatus> statuses,
+                                                              LocalDateTime since);
+
     long countByHouseholdIdAndStatusAndConfirmedAtAfter(UUID householdId, ReceiptStatus status, LocalDateTime since);
 
     // --- Admin metrics: internal-account filter ---
@@ -203,6 +208,18 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
             + " GROUP BY substring(regexp_replace(r.cnpj_emitente, '\\D', '', 'g') FROM 1 FOR 8) "
             + "ORDER BY count(*) DESC", nativeQuery = true)
     List<Object[]> topMarketsByChainScans(Pageable pageable, boolean includeInternal);
+
+    /** The states a household has confirmed receipts from — its "region" for the in-store
+     * typical price. Most-scanned state first. */
+    @Query("""
+        SELECT receipt.uf FROM Receipt receipt
+        WHERE receipt.household.id = :householdId
+          AND receipt.status = 'CONFIRMED'
+          AND receipt.uf IS NOT NULL
+        GROUP BY receipt.uf
+        ORDER BY count(receipt) DESC
+    """)
+    List<UnidadeFederativa> findConfirmedUfsForHousehold(@Param("householdId") UUID householdId);
 
     /** Confirmed receipts + spend by UF (region): (uf, count, spend). */
     @Query("SELECT receipt.uf, count(receipt), COALESCE(sum(receipt.totalAmount), 0) "

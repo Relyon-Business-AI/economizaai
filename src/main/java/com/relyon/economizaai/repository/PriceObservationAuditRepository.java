@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -69,6 +70,54 @@ public interface PriceObservationAuditRepository extends JpaRepository<PriceObse
         String getCnpj();
         long getHouseholds();
     }
+
+    /** K-anonymity helper for the best-markets ranking, at CHAIN granularity: distinct
+     * contributing households per market chain (CNPJ root) for a product. Stores of one
+     * chain pool their contributors, so K is reached far sooner than per store. */
+    @Query("""
+        SELECT a.observation.marketCnpjRoot AS cnpjRoot, COUNT(DISTINCT a.householdId) AS households
+        FROM PriceObservationAudit a
+        WHERE a.observation.product.id = :productId
+          AND a.observation.channel = 'IN_STORE'
+          AND a.observation.outlier = false
+          AND a.observation.observedAt >= :since
+        GROUP BY a.observation.marketCnpjRoot
+    """)
+    List<ChainHouseholdCount> countDistinctHouseholdsForProductByChain(@Param("productId") UUID productId,
+                                                                       @Param("since") LocalDateTime since);
+
+    /** Projection for {@link #countDistinctHouseholdsForProductByChain}. */
+    interface ChainHouseholdCount {
+        String getCnpjRoot();
+        long getHouseholds();
+    }
+
+    /** K-anonymity helper (in-store typical price): distinct households that contributed
+     * IN_STORE observations for a product across ALL markets since the cutoff. */
+    @Query("""
+        SELECT COUNT(DISTINCT a.householdId)
+        FROM PriceObservationAudit a
+        WHERE a.observation.product.id = :productId
+          AND a.observation.channel = 'IN_STORE'
+          AND a.observation.outlier = false
+          AND a.observation.observedAt >= :since
+    """)
+    long countDistinctInStoreHouseholdsForProduct(@Param("productId") UUID productId,
+                                                  @Param("since") LocalDateTime since);
+
+    /** Same as {@link #countDistinctInStoreHouseholdsForProduct} restricted to the given states. */
+    @Query("""
+        SELECT COUNT(DISTINCT a.householdId)
+        FROM PriceObservationAudit a
+        WHERE a.observation.product.id = :productId
+          AND a.observation.state IN :states
+          AND a.observation.channel = 'IN_STORE'
+          AND a.observation.outlier = false
+          AND a.observation.observedAt >= :since
+    """)
+    long countDistinctInStoreHouseholdsForProductInStates(@Param("productId") UUID productId,
+                                                          @Param("states") Collection<String> states,
+                                                          @Param("since") LocalDateTime since);
 
     /** Batched k-anonymity helper for community-promo detection: distinct contributing
      *  households per (product, market) in ONE aggregated query — the per-group count

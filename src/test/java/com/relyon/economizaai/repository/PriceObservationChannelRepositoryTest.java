@@ -18,6 +18,7 @@ import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -109,6 +110,49 @@ class PriceObservationChannelRepositoryTest {
     }
 
     @Test
+    void kAnonPerChain_poolsHouseholdsAcrossStoresOfTheSameRoot() {
+        // A second store of the same chain (same 8-digit root) contributed by a 4th household:
+        // per store it's a lone contributor, per chain the pool grows to 4.
+        var siblingStore = "12345678000271";
+        observe(product, siblingStore, ReceiptChannel.IN_STORE, new BigDecimal("10.50"), household("H6"), false);
+
+        var rows = auditRepository.countDistinctHouseholdsForProductByChain(product.getId(), SINCE);
+
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).getCnpjRoot()).isEqualTo("12345678");
+        assertThat(rows.get(0).getHouseholds()).isEqualTo(4);
+    }
+
+    @Test
+    void inStoreHouseholdCount_acrossAllMarketsCountsOnlyInStore() {
+        assertThat(auditRepository.countDistinctInStoreHouseholdsForProduct(product.getId(), SINCE)).isEqualTo(3);
+    }
+
+    @Test
+    void stateScopedReads_onlySeeObservationsSnapshottedInThoseStates() {
+        var rsHousehold = household("H7");
+        observeInState(product, "99887766000100", "RS", new BigDecimal("9.00"), rsHousehold);
+        observeInState(product, "99887766000200", "SC", new BigDecimal("9.50"), household("H8"));
+
+        var rsRows = observationRepository.findRecentByProductAndStates(product.getId(), List.of("RS"), SINCE);
+        var rsHouseholds = auditRepository.countDistinctInStoreHouseholdsForProductInStates(
+                product.getId(), List.of("RS"), SINCE);
+
+        assertThat(rsRows).hasSize(1).allMatch(observation -> "RS".equals(observation.getState()));
+        assertThat(rsHouseholds).isEqualTo(1);
+    }
+
+    @Test
+    void confirmedUfsForHousehold_listsTheStatesTheHouseholdScannedIn() {
+        var household = household("H9");
+        receiptRepository.save(receiptFor(household, CNPJ, ReceiptChannel.IN_STORE));
+
+        var ufs = receiptRepository.findConfirmedUfsForHousehold(household.getId());
+
+        assertThat(ufs).containsExactly(UnidadeFederativa.RS);
+    }
+
+    @Test
     void outlierObservationsExcludedFromBothSeries() {
         var outlierHousehold = household("H5");
         observe(product, CNPJ, ReceiptChannel.IN_STORE, new BigDecimal("999.00"), outlierHousehold, true);
@@ -136,6 +180,28 @@ class PriceObservationChannelRepositoryTest {
                 .quantity(BigDecimal.ONE)
                 .observedAt(OBSERVED)
                 .outlier(outlier)
+                .build());
+        auditRepository.save(PriceObservationAudit.builder()
+                .observation(observation)
+                .receiptId(receipt.getId())
+                .householdId(household.getId())
+                .contributedAt(OBSERVED)
+                .build());
+    }
+
+    /** Persist an IN_STORE observation whose market location was snapshotted in {@code state}. */
+    private void observeInState(Product product, String cnpj, String state, BigDecimal price, Household household) {
+        var receipt = receiptRepository.save(receiptFor(household, cnpj, ReceiptChannel.IN_STORE));
+        var observation = observationRepository.save(PriceObservation.builder()
+                .product(product)
+                .channel(ReceiptChannel.IN_STORE)
+                .marketCnpj(cnpj)
+                .marketCnpjRoot(cnpj.substring(0, 8))
+                .marketName("Loja")
+                .unitPrice(price)
+                .quantity(BigDecimal.ONE)
+                .observedAt(OBSERVED)
+                .state(state)
                 .build());
         auditRepository.save(PriceObservationAudit.builder()
                 .observation(observation)

@@ -82,6 +82,9 @@ import com.relyon.economizaai.service.analytics.AdminAnalyticsService;
 import com.relyon.economizaai.dto.response.MarketingDashboardResponse;
 import com.relyon.economizaai.service.analytics.MarketingDashboardService;
 import com.relyon.economizaai.service.analytics.RetentionCohortService;
+import com.relyon.economizaai.service.analytics.asc.AppStoreAnalyticsService;
+import com.relyon.economizaai.service.analytics.asc.AppStoreAnalyticsSyncJob;
+import com.relyon.economizaai.dto.response.StoreAnalyticsResponse;
 import com.relyon.economizaai.service.analytics.meta.MetaAdSpendSyncJob;
 import com.relyon.economizaai.service.analytics.asc.AppStoreAnalyticsService;
 import com.relyon.economizaai.service.analytics.asc.AppStoreAnalyticsSyncJob;
@@ -368,10 +371,11 @@ public class AdminController {
             @RequestParam(required = false) UnidadeFederativa uf,
             @RequestParam(required = false) ReceiptStatus status,
             @RequestParam(required = false) String parseErrorReason,
+            @RequestParam(required = false) String userQ,
             @RequestParam(defaultValue = "false") boolean includeInternal,
             @PageableDefault(size = 20) Pageable pageable) {
         return ResponseEntity.ok(adminReceiptService.list(
-                from, to, marketCnpj, category, q, householdId, uf, status, parseErrorReason, includeInternal, pageable));
+                from, to, marketCnpj, category, q, householdId, uf, status, parseErrorReason, userQ, includeInternal, pageable));
     }
 
     /** Count + total value of the notes matching the given filters (list header total). */
@@ -386,9 +390,10 @@ public class AdminController {
             @RequestParam(required = false) UnidadeFederativa uf,
             @RequestParam(required = false) ReceiptStatus status,
             @RequestParam(required = false) String parseErrorReason,
+            @RequestParam(required = false) String userQ,
             @RequestParam(defaultValue = "false") boolean includeInternal) {
         return ResponseEntity.ok(adminReceiptService.stats(
-                from, to, marketCnpj, category, q, householdId, uf, status, parseErrorReason, includeInternal));
+                from, to, marketCnpj, category, q, householdId, uf, status, parseErrorReason, userQ, includeInternal));
     }
 
     /**
@@ -405,9 +410,10 @@ public class AdminController {
             @RequestParam(required = false) String q,
             @RequestParam(required = false) UUID householdId,
             @RequestParam(required = false) UnidadeFederativa uf,
+            @RequestParam(required = false) String userQ,
             @RequestParam(defaultValue = "false") boolean includeInternal) {
         return ResponseEntity.ok(adminReceiptService.failureBreakdown(
-                from, to, marketCnpj, category, q, householdId, uf, includeInternal));
+                from, to, marketCnpj, category, q, householdId, uf, userQ, includeInternal));
     }
 
     /** How users are entering their notas (QR scan vs typed/photographed chave vs photo vs import):
@@ -616,6 +622,19 @@ public class AdminController {
     @PostMapping("/analytics/ad-spend/sync")
     public ResponseEntity<Map<String, Integer>> syncAdSpend() {
         return ResponseEntity.ok(Map.of("rowsSynced", metaAdSpendSyncJob.syncNow()));
+    }
+
+    @Operation(summary = "Funil iOS pré-instalação (impressões, page views, installs por fonte)")
+    @GetMapping("/analytics/store/ios")
+    public ResponseEntity<StoreAnalyticsResponse> iosStoreAnalytics(
+            @RequestParam(defaultValue = "90") int days) {
+        return ResponseEntity.ok(appStoreAnalyticsService.report(days));
+    }
+
+    @Operation(summary = "Força sincronização imediata dos dados da App Store Connect")
+    @PostMapping("/analytics/store/ios/sync")
+    public ResponseEntity<Map<String, Integer>> syncIosStoreAnalytics() {
+        return ResponseEntity.ok(Map.of("rowsSynced", appStoreAnalyticsSyncJob.syncNow()));
     }
 
     /**

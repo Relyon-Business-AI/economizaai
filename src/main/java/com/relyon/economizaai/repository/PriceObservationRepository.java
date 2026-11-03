@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -114,6 +115,20 @@ public interface PriceObservationRepository extends JpaRepository<PriceObservati
                                         @Param("from") LocalDateTime from,
                                         @Param("to") LocalDateTime to,
                                         @Param("maxPrice") BigDecimal maxPrice);
+
+    /** In-store typical price (regional): recent IN_STORE observations of one product in the given states. */
+    @Query("""
+        SELECT po FROM PriceObservation po
+        WHERE po.product.id = :productId
+          AND po.state IN :states
+          AND po.channel = 'IN_STORE'
+          AND po.outlier = false
+          AND po.observedAt >= :since
+        ORDER BY po.observedAt DESC
+    """)
+    List<PriceObservation> findRecentByProductAndStates(@Param("productId") UUID productId,
+                                                        @Param("states") Collection<String> states,
+                                                        @Param("since") LocalDateTime since);
 
     /** Merchant panel (region side): recent observations for the given products in the given states. */
     @Query("""

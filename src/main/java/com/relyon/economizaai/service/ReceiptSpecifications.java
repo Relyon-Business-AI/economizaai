@@ -150,6 +150,17 @@ public final class ReceiptSpecifications {
         };
     }
 
+    /** Admin-only: restricts to receipts whose owner's email or name contains {@code userQ} (case-insensitive). */
+    public static Specification<Receipt> byUserQ(String userQ) {
+        return (root, query, cb) -> {
+            var like = "%" + userQ.trim().toLowerCase() + "%";
+            var userJoin = root.join("user", JoinType.INNER);
+            return cb.or(
+                    cb.like(cb.lower(userJoin.get("email")), like),
+                    cb.like(cb.lower(userJoin.get("name")), like));
+        };
+    }
+
     /**
      * Drops receipts submitted by internal accounts (admins, @economizaai.app /
      * Firebase Test Lab, and anyone flagged {@code excludedFromMetrics}) — the

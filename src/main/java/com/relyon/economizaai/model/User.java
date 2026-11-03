@@ -136,6 +136,16 @@ public class User extends BaseEntity implements UserDetails {
     @Column(name = "push_token_updated_at")
     private LocalDateTime pushTokenUpdatedAt;
 
+    // In-app store rating prompt bookkeeping (StoreReviewPromptService): the OS never
+    // tells us whether the dialog was shown, so each request "spends" one of the few
+    // chances the platforms allow — the cap/cooldown is tracked server-side.
+    @Column(name = "store_review_prompt_count", nullable = false)
+    @Builder.Default
+    private int storeReviewPromptCount = 0;
+
+    @Column(name = "store_review_last_prompted_at")
+    private LocalDateTime storeReviewLastPromptedAt;
+
     // Daily deals digest (Phase C): how often, an optional send-hour override
     // (0-23, wall-clock America/Sao_Paulo), and the 1/day cap marker.
     @Enumerated(EnumType.STRING)

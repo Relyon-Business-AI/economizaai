@@ -58,6 +58,8 @@ import com.relyon.economizaai.service.notifications.RelevanceReportService;
 import com.relyon.economizaai.service.analytics.AdminAnalyticsService;
 import com.relyon.economizaai.service.analytics.RetentionCohortService;
 import com.relyon.economizaai.service.analytics.meta.MetaAdSpendSyncJob;
+import com.relyon.economizaai.service.analytics.asc.AppStoreAnalyticsService;
+import com.relyon.economizaai.service.analytics.asc.AppStoreAnalyticsSyncJob;
 import com.relyon.economizaai.service.admin.AdminOverviewService;
 import com.relyon.economizaai.service.admin.IngestionHealthService;
 import com.relyon.economizaai.service.admin.MarketIntelService;
@@ -139,6 +141,8 @@ class AdminControllerTest {
     @MockitoBean private AdminAnalyticsService adminAnalyticsService;
     @MockitoBean private RetentionCohortService retentionCohortService;
     @MockitoBean private MetaAdSpendSyncJob metaAdSpendSyncJob;
+    @MockitoBean private AppStoreAnalyticsService appStoreAnalyticsService;
+    @MockitoBean private AppStoreAnalyticsSyncJob appStoreAnalyticsSyncJob;
     @MockitoBean private StateCoverageService stateCoverageService;
     @MockitoBean private SefazIngestionService sefazIngestionService;
     @MockitoBean private AdminMarketChainService adminMarketChainService;
@@ -436,7 +440,7 @@ class AdminControllerTest {
         var row = new AdminReceiptSummaryResponse(summary, owner, UnidadeFederativa.RS, LocalDateTime.now(),
                 "receipt.parse.failed:no-items-found", "Não foi possível extrair os dados da NFC-e.");
         Page<AdminReceiptSummaryResponse> page = new PageImpl<>(List.of(row));
-        when(adminReceiptService.list(any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(Pageable.class)))
+        when(adminReceiptService.list(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(Pageable.class)))
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/v1/admin/receipts")
@@ -458,7 +462,7 @@ class AdminControllerTest {
 
     @Test
     void receiptStats_returnsCountAndTotal() throws Exception {
-        when(adminReceiptService.stats(any(), any(), any(), any(), any(), any(), any(), any(), any(), eq(false)))
+        when(adminReceiptService.stats(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), eq(false)))
                 .thenReturn(new AdminReceiptStatsResponse(12, new BigDecimal("3456.78")));
 
         mockMvc.perform(get("/api/v1/admin/receipts/stats")

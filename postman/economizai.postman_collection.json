@@ -909,6 +909,85 @@
 					"response": []
 				},
 				{
+					"name": "Store review prompt \u2014 eligibility",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('status 200', () => pm.response.to.have.status(200));",
+									"const body = pm.response.json();",
+									"pm.test('has eligible + reason', () => { pm.expect(body).to.have.property('eligible'); pm.expect(body.reason).to.be.a('string'); });"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/store-review-prompt",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"store-review-prompt"
+							]
+						},
+						"description": "Whether the app may show the native store-rating dialog now. eligible=true only when the user has >= N confirmed notas (default 2), no failed nota in the last 7 days, fewer than 3 prompts ever and no prompt in the last 90 days. `reason` is a machine key (ok | not_enough_receipts | recent_failure | max_prompts_reached | cooldown)."
+					},
+					"response": []
+				},
+				{
+					"name": "Store review prompt \u2014 mark prompted",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('status 200', () => pm.response.to.have.status(200));",
+									"pm.test('status ok', () => pm.expect(pm.response.json().status).to.eql('ok'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/store-review-prompt",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"store-review-prompt"
+							]
+						},
+						"description": "Records that the app called the native rating dialog (the OS never says whether it was shown). Increments the per-user prompt count and starts the cooldown."
+					},
+					"response": []
+				},
+				{
 					"name": "Set phone number (sends OTP)",
 					"request": {
 						"method": "PATCH",
@@ -4871,6 +4950,33 @@
 					"response": []
 				},
 				{
+					"name": "In-store reference price (household states \u2192 national)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/price-index/products/{{e2eProductId}}/in-store-reference",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"price-index",
+								"products",
+								"{{e2eProductId}}",
+								"in-store-reference"
+							]
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "Best markets for a product",
 					"request": {
 						"method": "GET",
@@ -5759,7 +5865,7 @@
 					},
 					"response": []
 				},
-								{
+				{
 					"name": "Edit custom category",
 					"request": {
 						"method": "PATCH",
@@ -5793,7 +5899,7 @@
 					},
 					"response": []
 				},
-{
+				{
 					"name": "Migrate products into a category",
 					"request": {
 						"method": "POST",
@@ -8539,6 +8645,52 @@
 					]
 				},
 				{
+					"name": "27a2. In-store reference price (states \u2192 national, k-anon protected)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/price-index/products/{{e2eProductId}}/in-store-reference",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"price-index",
+								"products",
+								"{{e2eProductId}}",
+								"in-store-reference"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id \u2014 skipping'); return; }",
+									"pm.test('Returns 200 (200 even when k-anon hides data)', function () { pm.response.to.have.status(200); });",
+									"var d = pm.response.json();",
+									"pm.test('Has scope + states + reference counts', function () {",
+									"    pm.expect(['STATE', 'NATIONAL']).to.include(d.scope);",
+									"    pm.expect(d.states).to.be.an('array');",
+									"    pm.expect(d.reference).to.have.property('sampleCount');",
+									"    pm.expect(d.reference).to.have.property('distinctHouseholds');",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
 					"name": "27b. Deals \u2014 Ofertas pra voc\u00ea",
 					"request": {
 						"method": "GET",
@@ -10577,6 +10729,85 @@
 							}
 						}
 					]
+				},
+				{
+					"name": "COV: Store review prompt \u2014 eligibility",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('status 200', () => pm.response.to.have.status(200));",
+									"const body = pm.response.json();",
+									"pm.test('has eligible + reason', () => { pm.expect(body).to.have.property('eligible'); pm.expect(body.reason).to.be.a('string'); });"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/store-review-prompt",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"store-review-prompt"
+							]
+						},
+						"description": "Whether the app may show the native store-rating dialog now. eligible=true only when the user has >= N confirmed notas (default 2), no failed nota in the last 7 days, fewer than 3 prompts ever and no prompt in the last 90 days. `reason` is a machine key (ok | not_enough_receipts | recent_failure | max_prompts_reached | cooldown)."
+					},
+					"response": []
+				},
+				{
+					"name": "COV: Store review prompt \u2014 mark prompted",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('status 200', () => pm.response.to.have.status(200));",
+									"pm.test('status ok', () => pm.expect(pm.response.json().status).to.eql('ok'));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/store-review-prompt",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"store-review-prompt"
+							]
+						},
+						"description": "Records that the app called the native rating dialog (the OS never says whether it was shown). Increments the per-user prompt count and starts the cooldown."
+					},
+					"response": []
 				},
 				{
 					"name": "COV: Set phone number (sends OTP)",
