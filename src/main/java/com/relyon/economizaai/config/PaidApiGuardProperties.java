@@ -28,8 +28,9 @@ public class PaidApiGuardProperties {
     /** Max LLM enrichment batch calls per day (global worker, keyed on the system user row = null). */
     private int llmEnrichDailyCapPerUser = 200;
 
-    /** Max LLM vision photo-extractions per user per day. 0 or negative = unlimited. */
-    private int llmVisionDailyCapPerUser = 5;
+    /** Max LLM vision photo-extractions per user per day (counted PER PHOTO — a
+     *  multi-photo nota of 5 fotos consome 5 do cap). 0 or negative = unlimited. */
+    private int llmVisionDailyCapPerUser = 15;
 
     /** Max LLM HTML parse-rescues per user per day. 0 or negative = unlimited. */
     private int llmHtmlRescueDailyCapPerUser = 10;

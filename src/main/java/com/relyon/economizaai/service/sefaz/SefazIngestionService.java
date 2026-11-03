@@ -248,6 +248,12 @@ public class SefazIngestionService {
                     return rescued;
                 } catch (PaidApiQuotaExceededException | PaidApiBudgetExceededException | PaidApiUnavailableException guardEx) {
                     throw guardEx; // cap/budget/breaker — não é "sem suporte", propaga o motivo real
+                } catch (InfosimplesNoDataException noDataEx) {
+                    // Chave digitada errada (passa no DV) ou nota cancelada: falha determinística
+                    // do INPUT, não do caminho — alertar aqui queimaria o dedup 1×/UF/dia e
+                    // mascararia uma queda real do portal no resto do dia.
+                    log.info("sefaz.fetch.bare_chave.infosimples_no_data uf={} chave={}", uf, abbrev(chave));
+                    throw noDataEx;
                 } catch (RuntimeException infosimplesEx) {
                     log.warn("sefaz.fetch.bare_chave.infosimples_failed uf={} chave={} reason={}",
                             uf, abbrev(chave), describe(infosimplesEx));

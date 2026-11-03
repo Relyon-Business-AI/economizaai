@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.relyon.economizaai.model.enums.AiActivity;
 import com.relyon.economizaai.service.ai.AiGateway;
 import com.relyon.economizaai.exception.InvalidReceiptPhotoException;
+import com.relyon.economizaai.exception.PaidApiBudgetExceededException;
+import com.relyon.economizaai.exception.PaidApiQuotaExceededException;
 import com.relyon.economizaai.exception.PhotoExtractionUnavailableException;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
@@ -108,16 +110,33 @@ public class PhotoReceiptExtractionService {
         if (files == null || files.isEmpty()) {
             throw new InvalidReceiptPhotoException("receipt.photo.empty");
         }
-        var photos = files.size() > maxPhotos ? files.subList(0, maxPhotos) : files;
+        if (files.size() > maxPhotos) {
+            // Fail-fast: truncar silenciosamente perderia o fim da nota sem o usuário saber.
+            throw new InvalidReceiptPhotoException("receipt.photo.too-many", String.valueOf(maxPhotos));
+        }
+        var photos = files;
         subscriptionGate.require(user, Feature.PHOTO_EXTRACTION);
         receiptService.enforceMonthlyReceiptCap(user); // photo receipts count toward the FREE cap
+        // Validação determinística de TODAS as fotos ANTES da primeira chamada paga —
+        // uma foto inválida na posição N não pode custar N-1 chamadas de visão.
+        photos.forEach(photoUploadValidator::readImage);
 
         var receiptExtractions = new ArrayList<JsonNode>();
         var anyVisionCallSucceeded = false;
         for (var file : photos) {
-            photoUploadValidator.readImage(file); // size/format validation; bytes go to the LLM raw
-            paidApiGuard.assertUnderGlobalBudget();
-            paidApiGuard.assertWithinDailyCap(user.getId(), PaidApiService.LLM_VISION);
+            try {
+                paidApiGuard.assertUnderGlobalBudget();
+                paidApiGuard.assertWithinDailyCap(user.getId(), PaidApiService.LLM_VISION);
+            } catch (PaidApiQuotaExceededException | PaidApiBudgetExceededException capEx) {
+                if (!anyVisionCallSucceeded) {
+                    throw capEx; // nada foi pago ainda — o chamador recebe o 429/503 real
+                }
+                // Cap estourou NO MEIO do lote: o que já foi pago/extraído vira nota
+                // parcial em vez de ir pro lixo junto com um erro.
+                log.warn("photo_extract.cap_hit_mid_batch user={} extracted={} — seguindo com as fotos já pagas",
+                        user.getId(), receiptExtractions.size());
+                break;
+            }
             try {
                 // HTTP untransacted — a chamada de visão leva segundos. Anthropic (mesma
                 // infra do resto da IA): ledger/caps no AiGateway + ledger por-usuário aqui.

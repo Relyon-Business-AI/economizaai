@@ -74,7 +74,6 @@ public class AdminUserService {
     private static final Set<String> AGGREGATE_SORTS = Set.of("receiptCount", "totalSpend", "cost");
     private static final int AGGREGATE_SORT_CAP = 5000;
 
-    @Transactional(readOnly = true)
     /** Filtros da listagem de usuários — agrupados pra não estourar a assinatura. ufUserIds:
      *  null = sem filtro de UF; lista (possivelmente vazia) = ids cujo estado predominante bate. */
     private record UserFilters(String search, LocalDateTime createdFrom, LocalDateTime createdTo,
@@ -82,6 +81,7 @@ public class AdminUserService {
                                boolean includeInternal) {
     }
 
+    @Transactional(readOnly = true)
     public Page<AdminUserSummaryResponse> list(String search, LocalDateTime createdFrom, LocalDateTime createdTo,
                                                Platform platform, AcquisitionChannel channel, UnidadeFederativa uf,
                                                boolean includeInternal, Pageable pageable) {
