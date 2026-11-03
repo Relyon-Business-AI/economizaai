@@ -11,6 +11,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -323,6 +324,16 @@ public class GlobalExceptionHandler {
         log.warn("Method not allowed: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
                 .body(new ErrorResponse(HttpStatus.METHOD_NOT_ALLOWED.value(), message, LocalDateTime.now()));
+    }
+
+    /** Upload bigger than the multipart cap (e.g. várias fotos grandes somadas) — a clean 413
+     *  with a localized "envie menos fotos / qualidade menor", never the generic 500. */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleUploadTooLarge(MaxUploadSizeExceededException ex) {
+        var message = messageService.translate("error.upload.too.large");
+        log.warn("Upload rejected — request exceeds multipart cap: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(new ErrorResponse(HttpStatus.PAYLOAD_TOO_LARGE.value(), message, LocalDateTime.now()));
     }
 
     @ExceptionHandler(Exception.class)

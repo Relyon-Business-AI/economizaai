@@ -10,7 +10,9 @@ spring:
   servlet:
     multipart:
       max-file-size: 6MB     # leaves headroom over the app-level 5MB profile-picture cap
-      max-request-size: 8MB
+      # Request total must fit MULTIPLE item photos (até max-photos=5 × ~5MB cada +
+      # overhead) — uma nota longa fotografada em várias fotos vai toda num request só.
+      max-request-size: 40MB
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/economizai}
     username: ${DB_USERNAME:economizai}
