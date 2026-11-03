@@ -403,6 +403,12 @@ economizaai:
     enabled: true                              # master switch — disables all observation writes/reads
     min-households-for-public: 3               # k-anon: aggregate queries return empty until this many distinct households contributed
     min-observations-per-product-market: 5     # don't show reference price for (product, market) until enough samples
+    # GROCERY aggregates (best-markets, reference prices) relax to n=1 — same public fact the state
+    # "menor preço" portals publish from NFC-e; observed_at is day-truncated so observations can't be
+    # re-grouped into a receipt. Health products + PHARMACY stores keep the full K above (PrivacyTierResolver).
+    min-households-for-grocery: 1
+    min-observations-for-grocery: 1
+    sensitive-category-groups: saude           # category GROUP slugs that always keep the full K
     min-observations-for-community-promo: 10   # don't flag a community promo unless this much baseline exists
     community-promo-threshold-pct: 15          # current price < (median - X%) → community promo
     community-promo-recent-window-days: 7      # last N days = "recent" sample; older rows are baseline

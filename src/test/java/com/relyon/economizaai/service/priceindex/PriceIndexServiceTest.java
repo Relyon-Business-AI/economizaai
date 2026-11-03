@@ -9,8 +9,10 @@ import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.MerchantSegment;
 import com.relyon.economizaai.model.enums.ReceiptChannel;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
+import org.mockito.ArgumentCaptor;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository.ChainHouseholdCount;
 import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
@@ -37,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -54,6 +57,7 @@ class PriceIndexServiceTest {
     @Mock private MerchantSupportGate merchantSupportGate;
     @Mock private NotificationRuleEngine notificationRuleEngine;
     @Mock private ReceiptRepository receiptRepository;
+    @Mock private PrivacyTierResolver privacyTierResolver;
 
     private CollaborativeProperties properties;
     private PriceIndexService service;
@@ -62,8 +66,84 @@ class PriceIndexServiceTest {
     void setUp() {
         properties = new CollaborativeProperties();
         service = new PriceIndexService(observationRepository, auditRepository, properties,
-                marketLocationService, merchantSupportGate, notificationRuleEngine, receiptRepository);
+                marketLocationService, merchantSupportGate, notificationRuleEngine, receiptRepository,
+                privacyTierResolver);
         lenient().when(merchantSupportGate.contributesToIndex(any())).thenReturn(true);
+        // Default tier for these tests: the full K (3 households / 3 observations), i.e. the
+        // sensitive thresholds — the grocery-tier tests override it explicitly.
+        lenient().when(privacyTierResolver.thresholdsFor(anyBoolean()))
+                .thenReturn(new PrivacyTierResolver.Thresholds(3, 3));
+    }
+
+    @Test
+    void recordContributions_truncatesObservedAtToTheDay() {
+        var product = product();
+        var receipt = buildConfirmedReceipt(true, itemWithProduct(product, new BigDecimal("10")));
+        receipt.setIssuedAt(LocalDateTime.of(2026, 10, 30, 18, 42, 17));
+        var captor = ArgumentCaptor.forClass(PriceObservation.class);
+        when(observationRepository.save(captor.capture())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
+
+        service.recordContributions(receipt);
+
+        assertEquals(LocalDateTime.of(2026, 10, 30, 0, 0), captor.getValue().getObservedAt(),
+                "observedAt must carry day precision only — minute-exact stamps re-group a receipt");
+    }
+
+    @Test
+    void bestMarkets_groceryTierShowsASingleHouseholdChain() {
+        var productId = UUID.randomUUID();
+        var observations = List.of(obsAt(productId, "AAAAAAAA000111", "Loja", new BigDecimal("4.99")));
+        when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(observations);
+        when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
+                .thenReturn(List.of(chainCount("AAAAAAAA", 1L)));
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
+        when(privacyTierResolver.isSensitiveProduct(productId)).thenReturn(false);
+        when(privacyTierResolver.thresholdsFor(false)).thenReturn(new PrivacyTierResolver.Thresholds(1, 1));
+
+        var rows = service.bestMarkets(productId, 10, null, null, null, Set.of());
+
+        assertEquals(1, rows.size(), "grocery tier: n=1 is disclosable");
+        assertEquals(1L, rows.get(0).distinctHouseholds());
+        assertEquals(0, new BigDecimal("4.99").compareTo(rows.get(0).latestPrice()));
+    }
+
+    @Test
+    void bestMarkets_pharmacyChainKeepsTheFullKEvenForAGroceryProduct() {
+        var productId = UUID.randomUUID();
+        var observations = List.of(obsAt(productId, "PPPPPPPP000111", "Farmacia", new BigDecimal("4.99")));
+        when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(observations);
+        when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
+                .thenReturn(List.of(chainCount("PPPPPPPP", 1L)));
+        var pharmacy = MarketLocation.builder().cnpj("PPPPPPPP000111").cnpjRoot("PPPPPPPP")
+                .segment(MerchantSegment.PHARMACY).build();
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of("PPPPPPPP000111", pharmacy));
+        when(privacyTierResolver.isSensitiveProduct(productId)).thenReturn(false);
+        when(privacyTierResolver.thresholdsFor(true)).thenReturn(new PrivacyTierResolver.Thresholds(3, 3));
+
+        var rows = service.bestMarkets(productId, 10, null, null, null, Set.of());
+
+        assertTrue(rows.isEmpty(), "a pharmacy chain must stay under the full K");
+        verify(privacyTierResolver).thresholdsFor(true);
+        verify(privacyTierResolver, never()).thresholdsFor(false);
+    }
+
+    @Test
+    void inStoreReferencePrice_sensitiveProductUsesTheFullK() {
+        var productId = UUID.randomUUID();
+        var householdId = UUID.randomUUID();
+        when(receiptRepository.findConfirmedUfsForHousehold(householdId)).thenReturn(List.of());
+        when(observationRepository.findRecentByProduct(eq(productId), any()))
+                .thenReturn(List.of(obs(productId, new BigDecimal("8"))));
+        when(auditRepository.countDistinctInStoreHouseholdsForProduct(eq(productId), any())).thenReturn(1L);
+        when(privacyTierResolver.isSensitiveProduct(productId)).thenReturn(true);
+
+        var result = service.inStoreReferencePrice(productId, householdId);
+
+        assertTrue(result.reference().kAnonBlocked());
+        verify(privacyTierResolver).thresholdsFor(true);
+        // A sensitive product short-circuits the tier decision — no market lookup needed.
+        verify(marketLocationService, never()).findByCnpjs(any());
     }
 
     private Receipt buildConfirmedReceipt(boolean optIn, ReceiptItem... items) {

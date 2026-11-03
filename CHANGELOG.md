@@ -1,5 +1,22 @@
 # economizai — what's new
 
+## 2026-11-03 — k-anonimato por TIER: mercearia abre em n=1, saúde/farmácia mantém K=3
+Decisão do owner após revisar o risco real de LGPD. Um preço+dia de um item de mercearia numa
+loja é o mesmo fato público que os portais estaduais de "menor preço" publicam da NFC-e com
+n=1; o risco de reidentificação está em (a) reagrupar observações numa nota e (b) saúde.
+
+- **`observedAt` das observações agora tem precisão de DIA** (gravação + backfill V127).
+  Sem hora/minuto, ninguém consegue juntar as observações de uma loja numa única nota. Na
+  tela, "visto em" já era só dia/mês — nada muda visualmente.
+- **Agregados de mercearia** (`best-markets`, `in-store-reference`, `online-reference`,
+  `markets/{cnpj}/reference`) passam a usar `min-households-for-grocery=1` /
+  `min-observations-for-grocery=1`. Produtos do grupo **saúde** (`sensitive-category-groups`)
+  e qualquer observação vinda de loja **PHARMACY** continuam no K=3 / 5 obs de sempre.
+  Caminhos em forma de LISTA (admin, exports, painel do lojista, B2B) não mudam: K=3.
+- Efeito prático: em prod todos os ~290 produtos com observação em loja passam a ter ranking,
+  e o chip "N obs · 1 família" é honesto. Os textos "ao menos 3 famílias" da tela viram
+  "conforme a comunidade registra".
+
 ## 2026-11-03 — Pedido de avaliação na loja (in-app review) decidido pelo servidor
 O app pergunta ao backend se PODE abrir o diálogo nativo de avaliação (SKStoreReviewController /
 Play In-App Review) — a regra fica num lugar só e vale entre aparelhos.

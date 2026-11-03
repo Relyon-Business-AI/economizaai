@@ -1126,8 +1126,15 @@ Each `best-markets` row carries both an aggregate and a real value:
 `latestPrice` + `latestObservedAt` — the actual most-recent observed price in that
 chain and when it was seen. Show `latestPrice` + "visto em {latestObservedAt}" on the
 market card (a real number the shopper will roughly find, honestly dated); reserve
-the median for "usual price" contexts. Both are k-anon gated (row only appears with
-≥3 contributing households), so the real value never exposes a lone shopper.
+the median for "usual price" contexts.
+
+**k-anonymity is tiered (2026-11-03).** Grocery aggregates (`best-markets`,
+`in-store-reference`, `online-reference`, `markets/{cnpj}/reference`) disclose from
+**n=1** (`distinctHouseholds` may be 1 — render it honestly, never promise "3
+famílias"). `latestObservedAt`/`mostRecentAt` carry **day precision only**. Anything
+SENSITIVE keeps the full K=3 / min 5 observations: products in the health category
+group and observations from PHARMACY stores. List-shaped reads (admin, exports,
+merchant panel) always keep K=3.
 
 ### Barcode scan flow (scan → price nearby)
 

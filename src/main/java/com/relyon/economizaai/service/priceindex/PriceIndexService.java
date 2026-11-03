@@ -73,6 +73,7 @@ public class PriceIndexService {
     private final MerchantSupportGate merchantSupportGate;
     private final NotificationRuleEngine notificationRuleEngine;
     private final ReceiptRepository receiptRepository;
+    private final PrivacyTierResolver privacyTierResolver;
 
     @Transactional
     public int recordContributions(Receipt receipt) {
@@ -202,7 +203,9 @@ public class PriceIndexService {
                 .quantity(item.getQuantity())
                 .packSize(product.getPackSize())
                 .packUnit(product.getPackUnit())
-                .observedAt(receipt.getIssuedAt() != null ? receipt.getIssuedAt() : BrazilClock.nowDateTime())
+                // DAY precision on purpose: a minute-exact timestamp would let a reader re-group
+                // the observations of one store+moment back into a single household's receipt.
+                .observedAt(observationDay(receipt.getIssuedAt()))
                 .promoFlag(item.isNfcePromoFlag())
                 .normalizedUnitPrice(normalized.map(UnitConverter.NormalizedPrice::pricePerBaseUnit).orElse(null))
                 .normalizedUnit(normalized.map(n -> n.baseUnit().name()).orElse(null))
@@ -223,13 +226,35 @@ public class PriceIndexService {
 
     private record MarketSnapshot(String city, String state, String ibgeCityCode) {}
 
+    static LocalDateTime observationDay(LocalDateTime issuedAt) {
+        var moment = issuedAt != null ? issuedAt : BrazilClock.nowDateTime();
+        return moment.toLocalDate().atStartOfDay();
+    }
+
     @Transactional(readOnly = true)
     public ReferencePrice referencePrice(UUID productId, String marketCnpj) {
         if (!properties.getCollaborative().isEnabled()) return ReferencePrice.empty();
         var since = BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getLookbackDays());
         var observations = observationRepository.findRecentByProductAndMarket(productId, marketCnpj, since);
         return aggregateReference("reference_price", productId, observations,
-                () -> auditRepository.countDistinctHouseholdsForProductMarket(productId, marketCnpj, since));
+                () -> auditRepository.countDistinctHouseholdsForProductMarket(productId, marketCnpj, since),
+                thresholdsFor(productId, observations));
+    }
+
+    /**
+     * Thresholds for an aggregate over these observations: the full K when the product is
+     * sensitive (health) or any of the sellers is a pharmacy, the relaxed grocery tier otherwise.
+     */
+    private PrivacyTierResolver.Thresholds thresholdsFor(UUID productId, List<PriceObservation> observations) {
+        if (observations.isEmpty()) return privacyTierResolver.thresholdsFor(true);
+        var sensitive = privacyTierResolver.isSensitiveProduct(productId)
+                || PrivacyTierResolver.anySensitiveMarket(locationsOf(observations).values());
+        return privacyTierResolver.thresholdsFor(sensitive);
+    }
+
+    private Map<String, MarketLocation> locationsOf(List<PriceObservation> observations) {
+        var cnpjs = observations.stream().map(PriceObservation::getMarketCnpj).distinct().toList();
+        return marketLocationService.findByCnpjs(new ArrayList<>(cnpjs));
     }
 
     /**
@@ -243,7 +268,8 @@ public class PriceIndexService {
         var since = BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getLookbackDays());
         var observations = observationRepository.findRecentOnlineByProduct(productId, since);
         return aggregateReference("online_reference_price", productId, observations,
-                () -> auditRepository.countDistinctOnlineHouseholdsForProduct(productId, since));
+                () -> auditRepository.countDistinctOnlineHouseholdsForProduct(productId, since),
+                thresholdsFor(productId, observations));
     }
 
     /**
@@ -261,14 +287,16 @@ public class PriceIndexService {
                 .map(Enum::name)
                 .toList();
         if (!states.isEmpty()) {
-            var regional = aggregateReference("in_store_reference_price.state", productId,
-                    observationRepository.findRecentByProductAndStates(productId, states, since),
-                    () -> auditRepository.countDistinctInStoreHouseholdsForProductInStates(productId, states, since));
+            var regionalObservations = observationRepository.findRecentByProductAndStates(productId, states, since);
+            var regional = aggregateReference("in_store_reference_price.state", productId, regionalObservations,
+                    () -> auditRepository.countDistinctInStoreHouseholdsForProductInStates(productId, states, since),
+                    thresholdsFor(productId, regionalObservations));
             if (regional.hasData()) return new InStoreReferencePrice(ReferenceScope.STATE, states, regional);
         }
-        var national = aggregateReference("in_store_reference_price.national", productId,
-                observationRepository.findRecentByProduct(productId, since),
-                () -> auditRepository.countDistinctInStoreHouseholdsForProduct(productId, since));
+        var nationalObservations = observationRepository.findRecentByProduct(productId, since);
+        var national = aggregateReference("in_store_reference_price.national", productId, nationalObservations,
+                () -> auditRepository.countDistinctInStoreHouseholdsForProduct(productId, since),
+                thresholdsFor(productId, nationalObservations));
         return new InStoreReferencePrice(ReferenceScope.NATIONAL, List.of(), national);
     }
 
@@ -280,12 +308,12 @@ public class PriceIndexService {
      */
     private ReferencePrice aggregateReference(String logTag, UUID productId,
                                               List<PriceObservation> observations,
-                                              LongSupplier distinctHouseholdCounter) {
+                                              LongSupplier distinctHouseholdCounter,
+                                              PrivacyTierResolver.Thresholds thresholds) {
         var distinctHouseholds = observations.isEmpty() ? 0L : distinctHouseholdCounter.getAsLong();
-        if (observations.size() < properties.getCollaborative().getMinObservationsPerProductMarket()
-                || distinctHouseholds < properties.getCollaborative().getMinHouseholdsForPublic()) {
-            log.debug("{}.kanon_blocked product={} samples={} households={}",
-                    logTag, productId, observations.size(), distinctHouseholds);
+        if (thresholds.blocks(observations.size(), distinctHouseholds)) {
+            log.debug("{}.kanon_blocked product={} samples={} households={} minHouseholds={}",
+                    logTag, productId, observations.size(), distinctHouseholds, thresholds.minHouseholds());
             return new ReferencePrice(null, null, null, observations.size(), distinctHouseholds, null, true);
         }
         var prices = observations.stream().map(PriceObservation::getUnitPrice).toList();
@@ -320,10 +348,12 @@ public class PriceIndexService {
         var locations = marketLocationService.findByCnpjs(new ArrayList<>(storeCnpjs));
         var householdsByChain = auditRepository.countDistinctHouseholdsForProductByChain(productId, since).stream()
                 .collect(Collectors.toMap(ChainHouseholdCount::getCnpjRoot, ChainHouseholdCount::getHouseholds));
+        var sensitiveProduct = privacyTierResolver.isSensitiveProduct(productId);
 
         return byChain.entrySet().stream()
                 .map(entry -> toChainRow(entry.getKey(), entry.getValue(),
-                        householdsByChain.getOrDefault(entry.getKey(), 0L), locations, viewer))
+                        householdsByChain.getOrDefault(entry.getKey(), 0L), locations, viewer,
+                        chainThresholds(sensitiveProduct, entry.getValue(), locations)))
                 .filter(Objects::nonNull)
                 .sorted(Comparator
                         .comparing(MarketPriceRow::watching, Comparator.reverseOrder())
@@ -347,10 +377,18 @@ public class PriceIndexService {
      * too few observations, fails k-anonymity, or (when a radius is set) none of its
      * stores is in range or watched.
      */
+    private PrivacyTierResolver.Thresholds chainThresholds(boolean sensitiveProduct, List<PriceObservation> rows,
+                                                           Map<String, MarketLocation> locations) {
+        var pharmacyInChain = rows.stream()
+                .map(observation -> locations.get(observation.getMarketCnpj()))
+                .anyMatch(PrivacyTierResolver::isSensitiveMarket);
+        return privacyTierResolver.thresholdsFor(sensitiveProduct || pharmacyInChain);
+    }
+
     private MarketPriceRow toChainRow(String cnpjRoot, List<PriceObservation> rows, long distinctHouseholds,
-                                      Map<String, MarketLocation> locations, Viewer viewer) {
-        if (rows.size() < properties.getCollaborative().getMinObservationsPerProductMarket()) return null;
-        if (distinctHouseholds < properties.getCollaborative().getMinHouseholdsForPublic()) return null;
+                                      Map<String, MarketLocation> locations, Viewer viewer,
+                                      PrivacyTierResolver.Thresholds thresholds) {
+        if (thresholds.blocks(rows.size(), distinctHouseholds)) return null;
         var displayStore = pickDisplayStore(rows, locations, viewer);
         if (displayStore == null) return null;
         var prices = rows.stream().map(PriceObservation::getUnitPrice).toList();
