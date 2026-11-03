@@ -139,6 +139,11 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
      */
     long countByUserIdAndCreatedAtGreaterThanEqual(UUID userId, LocalDateTime since);
 
+    long countByUserIdAndStatus(UUID userId, ReceiptStatus status);
+
+    long countByUserIdAndStatusInAndUpdatedAtGreaterThanEqual(UUID userId, Collection<ReceiptStatus> statuses,
+                                                              LocalDateTime since);
+
     long countByHouseholdIdAndStatusAndConfirmedAtAfter(UUID householdId, ReceiptStatus status, LocalDateTime since);
 
     // --- Admin metrics: internal-account filter ---

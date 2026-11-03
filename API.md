@@ -215,6 +215,14 @@ GET    /api/v1/users/me/export          → LGPD data export (ALL personal data:
 PATCH  /api/v1/users/me/contribution    { "contributionOptIn": false }   ← LGPD opt-out from collaborative panel
 PATCH  /api/v1/users/me/location        { "latitude": -30.0277, "longitude": -51.2287 }
 PATCH  /api/v1/users/me/push-token      { "pushDeviceToken": "<FCM>" }   ← null/empty to clear
+GET    /api/v1/users/me/store-review-prompt  → { "eligible": true, "reason": "ok" }
+       ← may the app show the native store-rating dialog NOW? true only on a positive moment:
+         >= 2 confirmed notas, no failed nota (FAILED_PARSE/CONTINGENCY_PENDING/NEEDS_DEVICE_FETCH)
+         in the last 7 days, < 3 prompts ever, none in the last 90 days.
+         reason (machine key, never rendered): ok | not_enough_receipts | recent_failure |
+         max_prompts_reached | cooldown
+POST   /api/v1/users/me/store-review-prompt  → { "status": "ok" }
+       ← call right after StoreReview.requestReview(); counts the prompt + starts the cooldown
 PATCH  /api/v1/users/me/phone           { "phoneNumber": "+5551999999999" }  → 204 (E.164; sends a 6-digit OTP via SMS)
 POST   /api/v1/users/me/phone/verify    { "code": "123456" }                 → 204 (400 on wrong/expired code)
 GET    /api/v1/users/me/notification-preferences

@@ -548,6 +548,15 @@ economizaai:
       access-key: ${R2_ACCESS_KEY_ID:}
       secret-key: ${R2_SECRET_ACCESS_KEY:}
       region: ${R2_REGION:auto}
+  store-review:
+    # Native in-app rating prompt (GET/POST /users/me/store-review-prompt). The app asks
+    # only on a POSITIVE moment: the user just confirmed their Nth nota and had no failed
+    # nota in the lookback window. Each prompt is counted server-side (the OS never says
+    # whether it showed the dialog) and capped/cooled down across devices.
+    min-confirmed-receipts: ${STORE_REVIEW_MIN_CONFIRMED_RECEIPTS:2}
+    failure-lookback-days: ${STORE_REVIEW_FAILURE_LOOKBACK_DAYS:7}
+    max-prompts: ${STORE_REVIEW_MAX_PROMPTS:3}
+    cooldown-days: ${STORE_REVIEW_COOLDOWN_DAYS:90}
   chain-logo:
     storage: ${CHAIN_LOGO_STORAGE:local}
     local-dir: ${CHAIN_LOGO_DIR:/tmp/economizai/chain-logos}

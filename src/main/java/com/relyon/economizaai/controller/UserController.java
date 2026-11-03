@@ -15,6 +15,7 @@ import com.relyon.economizaai.dto.request.VerifyPhoneRequest;
 import com.relyon.economizaai.dto.response.DigestPreferencesResponse;
 import com.relyon.economizaai.dto.response.NotificationPreferenceResponse;
 import com.relyon.economizaai.dto.response.SavingsSummaryResponse;
+import com.relyon.economizaai.dto.response.StoreReviewPromptResponse;
 import com.relyon.economizaai.dto.response.SubscriptionStatusResponse;
 import com.relyon.economizaai.dto.response.UserDataExportResponse;
 import com.relyon.economizaai.dto.response.UserResponse;
@@ -28,6 +29,7 @@ import com.relyon.economizaai.service.notifications.NotificationPreferenceServic
 import com.relyon.economizaai.service.notifications.SavingsService;
 import com.relyon.economizaai.service.notifications.WhatsAppOptInService;
 import com.relyon.economizaai.service.profile.ProfilePictureService;
+import com.relyon.economizaai.service.profile.StoreReviewPromptService;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -64,6 +66,7 @@ public class UserController {
     private final SavingsService savingsService;
     private final SubscriptionService subscriptionService;
     private final WhatsAppOptInService whatsAppOptInService;
+    private final StoreReviewPromptService storeReviewPromptService;
 
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getProfile(@AuthenticationPrincipal User user) {
@@ -106,6 +109,17 @@ public class UserController {
     public ResponseEntity<Map<String, String>> updatePushToken(@AuthenticationPrincipal User user,
                                                                @Valid @RequestBody UpdatePushTokenRequest request) {
         notificationPreferenceService.updatePushToken(user, request);
+        return ResponseEntity.ok(Map.of("status", "ok"));
+    }
+
+    @GetMapping("/me/store-review-prompt")
+    public ResponseEntity<StoreReviewPromptResponse> storeReviewPrompt(@AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(storeReviewPromptService.evaluate(user));
+    }
+
+    @PostMapping("/me/store-review-prompt")
+    public ResponseEntity<Map<String, String>> storeReviewPrompted(@AuthenticationPrincipal User user) {
+        storeReviewPromptService.recordPrompted(user);
         return ResponseEntity.ok(Map.of("status", "ok"));
     }
 

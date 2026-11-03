@@ -22,6 +22,8 @@ import com.relyon.economizaai.service.auth.PhoneVerificationService;
 import com.relyon.economizaai.service.notifications.NotificationPreferenceService;
 import com.relyon.economizaai.service.notifications.SavingsService;
 import com.relyon.economizaai.service.profile.ProfilePictureService;
+import com.relyon.economizaai.service.profile.StoreReviewPromptService;
+import com.relyon.economizaai.dto.response.StoreReviewPromptResponse;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
 import com.relyon.economizaai.service.notifications.WhatsAppOptInService;
 import org.junit.jupiter.api.Test;
@@ -65,6 +67,7 @@ class UserControllerCoverageTest {
     @MockitoBean private LocalizedMessageService localizedMessageService;
     @MockitoBean private NotificationPreferenceService notificationPreferenceService;
     @MockitoBean private ProfilePictureService profilePictureService;
+    @MockitoBean private StoreReviewPromptService storeReviewPromptService;
     @MockitoBean private EmailVerificationService emailVerificationService;
     @MockitoBean private PhoneVerificationService phoneVerificationService;
     @MockitoBean private JwtService jwtService;
@@ -136,6 +139,29 @@ class UserControllerCoverageTest {
                 .andExpect(jsonPath("$.status").value("ok"));
 
         verify(notificationPreferenceService).updatePushToken(any(User.class), any(UpdatePushTokenRequest.class));
+    }
+
+    @Test
+    void storeReviewPrompt_returnsEligibility() throws Exception {
+        when(storeReviewPromptService.evaluate(any(User.class)))
+                .thenReturn(StoreReviewPromptResponse.blocked("recent_failure"));
+
+        mockMvc.perform(get("/api/v1/users/me/store-review-prompt")
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.eligible").value(false))
+                .andExpect(jsonPath("$.reason").value("recent_failure"));
+    }
+
+    @Test
+    void storeReviewPrompted_recordsAndReturnsOk() throws Exception {
+        mockMvc.perform(post("/api/v1/users/me/store-review-prompt")
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal()))
+                        .with(SecurityMockMvcRequestPostProcessors.csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ok"));
+
+        verify(storeReviewPromptService).recordPrompted(any(User.class));
     }
 
     @Test

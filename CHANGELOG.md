@@ -1,5 +1,19 @@
 # economizai — what's new
 
+## 2026-11-03 — Pedido de avaliação na loja (in-app review) decidido pelo servidor
+O app pergunta ao backend se PODE abrir o diálogo nativo de avaliação (SKStoreReviewController /
+Play In-App Review) — a regra fica num lugar só e vale entre aparelhos.
+
+- **`GET /users/me/store-review-prompt`** → `{ eligible, reason }`. `eligible=true` só num
+  momento positivo: **≥ 2 notas confirmadas**, **nenhuma nota falhada nos últimos 7 dias**
+  (FAILED_PARSE / CONTINGENCY_PENDING / NEEDS_DEVICE_FETCH), menos de 3 pedidos no total e
+  nenhum nos últimos 90 dias. `reason` é chave de máquina (`ok`, `not_enough_receipts`,
+  `recent_failure`, `max_prompts_reached`, `cooldown`) — só pra telemetria, não renderizar.
+- **`POST /users/me/store-review-prompt`** → registra que o app chamou o diálogo (o SO nunca
+  diz se mostrou). Incrementa o contador e inicia o cooldown.
+- Fluxo no app: logo após **confirmar a nota** (tela de revisão) → GET → se elegível,
+  `requestReview()` → POST. Limites ajustáveis por env (`STORE_REVIEW_*`).
+
 ## 2026-11-03 — "Melhores preços" por REDE + janela de 180 dias + preço típico em loja (fallback)
 Com 72 famílias ativas espalhadas por muitas lojas, NENHUM par produto×loja passava o
 k-anonimato nos 90 dias — a tela ficava "Dados insuficientes" pra todo produto. Três mudanças:
