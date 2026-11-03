@@ -1,5 +1,15 @@
 # economizai — what's new
 
+## 2026-11-03 — Foto de itens: >5 fotos agora é 400 (antes truncava em silêncio)
+- `POST /receipts/items-photo`: mandar mais fotos que o máximo (5) retorna **400**
+  com a chave `receipt.photo.too-many` em vez de truncar silenciosamente e perder o
+  fim da nota. O FE espelha o limite no scanner (aviso ao bater 5 fotos).
+- Validação de formato/tamanho roda em TODAS as fotos **antes** da primeira chamada
+  de visão (foto inválida não desperdiça as anteriores); cap diário de visão 5 → **15
+  fotos/dia** (`LLM_VISION_DAILY_CAP`); cap estourado no meio do lote devolve nota
+  parcial com as fotos já processadas.
+
+
 ## 2026-11-03 — k-anonimato por TIER: mercearia abre em n=1, saúde/farmácia mantém K=3
 Decisão do owner após revisar o risco real de LGPD. Um preço+dia de um item de mercearia numa
 loja é o mesmo fato público que os portais estaduais de "menor preço" publicam da NFC-e com

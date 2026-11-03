@@ -110,7 +110,7 @@ GitHub repo: `economizaai` (https://github.com/Relyon-Business-AI/economizaai.gi
 ### Privacy & Anonymization (LGPD)
 - `PriceObservation` (the collaborative index atom) **must never carry user_id** in its primary table
 - Audit trail (which receipt produced which observation) lives in a separate, internal-only join table
-- Aggregate queries exposed publicly or to B2B clients enforce **k-anonymity** (start K=3) at the query layer
+- Aggregate queries exposed publicly or to B2B clients enforce **k-anonymity at the query layer, by TIER** (owner decision 2026-11-03): grocery aggregates may disclose at n=1 household (same public fact the state menor-preço portals publish; `observedAt` is day-truncated so observations can't be regrouped into one receipt), while **health-group products and PHARMACY stores keep K=3** (fail-closed: unknown product/segment counts as sensitive). LIST-shaped reads (admin, exports, merchant panel, B2B) stay K=3.
 - CPF, when present on receipts, is stripped before raw HTML is persisted (regex sweep on the snapshot)
 - Any new endpoint that exposes aggregated data must have a test asserting k-anonymity holds
 
