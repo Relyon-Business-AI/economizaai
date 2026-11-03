@@ -5,8 +5,13 @@
 existentes), tirando-os da fila de revisão e marcando-os à parte. As notas de
 posto ficam guardadas normalmente — um backfill (mesmo mecanismo do botão
 "Mercado") gera as observações retroativas quando a feature nascer.
-Mockups de referência mostrados ao dono em 2026-11-03 (home com tile
-"Combustível", tela de comparação por combustível, detalhe do posto).
+
+**Mockups (2026-11-03) em `docs/mockups/` — decisão de UX em aberto com a FE dev:**
+- `fuel-variante-a-tile.html` — entrada por TILE grande "Combustível" na home.
+- `fuel-variante-b-chips.html` — escopo discreto por CHIPS no card de gasto
+  (`Mercado · Farmácia · Combustível · Tudo`) + atalho pill na tela Mercados.
+  As telas internas (comparação por combustível + detalhe do posto) são iguais
+  nas duas variantes e já foram aprovadas pelo dono. Abrir direto no navegador.
 
 ## Por que vale
 - Muita gente já escaneia nota de posto (observação do dono na moderação).
