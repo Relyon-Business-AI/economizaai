@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Lente Combustível — telas finais</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --green:#14BA5E;--green-dark:#0E9A4D;--green-soft:#DFF5E8;--green-tint:#F1FCF6;
+    --white:#fff;--snow:#F9FAFB;--cloud:#F3F4F6;--ink:#111827;--ink-muted:#6B7280;--ink-faint:#9CA3AF;
+    --line:#E5E7EB;--amber:#F59E0B;--citron:#C5D86D;--gold:#FFC53A;--coral:#EE6C4D;--sky:#57C4E5;
+    --font:'Inter',sans-serif;--display:'Plus Jakarta Sans',sans-serif;
+  }
+  body{margin:0;background:#E8EAEE;font-family:var(--font);display:flex;gap:22px;padding:22px;align-items:flex-start;flex-wrap:wrap}
+  .phone{width:360px;background:var(--white);border-radius:32px;box-shadow:0 16px 44px rgba(17,24,39,.18);overflow:hidden;border:6px solid #0f172a}
+  .screen{background:var(--snow);min-height:660px;position:relative;padding-bottom:64px}
+  .mock-label{font-family:var(--display);font-weight:800;font-size:14px;color:#334155;text-align:center;margin:8px 0 6px;max-width:360px}
+  .hero{background:var(--green);padding:26px 18px 18px;color:#fff}
+  .brandrow{display:flex;justify-content:space-between;align-items:flex-start}
+  .brand{font-family:var(--display);font-weight:800;font-size:22px}
+  .ola{font-size:13px;opacity:.95;margin-top:2px}
+  .roundicons{display:flex;gap:8px}
+  .roundicons div{width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.25);display:grid;place-items:center;font-size:14px}
+  .gastorow{display:flex;justify-content:space-between;align-items:center;margin-top:16px}
+  .gastolabel{font-size:11px;font-weight:700;letter-spacing:.08em}
+  .period{display:flex;background:rgba(255,255,255,.22);border-radius:999px;padding:2px;gap:2px}
+  .period div{font-size:11px;font-weight:600;padding:4px 9px;border-radius:999px;color:#fff}
+  .period .on{background:#fff;color:var(--green-dark)}
+  .lens{display:inline-flex;align-items:center;gap:6px;margin-top:11px;background:#fff;color:var(--green-dark);border-radius:999px;padding:5px 12px;font-size:12px;font-weight:700}
+  .valor{font-family:var(--display);font-weight:800;font-size:34px;margin-top:6px}
+  .subcard{background:rgba(255,255,255,.2);border-radius:14px;display:flex;margin-top:12px;padding:10px 0}
+  .subcard div{flex:1;text-align:center}
+  .subcard b{font-family:var(--display);font-size:16px;display:block}
+  .subcard small{font-size:10px;opacity:.9}
+  .catcard{background:var(--white);margin:12px 14px 10px;border-radius:16px;padding:12px 14px;box-shadow:0 1px 3px rgba(17,24,39,.05)}
+  .catcard .h{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
+  .catcard .h b{font-family:var(--display)}
+  .catcard .h a{color:var(--green-dark);font-weight:700;text-decoration:none;font-size:12px}
+  .bar-row{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px}
+  .bar-row .lbl{width:118px;color:var(--ink-muted)}
+  .bar-track{flex:1;height:8px;background:var(--cloud);border-radius:4px;overflow:hidden}
+  .bar-fill{height:100%;border-radius:4px;background:var(--amber)}
+  .bar-row b{font-family:var(--display);font-size:12px;width:72px;text-align:right}
+  .row{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:8px 0;border-bottom:1px solid var(--cloud)}
+  .row .nm{font-weight:600;color:var(--ink)}
+  .row .sub{font-size:11px;color:var(--ink-faint);margin-top:1px}
+  .row b{font-family:var(--display)}
+  .cta{margin:0 14px 10px;background:var(--white);border:1px solid var(--green-soft);border-radius:14px;padding:12px 14px;font-size:12.5px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 3px rgba(17,24,39,.05)}
+  .cta b{color:var(--green-dark)}
+  .tabbar{display:flex;background:var(--white);border-top:1px solid var(--line);padding:7px 6px 12px;position:absolute;bottom:0;left:0;right:0}
+  .tabbar div{flex:1;text-align:center;font-size:9.5px;color:var(--ink-faint)}
+  .tabbar .on{color:var(--green-dark);font-weight:700}
+  .tabbar span{display:block;font-size:15px}
+  .wrap{display:flex;flex-direction:column;align-items:center}
+  .note{font-size:11px;color:#64748b;max-width:340px;text-align:center;margin-top:6px;line-height:1.5}
+  /* tela Notas */
+  .pagehead{display:flex;justify-content:space-between;align-items:center;padding:18px 16px 8px}
+  .pagehead h3{font-family:var(--display);font-size:19px;margin:0;color:var(--ink)}
+  .mini-lens{display:inline-flex;align-items:center;gap:5px;background:var(--green-tint);border:1px solid var(--green-soft);color:var(--green-dark);border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:700}
+  .searchbar{margin:4px 14px 10px;background:var(--white);border:1px solid var(--line);border-radius:12px;padding:9px 12px;font-size:12.5px;color:var(--ink-faint)}
+  .nota-card{background:var(--white);margin:0 14px 10px;border-radius:14px;padding:12px 14px;box-shadow:0 1px 3px rgba(17,24,39,.05)}
+  .nota-card .top{display:flex;justify-content:space-between;font-size:13px}
+  .nota-card .top b{font-family:var(--display)}
+  .nota-card .sub{font-size:11px;color:var(--ink-faint);margin-top:3px}
+  .chip-ok{display:inline-block;background:var(--green-soft);color:var(--green-dark);border-radius:999px;font-size:10px;font-weight:700;padding:2px 8px}
+</style>
+</head>
+<body>
+
+<!-- 1. HOME sob lente Combustível (hoje) -->
+<div class="wrap">
+  <div class="mock-label">1 · Home — lente ⛽ ativa (extrato, sem tiles)</div>
+  <div class="phone"><div class="screen">
+    <div class="hero">
+      <div class="brandrow"><div><div class="brand">Economiza AI</div><div class="ola">Olá, Teste</div></div><div class="roundicons"><div>🔔</div><div>👤</div></div></div>
+      <div class="gastorow"><div class="gastolabel">GASTO ESTE MÊS — COMBUSTÍVEL</div><div class="period"><div class="on">Este mês</div><div>Mês passado</div><div>Tudo</div></div></div>
+      <div class="lens">⛽ Combustível ▾</div>
+      <div class="valor">R$ 418,70</div>
+      <div class="subcard"><div><b>2</b><small>notas</small></div><div><b>R$ 209,35</b><small>média por compra</small></div></div>
+    </div>
+
+    <div class="catcard">
+      <div class="h"><b>Por categoria</b><a>Ver todas ›</a></div>
+      <div class="bar-row"><span class="lbl">Gasolina comum</span><div class="bar-track"><div class="bar-fill" style="width:88%"></div></div><b>R$ 368,70</b></div>
+      <div class="bar-row"><span class="lbl">Lubrif. e aditivos</span><div class="bar-track"><div class="bar-fill" style="width:12%;opacity:.7"></div></div><b>R$ 50,00</b></div>
+    </div>
+
+    <div class="catcard">
+      <div class="h"><b>Últimas notas</b><a>Ver todas ›</a></div>
+      <div class="row"><div><div class="nm">Posto Ipiranga Protásio</div><div class="sub">ontem · 36,2 L</div></div><b>R$ 212,40</b></div>
+      <div class="row" style="border-bottom:none"><div><div class="nm">Shell Av. Assis Brasil</div><div class="sub">12 out · 35,1 L</div></div><b>R$ 206,30</b></div>
+    </div>
+
+    <div class="tabbar"><div class="on"><span>🏠</span>Início</div><div><span>🧾</span>Notas</div><div><span>▣</span></div><div><span>🛍️</span>Produtos</div><div><span>⚙️</span>Ajustes</div></div>
+  </div></div>
+  <div class="note">Mesma home, lente pura: muda o rótulo ("— COMBUSTÍVEL"), os números e as categorias (folhas da taxonomia de combustível). A faixa de tiles some em bloco — a tela vira o extrato limpo do segmento.</div>
+</div>
+
+<!-- 2. NOTAS com indicador compacto -->
+<div class="wrap">
+  <div class="mock-label">2 · Notas — contexto mantido, indicador compacto</div>
+  <div class="phone"><div class="screen" style="background:var(--snow)">
+    <div style="height:30px;background:var(--white)"></div>
+    <div class="pagehead"><h3>Notas</h3><span class="mini-lens">⛽ Combustível ▾</span></div>
+    <div class="searchbar">🔍 Buscar por mercado ou produto…</div>
+    <div class="nota-card">
+      <div class="top"><span>Posto Ipiranga Protásio</span><b>R$ 212,40</b></div>
+      <div class="sub">ontem · 1 item · <span class="chip-ok">confirmada</span></div>
+    </div>
+    <div class="nota-card">
+      <div class="top"><span>Shell Av. Assis Brasil</span><b>R$ 206,30</b></div>
+      <div class="sub">12 out · 2 itens · <span class="chip-ok">confirmada</span></div>
+    </div>
+    <div style="text-align:center;color:var(--ink-faint);font-size:11.5px;margin-top:14px">Só notas de combustível — toque em ⛽ pra trocar a lente</div>
+    <div class="tabbar"><div><span>🏠</span>Início</div><div class="on"><span>🧾</span>Notas</div><div><span>▣</span></div><div><span>🛍️</span>Produtos</div><div><span>⚙️</span>Ajustes</div></div>
+  </div></div>
+  <div class="note">Naveguei da home pra Notas: a lente VEIO JUNTO (global). O sheet não é duplicado — o indicador compacto no topo mostra/troca a lente. Tela idêntica à de sempre, só filtrada.</div>
+</div>
+
+<!-- 3. HOME lente combustível no FUTURO (com satélite) -->
+<div class="wrap">
+  <div class="mock-label">3 · Mesma tela, no futuro — único acréscimo</div>
+  <div class="phone"><div class="screen">
+    <div class="hero">
+      <div class="brandrow"><div><div class="brand">Economiza AI</div><div class="ola">Olá, Teste</div></div><div class="roundicons"><div>🔔</div><div>👤</div></div></div>
+      <div class="gastorow"><div class="gastolabel">GASTO ESTE MÊS — COMBUSTÍVEL</div><div class="period"><div class="on">Este mês</div><div>Mês passado</div><div>Tudo</div></div></div>
+      <div class="lens">⛽ Combustível ▾</div>
+      <div class="valor">R$ 418,70</div>
+      <div class="subcard"><div><b>2</b><small>notas</small></div><div><b>R$ 209,35</b><small>média por compra</small></div></div>
+    </div>
+
+    <div class="cta"><span>⛽ <b>Gasolina a R$ 5,79/L</b> perto de você — compare postos</span><b>›</b></div>
+
+    <div class="catcard">
+      <div class="h"><b>Por categoria</b><a>Ver todas ›</a></div>
+      <div class="bar-row"><span class="lbl">Gasolina comum</span><div class="bar-track"><div class="bar-fill" style="width:88%"></div></div><b>R$ 368,70</b></div>
+      <div class="bar-row"><span class="lbl">Lubrif. e aditivos</span><div class="bar-track"><div class="bar-fill" style="width:12%;opacity:.7"></div></div><b>R$ 50,00</b></div>
+    </div>
+
+    <div class="catcard">
+      <div class="h"><b>Últimas notas</b><a>Ver todas ›</a></div>
+      <div class="row"><div><div class="nm">Posto Ipiranga Protásio</div><div class="sub">ontem · 36,2 L</div></div><b>R$ 212,40</b></div>
+      <div class="row" style="border-bottom:none"><div><div class="nm">Shell Av. Assis Brasil</div><div class="sub">12 out · 35,1 L</div></div><b>R$ 206,30</b></div>
+    </div>
+
+    <div class="tabbar"><div class="on"><span>🏠</span>Início</div><div><span>🧾</span>Notas</div><div><span>▣</span></div><div><span>🛍️</span>Produtos</div><div><span>⚙️</span>Ajustes</div></div>
+  </div></div>
+  <div class="note">Quando a comparação de postos existir: UM card contextual entra no extrato (e leva pra tela satélite com as abas gasolina/etanol que você já aprovou). Nada mais muda.</div>
+</div>
+
+</body>
+</html>
