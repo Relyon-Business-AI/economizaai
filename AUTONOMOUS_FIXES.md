@@ -73,6 +73,30 @@ A rollback looks like:
 
 <!-- AUTONOMOUS ENTRIES BELOW - newest first. The watchdog inserts here. -->
 
+### [2026-11-03 13:11:50] [NEEDS-HUMAN] NO-TESTREF - E2E: 22. Categorizer AI status (admin)
+- **Detected:**
+```
+A daily E2E run against the live dev server FAILED (45/272 assertions).
+Failing steps:
+- 22. Categorizer AI status (admin): AssertionError: expected response to have status code 200 but got 403
+- 22. Categorizer AI status (admin): AssertionError: expected { status: 403, message: 'Forbidden' } to have property 'enabled'
+- COV: Contact / feedback (public): Error: ESOCKETTIMEDOUT
+- COV: Contact / feedback (public): AssertionError: expected undefined to be a number or a date
+- COV: Beta-tester signup (public): Error: ESOCKETTIMEDOUT
+- COV: Beta-tester signup (public): AssertionError: expected undefined to be a number or a date
+- COV admin: List audiences (builtin Admins presente): AssertionError: expected response to have status code 200 but got 403
+- COV admin: Preview da audiencia Admins: AssertionError: expected response to have status code 200 but got 403
+
+Server-side errors during the run (the likely root cause):
+```
+2026-11-03 13:09:32.315 WARN  [req=8d00f106 user=a***@economizaai.app ip=4.154.135.145 rcpt=dc2c53eb item=] c.r.e.e.GlobalExceptionHandler - Bad request: Nota fiscal no estado CONFIRMED não pode mais ser editada.
+2026-11-03 13:09:32.505 WARN  [req=6caabb1f user=a***@economizaai.app ip=4.154.135.145 rcpt= item=] c.r.e.e.GlobalExceptionHandler - Conflict: Esta NFC-e (chave ****9174) já está no histórico do seu domicílio.
+2026-11-03 13:09:46.408 WARN  [req=63742c0f user=a***@economizaai.app ip=4.154.135.145 rcpt= item=] c.r.e.e.GlobalExceptionHandler - Invalid webh
+```
+- **Claude:** Failed to authenticate. API Error: 401 OAuth access token has been revoked.
+Ignoring 25 permissions.allow entries from .claude/settings.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog, or set projects["/home/runner/work/economizaai/economizaai"].hasTrustDialogAccepted: true in /home/runner/.claude.json.
+- **Outcome:** reply lacked a verifiable test reference; changes discarded.
+
 ### [2026-11-02 14:01:11] [NEEDS-HUMAN] NO-TESTREF - E2E: 22. Categorizer AI status (admin)
 - **Detected:**
 ```
