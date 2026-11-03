@@ -146,7 +146,8 @@ public class DashboardCacheService {
                     cb.equal(root.get("household").get("id"), householdId),
                     cb.equal(root.get("status"), ReceiptStatus.CONFIRMED));
             if (scope == MarketScope.ALL) return base;
-            var scopeCnpjs = insightsRepository.supportedCnpjs(householdId, scope.segments());
+            var scopeCnpjs = insightsRepository.supportedCnpjs(householdId, scope.segments(),
+                    scope.absorbsSupportOverride());
             if (scopeCnpjs.isEmpty()) {
                 // No CNPJs in the lens's segments yet: inclusion shows nothing, exclusion shows all.
                 return scope.inclusion() ? cb.and(base, cb.disjunction()) : base;

@@ -74,7 +74,8 @@ public class ItemQueryService {
         // CNPJ set once. Inclusion lens with none → no rows; exclusion lens with none → everything.
         var scopeCnpjs = filters.scope() == MarketScope.ALL
                 ? List.<String>of()
-                : insightsRepository.supportedCnpjs(filters.householdId(), filters.scope().segments());
+                : insightsRepository.supportedCnpjs(filters.householdId(), filters.scope().segments(),
+                        filters.scope().absorbsSupportOverride());
         if (filters.scope().inclusion() && scopeCnpjs.isEmpty()) {
             log.info("items.query household={} scope={} total=0 reason=no_markets_in_scope",
                     filters.householdId(), filters.scope());

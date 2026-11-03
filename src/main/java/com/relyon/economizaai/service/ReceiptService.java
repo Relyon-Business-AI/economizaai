@@ -613,7 +613,8 @@ public class ReceiptService {
                 householdId, from, to, cnpj, categories, status, trimmedSearch, true, null, null, categoryNodeIds);
         if (scope != null && scope != MarketScope.ALL) {
             spec = spec.and(scopeSpec(scope,
-                    insightsRepository.supportedCnpjs(householdId, scope.segments())));
+                    insightsRepository.supportedCnpjs(householdId, scope.segments(),
+                            scope.absorbsSupportOverride())));
         }
         var page = receiptRepository.findAll(spec, sortedPageable);
         var cnpjs = page.getContent().stream()

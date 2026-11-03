@@ -25,11 +25,13 @@ import java.util.UUID;
 @Repository
 public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
 
-    // The household's CONFIRMED-receipt CNPJs that count as "mercado/farmácia".
-    // Mirrors MerchantSupportGate.statusOf: an admin SUPPORTED override wins over
-    // the CNAE segment (promotes a merchant stuck UNKNOWN because its CNAE lookup
-    // never resolved), a BLOCKED override excludes it even with a grocery segment,
-    // and otherwise it falls back to the segment. Used to partition every
+    // The household's CONFIRMED-receipt CNPJs that count for the lens. An admin
+    // SUPPORTED override promotes a merchant stuck UNKNOWN (CNAE never resolved) to
+    // "mercado suportado", a BLOCKED override excludes it even with a grocery segment,
+    // otherwise it falls back to the CNAE segment. The SUPPORTED override only counts
+    // for lenses that ABSORB it (:absorbsOverride — those including mercado, i.e.
+    // SUPERMARKET/FOOD_RETAIL); specific lenses (PHARMACY/FUEL) must NOT inherit it,
+    // else a promoted supermarket leaks into Farmácia. Used to partition every
     // aggregation below.
     @Query("""
         SELECT DISTINCT r.cnpjEmitente
@@ -37,11 +39,13 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
         JOIN MarketLocation ml ON ml.cnpj = r.cnpjEmitente
         WHERE r.household.id = :householdId
           AND r.status = 'CONFIRMED'
-          AND (ml.supportOverride = 'SUPPORTED'
+          AND ((ml.supportOverride = 'SUPPORTED'
+                AND (ml.segment IN :segments OR :absorbsOverride = TRUE))
                OR (ml.supportOverride IS NULL AND ml.segment IN :segments))
     """)
     List<String> supportedCnpjs(@Param("householdId") UUID householdId,
-                                @Param("segments") Collection<MerchantSegment> segments);
+                                @Param("segments") Collection<MerchantSegment> segments,
+                                @Param("absorbsOverride") boolean absorbsOverride);
 
     @Query("""
         SELECT COALESCE(SUM(ri.totalPrice), 0)
