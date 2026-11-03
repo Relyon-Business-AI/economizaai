@@ -1,5 +1,16 @@
 # economizai — what's new
 
+## 2026-11-03 — `/receipts`: nota sem loja conhecida aparece em TODAS as lentes
+
+- Uma nota ainda sem CNPJ (PROCESSING, IMPORT_QUEUED, NEEDS_DEVICE_FETCH,
+  CONTINGENCY_PENDING, ou que falhou antes do parse) agora vem em qualquer
+  `scope` de inclusão (`MARKET`, `PHARMACY`, `FUEL`, `SUPPORTED`), não só em
+  `OTHERS`/`ALL`. Antes a nota recém-escaneada sumia da lente padrão
+  "Mercado" até terminar — o usuário não a encontrava.
+- Lente de inclusão sem nenhum CNPJ no segmento passa a devolver só essas
+  notas sem loja (antes: vazio). Ordenação inalterada (`issuedAt` desc, nulos
+  primeiro), então elas continuam no topo.
+
 ## 2026-11-03 — Lente de segmento: scope ganha MARKET / PHARMACY / FUEL / OTHERS
 
 - O parâmetro `scope` de **`/dashboard`, `/insights/spend`, `/insights/query`,

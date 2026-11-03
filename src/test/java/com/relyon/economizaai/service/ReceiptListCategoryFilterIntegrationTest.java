@@ -92,6 +92,17 @@ class ReceiptListCategoryFilterIntegrationTest {
     }
 
     @Test
+    void processingReceiptWithoutCnpj_showsInEveryLens() {
+        processingReceipt(user.getHousehold());
+
+        assertEquals(3, receiptService.list(user, null, null, null, null, null, null, null, MarketScope.MARKET, PageRequest.of(0, 20)).getTotalElements());
+        assertEquals(3, receiptService.list(user, null, null, null, null, null, null, null, MarketScope.SUPPORTED, PageRequest.of(0, 20)).getTotalElements());
+        assertEquals(1, receiptService.list(user, null, null, null, null, null, null, null, MarketScope.PHARMACY, PageRequest.of(0, 20)).getTotalElements());
+        assertEquals(2, receiptService.list(user, null, null, null, null, null, null, null, MarketScope.OTHERS, PageRequest.of(0, 20)).getTotalElements());
+        assertEquals(4, receiptService.list(user, null, null, null, null, null, null, null, MarketScope.ALL, PageRequest.of(0, 20)).getTotalElements());
+    }
+
+    @Test
     void noCategory_returnsAll() {
         var page = receiptService.list(user, null, null, null, null, null, null, null, MarketScope.ALL, PageRequest.of(0, 20));
         assertEquals(3, page.getTotalElements());
@@ -124,6 +135,15 @@ class ReceiptListCategoryFilterIntegrationTest {
                 .unitPrice(new BigDecimal("10.00")).totalPrice(new BigDecimal("10.00"))
                 .build());
         receiptRepository.save(receipt);
+    }
+
+    /** A nota just scanned: still PROCESSING, so no CNPJ/issuedAt is known yet. */
+    private void processingReceipt(Household household) {
+        receiptRepository.save(Receipt.builder()
+                .user(user).household(household).chaveAcesso(uniqueChave())
+                .uf(UnidadeFederativa.RS).qrPayload("test")
+                .status(ReceiptStatus.PROCESSING)
+                .build());
     }
 
     private static String uniqueCode() {

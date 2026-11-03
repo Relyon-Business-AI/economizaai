@@ -631,18 +631,21 @@ public class ReceiptService {
     /**
      * Filters receipts by merchant-segment lens: an inclusion lens (MARKET/PHARMACY/FUEL/SUPPORTED)
      * keeps only the household's CNPJs in the lens's segments; an exclusion lens (OTHERS/OTHER)
-     * keeps the rest (incl. unregistered / no-CNPJ). Empty CNPJ set → inclusion shows nothing,
-     * exclusion shows all.
+     * keeps the rest. A receipt whose store is still unknown (no CNPJ yet: processing, queued,
+     * failed before the parse) belongs to EVERY lens — otherwise the nota the user just scanned
+     * vanishes from the default "Mercado" view until it finishes. Empty CNPJ set → inclusion
+     * shows only the unknown-store receipts, exclusion shows all.
      */
     private static Specification<Receipt> scopeSpec(MarketScope scope, List<String> scopeCnpjs) {
         return (root, query, cb) -> {
+            var unknownStore = root.get("cnpjEmitente").isNull();
             if (scopeCnpjs.isEmpty()) {
-                return scope.inclusion() ? cb.disjunction() : cb.conjunction();
+                return scope.inclusion() ? unknownStore : cb.conjunction();
             }
             var inScope = root.get("cnpjEmitente").in(scopeCnpjs);
             return scope.inclusion()
-                    ? inScope
-                    : cb.or(root.get("cnpjEmitente").isNull(), cb.not(inScope));
+                    ? cb.or(unknownStore, inScope)
+                    : cb.or(unknownStore, cb.not(inScope));
         };
     }
 
