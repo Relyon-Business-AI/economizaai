@@ -25,6 +25,7 @@ import com.relyon.economizaai.dto.response.AcquisitionReportResponse;
 import com.relyon.economizaai.dto.response.AdminAlertsConfigResponse;
 import com.relyon.economizaai.dto.response.AdminNotificationSummaryResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptDetailResponse;
+import com.relyon.economizaai.dto.response.DeletionReasonStatsResponse;
 import com.relyon.economizaai.dto.response.EntryMethodStatsResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptStatsResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptSummaryResponse;
@@ -59,6 +60,8 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
+import com.relyon.economizaai.model.enums.AcquisitionChannel;
+import com.relyon.economizaai.model.enums.Platform;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.ReceiptService;
 import com.relyon.economizaai.service.admin.AdminLlmService;
@@ -224,9 +227,12 @@ public class AdminController {
             @RequestParam(required = false) String q,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
+            @RequestParam(required = false) Platform platform,
+            @RequestParam(required = false) AcquisitionChannel channel,
+            @RequestParam(required = false) UnidadeFederativa uf,
             @RequestParam(defaultValue = "false") boolean includeInternal,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(adminUserService.list(q, from, to, includeInternal, pageable));
+        return ResponseEntity.ok(adminUserService.list(q, from, to, platform, channel, uf, includeInternal, pageable));
     }
 
     /**
@@ -550,6 +556,15 @@ public class AdminController {
             @RequestParam(defaultValue = "30") int days,
             @RequestParam(defaultValue = "false") boolean includeInternal) {
         return ResponseEntity.ok(adminAnalyticsService.acquisition(days, includeInternal));
+    }
+
+    @Operation(summary = "Account deletion reasons",
+            description = "Anonymized churn survey over the window: total deletions, how many gave a reason, "
+                    + "per-reason breakdown with share, and the most recent free-text notes.")
+    @GetMapping("/analytics/deletion-reasons")
+    public ResponseEntity<DeletionReasonStatsResponse> deletionReasons(
+            @RequestParam(defaultValue = "30") int days) {
+        return ResponseEntity.ok(adminAnalyticsService.deletionReasons(days));
     }
 
     @Operation(summary = "Subscription mix",

@@ -22,7 +22,10 @@ import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ShoppingList;
 import com.relyon.economizaai.model.Subscription;
+import com.relyon.economizaai.model.AccountDeletionFeedback;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.AccountDeletionReason;
+import com.relyon.economizaai.dto.request.DeleteAccountRequest;
 import com.relyon.economizaai.model.UserWatchedMarket;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.AuthProvider;
@@ -49,6 +52,7 @@ import com.relyon.economizaai.repository.ShoppingListRepository;
 import com.relyon.economizaai.repository.SubscriptionRepository;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
 import com.relyon.economizaai.repository.UserRepository;
+import com.relyon.economizaai.repository.AccountDeletionFeedbackRepository;
 import com.relyon.economizaai.repository.UserWatchedMarketRepository;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.security.ratelimit.LoginAttemptGuard;
@@ -60,6 +64,7 @@ import com.relyon.economizaai.service.attribution.AttributionResolver;
 import com.relyon.economizaai.service.analytics.meta.MetaConversionsService;
 import com.relyon.economizaai.service.auth.SignupAlertService;
 import com.relyon.economizaai.service.notifications.NotificationRuleService;
+import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -81,6 +86,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -187,6 +193,9 @@ class UserServiceTest {
 
     @Mock
     private LoginAttemptGuard loginAttemptGuard;
+
+    @Mock
+    private AccountDeletionFeedbackRepository accountDeletionFeedbackRepository;
 
     @InjectMocks
     private UserService userService;
@@ -512,6 +521,37 @@ class UserServiceTest {
 
         verify(userRepository).delete(user);
         verify(householdRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void deleteAccount_withSurvey_persistsAnonymizedFeedbackBeforeDelete() {
+        var user = buildUser();
+        user.setCreatedAt(LocalDateTime.now().minusDays(10));
+        when(userRepository.countByHouseholdId(user.getHousehold().getId())).thenReturn(0L);
+        when(receiptRepository.countByUserId(user.getId())).thenReturn(7L);
+
+        userService.deleteAccount(user, new DeleteAccountRequest(AccountDeletionReason.PRIVACY_CONCERN, " foo "));
+
+        var captor = ArgumentCaptor.forClass(AccountDeletionFeedback.class);
+        verify(accountDeletionFeedbackRepository).save(captor.capture());
+        var saved = captor.getValue();
+        assertThat(saved.getReason()).isEqualTo(AccountDeletionReason.PRIVACY_CONCERN);
+        assertThat(saved.getDetails()).isEqualTo("foo");
+        assertThat(saved.getSubscriptionTier()).isEqualTo("FREE");
+        assertThat(saved.getAccountAgeDays()).isEqualTo(10);
+        assertThat(saved.getReceiptCount()).isEqualTo(7);
+        verify(userRepository).delete(user);
+    }
+
+    @Test
+    void deleteAccount_withoutSurvey_savesNoFeedback() {
+        var user = buildUser();
+        when(userRepository.countByHouseholdId(user.getHousehold().getId())).thenReturn(0L);
+
+        userService.deleteAccount(user, null);
+
+        verify(accountDeletionFeedbackRepository, never()).save(any());
+        verify(userRepository).delete(user);
     }
 
     @Test

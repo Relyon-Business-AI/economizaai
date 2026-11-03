@@ -3,6 +3,7 @@ package com.relyon.economizaai.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.relyon.economizaai.config.SecurityConfig;
 import com.relyon.economizaai.dto.request.ChangePasswordRequest;
+import com.relyon.economizaai.dto.request.DeleteAccountRequest;
 import com.relyon.economizaai.dto.request.SetPasswordRequest;
 import com.relyon.economizaai.dto.request.UpdateContributionRequest;
 import com.relyon.economizaai.dto.request.UpdateDigestPreferencesRequest;
@@ -37,7 +38,9 @@ import com.relyon.economizaai.service.profile.ProfilePictureService;
 import com.relyon.economizaai.service.notifications.WhatsAppOptInService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
+import com.relyon.economizaai.model.enums.AccountDeletionReason;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -52,8 +55,11 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -451,6 +457,24 @@ class UserControllerTest {
                         .with(SecurityMockMvcRequestPostProcessors.user(user)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Conta excluida."));
+    }
+
+    @Test
+    void deleteAccount_withReason_passesSurveyToService() throws Exception {
+        var user = buildUser();
+        when(localizedMessageService.translate("user.account.deleted")).thenReturn("Conta excluida.");
+
+        mockMvc.perform(delete("/api/v1/users/me")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new DeleteAccountRequest(AccountDeletionReason.MISSING_FEATURES, "faltava x"))))
+                .andExpect(status().isOk());
+
+        var captor = ArgumentCaptor.forClass(DeleteAccountRequest.class);
+        verify(userService).deleteAccount(eq(user), captor.capture());
+        assertThat(captor.getValue().reason()).isEqualTo(AccountDeletionReason.MISSING_FEATURES);
+        assertThat(captor.getValue().details()).isEqualTo("faltava x");
     }
 
     @Test
