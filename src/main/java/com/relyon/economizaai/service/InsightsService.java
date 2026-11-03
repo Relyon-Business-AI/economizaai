@@ -11,7 +11,6 @@ import com.relyon.economizaai.config.CachingConfig;
 import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.service.geo.MarketNameService;
-import com.relyon.economizaai.service.geo.MerchantSupportGate;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -64,7 +63,7 @@ public class InsightsService {
         from = subscriptionGate.clampFrom(user, from);
         var fromBound = from != null ? from : EPOCH_FLOOR;
         var toBound = to != null ? to : EPOCH_CEIL;
-        var scopeName = scope.name();
+        var scopeName = scope.queryMode();
         var cnpjs = scopeCnpjs(householdId, scope);
         var total = insightsRepository.totalSpend(householdId, fromBound, toBound, scopeName, cnpjs);
         var totalDiscount = toBigDecimal(insightsRepository.totalDiscount(householdId, fromBound, toBound, scopeName, cnpjs));
@@ -78,14 +77,14 @@ public class InsightsService {
     }
 
     /**
-     * The CNPJ set the scope predicate filters on. For SUPPORTED/OTHER it's the
-     * household's grocery/pharmacy CNPJs; for ALL (and when the set is empty) a
-     * sentinel keeps the {@code IN}/{@code NOT IN} well-formed (never an empty list).
+     * The CNPJ set the scope predicate filters on: the household's CNPJs in the
+     * lens's segments. For ALL (and when the set is empty) a sentinel keeps the
+     * {@code IN}/{@code NOT IN} well-formed (never an empty list).
      */
     private List<String> scopeCnpjs(UUID householdId, MarketScope scope) {
         if (scope == MarketScope.ALL) return List.of("__none__");
-        var supported = insightsRepository.supportedCnpjs(householdId, MerchantSupportGate.supportedSegments());
-        return supported.isEmpty() ? List.of("__none__") : supported;
+        var inScope = insightsRepository.supportedCnpjs(householdId, scope.segments());
+        return inScope.isEmpty() ? List.of("__none__") : inScope;
     }
 
     private List<SpendInsightsResponse.MonthBucket> buildMonthBuckets(UUID householdId,

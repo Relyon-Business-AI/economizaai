@@ -11,7 +11,6 @@ import com.relyon.economizaai.model.enums.MarketScope;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.InsightsRepository;
-import com.relyon.economizaai.service.geo.MerchantSupportGate;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -74,7 +73,7 @@ public class InsightsQueryService {
         // the household's supported CNPJs once and bind them into the filters for the clause builder.
         if (filters.scope() != MarketScope.ALL) {
             filters = filters.withSupportedCnpjs(
-                    insightsRepository.supportedCnpjs(filters.householdId(), MerchantSupportGate.supportedSegments()));
+                    insightsRepository.supportedCnpjs(filters.householdId(), filters.scope().segments()));
         }
         var groupBy = filters.groupBy();
         var summary = computeSummary(filters);
@@ -332,17 +331,18 @@ public class InsightsQueryService {
         clauses.add("r.status = :status");
         bindings.put("status", ReceiptStatus.CONFIRMED);
 
-        // Market-segment scope. supportedCnpjs is resolved in query() (null for ALL). SUPPORTED with
-        // none matches nothing (summary/buckets can't early-return like a page can); JPQL rejects IN ().
-        if (filters.scope() == MarketScope.SUPPORTED) {
-            var supported = filters.supportedCnpjs();
-            if (supported == null || supported.isEmpty()) {
+        // Market-segment lens. supportedCnpjs is resolved in query() (null for ALL). An inclusion
+        // lens with no CNPJs matches nothing (summary/buckets can't early-return like a page can);
+        // JPQL rejects IN ().
+        if (filters.scope().inclusion()) {
+            var scopeCnpjs = filters.supportedCnpjs();
+            if (scopeCnpjs == null || scopeCnpjs.isEmpty()) {
                 clauses.add("r.id IS NULL");
             } else {
                 clauses.add("r.cnpjEmitente IN (:scopeCnpjs)");
-                bindings.put("scopeCnpjs", supported);
+                bindings.put("scopeCnpjs", scopeCnpjs);
             }
-        } else if (filters.scope() == MarketScope.OTHER
+        } else if (filters.scope().exclusion()
                 && filters.supportedCnpjs() != null && !filters.supportedCnpjs().isEmpty()) {
             clauses.add("(r.cnpjEmitente IS NULL OR r.cnpjEmitente NOT IN (:scopeCnpjs))");
             bindings.put("scopeCnpjs", filters.supportedCnpjs());

@@ -613,7 +613,7 @@ public class ReceiptService {
                 householdId, from, to, cnpj, categories, status, trimmedSearch, true, null, null, categoryNodeIds);
         if (scope != null && scope != MarketScope.ALL) {
             spec = spec.and(scopeSpec(scope,
-                    insightsRepository.supportedCnpjs(householdId, MerchantSupportGate.supportedSegments())));
+                    insightsRepository.supportedCnpjs(householdId, scope.segments())));
         }
         var page = receiptRepository.findAll(spec, sortedPageable);
         var cnpjs = page.getContent().stream()
@@ -629,19 +629,20 @@ public class ReceiptService {
     }
 
     /**
-     * Filters receipts by merchant segment for the Mercado/Outras lens: SUPPORTED keeps only the
-     * household's grocery/pharmacy CNPJs; OTHER keeps the rest (incl. unregistered / no-CNPJ).
-     * Empty supported set → SUPPORTED shows nothing, OTHER shows all.
+     * Filters receipts by merchant-segment lens: an inclusion lens (MARKET/PHARMACY/FUEL/SUPPORTED)
+     * keeps only the household's CNPJs in the lens's segments; an exclusion lens (OTHERS/OTHER)
+     * keeps the rest (incl. unregistered / no-CNPJ). Empty CNPJ set → inclusion shows nothing,
+     * exclusion shows all.
      */
-    private static Specification<Receipt> scopeSpec(MarketScope scope, List<String> supportedCnpjs) {
+    private static Specification<Receipt> scopeSpec(MarketScope scope, List<String> scopeCnpjs) {
         return (root, query, cb) -> {
-            if (supportedCnpjs.isEmpty()) {
-                return scope == MarketScope.SUPPORTED ? cb.disjunction() : cb.conjunction();
+            if (scopeCnpjs.isEmpty()) {
+                return scope.inclusion() ? cb.disjunction() : cb.conjunction();
             }
-            var inSupported = root.get("cnpjEmitente").in(supportedCnpjs);
-            return scope == MarketScope.SUPPORTED
-                    ? inSupported
-                    : cb.or(root.get("cnpjEmitente").isNull(), cb.not(inSupported));
+            var inScope = root.get("cnpjEmitente").in(scopeCnpjs);
+            return scope.inclusion()
+                    ? inScope
+                    : cb.or(root.get("cnpjEmitente").isNull(), cb.not(inScope));
         };
     }
 

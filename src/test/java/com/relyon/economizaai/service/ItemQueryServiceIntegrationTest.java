@@ -323,11 +323,73 @@ class ItemQueryServiceIntegrationTest {
         assertEquals(0, supported.getTotalElements());
     }
 
+    @Test
+    void lens_marketExcludesPharmacy() {
+        seedSegments(MerchantSegment.SUPERMARKET, MerchantSegment.PHARMACY);
+
+        var market = service.query(user, filtersScope(MarketScope.MARKET), PageRequest.of(0, 20));
+        // Only Zaffari (SUPERMARKET); Bistek is PHARMACY and must be out of the MARKET lens.
+        assertEquals(3, market.getTotalElements());
+        assertTrue(market.getContent().stream()
+                .allMatch(row -> "93015006005182".equals(row.marketCnpj())));
+    }
+
+    @Test
+    void lens_pharmacyReturnsOnlyPharmacies() {
+        seedSegments(MerchantSegment.SUPERMARKET, MerchantSegment.PHARMACY);
+
+        var pharmacy = service.query(user, filtersScope(MarketScope.PHARMACY), PageRequest.of(0, 20));
+        assertEquals(5, pharmacy.getTotalElements());
+        assertTrue(pharmacy.getContent().stream()
+                .allMatch(row -> "93015006000111".equals(row.marketCnpj())));
+    }
+
+    @Test
+    void lens_fuelReturnsOnlyGasStations() {
+        seedSegments(MerchantSegment.SUPERMARKET, MerchantSegment.GAS_STATION);
+
+        var fuel = service.query(user, filtersScope(MarketScope.FUEL), PageRequest.of(0, 20));
+        assertEquals(5, fuel.getTotalElements());
+        assertTrue(fuel.getContent().stream()
+                .allMatch(row -> "93015006000111".equals(row.marketCnpj())));
+    }
+
+    @Test
+    void lens_fuelWithNoGasStations_returnsEmpty() {
+        seedSegments(MerchantSegment.SUPERMARKET, MerchantSegment.PHARMACY);
+
+        var fuel = service.query(user, filtersScope(MarketScope.FUEL), PageRequest.of(0, 20));
+        assertEquals(0, fuel.getTotalElements());
+    }
+
+    @Test
+    void lens_othersExcludesAllVerticals() {
+        seedSegments(MerchantSegment.SUPERMARKET, MerchantSegment.OTHER);
+
+        var others = service.query(user, filtersScope(MarketScope.OTHERS), PageRequest.of(0, 20));
+        // Zaffari (SUPERMARKET) is a vertical → out; Bistek (OTHER segment) stays.
+        assertEquals(5, others.getTotalElements());
+        assertTrue(others.getContent().stream()
+                .allMatch(row -> "93015006000111".equals(row.marketCnpj())));
+    }
+
+    @Test
+    void lens_othersExcludesGasStationsToo() {
+        seedSegments(MerchantSegment.GAS_STATION, MerchantSegment.PHARMACY);
+
+        var others = service.query(user, filtersScope(MarketScope.OTHERS), PageRequest.of(0, 20));
+        assertEquals(0, others.getTotalElements());
+    }
+
     private void seedSegments() {
+        seedSegments(MerchantSegment.SUPERMARKET, MerchantSegment.OTHER);
+    }
+
+    private void seedSegments(MerchantSegment zaffariSegment, MerchantSegment bistekSegment) {
         marketLocationRepository.save(MarketLocation.builder()
-                .cnpj("93015006005182").cnpjRoot("93015006").segment(MerchantSegment.SUPERMARKET).build());
+                .cnpj("93015006005182").cnpjRoot("93015006").segment(zaffariSegment).build());
         marketLocationRepository.save(MarketLocation.builder()
-                .cnpj("93015006000111").cnpjRoot("93015006").segment(MerchantSegment.OTHER).build());
+                .cnpj("93015006000111").cnpjRoot("93015006").segment(bistekSegment).build());
     }
 
     private ItemFilters filtersScope(MarketScope scope) {

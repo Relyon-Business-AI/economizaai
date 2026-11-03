@@ -9,7 +9,6 @@ import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.service.geo.MarketNameService;
-import com.relyon.economizaai.service.geo.MerchantSupportGate;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -71,17 +70,17 @@ public class ItemQueryService {
                 input.maxReceiptTotal(), input.categoryView(), input.scope());
         var filters = ItemFilters.normalize(clamped, user.getHousehold().getId());
 
-        // Scope by merchant segment (same lens as /receipts and /insights): resolve the household's
-        // supported-segment CNPJs once. SUPPORTED with none → no rows; OTHER with none → everything.
-        var supportedCnpjs = filters.scope() == MarketScope.ALL
+        // Scope by merchant-segment lens (same lens as /receipts and /insights): resolve the lens's
+        // CNPJ set once. Inclusion lens with none → no rows; exclusion lens with none → everything.
+        var scopeCnpjs = filters.scope() == MarketScope.ALL
                 ? List.<String>of()
-                : insightsRepository.supportedCnpjs(filters.householdId(), MerchantSupportGate.supportedSegments());
-        if (filters.scope() == MarketScope.SUPPORTED && supportedCnpjs.isEmpty()) {
-            log.info("items.query household={} scope=SUPPORTED total=0 reason=no_supported_markets",
-                    filters.householdId());
+                : insightsRepository.supportedCnpjs(filters.householdId(), filters.scope().segments());
+        if (filters.scope().inclusion() && scopeCnpjs.isEmpty()) {
+            log.info("items.query household={} scope={} total=0 reason=no_markets_in_scope",
+                    filters.householdId(), filters.scope());
             return Page.empty(pageable);
         }
-        var clauses = buildClauses(filters, supportedCnpjs);
+        var clauses = buildClauses(filters, scopeCnpjs);
 
         var total = countMatching(clauses);
         List<PurchasedItemResponse> rows = List.of();
@@ -139,7 +138,7 @@ public class ItemQueryService {
                 .toList();
     }
 
-    private static FilterClauses buildClauses(ItemFilters filters, List<String> supportedCnpjs) {
+    private static FilterClauses buildClauses(ItemFilters filters, List<String> scopeCnpjs) {
         var clauses = new ArrayList<String>();
         var bindings = new LinkedHashMap<String, Object>();
         var join = "";
@@ -150,14 +149,14 @@ public class ItemQueryService {
         clauses.add("r.status = :status");
         bindings.put("status", ReceiptStatus.CONFIRMED);
 
-        // Market-segment scope. SUPPORTED-with-none is short-circuited in query() before we get here,
-        // so a SUPPORTED clause always has a non-empty list (JPQL rejects an empty IN ()).
-        if (filters.scope() == MarketScope.SUPPORTED) {
+        // Market-segment lens. Inclusion-with-none is short-circuited in query() before we get here,
+        // so an inclusion clause always has a non-empty list (JPQL rejects an empty IN ()).
+        if (filters.scope().inclusion()) {
             clauses.add("r.cnpjEmitente IN (:scopeCnpjs)");
-            bindings.put("scopeCnpjs", supportedCnpjs);
-        } else if (filters.scope() == MarketScope.OTHER && !supportedCnpjs.isEmpty()) {
+            bindings.put("scopeCnpjs", scopeCnpjs);
+        } else if (filters.scope().exclusion() && !scopeCnpjs.isEmpty()) {
             clauses.add("(r.cnpjEmitente IS NULL OR r.cnpjEmitente NOT IN (:scopeCnpjs))");
-            bindings.put("scopeCnpjs", supportedCnpjs);
+            bindings.put("scopeCnpjs", scopeCnpjs);
         }
 
         clauses.add("ri.excluded = false");

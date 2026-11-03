@@ -14,7 +14,6 @@ import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.InsightsService;
-import com.relyon.economizaai.service.geo.MerchantSupportGate;
 import com.relyon.economizaai.service.consumption.ConsumptionIntelligenceService;
 import com.relyon.economizaai.service.geo.MarketNameService;
 import com.relyon.economizaai.service.geo.WatchedMarketService;
@@ -147,15 +146,15 @@ public class DashboardCacheService {
                     cb.equal(root.get("household").get("id"), householdId),
                     cb.equal(root.get("status"), ReceiptStatus.CONFIRMED));
             if (scope == MarketScope.ALL) return base;
-            var supported = insightsRepository.supportedCnpjs(householdId, MerchantSupportGate.supportedSegments());
-            if (supported.isEmpty()) {
-                // No grocery/pharmacy CNPJs yet: SUPPORTED shows nothing, OTHER shows all.
-                return scope == MarketScope.SUPPORTED ? cb.and(base, cb.disjunction()) : base;
+            var scopeCnpjs = insightsRepository.supportedCnpjs(householdId, scope.segments());
+            if (scopeCnpjs.isEmpty()) {
+                // No CNPJs in the lens's segments yet: inclusion shows nothing, exclusion shows all.
+                return scope.inclusion() ? cb.and(base, cb.disjunction()) : base;
             }
-            var inSupported = root.get("cnpjEmitente").in(supported);
-            return scope == MarketScope.SUPPORTED
-                    ? cb.and(base, inSupported)
-                    : cb.and(base, cb.or(root.get("cnpjEmitente").isNull(), cb.not(inSupported)));
+            var inScope = root.get("cnpjEmitente").in(scopeCnpjs);
+            return scope.inclusion()
+                    ? cb.and(base, inScope)
+                    : cb.and(base, cb.or(root.get("cnpjEmitente").isNull(), cb.not(inScope)));
         };
     }
 }
