@@ -14,5 +14,8 @@ public enum MerchantSegment {
     PHARMACY,     // CNAE 4771* (produtos farmacêuticos)
     FOOD_RETAIL,  // CNAE 4721*-4724* / 4729* (padarias, açougues, bebidas, hortifrúti, conveniência)
     FOOD_SERVICE, // CNAE 56* (restaurantes, bares, lanchonetes) — rejected, non-recurring purchases
+    GAS_STATION,  // CNAE 4731*/4732* (combustíveis/lubrificantes) — fora do índice de mercado e da
+                  // fila de revisão; marcado à parte como insumo da futura feature de preço de
+                  // combustível (as notas ficam guardadas; backfill gera observações quando nascer)
     OTHER         // classified, but none of the above — grey zone, admin reviews
 }

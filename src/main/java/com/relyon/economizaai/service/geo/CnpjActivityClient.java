@@ -174,6 +174,9 @@ public class CnpjActivityClient {
         if (primary.startsWith("4711") || primary.startsWith("4712")) return MerchantSegment.SUPERMARKET;
         if (isFoodRetailCnae(primary)) return MerchantSegment.FOOD_RETAIL;
         if (primary.startsWith("56")) return MerchantSegment.FOOD_SERVICE;
+        // Postos (4731 combustíveis / 4732 lubrificantes): fora do índice de mercado e da
+        // fila de revisão — marcados à parte como insumo da futura feature de combustível.
+        if (primary.startsWith("4731") || primary.startsWith("4732")) return MerchantSegment.GAS_STATION;
         return MerchantSegment.OTHER;
     }
 

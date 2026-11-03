@@ -67,6 +67,12 @@ class CnpjActivityClientTest {
     }
 
     @Test
+    void gasStationCnaes() {
+        assertEquals(MerchantSegment.GAS_STATION, CnpjActivityClient.segmentFromCnae(List.of("4731800")));
+        assertEquals(MerchantSegment.GAS_STATION, CnpjActivityClient.segmentFromCnae(List.of("4732600")));
+    }
+
+    @Test
     void classifiesByPrimaryCnae_notSecondary() {
         // Primary is conveniência (food retail); a 4771 pharmacy code is only SECONDARY.
         // The primary wins now — matching any secondary code falsely tagged Amazon/Cobasi
@@ -93,10 +99,9 @@ class CnpjActivityClientTest {
 
     @Test
     void gasStationWithConvenienceSecondary_followsPrimary() {
-        // posto (4731 primary) with a loja de conveniência as SECONDARY now follows its
-        // primary → OTHER. Trade-off of primary-only classification (accepted: avoiding
-        // false positives like Amazon→PHARMACY matters more than catching posto grocery).
-        assertEquals(MerchantSegment.OTHER,
+        // posto (4731 primary) with a loja de conveniência as SECONDARY follows its
+        // primary → GAS_STATION (fora do índice de mercado, marcado pra feature de combustível).
+        assertEquals(MerchantSegment.GAS_STATION,
                 CnpjActivityClient.segmentFromCnae(List.of("4731800", "4729602")));
     }
 
@@ -119,7 +124,7 @@ class CnpjActivityClientTest {
 
     @Test
     void otherActivityIsOther() {
-        assertEquals(MerchantSegment.OTHER, CnpjActivityClient.segmentFromCnae(List.of("4731800"))); // posto sem conveniência
+        assertEquals(MerchantSegment.OTHER, CnpjActivityClient.segmentFromCnae(List.of("4930201"))); // transportadora
     }
 
     @Test
