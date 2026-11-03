@@ -1,0 +1,34 @@
+# Daily PROD database-disk watch — ALERT-ONLY. Render Postgres disks only grow and
+# a full disk turns every receipt submit into a write failure, so this reads the
+# Render metrics API and opens a `prod-error` issue at 80 / 90 / 95 % usage.
+name: disk-watch-prod
+
+on:
+  schedule:
+    - cron: '0 12 * * *'   # daily 09:00 BRT — disk moves slowly, one check a day is enough
+  workflow_dispatch:
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write   # opens the alert issue
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Watch prod Postgres disk
+        id: watch
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RESOURCE_ID: dpg-d7odmplckfvc73ddd4s0-a
+          DISK_ALERT_BUCKETS: '80,90,95'
+        run: python3 .github/scripts/disk_watch.py
+      - name: Open alert issue
+        if: steps.watch.outputs.found == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SIGNATURE: ${{ steps.watch.outputs.signature }}
+          CONTEXT: ${{ steps.watch.outputs.context }}
+          SOURCE: disk-watch-prod
+        run: python3 .github/scripts/prod_alert.py
