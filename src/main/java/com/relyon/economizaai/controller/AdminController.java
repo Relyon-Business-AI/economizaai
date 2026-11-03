@@ -83,6 +83,9 @@ import com.relyon.economizaai.dto.response.MarketingDashboardResponse;
 import com.relyon.economizaai.service.analytics.MarketingDashboardService;
 import com.relyon.economizaai.service.analytics.RetentionCohortService;
 import com.relyon.economizaai.service.analytics.meta.MetaAdSpendSyncJob;
+import com.relyon.economizaai.service.analytics.asc.AppStoreAnalyticsService;
+import com.relyon.economizaai.service.analytics.asc.AppStoreAnalyticsSyncJob;
+import com.relyon.economizaai.dto.response.StoreAnalyticsResponse;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.notifications.OperationalAlertService;
 import com.relyon.economizaai.service.notifications.RelevanceReportService;
@@ -156,6 +159,8 @@ public class AdminController {
     private final AdminAnalyticsService adminAnalyticsService;
     private final RetentionCohortService retentionCohortService;
     private final MetaAdSpendSyncJob metaAdSpendSyncJob;
+    private final AppStoreAnalyticsService appStoreAnalyticsService;
+    private final AppStoreAnalyticsSyncJob appStoreAnalyticsSyncJob;
     private final MarketingDashboardService marketingDashboardService;
     private final StateCoverageService stateCoverageService;
     private final SefazIngestionService sefazIngestionService;
@@ -584,6 +589,18 @@ public class AdminController {
             @RequestParam(defaultValue = "8") int weeks,
             @RequestParam(defaultValue = "false") boolean includeInternal) {
         return ResponseEntity.ok(retentionCohortService.cohorts(weeks, includeInternal));
+    }
+
+    @Operation(summary = "App Store Connect analytics (iOS) — impressões/page views/installs por fonte de tráfego. configured=false até APPLE_ASC_* estar setado.")
+    @GetMapping("/analytics/store/ios")
+    public ResponseEntity<StoreAnalyticsResponse> iosStoreAnalytics(
+            @RequestParam(defaultValue = "90") int days) {
+        return ResponseEntity.ok(appStoreAnalyticsService.report(days));
+    }
+
+    @PostMapping("/analytics/store/ios/sync")
+    public ResponseEntity<Map<String, Integer>> syncIosStoreAnalytics() {
+        return ResponseEntity.ok(Map.of("rowsSynced", appStoreAnalyticsSyncJob.syncNow()));
     }
 
     @Operation(summary = "Marketing dashboard — Meta Ads spend + Google Search Console organic metrics for the window. Both sections carry configured=false until their env vars are set.")
