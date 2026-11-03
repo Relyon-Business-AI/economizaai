@@ -14,11 +14,13 @@ import com.relyon.economizaai.dto.response.AcquisitionReportResponse.RetentionLi
 import com.relyon.economizaai.dto.response.AcquisitionReportResponse.RevenueSummary;
 import com.relyon.economizaai.dto.response.AcquisitionReportResponse.VisitCampaignLine;
 import com.relyon.economizaai.dto.response.AcquisitionReportResponse.VisitSummary;
+import com.relyon.economizaai.dto.response.DeletionReasonStatsResponse;
 import com.relyon.economizaai.dto.response.SubscriptionReportResponse;
 import com.relyon.economizaai.config.MonetizationProperties;
 import com.relyon.economizaai.model.MetaCampaign;
 import com.relyon.economizaai.model.enums.AcquisitionChannel;
 import com.relyon.economizaai.model.enums.SubscriptionStatus;
+import com.relyon.economizaai.repository.AccountDeletionFeedbackRepository;
 import com.relyon.economizaai.repository.MetaAdSpendRepository;
 import com.relyon.economizaai.repository.MetaCampaignRepository;
 import com.relyon.economizaai.repository.RevenueEventRepository;
@@ -36,6 +38,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -56,6 +59,7 @@ public class AdminAnalyticsService {
     private static final String CURRENCY = "BRL";
 
     private final UserRepository userRepository;
+    private final AccountDeletionFeedbackRepository accountDeletionFeedbackRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final MetaAdSpendRepository metaAdSpendRepository;
     private final MetaCampaignRepository metaCampaignRepository;
@@ -86,6 +90,45 @@ public class AdminAnalyticsService {
                 revenue.realizedRevenue(), visits.totalVisits());
         return new AcquisitionReportResponse(windowDays, from, to, funnel, timeline,
                 byChannel, byPlatform, byCampaign, adSpend, revenue, visits, retention);
+    }
+
+    /**
+     * Why users deleted their accounts over the window: total + per-reason breakdown (with share)
+     * + the most recent free-text notes. Anonymized churn — reads the deletion-feedback table only.
+     */
+    @Transactional(readOnly = true)
+    public DeletionReasonStatsResponse deletionReasons(int days) {
+        var windowDays = Math.max(1, days);
+        var since = BrazilClock.today().minusDays(windowDays - 1L).atStartOfDay().atZone(BrazilClock.ZONE).toOffsetDateTime();
+
+        var total = accountDeletionFeedbackRepository.countByCreatedAtAfter(since);
+        var counts = accountDeletionFeedbackRepository.reasonCountsSince(since);
+        var answered = counts.stream()
+                .filter(count -> count.getReason() != null)
+                .mapToLong(AccountDeletionFeedbackRepository.ReasonCount::getTotal)
+                .sum();
+        var lines = counts.stream()
+                .sorted(Comparator.comparingLong(AccountDeletionFeedbackRepository.ReasonCount::getTotal).reversed())
+                .map(count -> new DeletionReasonStatsResponse.Line(
+                        count.getReason() == null ? "NOT_SPECIFIED" : count.getReason().name(),
+                        count.getTotal(),
+                        percentage(count.getTotal(), total)))
+                .toList();
+        var recentNotes = accountDeletionFeedbackRepository
+                .findTop20ByDetailsIsNotNullAndCreatedAtAfterOrderByCreatedAtDesc(since).stream()
+                .map(feedback -> new DeletionReasonStatsResponse.Note(
+                        feedback.getReason() == null ? null : feedback.getReason().name(),
+                        feedback.getDetails(),
+                        feedback.getCreatedAt()))
+                .toList();
+
+        log.info("analytics.deletion_reasons days={} total={} answered={}", windowDays, total, answered);
+        return new DeletionReasonStatsResponse(windowDays, total, answered, lines, recentNotes);
+    }
+
+    private static BigDecimal percentage(long part, long whole) {
+        return whole == 0 ? BigDecimal.ZERO
+                : BigDecimal.valueOf(part * 100.0 / whole).setScale(1, RoundingMode.HALF_UP);
     }
 
     @Transactional(readOnly = true)

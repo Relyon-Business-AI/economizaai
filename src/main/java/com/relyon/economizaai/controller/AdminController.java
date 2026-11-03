@@ -25,6 +25,7 @@ import com.relyon.economizaai.dto.response.AcquisitionReportResponse;
 import com.relyon.economizaai.dto.response.AdminAlertsConfigResponse;
 import com.relyon.economizaai.dto.response.AdminNotificationSummaryResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptDetailResponse;
+import com.relyon.economizaai.dto.response.DeletionReasonStatsResponse;
 import com.relyon.economizaai.dto.response.EntryMethodStatsResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptStatsResponse;
 import com.relyon.economizaai.dto.response.AdminReceiptSummaryResponse;
@@ -550,6 +551,15 @@ public class AdminController {
             @RequestParam(defaultValue = "30") int days,
             @RequestParam(defaultValue = "false") boolean includeInternal) {
         return ResponseEntity.ok(adminAnalyticsService.acquisition(days, includeInternal));
+    }
+
+    @Operation(summary = "Account deletion reasons",
+            description = "Anonymized churn survey over the window: total deletions, how many gave a reason, "
+                    + "per-reason breakdown with share, and the most recent free-text notes.")
+    @GetMapping("/analytics/deletion-reasons")
+    public ResponseEntity<DeletionReasonStatsResponse> deletionReasons(
+            @RequestParam(defaultValue = "30") int days) {
+        return ResponseEntity.ok(adminAnalyticsService.deletionReasons(days));
     }
 
     @Operation(summary = "Subscription mix",

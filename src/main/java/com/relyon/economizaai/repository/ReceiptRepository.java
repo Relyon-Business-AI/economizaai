@@ -78,6 +78,9 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
 
     long countByUserIdAndOriginAndStatus(UUID userId, ReceiptOrigin origin, ReceiptStatus status);
 
+    // Engagement proxy captured (anonymized) at account deletion.
+    long countByUserId(UUID userId);
+
     /**
      * Users with import results newer than their completion-notification claim —
      * the candidates the worker's completion sweep checks each tick. The per-user
@@ -230,6 +233,19 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
     @Query("SELECT r.chaveAcesso FROM Receipt r WHERE r.uf = :uf AND r.chaveAcesso IS NOT NULL "
             + "ORDER BY r.createdAt DESC")
     List<String> chavesByUf(@Param("uf") UnidadeFederativa uf, Pageable pageable);
+
+    /** Ids dos usuários cuja UF PREDOMINANTE (moda das notas) é a dada — pro filtro de UF no admin. */
+    @Query(value = """
+            SELECT user_uf.user_id FROM (
+                SELECT ranked.user_id, ranked.uf FROM (
+                    SELECT r.user_id, r.uf,
+                           ROW_NUMBER() OVER (PARTITION BY r.user_id ORDER BY COUNT(*) DESC) AS rn
+                    FROM receipts r WHERE r.uf IS NOT NULL
+                    GROUP BY r.user_id, r.uf) ranked
+                WHERE ranked.rn = 1) user_uf
+            WHERE user_uf.uf = :uf
+            """, nativeQuery = true)
+    List<UUID> userIdsByPredominantUf(@Param("uf") String uf);
 
     /** (householdId, receiptCount) for the given households — batch enrichment for the admin user list. */
     @Query("SELECT receipt.household.id, count(receipt) FROM Receipt receipt "

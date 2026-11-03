@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service;
 
 import com.relyon.economizaai.dto.request.ChangePasswordRequest;
+import com.relyon.economizaai.dto.request.DeleteAccountRequest;
 import com.relyon.economizaai.dto.request.LoginRequest;
 import com.relyon.economizaai.dto.request.RegisterRequest;
 import com.relyon.economizaai.dto.request.SetPasswordRequest;
@@ -39,6 +40,7 @@ import com.relyon.economizaai.exception.PasswordAlreadySetException;
 import com.relyon.economizaai.exception.InvalidLegalVersionException;
 import com.relyon.economizaai.legal.LegalDocuments;
 import com.relyon.economizaai.model.HouseholdProductAlias;
+import com.relyon.economizaai.model.AccountDeletionFeedback;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.service.analytics.meta.MetaConversionsService;
 import com.relyon.economizaai.service.attribution.AttributionResolver;
@@ -53,6 +55,7 @@ import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.repository.ShoppingListRepository;
 import com.relyon.economizaai.repository.SubscriptionRepository;
 import com.relyon.economizaai.repository.UserRepository;
+import com.relyon.economizaai.repository.AccountDeletionFeedbackRepository;
 import com.relyon.economizaai.repository.UserWatchedMarketRepository;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
 import com.relyon.economizaai.repository.NotificationPreferenceRepository;
@@ -80,6 +83,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -95,6 +99,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final HouseholdRepository householdRepository;
     private final ReceiptRepository receiptRepository;
+    private final AccountDeletionFeedbackRepository accountDeletionFeedbackRepository;
     private final NotificationRuleRepository notificationRuleRepository;
     private final UserWatchedMarketRepository userWatchedMarketRepository;
     private final SubscriptionRepository subscriptionRepository;
@@ -470,8 +475,15 @@ public class UserService {
                                 List<ManualPurchaseSummary> manualPurchases,
                                 List<ShoppingListSummary> shoppingLists) {}
 
+    /** Admin-initiated deletion (no churn survey). */
     @Transactional
     public void deleteAccount(User user) {
+        deleteAccount(user, null);
+    }
+
+    @Transactional
+    public void deleteAccount(User user, DeleteAccountRequest request) {
+        recordDeletionFeedback(user, request);
         var householdId = user.getHousehold().getId();
         userRepository.delete(user);
         log.info("User account deleted: {}", LogMasker.email(user.getEmail()));
@@ -479,5 +491,36 @@ public class UserService {
             householdRepository.deleteById(householdId);
             log.info("Household {} deleted (no members left after user deletion)", householdId);
         }
+    }
+
+    /**
+     * Persist the churn survey (if any) BEFORE the user row is deleted — the feedback row is
+     * anonymized (no user_id/email), only a non-identifying snapshot for segmenting churn.
+     * Never blocks deletion: a missing body or a failure here must not stop the account removal.
+     */
+    private void recordDeletionFeedback(User user, DeleteAccountRequest request) {
+        var reason = request == null ? null : request.reason();
+        var details = request == null ? null : trimToNull(request.details());
+        if (reason == null && details == null) {
+            log.info("account.deleted reason=none tier={}", user.getSubscriptionTier());
+            return;
+        }
+        var ageDays = (int) Math.max(0, ChronoUnit.DAYS.between(user.getCreatedAt(), LocalDateTime.now()));
+        accountDeletionFeedbackRepository.save(AccountDeletionFeedback.builder()
+                .reason(reason)
+                .details(details)
+                .subscriptionTier(user.getSubscriptionTier() == null ? null : user.getSubscriptionTier().name())
+                .accountAgeDays(ageDays)
+                .receiptCount((int) receiptRepository.countByUserId(user.getId()))
+                .build());
+        log.info("account.deleted reason={} tier={} age_days={}", reason, user.getSubscriptionTier(), ageDays);
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        var trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }

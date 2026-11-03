@@ -1,6 +1,7 @@
 package com.relyon.economizaai.controller;
 
 import com.relyon.economizaai.dto.request.ChangePasswordRequest;
+import com.relyon.economizaai.dto.request.DeleteAccountRequest;
 import com.relyon.economizaai.dto.request.SetPasswordRequest;
 import com.relyon.economizaai.dto.request.UpdateContributionRequest;
 import com.relyon.economizaai.dto.request.UpdateDigestPreferencesRequest;
@@ -149,8 +150,9 @@ public class UserController {
     }
 
     @DeleteMapping("/me")
-    public ResponseEntity<Map<String, String>> deleteAccount(@AuthenticationPrincipal User user) {
-        userService.deleteAccount(user);
+    public ResponseEntity<Map<String, String>> deleteAccount(@AuthenticationPrincipal User user,
+                                                             @Valid @RequestBody(required = false) DeleteAccountRequest request) {
+        userService.deleteAccount(user, request);
         return ResponseEntity.ok(Map.of("message", messageService.translate("user.account.deleted")));
     }
 
