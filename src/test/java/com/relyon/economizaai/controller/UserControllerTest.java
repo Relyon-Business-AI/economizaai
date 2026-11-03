@@ -25,6 +25,7 @@ import com.relyon.economizaai.model.enums.SubscriptionTier;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.UserService;
+import com.relyon.economizaai.service.profile.StoreReviewPromptService;
 import com.relyon.economizaai.dto.request.UpdatePhoneRequest;
 import com.relyon.economizaai.dto.request.VerifyPhoneRequest;
 import com.relyon.economizaai.exception.InvalidPhoneNumberException;
@@ -111,6 +112,9 @@ class UserControllerTest {
 
     @MockitoBean
     private WhatsAppOptInService whatsAppOptInService;
+
+    @MockitoBean
+    private StoreReviewPromptService storeReviewPromptService;
 
     private User buildUser() {
         var user = User.builder()
