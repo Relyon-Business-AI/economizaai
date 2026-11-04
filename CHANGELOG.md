@@ -1,5 +1,17 @@
 # economizai — what's new
 
+## 2026-11-04 — Localização por CEP (alternativa ao GPS, funciona na web)
+
+- **Novo `GET /api/v1/users/me/location/cep?cep=NNNNNNNN`** → `{ latitude, longitude, label }`.
+  Resolve um CEP para coordenada aproximada (BrasilAPI CEP v2; fallback de geocoding
+  quando a BrasilAPI não traz coordenada). **Só pré-visualiza** — salvar segue em
+  `PATCH /me/location` com as coords devolvidas (mesmo fluxo da prévia do GPS). `404`
+  (`cep.not-resolvable`) quando o CEP não resolve.
+- **Por quê:** até agora definir localização era **só GPS**, o que não funciona bem na
+  web e exclui quem nega a permissão. O CEP cobre esses casos sem pedir permissão nenhuma.
+  App: tela de Localização ganhou campo de CEP ("ou use seu CEP") ao lado do botão de GPS.
+
+
 ## 2026-11-04 — Promoções: feed com contexto de localização (`/promos/feed`)
 
 - **Novo endpoint `GET /api/v1/price-index/promos/feed`** → `{ locationSource, uf, promos }`:

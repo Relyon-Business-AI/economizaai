@@ -25,6 +25,7 @@ import com.relyon.economizaai.model.enums.SubscriptionTier;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.UserService;
+import com.relyon.economizaai.service.geo.CepLocationService;
 import com.relyon.economizaai.service.profile.StoreReviewPromptService;
 import com.relyon.economizaai.dto.request.UpdatePhoneRequest;
 import com.relyon.economizaai.dto.request.VerifyPhoneRequest;
@@ -52,6 +53,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -116,6 +118,9 @@ class UserControllerTest {
     @MockitoBean
     private StoreReviewPromptService storeReviewPromptService;
 
+    @MockitoBean
+    private CepLocationService cepLocationService;
+
     private User buildUser() {
         var user = User.builder()
                 .id(UUID.randomUUID())
@@ -172,6 +177,30 @@ class UserControllerTest {
     void getProfile_shouldReturn401WhenUnauthenticated() throws Exception {
         mockMvc.perform(get("/api/v1/users/me"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void resolveCep_shouldReturnCoordinates() throws Exception {
+        var user = buildUser();
+        when(cepLocationService.resolve("88010000")).thenReturn(Optional.of(
+                new CepLocationService.CepLocation(new BigDecimal("-27.59"), new BigDecimal("-48.55"), "Florianópolis - SC")));
+
+        mockMvc.perform(get("/api/v1/users/me/location/cep?cep=88010000")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.latitude").value(-27.59))
+                .andExpect(jsonPath("$.longitude").value(-48.55))
+                .andExpect(jsonPath("$.label").value("Florianópolis - SC"));
+    }
+
+    @Test
+    void resolveCep_shouldReturn404WhenUnresolvable() throws Exception {
+        var user = buildUser();
+        when(cepLocationService.resolve(any())).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/v1/users/me/location/cep?cep=00000000")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isNotFound());
     }
 
     @Test

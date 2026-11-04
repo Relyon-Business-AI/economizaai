@@ -875,6 +875,40 @@
 					"response": []
 				},
 				{
+					"name": "Resolve CEP to coordinates",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/location/cep?cep=90010000",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"location",
+								"cep"
+							],
+							"query": [
+								{
+									"key": "cep",
+									"value": "90010000"
+								}
+							]
+						},
+						"description": "Resolve CEP -> {latitude, longitude, label}. So pre-visualiza; salvar via PATCH /me/location. 404 se nao resolver."
+					},
+					"response": []
+				},
+				{
 					"name": "Set push device token (FCM)",
 					"request": {
 						"method": "PATCH",
