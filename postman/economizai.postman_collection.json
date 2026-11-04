@@ -5035,6 +5035,33 @@
 					"response": []
 				},
 				{
+					"name": "Community promos feed (location context)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/price-index/promos/feed",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"price-index",
+								"promos",
+								"feed"
+							]
+						},
+						"description": "Feed com contexto de localizacao: {locationSource (EXPLICIT|INFERRED|NONE), uf, promos[]}. Recorte 'perto de voce' (seguidos + raio/estado) feito no app."
+					},
+					"response": []
+				},
+				{
 					"name": "Current community promos (radius filter)",
 					"request": {
 						"method": "GET",

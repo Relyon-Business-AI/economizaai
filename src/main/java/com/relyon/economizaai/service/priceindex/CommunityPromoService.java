@@ -148,7 +148,20 @@ public class CommunityPromoService {
             }
         }
         promos.sort(Comparator.comparing(CommunityPromo::dropPct).reversed());
-        return List.copyOf(promos);
+        return List.copyOf(attachUf(promos));
+    }
+
+    /** Anexa a UF (estado) de cada mercado — fato independente do viewer, resolvido em UM batch. */
+    private List<CommunityPromo> attachUf(List<CommunityPromo> promos) {
+        if (promos.isEmpty()) return promos;
+        var cnpjs = promos.stream().map(CommunityPromo::marketCnpj).distinct().toList();
+        var locationsByCnpj = marketLocationService.findByCnpjs(cnpjs);
+        return promos.stream()
+                .map(promo -> {
+                    var location = locationsByCnpj.get(promo.marketCnpj());
+                    return promo.withUf(location != null ? location.getState() : null);
+                })
+                .toList();
     }
 
     /**
@@ -184,7 +197,8 @@ public class CommunityPromoService {
                 priceDrop.recentSampleCount(),
                 distinctHouseholds,
                 null,
-                false
+                false,
+                null
         );
     }
 
@@ -270,20 +284,28 @@ public class CommunityPromoService {
             int recentSampleCount,
             long distinctHouseholds,
             Double distanceKm,
-            boolean watching
+            boolean watching,
+            String uf
     ) {
         /** Copy with the household's custom display name applied; leaves the original {@code marketName} intact. */
         public CommunityPromo withMarketFriendlyName(String marketFriendlyName) {
             return new CommunityPromo(productId, productName, marketCnpj, marketCnpjRoot, marketName,
                     marketFriendlyName, currentMedianPrice, baselineMedianPrice, dropPct,
-                    recentSampleCount, distinctHouseholds, distanceKm, watching);
+                    recentSampleCount, distinctHouseholds, distanceKm, watching, uf);
         }
 
         /** Copy with the VIEWER's context (distance from their location, watched flag) applied. */
         public CommunityPromo withViewerContext(Double distanceKm, boolean watching) {
             return new CommunityPromo(productId, productName, marketCnpj, marketCnpjRoot, marketName,
                     marketFriendlyName, currentMedianPrice, baselineMedianPrice, dropPct,
-                    recentSampleCount, distinctHouseholds, distanceKm, watching);
+                    recentSampleCount, distinctHouseholds, distanceKm, watching, uf);
+        }
+
+        /** Copy with the market's UF (state) attached — viewer-independent, set once in detection. */
+        public CommunityPromo withUf(String uf) {
+            return new CommunityPromo(productId, productName, marketCnpj, marketCnpjRoot, marketName,
+                    marketFriendlyName, currentMedianPrice, baselineMedianPrice, dropPct,
+                    recentSampleCount, distinctHouseholds, distanceKm, watching, uf);
         }
     }
 }

@@ -1,5 +1,23 @@
 # economizai — what's new
 
+## 2026-11-04 — Promoções: feed com contexto de localização (`/promos/feed`)
+
+- **Novo endpoint `GET /api/v1/price-index/promos/feed`** → `{ locationSource, uf, promos }`:
+  - `locationSource`: `EXPLICIT` (o usuário definiu localização), `INFERRED` (estimada
+    pela **mediana** das coordenadas dos mercados geocodificados onde ele já escaneou
+    nota) ou `NONE`. Quando != NONE, cada promo traz `distanceKm` relativo a essa
+    localização e o app recorta por raio (10 km) + mercados acompanhados.
+  - `uf`: UF majoritária das notas do usuário — fallback de estado quando não há
+    coordenadas (app mostra "mercados do seu estado").
+  - `promos`: lista completa; o app faz o recorte/"ver mais" no cliente.
+- **`CommunityPromo` ganhou o campo `uf`** (estado do mercado) — ADITIVO, usado no
+  fallback por estado. O endpoint legado `GET /price-index/promos` (array) segue
+  intacto para apps antigos, agora também com `uf` em cada item.
+- **Privacidade:** a localização estimada é dado do próprio usuário, usado só pra
+  ordenar o que *ele* vê — nunca entra no índice colaborativo. O app mostra
+  "estimado pelas suas compras" e um link para definir a localização exata.
+
+
 ## 2026-11-04 — Admin: classificar merchant cinza por segmento (Mercado/Farmácia/Combustível/Bloquear)
 
 - Novo `PUT /api/v1/admin/merchants/{cnpj}/classification` com body
