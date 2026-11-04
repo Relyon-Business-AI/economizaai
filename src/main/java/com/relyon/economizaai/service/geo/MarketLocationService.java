@@ -45,6 +45,12 @@ public class MarketLocationService {
     private static final int MAX_GEOCODE_ATTEMPTS = 3;
     private static final int MAX_SEGMENT_ATTEMPTS = 3;
     private static final int MAX_IBGE_BACKFILL_ATTEMPTS = 3;
+    /**
+     * segmentAttempts neste valor marca uma classificação MANUAL do admin: fica no limite das duas
+     * filas do classificador CNAE ({@code SegmentAttemptsLessThan}), então o job nunca re-lookup
+     * nem sobrescreve o veredito do admin. Use em {@code AdminMerchantService.classifyMerchant}.
+     */
+    public static final int MANUAL_SEGMENT_ATTEMPTS = MAX_SEGMENT_ATTEMPTS + MAX_IBGE_BACKFILL_ATTEMPTS;
     private static final String BRASIL_SUFFIX = ", Brasil";
 
     private final MarketLocationRepository repository;

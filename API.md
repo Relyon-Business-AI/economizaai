@@ -1509,6 +1509,7 @@ GET    /api/v1/admin/merchants/grey                → List<GreyMerchantResponse
 GET    /api/v1/admin/llm/report                    → LlmReportResponse (LLM labels, cost, override-rate KPI, disagreement queue)
 POST   /api/v1/admin/llm/disagreements/{id}/resolve?accept=true|false → 204 (accept applies suggestion as source USER)
 PUT    /api/v1/admin/merchants/{cnpj}/support      → SupportOverrideResult — body {"override":"SUPPORTED"|"BLOCKED"|null}; SUPPORTED backfills the price index from the merchant's confirmed receipts
+PUT    /api/v1/admin/merchants/{cnpj}/classification → ClassificationResult — body {"segment":"SUPERMARKET"|"PHARMACY"|"GAS_STATION"|"OTHER"}; veredito por segmento (Mercado/Farmácia/Combustível/Bloquear). Grava o segmento como MANUAL (o classificador CNAE não sobrescreve), limpa o override p/ segmentos suportados (ou BLOCKED p/ OTHER) e faz backfill do índice. Preferir a /support — evita que um mercado promovido vaze pra lente Farmácia
 DELETE /api/v1/admin/products/{id}?force=false     → 200 ProductDeletionResponse (prune test/junk catalog rows)
 GET    /api/v1/admin/analytics/acquisition?days=30&includeInternal=false → AcquisitionAnalyticsResponse (signup funnel + timeline by channel + byPlatform + campaign breakdown + Meta ad-spend / cost-per-signup)
 GET    /api/v1/admin/analytics/subscriptions?includeInternal=false       → SubscriptionAnalyticsResponse (users by tier, paying-active, promo-granted)

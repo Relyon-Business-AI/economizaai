@@ -14944,7 +14944,62 @@
 								"exec": [
 									"if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin \u2014 pulando'); return; }",
 									"pm.test('GET /admin/merchants/grey -> 200', function () { pm.response.to.have.status(200); });",
-									"pm.test('resposta e uma lista', function () { pm.expect(pm.response.json()).to.be.an('array'); });"
+									"pm.test('resposta e uma lista', function () { pm.expect(pm.response.json()).to.be.an('array'); });",
+										"var grey = pm.response.json(); if (Array.isArray(grey) && grey.length) { pm.collectionVariables.set('greyCnpj', grey[0].cnpj); }"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "49b2a. Admin: classificar merchant cinza (segmento)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"segment\": \"SUPERMARKET\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/merchants/{{greyCnpj}}/classification",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"merchants",
+								"{{greyCnpj}}",
+								"classification"
+							]
+						},
+						"description": "Veredito por segmento: SUPERMARKET (Mercado), PHARMACY (Farmacia), GAS_STATION (Combustivel) ou OTHER (Bloquear). Grava o segmento como manual (o classificador CNAE nao sobrescreve), ajusta o override e faz backfill do indice quando suportado."
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin — pulando'); return; }",
+									"if (!pm.collectionVariables.get('greyCnpj')) { pm.test.skip('Sem merchant cinza — pulando'); return; }",
+									"pm.test('PUT /admin/merchants/{cnpj}/classification -> 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('resposta tem segment', function () { pm.expect(pm.response.json().segment).to.eql('SUPERMARKET'); });"
 								]
 							}
 						}
