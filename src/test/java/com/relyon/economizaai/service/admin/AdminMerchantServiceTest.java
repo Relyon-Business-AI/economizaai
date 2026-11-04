@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.admin;
 
+import com.relyon.economizaai.exception.InvalidMerchantSegmentException;
 import com.relyon.economizaai.exception.MarketNotFoundException;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.MarketLocation;
@@ -11,6 +12,7 @@ import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.MarketLocationRepository;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
+import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.priceindex.PriceIndexService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -108,5 +110,71 @@ class AdminMerchantServiceTest {
         assertThat(market.getSupportOverride()).isEqualTo(MerchantSupportOverride.SUPPORTED);
         assertThat(result.backfilledReceipts()).isEqualTo(1);
         verify(priceIndexService, never()).recordContributions(alreadyContributed);
+    }
+
+    @Test
+    void classifyMerchant_market_setsSegmentClearsOverridePinsAndBackfills() {
+        var market = greyMarket("17302829000494", "JL SUPERMERCADOS");
+        var receipt = confirmedReceipt("17302829000494");
+        when(marketLocationRepository.findByCnpj("17302829000494")).thenReturn(Optional.of(market));
+        when(receiptRepository.findAllByCnpjEmitenteAndStatus("17302829000494", ReceiptStatus.CONFIRMED))
+                .thenReturn(List.of(receipt));
+        when(auditRepository.existsByReceiptId(receipt.getId())).thenReturn(false);
+        when(priceIndexService.recordContributions(receipt)).thenReturn(2);
+
+        var result = service.classifyMerchant("17302829000494", MerchantSegment.SUPERMARKET);
+
+        assertThat(market.getSegment()).isEqualTo(MerchantSegment.SUPERMARKET);
+        assertThat(market.getSupportOverride()).isNull(); // segment drives — no SUPPORTED override leak
+        assertThat(market.getSegmentAttempts()).isEqualTo(MarketLocationService.MANUAL_SEGMENT_ATTEMPTS);
+        assertThat(market.getSegmentClassifiedAt()).isNotNull();
+        assertThat(result.segment()).isEqualTo(MerchantSegment.SUPERMARKET);
+        assertThat(result.backfilledReceipts()).isEqualTo(1);
+    }
+
+    @Test
+    void classifyMerchant_pharmacy_backfills() {
+        var market = greyMarket("11111111000111", "Drogaria Cinza");
+        when(marketLocationRepository.findByCnpj("11111111000111")).thenReturn(Optional.of(market));
+        when(receiptRepository.findAllByCnpjEmitenteAndStatus("11111111000111", ReceiptStatus.CONFIRMED))
+                .thenReturn(List.of());
+
+        var result = service.classifyMerchant("11111111000111", MerchantSegment.PHARMACY);
+
+        assertThat(market.getSegment()).isEqualTo(MerchantSegment.PHARMACY);
+        assertThat(market.getSupportOverride()).isNull();
+        assertThat(result.backfilledReceipts()).isZero();
+    }
+
+    @Test
+    void classifyMerchant_fuel_setsSegmentWithoutBackfill() {
+        var market = greyMarket("11111111000111", "Posto Cinza");
+        when(marketLocationRepository.findByCnpj("11111111000111")).thenReturn(Optional.of(market));
+
+        var result = service.classifyMerchant("11111111000111", MerchantSegment.GAS_STATION);
+
+        assertThat(market.getSegment()).isEqualTo(MerchantSegment.GAS_STATION);
+        assertThat(market.getSupportOverride()).isNull(); // combustível fora do índice de mercado
+        assertThat(result.backfilledReceipts()).isZero();
+        verify(priceIndexService, never()).recordContributions(any());
+    }
+
+    @Test
+    void classifyMerchant_other_blocksWithoutBackfill() {
+        var market = greyMarket("11111111000111", "Restaurante Disfarçado");
+        when(marketLocationRepository.findByCnpj("11111111000111")).thenReturn(Optional.of(market));
+
+        var result = service.classifyMerchant("11111111000111", MerchantSegment.OTHER);
+
+        assertThat(market.getSegment()).isEqualTo(MerchantSegment.OTHER);
+        assertThat(market.getSupportOverride()).isEqualTo(MerchantSupportOverride.BLOCKED);
+        assertThat(result.backfilledReceipts()).isZero();
+        verify(priceIndexService, never()).recordContributions(any());
+    }
+
+    @Test
+    void classifyMerchant_unknownSegment_throws() {
+        assertThrows(InvalidMerchantSegmentException.class,
+                () -> service.classifyMerchant("11111111000111", MerchantSegment.UNKNOWN));
     }
 }

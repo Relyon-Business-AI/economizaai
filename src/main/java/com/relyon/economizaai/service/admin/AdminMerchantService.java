@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.admin;
 
 import com.relyon.economizaai.dto.response.GreyMerchantResponse;
+import com.relyon.economizaai.exception.InvalidMerchantSegmentException;
 import com.relyon.economizaai.exception.MarketNotFoundException;
 import com.relyon.economizaai.model.enums.MerchantSegment;
 import com.relyon.economizaai.model.enums.MerchantSupportOverride;
@@ -8,12 +9,15 @@ import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.MarketLocationRepository;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
+import com.relyon.economizaai.service.geo.MarketLocationService;
+import com.relyon.economizaai.service.geo.MerchantSupportGate;
 import com.relyon.economizaai.service.priceindex.PriceIndexService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 
@@ -64,6 +68,35 @@ public class AdminMerchantService {
         return new SupportOverrideResult(cnpj, override, backfilled);
     }
 
+    /**
+     * Veredito do admin por SEGMENTO (tela de confirmar/bloquear): classifica o merchant como
+     * Mercado ({@code SUPERMARKET}/{@code FOOD_RETAIL}), Farmácia ({@code PHARMACY}), Combustível
+     * ({@code GAS_STATION}) ou Bloquear ({@code OTHER}/{@code FOOD_SERVICE}). Grava o segmento como
+     * MANUAL (pina {@code segmentAttempts} pra o classificador CNAE não sobrescrever), ajusta o
+     * override (BLOCKED quando bloqueia, limpo caso contrário — o segmento passa a mandar) e faz
+     * backfill do índice quando o segmento entra no índice colaborativo. Resolve a ambiguidade que
+     * deixava um mercado promovido via override SUPPORTED vazar pra lente Farmácia.
+     */
+    @Transactional
+    public ClassificationResult classifyMerchant(String cnpj, MerchantSegment segment) {
+        if (segment == null || segment == MerchantSegment.UNKNOWN) {
+            throw new InvalidMerchantSegmentException(String.valueOf(segment));
+        }
+        var market = marketLocationRepository.findByCnpj(cnpj)
+                .orElseThrow(() -> new MarketNotFoundException(cnpj));
+        var block = segment == MerchantSegment.OTHER || segment == MerchantSegment.FOOD_SERVICE;
+        market.setSegment(segment);
+        market.setSegmentClassifiedAt(LocalDateTime.now());
+        market.setSegmentAttempts(MarketLocationService.MANUAL_SEGMENT_ATTEMPTS);
+        market.setSupportOverride(block ? MerchantSupportOverride.BLOCKED : null);
+        marketLocationRepository.save(market);
+        var backfilled = !block && MerchantSupportGate.supportedSegments().contains(segment)
+                ? backfillObservations(cnpj) : 0;
+        log.info("merchant.classify.manual cnpj={} segment={} block={} backfilledReceipts={}",
+                cnpj, segment, block, backfilled);
+        return new ClassificationResult(cnpj, segment, market.getSupportOverride(), backfilled);
+    }
+
     private int backfillObservations(String cnpj) {
         var confirmedReceipts = receiptRepository.findAllByCnpjEmitenteAndStatus(cnpj, ReceiptStatus.CONFIRMED);
         var backfilled = 0;
@@ -75,4 +108,7 @@ public class AdminMerchantService {
     }
 
     public record SupportOverrideResult(String cnpj, MerchantSupportOverride override, int backfilledReceipts) {}
+
+    public record ClassificationResult(String cnpj, MerchantSegment segment,
+                                       MerchantSupportOverride override, int backfilledReceipts) {}
 }

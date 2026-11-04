@@ -2,6 +2,7 @@ package com.relyon.economizaai.controller;
 
 import com.relyon.economizaai.dto.request.CreateMarketChainRequest;
 import com.relyon.economizaai.dto.request.MergeProductRequest;
+import com.relyon.economizaai.dto.request.MerchantClassificationRequest;
 import com.relyon.economizaai.dto.request.MerchantSupportOverrideRequest;
 import com.relyon.economizaai.dto.request.UpdateMarketChainRequest;
 import com.relyon.economizaai.dto.request.ReceiptIdsRequest;
@@ -677,6 +678,19 @@ public class AdminController {
     public ResponseEntity<AdminMerchantService.SupportOverrideResult> setMerchantSupport(
             @PathVariable String cnpj, @RequestBody MerchantSupportOverrideRequest request) {
         return ResponseEntity.ok(adminMerchantService.setSupportOverride(cnpj, request.override()));
+    }
+
+    /**
+     * Veredito por SEGMENTO (tela de confirmar/bloquear): classifica o merchant como Mercado
+     * (SUPERMARKET), Farmácia (PHARMACY), Combustível (GAS_STATION) ou Bloquear (OTHER). Grava o
+     * segmento como manual (o classificador CNAE não sobrescreve), ajusta o override e faz backfill
+     * do índice quando o segmento é suportado. Mais específico que /support — não deixa um mercado
+     * promovido vazar pra lente Farmácia.
+     */
+    @PutMapping("/merchants/{cnpj}/classification")
+    public ResponseEntity<AdminMerchantService.ClassificationResult> classifyMerchant(
+            @PathVariable String cnpj, @RequestBody MerchantClassificationRequest request) {
+        return ResponseEntity.ok(adminMerchantService.classifyMerchant(cnpj, request.segment()));
     }
 
     /** LLM teacher-layer health: labels, cost, override-rate KPI, disagreement queue. */

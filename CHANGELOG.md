@@ -1,5 +1,18 @@
 # economizai — what's new
 
+## 2026-11-04 — Admin: classificar merchant cinza por segmento (Mercado/Farmácia/Combustível/Bloquear)
+
+- Novo `PUT /api/v1/admin/merchants/{cnpj}/classification` com body
+  `{"segment":"SUPERMARKET"|"PHARMACY"|"GAS_STATION"|"OTHER"}`. Em vez do
+  antigo veredito binário SUPPORTED/BLOCKED (que deixava o segmento UNKNOWN e
+  fazia o merchant vazar pra lente errada), o admin define o **segmento real**:
+  Mercado, Farmácia, Combustível ou Bloquear (OTHER). Resposta `ClassificationResult`
+  `{cnpj, segment, override, backfilledReceipts}`.
+- O segmento vira **manual** (o classificador CNAE automático não sobrescreve mais);
+  override é limpo pros segmentos suportados (o segmento passa a mandar na lente) ou
+  vira BLOCKED pra OTHER; backfill do índice roda pros suportados. A tela admin de
+  merchants cinza deve usar este endpoint (o `/support` continua existindo).
+
 ## 2026-11-03 — Lente Farmácia/Combustível não mostra mais mercado promovido
 
 - Fix: um mercado com CNAE não-resolvido que um admin marcou como suportado
