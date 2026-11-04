@@ -152,8 +152,13 @@ public class CnpjActivityClient {
     // 4691 = atacado de mercadorias em geral COM PREDOMINÂNCIA DE ALIMENTOS — os atacarejos /
     // cash-and-carry (Atacadão/Assaí-like) registram-se assim; são fonte de preço de mercado
     // legítima, então contam como suportados. Um 4691 B2B-puro atípico se bloqueia via override.
+    // 463* = atacado ESPECIALIZADO de alimentos/bebidas (4633 hortifrúti, 4634 carnes, 4639
+    // alimentos em geral…) — atacarejos de bairro registram esses códigos como atividade
+    // principal e o dono aprovou TODOS os casos reais da fila (Marquesa, Adição, Center Sul,
+    // Padre Cícero — 2026-11-04). Um distribuidor B2B-puro atípico se bloqueia via override;
+    // nota de consumidor final num 463* é, na prática, compra de mercado.
     private static final List<String> FOOD_RETAIL_PREFIXES =
-            List.of("4691", "4721", "4722", "4723", "4724", "4729");
+            List.of("463", "4691", "4721", "4722", "4723", "4724", "4729");
 
     /**
      * Pure mapping (CNAE prefix → segment), extracted for testability. Classifies by

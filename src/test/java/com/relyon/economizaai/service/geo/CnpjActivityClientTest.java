@@ -128,6 +128,21 @@ class CnpjActivityClientTest {
     }
 
     @Test
+    void foodWholesaleIsFoodRetail() {
+        // Atacarejos de bairro registram o atacado de alimentos como atividade principal
+        // (Marquesa 4639701, Soul 4634601, Elder Besen 4633801 — todos aprovados pelo dono).
+        assertEquals(MerchantSegment.FOOD_RETAIL,
+                CnpjActivityClient.segmentFromCnae(List.of("4639701"))); // alimentos em geral
+        assertEquals(MerchantSegment.FOOD_RETAIL,
+                CnpjActivityClient.segmentFromCnae(List.of("4634601"))); // carnes
+        assertEquals(MerchantSegment.FOOD_RETAIL,
+                CnpjActivityClient.segmentFromCnae(List.of("4633801"))); // hortifrúti
+        // 4693 (atacado SEM predominância de alimentos) segue fora — B2B genérico.
+        assertEquals(MerchantSegment.OTHER,
+                CnpjActivityClient.segmentFromCnae(List.of("4693100")));
+    }
+
+    @Test
     void emptyIsUnknown() {
         assertEquals(MerchantSegment.UNKNOWN, CnpjActivityClient.segmentFromCnae(List.of()));
     }
