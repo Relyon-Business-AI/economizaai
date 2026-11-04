@@ -5,6 +5,8 @@ import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.LocalizedMessageService;
+import com.relyon.economizaai.service.geo.ViewerLocationService;
+import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import com.relyon.economizaai.service.geo.WatchedMarketService;
 import com.relyon.economizaai.service.merchant.SponsoredPromoService;
 import com.relyon.economizaai.service.priceindex.CommunityPromoService;
@@ -44,6 +46,7 @@ class PriceIndexControllerTest {
     @MockitoBean private CommunityPromoService communityPromoService;
     @MockitoBean private WatchedMarketService watchedMarketService;
     @MockitoBean private SponsoredPromoService sponsoredPromoService;
+    @MockitoBean private ViewerLocationService viewerLocationService;
     @MockitoBean private JwtService jwtService;
     @MockitoBean private UserDetailsService userDetailsService;
     @MockitoBean private LocalizedMessageService localizedMessageService;
@@ -145,7 +148,7 @@ class PriceIndexControllerTest {
                         new CommunityPromoService.CommunityPromo(UUID.randomUUID(), "Arroz",
                                 "93015006005182", "93015006", "Mercado X", "Mercado X",
                                 new BigDecimal("22"), new BigDecimal("28"), new BigDecimal("21.43"),
-                                5, 3L, null, false)
+                                5, 3L, null, false, "RS")
                 ));
 
         mockMvc.perform(get("/api/v1/price-index/promos")
@@ -153,6 +156,29 @@ class PriceIndexControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].productName").value("Arroz"))
                 .andExpect(jsonPath("$[0].dropPct").value(21.43));
+    }
+
+    @Test
+    void promosFeed_wrapsPromosWithLocationContext() throws Exception {
+        when(watchedMarketService.watchedCnpjs(any())).thenReturn(Set.of());
+        when(viewerLocationService.resolve(any()))
+                .thenReturn(new ViewerLocation(new BigDecimal("-30.05"), new BigDecimal("-51.20"),
+                        ViewerLocationService.Source.INFERRED, "RS"));
+        when(communityPromoService.detectAll(any(), any(), isNull(), any()))
+                .thenReturn(List.of(
+                        new CommunityPromoService.CommunityPromo(UUID.randomUUID(), "Arroz",
+                                "93015006005182", "93015006", "Mercado X", "Mercado X",
+                                new BigDecimal("22"), new BigDecimal("28"), new BigDecimal("21.43"),
+                                5, 3L, 2.0, false, "RS")
+                ));
+
+        mockMvc.perform(get("/api/v1/price-index/promos/feed")
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.locationSource").value("INFERRED"))
+                .andExpect(jsonPath("$.uf").value("RS"))
+                .andExpect(jsonPath("$.promos[0].productName").value("Arroz"))
+                .andExpect(jsonPath("$.promos[0].uf").value("RS"));
     }
 
     @Test

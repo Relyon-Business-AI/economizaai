@@ -1102,10 +1102,25 @@ best-markets window (180 days).
 ```
 GET /api/v1/price-index/products/{productId}/best-markets?limit=10&radiusKm=5[&lat=&lng=]
 GET /api/v1/price-index/promos?radiusKm=5
+GET /api/v1/price-index/promos/feed
 ```
 
 `promos` returns currently-detected community promos in the user's area
-(recent median ≥ 15% below baseline, k-anon protected).
+(recent median ≥ 15% below baseline, k-anon protected). Each promo now also
+carries `uf` (the market's state).
+
+`promos/feed` wraps the same list with the LOCATION CONTEXT the app needs for
+its "perto de você" cascade: `{ locationSource, uf, promos }`.
+- `locationSource`: `EXPLICIT` (user set a location), `INFERRED` (estimated from
+  the **median** of the coordinates of the geocoded markets the household has
+  scanned) or `NONE`. When ≠ `NONE`, each promo's `distanceKm` is relative to that
+  location and the app filters by radius (10 km) + watched markets.
+- `uf`: the user's majority receipt state — a state-level fallback when there are
+  no coordinates (the app shows "markets in your state").
+- `promos`: the full list; the app does the nearby/"see more" split client-side.
+The inferred location is the user's own data, used only to rank what THEY see —
+it never enters the collaborative index. Legacy `/promos` (plain array) stays for
+older app builds.
 
 `best-markets` returns **one row per market CHAIN** (`cnpjRoot`), not per store:
 stores of a chain practice the same shelf price, so their observations and

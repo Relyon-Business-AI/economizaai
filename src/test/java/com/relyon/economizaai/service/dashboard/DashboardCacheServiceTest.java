@@ -237,6 +237,6 @@ class DashboardCacheServiceTest {
         return new CommunityPromo(
                 UUID.randomUUID(), productName, cnpj, cnpj.substring(0, 8), marketName, marketName,
                 new BigDecimal("4.00"), new BigDecimal("5.00"), new BigDecimal("20.0"),
-                5, 3L, 2.0, false);
+                5, 3L, 2.0, false, "RS");
     }
 }

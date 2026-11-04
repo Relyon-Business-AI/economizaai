@@ -1,7 +1,9 @@
 package com.relyon.economizaai.controller;
 
+import com.relyon.economizaai.dto.response.PromoFeedResponse;
 import com.relyon.economizaai.dto.response.SponsoredPromoResponse;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.service.geo.ViewerLocationService;
 import com.relyon.economizaai.service.geo.WatchedMarketService;
 import com.relyon.economizaai.service.merchant.SponsoredPromoService;
 import com.relyon.economizaai.service.priceindex.CommunityPromoService;
@@ -41,6 +43,7 @@ public class PriceIndexController {
     private final CommunityPromoService communityPromoService;
     private final WatchedMarketService watchedMarketService;
     private final SponsoredPromoService sponsoredPromoService;
+    private final ViewerLocationService viewerLocationService;
 
     @GetMapping("/products/{productId}/markets/{marketCnpj}/reference")
     public ResponseEntity<PriceIndexService.ReferencePrice> reference(@PathVariable UUID productId,
@@ -102,6 +105,23 @@ public class PriceIndexController {
         return ResponseEntity.ok(communityPromoService.detectAll(
                 user.getHomeLatitude(), user.getHomeLongitude(), radiusKm,
                 watchedMarketService.watchedCnpjs(user)));
+    }
+
+    /**
+     * Feed de promoções com contexto de localização para a cascata "perto de você":
+     * resolve a localização efetiva (explícita → centro estimado das compras → UF) e
+     * devolve-a junto da lista. O app recorta no cliente (seguidos + raio/estado +
+     * "ver mais"). Separado de {@code /promos} (array legado) para não quebrar apps antigos.
+     */
+    @GetMapping("/promos/feed")
+    public ResponseEntity<PromoFeedResponse> promosFeed(
+            @AuthenticationPrincipal User user,
+            @RequestParam(required = false) Double radiusKm) {
+        var location = viewerLocationService.resolve(user);
+        var promos = communityPromoService.detectAll(
+                location.latitude(), location.longitude(), radiusKm,
+                watchedMarketService.watchedCnpjs(user));
+        return ResponseEntity.ok(new PromoFeedResponse(location.source().name(), location.uf(), promos));
     }
 
     /**
