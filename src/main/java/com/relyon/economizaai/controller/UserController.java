@@ -12,6 +12,7 @@ import com.relyon.economizaai.dto.request.UpdatePushTokenRequest;
 import com.relyon.economizaai.dto.request.UpdateUserRequest;
 import com.relyon.economizaai.dto.request.UpdateWhatsAppRequest;
 import com.relyon.economizaai.dto.request.VerifyPhoneRequest;
+import com.relyon.economizaai.dto.response.CepLocationResponse;
 import com.relyon.economizaai.dto.response.DigestPreferencesResponse;
 import com.relyon.economizaai.dto.response.NotificationPreferenceResponse;
 import com.relyon.economizaai.dto.response.SavingsSummaryResponse;
@@ -21,8 +22,10 @@ import com.relyon.economizaai.dto.response.UserDataExportResponse;
 import com.relyon.economizaai.dto.response.UserResponse;
 import com.relyon.economizaai.dto.response.WhatsAppStatusResponse;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.exception.CepNotResolvableException;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.UserService;
+import com.relyon.economizaai.service.geo.CepLocationService;
 import com.relyon.economizaai.service.auth.EmailVerificationService;
 import com.relyon.economizaai.service.auth.PhoneVerificationService;
 import com.relyon.economizaai.service.notifications.NotificationPreferenceService;
@@ -67,6 +70,7 @@ public class UserController {
     private final SubscriptionService subscriptionService;
     private final WhatsAppOptInService whatsAppOptInService;
     private final StoreReviewPromptService storeReviewPromptService;
+    private final CepLocationService cepLocationService;
 
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getProfile(@AuthenticationPrincipal User user) {
@@ -103,6 +107,17 @@ public class UserController {
     public ResponseEntity<UserResponse> updateHomeLocation(@AuthenticationPrincipal User user,
                                                            @Valid @RequestBody UpdateHomeLocationRequest request) {
         return ResponseEntity.ok(userService.updateHomeLocation(user, request));
+    }
+
+    /**
+     * Resolve um CEP para coordenada aproximada (alternativa ao GPS, funciona na web).
+     * Só pré-visualiza — o salvamento continua em {@code PATCH /me/location}. 404 quando
+     * o CEP não resolve.
+     */
+    @GetMapping("/me/location/cep")
+    public ResponseEntity<CepLocationResponse> resolveCep(@RequestParam String cep) {
+        var resolved = cepLocationService.resolve(cep).orElseThrow(CepNotResolvableException::new);
+        return ResponseEntity.ok(new CepLocationResponse(resolved.latitude(), resolved.longitude(), resolved.label()));
     }
 
     @PatchMapping("/me/push-token")

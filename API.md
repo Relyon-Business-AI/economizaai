@@ -214,6 +214,10 @@ DELETE /api/v1/users/me                 → LGPD account deletion (cascades all 
 GET    /api/v1/users/me/export          → LGPD data export (ALL personal data: user + accountExtras + household + receipts + notificationRules + watchedMarketCnpjs + subscription + marketAliases + customCategories + categoryOverrides + manualPurchases + shoppingLists + notifications)
 PATCH  /api/v1/users/me/contribution    { "contributionOptIn": false }   ← LGPD opt-out from collaborative panel
 PATCH  /api/v1/users/me/location        { "latitude": -30.0277, "longitude": -51.2287 }
+GET    /api/v1/users/me/location/cep?cep=90010000  → { latitude, longitude, label }  ← resolve-only, não salva
+       ← alternativa ao GPS (funciona na web, sem permissão): CEP → coordenada aproximada
+         (BrasilAPI CEP v2; fallback geocoding). 404 quando o CEP não resolve. Para SALVAR,
+         chame PATCH /me/location com as coords devolvidas (mesmo fluxo da prévia do GPS).
 PATCH  /api/v1/users/me/push-token      { "pushDeviceToken": "<FCM>" }   ← null/empty to clear
 GET    /api/v1/users/me/store-review-prompt  → { "eligible": true, "reason": "ok" }
        ← may the app show the native store-rating dialog NOW? true only on a positive moment:
