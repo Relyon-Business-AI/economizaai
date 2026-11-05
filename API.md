@@ -498,8 +498,15 @@ POST /api/v1/receipts/confirm-batch
 
 - Staging returns everything except `CONFIRMED` (which has been saved definitively and
   drops off): `IMPORT_QUEUED` / `PROCESSING` / `PENDING_CONFIRMATION` / `FAILED_PARSE` /
-  `NEEDS_DEVICE_FETCH`. Confirm a nota (`POST /receipts/{id}/confirm` or `confirm-batch`)
+  `NEEDS_DEVICE_FETCH` / `CONTINGENCY_PENDING` / `PORTAL_PENDING`. Confirm a nota (`POST /receipts/{id}/confirm` or `confirm-batch`)
   or delete it (`DELETE /receipts/{id}` / `POST /receipts/delete-batch`) to remove it.
+- **`PORTAL_PENDING`** (new): the state's SEFAZ portal was offline (código 615) when the nota was
+  scanned, so no path could reach it — but the nota is fine, the portal is just down (minutes to
+  weeks). NOT a failure: the server re-fetches on a schedule (`PortalRecoverySweeper`) until the portal
+  returns (→ `PENDING_CONFIRMATION` + a "nota pronta" push), giving up to `FAILED_PARSE` only after a
+  long window (~14d). `parseErrorMessage` carries the honest "portal do seu estado está fora" text.
+  The app should render it as a transparent "aguardando" (not "falhou") and may offer the user to
+  photograph the nota instead of waiting. Reason key: `receipt.portal.unavailable`.
 
 ### Submit from a PHOTO of the QR code
 
@@ -1614,6 +1621,7 @@ POST   /api/v1/admin/dev/seed-discounted-receipt?targetEmail= → ReceiptRespons
 - **`revenue` (acquisition response)** — money view. `realizedRevenue` is **real** provider money in the window (from RevenueCat purchase/renewal events → `RevenueEvent`; starts ~0, grows). Everything else is **modeled** from the configured PRO price until real payments accumulate (`revenueRealized=false` while there's none): `mrrProxy` (all PRO × monthly price), `ltvPerProUser` (monthly × `assumedLifetimeMonths`), `projectedLtv` (PRO signups in window × that), `roas` (realized ÷ spend), `projectedRoas` (projectedLtv ÷ spend), `ltvToCac` (ltvPerProUser ÷ cost-per-paid-signup), `byChannel:[{ channel, proUsers, realizedRevenue, projectedLtv }]`, `note`. Price is configurable via `PRO_MONTHLY_PRICE` (def. 9.90) / `PRO_YEARLY_PRICE` (89.00) / `PRO_ASSUMED_LIFETIME_MONTHS` (12). ROAS fields are `null` when there's no spend. Also carries **`payingCustomers`** (ACTIVE subscriptions with a real payment provider — excludes promo/manual grants) and **`avgTicket`** (ticket médio = `realizedRevenue ÷ payingCustomers`); both are `0` until billing is live, wired to populate automatically once real payments arrive.
 - **Retention cohorts** — `GET /admin/analytics/retention-cohorts?weeks=8` (weeks clamped 4–16). The retention triangle: `{ weeks, cohorts:[{ weekStart (ISO Monday), size, activeByWeek:[…] }], byChannel:[{ channel, users, retentionByWeek:[…] }] }`. Users are grouped by signup week; `activeByWeek[k]` = distinct users from that cohort who scanned a receipt `k` weeks after signup (`k=0` = signup week). Each cohort's array only spans the weeks it's old enough to have observed (the FE renders a triangle — recent cohorts are shorter — never fabricated future zeros). `byChannel` is the per-channel **pooled** curve: `retentionByWeek[k]` in `0..1` over every cohort mature enough to have observed week `k`, so a fresh cohort never drags the tail down. Answers "do the users a channel brings keep coming back?"
 - **`visits` (acquisition response)** — first-party top of funnel: `{ totalVisits, uniqueVisitors, signups, visitToSignupRate, byCampaign:[{ channel, source, medium, campaign, uniqueVisitors, signups, conversionRate }], note }`. Fed by the public visit beacon (below), so click→signup conversion is OUR number, independent of Meta. `note` set when no visits recorded yet.
+- **`byHour` (acquisition response)** — signups by hour of day in **Brasília** time, always 24 entries: `[{ hour (0–23), total, byChannel:{CHANNEL:count} }]`, summed over every day of the window. The daily `timeline` is now also bucketed by Brasília day (before, signups after 21h landed on the next day).
 - **`retention` (acquisition response)** — per channel cohort quality: `[{ channel, cohort, activated, activationRate, cohort7, retainedD7, retentionD7, cohort30, retainedD30, retentionD30 }]`. "Retention" = activation (first receipt) within 7/30 days of signup; D7/D30 denominators only count signups old enough to have had the full window.
 
 All require a JWT for a user with `Role.ADMIN`. Regular users hit 403.

@@ -9,6 +9,7 @@ import com.relyon.economizaai.dto.response.AcquisitionReportResponse.ChannelLine
 import com.relyon.economizaai.dto.response.AcquisitionReportResponse.ChannelRevenueLine;
 import com.relyon.economizaai.dto.response.AcquisitionReportResponse.DailySignupLine;
 import com.relyon.economizaai.dto.response.AcquisitionReportResponse.Funnel;
+import com.relyon.economizaai.dto.response.AcquisitionReportResponse.HourlySignupLine;
 import com.relyon.economizaai.dto.response.AcquisitionReportResponse.PlatformLine;
 import com.relyon.economizaai.dto.response.AcquisitionReportResponse.RetentionLine;
 import com.relyon.economizaai.dto.response.AcquisitionReportResponse.RevenueSummary;
@@ -76,7 +77,9 @@ public class AdminAnalyticsService {
         var since = from.atStartOfDay();
 
         var funnel = buildFunnel(since, includeInternal);
-        var timeline = buildTimeline(since, from, to, includeInternal);
+        var signups = loadSignupsInBrasilia(since, from, includeInternal);
+        var timeline = buildTimeline(signups, from, to);
+        var byHour = buildHourlyLines(signups);
         var byChannel = buildChannelLines(since, includeInternal);
         var byPlatform = buildPlatformLines(since, includeInternal);
         var adSpend = buildAdSpend(from, to, byChannel, includeInternal);
@@ -89,7 +92,22 @@ public class AdminAnalyticsService {
                 windowDays, includeInternal, funnel.signups(), adSpend.paidSignups(), adSpend.totalSpend(),
                 revenue.realizedRevenue(), visits.totalVisits());
         return new AcquisitionReportResponse(windowDays, from, to, funnel, timeline,
-                byChannel, byPlatform, byCampaign, adSpend, revenue, visits, retention);
+                byChannel, byPlatform, byCampaign, adSpend, revenue, visits, retention, byHour);
+    }
+
+    /** One signup: Brasília wall-clock creation time + derived channel name. */
+    private record SignupMoment(LocalDateTime createdAt, String channel) {
+    }
+
+    /**
+     * createdAt is stored as UTC wall-clock; convert to Brasília so a 22h signup lands on
+     * the right day/hour. Rows that fall before {@code from} after the shift are dropped.
+     */
+    private List<SignupMoment> loadSignupsInBrasilia(LocalDateTime since, LocalDate from, boolean includeInternal) {
+        return userRepository.signupTimelineSince(since, includeInternal).stream()
+                .map(row -> new SignupMoment(BrazilClock.fromUtc((LocalDateTime) row[0]), channelName(row[1])))
+                .filter(signup -> !signup.createdAt().toLocalDate().isBefore(from))
+                .toList();
     }
 
     /**
@@ -168,25 +186,33 @@ public class AdminAnalyticsService {
         return lines;
     }
 
-    private List<DailySignupLine> buildTimeline(LocalDateTime since, LocalDate from, LocalDate to,
-                                                boolean includeInternal) {
+    private List<DailySignupLine> buildTimeline(List<SignupMoment> signups, LocalDate from, LocalDate to) {
         var perDay = new TreeMap<LocalDate, Map<String, Long>>();
         for (var day = from; !day.isAfter(to); day = day.plusDays(1)) {
             perDay.put(day, new LinkedHashMap<>());
         }
-        for (var row : userRepository.signupTimelineSince(since, includeInternal)) {
-            var createdAt = (LocalDateTime) row[0];
-            var day = createdAt.toLocalDate();
-            var channel = channelName(row[1]);
-            perDay.computeIfAbsent(day, ignored -> new LinkedHashMap<>())
-                    .merge(channel, 1L, Long::sum);
-        }
+        signups.forEach(signup -> perDay.computeIfAbsent(signup.createdAt().toLocalDate(), ignored -> new LinkedHashMap<>())
+                .merge(signup.channel(), 1L, Long::sum));
         var timeline = new ArrayList<DailySignupLine>();
-        perDay.forEach((day, byChannel) -> {
-            var total = byChannel.values().stream().mapToLong(Long::longValue).sum();
-            timeline.add(new DailySignupLine(day, total, byChannel));
-        });
+        perDay.forEach((day, byChannel) -> timeline.add(new DailySignupLine(day, sum(byChannel), byChannel)));
         return timeline;
+    }
+
+    private List<HourlySignupLine> buildHourlyLines(List<SignupMoment> signups) {
+        var perHour = new ArrayList<Map<String, Long>>();
+        for (var hour = 0; hour < 24; hour++) {
+            perHour.add(new LinkedHashMap<>());
+        }
+        signups.forEach(signup -> perHour.get(signup.createdAt().getHour()).merge(signup.channel(), 1L, Long::sum));
+        var lines = new ArrayList<HourlySignupLine>();
+        for (var hour = 0; hour < 24; hour++) {
+            lines.add(new HourlySignupLine(hour, sum(perHour.get(hour)), perHour.get(hour)));
+        }
+        return lines;
+    }
+
+    private static long sum(Map<String, Long> countsByChannel) {
+        return countsByChannel.values().stream().mapToLong(Long::longValue).sum();
     }
 
     private List<ChannelLine> buildChannelLines(LocalDateTime since, boolean includeInternal) {

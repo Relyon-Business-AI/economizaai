@@ -18,16 +18,34 @@ public class ExperimentalStateFailedException extends ReceiptParseException {
      */
     private final boolean captchaBlocked;
 
+    /**
+     * True when the chain failed because the state's PORTAL/origin was momentarily UNREACHABLE
+     * (Infosimples code 615 "origem indisponível", provider instability) rather than a per-nota
+     * dead end (nota inexistente/cancelada). A transient, retry-later failure: the ingest parks the
+     * receipt as {@link com.relyon.economizaai.model.enums.ReceiptStatus#PORTAL_PENDING} and the
+     * recovery sweeper re-fetches it until the portal is back, instead of failing it outright.
+     */
+    private final boolean portalUnavailable;
+
     public ExperimentalStateFailedException(String state) {
-        this(state, false);
+        this(state, false, false);
     }
 
     public ExperimentalStateFailedException(String state, boolean captchaBlocked) {
+        this(state, captchaBlocked, false);
+    }
+
+    public ExperimentalStateFailedException(String state, boolean captchaBlocked, boolean portalUnavailable) {
         super("receipt.state.experimental_failed", state);
         this.captchaBlocked = captchaBlocked;
+        this.portalUnavailable = portalUnavailable;
     }
 
     public boolean isCaptchaBlocked() {
         return captchaBlocked;
+    }
+
+    public boolean isPortalUnavailable() {
+        return portalUnavailable;
     }
 }

@@ -569,6 +569,33 @@ class ReceiptIngestionServiceTest {
     }
 
     @Test
+    void markFailed_portalUnavailable_parksPortalPending_withoutOwnerPing() {
+        // Portal/origin down (615) for a non-contingency chave: park it PORTAL_PENDING so the recovery
+        // sweeper re-fetches when the portal is back — NOT a dead FAILED_PARSE, and no "falhou" ping.
+        var receipt = processingReceipt();
+        receipt.setCreatedAt(LocalDateTime.now().minusMinutes(5)); // slow enough to ping IF it were a failure
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        service.markFailed(receipt.getId(), new ExperimentalStateFailedException("SE", false, true));
+
+        assertEquals(ReceiptStatus.PORTAL_PENDING, receipt.getStatus());
+        assertTrue(receipt.getParseErrorReason().startsWith("receipt.portal.unavailable"));
+        assertTrue(receipt.isResyncingFromContingency()); // so recovery pings the owner
+        verify(notificationService, never()).notifyAfterCommit(any());
+    }
+
+    @Test
+    void markFailed_experimentalFailureNotPortalDown_staysFailedParse() {
+        var receipt = processingReceipt();
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        service.markFailed(receipt.getId(), new ExperimentalStateFailedException("SE")); // portalUnavailable=false
+
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+        assertFalse(receipt.isResyncingFromContingency());
+    }
+
+    @Test
     void markFailed_poolRejectionWithoutPriorReason_recordsTheRejection() {
         var receipt = processingReceipt();
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
