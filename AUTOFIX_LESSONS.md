@@ -6,6 +6,8 @@
 
 <!-- LESSONS BELOW -->
 
+- [2026-11-05 23:37:35] [[NEEDS-HUMAN] NO-TESTREF] Always end a FIXED reply with a real FQCN#method test reference.
+
 - [2026-11-05 13:43:26] [[NEEDS-HUMAN] NO-TESTREF] Always end a FIXED reply with a real FQCN#method test reference.
 
 - [2026-11-04 13:31:02] [[NEEDS-HUMAN] NO-TESTREF] Always end a FIXED reply with a real FQCN#method test reference.
