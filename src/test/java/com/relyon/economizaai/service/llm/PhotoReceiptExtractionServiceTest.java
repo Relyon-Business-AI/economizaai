@@ -2,7 +2,6 @@ package com.relyon.economizaai.service.llm;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.relyon.economizaai.service.ai.AiGateway;
-import com.relyon.economizaai.exception.InvalidReceiptPhotoException;
 import com.relyon.economizaai.exception.PhotoExtractionUnavailableException;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.Receipt;
@@ -18,7 +17,6 @@ import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
@@ -26,20 +24,26 @@ import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.util.Optional;
 import java.util.UUID;
-import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * Fluxo ASSÍNCRONO: {@code extract} cria a nota em PROCESSING e retorna; o trabalho de visão
+ * roda em {@code processPhotosAsync} (inline aqui, pois {@code self == this} sem proxy Spring).
+ * O estado FINAL da nota é o que importa (PENDING_CONFIRMATION no sucesso, FAILED_PARSE no erro).
+ */
 @ExtendWith(MockitoExtension.class)
 class PhotoReceiptExtractionServiceTest {
 
@@ -54,6 +58,7 @@ class PhotoReceiptExtractionServiceTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private PhotoReceiptExtractionService service;
     private User user;
+    private Receipt savedReceipt;
 
     @BeforeEach
     void setUp() {
@@ -66,16 +71,14 @@ class PhotoReceiptExtractionServiceTest {
             TransactionCallback<?> callback = invocation.getArgument(0);
             return callback.doInTransaction(mock(TransactionStatus.class));
         });
-        lenient().doAnswer(invocation -> {
-            Consumer<TransactionStatus> callback = invocation.getArgument(0);
-            callback.accept(mock(TransactionStatus.class));
-            return null;
-        }).when(transactionTemplate).executeWithoutResult(any());
+        // save: guarda a nota (dá id na 1ª vez) e devolve-a; findById devolve a mesma.
         lenient().when(receiptRepository.save(any(Receipt.class))).thenAnswer(invocation -> {
             var receipt = invocation.<Receipt>getArgument(0);
-            receipt.setId(UUID.randomUUID());
+            if (receipt.getId() == null) receipt.setId(UUID.randomUUID());
+            savedReceipt = receipt;
             return receipt;
         });
+        lenient().when(receiptRepository.findById(any())).thenAnswer(invocation -> Optional.ofNullable(savedReceipt));
     }
 
     private MockMultipartFile photo() {
@@ -83,13 +86,13 @@ class PhotoReceiptExtractionServiceTest {
     }
 
     @Test
-    void extract_buildsPendingPhotoReceiptExcludedFromIndexPath() throws Exception {
+    void extract_finalizesPendingPhotoReceipt() {
         when(aiGateway.isEnabled()).thenReturn(true);
         when(aiGateway.extractorModel()).thenReturn("claude-haiku");
         when(aiGateway.completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt(), any()))
                 .thenReturn("""
-                        {"is_receipt": true, "market_name": "Bar do Ze", "issued_at": "2026-07-15 15:45",
-                         "total_amount": 47.00,
+                        {"is_receipt": true, "market_name": "Bar do Ze", "cnpj": "12345678000199",
+                         "issued_at": "2026-07-15 15:45", "total_amount": 47.00,
                          "items": [
                            {"description": "Chopp Brahma 440ml", "quantity": 1, "unit": "UN",
                             "unit_price": 14.00, "total_price": 14.00},
@@ -99,28 +102,28 @@ class PhotoReceiptExtractionServiceTest {
         var receiptId = service.extract(user, photo());
 
         assertThat(receiptId).isNotNull();
-        var captor = ArgumentCaptor.forClass(Receipt.class);
-        verify(receiptRepository).save(captor.capture());
-        var receipt = captor.getValue();
-        assertThat(receipt.getOrigin()).isEqualTo(ReceiptOrigin.PHOTO);
-        assertThat(receipt.getStatus()).isEqualTo(ReceiptStatus.PENDING_CONFIRMATION);
-        assertThat(receipt.getChaveAcesso()).startsWith("PH").hasSize(44);
-        assertThat(receipt.getItems()).hasSize(2);
-        assertThat(receipt.getTotalAmount()).isEqualByComparingTo("47.00");
+        assertThat(savedReceipt.getOrigin()).isEqualTo(ReceiptOrigin.PHOTO);
+        assertThat(savedReceipt.getStatus()).isEqualTo(ReceiptStatus.PENDING_CONFIRMATION);
+        assertThat(savedReceipt.getChaveAcesso()).startsWith("PH").hasSize(44);
+        assertThat(savedReceipt.getCnpjEmitente()).isEqualTo("12345678000199");
+        assertThat(savedReceipt.getItems()).hasSize(2);
+        assertThat(savedReceipt.getTotalAmount()).isEqualByComparingTo("47.00");
         verify(receiptService).enforceMonthlyReceiptCap(user);
-        verify(paidApiGuard).assertWithinDailyCap(user.getId(), PaidApiService.LLM_VISION);
+        verify(paidApiGuard, atLeastOnce()).assertWithinDailyCap(user.getId(), PaidApiService.LLM_VISION);
         verify(paidApiGuard).recordSuccess(user.getId(), PaidApiService.LLM_VISION, null, "anthropic");
     }
 
     @Test
-    void extract_rejectsNonReceiptImages() throws Exception {
+    void extract_nonReceiptImage_marksReceiptFailed() {
         when(aiGateway.isEnabled()).thenReturn(true);
         when(aiGateway.extractorModel()).thenReturn("claude-haiku");
         when(aiGateway.completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt(), any()))
                 .thenReturn("{\"is_receipt\": false}");
 
-        assertThrows(InvalidReceiptPhotoException.class, () -> service.extract(user, photo()));
-        verify(receiptRepository, never()).save(any());
+        service.extract(user, photo());
+
+        assertThat(savedReceipt.getStatus()).isEqualTo(ReceiptStatus.FAILED_PARSE);
+        assertThat(savedReceipt.getParseErrorReason()).isEqualTo("receipt.photo.not-receipt");
     }
 
     @Test
@@ -133,13 +136,16 @@ class PhotoReceiptExtractionServiceTest {
     }
 
     @Test
-    void extract_llmFailure_recordsFailureAndSurfacesUnavailable() {
+    void extract_llmFailure_marksReceiptFailed() {
         when(aiGateway.isEnabled()).thenReturn(true);
         when(aiGateway.extractorModel()).thenReturn("claude-haiku");
         when(aiGateway.completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt(), any()))
                 .thenThrow(new AiGateway.AiUnavailableException("timeout"));
 
-        assertThrows(PhotoExtractionUnavailableException.class, () -> service.extract(user, photo()));
+        service.extract(user, photo());
+
         verify(paidApiGuard).recordFailure(user.getId(), PaidApiService.LLM_VISION, null, "anthropic");
+        assertThat(savedReceipt.getStatus()).isEqualTo(ReceiptStatus.FAILED_PARSE);
+        assertThat(savedReceipt.getParseErrorReason()).isEqualTo("receipt.photo.extraction-failed");
     }
 }

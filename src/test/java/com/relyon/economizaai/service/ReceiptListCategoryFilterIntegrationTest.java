@@ -103,6 +103,27 @@ class ReceiptListCategoryFilterIntegrationTest {
     }
 
     @Test
+    void pendingSupermarketNota_showsInMarketLens() {
+        // Nota de supermercado AINDA EM REVISÃO (não confirmada) deve cair em Mercado,
+        // não em Outras — a lente de listagem não exige CONFIRMED.
+        pendingReceipt(user.getHousehold(), "93015006005182"); // loja SUPERMARKET
+
+        assertEquals(3, receiptService.list(user, null, null, null, null, null, null, null, MarketScope.MARKET, PageRequest.of(0, 20)).getTotalElements());
+        assertEquals(1, receiptService.list(user, null, null, null, null, null, null, null, MarketScope.OTHERS, PageRequest.of(0, 20)).getTotalElements());
+    }
+
+    @Test
+    void newUnclassifiedStoreOfKnownChain_fallsBackToChainSegment() {
+        // Loja NOVA do Zaffari (mesma raiz 93015006) ainda UNKNOWN → cai por raiz em Mercado.
+        marketLocationRepository.save(MarketLocation.builder()
+                .cnpj("93015006009999").cnpjRoot("93015006").segment(MerchantSegment.UNKNOWN).build());
+        pendingReceipt(user.getHousehold(), "93015006009999");
+
+        assertEquals(3, receiptService.list(user, null, null, null, null, null, null, null, MarketScope.MARKET, PageRequest.of(0, 20)).getTotalElements());
+        assertEquals(1, receiptService.list(user, null, null, null, null, null, null, null, MarketScope.OTHERS, PageRequest.of(0, 20)).getTotalElements());
+    }
+
+    @Test
     void noCategory_returnsAll() {
         var page = receiptService.list(user, null, null, null, null, null, null, null, MarketScope.ALL, PageRequest.of(0, 20));
         assertEquals(3, page.getTotalElements());
@@ -135,6 +156,17 @@ class ReceiptListCategoryFilterIntegrationTest {
                 .unitPrice(new BigDecimal("10.00")).totalPrice(new BigDecimal("10.00"))
                 .build());
         receiptRepository.save(receipt);
+    }
+
+    /** Nota com CNPJ mas AINDA EM REVISÃO (não confirmada). */
+    private void pendingReceipt(Household household, String cnpj) {
+        receiptRepository.save(Receipt.builder()
+                .user(user).household(household).chaveAcesso(uniqueChave())
+                .uf(UnidadeFederativa.RS).cnpjEmitente(cnpj).marketName("Mercado")
+                .issuedAt(LocalDateTime.of(2026, Month.APRIL, 13, 10, 0))
+                .totalAmount(new BigDecimal("10.00")).qrPayload("test")
+                .status(ReceiptStatus.PENDING_CONFIRMATION)
+                .build());
     }
 
     /** A nota just scanned: still PROCESSING, so no CNPJ/issuedAt is known yet. */
