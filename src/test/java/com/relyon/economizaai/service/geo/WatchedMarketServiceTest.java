@@ -1,5 +1,7 @@
 package com.relyon.economizaai.service.geo;
 
+import com.relyon.economizaai.service.geo.ViewerLocationService.Source;
+import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import com.relyon.economizaai.exception.InvalidCnpjException;
 import com.relyon.economizaai.exception.MarketNotFoundException;
 import com.relyon.economizaai.model.Household;
@@ -24,6 +26,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -41,6 +44,7 @@ class WatchedMarketServiceTest {
     @Mock private ReceiptRepository receiptRepository;
     @Mock private MarketNameService marketNameService;
     @Mock private SubscriptionGateService subscriptionGate;
+    @Mock private ViewerLocationService viewerLocationService;
 
     private WatchedMarketService service;
     private User user;
@@ -48,7 +52,7 @@ class WatchedMarketServiceTest {
     @BeforeEach
     void setUp() {
         service = new WatchedMarketService(watchedRepository, marketRepository, receiptRepository,
-                marketNameService, subscriptionGate);
+                marketNameService, subscriptionGate, viewerLocationService);
         // Default: PRO-equivalent unlimited cap so existing tests keep their intent.
         lenient().when(subscriptionGate.watchedMarketLimit(any())).thenReturn(Integer.MAX_VALUE);
         lenient().when(marketNameService.resolveNames(any(), any())).thenReturn(Map.of());
@@ -250,11 +254,44 @@ class WatchedMarketServiceTest {
                 .latitude(new BigDecimal("-10.0000000")).longitude(new BigDecimal("-40.0000000"))
                 .build();
         when(marketRepository.findAll()).thenReturn(List.of(nearMarket, farMarket));
+        when(viewerLocationService.resolve(user)).thenReturn(new ViewerLocation(
+                user.getHomeLatitude(), user.getHomeLongitude(), Source.EXPLICIT, "RS"));
 
         var rows = service.listForPicker(user, 5.0);
 
         assertEquals(1, rows.size());
         assertEquals("44444444000111", rows.get(0).cnpj());
+    }
+
+    @Test
+    void listForPicker_withoutHomeUsesLocationInferredFromReceipts() {
+        when(receiptRepository.findDistinctCnpjsByHousehold(user.getHousehold().getId()))
+                .thenReturn(List.of());
+        when(watchedRepository.findAllByUserId(user.getId())).thenReturn(List.of());
+        var nearMarket = market("44444444000111", "Near");
+        var farMarket = MarketLocation.builder()
+                .cnpj("55555555000111").cnpjRoot("55555555").name("Far")
+                .latitude(new BigDecimal("-10.0000000")).longitude(new BigDecimal("-40.0000000"))
+                .build();
+        when(marketRepository.findAll()).thenReturn(List.of(nearMarket, farMarket));
+        when(viewerLocationService.resolve(user)).thenReturn(new ViewerLocation(
+                new BigDecimal("-30.0500000"), new BigDecimal("-51.2200000"), Source.INFERRED, "RS"));
+
+        var rows = service.listForPicker(user, 5.0);
+
+        assertEquals(List.of("44444444000111"), rows.stream().map(row -> row.cnpj()).toList());
+        assertNull(rows.get(0).distanceKm(), "estimated centre is never shown as a distance");
+    }
+
+    @Test
+    void listForPicker_unlocatedViewerGetsNoNearbyMarkets() {
+        when(receiptRepository.findDistinctCnpjsByHousehold(user.getHousehold().getId()))
+                .thenReturn(List.of());
+        when(watchedRepository.findAllByUserId(user.getId())).thenReturn(List.of());
+        when(viewerLocationService.resolve(user)).thenReturn(new ViewerLocation(null, null, Source.NONE, "RS"));
+
+        assertTrue(service.listForPicker(user, 5.0).isEmpty());
+        verify(marketRepository, never()).findAll();
     }
 
     @Test

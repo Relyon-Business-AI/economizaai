@@ -1,5 +1,10 @@
 package com.relyon.economizaai.service.priceindex;
 
+import com.relyon.economizaai.model.MarketLocation;
+import java.util.Map;
+import com.relyon.economizaai.service.geo.NearbyScope;
+import com.relyon.economizaai.service.geo.ViewerLocationService.Source;
+import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.model.PriceObservation;
 import com.relyon.economizaai.model.Product;
@@ -145,6 +150,25 @@ class CommunityPromoServiceTest {
         // ...but still got their own watched flag applied on top of it.
         assertEquals(false, firstViewer.get(0).watching());
         assertTrue(secondViewer.get(0).watching());
+    }
+
+    @Test
+    void detectInScope_unlocatedViewerOnlySeesPromosFromTheirState() {
+        var now = LocalDateTime.now();
+        var observations = new ArrayList<PriceObservation>();
+        for (var index = 0; index < 8; index++) observations.add(obs(new BigDecimal("28"), now.minusDays(30)));
+        for (var index = 0; index < 5; index++) observations.add(obs(new BigDecimal("22"), now.minusDays(2)));
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of(marketCnpj,
+                MarketLocation.builder().cnpj(marketCnpj).state("PE").build()));
+        when(observationRepository.findRecent(any())).thenReturn(observations);
+        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(3L)))
+                .thenReturn(List.of(groupCount(productId, marketCnpj, 3L)));
+
+        var gaucho = new NearbyScope(new ViewerLocation(null, null, Source.NONE, "RS"), Set.of(), 10);
+        var pernambucano = new NearbyScope(new ViewerLocation(null, null, Source.NONE, "PE"), Set.of(), 10);
+
+        assertTrue(service.detectInScope(gaucho).isEmpty(), "a Recife promo is noise for Porto Alegre");
+        assertEquals(1, service.detectInScope(pernambucano).size());
     }
 
     @Test

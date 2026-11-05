@@ -137,7 +137,7 @@ public class DealsDigestScheduler {
      * (same split as {@code MarketLocationService.geocodeOne}/{@code persistGeocodeResult}).
      */
     public boolean processUser(User user, OffsetDateTime now) {
-        var deals = dealsService.findDeals(user, false, null, DEAL_LIMIT);
+        var deals = dealsService.findDeals(user, true, null, DEAL_LIMIT);
         var newsworthy = deals.stream().filter(deal -> isNewsworthy(user, deal, now)).toList();
         if (newsworthy.isEmpty()) {
             log.info("digest.skip user={} reason=nothing_newsworthy deals={}",

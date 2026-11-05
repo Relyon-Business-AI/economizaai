@@ -1,5 +1,9 @@
 package com.relyon.economizaai.service;
 
+import com.relyon.economizaai.service.geo.NearbyScope;
+import com.relyon.economizaai.service.geo.NearbyScopeService;
+import com.relyon.economizaai.service.geo.ViewerLocationService.Source;
+import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import com.relyon.economizaai.dto.response.ProductMarketPriceResponse.PriceType;
 import com.relyon.economizaai.exception.ProductNotFoundException;
 import com.relyon.economizaai.model.Household;
@@ -45,6 +49,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -62,6 +67,7 @@ class HouseholdProductServiceTest {
     @Mock private WatchedMarketService watchedMarketService;
     @Mock private MarketLocationService marketLocationService;
     @Mock private MarketNameService marketNameService;
+    @Mock private NearbyScopeService nearbyScopeService;
 
     @InjectMocks private HouseholdProductService service;
 
@@ -290,7 +296,7 @@ class HouseholdProductServiceTest {
         when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of(CNPJ_ZAFFARI, location(CNPJ_ZAFFARI, "Zaffari")));
         when(watchedMarketService.watchedCnpjs(user)).thenReturn(Set.of());
         // Community median at Nacional = 4.00 (cheaper), and one row for Zaffari that must be ignored (own wins).
-        when(priceIndexService.bestMarkets(eq(product.getId()), anyInt(), any(), any(), isNull(), any()))
+        when(priceIndexService.bestMarketsAtWatched(eq(product.getId()), anyInt(), any()))
                 .thenReturn(List.of(
                         new MarketPriceRow(CNPJ_NACIONAL, "99887766", "Nacional",
                                 new BigDecimal("4.00"), new BigDecimal("3.50"),
@@ -320,7 +326,7 @@ class HouseholdProductServiceTest {
         when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
         when(watchedMarketService.watchedCnpjs(user)).thenReturn(Set.of());
         // A scale-4 median (5.3350) must be rounded HALF_UP to 5.34 in the response.
-        when(priceIndexService.bestMarkets(eq(product.getId()), anyInt(), any(), any(), isNull(), any()))
+        when(priceIndexService.bestMarketsAtWatched(eq(product.getId()), anyInt(), any()))
                 .thenReturn(List.of(new MarketPriceRow(CNPJ_NACIONAL, "99887766", "Nacional",
                         new BigDecimal("5.3350"), new BigDecimal("3.50"),
                         new BigDecimal("3.50"), LocalDateTime.of(2026, 1, 1, 0, 0), 5, 3L, 2.0, false)));
@@ -342,7 +348,7 @@ class HouseholdProductServiceTest {
                 .thenReturn(List.of(ownItem));
         when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
         when(watchedMarketService.watchedCnpjs(user)).thenReturn(Set.of());
-        when(priceIndexService.bestMarkets(eq(product.getId()), anyInt(), any(), any(), isNull(), any()))
+        when(priceIndexService.bestMarketsAtWatched(eq(product.getId()), anyInt(), any()))
                 .thenReturn(List.of());
         when(marketNameService.resolveNames(eq(HOUSEHOLD_ID), any()))
                 .thenReturn(Map.of(CNPJ_ZAFFARI, "Zaffari de casa"));
@@ -356,19 +362,22 @@ class HouseholdProductServiceTest {
     }
 
     @Test
-    void productMarkets_includeNearby_passesRadiusToBestMarkets() {
+    void productMarkets_includeNearby_usesNearbyScopeWithRadius() {
         var product = product("Leite");
         when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
         when(receiptItemRepository.findHouseholdHistoryForProduct(product.getId(), HOUSEHOLD_ID))
                 .thenReturn(List.of());
         when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
         when(watchedMarketService.watchedCnpjs(user)).thenReturn(Set.of());
-        when(priceIndexService.bestMarkets(eq(product.getId()), anyInt(), any(), any(), eq(7.5), any()))
+        var scope = new NearbyScope(new ViewerLocation(null, null, Source.NONE, "RS"), Set.of(), 7.5);
+        when(nearbyScopeService.forUser(user, 7.5)).thenReturn(scope);
+        when(priceIndexService.bestMarketsInScope(eq(product.getId()), anyInt(), eq(scope)))
                 .thenReturn(List.of());
 
         service.productMarkets(user, product.getId(), true, 7.5);
 
-        verify(priceIndexService).bestMarkets(eq(product.getId()), anyInt(), any(), any(), eq(7.5), any());
+        verify(priceIndexService).bestMarketsInScope(eq(product.getId()), anyInt(), eq(scope));
+        verify(priceIndexService, never()).bestMarketsAtWatched(any(), anyInt(), any());
     }
 
     @Test
@@ -384,7 +393,7 @@ class HouseholdProductServiceTest {
                 .thenReturn(List.of(olderItem, newerItem));
         when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
         when(watchedMarketService.watchedCnpjs(user)).thenReturn(Set.of());
-        when(priceIndexService.bestMarkets(eq(product.getId()), anyInt(), any(), any(), isNull(), any()))
+        when(priceIndexService.bestMarketsAtWatched(eq(product.getId()), anyInt(), any()))
                 .thenReturn(List.of());
 
         var result = service.productMarkets(user, product.getId(), false, null);
@@ -406,7 +415,7 @@ class HouseholdProductServiceTest {
                 .latitude(new BigDecimal("-30.1")).longitude(new BigDecimal("-51.1")).build();
         when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of(CNPJ_ZAFFARI, locatedMarket));
         when(watchedMarketService.watchedCnpjs(user)).thenReturn(Set.of(CNPJ_ZAFFARI));
-        when(priceIndexService.bestMarkets(eq(product.getId()), anyInt(), any(), any(), isNull(), any()))
+        when(priceIndexService.bestMarketsAtWatched(eq(product.getId()), anyInt(), any()))
                 .thenReturn(List.of());
 
         var result = service.productMarkets(user, product.getId(), false, null);
@@ -436,7 +445,7 @@ class HouseholdProductServiceTest {
                 .latitude(new BigDecimal("-30.1")).longitude(new BigDecimal("-51.1")).build();
         when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of(CNPJ_ZAFFARI, locatedMarket));
         when(watchedMarketService.watchedCnpjs(noHomeUser)).thenReturn(Set.of());
-        when(priceIndexService.bestMarkets(eq(product.getId()), anyInt(), isNull(), isNull(), isNull(), any()))
+        when(priceIndexService.bestMarketsAtWatched(eq(product.getId()), anyInt(), any()))
                 .thenReturn(List.of());
 
         var result = service.productMarkets(noHomeUser, product.getId(), false, null);
@@ -454,7 +463,7 @@ class HouseholdProductServiceTest {
                 .thenReturn(List.of(noCnpjItem));
         when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
         when(watchedMarketService.watchedCnpjs(user)).thenReturn(Set.of());
-        when(priceIndexService.bestMarkets(eq(product.getId()), anyInt(), any(), any(), isNull(), any()))
+        when(priceIndexService.bestMarketsAtWatched(eq(product.getId()), anyInt(), any()))
                 .thenReturn(List.of());
 
         assertEquals(List.of(), service.productMarkets(user, product.getId(), false, null));
@@ -471,7 +480,7 @@ class HouseholdProductServiceTest {
         when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
         when(watchedMarketService.watchedCnpjs(user)).thenReturn(Set.of());
         // k-anon-suppressed market: row present but no median price.
-        when(priceIndexService.bestMarkets(eq(product.getId()), anyInt(), any(), any(), isNull(), any()))
+        when(priceIndexService.bestMarketsAtWatched(eq(product.getId()), anyInt(), any()))
                 .thenReturn(List.of(new MarketPriceRow(CNPJ_NACIONAL, "99887766", "Nacional",
                         null, null, null, null, 2, 2L, 2.0, false)));
 

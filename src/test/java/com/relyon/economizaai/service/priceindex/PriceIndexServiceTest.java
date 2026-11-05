@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.priceindex;
 
+import com.relyon.economizaai.service.geo.NearbyScope;
 import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.MarketLocation;
@@ -181,6 +182,26 @@ class PriceIndexServiceTest {
         var rows = service.bestMarketsForViewer(productId, 10, location, Set.of("BBBBBBBB000111"));
 
         assertEquals(List.of("Super Santi", "Mercado POA"), chainNames(rows), "watched first, then nearby");
+    }
+
+    @Test
+    void bestMarketsInScope_honoursTheScopeRadius() {
+        var productId = UUID.randomUUID();
+        stubThreeChainsAcrossRegions(productId);
+        var location = new ViewerLocation(POA_LAT, POA_LNG, ViewerLocationService.Source.EXPLICIT, "RS");
+
+        var rows = service.bestMarketsInScope(productId, 10, new NearbyScope(location, Set.of(), 500));
+
+        assertEquals(List.of("Super Santi", "Mercado POA"), chainNames(rows), "500 km reaches Santo Augusto, not Curitiba");
+    }
+
+    @Test
+    void bestMarketsAtWatched_onlyWatchedChains_emptyWhenNoneWatched() {
+        var productId = UUID.randomUUID();
+        stubThreeChainsAcrossRegions(productId);
+
+        assertEquals(List.of("Muffato"), chainNames(service.bestMarketsAtWatched(productId, 10, Set.of("CCCCCCCC000111"))));
+        assertTrue(service.bestMarketsAtWatched(productId, 10, Set.of()).isEmpty());
     }
 
     @Test

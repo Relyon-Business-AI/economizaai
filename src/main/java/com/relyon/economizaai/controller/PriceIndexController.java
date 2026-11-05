@@ -3,6 +3,7 @@ package com.relyon.economizaai.controller;
 import com.relyon.economizaai.dto.response.PromoFeedResponse;
 import com.relyon.economizaai.dto.response.SponsoredPromoResponse;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.service.geo.NearbyScopeService;
 import com.relyon.economizaai.service.geo.ViewerLocationService;
 import com.relyon.economizaai.service.geo.WatchedMarketService;
 import com.relyon.economizaai.service.merchant.SponsoredPromoService;
@@ -44,6 +45,7 @@ public class PriceIndexController {
     private final WatchedMarketService watchedMarketService;
     private final SponsoredPromoService sponsoredPromoService;
     private final ViewerLocationService viewerLocationService;
+    private final NearbyScopeService nearbyScopeService;
 
     @GetMapping("/products/{productId}/markets/{marketCnpj}/reference")
     public ResponseEntity<PriceIndexService.ReferencePrice> reference(@PathVariable UUID productId,
@@ -108,9 +110,7 @@ public class PriceIndexController {
     public ResponseEntity<List<CommunityPromoService.CommunityPromo>> currentPromos(
             @AuthenticationPrincipal User user,
             @RequestParam(required = false) Double radiusKm) {
-        return ResponseEntity.ok(communityPromoService.detectAll(
-                user.getHomeLatitude(), user.getHomeLongitude(), radiusKm,
-                watchedMarketService.watchedCnpjs(user)));
+        return ResponseEntity.ok(communityPromoService.detectInScope(nearbyScopeService.forUser(user, radiusKm)));
     }
 
     /**

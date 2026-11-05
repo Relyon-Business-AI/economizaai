@@ -13,6 +13,10 @@ import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.repository.NotificationRuleRepository;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.geo.MarketNameService;
+import com.relyon.economizaai.service.geo.NearbyScope;
+import com.relyon.economizaai.service.geo.NearbyScopeService;
+import com.relyon.economizaai.service.geo.ViewerLocationService.Source;
+import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,6 +29,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -42,6 +47,7 @@ class NotificationRuleEngineTest {
     @Mock private MarketLocationService marketLocationService;
     @Mock private MarketNameService marketNameService;
     @Mock private NotificationService notificationService;
+    @Mock private NearbyScopeService nearbyScopeService;
     private static LocalizedMessageService realMessageService() {
         var source = new ResourceBundleMessageSource();
         source.setBasename("i18n/messages");
@@ -56,6 +62,15 @@ class NotificationRuleEngineTest {
     void stubMarketNames() {
         lenient().when(marketNameService.resolve(any(), any(), any()))
                 .thenAnswer(invocation -> invocation.getArgument(2));
+        lenient().when(nearbyScopeService.forUser(any())).thenAnswer(invocation ->
+                scopeFromHome(invocation.getArgument(0), null, Set.of()));
+    }
+
+    /** Explicit home when set, else unlocated; {@code uf} null = no state known (national). */
+    private static NearbyScope scopeFromHome(User user, String uf, Set<String> watched) {
+        var source = user.getHomeLatitude() != null ? Source.EXPLICIT : Source.NONE;
+        return new NearbyScope(new ViewerLocation(user.getHomeLatitude(), user.getHomeLongitude(), source, uf),
+                watched, 10);
     }
 
     private static final UUID PRODUCT_ID = UUID.randomUUID();
@@ -84,10 +99,14 @@ class NotificationRuleEngineTest {
     }
 
     private PriceObservation observation(BigDecimal unitPrice) {
+        return observationIn(unitPrice, null);
+    }
+
+    private PriceObservation observationIn(BigDecimal unitPrice, String uf) {
         return PriceObservation.builder()
                 .product(product()).marketCnpj(CNPJ).marketCnpjRoot("12345678")
                 .marketName("Zaffari").unitPrice(unitPrice).quantity(BigDecimal.ONE)
-                .observedAt(LocalDateTime.now()).build();
+                .state(uf).observedAt(LocalDateTime.now()).build();
     }
 
     private MarketLocation marketAt(BigDecimal latitude, BigDecimal longitude) {
@@ -194,5 +213,67 @@ class NotificationRuleEngineTest {
         engine.evaluate(List.of(observation(new BigDecimal("5.00"))), CONTRIBUTOR_HOUSEHOLD);
 
         verify(notificationService, never()).notifyAfterCommit(any());
+    }
+
+    // ---- "perto de você" scope ----
+
+    private static final BigDecimal PORTO_ALEGRE_LAT = new BigDecimal("-30.0331");
+    private static final BigDecimal PORTO_ALEGRE_LNG = new BigDecimal("-51.2300");
+    private static final BigDecimal SAO_PAULO_LAT = new BigDecimal("-23.5505");
+    private static final BigDecimal SAO_PAULO_LNG = new BigDecimal("-46.6333");
+
+    @Test
+    void priceDrop_ruleWithoutRadiusStillNeverFiresAcrossTheCountry() {
+        var home = owner(PORTO_ALEGRE_LAT, PORTO_ALEGRE_LNG);
+        var rule = priceRule(NotificationType.PRICE_DROP, new BigDecimal("6.00"), null, null, home);
+        when(ruleRepository.findActiveProductRules(any(), any())).thenReturn(List.of(rule));
+        when(marketLocationService.findByCnpjs(any()))
+                .thenReturn(Map.of(CNPJ, marketAt(SAO_PAULO_LAT, SAO_PAULO_LNG)));
+
+        engine.evaluate(List.of(observationIn(new BigDecimal("5.00"), "SP")), CONTRIBUTOR_HOUSEHOLD);
+
+        verify(notificationService, never()).notifyAfterCommit(any());
+    }
+
+    @Test
+    void priceDrop_firesWithinDefaultRadius() {
+        var home = owner(PORTO_ALEGRE_LAT, PORTO_ALEGRE_LNG);
+        var rule = priceRule(NotificationType.PRICE_DROP, new BigDecimal("6.00"), null, null, home);
+        when(ruleRepository.findActiveProductRules(any(), any())).thenReturn(List.of(rule));
+        when(marketLocationService.findByCnpjs(any()))
+                .thenReturn(Map.of(CNPJ, marketAt(new BigDecimal("-30.0400"), new BigDecimal("-51.2200"))));
+
+        engine.evaluate(List.of(observationIn(new BigDecimal("5.00"), "RS")), CONTRIBUTOR_HOUSEHOLD);
+
+        verify(notificationService).notifyAfterCommit(any());
+    }
+
+    @Test
+    void priceDrop_watchedMarketFiresEvenWhenFar() {
+        var home = owner(PORTO_ALEGRE_LAT, PORTO_ALEGRE_LNG);
+        when(nearbyScopeService.forUser(home)).thenReturn(scopeFromHome(home, "RS", Set.of(CNPJ)));
+        var rule = priceRule(NotificationType.PRICE_DROP, new BigDecimal("6.00"), null, null, home);
+        when(ruleRepository.findActiveProductRules(any(), any())).thenReturn(List.of(rule));
+        when(marketLocationService.findByCnpjs(any()))
+                .thenReturn(Map.of(CNPJ, marketAt(SAO_PAULO_LAT, SAO_PAULO_LNG)));
+
+        engine.evaluate(List.of(observationIn(new BigDecimal("5.00"), "SP")), CONTRIBUTOR_HOUSEHOLD);
+
+        verify(notificationService).notifyAfterCommit(any());
+    }
+
+    @Test
+    void priceDrop_unlocatedUserOnlyGetsTheirOwnState() {
+        var user = owner(null, null);
+        when(nearbyScopeService.forUser(user)).thenReturn(scopeFromHome(user, "RS", Set.of()));
+        var rule = priceRule(NotificationType.PRICE_DROP, new BigDecimal("6.00"), null, null, user);
+        when(ruleRepository.findActiveProductRules(any(), any())).thenReturn(List.of(rule));
+        lenient().when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
+
+        engine.evaluate(List.of(observationIn(new BigDecimal("5.00"), "PE")), CONTRIBUTOR_HOUSEHOLD);
+        verify(notificationService, never()).notifyAfterCommit(any());
+
+        engine.evaluate(List.of(observationIn(new BigDecimal("5.00"), "RS")), CONTRIBUTOR_HOUSEHOLD);
+        verify(notificationService).notifyAfterCommit(any());
     }
 }

@@ -45,6 +45,7 @@ public class WatchedMarketService {
     private final ReceiptRepository receiptRepository;
     private final MarketNameService marketNameService;
     private final SubscriptionGateService subscriptionGate;
+    private final ViewerLocationService viewerLocationService;
 
     /** CNPJs the user is watching. Cheap helper for query-layer joins. */
     @Transactional(readOnly = true)
@@ -106,15 +107,7 @@ public class WatchedMarketService {
                 ? List.<MarketLocation>of()
                 : marketRepository.findAllByCnpjIn(List.copyOf(unionCnpjs));
 
-        var nearby = (radiusKm != null && user.getHomeLatitude() != null && user.getHomeLongitude() != null)
-                ? marketRepository.findAll().stream()
-                        .filter(MarketLocation::hasCoordinates)
-                        .filter(m -> !unionCnpjs.contains(m.getCnpj()))
-                        .filter(m -> DistanceCalculator.kmBetween(
-                                user.getHomeLatitude(), user.getHomeLongitude(),
-                                m.getLatitude(), m.getLongitude()) <= radiusKm)
-                        .toList()
-                : List.<MarketLocation>of();
+        var nearby = nearbyMarkets(user, radiusKm, unionCnpjs);
 
         var rows = Stream.concat(visitedAndWatched.stream(), nearby.stream())
                 .map(m -> MarketResponse.from(
@@ -128,6 +121,24 @@ public class WatchedMarketService {
                         .thenComparing(r -> r.distanceKm() == null ? Double.MAX_VALUE : r.distanceKm()))
                 .toList();
         return applyFriendlyNames(user.getHousehold().getId(), rows);
+    }
+
+    /**
+     * Markets within {@code radiusKm} of the viewer's effective location — explicit GPS/CEP
+     * or, without one, the centre inferred from their receipts — so a user who never set an
+     * address still sees the markets around where they actually shop.
+     */
+    private List<MarketLocation> nearbyMarkets(User user, Double radiusKm, Set<String> excludedCnpjs) {
+        if (radiusKm == null) return List.of();
+        var location = viewerLocationService.resolve(user);
+        if (!location.hasCoordinates()) return List.of();
+        return marketRepository.findAll().stream()
+                .filter(MarketLocation::hasCoordinates)
+                .filter(market -> !excludedCnpjs.contains(market.getCnpj()))
+                .filter(market -> DistanceCalculator.kmBetween(
+                        location.latitude(), location.longitude(),
+                        market.getLatitude(), market.getLongitude()) <= radiusKm)
+                .toList();
     }
 
     @Transactional

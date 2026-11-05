@@ -17,6 +17,7 @@ import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.service.geo.DistanceCalculator;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.geo.MerchantSupportGate;
+import com.relyon.economizaai.service.geo.NearbyScope;
 import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import com.relyon.economizaai.service.notifications.NotificationRuleEngine;
 import lombok.RequiredArgsConstructor;
@@ -357,11 +358,19 @@ public class PriceIndexService {
     @Transactional(readOnly = true)
     public List<MarketPriceRow> bestMarketsForViewer(UUID productId, int limit, ViewerLocation location,
                                                      Set<String> watchedCnpjs) {
-        var watched = watchedCnpjs == null ? Set.<String>of() : watchedCnpjs;
+        return bestMarketsInScope(productId, limit, new NearbyScope(location,
+                watchedCnpjs == null ? Set.of() : watchedCnpjs,
+                properties.getCollaborative().getBestMarketsNearbyRadiusKm()));
+    }
+
+    /** {@link #bestMarketsForViewer} with a caller-built scope (custom radius). */
+    @Transactional(readOnly = true)
+    public List<MarketPriceRow> bestMarketsInScope(UUID productId, int limit, NearbyScope scope) {
+        var location = scope.location();
+        var watched = scope.watchedCnpjs();
         if (location.hasCoordinates()) {
-            var radiusKm = properties.getCollaborative().getBestMarketsNearbyRadiusKm();
-            var viewer = new Viewer(location.latitude(), location.longitude(), radiusKm, watched);
-            log.debug("best_markets.scope product={} scope=NEARBY source={} radiusKm={}", productId, location.source(), radiusKm);
+            var viewer = new Viewer(location.latitude(), location.longitude(), scope.radiusKm(), watched);
+            log.debug("best_markets.scope product={} scope=NEARBY source={} radiusKm={}", productId, location.source(), scope.radiusKm());
             return rankChains(productId, limit, viewer, observation -> true);
         }
         var unlocated = new Viewer(null, null, null, watched);
@@ -378,6 +387,14 @@ public class PriceIndexService {
         }
         log.debug("best_markets.scope product={} scope=NATIONAL", productId);
         return rankChains(productId, limit, unlocated, observation -> true);
+    }
+
+    /** Only the chains the viewer watches ("Mercados que sigo"); empty when they watch none. */
+    @Transactional(readOnly = true)
+    public List<MarketPriceRow> bestMarketsAtWatched(UUID productId, int limit, Set<String> watchedCnpjs) {
+        if (watchedCnpjs == null || watchedCnpjs.isEmpty()) return List.of();
+        return rankChains(productId, limit, new Viewer(null, null, null, watchedCnpjs),
+                observation -> watchedCnpjs.contains(observation.getMarketCnpj()));
     }
 
     /**
