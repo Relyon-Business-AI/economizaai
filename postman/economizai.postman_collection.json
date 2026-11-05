@@ -2326,6 +2326,37 @@
 					"response": []
 				},
 				{
+					"name": "Edit market (photo receipt)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"marketName\": \"Supermercado Zaffari\",\n  \"cnpj\": \"93015006003805\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/receipts/{{receiptId}}/market",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"receipts",
+								"{{receiptId}}",
+								"market"
+							]
+						},
+						"description": "Edita o mercado (nome/CNPJ) de uma nota de FOTO. 400 se nao for foto / nao estiver em revisao / CNPJ invalido."
+					},
+					"response": []
+				},
+				{
 					"name": "Update receipt item",
 					"request": {
 						"method": "PATCH",

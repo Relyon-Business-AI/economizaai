@@ -252,6 +252,20 @@ class ReceiptControllerTest {
     }
 
     @Test
+    void updateMarket_editsPhotoReceiptMarket() throws Exception {
+        var user = buildUser();
+        var id = UUID.randomUUID();
+        when(receiptService.updateMarket(any(User.class), eq(id), eq("Zaffari"), eq("93015006003805")))
+                .thenReturn(sampleReceipt(ReceiptStatus.PENDING_CONFIRMATION));
+
+        mockMvc.perform(patch("/api/v1/receipts/" + id + "/market")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"marketName\":\"Zaffari\",\"cnpj\":\"93015006003805\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void itemsPhoto_multipleFiles_passesAllToExtraction() throws Exception {
         var user = buildUser();

@@ -623,11 +623,18 @@ PATCH  /api/v1/receipts/{id}/items/{itemId}/personal  → household "personal la
                                                         { excludedFromPersonal, friendlyDescription, paidTotalPrice }
 PUT    /api/v1/receipts/{id}/items/{itemId}/category  → correct the category { "category": "MEAT_DAIRY" } OR { "customCategoryId": "<uuid>" }
 POST   /api/v1/receipts/{id}/items                   → add a missing item (PENDING_CONFIRMATION only)
-POST   /api/v1/receipts/items-photo                  → multipart photo of the printed receipt; vision-LLM
-                                                        extracts items into a PENDING_CONFIRMATION receipt
-                                                        (origin=PHOTO — personal history only, never feeds
-                                                        the price index; counts toward the FREE monthly cap;
-                                                        per-user daily photo cap; 503 when the LLM layer is off)
+PATCH  /api/v1/receipts/{id}/market { "marketName": "...", "cnpj": "14 dígitos|null" }
+                                                     → edita o mercado de uma nota de FOTO (dado não
+                                                       verificado, livre pra corrigir). Corrigir o CNPJ
+                                                       reencaixa a nota na lente certa. 400 se não for
+                                                       nota de foto / não estiver em revisão / CNPJ inválido.
+POST   /api/v1/receipts/items-photo                  → multipart (1+ fotos) do cupom impresso. ASSÍNCRONO:
+                                                        retorna 201 com a nota em PROCESSING na hora; a visão
+                                                        roda em background e a nota vira PENDING_CONFIRMATION
+                                                        (ou FAILED_PARSE). Fotos sobrepostas são costuradas
+                                                        (dedup na junção). origin=PHOTO — só histórico pessoal,
+                                                        nunca o índice; conta no cap mensal FREE; cap diário
+                                                        por usuário; 503 quando a camada de IA está off.
 POST   /api/v1/receipts/{id}/retry                   → "tentar novamente" de nota FALHADA, sem re-escanear:
                                                         SCAN re-roda a ingestão com o qrPayload guardado
                                                         (aproveita fallbacks novos, ex. resgate RS 227);

@@ -12,6 +12,7 @@ import com.relyon.economizaai.dto.request.SubmitReceiptRequest;
 import com.relyon.economizaai.dto.request.UpdateItemCategoryRequest;
 import com.relyon.economizaai.dto.request.UpdateItemPersonalRequest;
 import com.relyon.economizaai.dto.request.UpdateReceiptItemRequest;
+import com.relyon.economizaai.dto.request.UpdateReceiptMarketRequest;
 import com.relyon.economizaai.dto.response.ChaveExtractionResponse;
 import com.relyon.economizaai.exception.InvalidExportFormatException;
 import com.relyon.economizaai.exception.ReceiptRetryUnavailableException;
@@ -364,6 +365,14 @@ public class ReceiptController {
                                                       @PathVariable UUID itemId,
                                                       @Valid @RequestBody UpdateReceiptItemRequest request) {
         return ResponseEntity.ok(receiptService.updateItem(user, id, itemId, request));
+    }
+
+    /** Edita o mercado (nome/CNPJ) de uma nota de FOTO — dado não verificado, livre pra corrigir. */
+    @PatchMapping("/{id}/market")
+    public ResponseEntity<ReceiptResponse> updateMarket(@AuthenticationPrincipal User user,
+                                                        @PathVariable UUID id,
+                                                        @Valid @RequestBody UpdateReceiptMarketRequest request) {
+        return ResponseEntity.ok(receiptService.updateMarket(user, id, request.marketName(), request.cnpj()));
     }
 
     @PostMapping("/{id}/items")

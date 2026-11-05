@@ -21,6 +21,7 @@ import com.relyon.economizaai.exception.UnsupportedStateException;
 import com.relyon.economizaai.exception.ReceiptItemNotFoundException;
 import com.relyon.economizaai.exception.InvalidItemPriceException;
 import com.relyon.economizaai.exception.InvalidCategoryTargetException;
+import com.relyon.economizaai.exception.InvalidCnpjException;
 import com.relyon.economizaai.exception.ReceiptNotEditableException;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
 import com.relyon.economizaai.exception.UnsupportedMerchantException;
@@ -613,7 +614,7 @@ public class ReceiptService {
                 householdId, from, to, cnpj, categories, status, trimmedSearch, true, null, null, categoryNodeIds);
         if (scope != null && scope != MarketScope.ALL) {
             spec = spec.and(scopeSpec(scope,
-                    insightsRepository.supportedCnpjs(householdId, scope.segments(),
+                    insightsRepository.householdListingCnpjsInSegment(householdId, scope.segments(),
                             scope.absorbsSupportOverride())));
         }
         var page = receiptRepository.findAll(spec, sortedPageable);
@@ -653,6 +654,37 @@ public class ReceiptService {
     @Transactional(readOnly = true)
     public ReceiptResponse get(User user, UUID receiptId) {
         return toResponse(user, loadOwned(user, receiptId));
+    }
+
+    /**
+     * Edita o mercado (nome e/ou CNPJ) de uma nota de FOTO — dado não verificado, então o
+     * user é livre pra corrigir o que a IA leu errado. Só nota de foto (origin=PHOTO) e só
+     * enquanto em revisão. Corrigir o CNPJ reencaixa a nota na lente certa (o segmento segue
+     * o CNPJ/rede). Nota de SEFAZ/scan é verificada e não se edita o mercado.
+     */
+    @Transactional
+    public ReceiptResponse updateMarket(User user, UUID receiptId, String marketName, String cnpj) {
+        MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
+        var receipt = loadOwned(user, receiptId);
+        if (receipt.getOrigin() != ReceiptOrigin.PHOTO) {
+            throw new ReceiptNotEditableException("NOT_PHOTO");
+        }
+        if (receipt.getStatus() != ReceiptStatus.PENDING_CONFIRMATION) {
+            throw new ReceiptNotEditableException(receipt.getStatus().name());
+        }
+        if (marketName != null && !marketName.isBlank()) {
+            receipt.setMarketName(marketName.trim());
+        }
+        if (cnpj != null) {
+            var digits = cnpj.replaceAll("\\D", "");
+            if (!digits.isEmpty() && digits.length() != 14) {
+                throw new InvalidCnpjException("market.cnpj.invalid");
+            }
+            receipt.setCnpjEmitente(digits.isEmpty() ? null : digits);
+        }
+        receiptRepository.save(receipt);
+        log.info("receipt.market_edited rcpt={} hasCnpj={}", abbrev(receiptId), receipt.getCnpjEmitente() != null);
+        return toResponse(user, receipt);
     }
 
     /**

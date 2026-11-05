@@ -47,6 +47,40 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
                                 @Param("segments") Collection<MerchantSegment> segments,
                                 @Param("absorbsOverride") boolean absorbsOverride);
 
+    /**
+     * Versão para a LISTAGEM de notas (não para agregações de gasto): resolve o segmento
+     * da própria nota, SEM exigir CONFIRMED (uma nota em revisão já cai na lente certa) e
+     * casando por CNPJ exato OU pela RAIZ da rede (uma loja nova de uma rede já classificada
+     * — ex.: um Zaffari recém-escaneado — entra em Mercado na hora, sem esperar o
+     * classificador por-loja). Um bloqueio explícito naquela loja exclui. Isto conserta a
+     * nota de supermercado que caía em "Outras" até confirmar/classificar.
+     */
+    @Query("""
+        SELECT DISTINCT r.cnpjEmitente
+        FROM Receipt r
+        WHERE r.household.id = :householdId
+          AND r.cnpjEmitente IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM MarketLocation blocked
+                          WHERE blocked.cnpj = r.cnpjEmitente AND blocked.supportOverride = 'BLOCKED')
+          AND (
+            EXISTS (SELECT 1 FROM MarketLocation ex
+                    WHERE ex.cnpj = r.cnpjEmitente
+                      AND ((ex.supportOverride = 'SUPPORTED' AND (ex.segment IN :segments OR :absorbsOverride = TRUE))
+                           OR (ex.supportOverride IS NULL AND ex.segment IN :segments)))
+            OR (
+              NOT EXISTS (SELECT 1 FROM MarketLocation known
+                          WHERE known.cnpj = r.cnpjEmitente AND known.segment <> 'UNKNOWN')
+              AND EXISTS (SELECT 1 FROM MarketLocation chain
+                          WHERE chain.cnpjRoot = SUBSTRING(r.cnpjEmitente, 1, 8)
+                            AND ((chain.supportOverride = 'SUPPORTED' AND (chain.segment IN :segments OR :absorbsOverride = TRUE))
+                                 OR (chain.supportOverride IS NULL AND chain.segment IN :segments)))
+            )
+          )
+    """)
+    List<String> householdListingCnpjsInSegment(@Param("householdId") UUID householdId,
+                                                @Param("segments") Collection<MerchantSegment> segments,
+                                                @Param("absorbsOverride") boolean absorbsOverride);
+
     @Query("""
         SELECT COALESCE(SUM(ri.totalPrice), 0)
         FROM ReceiptItem ri

@@ -1,5 +1,27 @@
 # economizai — what's new
 
+## 2026-11-05 — Nota por foto: qualidade, async e edição; nota cai no segmento certo
+
+- **Extração por foto muito melhor.** Fotos de uma nota longa se sobrepõem; antes os itens
+  da sobreposição duplicavam (35 viravam ~60). Agora as fotos são **costuradas pela
+  sobreposição** (descarta o run repetido na junção, respeitando compra legítima de itens
+  repetidos). Prompt reforçado (estrutura das colunas, checagem qty×unit=total, âncora no
+  total impresso) e **captura do CNPJ** do cabeçalho. Itens ilegíveis são omitidos (o user
+  completa na revisão).
+- **`POST /receipts/items-photo` agora é ASSÍNCRONO.** Responde na hora com a nota em
+  `PROCESSING` (o app pode sair da tela); a extração roda em background e a nota vira
+  `PENDING_CONFIRMATION` (ou `FAILED_PARSE`) quando termina, aparecendo em Minhas Notas.
+  Validação/cota são fail-fast (4xx) ANTES de criar a nota. O sweeper de PROCESSING cobre.
+- **Novo `PATCH /receipts/{id}/market`** `{ marketName, cnpj? }` — edita o mercado de uma
+  nota de FOTO (dado não verificado; `cnpj` opcional, 14 dígitos). Corrigir o CNPJ reencaixa
+  a nota na lente certa. 400 se não for nota de foto / não estiver em revisão / CNPJ inválido.
+- **Nota de supermercado parava em "Outras" até confirmar.** A lente de LISTAGEM agora
+  resolve o segmento da própria nota (sem exigir CONFIRMED) e casa por **CNPJ ou raiz da
+  rede** — uma loja nova de uma rede conhecida (ex.: Zaffari) já cai em Mercado na hora. O
+  app: badge "Extraída por foto" (não "NFC-e verificada") nas notas de foto; ícone de
+  Combustível vira bomba; miniaturas das fotos não cortam mais e ampliam ao toque.
+
+
 ## 2026-11-05 — AM (Amazonas) agora funciona por chave digitada/foto, de graça
 
 - Chave pura de AM (digitada ou por foto) passou a resolver pela **reconsulta grátis**
