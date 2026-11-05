@@ -16,7 +16,7 @@ import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.InsightsService;
 import com.relyon.economizaai.service.consumption.ConsumptionIntelligenceService;
 import com.relyon.economizaai.service.geo.MarketNameService;
-import com.relyon.economizaai.service.geo.WatchedMarketService;
+import com.relyon.economizaai.service.geo.NearbyScopeService;
 import com.relyon.economizaai.service.priceindex.CommunityPromoService;
 import com.relyon.economizaai.service.priceindex.CommunityPromoService.CommunityPromo;
 import lombok.RequiredArgsConstructor;
@@ -60,7 +60,7 @@ public class DashboardCacheService {
     private final ReceiptRepository receiptRepository;
     private final ConsumptionIntelligenceService consumptionService;
     private final CommunityPromoService communityPromoService;
-    private final WatchedMarketService watchedMarketService;
+    private final NearbyScopeService nearbyScopeService;
     private final MarketNameService marketNameService;
 
     /** Backwards-compatible entry point — every segment (ALL scope). */
@@ -122,10 +122,8 @@ public class DashboardCacheService {
     }
 
     private List<CommunityPromo> loadTopPromos(User user, UUID householdId) {
-        var detectedPromos = communityPromoService.detectAll(
-                        user.getHomeLatitude(), user.getHomeLongitude(),
-                        null,    // FE typically wants the broad view on the home screen
-                        watchedMarketService.watchedCnpjs(user)).stream()
+        // "perto de você" — a deal 2 000 km away is noise on the home screen.
+        var detectedPromos = communityPromoService.detectInScope(nearbyScopeService.forUser(user)).stream()
                 .limit(PROMOS_TOP_N)
                 .toList();
         var promoOverrides = marketNameService.resolveNames(householdId, detectedPromos.stream()

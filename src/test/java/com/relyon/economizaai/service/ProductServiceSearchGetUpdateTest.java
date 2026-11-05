@@ -1,5 +1,8 @@
 package com.relyon.economizaai.service;
 
+import com.relyon.economizaai.service.geo.ViewerLocationService;
+import com.relyon.economizaai.service.geo.ViewerLocationService.Source;
+import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import com.relyon.economizaai.dto.request.CreateProductRequest;
 import com.relyon.economizaai.dto.request.UpdateProductRequest;
 import com.relyon.economizaai.exception.ProductNotFoundException;
@@ -44,6 +47,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.springframework.data.domain.PageRequest;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class ProductServiceSearchGetUpdateTest {
@@ -57,6 +61,7 @@ class ProductServiceSearchGetUpdateTest {
     @Mock private ProductExtractor productExtractor;
     @Mock private EanCatalogService eanCatalogService;
     @Mock private BrandAliasPromotionService brandAliasPromotionService;
+    @Mock private ViewerLocationService viewerLocationService;
 
     private ProductService productService;
 
@@ -68,7 +73,12 @@ class ProductServiceSearchGetUpdateTest {
                 new HouseholdProductAliasService(householdProductAliasRepository, receiptItemRepository);
         productService = new ProductService(productRepository, categoryResolver, aliasRepository, householdProductAliasRepository,
                 receiptItemRepository, priceObservationRepository, productExtractor, eanCatalogService,
-                householdProductAliasService, brandAliasPromotionService);
+                householdProductAliasService, brandAliasPromotionService, viewerLocationService);
+        lenient().when(viewerLocationService.resolve(any())).thenAnswer(invocation -> {
+            User viewer = invocation.getArgument(0);
+            var source = viewer.getHomeLatitude() != null ? Source.EXPLICIT : Source.NONE;
+            return new ViewerLocation(viewer.getHomeLatitude(), viewer.getHomeLongitude(), source, null);
+        });
     }
 
     private User user() {
@@ -267,6 +277,33 @@ class ProductServiceSearchGetUpdateTest {
 
         assertEquals(List.of("Arroz Comprado", "Arroz Mercado Visitado", "Arroz Proximo",
                         "Arroz Cidade", "Arroz Zzz"),
+                result.getContent().stream().map(product -> product.normalizedName()).toList());
+    }
+
+    @Test
+    void search_withoutHomeRanksNearbyFromLocationInferredFromReceipts() {
+        var pageable = PageRequest.of(0, 20);
+        var nearby = buildProduct(UUID.randomUUID(), "Arroz Proximo");
+        var unrelated = buildProduct(UUID.randomUUID(), "Arroz Aaa");
+        var viewer = user();
+        when(viewerLocationService.resolve(viewer)).thenReturn(new ViewerLocation(
+                new BigDecimal("-30.0000000"), new BigDecimal("-51.0000000"), Source.INFERRED, "RS"));
+        when(productRepository.searchAll("arroz")).thenReturn(List.of(unrelated, nearby));
+        when(receiptItemRepository.findProductIdsWithHistoryForHousehold(anyList(), eq(HOUSEHOLD_ID)))
+                .thenReturn(List.of());
+        when(priceObservationRepository.findProductIdsObservedAtVisitedMarkets(anyList(), eq(HOUSEHOLD_ID)))
+                .thenReturn(List.of());
+        when(priceObservationRepository.findProductIdsObservedInHouseholdCities(anyList(), eq(HOUSEHOLD_ID)))
+                .thenReturn(List.of());
+        var row = mock(PriceObservationRepository.ProductMarketCoordinates.class);
+        when(row.getProductId()).thenReturn(nearby.getId());
+        when(row.getLatitude()).thenReturn(new BigDecimal("-30.0100000"));
+        when(row.getLongitude()).thenReturn(new BigDecimal("-51.0100000"));
+        when(priceObservationRepository.findProductMarketCoordinates(anyList())).thenReturn(List.of(row));
+
+        var result = productService.search("arroz", viewer, pageable);
+
+        assertEquals(List.of("Arroz Proximo", "Arroz Aaa"),
                 result.getContent().stream().map(product -> product.normalizedName()).toList());
     }
 

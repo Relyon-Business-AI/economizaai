@@ -1,5 +1,24 @@
 # economizai — what's new
 
+## 2026-11-05 — Regra "perto de você" em TODO o app (ofertas, alertas, Início…)
+
+Uma oferta do Nordeste não serve pra quem mora no Sul. A mesma cascata do best-markets
+agora vale em todo lugar: **acompanhados sempre** + loja até **10 km** da localização
+(definida OU estimada pelas notas); sem localização → acompanhados, senão o estado, senão
+nacional. Shapes das respostas iguais.
+
+- `GET /deals`: `includeNearby=true` = cascata (`radiusKm` opcional sobrescreve os 10 km);
+  `includeNearby=false` = **só mercados acompanhados** (antes vazava o Brasil inteiro).
+  App agora abre em "Mercados próximos".
+- **Digest diário de ofertas (push)**: usa a cascata (antes: nacional).
+- **Alerta de preço (PRICE_DROP)**: só dispara pra mercado acompanhado ou dentro do raio da
+  regra (padrão 10 km; sem localização → mesma UF). Antes, regra sem raio disparava pro país.
+- **Início (top promoções)** e `GET /price-index/promos` (legado): recortados na cascata.
+- `GET /products/{id}/markets`: comunidade = acompanhados; `includeNearby=true` = cascata.
+- `GET /markets?radiusKm=` e ranking da busca de produtos: "perto" usa a localização
+  estimada quando o usuário não definiu endereço (antes: nada). App sempre manda o raio.
+- `/promos/feed` sem mudança (já era a cascata, com "ver mais longe" opt-in no app).
+
 ## 2026-11-05 — "Melhores preços" agora é perto de você (antes: Brasil inteiro)
 
 - **Fix:** `GET /price-index/products/{id}/best-markets` listava as redes mais baratas do

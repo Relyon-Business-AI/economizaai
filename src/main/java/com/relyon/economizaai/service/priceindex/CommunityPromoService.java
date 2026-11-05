@@ -7,6 +7,7 @@ import com.relyon.economizaai.model.PriceObservation;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository.ProductMarketHouseholdCount;
 import com.relyon.economizaai.repository.PriceObservationRepository;
+import com.relyon.economizaai.service.geo.NearbyScope;
 import com.relyon.economizaai.service.geo.DistanceCalculator;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import lombok.RequiredArgsConstructor;
@@ -101,6 +102,18 @@ public class CommunityPromoService {
             visiblePromos.add(promo.withViewerContext(geoEligibility.distanceKm(), isWatched));
         }
         return visiblePromos;
+    }
+
+    /**
+     * Promos inside the viewer's "perto de você" {@link NearbyScope}: followed markets, or
+     * within the radius of the explicit/inferred location; unlocated → followed, else UF,
+     * else national. For server-side surfaces with no "ver mais" (Início, legacy /promos).
+     */
+    @Transactional(readOnly = true)
+    public List<CommunityPromo> detectInScope(NearbyScope scope) {
+        var location = scope.location();
+        var promos = self.detectAll(location.latitude(), location.longitude(), null, scope.watchedCnpjs());
+        return scope.narrow(promos, promo -> new NearbyScope.Candidate(promo.watching(), promo.distanceKm(), promo.uf()));
     }
 
     /** Returns the shared promo list, recomputing only when the TTL expired (0 = no caching). */

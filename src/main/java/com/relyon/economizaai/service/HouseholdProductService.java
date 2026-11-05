@@ -16,6 +16,8 @@ import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import com.relyon.economizaai.service.geo.DistanceCalculator;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.geo.MarketNameService;
+import com.relyon.economizaai.service.geo.NearbyScope;
+import com.relyon.economizaai.service.geo.NearbyScopeService;
 import com.relyon.economizaai.service.geo.WatchedMarketService;
 import com.relyon.economizaai.service.priceindex.PriceIndexService;
 import lombok.RequiredArgsConstructor;
@@ -60,6 +62,7 @@ public class HouseholdProductService {
     private final WatchedMarketService watchedMarketService;
     private final MarketLocationService marketLocationService;
     private final MarketNameService marketNameService;
+    private final NearbyScopeService nearbyScopeService;
 
     @Transactional(readOnly = true)
     public List<HouseholdProductResponse> listHouseholdProducts(User user, String query) {
@@ -164,16 +167,17 @@ public class HouseholdProductService {
     }
 
     /**
-     * Community data: k-anon-guarded medians for watched (always) + nearby
-     * (opt-in) markets. A market where the household has its own exact price is
+     * Community data: k-anon-guarded medians for the followed markets, plus — when
+     * {@code includeNearby} — the "perto de você" {@link NearbyScope} cascade (never a
+     * market across the country). A market where the household has its own exact price is
      * skipped — own price wins over the community median.
      */
     private void overlayCommunityPriceRows(User user, UUID productId, boolean includeNearby, Double radiusKm,
                                            Set<String> watchedCnpjs,
                                            Map<String, ProductMarketPriceResponse> rowsByCnpj) {
-        var communityRows = priceIndexService.bestMarkets(productId, MARKET_LIMIT,
-                user.getHomeLatitude(), user.getHomeLongitude(),
-                includeNearby ? radiusKm : null, watchedCnpjs);
+        var communityRows = includeNearby
+                ? priceIndexService.bestMarketsInScope(productId, MARKET_LIMIT, nearbyScopeService.forUser(user, radiusKm))
+                : priceIndexService.bestMarketsAtWatched(productId, MARKET_LIMIT, watchedCnpjs);
         for (var row : communityRows) {
             if (rowsByCnpj.containsKey(row.cnpj())) continue; // own exact price wins over community median
             var medianPrice = row.medianPrice() != null

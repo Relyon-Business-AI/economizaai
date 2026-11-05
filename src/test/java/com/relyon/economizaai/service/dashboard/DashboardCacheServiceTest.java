@@ -15,7 +15,10 @@ import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.InsightsService;
 import com.relyon.economizaai.service.consumption.ConsumptionIntelligenceService;
 import com.relyon.economizaai.service.geo.MarketNameService;
-import com.relyon.economizaai.service.geo.WatchedMarketService;
+import com.relyon.economizaai.service.geo.NearbyScope;
+import com.relyon.economizaai.service.geo.NearbyScopeService;
+import com.relyon.economizaai.service.geo.ViewerLocationService.Source;
+import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import com.relyon.economizaai.service.priceindex.CommunityPromoService;
 import com.relyon.economizaai.service.priceindex.CommunityPromoService.CommunityPromo;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,7 +48,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -67,10 +69,14 @@ class DashboardCacheServiceTest {
     @Mock private ReceiptRepository receiptRepository;
     @Mock private ConsumptionIntelligenceService consumptionService;
     @Mock private CommunityPromoService communityPromoService;
-    @Mock private WatchedMarketService watchedMarketService;
+    @Mock private NearbyScopeService nearbyScopeService;
     @Mock private MarketNameService marketNameService;
 
     @InjectMocks private DashboardCacheService service;
+
+    private static final NearbyScope SCOPE = new NearbyScope(
+            new ViewerLocation(new BigDecimal("-30"), new BigDecimal("-51"), Source.EXPLICIT, "RS"),
+            Set.of(), 10);
 
     private User user;
 
@@ -92,8 +98,8 @@ class DashboardCacheServiceTest {
         lenient().when(receiptRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(Page.empty());
         lenient().when(consumptionService.suggestedList(user, false, 0))
                 .thenReturn(new SuggestedShoppingListResponse(List.of(), null));
-        lenient().when(communityPromoService.detectAll(any(), any(), any(), any())).thenReturn(List.of());
-        lenient().when(watchedMarketService.watchedCnpjs(user)).thenReturn(Set.of());
+        lenient().when(communityPromoService.detectInScope(any())).thenReturn(List.of());
+        lenient().when(nearbyScopeService.forUser(user)).thenReturn(SCOPE);
         lenient().when(marketNameService.resolveNames(any(), any())).thenReturn(Map.of());
         lenient().when(marketNameService.applyOverride(any(), any(), any())).thenAnswer(invocation -> {
             Map<String, String> overrides = invocation.getArgument(0);
@@ -190,7 +196,7 @@ class DashboardCacheServiceTest {
         var promos = IntStream.range(0, 7)
                 .mapToObj(index -> promo("Produto " + index, CNPJ_ZAFFARI, "Zaffari"))
                 .toList();
-        when(communityPromoService.detectAll(any(), any(), any(), any())).thenReturn(promos);
+        when(communityPromoService.detectInScope(any())).thenReturn(promos);
         when(marketNameService.resolveNames(eq(HOUSEHOLD_ID), any()))
                 .thenReturn(Map.of(CNPJ_ZAFFARI, "Zaffari de casa"));
 
@@ -202,14 +208,11 @@ class DashboardCacheServiceTest {
     }
 
     @Test
-    void core_passesHomeCoordinatesAndWatchedCnpjsToPromoDetection() {
-        var watched = Set.of(CNPJ_NACIONAL);
-        when(watchedMarketService.watchedCnpjs(user)).thenReturn(watched);
-
+    void core_scopesPromosToTheViewersNearbyScope() {
         service.buildCachedDashboard(user);
 
-        verify(communityPromoService).detectAll(
-                eq(new BigDecimal("-30")), eq(new BigDecimal("-51")), isNull(), eq(watched));
+        verify(nearbyScopeService).forUser(user);
+        verify(communityPromoService).detectInScope(SCOPE);
     }
 
     // ---------------------------------------------------------- helpers

@@ -4,12 +4,12 @@ import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.model.MarketLocation;
 import com.relyon.economizaai.model.NotificationRule;
 import com.relyon.economizaai.model.PriceObservation;
-import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.repository.NotificationRuleRepository;
-import com.relyon.economizaai.service.geo.DistanceCalculator;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.geo.MarketNameService;
+import com.relyon.economizaai.service.geo.NearbyScope;
+import com.relyon.economizaai.service.geo.NearbyScopeService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,7 +35,10 @@ import java.util.stream.Collectors;
  *
  * <p>Handles only the explicit user alert:
  * <ul>
- *   <li><b>PRICE_DROP</b> — user rule, fire when observed price ≤ threshold.</li>
+ *   <li><b>PRICE_DROP</b> — user rule, fire when observed price ≤ threshold AND the market is
+ *       in the user's "perto de você" {@link NearbyScope} (followed, or within the rule's
+ *       radius — default radius when unset — of the explicit/inferred location, or in the
+ *       user's UF when unlocated). A drop 2 000 km away is noise, never a push.</li>
  * </ul>
  *
  * <p>Discovery notifications (PROMO_COMMUNITY / PROMO_PERSONAL / CHEAPER_MARKET) are
@@ -55,6 +58,7 @@ public class NotificationRuleEngine {
     private final MarketLocationService marketLocationService;
     private final MarketNameService marketNameService;
     private final NotificationService notificationService;
+    private final NearbyScopeService nearbyScopeService;
 
     @Transactional
     public void evaluate(List<PriceObservation> observations, UUID contributingHouseholdId) {
@@ -87,13 +91,14 @@ public class NotificationRuleEngine {
         var rulesByProduct = rules.stream().collect(Collectors.groupingBy(rule -> rule.getProduct().getId()));
         var firedIds = new HashSet<UUID>();
         var fired = new ArrayList<NotificationRule>();
+        var scopesByUser = new HashMap<UUID, NearbyScope>();
 
         for (var observation : observations) {
             var candidates = rulesByProduct.get(observation.getProduct().getId());
             if (candidates == null) continue;
             for (var rule : candidates) {
                 if (firedIds.contains(rule.getId())) continue;
-                if (!priceRuleShouldFire(rule, observation, contributingHouseholdId, locations, now)) continue;
+                if (!priceRuleShouldFire(rule, observation, contributingHouseholdId, locations, scopesByUser, now)) continue;
 
                 notifyPriceRule(rule, observation);
                 rule.setLastFiredAt(now);
@@ -107,11 +112,24 @@ public class NotificationRuleEngine {
     /** All the gates a price rule must clear before firing for this observation. */
     private boolean priceRuleShouldFire(NotificationRule rule, PriceObservation observation,
                                         UUID contributingHouseholdId,
-                                        Map<String, MarketLocation> locations, LocalDateTime now) {
+                                        Map<String, MarketLocation> locations,
+                                        Map<UUID, NearbyScope> scopesByUser, LocalDateTime now) {
         if (sameHousehold(rule, contributingHouseholdId)) return false;
         if (!thresholdMet(rule, observation.getUnitPrice())) return false;
         if (inCooldown(rule, now)) return false;
-        return withinRadius(rule.getRadiusKm(), rule.getUser(), observation, locations);
+        var inScope = inViewerScope(ruleScope(rule, scopesByUser), observation, locations);
+        if (!inScope) {
+            log.debug("notification_rule.out_of_scope rule={} market={}", rule.getId(), observation.getMarketCnpj());
+        }
+        return inScope;
+    }
+
+    /** The user's scope (resolved once per user per evaluation), with the rule's own radius when set. */
+    private NearbyScope ruleScope(NotificationRule rule, Map<UUID, NearbyScope> scopesByUser) {
+        var user = rule.getUser();
+        var userScope = scopesByUser.computeIfAbsent(user.getId(), userId -> nearbyScopeService.forUser(user));
+        if (rule.getRadiusKm() == null) return userScope;
+        return new NearbyScope(userScope.location(), userScope.watchedCnpjs(), rule.getRadiusKm());
     }
 
     private boolean thresholdMet(NotificationRule rule, BigDecimal unitPrice) {
@@ -149,18 +167,12 @@ public class NotificationRuleEngine {
         return rule.getLastFiredAt() != null && rule.getLastFiredAt().isAfter(now.minus(COOLDOWN));
     }
 
-    private boolean withinRadius(Double radiusKm, User user,
-                                 PriceObservation observation, Map<String, MarketLocation> locations) {
-        if (radiusKm == null) return true;
-        var location = locations.get(observation.getMarketCnpj());
-        if (user.getHomeLatitude() == null || user.getHomeLongitude() == null
-                || location == null || !location.hasCoordinates()) {
-            return false; // radius requested but we can't place it — honor the constraint
-        }
-        var km = DistanceCalculator.kmBetween(
-                user.getHomeLatitude(), user.getHomeLongitude(),
-                location.getLatitude(), location.getLongitude());
-        return km <= radiusKm;
+    private boolean inViewerScope(NearbyScope scope, PriceObservation observation,
+                                  Map<String, MarketLocation> locations) {
+        var market = locations.get(observation.getMarketCnpj());
+        var distanceKm = market == null ? null : scope.distanceKmTo(market.getLatitude(), market.getLongitude());
+        return scope.admits(new NearbyScope.Candidate(
+                scope.isWatched(observation.getMarketCnpj()), distanceKm, observation.getState()));
     }
 
     private String marketName(PriceObservation observation, Locale locale) {

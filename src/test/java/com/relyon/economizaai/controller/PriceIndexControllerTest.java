@@ -1,5 +1,7 @@
 package com.relyon.economizaai.controller;
 
+import com.relyon.economizaai.service.geo.NearbyScope;
+import com.relyon.economizaai.service.geo.NearbyScopeService;
 import com.relyon.economizaai.config.SecurityConfig;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
@@ -47,6 +49,7 @@ class PriceIndexControllerTest {
     @MockitoBean private WatchedMarketService watchedMarketService;
     @MockitoBean private SponsoredPromoService sponsoredPromoService;
     @MockitoBean private ViewerLocationService viewerLocationService;
+    @MockitoBean private NearbyScopeService nearbyScopeService;
     @MockitoBean private JwtService jwtService;
     @MockitoBean private UserDetailsService userDetailsService;
     @MockitoBean private LocalizedMessageService localizedMessageService;
@@ -145,8 +148,9 @@ class PriceIndexControllerTest {
 
     @Test
     void promos_returnsCurrentPromos() throws Exception {
-        when(watchedMarketService.watchedCnpjs(any())).thenReturn(Set.of());
-        when(communityPromoService.detectAll(isNull(), isNull(), isNull(), any()))
+        var scope = new NearbyScope(new ViewerLocation(null, null, ViewerLocationService.Source.NONE, "RS"), Set.of(), 10);
+        when(nearbyScopeService.forUser(any(), isNull())).thenReturn(scope);
+        when(communityPromoService.detectInScope(scope))
                 .thenReturn(List.of(
                         new CommunityPromoService.CommunityPromo(UUID.randomUUID(), "Arroz",
                                 "93015006005182", "93015006", "Mercado X", "Mercado X",

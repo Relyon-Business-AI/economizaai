@@ -9,7 +9,8 @@ import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.model.enums.RelevanceMode;
 import com.relyon.economizaai.service.HouseholdProductAliasService;
 import com.relyon.economizaai.service.geo.MarketNameService;
-import com.relyon.economizaai.service.geo.WatchedMarketService;
+import com.relyon.economizaai.service.geo.NearbyScope;
+import com.relyon.economizaai.service.geo.NearbyScopeService;
 import com.relyon.economizaai.service.notifications.DealFeedbackService;
 import com.relyon.economizaai.service.notifications.RelevanceThreshold;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +25,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -33,9 +33,11 @@ import java.util.UUID;
  * authenticated user's household.
  *
  * <p>For every product the household has actually bought (its purchase history),
- * we ask {@link PriceIndexService#bestMarkets} for the best community price at a
- * relevant market — watched markets always, nearby markets only when the caller
- * opts in via {@code includeNearby}. The community median is k-anonymity guarded
+ * we ask the price index for the best community price at a relevant market:
+ * {@code includeNearby=false} = only the markets the user follows ("Mercados que sigo");
+ * {@code includeNearby=true} = the "perto de você" {@link NearbyScope} cascade (followed +
+ * within the radius of the explicit/inferred location, else UF, else national). Never a
+ * market across the country. The community median is k-anonymity guarded
  * inside {@code bestMarkets} (disclosed only when ≥ K distinct households
  * contributed), so no sub-K price ever leaks here. We keep the cheapest market
  * whose price beats the household's last-paid by at least the progressive
@@ -61,7 +63,7 @@ public class DealsService {
     private final ReceiptItemRepository receiptItemRepository;
     private final PriceIndexService priceIndexService;
     private final CollaborativeProperties properties;
-    private final WatchedMarketService watchedMarketService;
+    private final NearbyScopeService nearbyScopeService;
     private final MarketNameService marketNameService;
     private final DealFeedbackService dealFeedbackService;
     private final HouseholdProductAliasService householdProductAliasService;
@@ -77,7 +79,7 @@ public class DealsService {
 
         var relevanceMode = dealFeedbackService.mode();
         var suppressions = dealFeedbackService.suppressionsFor(user);
-        var watchedCnpjs = watchedMarketService.watchedCnpjs(user);
+        var scope = nearbyScopeService.forUser(user, radiusKm);
         var friendlyNames = householdProductAliasService.friendlyNamesFor(householdId,
                 List.copyOf(purchased.keySet()));
         var deals = new ArrayList<DealResponse>();
@@ -90,7 +92,7 @@ public class DealsService {
                 suppressedCount++;
                 continue;
             }
-            var deal = bestDealForProduct(user, aggregate, watchedCnpjs, includeNearby, radiusKm,
+            var deal = bestDealForProduct(user, aggregate, scope, includeNearby,
                     friendlyNames.get(aggregate.product.getId()));
             if (deal == null) continue;
             if (suppressions.suppresses(deal.productId(), deal.marketCnpj())) {
@@ -115,8 +117,8 @@ public class DealsService {
                                 Comparator.nullsLast(Comparator.reverseOrder())))
                 .limit(limit)
                 .toList();
-        log.info("deals.query done household={} candidates={} qualified={} returned={}",
-                householdId, purchased.size(), deals.size(), ranked.size());
+        log.info("deals.query done household={} scope={} candidates={} qualified={} returned={}",
+                householdId, includeNearby ? scope.tier() : "FOLLOWED", purchased.size(), deals.size(), ranked.size());
         return ranked;
     }
 
@@ -124,14 +126,15 @@ public class DealsService {
      * Cheapest qualifying community market for one product the household buys, or
      * null when nothing currently beats their last-paid by the relevance threshold.
      */
-    private DealResponse bestDealForProduct(User user, ProductAggregate aggregate, Set<String> watchedCnpjs,
-                                            boolean includeNearby, Double radiusKm, String friendlyDescription) {
+    private DealResponse bestDealForProduct(User user, ProductAggregate aggregate, NearbyScope scope,
+                                            boolean includeNearby, String friendlyDescription) {
         var lastPaid = aggregate.lastUnitPrice;
         if (lastPaid == null || lastPaid.signum() <= 0) return null;
 
-        var markets = priceIndexService.bestMarkets(aggregate.product.getId(), MARKET_LIMIT,
-                user.getHomeLatitude(), user.getHomeLongitude(),
-                includeNearby ? radiusKm : null, watchedCnpjs);
+        var productId = aggregate.product.getId();
+        var markets = includeNearby
+                ? priceIndexService.bestMarketsInScope(productId, MARKET_LIMIT, scope)
+                : priceIndexService.bestMarketsAtWatched(productId, MARKET_LIMIT, scope.watchedCnpjs());
         if (markets.isEmpty()) return null;
 
         var best = cheapestQualifyingMarket(markets, lastPaid);

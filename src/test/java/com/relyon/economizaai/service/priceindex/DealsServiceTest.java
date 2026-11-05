@@ -10,7 +10,10 @@ import com.relyon.economizaai.model.enums.RelevanceMode;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.service.geo.MarketNameService;
-import com.relyon.economizaai.service.geo.WatchedMarketService;
+import com.relyon.economizaai.service.geo.NearbyScope;
+import com.relyon.economizaai.service.geo.NearbyScopeService;
+import com.relyon.economizaai.service.geo.ViewerLocationService.Source;
+import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import com.relyon.economizaai.service.notifications.DealFeedbackService;
 import com.relyon.economizaai.service.HouseholdProductAliasService;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,7 +44,7 @@ class DealsServiceTest {
 
     @Mock private ReceiptItemRepository receiptItemRepository;
     @Mock private PriceIndexService priceIndexService;
-    @Mock private WatchedMarketService watchedMarketService;
+    @Mock private NearbyScopeService nearbyScopeService;
     @Mock private MarketNameService marketNameService;
     @Mock private DealFeedbackService dealFeedbackService;
     @Mock private HouseholdProductAliasService householdProductAliasService;
@@ -58,11 +61,12 @@ class DealsServiceTest {
     @BeforeEach
     void setUp() {
         dealsService = new DealsService(receiptItemRepository, priceIndexService, properties,
-                watchedMarketService, marketNameService, dealFeedbackService, householdProductAliasService);
+                nearbyScopeService, marketNameService, dealFeedbackService, householdProductAliasService);
         lenient().when(dealFeedbackService.mode()).thenReturn(RelevanceMode.OFF);
         lenient().when(dealFeedbackService.suppressionsFor(any()))
                 .thenReturn(DealFeedbackService.SuppressionSet.empty());
-        lenient().when(watchedMarketService.watchedCnpjs(any())).thenReturn(Set.of(WATCHED_CNPJ));
+        lenient().when(nearbyScopeService.forUser(any(), any())).thenReturn(new NearbyScope(
+                new ViewerLocation(null, null, Source.NONE, "RS"), Set.of(WATCHED_CNPJ), 10));
         lenient().when(marketNameService.resolve(any(), any(), any()))
                 .thenAnswer(invocation -> invocation.getArgument(2));
     }
@@ -94,7 +98,7 @@ class DealsServiceTest {
         when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID))
                 .thenReturn(List.of(purchase(new BigDecimal("10.00"), LocalDateTime.now())));
         // 30% drop on a R$10 item — well past the ~12% required at that price.
-        when(priceIndexService.bestMarkets(eq(PRODUCT_ID), anyInt(), any(), any(), any(), any()))
+        when(priceIndexService.bestMarketsAtWatched(eq(PRODUCT_ID), anyInt(), any()))
                 .thenReturn(List.of(market(WATCHED_CNPJ, new BigDecimal("7.00"), 3L, null, true)));
 
         var deals = dealsService.findDeals(user(), false, null, 20);
@@ -121,7 +125,7 @@ class DealsServiceTest {
                 .thenReturn(List.of(purchase(new BigDecimal("10.00"), LocalDateTime.now())));
 
         assertTrue(dealsService.findDeals(user(), false, null, 20).isEmpty());
-        verify(priceIndexService, never()).bestMarkets(any(), anyInt(), any(), any(), any(), any());
+        verify(priceIndexService, never()).bestMarketsAtWatched(any(), anyInt(), any());
     }
 
     @Test
@@ -133,7 +137,7 @@ class DealsServiceTest {
         when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID))
                 .thenReturn(List.of(purchase(new BigDecimal("10.00"), LocalDateTime.now())));
         // dismissed market is cheapest, but another market also qualifies
-        when(priceIndexService.bestMarkets(eq(PRODUCT_ID), anyInt(), any(), any(), any(), any()))
+        when(priceIndexService.bestMarketsAtWatched(eq(PRODUCT_ID), anyInt(), any()))
                 .thenReturn(List.of(market(WATCHED_CNPJ, new BigDecimal("7.00"), 3L, null, true)));
 
         // the surviving cheapest qualifying market IS the dismissed pair → suppressed
@@ -147,7 +151,7 @@ class DealsServiceTest {
                 new DealFeedbackService.SuppressionSet(Set.of(PRODUCT_ID), Set.of(), Map.of()));
         when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID))
                 .thenReturn(List.of(purchase(new BigDecimal("10.00"), LocalDateTime.now())));
-        when(priceIndexService.bestMarkets(eq(PRODUCT_ID), anyInt(), any(), any(), any(), any()))
+        when(priceIndexService.bestMarketsAtWatched(eq(PRODUCT_ID), anyInt(), any()))
                 .thenReturn(List.of(market(WATCHED_CNPJ, new BigDecimal("7.00"), 3L, null, true)));
 
         var deals = dealsService.findDeals(user(), false, null, 20);
@@ -160,7 +164,7 @@ class DealsServiceTest {
         when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID))
                 .thenReturn(List.of(purchase(new BigDecimal("10.00"), LocalDateTime.now())));
         // 1% drop — far below the required drop for a R$10 item.
-        when(priceIndexService.bestMarkets(eq(PRODUCT_ID), anyInt(), any(), any(), any(), any()))
+        when(priceIndexService.bestMarketsAtWatched(eq(PRODUCT_ID), anyInt(), any()))
                 .thenReturn(List.of(market(WATCHED_CNPJ, new BigDecimal("9.90"), 3L, null, true)));
 
         assertTrue(dealsService.findDeals(user(), false, null, 20).isEmpty());
@@ -172,40 +176,42 @@ class DealsServiceTest {
         // returns nothing here — the deal must not surface.
         when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID))
                 .thenReturn(List.of(purchase(new BigDecimal("10.00"), LocalDateTime.now())));
-        when(priceIndexService.bestMarkets(eq(PRODUCT_ID), anyInt(), any(), any(), any(), any()))
+        when(priceIndexService.bestMarketsAtWatched(eq(PRODUCT_ID), anyInt(), any()))
                 .thenReturn(List.of());
 
         assertTrue(dealsService.findDeals(user(), false, null, 20).isEmpty());
     }
 
     @Test
-    void nearbyMarketExcludedUnlessIncludeNearby() {
+    void followedOnlyAsksForWatchedMarketsNeverTheNearbyCascade() {
         when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID))
                 .thenReturn(List.of(purchase(new BigDecimal("10.00"), LocalDateTime.now())));
-        // When includeNearby=false, the service passes radiusKm=null so bestMarkets
-        // filters nearby markets out; assert that null radius is forwarded.
-        when(priceIndexService.bestMarkets(eq(PRODUCT_ID), anyInt(), any(), any(),
-                eq(null), any()))
+        when(priceIndexService.bestMarketsAtWatched(eq(PRODUCT_ID), anyInt(), eq(Set.of(WATCHED_CNPJ))))
                 .thenReturn(List.of());
 
         var deals = dealsService.findDeals(user(), false, 5.0, 20);
 
         assertTrue(deals.isEmpty());
+        verify(priceIndexService, never()).bestMarketsInScope(any(), anyInt(), any());
     }
 
     @Test
-    void includeNearbyForwardsRadiusAndSurfacesNearbyDeal() {
+    void includeNearbyUsesViewerScopeWithRadiusAndSurfacesNearbyDeal() {
+        var user = user();
+        var scope = new NearbyScope(new ViewerLocation(new BigDecimal("-30"), new BigDecimal("-51"),
+                Source.INFERRED, "RS"), Set.of(WATCHED_CNPJ), 5.0);
+        when(nearbyScopeService.forUser(user, 5.0)).thenReturn(scope);
         when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID))
                 .thenReturn(List.of(purchase(new BigDecimal("10.00"), LocalDateTime.now())));
-        when(priceIndexService.bestMarkets(eq(PRODUCT_ID), anyInt(), any(), any(),
-                eq(5.0), any()))
+        when(priceIndexService.bestMarketsInScope(eq(PRODUCT_ID), anyInt(), eq(scope)))
                 .thenReturn(List.of(market(NEARBY_CNPJ, new BigDecimal("7.00"), 4L, 2.3, false)));
 
-        var deals = dealsService.findDeals(user(), true, 5.0, 20);
+        var deals = dealsService.findDeals(user, true, 5.0, 20);
 
         assertEquals(1, deals.size());
         assertEquals(NEARBY_CNPJ, deals.get(0).marketCnpj());
         assertEquals(2.3, deals.get(0).distanceKm());
+        verify(priceIndexService, never()).bestMarketsAtWatched(any(), anyInt(), any());
     }
 
     @Test
@@ -221,9 +227,9 @@ class DealsServiceTest {
                 .thenReturn(List.of(lowSavingsItem, highSavingsItem));
 
         // PRODUCT_ID: 20% drop (10 -> 8). cheaperProductId: 50% drop (20 -> 10).
-        when(priceIndexService.bestMarkets(eq(PRODUCT_ID), anyInt(), any(), any(), any(), any()))
+        when(priceIndexService.bestMarketsAtWatched(eq(PRODUCT_ID), anyInt(), any()))
                 .thenReturn(List.of(market(WATCHED_CNPJ, new BigDecimal("8.00"), 3L, null, true)));
-        when(priceIndexService.bestMarkets(eq(cheaperProductId), anyInt(), any(), any(), any(), any()))
+        when(priceIndexService.bestMarketsAtWatched(eq(cheaperProductId), anyInt(), any()))
                 .thenReturn(List.of(market(WATCHED_CNPJ, new BigDecimal("10.00"), 3L, null, true)));
 
         var deals = dealsService.findDeals(user(), false, null, 20);
@@ -248,7 +254,7 @@ class DealsServiceTest {
     void dealCarriesHouseholdFriendlyName() {
         when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID))
                 .thenReturn(List.of(purchase(new BigDecimal("10.00"), LocalDateTime.now())));
-        when(priceIndexService.bestMarkets(eq(PRODUCT_ID), anyInt(), any(), any(), any(), any()))
+        when(priceIndexService.bestMarketsAtWatched(eq(PRODUCT_ID), anyInt(), any()))
                 .thenReturn(List.of(market(WATCHED_CNPJ, new BigDecimal("7.00"), 3L, null, true)));
         when(householdProductAliasService.friendlyNamesFor(eq(HOUSEHOLD_ID), any()))
                 .thenReturn(Map.of(PRODUCT_ID, "Leite das criancas"));

@@ -1159,6 +1159,12 @@ same as `/promos/feed`, resolved server-side:
 3. else the household's majority **UF** → chains with a store in that state;
 4. else national.
 
+**The same rule (`NearbyScope`) applies app-wide:** `/deals` (`includeNearby=true`;
+`false` = watched only), the daily deals digest push, PRICE_DROP alerts (rule radius or
+10 km; unlocated → same UF), dashboard top promos, legacy `/price-index/promos`,
+`/products/{id}/markets?includeNearby=true`, and "nearby" in `/markets` + product search
+(use the inferred location when no address is set).
+
 The scope only picks WHICH chains appear and which store represents each; the chain's
 price still aggregates all its observations (k-anon household count is chain-wide).
 
