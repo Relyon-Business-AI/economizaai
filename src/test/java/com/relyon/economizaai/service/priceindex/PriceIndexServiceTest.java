@@ -19,6 +19,8 @@ import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.geo.MerchantSupportGate;
+import com.relyon.economizaai.service.geo.ViewerLocationService;
+import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import com.relyon.economizaai.service.notifications.NotificationRuleEngine;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -126,6 +128,114 @@ class PriceIndexServiceTest {
         assertTrue(rows.isEmpty(), "a pharmacy chain must stay under the full K");
         verify(privacyTierResolver).thresholdsFor(true);
         verify(privacyTierResolver, never()).thresholdsFor(false);
+    }
+
+    // Porto Alegre viewer; one chain in POA (~2 km), one in Santo Augusto (~400 km), one in PR.
+    private static final BigDecimal POA_LAT = new BigDecimal("-30.0346");
+    private static final BigDecimal POA_LNG = new BigDecimal("-51.2177");
+
+    private void stubThreeChainsAcrossRegions(UUID productId) {
+        var poa = obsAt(productId, "AAAAAAAA000111", "Mercado POA", new BigDecimal("5.49"));
+        poa.setState("RS");
+        var santoAugusto = obsAt(productId, "BBBBBBBB000111", "Super Santi", new BigDecimal("4.99"));
+        santoAugusto.setState("RS");
+        var parana = obsAt(productId, "CCCCCCCC000111", "Muffato", new BigDecimal("4.49"));
+        parana.setState("PR");
+        when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(List.of(poa, santoAugusto, parana));
+        when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
+                .thenReturn(List.of(chainCount("AAAAAAAA", 1L), chainCount("BBBBBBBB", 1L), chainCount("CCCCCCCC", 1L)));
+        lenient().when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of(
+                "AAAAAAAA000111", located("AAAAAAAA000111", "-30.0500", "-51.2000"),
+                "BBBBBBBB000111", located("BBBBBBBB000111", "-27.8500", "-53.7800"),
+                "CCCCCCCC000111", located("CCCCCCCC000111", "-25.4300", "-49.2700")));
+        when(privacyTierResolver.thresholdsFor(false)).thenReturn(new PrivacyTierResolver.Thresholds(1, 1));
+    }
+
+    private MarketLocation located(String cnpj, String latitude, String longitude) {
+        return MarketLocation.builder().cnpj(cnpj).cnpjRoot(cnpj.substring(0, 8))
+                .latitude(new BigDecimal(latitude)).longitude(new BigDecimal(longitude)).build();
+    }
+
+    private static List<String> chainNames(List<PriceIndexService.MarketPriceRow> rows) {
+        return rows.stream().map(PriceIndexService.MarketPriceRow::marketName).toList();
+    }
+
+    @Test
+    void bestMarketsForViewer_withLocationKeepsOnlyChainsWithinTheNearbyRadius() {
+        var productId = UUID.randomUUID();
+        stubThreeChainsAcrossRegions(productId);
+        var location = new ViewerLocation(POA_LAT, POA_LNG, ViewerLocationService.Source.INFERRED, "RS");
+
+        var rows = service.bestMarketsForViewer(productId, 10, location, Set.of());
+
+        assertEquals(List.of("Mercado POA"), chainNames(rows),
+                "a Porto Alegre shopper must not see a chain 400 km away, even if cheaper and same state");
+    }
+
+    @Test
+    void bestMarketsForViewer_withLocationStillShowsAWatchedFarChain() {
+        var productId = UUID.randomUUID();
+        stubThreeChainsAcrossRegions(productId);
+        var location = new ViewerLocation(POA_LAT, POA_LNG, ViewerLocationService.Source.EXPLICIT, "RS");
+
+        var rows = service.bestMarketsForViewer(productId, 10, location, Set.of("BBBBBBBB000111"));
+
+        assertEquals(List.of("Super Santi", "Mercado POA"), chainNames(rows), "watched first, then nearby");
+    }
+
+    @Test
+    void bestMarketsForViewer_withoutLocationFallsBackToTheViewerState() {
+        var productId = UUID.randomUUID();
+        stubThreeChainsAcrossRegions(productId);
+        var location = new ViewerLocation(null, null, ViewerLocationService.Source.NONE, "RS");
+
+        var rows = service.bestMarketsForViewer(productId, 10, location, Set.of());
+
+        assertEquals(List.of("Super Santi", "Mercado POA"), chainNames(rows), "RS chains only, cheapest first");
+    }
+
+    @Test
+    void bestMarketsForViewer_withoutLocationButWatchingShowsOnlyWatchedChains() {
+        var productId = UUID.randomUUID();
+        stubThreeChainsAcrossRegions(productId);
+        var location = new ViewerLocation(null, null, ViewerLocationService.Source.NONE, "RS");
+
+        var rows = service.bestMarketsForViewer(productId, 10, location, Set.of("AAAAAAAA000111"));
+
+        assertEquals(List.of("Mercado POA"), chainNames(rows));
+    }
+
+    @Test
+    void bestMarketsForViewer_withNothingKnownIsNational() {
+        var productId = UUID.randomUUID();
+        stubThreeChainsAcrossRegions(productId);
+        var location = new ViewerLocation(null, null, ViewerLocationService.Source.NONE, null);
+
+        var rows = service.bestMarketsForViewer(productId, 10, location, Set.of());
+
+        assertEquals(3, rows.size());
+    }
+
+    @Test
+    void bestMarketsForViewer_stateScopePicksTheInStateStoreButPricesTheWholeChain() {
+        var productId = UUID.randomUUID();
+        var rsStore = obsAt(productId, "DDDDDDDD000111", "Rede RS", new BigDecimal("6.00"));
+        rsStore.setState("RS");
+        var scStore = obsAt(productId, "DDDDDDDD000222", "Rede SC", new BigDecimal("4.00"));
+        scStore.setState("SC");
+        when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(List.of(rsStore, scStore));
+        when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
+                .thenReturn(List.of(chainCount("DDDDDDDD", 2L)));
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
+        when(privacyTierResolver.thresholdsFor(false)).thenReturn(new PrivacyTierResolver.Thresholds(1, 1));
+        var location = new ViewerLocation(null, null, ViewerLocationService.Source.NONE, "RS");
+
+        var rows = service.bestMarketsForViewer(productId, 10, location, Set.of());
+
+        assertEquals(1, rows.size());
+        assertEquals("DDDDDDDD000111", rows.get(0).cnpj(), "represented by its in-state store");
+        assertEquals(2, rows.get(0).sampleCount(),
+                "price stays chain-wide: the k-anon household count is chain-wide, never a filtered subset");
     }
 
     @Test

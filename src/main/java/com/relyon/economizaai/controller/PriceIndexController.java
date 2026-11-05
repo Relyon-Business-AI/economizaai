@@ -91,11 +91,17 @@ public class PriceIndexController {
         // lat/lng are an all-or-nothing pair — using one with the home value of the
         // other would be a garbage coordinate that skews distance/radius filtering.
         var useCurrentPosition = lat != null && lng != null;
-        var originLatitude = useCurrentPosition ? lat : user.getHomeLatitude();
-        var originLongitude = useCurrentPosition ? lng : user.getHomeLongitude();
-        return ResponseEntity.ok(priceIndexService.bestMarkets(productId, limit,
-                originLatitude, originLongitude, radiusKm,
-                watchedMarketService.watchedCnpjs(user)));
+        var watched = watchedMarketService.watchedCnpjs(user);
+        // Explicit position/radius (barcode scan inside a store) keeps the caller's own scope;
+        // otherwise the "perto de você" cascade (explícita → estimada pelas notas → UF → nacional).
+        if (useCurrentPosition || radiusKm != null) {
+            var originLatitude = useCurrentPosition ? lat : user.getHomeLatitude();
+            var originLongitude = useCurrentPosition ? lng : user.getHomeLongitude();
+            return ResponseEntity.ok(priceIndexService.bestMarkets(productId, limit,
+                    originLatitude, originLongitude, radiusKm, watched));
+        }
+        return ResponseEntity.ok(priceIndexService.bestMarketsForViewer(productId, limit,
+                viewerLocationService.resolve(user), watched));
     }
 
     @GetMapping("/promos")

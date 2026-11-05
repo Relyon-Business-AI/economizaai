@@ -1,5 +1,15 @@
 # economizai — what's new
 
+## 2026-11-05 — "Melhores preços" agora é perto de você (antes: Brasil inteiro)
+
+- **Fix:** `GET /price-index/products/{id}/best-markets` listava as redes mais baratas do
+  país inteiro (um usuário de Porto Alegre via mercado de Santo Augusto e do PR). Agora,
+  sem `lat`/`lng`/`radiusKm`, aplica a mesma cascata do `/promos/feed`: localização
+  (definida OU estimada pelas notas) → redes com loja até **10 km** + acompanhadas; sem
+  localização → acompanhadas; senão o estado; senão nacional. Shape da resposta igual.
+- **App:** na tela, "N preços · N famílias" só aparece pra admin; a etiqueta de estados do
+  "Preço em loja" não estoura mais o card (até 2 UFs, senão "N estados"); aviso enxuto.
+
 ## 2026-11-05 — Nota por foto: qualidade, async e edição; nota cai no segmento certo
 
 - **Extração por foto muito melhor.** Fotos de uma nota longa se sobrepõem; antes os itens

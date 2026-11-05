@@ -105,10 +105,13 @@ class PriceIndexControllerTest {
     }
 
     @Test
-    void bestMarkets_returnsRanking() throws Exception {
+    void bestMarkets_withoutPositionUsesViewerLocationCascade() throws Exception {
         var pid = UUID.randomUUID();
+        var location = new ViewerLocation(new BigDecimal("-30.03"), new BigDecimal("-51.22"),
+                ViewerLocationService.Source.INFERRED, "RS");
         when(watchedMarketService.watchedCnpjs(any())).thenReturn(Set.of());
-        when(priceIndexService.bestMarkets(any(), anyInt(), isNull(), isNull(), isNull(), any()))
+        when(viewerLocationService.resolve(any())).thenReturn(location);
+        when(priceIndexService.bestMarketsForViewer(any(), anyInt(), eq(location), any()))
                 .thenReturn(List.of(
                         new PriceIndexService.MarketPriceRow("93015006005182", "93015006", "Mercado X",
                                 new BigDecimal("10"), new BigDecimal("9"),
