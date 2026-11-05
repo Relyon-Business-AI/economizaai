@@ -9,9 +9,11 @@ class NotificationTypeDestinationTest {
 
     @Test
     void mapsEachTypeToItsDestination() {
-        assertEquals(NotificationDestination.DEALS, NotificationType.PROMO_PERSONAL.destination());
-        assertEquals(NotificationDestination.DEALS, NotificationType.PROMO_COMMUNITY.destination());
-        assertEquals(NotificationDestination.DEALS, NotificationType.CHEAPER_MARKET.destination());
+        // Promo de um produto específico abre o PRODUTO (melhores mercados).
+        assertEquals(NotificationDestination.PRODUCT, NotificationType.PROMO_PERSONAL.destination());
+        assertEquals(NotificationDestination.PRODUCT, NotificationType.PROMO_COMMUNITY.destination());
+        assertEquals(NotificationDestination.PRODUCT, NotificationType.CHEAPER_MARKET.destination());
+        // Só o resumo diário (rollup) abre a lista de ofertas.
         assertEquals(NotificationDestination.DEALS, NotificationType.DEALS_DIGEST.destination());
         // Resumo (semanal/mensal) deep-linka pra gastos por categoria — nunca pra
         // ofertas (poderia estar vazia em volume baixo).
