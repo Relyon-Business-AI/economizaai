@@ -41,7 +41,7 @@ são reais mas antigas, 2018–2026; prod fresco só BA/MG):
 
 | UF | Chave pura → itens? | Como / bloqueio |
 |---|---|---|
-| **AM** | ✅ **GRÁTIS, sem captcha** | `sistemas.sefaz.am.gov.br/nfceweb/consultarNFCe.jsp?p=<chave>` → DANFE completo com itens. Validado com nota de **2023** (nem expurgo tem). Novo "RS" |
+| **AM** | ✅ **GRÁTIS, sem captcha — EM PROD (2026-11-05)** | `sistemas.sefaz.am.gov.br/nfceweb/consultarNFCe.jsp?p=<chave>` → DANFE responsivo padrão (ISO-8859-1) lido pelo `ResponsiveDanfeParser` genérico. `AmChaveReconsultClient` + `ChaveReconsultService` (`isReconsultable`). Fixture real (SUPERMERCADOS DB, 2 itens, R$13,98) em `fixtures/sefaz/am/`. Novo "RS" |
 | **BA** | ✅ validado c/ captcha imagem | `NFCEC_consulta_chave_acesso.aspx` (campos `txt_chave_acesso`, `txt_cod_antirobo`, botão `btn_consulta_completa`; imagem em `../AntiRobo/NFCEC_anti_robo.aspx`) → DANFE completo. Usar **http://** (cadeia TLS quebrada) |
 | **PI** | 🟡 provável | `webas.sefaz.pi.gov.br/nfce/<chave>` renderiza form público de consulta por chave com captcha de imagem — mesmo padrão do BA, falta validar o POST |
 | **AC** | 🟡 | aceita chave pura mas redireciona a `dfe.sefaz.ac.gov.br/resolve-captcha?fluxo=nfce&chave=…` (SPA "Portal DFe") — investigação dedicada |
@@ -50,9 +50,9 @@ são reais mas antigas, 2018–2026; prod fresco só BA/MG):
 | **MT** | 🔴 | "Inconsistência de Informações no QRCode" — exige assinatura |
 | **CE** | ✅ **grátis, sem captcha (2026-10-12)** | O erro "Inconsistência de Informações no QR Code" era validação CLIENT-SIDE do shell Angular — o servidor tem uma api JSON (`POST /nfce/api/notasFiscal/qrcodev3/` com `{chave_acesso, versao_qrcode:3, tipo_ambiente:1}`) que devolve a DANFE completa de **chave pura**. `CearaNfcePortalAdapter` em prod; fixture real (Centerbox, 68 itens) em `fixtures/sefaz/ce/` |
 | **RN** | 🔴 (QR) | idem CE |
-| **MG** | ⚪ portal fora do ar | `portalsped` inacessível hoje (reset no script E error page no Chrome) — retestar; temos chave fresca (set/2026) |
-| **MA** | ⚪ | host `nfce.sefaz.ma.gov.br` não resolve mais (DNS) — URL mudou, redescobrir |
-| **RO** | ⚪ | `consultanfce/consulta.jsp` → HTTP 500 — retestar/URL alternativa |
+| **MG** | 🔴 chave pura (QR ok via adapter) | **Reteste 2026-11-05:** `portalsped` VOLTOU (HTTP 200), mas `qrcode.xhtml?p=<chave>` é **JSF + captcha** (ViewState + CAPTCHA, sem itens no GET) — precisa fluxo stateful + solve, não GET simples. QR de MG já funciona via `MgNfcePortalAdapter`; digitada cai no Infosimples |
+| **MA** | 🔴 chave pura | **Reteste 2026-11-05:** DNS VOLTOU (`nfce.sefaz.ma.gov.br` HTTP 200), mas é **JSF + captcha** (jsessionid + ViewState + captcha) — 2 passos + solve. Digitada cai no Infosimples |
+| **RO** | ⚪ | **Reteste 2026-11-05:** host responde (HTTP 200), mas `consultanfce/consulta.jsp` redireciona pra `home.jsp` — URL de consulta mudou, redescobrir. Sem chave de RO no banco pra validar |
 
 Consequência (consolidada): import por chaves pode expandir **RS+GO+AM de
 graça**, **MS+BA (+PE on-device, +PI provável) por centavos de captcha**; SP
