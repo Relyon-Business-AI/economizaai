@@ -13,6 +13,16 @@
   "falhou") e, no detalhe, oferecer ativar notificações + tirar foto da nota como plano B. Nota
   inexistente/cancelada (607/612) continua `FAILED_PARSE` definitivo — só 615/portal-fora espera.
 
+## 2026-11-05 — Lojas (iOS): origem dos downloads volta a popular
+
+- **Fix:** o sync diário do App Store Connect falhava com 400 desde que foi criado (filtros
+  `reportType`/`granularity` não existem nesse endpoint), então `GET /admin/analytics/store/ios`
+  vinha sempre vazio. Agora lê os relatórios "Discovery and Engagement" + "App Downloads"
+  e deduplica as datas que a Apple republica (sem isso os números saíam 2-3×).
+- `installs` = só **primeiro download** (redownload/auto-update/restore não contam). Fontes:
+  busca na App Store, navegação, referência web, referência de app. A Apple guarda ~1 mês de
+  histórico diário.
+
 ## 2026-11-05 — Aquisição: cadastros por hora do dia
 
 - `GET /admin/analytics/acquisition` ganhou **`byHour`**: 24 pontos `{ hour, total, byChannel }`
