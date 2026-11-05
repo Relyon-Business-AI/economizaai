@@ -1,5 +1,13 @@
 # economizai — what's new
 
+## 2026-11-05 — Aquisição: cadastros por hora do dia
+
+- `GET /admin/analytics/acquisition` ganhou **`byHour`**: 24 pontos `{ hour, total, byChannel }`
+  em horário de Brasília, somando o período. O painel Admin → Aquisição mostra como gráfico
+  de linha ("Horário dos cadastros") com pico e quebra por canal no toque/hover.
+- **Fix:** `timeline` (cadastros por dia) agora agrupa pelo dia de Brasília — cadastros
+  depois das 21h caíam no dia seguinte (UTC).
+
 ## 2026-11-05 — Notificação de promoção abre o PRODUTO (antes caía na Início)
 
 - **`PROMO_PERSONAL` / `PROMO_COMMUNITY` / `CHEAPER_MARKET` agora têm `destination=PRODUCT`**

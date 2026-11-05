@@ -23,7 +23,8 @@ public record AcquisitionReportResponse(
         AdSpendSummary adSpend,
         RevenueSummary revenue,
         VisitSummary visits,
-        List<RetentionLine> retention) {
+        List<RetentionLine> retention,
+        List<HourlySignupLine> byHour) {
 
     /** Signup → verified email → uploaded first receipt (activated) → PRO tier, with conversion rates in [0,1]. */
     public record Funnel(long signups, long verified, long activated, long proTier,
@@ -32,6 +33,13 @@ public record AcquisitionReportResponse(
 
     /** One day of the signup series; {@code byChannel} maps AcquisitionChannel name → count that day. */
     public record DailySignupLine(LocalDate date, long total, Map<String, Long> byChannel) {
+    }
+
+    /**
+     * Signups in the window bucketed by hour of day (0–23, Brasília wall-clock). Always 24
+     * entries so the FE can draw a continuous line; {@code byChannel} as in the daily series.
+     */
+    public record HourlySignupLine(int hour, long total, Map<String, Long> byChannel) {
     }
 
     public record ChannelLine(String channel, long signups, long verified, long proTier) {

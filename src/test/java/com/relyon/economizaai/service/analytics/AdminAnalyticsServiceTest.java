@@ -25,6 +25,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -241,6 +242,31 @@ class AdminAnalyticsServiceTest {
         assertThat(line.activated()).isEqualTo(1L);
         assertThat(line.retainedD7()).isEqualTo(1L);
         assertThat(line.activationRate()).isEqualTo(0.5d);
+    }
+
+    @Test
+    void signupsBucketByBrasiliaHourAndDay() {
+        stubEmptyFunnel();
+        when(userRepository.channelBreakdownSince(any(), anyBoolean())).thenReturn(List.of());
+        when(metaAdsProperties.isConfigured()).thenReturn(false);
+        var yesterdayUtc = LocalDate.now(ZoneOffset.UTC).minusDays(1);
+        // 01:30 UTC = 22:30 Brasília of the PREVIOUS day; 15:00 UTC = 12:00 Brasília.
+        Object[] lateNight = {yesterdayUtc.atTime(1, 30), AcquisitionChannel.INSTAGRAM_PAID};
+        Object[] noon = {yesterdayUtc.atTime(15, 0), null};
+        when(userRepository.signupTimelineSince(any(), anyBoolean()))
+                .thenReturn(List.<Object[]>of(lateNight, noon));
+
+        var report = service.acquisition(30, false);
+
+        assertThat(report.byHour()).hasSize(24);
+        assertThat(report.byHour().get(22).total()).isEqualTo(1L);
+        assertThat(report.byHour().get(22).byChannel()).containsEntry("INSTAGRAM_PAID", 1L);
+        assertThat(report.byHour().get(12).byChannel()).containsEntry("UNKNOWN", 1L);
+        assertThat(report.byHour().get(1).total()).isZero();
+        var lateNightDay = report.timeline().stream()
+                .filter(line -> line.date().equals(yesterdayUtc.minusDays(1)))
+                .findFirst().orElseThrow();
+        assertThat(lateNightDay.total()).isEqualTo(1L);
     }
 
     private void stubEmptyFunnel() {
