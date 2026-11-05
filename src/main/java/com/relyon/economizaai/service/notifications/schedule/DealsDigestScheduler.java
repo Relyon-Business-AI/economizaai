@@ -245,6 +245,9 @@ public class DealsDigestScheduler {
         extras.put("screen", "deals");
         extras.put("newsworthyCount", newsworthyCount);
         extras.put("bestProductId", best.productId().toString());
+        // Nome do produto em destaque — o app abre os "Melhores Mercados" dele no tap (qual mercado
+        // tem mais barato), e a tela precisa do nome pro cabeçalho.
+        extras.put("bestProductName", productLabel);
         extras.put("bestMarketCnpj", best.marketCnpj());
         extras.put("bestDiscountFraction", best.discountFraction());
         return new NotificationPayload(user, NotificationType.DEALS_DIGEST, title, body, extras);
