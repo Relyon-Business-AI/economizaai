@@ -1080,3 +1080,22 @@ classify OTHER (grey) unless they carry a conveniência CNAE.
   jul–ago). `InfosimplesAlertService` novo: e-mail admin em consulta paga falhando (CE!),
   saldo < R$5 e conta inacessível. Modelo de "varrido" da franquia em observação (saldo de
   setembro carregou pro mês novo, contrariando o fechamento) — ver DEV_NOTES.
+
+### Session (2026-11-05) — aquisição: horário dos cadastros + sync da App Store consertado (PRONTO P/ PROD, aguardando)
+
+- **Handoff de release:** tudo abaixo está em `development` (back) e `development` (FE, commit
+  `dafb466`), validado e com o OK do dono pra prod. **Segurado de propósito** porque o mesmo merge
+  leva o `2e9a3980` (PORTAL_PENDING), que o app ainda não trata. **A sessão do PORTAL_PENDING sobe
+  tudo junto** quando o FE dela estiver pronto: back `development`→`main`; FE leva também o
+  `dafb466` (gráfico) pro `master`.
+- `GET /admin/analytics/acquisition` ganhou `byHour` (24 pontos, Brasília) + `timeline` agora no
+  dia de Brasília (antes, cadastro depois das 21h caía no dia seguinte). FE: card "Horário dos
+  cadastros" (linha estilo cotação, pico + canais no toque/hover).
+- **App Store Connect sync falhava com 400 todo dia desde a criação** (filtros inexistentes).
+  Reescrito: relatório por categoria+nome → instâncias DAILY → segments; **instâncias repetem
+  2-3 datas → a mais recente vence** (somar inflava 2-3×). Validado ao vivo contra a Apple.
+- Achados de aquisição (iOS, out/2026): 61% dos downloads vêm da **busca na App Store** → foco em
+  ASO. Atribuição UTM própria é quase vazia (captura só na web; quase todos cadastram no app).
+  Android: origem só via export GCS do Play (não configurado — precisa service account + bucket).
+- Nota de ambiente: `ReceiptToPriceIndexIntegrationTest` falha no checkout principal mas passa em
+  worktree limpo do mesmo commit → é ambiente local (`.env`/`.envrc`/target), não código.
