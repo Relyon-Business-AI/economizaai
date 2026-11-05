@@ -1,5 +1,12 @@
 # economizai — what's new
 
+## 2026-11-05 — AM (Amazonas) agora funciona por chave digitada/foto, de graça
+
+- Chave pura de AM (digitada ou por foto) passou a resolver pela **reconsulta grátis**
+  (`sistemas.sefaz.am.gov.br`, GET público sem captcha → DANFE padrão), sem gastar Infosimples —
+  igual RS/CE. Antes caía no Infosimples (pago) ou falhava. QR de AM já funcionava.
+- Sem mudança de contrato pro FE — só mais um estado que ingere por chave sem custo.
+
 ## 2026-11-05 — Portal do estado fora: nota fica "aguardando" em vez de "falhou"
 
 - Novo `ReceiptStatus` **`PORTAL_PENDING`**. Quando o portal da SEFAZ do estado está offline

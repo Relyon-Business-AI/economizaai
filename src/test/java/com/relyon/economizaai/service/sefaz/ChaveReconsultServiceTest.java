@@ -6,6 +6,7 @@ import org.springframework.core.io.ClassPathResource;
 import java.nio.charset.StandardCharsets;
 import java.util.regex.Pattern;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -14,6 +15,7 @@ class ChaveReconsultServiceTest {
 
     private static final String RS_NFCE = "43250993015006000171651130003175331432171862";
     private static final String BA_NFCE = "29260816587844000110650010004061381036664035";
+    private static final String AM_NFCE = "13230222991939000955650460000268981001050009";
 
     @Test
     void isReconsultable_rsAndBaNfce_butNotOtherStates() {
@@ -22,12 +24,31 @@ class ChaveReconsultServiceTest {
         // CE (23): qrcodev3 consulta por chave pura, sem captcha
         assertTrue(ChaveReconsultService.isReconsultable(
                 "23260816587844000110650010004061381036664035"));
+        // AM (13): portal público por chave pura, sem captcha — grátis
+        assertTrue(ChaveReconsultService.isReconsultable(AM_NFCE));
         // SP (35) segue fora do import por chave pura
         assertFalse(ChaveReconsultService.isReconsultable(
                 "35260816587844000110650010004061381036664035"));
         // BA modelo 55 (NF-e) não é servido pelo portal NFC-e
         assertFalse(ChaveReconsultService.isReconsultable(
                 "29260816587844000110550010004061381036664035"));
+        // AM modelo 55 (NF-e) também não
+        assertFalse(ChaveReconsultService.isReconsultable(
+                "13230222991939000955550460000268981001050009"));
+    }
+
+    @Test
+    void amReconsult_parsesRealDanfe() throws Exception {
+        // Fixture real (nota AM 2023) servido por GET público em ISO-8859-1. O portal entrega o
+        // DANFE responsivo padrão, lido pelo parser genérico — valida o "novo RS".
+        var html = new String(new ClassPathResource("fixtures/sefaz/am/nfce-real-reconsult.html")
+                .getInputStream().readAllBytes(), StandardCharsets.ISO_8859_1);
+
+        var parsed = ResponsiveDanfeParser.parse(html, AM_NFCE, "https://sistemas.sefaz.am.gov.br/nfceweb");
+
+        assertEquals(2, parsed.items().size());
+        assertTrue(parsed.totalAmount().signum() > 0);
+        assertTrue(parsed.items().stream().allMatch(item -> item.rawDescription() != null && !item.rawDescription().isBlank()));
     }
 
     @Test
