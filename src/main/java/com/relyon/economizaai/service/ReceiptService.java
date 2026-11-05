@@ -899,6 +899,7 @@ public class ReceiptService {
                     Map.of(
                             "receiptId", receipt.getId().toString(),
                             "productId", promo.productId().toString(),
+                            "productName", promo.productName(),
                             "savingsPct", promo.savingsPct(),
                             "paidPrice", promo.paidPrice(),
                             "historicalMedian", promo.historicalMedian()

@@ -1,5 +1,19 @@
 # economizai — what's new
 
+## 2026-11-05 — Notificação de promoção abre o PRODUTO (antes caía na Início)
+
+- **`PROMO_PERSONAL` / `PROMO_COMMUNITY` / `CHEAPER_MARKET` agora têm `destination=PRODUCT`**
+  (antes `DEALS`). Tocar numa notificação "produto X% mais barato que o normal" abre a
+  tela de **melhores mercados daquele produto**, não a lista de ofertas nem a Início. O
+  resumo diário (`DEALS_DIGEST`, rollup) continua abrindo a lista de ofertas.
+- `PROMO_PERSONAL` passou a mandar `productName` no payload (produto já abre com o nome).
+- **App:** corrigido o deep link de **cold start** — quando o tap na notificação abria o
+  app do zero, o roteamento disparava antes da navegação montar e o link era perdido (ia
+  pra Início); agora ele espera a navegação ficar pronta. Também removida a linha
+  "Notificações" dos Ajustes (o sininho da Início já abre a caixa); "Preferências de
+  Notificações" permanece.
+
+
 ## 2026-11-04 — Localização por CEP (alternativa ao GPS, funciona na web)
 
 - **Novo `GET /api/v1/users/me/location/cep?cep=NNNNNNNN`** → `{ latitude, longitude, label }`.

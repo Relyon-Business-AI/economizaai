@@ -89,10 +89,11 @@ public enum NotificationType {
     /** Which FE screen a notification of this type should deep-link to. */
     public NotificationDestination destination() {
         return switch (this) {
-            // DEALS fica só pros tipos que NASCEM de uma oferta concreta (nunca
-            // chegam com a tela vazia). O resumo semanal vive no corpo da própria
-            // notificação → INBOX, onde dá pra ler (volume baixo não atrapalha).
-            case PROMO_PERSONAL, PROMO_COMMUNITY, CHEAPER_MARKET, DEALS_DIGEST -> NotificationDestination.DEALS;
+            // Promo sobre um produto específico abre o PRODUTO (melhores mercados) —
+            // levar pra lista de ofertas ou pra Início é inútil. O resumo diário
+            // (DEALS_DIGEST) é um rollup de várias ofertas → abre a lista.
+            case PROMO_PERSONAL, PROMO_COMMUNITY, CHEAPER_MARKET -> NotificationDestination.PRODUCT;
+            case DEALS_DIGEST -> NotificationDestination.DEALS;
             case DIGEST -> NotificationDestination.SPENDING;
             case STOCKOUT -> NotificationDestination.REPLENISHMENT;
             case PRICE_DROP -> NotificationDestination.PRODUCT;
