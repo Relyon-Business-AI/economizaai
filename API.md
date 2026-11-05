@@ -498,8 +498,15 @@ POST /api/v1/receipts/confirm-batch
 
 - Staging returns everything except `CONFIRMED` (which has been saved definitively and
   drops off): `IMPORT_QUEUED` / `PROCESSING` / `PENDING_CONFIRMATION` / `FAILED_PARSE` /
-  `NEEDS_DEVICE_FETCH`. Confirm a nota (`POST /receipts/{id}/confirm` or `confirm-batch`)
+  `NEEDS_DEVICE_FETCH` / `CONTINGENCY_PENDING` / `PORTAL_PENDING`. Confirm a nota (`POST /receipts/{id}/confirm` or `confirm-batch`)
   or delete it (`DELETE /receipts/{id}` / `POST /receipts/delete-batch`) to remove it.
+- **`PORTAL_PENDING`** (new): the state's SEFAZ portal was offline (código 615) when the nota was
+  scanned, so no path could reach it — but the nota is fine, the portal is just down (minutes to
+  weeks). NOT a failure: the server re-fetches on a schedule (`PortalRecoverySweeper`) until the portal
+  returns (→ `PENDING_CONFIRMATION` + a "nota pronta" push), giving up to `FAILED_PARSE` only after a
+  long window (~14d). `parseErrorMessage` carries the honest "portal do seu estado está fora" text.
+  The app should render it as a transparent "aguardando" (not "falhou") and may offer the user to
+  photograph the nota instead of waiting. Reason key: `receipt.portal.unavailable`.
 
 ### Submit from a PHOTO of the QR code
 

@@ -491,6 +491,10 @@ public class ReceiptIngestionService {
      * page). Both mean "recoverable, auto-resync" → {@link ReceiptStatus#CONTINGENCY_PENDING}. */
     static final String CONTINGENCY_PENDING_REASON = "receipt.contingency.pending";
 
+    /** Reason-key prefix for a nota parked because the state's portal/origin was UNAVAILABLE (615).
+     * Means "recoverable, auto-resync when the portal is back" → {@link ReceiptStatus#PORTAL_PENDING}. */
+    static final String PORTAL_UNAVAILABLE_REASON = "receipt.portal.unavailable";
+
     static String parseFailureReason(ReceiptParseException ex, String chaveAcesso) {
         // A note emitted in contingency (tpEmis != 1) with an INTACT chave (valid DV) that we
         // couldn't retrieve — SEFAZ served nothing, or an empty DANFE — is "not transmitted yet"
@@ -520,9 +524,9 @@ public class ReceiptIngestionService {
      * so the resync sweeper re-fetches it within the window. Every other parse failure is terminal.
      */
     static ReceiptStatus statusForReason(String reason) {
-        return reason.startsWith(CONTINGENCY_PENDING_REASON)
-                ? ReceiptStatus.CONTINGENCY_PENDING
-                : ReceiptStatus.FAILED_PARSE;
+        if (reason.startsWith(CONTINGENCY_PENDING_REASON)) return ReceiptStatus.CONTINGENCY_PENDING;
+        if (reason.startsWith(PORTAL_UNAVAILABLE_REASON)) return ReceiptStatus.PORTAL_PENDING;
+        return ReceiptStatus.FAILED_PARSE;
     }
 
     /**
@@ -599,13 +603,22 @@ public class ReceiptIngestionService {
                             // doesn't have it yet" — recoverable, not a dead end. Park it pending
                             // (the sweeper gives up after the 72h window) instead of failing now.
                             var contingency = isRecoverableContingency(receipt.getChaveAcesso());
+                            // The portal/origin was momentarily UNAVAILABLE (615) — the nota exists,
+                            // the portal is just offline. Park it PORTAL_PENDING so the recovery
+                            // sweeper re-fetches until it's back, instead of a dead FAILED_PARSE.
+                            var portalDown = !contingency
+                                    && ex instanceof ExperimentalStateFailedException esf && esf.isPortalUnavailable();
                             if (shouldOverwriteReason(receipt, ex)) {
-                                receipt.setParseErrorReason(contingency ? CONTINGENCY_PENDING_REASON + ":" : failureReason(ex));
+                                receipt.setParseErrorReason(contingency ? CONTINGENCY_PENDING_REASON + ":"
+                                        : portalDown ? PORTAL_UNAVAILABLE_REASON + ":" : failureReason(ex));
                             }
-                            receipt.setStatus(contingency ? ReceiptStatus.CONTINGENCY_PENDING : ReceiptStatus.FAILED_PARSE);
+                            // Mark pending states so the ingest-success path pings the owner when a resync recovers them.
+                            if (contingency || portalDown) receipt.setResyncingFromContingency(true);
+                            receipt.setStatus(contingency ? ReceiptStatus.CONTINGENCY_PENDING
+                                    : portalDown ? ReceiptStatus.PORTAL_PENDING : ReceiptStatus.FAILED_PARSE);
                             receiptRepository.save(receipt);
-                            // CONTINGENCY_PENDING is not a failure (note not on SEFAZ yet) — don't ping the owner.
-                            if (!contingency && firstDiagnosis) notifyFailedIfSlow(receipt);
+                            // Pending states are NOT failures (nota reachable once the portal/SEFAZ is back) — don't ping "falhou".
+                            if (!contingency && !portalDown && firstDiagnosis) notifyFailedIfSlow(receipt);
                         }
                     }));
         } catch (RuntimeException inner) {

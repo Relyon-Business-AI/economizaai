@@ -31,7 +31,8 @@ public class StoreReviewPromptService {
 
     /** From the user's point of view these all mean "my nota didn't work". */
     private static final Set<ReceiptStatus> FAILURE_STATUSES =
-            Set.of(ReceiptStatus.FAILED_PARSE, ReceiptStatus.CONTINGENCY_PENDING, ReceiptStatus.NEEDS_DEVICE_FETCH);
+            Set.of(ReceiptStatus.FAILED_PARSE, ReceiptStatus.CONTINGENCY_PENDING, ReceiptStatus.NEEDS_DEVICE_FETCH,
+                    ReceiptStatus.PORTAL_PENDING);
 
     private final ReceiptRepository receiptRepository;
     private final UserRepository userRepository;

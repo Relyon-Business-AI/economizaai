@@ -338,7 +338,8 @@ public class SefazIngestionService {
                             StateIngestionOutcome.FETCH_FAILED, qrHost, describe(fallbackEx));
                     throw experimentalExhausted(uf, userId, chave, sourceUrlOf(qrPayload),
                             "QR_PORTAL: " + describe(primaryEx) + "; INFOSIMPLES: " + describe(fallbackEx),
-                            portalEvidence, primaryEx instanceof ExperimentalCaptchaWallException);
+                            portalEvidence, primaryEx instanceof ExperimentalCaptchaWallException,
+                            isPortalUnavailable(fallbackEx));
                 }
                 throw fallbackEx;
             }
@@ -562,12 +563,29 @@ public class SefazIngestionService {
     private ExperimentalStateFailedException experimentalExhausted(UnidadeFederativa uf, UUID userId, String chave,
                                                                    String sourceUrl, String failureSummary,
                                                                    String htmlSnippet, boolean captchaBlocked) {
+        return experimentalExhausted(uf, userId, chave, sourceUrl, failureSummary, htmlSnippet, captchaBlocked, false);
+    }
+
+    private ExperimentalStateFailedException experimentalExhausted(UnidadeFederativa uf, UUID userId, String chave,
+                                                                   String sourceUrl, String failureSummary,
+                                                                   String htmlSnippet, boolean captchaBlocked,
+                                                                   boolean portalUnavailable) {
         if (prefetchPolicy.isDeviceFetchUf(uf)) {
             log.info("state_coverage.exhausted_skipped uf={} reason=device_fetch_uf", uf);
         } else {
             stateCoverage.reportExhausted(uf, userId, chave, sourceUrl, failureSummary, htmlSnippet);
         }
-        return new ExperimentalStateFailedException(uf.name(), captchaBlocked);
+        return new ExperimentalStateFailedException(uf.name(), captchaBlocked, portalUnavailable);
+    }
+
+    /**
+     * The Infosimples fallback failed: the portal/origin is momentarily UNAVAILABLE (transient —
+     * provider instability, code 615) UNLESS it answered a deterministic per-nota verdict
+     * ({@link InfosimplesNoDataException}: nota inexistente/cancelada). Only the transient case is
+     * worth parking as PORTAL_PENDING and retrying — a not-found never changes.
+     */
+    private static boolean isPortalUnavailable(RuntimeException fallbackEx) {
+        return !(fallbackEx instanceof InfosimplesNoDataException);
     }
 
     private static String describe(RuntimeException ex) {

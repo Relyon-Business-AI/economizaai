@@ -1,5 +1,18 @@
 # economizai — what's new
 
+## 2026-11-05 — Portal do estado fora: nota fica "aguardando" em vez de "falhou"
+
+- Novo `ReceiptStatus` **`PORTAL_PENDING`**. Quando o portal da SEFAZ do estado está offline
+  (código 615) e nenhum caminho alcança a nota, ela não vira mais `FAILED_PARSE` (beco sem saída):
+  fica parada como "aguardando o portal voltar", o servidor retenta sozinho a cada 6h
+  (`PortalRecoverySweeper`) e, quando o portal volta, a nota processa e dispara o push "nota pronta".
+  Só desiste (→ `FAILED_PARSE`) depois de ~14 dias.
+- `parseErrorMessage` traz um texto honesto ("O portal do seu estado está fora no momento. Guardamos
+  sua nota…") em vez do enganoso "tente em alguns minutos". Reason key `receipt.portal.unavailable`.
+- **FE deve** renderizar `PORTAL_PENDING` como estado transparente "aguardando" (não vermelho
+  "falhou") e, no detalhe, oferecer ativar notificações + tirar foto da nota como plano B. Nota
+  inexistente/cancelada (607/612) continua `FAILED_PARSE` definitivo — só 615/portal-fora espera.
+
 ## 2026-11-05 — Aquisição: cadastros por hora do dia
 
 - `GET /admin/analytics/acquisition` ganhou **`byHour`**: 24 pontos `{ hour, total, byChannel }`

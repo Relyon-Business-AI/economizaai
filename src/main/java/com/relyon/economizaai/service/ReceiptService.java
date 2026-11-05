@@ -1164,7 +1164,8 @@ public class ReceiptService {
         // CONTINGENCY_PENDING carries the same localized reason (the transparent "aguardando SEFAZ"
         // message) so the detail/admin can show WHY the note is pending, not just FAILED_PARSE.
         var hasReason = receipt.getStatus() == ReceiptStatus.FAILED_PARSE
-                || receipt.getStatus() == ReceiptStatus.CONTINGENCY_PENDING;
+                || receipt.getStatus() == ReceiptStatus.CONTINGENCY_PENDING
+                || receipt.getStatus() == ReceiptStatus.PORTAL_PENDING;
         if (!hasReason || receipt.getParseErrorReason() == null) {
             return null;
         }

@@ -29,5 +29,16 @@ public enum ReceiptStatus {
      * no manual retry — the system resyncs automatically.
      */
     CONTINGENCY_PENDING,
+    /**
+     * The state's SEFAZ portal was momentarily UNAVAILABLE (origin down / Infosimples code 615),
+     * so NO fetch path could reach the nota — but the chave is fine and the nota exists; it's just
+     * that the portal is offline right now (can be minutes or weeks). NOT a dead end like
+     * {@link #FAILED_PARSE}: the {@link com.relyon.economizaai.service.sefaz.PortalRecoverySweeper}
+     * re-fetches it on a schedule until the portal is back (items appear → PENDING_CONFIRMATION,
+     * owner gets a "nota pronta" push). Past a long give-up window it becomes FAILED_PARSE. The user
+     * sees a transparent "aguardando o portal do estado" state and can opt to photograph the nota
+     * instead of waiting.
+     */
+    PORTAL_PENDING,
     FAILED_PARSE
 }
