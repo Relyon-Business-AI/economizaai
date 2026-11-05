@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -35,16 +36,18 @@ public class PausedStateRecoveryProbe {
     private final InfosimplesService infosimples;
     private final OperationalAlertService alertService;
     private final ReceiptRepository receiptRepository;
+    private final GenericQrPortalAdapter qrPortalAdapter;
     private final Set<UnidadeFederativa> watchedUfs;
     // UFs já detectadas de volta (e já alertadas) — para de sondar até o próximo restart.
     private final Set<UnidadeFederativa> alreadyRecovered = ConcurrentHashMap.newKeySet();
 
     public PausedStateRecoveryProbe(InfosimplesService infosimples, OperationalAlertService alertService,
-                                    ReceiptRepository receiptRepository,
+                                    ReceiptRepository receiptRepository, GenericQrPortalAdapter qrPortalAdapter,
                                     @Value("${economizaai.ingestion.paused-state-probe.ufs:SE}") String ufsCsv) {
         this.infosimples = infosimples;
         this.alertService = alertService;
         this.receiptRepository = receiptRepository;
+        this.qrPortalAdapter = qrPortalAdapter;
         this.watchedUfs = parseUfs(ufsCsv);
         log.info("paused_state.probe watched={}", watchedUfs);
     }
@@ -61,17 +64,42 @@ public class PausedStateRecoveryProbe {
                 continue;
             }
             var code = infosimples.probeRouteCode(chaves.get(0), uf);
-            if (code == 200) {
+            var via = code == 200 ? "Infosimples (code 200)" : nativePortalResolves(uf) ? "portal nativo (QR válido com itens)" : null;
+            if (via != null) {
                 alreadyRecovered.add(uf);
-                log.info("paused_state.recovered uf={} code=200", uf);
+                log.info("paused_state.recovered uf={} via={}", uf, via);
                 alertService.alertAdmin(
-                        "SEFAZ " + uf + " voltou no Infosimples — pronto pra onboardar",
-                        "A rota " + uf.name().toLowerCase() + "/nfce voltou a responder 200. Próximo passo: "
+                        "SEFAZ " + uf + " voltou (" + via + ") — pronto pra onboardar",
+                        "A consulta de " + uf.name().toLowerCase() + "/nfce voltou via " + via + ". Próximo passo: "
                                 + "limpar o cap de evidência do " + uf + ", revalidar a nota real em dev, "
                                 + "adicionar ao teste de estados e subir pra prod.");
             } else {
-                log.debug("paused_state.still_down uf={} code={}", uf, code);
+                log.debug("paused_state.still_down uf={} infosimplesCode={}", uf, code);
             }
+        }
+    }
+
+    /**
+     * Sinal de recuperação pela via do app (scan ao vivo): bate no portal NATIVO com um QR real
+     * guardado e só considera de volta quando volta a DANFE com itens — não mais a página de "QR
+     * inválido" que o portal passou a devolver após a queda (ver status de SE). Reusa o cliente do
+     * {@link GenericQrPortalAdapter}, que já lida com redirect/TLS/encoding do portal. Qualquer falha
+     * (exceção, inválido, sem itens) = ainda fora. Nota: os estados vigiados (default SE) não têm
+     * captcha — não gasta solve pago; não adicionar UF com captcha ao watch-list por isso.
+     */
+    private boolean nativePortalResolves(UnidadeFederativa uf) {
+        var qrs = receiptRepository.qrPayloadsByUf(uf, PageRequest.of(0, 1));
+        if (qrs.isEmpty()) return false;
+        try {
+            var html = qrPortalAdapter.fetchHtml(qrs.get(0));
+            if (html == null) return false;
+            var invalid = html.toUpperCase(Locale.ROOT).contains("INVÁLIDO")
+                    || html.toUpperCase(Locale.ROOT).contains("INVALIDO");
+            var hasItems = html.contains("tabResult") || html.contains("txtTit");
+            return hasItems && !invalid;
+        } catch (RuntimeException ex) {
+            log.debug("paused_state.native_still_down uf={} reason={}", uf, ex.getClass().getSimpleName());
+            return false;
         }
     }
 

@@ -1149,10 +1149,23 @@ else the closest to the viewer, else the most recently seen. The `cnpj` is there
 always a real store the FE can watch/unwatch or route to. Window: 180 days
 (`best-markets-lookback-days`), wider than the 90-day promo baseline.
 
-`best-markets` measures distance from the user's HOME location by default; pass
-`lat`/`lng` to measure from the current position instead (barcode scan inside a
-store — see the flow below). With a `radiusKm`, a chain stays listed when its
-display store is within range or watched.
+**Default scope (no `lat`/`lng`/`radiusKm`) = the "perto de você" cascade (2026-11-05)**,
+same as `/promos/feed`, resolved server-side:
+1. user has a location — explicit (GPS/CEP) or **inferred** (median of the markets the
+   household scanned) → only chains with a store within **10 km**
+   (`best-markets-nearby-radius-km`) or a **watched** store. No widening to the whole
+   state: an empty list is the honest "nothing near you" (the in-store card covers it);
+2. no location but watches markets → only the watched chains;
+3. else the household's majority **UF** → chains with a store in that state;
+4. else national.
+
+The scope only picks WHICH chains appear and which store represents each; the chain's
+price still aggregates all its observations (k-anon household count is chain-wide).
+
+Pass `lat`/`lng` to measure from the current position instead (barcode scan inside a
+store — see the flow below); passing `lat`/`lng` or `radiusKm` bypasses the cascade and
+keeps the caller's own scope. With a `radiusKm`, a chain stays listed when its display
+store is within range or watched.
 
 Each `best-markets` row carries both an aggregate and a real value:
 `medianPrice`/`minPrice` (the "usual price" baseline, over the whole chain) **plus**

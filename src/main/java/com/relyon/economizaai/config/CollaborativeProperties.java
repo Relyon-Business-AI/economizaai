@@ -176,6 +176,11 @@ public class CollaborativeProperties {
          * the deals digest keep the tighter {@code lookbackDays} baseline.
          */
         private int bestMarketsLookbackDays = 180;
+        /**
+         * "Perto de você" radius for the best-markets ranking when the viewer has a location
+         * (explicit or inferred). Same 10 km the app uses for the promos feed cascade.
+         */
+        private double bestMarketsNearbyRadiusKm = 10;
         private int communityPromoRecentWindowDays = 7;
         /**
          * TTL of the SHARED community-promo cache (seconds). Detection scans every
@@ -205,6 +210,8 @@ public class CollaborativeProperties {
         public void setLookbackDays(int v) { this.lookbackDays = v; }
         public int getBestMarketsLookbackDays() { return bestMarketsLookbackDays; }
         public void setBestMarketsLookbackDays(int v) { this.bestMarketsLookbackDays = v; }
+        public double getBestMarketsNearbyRadiusKm() { return bestMarketsNearbyRadiusKm; }
+        public void setBestMarketsNearbyRadiusKm(double v) { this.bestMarketsNearbyRadiusKm = v; }
         public int getCommunityPromoRecentWindowDays() { return communityPromoRecentWindowDays; }
         public void setCommunityPromoRecentWindowDays(int v) { this.communityPromoRecentWindowDays = v; }
         public int getCommunityPromoCacheSeconds() { return communityPromoCacheSeconds; }

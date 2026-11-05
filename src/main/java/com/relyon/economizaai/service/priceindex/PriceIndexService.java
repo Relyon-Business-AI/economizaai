@@ -17,6 +17,7 @@ import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.service.geo.DistanceCalculator;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.geo.MerchantSupportGate;
+import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import com.relyon.economizaai.service.notifications.NotificationRuleEngine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +35,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.LongSupplier;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -335,13 +337,62 @@ public class PriceIndexService {
     public List<MarketPriceRow> bestMarkets(UUID productId, int limit,
                                             BigDecimal userLatitude, BigDecimal userLongitude, Double radiusKm,
                                             Set<String> watchedCnpjs) {
+        return rankChains(productId, limit, new Viewer(userLatitude, userLongitude, radiusKm,
+                watchedCnpjs == null ? Set.of() : watchedCnpjs), observation -> true);
+    }
+
+    /**
+     * Best-markets scoped to the viewer — the same "perto de você" cascade as the promos feed,
+     * applied server-side so a shopper in Porto Alegre doesn't get a chain 400 km away:
+     * <ol>
+     *   <li>has a location (explicit GPS/CEP or inferred from their receipts) → chains with a
+     *       store within {@code bestMarketsNearbyRadiusKm} or a watched store. No widening to
+     *       the whole state: "nothing nearby" is an honest answer (the in-store typical price
+     *       card covers it).</li>
+     *   <li>no location but watches markets → only the watched chains;</li>
+     *   <li>else the viewer's majority state → chains with a store there;</li>
+     *   <li>else national.</li>
+     * </ol>
+     */
+    @Transactional(readOnly = true)
+    public List<MarketPriceRow> bestMarketsForViewer(UUID productId, int limit, ViewerLocation location,
+                                                     Set<String> watchedCnpjs) {
+        var watched = watchedCnpjs == null ? Set.<String>of() : watchedCnpjs;
+        if (location.hasCoordinates()) {
+            var radiusKm = properties.getCollaborative().getBestMarketsNearbyRadiusKm();
+            var viewer = new Viewer(location.latitude(), location.longitude(), radiusKm, watched);
+            log.debug("best_markets.scope product={} scope=NEARBY source={} radiusKm={}", productId, location.source(), radiusKm);
+            return rankChains(productId, limit, viewer, observation -> true);
+        }
+        var unlocated = new Viewer(null, null, null, watched);
+        if (!watched.isEmpty()) {
+            var watchedRows = rankChains(productId, limit, unlocated, observation -> watched.contains(observation.getMarketCnpj()));
+            if (!watchedRows.isEmpty()) {
+                log.debug("best_markets.scope product={} scope=WATCHED", productId);
+                return watchedRows;
+            }
+        }
+        if (location.uf() != null) {
+            log.debug("best_markets.scope product={} scope=STATE uf={}", productId, location.uf());
+            return rankChains(productId, limit, unlocated, observation -> location.uf().equals(observation.getState()));
+        }
+        log.debug("best_markets.scope product={} scope=NATIONAL", productId);
+        return rankChains(productId, limit, unlocated, observation -> true);
+    }
+
+    /**
+     * {@code storeInScope} decides WHICH chains appear (a chain needs ≥1 in-scope store) and
+     * which of its stores represents it. The chain's PRICE still aggregates all its
+     * observations: the k-anon household count is chain-wide, so pricing a filtered subset
+     * would disclose fewer households than the gate checked.
+     */
+    private List<MarketPriceRow> rankChains(UUID productId, int limit, Viewer viewer,
+                                            Predicate<PriceObservation> storeInScope) {
         if (!properties.getCollaborative().isEnabled()) return List.of();
         var since = bestMarketsSince();
         var observations = observationRepository.findRecentByProduct(productId, since);
         if (observations.isEmpty()) return List.of();
 
-        var viewer = new Viewer(userLatitude, userLongitude, radiusKm,
-                watchedCnpjs == null ? Set.of() : watchedCnpjs);
         var byChain = observations.stream()
                 .collect(Collectors.groupingBy(PriceIndexService::chainKey));
         var storeCnpjs = observations.stream().map(PriceObservation::getMarketCnpj).distinct().toList();
@@ -353,7 +404,7 @@ public class PriceIndexService {
         return byChain.entrySet().stream()
                 .map(entry -> toChainRow(entry.getKey(), entry.getValue(),
                         householdsByChain.getOrDefault(entry.getKey(), 0L), locations, viewer,
-                        chainThresholds(sensitiveProduct, entry.getValue(), locations)))
+                        chainThresholds(sensitiveProduct, entry.getValue(), locations), storeInScope))
                 .filter(Objects::nonNull)
                 .sorted(Comparator
                         .comparing(MarketPriceRow::watching, Comparator.reverseOrder())
@@ -387,9 +438,12 @@ public class PriceIndexService {
 
     private MarketPriceRow toChainRow(String cnpjRoot, List<PriceObservation> rows, long distinctHouseholds,
                                       Map<String, MarketLocation> locations, Viewer viewer,
-                                      PrivacyTierResolver.Thresholds thresholds) {
+                                      PrivacyTierResolver.Thresholds thresholds,
+                                      Predicate<PriceObservation> storeInScope) {
         if (thresholds.blocks(rows.size(), distinctHouseholds)) return null;
-        var displayStore = pickDisplayStore(rows, locations, viewer);
+        var inScopeRows = rows.stream().filter(storeInScope).toList();
+        if (inScopeRows.isEmpty()) return null;
+        var displayStore = pickDisplayStore(inScopeRows, locations, viewer);
         if (displayStore == null) return null;
         var prices = rows.stream().map(PriceObservation::getUnitPrice).toList();
         // The "onde está mais barato" screen shows a REAL observed price + its date, not the

@@ -251,6 +251,11 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
             + "ORDER BY r.createdAt DESC")
     List<String> chavesByUf(@Param("uf") UnidadeFederativa uf, Pageable pageable);
 
+    /** QR payloads completos (URL assinada de scan real) de uma UF — amostra pro probe do portal nativo. */
+    @Query("SELECT r.qrPayload FROM Receipt r WHERE r.uf = :uf AND r.qrPayload LIKE 'http%' "
+            + "ORDER BY r.createdAt DESC")
+    List<String> qrPayloadsByUf(@Param("uf") UnidadeFederativa uf, Pageable pageable);
+
     /** Ids dos usuários cuja UF PREDOMINANTE (moda das notas) é a dada — pro filtro de UF no admin. */
     @Query(value = """
             SELECT user_uf.user_id FROM (
