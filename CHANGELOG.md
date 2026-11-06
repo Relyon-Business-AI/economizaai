@@ -1,5 +1,12 @@
 # economizai — what's new
 
+## 2026-11-06 — Aquisição: cadastro pelo app mostra a loja (não mais "Desconhecido")
+
+- Novos canais `APP_STORE` e `GOOGLE_PLAY` em `acquisitionChannel`: cadastro sem atribuição
+  web feito no app iOS/Android é atribuído à loja (as lojas não repassam UTM). Atribuição web
+  real nunca é sobrescrita. V131 preenche os usuários antigos pela `registration_platform`.
+  Admin: novos rótulos/cores "App Store (iOS)" / "Google Play (Android)".
+
 ## 2026-11-05 — Regra "perto de você" em TODO o app (ofertas, alertas, Início…)
 
 Uma oferta do Nordeste não serve pra quem mora no Sul. A mesma cascata do best-markets

@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.auth;
 
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.AcquisitionChannel;
 import com.relyon.economizaai.model.enums.Platform;
 import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.privacy.LogMasker;
@@ -43,6 +44,7 @@ public class LoginActivityRecorder {
             return;
         }
         user.setRegistrationPlatform(platform);
+        attributeToStoreIfUnattributed(user, platform);
         log.info("login.registration_platform_backfilled user={} platform={}",
                 LogMasker.email(user.getEmail()), platform);
     }
@@ -53,7 +55,23 @@ public class LoginActivityRecorder {
             return;
         }
         user.setRegistrationPlatform(platform);
+        attributeToStoreIfUnattributed(user, platform);
         recordLogin(user, platform);
+    }
+
+    /**
+     * An in-app signup carries no web attribution (the stores pass nothing on), so it lands as
+     * UNKNOWN; the app platform still tells WHICH store it came through. Never overrides a real
+     * web attribution.
+     */
+    private void attributeToStoreIfUnattributed(User user, Platform platform) {
+        var channel = user.getAcquisitionChannel();
+        if (channel != null && channel != AcquisitionChannel.UNKNOWN) return;
+        switch (platform) {
+            case IOS -> user.setAcquisitionChannel(AcquisitionChannel.APP_STORE);
+            case ANDROID -> user.setAcquisitionChannel(AcquisitionChannel.GOOGLE_PLAY);
+            case WEB -> { }
+        }
     }
 
     private void stampLogin(User user, Platform platform) {

@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.auth;
 
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.AcquisitionChannel;
 import com.relyon.economizaai.model.enums.Platform;
 import com.relyon.economizaai.repository.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -66,6 +67,43 @@ class LoginActivityRecorderTest {
 
         assertEquals(Platform.IOS, user.getRegistrationPlatform());
         assertEquals(Platform.WEB, user.getLastPlatform());
+    }
+
+    @Test
+    void recordRegistration_unattributedAppSignupIsAttributedToItsStore() {
+        var iosUser = new User();
+        iosUser.setAcquisitionChannel(AcquisitionChannel.UNKNOWN);
+        var androidUser = new User();
+        androidUser.setAcquisitionChannel(AcquisitionChannel.UNKNOWN);
+        var webUser = new User();
+        webUser.setAcquisitionChannel(AcquisitionChannel.UNKNOWN);
+
+        loginActivityRecorder.recordRegistration(iosUser, Platform.IOS);
+        loginActivityRecorder.recordRegistration(androidUser, Platform.ANDROID);
+        loginActivityRecorder.recordRegistration(webUser, Platform.WEB);
+
+        assertEquals(AcquisitionChannel.APP_STORE, iosUser.getAcquisitionChannel());
+        assertEquals(AcquisitionChannel.GOOGLE_PLAY, androidUser.getAcquisitionChannel());
+        assertEquals(AcquisitionChannel.UNKNOWN, webUser.getAcquisitionChannel());
+    }
+
+    @Test
+    void recordRegistration_neverOverridesRealWebAttribution() {
+        var user = new User();
+        user.setAcquisitionChannel(AcquisitionChannel.INSTAGRAM_PAID);
+
+        loginActivityRecorder.recordRegistration(user, Platform.IOS);
+
+        assertEquals(AcquisitionChannel.INSTAGRAM_PAID, user.getAcquisitionChannel());
+    }
+
+    @Test
+    void recordLogin_backfilledPlatformAlsoAttributesTheStore() {
+        var user = new User();
+
+        loginActivityRecorder.recordLogin(user, Platform.ANDROID);
+
+        assertEquals(AcquisitionChannel.GOOGLE_PLAY, user.getAcquisitionChannel());
     }
 
     @Test
