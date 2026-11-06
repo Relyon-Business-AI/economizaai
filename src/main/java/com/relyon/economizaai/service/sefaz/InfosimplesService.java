@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Service;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 import tools.jackson.core.JsonParser;
 import tools.jackson.databind.DeserializationContext;
@@ -116,9 +117,18 @@ public class InfosimplesService {
             @Value("${economizaai.infosimples.api-key}") String apiKey,
             @Value("${economizaai.infosimples.base-url:https://api.infosimples.com}") String baseUrl,
             @Value("${economizaai.infosimples.resumida-states:}") String resumidaStatesCsv,
-            @Value("${economizaai.infosimples.completa-states:}") String completaStatesCsv) {
+            @Value("${economizaai.infosimples.completa-states:}") String completaStatesCsv,
+            @Value("${economizaai.infosimples.timeout-ms:120000}") int timeoutMs) {
         this.apiKey = apiKey;
         this.alertService = alertService;
+        // Sem read timeout uma consulta travada segurava a thread de ingestão até o sweeper
+        // matar a nota (10 min) — prod 2026-11-04. 0 = mantém a fábrica do builder (testes).
+        if (timeoutMs > 0) {
+            var requestFactory = new SimpleClientHttpRequestFactory();
+            requestFactory.setConnectTimeout(Math.min(timeoutMs, 10000));
+            requestFactory.setReadTimeout(timeoutMs);
+            builder = builder.requestFactory(requestFactory);
+        }
         this.restClient = builder.baseUrl(baseUrl).build();
         this.resumidaStates = parseStates(resumidaStatesCsv);
         this.completaStates = parseStates(completaStatesCsv);
