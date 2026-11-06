@@ -128,7 +128,8 @@ public class RetentionCohortService {
                     eligible += channelSize;
                     active += activeAtForChannel(activity, weekStart, channel, offset);
                 }
-                retentionByWeek.add(rate(active, eligible));
+                // No cohort of this channel is old enough for this week yet: unknown, not 0%.
+                retentionByWeek.add(eligible == 0 ? null : rate(active, eligible));
             }
             curves.add(new ChannelCurve(channel, channels.get(channel)[0], retentionByWeek));
         }

@@ -4,9 +4,11 @@ import com.relyon.economizaai.dto.response.StateCoverageResponse;
 import com.relyon.economizaai.dto.response.StateCoverageResponse.StateCoverageEntry;
 import com.relyon.economizaai.dto.response.StateCoverageResponse.StateCoverageEntry.StrategyStats;
 import com.relyon.economizaai.model.StateIngestionAttempt;
+import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.StateIngestionOutcome;
 import com.relyon.economizaai.model.enums.StateIngestionStrategy;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
+import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.repository.StateIngestionAttemptRepository;
 import com.relyon.economizaai.service.ContactService;
 import com.relyon.economizaai.time.BrazilClock;
@@ -15,11 +17,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -54,7 +58,12 @@ public class StateCoverageService {
     private static final Pattern URL_HOST = Pattern.compile(
             "^https?://([^/?#@\\\\]+?)(?::\\d+)?(?=[/?#]|$)", Pattern.CASE_INSENSITIVE);
 
+    private static final Set<ReceiptStatus> INGESTED_STATUSES = EnumSet.of(
+            ReceiptStatus.PENDING_CONFIRMATION, ReceiptStatus.CONFIRMED, ReceiptStatus.REJECTED);
+    private static final LocalDateTime ALL_TIME = LocalDateTime.of(1970, 1, 1, 0, 0);
+
     private final StateIngestionAttemptRepository repository;
+    private final ReceiptRepository receiptRepository;
     private final ContactService contactService;
     private final int regressionMinFailures;
     private final long regressionWindowHours;
@@ -64,6 +73,7 @@ public class StateCoverageService {
 
     public StateCoverageService(
             StateIngestionAttemptRepository repository,
+            ReceiptRepository receiptRepository,
             ContactService contactService,
             @Value("${economizaai.ingestion.sefaz.regression.min-failures:5}") int regressionMinFailures,
             @Value("${economizaai.ingestion.sefaz.regression.window-hours:6}") long regressionWindowHours,
@@ -71,6 +81,7 @@ public class StateCoverageService {
             @Value("${economizaai.ingestion.sefaz.experimental.min-evidence-users:2}") int minEvidenceUsers,
             @Value("${economizaai.ingestion.sefaz.experimental.min-evidence-days:2}") int minEvidenceDays) {
         this.repository = repository;
+        this.receiptRepository = receiptRepository;
         this.contactService = contactService;
         this.regressionMinFailures = regressionMinFailures;
         this.regressionWindowHours = regressionWindowHours;
@@ -244,15 +255,25 @@ public class StateCoverageService {
      */
     public StateCoverageResponse report(Set<UnidadeFederativa> verified, Set<UnidadeFederativa> experimental,
                                         Integer days) {
-        var summaries = days == null || days <= 0
+        var allTime = days == null || days <= 0;
+        var layerSummaries = allTime
                 ? repository.summarize()
                 : repository.summarizeSince(OffsetDateTime.now(ZoneOffset.UTC).minusDays(days));
-        var summariesByUf = new HashMap<UnidadeFederativa, List<StateIngestionAttemptRepository.StateAttemptSummary>>();
-        for (var summary : summaries) {
-            summariesByUf.computeIfAbsent(summary.getUf(), key -> new ArrayList<>()).add(summary);
-        }
+        var since = allTime ? ALL_TIME : LocalDateTime.now().minusDays(days);
+        var layersByUf = layerSummaries.stream()
+                .collect(Collectors.groupingBy(StateIngestionAttemptRepository.StateAttemptSummary::getUf));
+        var outcomesByUf = receiptRepository.summarizeByUfAndStatusSince(since).stream()
+                .collect(Collectors.groupingBy(ReceiptRepository.UfStatusSummary::getUf));
+        var reasonsByUf = receiptRepository.summarizeFailureReasonsSince(since).stream()
+                .collect(Collectors.groupingBy(ReceiptRepository.UfFailureReasonSummary::getUf));
+        var usersByUf = receiptRepository.countUsersByUfSince(since).stream()
+                .collect(Collectors.toMap(ReceiptRepository.UfUserCount::getUf, ReceiptRepository.UfUserCount::getUsers));
         var entries = Arrays.stream(UnidadeFederativa.values())
-                .map(uf -> toEntry(uf, modeOf(uf, verified, experimental), summariesByUf.getOrDefault(uf, List.of())))
+                .map(uf -> toEntry(uf, modeOf(uf, verified, experimental),
+                        outcomesByUf.getOrDefault(uf, List.of()),
+                        reasonsByUf.getOrDefault(uf, List.of()),
+                        usersByUf.getOrDefault(uf, 0L),
+                        layersByUf.getOrDefault(uf, List.of())))
                 .sorted(Comparator.comparing(entry -> entry.uf().name()))
                 .toList();
         return new StateCoverageResponse(entries);
@@ -266,28 +287,41 @@ public class StateCoverageService {
     }
 
     private static StateCoverageEntry toEntry(UnidadeFederativa uf, String mode,
-                                              List<StateIngestionAttemptRepository.StateAttemptSummary> summaries) {
-        long attempts = 0;
-        long successes = 0;
-        OffsetDateTime lastAttemptAt = null;
-        var strategies = new HashMap<String, long[]>();
-        for (var summary : summaries) {
-            attempts += summary.getAttempts();
-            var stats = strategies.computeIfAbsent(summary.getStrategy().name(), key -> new long[2]);
-            if (summary.getOutcome() == StateIngestionOutcome.SUCCESS) {
-                successes += summary.getAttempts();
-                stats[0] += summary.getAttempts();
-            } else {
-                stats[1] += summary.getAttempts();
-            }
-            if (lastAttemptAt == null || summary.getLastAttemptAt().isAfter(lastAttemptAt)) {
-                lastAttemptAt = summary.getLastAttemptAt();
+                                              List<ReceiptRepository.UfStatusSummary> outcomes,
+                                              List<ReceiptRepository.UfFailureReasonSummary> reasons,
+                                              long users,
+                                              List<StateIngestionAttemptRepository.StateAttemptSummary> layers) {
+        long notas = 0;
+        long ingested = 0;
+        long failed = 0;
+        LocalDateTime lastCreatedAt = null;
+        for (var outcome : outcomes) {
+            notas += outcome.getNotas();
+            if (INGESTED_STATUSES.contains(outcome.getStatus())) ingested += outcome.getNotas();
+            if (outcome.getStatus() == ReceiptStatus.FAILED_PARSE) failed += outcome.getNotas();
+            if (lastCreatedAt == null || outcome.getLastCreatedAt().isAfter(lastCreatedAt)) {
+                lastCreatedAt = outcome.getLastCreatedAt();
             }
         }
+        var failureReasons = reasons.stream().collect(Collectors.toMap(
+                reason -> reason.getReason() == null ? "unknown" : reason.getReason(),
+                ReceiptRepository.UfFailureReasonSummary::getNotas,
+                Long::sum));
+        var lastAttemptAt = lastCreatedAt == null ? null : lastCreatedAt.atZone(ZoneId.systemDefault()).toOffsetDateTime();
+        return new StateCoverageEntry(uf, mode, notas, ingested, failed, notas - ingested - failed, users,
+                lastAttemptAt, Map.copyOf(failureReasons), layerStats(layers));
+    }
+
+    /** Per-layer telemetry: each chain layer's own successes/failures (not nota outcomes). */
+    private static Map<String, StrategyStats> layerStats(List<StateIngestionAttemptRepository.StateAttemptSummary> layers) {
+        var counts = new HashMap<String, long[]>();
+        for (var layer : layers) {
+            var stats = counts.computeIfAbsent(layer.getStrategy().name(), key -> new long[2]);
+            stats[layer.getOutcome() == StateIngestionOutcome.SUCCESS ? 0 : 1] += layer.getAttempts();
+        }
         var strategyStats = new HashMap<String, StrategyStats>();
-        strategies.forEach((strategy, counts) -> strategyStats.put(strategy, new StrategyStats(counts[0], counts[1])));
-        return new StateCoverageEntry(uf, mode, attempts, successes, attempts - successes, lastAttemptAt,
-                Map.copyOf(strategyStats));
+        counts.forEach((strategy, stats) -> strategyStats.put(strategy, new StrategyStats(stats[0], stats[1])));
+        return Map.copyOf(strategyStats);
     }
 
     private void persist(UnidadeFederativa uf, StateIngestionStrategy strategy, StateIngestionOutcome outcome,

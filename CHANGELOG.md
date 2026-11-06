@@ -1,5 +1,19 @@
 # economizai — what's new
 
+## 2026-11-06 — Admin "Estados": conta NOTAS pelo resultado final (PA/RN não são mais "0%")
+
+- `GET /admin/state-coverage`: `attempts`/`successes`/`failures` agora contam **notas** criadas no
+  período pelo status final (entrou = PENDING_CONFIRMATION/CONFIRMED/REJECTED; falhou = FAILED_PARSE),
+  seja qual for a camada que resolveu. Novos campos: `pending` (em andamento), `users` (usuários
+  distintos), `failureReasons` (chave → notas). `strategies` segue como telemetria por camada.
+  Antes contava só tentativas de camada → PA aparecia 53 falhas/0% com 23 de 36 notas entrando.
+- Nova camada `DEVICE_FETCH` (nota buscada pelo celular); o resgate Infosimples do sweeper do
+  device-fetch agora também é registrado (o spend-cap das UFs experimentais passa a ver o sucesso).
+- Notas bloqueadas por limite de consulta paga (`receipt.paid_api.*`) são retentadas sozinhas
+  todo dia às 03:30 (até 7 dias), pela fila espaçada do retry admin.
+- Infosimples ganhou timeout (120s): uma consulta travada segurava a nota até expirar em 10 min.
+- Retenção por canal: semana que nenhuma coorte do canal alcançou vem `null` (antes `0`).
+
 ## 2026-11-06 — Aquisição: cadastro pelo app mostra a loja (não mais "Desconhecido")
 
 - Novos canais `APP_STORE` e `GOOGLE_PLAY` em `acquisitionChannel`: cadastro sem atribuição

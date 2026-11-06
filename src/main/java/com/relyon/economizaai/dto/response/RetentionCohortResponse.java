@@ -32,7 +32,8 @@ public record RetentionCohortResponse(
      * Pooled retention curve for one acquisition channel: {@code retentionByWeek[k]}
      * in [0,1] is the share of that channel's users still active k weeks in, pooled
      * across every cohort old enough to have observed week k (so a fresh cohort never
-     * drags the later weeks down). {@code users} is the channel's total cohort size.
+     * drags the later weeks down); {@code null} when no cohort of the channel has reached
+     * week k yet. {@code users} is the channel's total cohort size.
      */
     public record ChannelCurve(String channel, long users, List<Double> retentionByWeek) {
     }

@@ -46,7 +46,7 @@ class InfosimplesServiceTest {
         builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
         alertService = mock(InfosimplesAlertService.class);
-        service = new InfosimplesService(builder, alertService, API_KEY, BASE_URL, "", "");
+        service = new InfosimplesService(builder, alertService, API_KEY, BASE_URL, "", "", 0);
     }
 
     @Test
@@ -174,7 +174,7 @@ class InfosimplesServiceTest {
     void fetchParsed_envOverrideFlipsSlug() {
         // Override por env tem prioridade sobre o mapa: força MS (normalmente /nfce)
         // pro slug resumida sem deploy.
-        var overridden = new InfosimplesService(builder, alertService, API_KEY, BASE_URL, "MS", "");
+        var overridden = new InfosimplesService(builder, alertService, API_KEY, BASE_URL, "MS", "", 0);
         server.expect(requestTo(BASE_URL + "/api/v2/consultas/sefaz/ms/nfce-resumida?token=test-key&nfce=" + CHAVE))
                 .andRespond(withSuccess(MINIMAL_RESPONSE_JSON, MediaType.APPLICATION_JSON));
 

@@ -95,8 +95,8 @@ class RetentionCohortServiceTest {
         var organic = report.byChannel().get(1);
         assertThat(organic.channel()).isEqualTo("ORGANIC");
         assertThat(organic.users()).isEqualTo(7L);
-        // offset0: (4+3)/(4+3)=1.0; offset1: only B mature → 1/4=0.25; offset2+: no mature cohort → 0.
-        assertThat(organic.retentionByWeek()).containsExactly(1.0, 0.25, 0.0, 0.0);
+        // offset0: (4+3)/(4+3)=1.0; offset1: only B mature → 1/4=0.25; offset2+: no mature cohort → unknown.
+        assertThat(organic.retentionByWeek()).containsExactly(1.0, 0.25, null, null);
     }
 
     @Test

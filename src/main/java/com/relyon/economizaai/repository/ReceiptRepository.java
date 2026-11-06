@@ -383,4 +383,54 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
         WHERE r.id = :id
     """)
     Optional<Receipt> findByIdWithItemsAndProducts(@Param("id") UUID id);
+
+    /**
+     * Per-UF ingestion outcome of every nota created since {@code since} — the honest
+     * "did the user's nota get in?" number for the admin state-coverage view, whatever
+     * chain layer (portal, device fetch, Infosimples, LLM) ended up resolving it.
+     */
+    @Query("""
+            select receipt.uf as uf, receipt.status as status, count(receipt) as notas,
+                   max(receipt.createdAt) as lastCreatedAt
+            from Receipt receipt
+            where receipt.uf is not null and receipt.createdAt >= :since
+            group by receipt.uf, receipt.status
+            """)
+    List<UfStatusSummary> summarizeByUfAndStatusSince(@Param("since") LocalDateTime since);
+
+    /** Failure reasons (machine keys) per UF since {@code since}, for the same view. */
+    @Query("""
+            select receipt.uf as uf, receipt.parseErrorReason as reason, count(receipt) as notas
+            from Receipt receipt
+            where receipt.uf is not null and receipt.createdAt >= :since and receipt.status = 'FAILED_PARSE'
+            group by receipt.uf, receipt.parseErrorReason
+            """)
+    List<UfFailureReasonSummary> summarizeFailureReasonsSince(@Param("since") LocalDateTime since);
+
+    interface UfStatusSummary {
+        UnidadeFederativa getUf();
+        ReceiptStatus getStatus();
+        long getNotas();
+        LocalDateTime getLastCreatedAt();
+    }
+
+    /** Distinct scanning users per UF since {@code since} — "is this one heavy user or many?". */
+    @Query("""
+            select receipt.uf as uf, count(distinct receipt.user.id) as users
+            from Receipt receipt
+            where receipt.uf is not null and receipt.createdAt >= :since
+            group by receipt.uf
+            """)
+    List<UfUserCount> countUsersByUfSince(@Param("since") LocalDateTime since);
+
+    interface UfUserCount {
+        UnidadeFederativa getUf();
+        long getUsers();
+    }
+
+    interface UfFailureReasonSummary {
+        UnidadeFederativa getUf();
+        String getReason();
+        long getNotas();
+    }
 }

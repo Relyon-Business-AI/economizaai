@@ -327,7 +327,8 @@ class AdminControllerTest {
     @Test
     void stateCoverage_returnsPerUfMap() throws Exception {
         var report = new StateCoverageResponse(List.of(new StateCoverageResponse.StateCoverageEntry(
-                UnidadeFederativa.BA, "EXPERIMENTAL", 7, 5, 2, LocalDateTime.now().atOffset(ZoneOffset.UTC),
+                UnidadeFederativa.BA, "EXPERIMENTAL", 7, 5, 2, 0, 1, LocalDateTime.now().atOffset(ZoneOffset.UTC),
+                Map.of("receipt.processing.timeout", 2L),
                 Map.of("QR_PORTAL", new StateCoverageResponse.StateCoverageEntry.StrategyStats(5, 2)))));
         when(sefazIngestionService.getVerifiedStates()).thenReturn(Set.of(UnidadeFederativa.RS));
         when(sefazIngestionService.experimentalStates()).thenReturn(Set.of(UnidadeFederativa.BA));

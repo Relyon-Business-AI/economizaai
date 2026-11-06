@@ -1,12 +1,15 @@
 package com.relyon.economizaai.service.sefaz;
 
 import com.relyon.economizaai.model.StateIngestionAttempt;
+import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.StateIngestionOutcome;
 import com.relyon.economizaai.model.enums.StateIngestionStrategy;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
+import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.repository.StateIngestionAttemptRepository;
 import com.relyon.economizaai.service.ContactService;
 import com.relyon.economizaai.time.BrazilClock;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -14,6 +17,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Set;
@@ -37,15 +41,16 @@ import static org.mockito.Mockito.when;
 class StateCoverageServiceTest {
 
     @Mock private StateIngestionAttemptRepository repository;
+    @Mock private ReceiptRepository receiptRepository;
     @Mock private ContactService contactService;
 
     private StateCoverageService service;
 
-    @org.junit.jupiter.api.BeforeEach
+    @BeforeEach
     void setUp() {
         // min-failures=5, window-hours=6, evidence rule 5 user-days / 2 users / 2 days
         // (mirrors the config defaults)
-        service = new StateCoverageService(repository, contactService, 5, 6, 5, 2, 2);
+        service = new StateCoverageService(repository, receiptRepository, contactService, 5, 6, 5, 2, 2);
     }
 
     private static final UUID USER_A = UUID.randomUUID();
@@ -179,31 +184,59 @@ class StateCoverageServiceTest {
     }
 
     @Test
-    void report_assemblesPerUfEntriesAcrossAll27States() {
+    void report_countsNotasByFinalOutcome_andKeepsLayerTelemetrySeparate() {
         var now = OffsetDateTime.now();
+        var lastNota = LocalDateTime.now().minusHours(1);
+        // Layer telemetry: the portal failed 52× (server IP-blocked) and Infosimples rescued 23.
         when(repository.summarize()).thenReturn(List.of(
-                summary(UnidadeFederativa.BA, StateIngestionStrategy.QR_PORTAL, StateIngestionOutcome.SUCCESS, 4, now),
-                summary(UnidadeFederativa.BA, StateIngestionStrategy.QR_PORTAL, StateIngestionOutcome.FETCH_FAILED, 2, now.minusDays(1)),
-                summary(UnidadeFederativa.BA, StateIngestionStrategy.INFOSIMPLES, StateIngestionOutcome.SUCCESS, 1, now.minusDays(2))));
+                summary(UnidadeFederativa.PA, StateIngestionStrategy.QR_PORTAL, StateIngestionOutcome.FETCH_FAILED, 52, now),
+                summary(UnidadeFederativa.PA, StateIngestionStrategy.INFOSIMPLES, StateIngestionOutcome.SUCCESS, 23, now)));
+        when(receiptRepository.summarizeByUfAndStatusSince(any())).thenReturn(List.of(
+                outcome(UnidadeFederativa.PA, ReceiptStatus.CONFIRMED, 20, lastNota),
+                outcome(UnidadeFederativa.PA, ReceiptStatus.PENDING_CONFIRMATION, 3, lastNota.minusHours(2)),
+                outcome(UnidadeFederativa.PA, ReceiptStatus.FAILED_PARSE, 13, lastNota.minusDays(1)),
+                outcome(UnidadeFederativa.PA, ReceiptStatus.NEEDS_DEVICE_FETCH, 2, lastNota.minusDays(2))));
+        when(receiptRepository.summarizeFailureReasonsSince(any())).thenReturn(List.of(
+                reason(UnidadeFederativa.PA, "receipt.paid_api.quota_exceeded:INFOSIMPLES", 9),
+                reason(UnidadeFederativa.PA, "receipt.processing.timeout", 4)));
+        when(receiptRepository.countUsersByUfSince(any())).thenReturn(List.of(userCount(UnidadeFederativa.PA, 1)));
 
-        var report = service.report(Set.of(UnidadeFederativa.RS), Set.of(UnidadeFederativa.BA));
+        var report = service.report(Set.of(UnidadeFederativa.RS), Set.of(UnidadeFederativa.PA));
 
         assertEquals(UnidadeFederativa.values().length, report.states().size());
-        var bahia = report.states().stream()
-                .filter(entry -> entry.uf() == UnidadeFederativa.BA).findFirst().orElseThrow();
-        assertEquals("EXPERIMENTAL", bahia.mode());
-        assertEquals(7, bahia.attempts());
-        assertEquals(5, bahia.successes());
-        assertEquals(2, bahia.failures());
-        assertEquals(now, bahia.lastAttemptAt());
-        assertEquals(4, bahia.strategies().get("QR_PORTAL").successes());
-        assertEquals(2, bahia.strategies().get("QR_PORTAL").failures());
-        assertEquals(1, bahia.strategies().get("INFOSIMPLES").successes());
+        var para = report.states().stream()
+                .filter(entry -> entry.uf() == UnidadeFederativa.PA).findFirst().orElseThrow();
+        assertEquals("EXPERIMENTAL", para.mode());
+        assertEquals(38, para.attempts());
+        assertEquals(23, para.successes());
+        assertEquals(13, para.failures());
+        assertEquals(2, para.pending());
+        assertEquals(1, para.users());
+        assertEquals(9L, para.failureReasons().get("receipt.paid_api.quota_exceeded:INFOSIMPLES"));
+        assertEquals(4L, para.failureReasons().get("receipt.processing.timeout"));
+        assertEquals(0, para.strategies().get("QR_PORTAL").successes());
+        assertEquals(52, para.strategies().get("QR_PORTAL").failures());
+        assertEquals(23, para.strategies().get("INFOSIMPLES").successes());
         var riograndedosul = report.states().stream()
                 .filter(entry -> entry.uf() == UnidadeFederativa.RS).findFirst().orElseThrow();
         assertEquals("VERIFIED", riograndedosul.mode());
         assertEquals(0, riograndedosul.attempts());
         assertNull(riograndedosul.lastAttemptAt());
+    }
+
+    @Test
+    void report_withPeriod_filtersBothNotasAndLayers() {
+        when(repository.summarizeSince(any())).thenReturn(List.of());
+        when(receiptRepository.summarizeByUfAndStatusSince(any())).thenReturn(List.of());
+        when(receiptRepository.summarizeFailureReasonsSince(any())).thenReturn(List.of());
+        when(receiptRepository.countUsersByUfSince(any())).thenReturn(List.of());
+
+        service.report(Set.of(), Set.of(), 7);
+
+        var sinceCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(receiptRepository).summarizeByUfAndStatusSince(sinceCaptor.capture());
+        assertTrue(sinceCaptor.getValue().isAfter(LocalDateTime.now().minusDays(8)));
+        verify(repository, never()).summarize();
     }
 
     @Test
@@ -273,6 +306,31 @@ class StateCoverageServiceTest {
             @Override public StateIngestionOutcome getOutcome() { return outcome; }
             @Override public long getAttempts() { return attempts; }
             @Override public OffsetDateTime getLastAttemptAt() { return lastAttemptAt; }
+        };
+    }
+
+    private static ReceiptRepository.UfStatusSummary outcome(UnidadeFederativa uf, ReceiptStatus status,
+                                                            long notas, LocalDateTime lastCreatedAt) {
+        return new ReceiptRepository.UfStatusSummary() {
+            @Override public UnidadeFederativa getUf() { return uf; }
+            @Override public ReceiptStatus getStatus() { return status; }
+            @Override public long getNotas() { return notas; }
+            @Override public LocalDateTime getLastCreatedAt() { return lastCreatedAt; }
+        };
+    }
+
+    private static ReceiptRepository.UfFailureReasonSummary reason(UnidadeFederativa uf, String reason, long notas) {
+        return new ReceiptRepository.UfFailureReasonSummary() {
+            @Override public UnidadeFederativa getUf() { return uf; }
+            @Override public String getReason() { return reason; }
+            @Override public long getNotas() { return notas; }
+        };
+    }
+
+    private static ReceiptRepository.UfUserCount userCount(UnidadeFederativa uf, long users) {
+        return new ReceiptRepository.UfUserCount() {
+            @Override public UnidadeFederativa getUf() { return uf; }
+            @Override public long getUsers() { return users; }
         };
     }
 }

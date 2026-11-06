@@ -1569,7 +1569,7 @@ GET    /api/v1/admin/analytics/retention-cohorts?weeks=8&includeInternal=false �
 POST   /api/v1/admin/analytics/ad-spend/sync       → {"rowsSynced": n} — run the Meta ad-spend sync now instead of waiting for the daily cron (0 when Meta is not configured)
 GET    /api/v1/admin/costs/infosimples             → InfosimplesFinanceResponse — painel da conta pré-paga: saldo/consumoMes/franquiaMinima ao vivo, aVarrerNoFechamento + proximoFechamento (dia 1º), totais históricos e historico[] mensal (recarga/consumo/varrido)
 GET    /api/v1/admin/costs?days=30                 → CostReportResponse (paid-API spend: total + by service + by state + today vs budget + conta Infosimples ao vivo: infosimplesSaldo, infosimplesConsumoMes (cobrado real), infosimplesFranquiaMinima — null se indisponível)
-GET    /api/v1/admin/state-coverage                → StateCoverageResponse (per-UF: VERIFIED/EXPERIMENTAL + per-layer success/failure telemetry from real scans)
+GET    /api/v1/admin/state-coverage                → StateCoverageResponse (per-UF: VERIFIED/EXPERIMENTAL + NOTA outcomes attempts/successes/failures/pending/users/failureReasons + per-layer `strategies` telemetry)
 GET    /api/v1/admin/ingestion-health?days=30      → IngestionHealthResponse (pipeline health: status mix, parse success rate, stuck/timeout counts, per-UF outcomes, top parseErrorReason keys — from the receipts table)
 GET    /api/v1/admin/notifications/relevance-report?days=30 → RelevanceReportResponse (deal-suppression shadow-mode KPI before flipping relevance ON)
 DELETE /api/v1/admin/receipts/{id}/observations    → PurgeObservationsResponse (pull one receipt's contributions out of the price index)
