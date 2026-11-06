@@ -9,6 +9,9 @@ public enum StateIngestionStrategy {
     /** Direct GET of the QR's own portal URL, parsed with the shared responsive-DANFE parser. */
     QR_PORTAL,
 
+    /** The user's app fetched the nota on-device (residential IP) and posted the page to us. */
+    DEVICE_FETCH,
+
     /** LLM extraction of the already-fetched DANFE HTML the parser failed on (cheaper than Infosimples). */
     LLM_RESCUE,
 

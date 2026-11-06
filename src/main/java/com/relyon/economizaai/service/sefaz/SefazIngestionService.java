@@ -396,7 +396,22 @@ public class SefazIngestionService {
         if (infosimples.isEmpty()) {
             throw new SefazFetchException(uf.name());
         }
-        return fetchViaInfosimples(chave, uf, userId);
+        var experimental = isExperimental(uf);
+        try {
+            var rescued = fetchViaInfosimples(chave, uf, userId);
+            // Esse caminho (sweeper do device-fetch / device-content ilegível) também é a cadeia
+            // da UF experimental: sem registrar, PA/RN apareciam 0% e o spend-cap nunca via o sucesso.
+            if (experimental) stateCoverage.recordSuccess(uf, StateIngestionStrategy.INFOSIMPLES, null);
+            return rescued;
+        } catch (PaidApiQuotaExceededException | PaidApiBudgetExceededException | PaidApiUnavailableException guardEx) {
+            throw guardEx;
+        } catch (RuntimeException fallbackEx) {
+            if (experimental) {
+                stateCoverage.recordFailure(uf, StateIngestionStrategy.INFOSIMPLES,
+                        StateIngestionOutcome.FETCH_FAILED, null, describe(fallbackEx));
+            }
+            throw fallbackEx;
+        }
     }
 
     /**
@@ -450,10 +465,11 @@ public class SefazIngestionService {
         if (fetched.preParsed() != null) return fetched.preParsed();
         var experimental = isExperimental(fetched.adapter());
         var qrHost = StateCoverageService.hostOf(fetched.sourceUrl());
+        var fetchLayer = fetched.fromDevice() ? StateIngestionStrategy.DEVICE_FETCH : StateIngestionStrategy.QR_PORTAL;
         try {
             var parsed = fetched.adapter().parseHtml(fetched.html(), fetched.chave(), fetched.sourceUrl());
             if (experimental) {
-                stateCoverage.recordSuccess(fetched.uf(), StateIngestionStrategy.QR_PORTAL, qrHost);
+                stateCoverage.recordSuccess(fetched.uf(), fetchLayer, qrHost);
             }
             return parsed;
         } catch (ReceiptParseException parseEx) {
@@ -478,7 +494,7 @@ public class SefazIngestionService {
                 if (llmRescued != null) return llmRescued;
                 throw parseEx;
             }
-            stateCoverage.recordFailure(fetched.uf(), StateIngestionStrategy.QR_PORTAL,
+            stateCoverage.recordFailure(fetched.uf(), fetchLayer,
                     StateIngestionOutcome.PARSE_FAILED, qrHost, describe(parseEx));
             var llmRescued = rescueParseViaLlm(fetched, parseEx, userId);
             if (llmRescued != null) {
@@ -618,7 +634,7 @@ public class SefazIngestionService {
             throw new ReceiptParseException("client-content-chave-mismatch");
         }
         log.info("sefaz.client_content.accepted uf={} chave={} bytes={}", uf, abbrev(chave), sanitized.length());
-        return new FetchedDocument(adapter, sanitized, chave, uf, sourceUrl);
+        return new FetchedDocument(adapter, sanitized, chave, uf, sourceUrl, null, true);
     }
 
     /**
@@ -668,8 +684,15 @@ public class SefazIngestionService {
      * @param html       sanitized DANFE HTML; null for Infosimples fallback results
      * @param preParsed  already-parsed receipt from Infosimples; null for normal HTML-based flow
      */
+    /** {@code fromDevice}: the html was fetched by the user's app on-device, not by our server. */
     public record FetchedDocument(SefazAdapter adapter, String html, String chave,
-                                  UnidadeFederativa uf, String sourceUrl, ParsedReceipt preParsed) {
+                                  UnidadeFederativa uf, String sourceUrl, ParsedReceipt preParsed,
+                                  boolean fromDevice) {
+        public FetchedDocument(SefazAdapter adapter, String html, String chave,
+                               UnidadeFederativa uf, String sourceUrl, ParsedReceipt preParsed) {
+            this(adapter, html, chave, uf, sourceUrl, preParsed, false);
+        }
+
         /** Backward-compatible constructor for existing code and tests. */
         public FetchedDocument(SefazAdapter adapter, String html, String chave,
                                UnidadeFederativa uf, String sourceUrl) {

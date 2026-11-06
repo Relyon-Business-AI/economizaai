@@ -565,6 +565,52 @@ class SefazIngestionServiceTest {
     }
 
     @Test
+    void fetchViaInfosimplesFallback_experimentalUf_recordsLayerSuccessForCoverage() {
+        // The device-fetch sweeper rescues experimental UFs (PA/RN) through this entry point;
+        // without recording it the coverage view showed 0% and the spend cap never saw a success.
+        var infosimples = mock(InfosimplesService.class);
+        when(infosimples.fetchParsed(eq(CHAVE_BA), eq(UnidadeFederativa.BA))).thenReturn(sampleParsed());
+        var service = new SefazIngestionService(List.of(mockAdapterFor(UnidadeFederativa.RS), genericAdapter(null)),
+                Optional.of(infosimples), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult,
+                operationalAlert, prefetchPolicy, htmlReceiptRescue);
+
+        service.fetchViaInfosimplesFallback(CHAVE_BA, UnidadeFederativa.BA, null);
+
+        verify(stateCoverage).recordSuccess(UnidadeFederativa.BA, StateIngestionStrategy.INFOSIMPLES, null);
+    }
+
+    @Test
+    void fetchViaInfosimplesFallback_verifiedUf_recordsNoCoverage() {
+        var infosimples = mock(InfosimplesService.class);
+        when(infosimples.fetchParsed(eq(CHAVE_SP), eq(UnidadeFederativa.SP))).thenReturn(sampleParsed());
+        var service = new SefazIngestionService(List.of(mockAdapterFor(UnidadeFederativa.SP)), Optional.of(infosimples),
+                paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+
+        service.fetchViaInfosimplesFallback(CHAVE_SP, UnidadeFederativa.SP, null);
+
+        verify(stateCoverage, never()).recordSuccess(any(), any(), any());
+    }
+
+    @Test
+    void parse_clientContentOnExperimentalUf_recordsDeviceFetchLayer() {
+        var expected = sampleParsed();
+        var generic = new GenericQrPortalAdapter(RestClient.builder(), NO_CAPTCHA, 1000, "test", true, 1, 0, "gov.br") {
+            @Override
+            public ParsedReceipt parseHtml(String html, String chave, String sourceUrl) {
+                return expected;
+            }
+        };
+        var service = new SefazIngestionService(List.of(mockAdapterFor(UnidadeFederativa.RS), generic), Optional.empty(),
+                paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+        var fetched = service.fromClientContent("<html>" + CHAVE_BA + "</html>", CHAVE_BA, UnidadeFederativa.BA, QR_URL_BA);
+
+        assertSame(expected, service.parse(fetched, null));
+
+        verify(stateCoverage).recordSuccess(UnidadeFederativa.BA, StateIngestionStrategy.DEVICE_FETCH, "nfe.sefaz.ba.gov.br");
+        verify(stateCoverage, never()).recordSuccess(any(), eq(StateIngestionStrategy.QR_PORTAL), any());
+    }
+
+    @Test
     void constructor_disabledGenericAdapterLeavesUfsUnsupported() {
         var rsAdapter = mockAdapterFor(UnidadeFederativa.RS);
         var disabledGeneric = new GenericQrPortalAdapter(RestClient.builder(), NO_CAPTCHA, 1000, "test", false, 1, 0, "gov.br");
