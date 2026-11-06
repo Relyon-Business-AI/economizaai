@@ -19,6 +19,10 @@ public enum AcquisitionChannel {
     ORGANIC,
     /** No referrer and no params — typed the URL or opened the app directly. */
     DIRECT,
-    /** Signup carried no attribution data at all (older accounts, API signups). */
+    /** No web attribution, signed up in the iOS app — came through the App Store (the store passes nothing on). */
+    APP_STORE,
+    /** No web attribution, signed up in the Android app — came through Google Play. */
+    GOOGLE_PLAY,
+    /** Signup carried no attribution data and no app platform (older accounts, API signups). */
     UNKNOWN
 }
