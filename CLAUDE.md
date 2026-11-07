@@ -139,10 +139,11 @@ Two environments, no staging. Pushing a branch deploys it:
 | `development` | API dev (`api-dev.economizaai.app`) | web dev (`dashboard-dev.economizaai.app`) |
 | `main` (front: `master`) | API prod (`api.economizaai.app`) | web prod + OTA to every phone |
 
-1. Work on `development` (or a branch → PR into `development`). Run the tests before pushing — the Render build does NOT run them.
-2. Push/merge → dev deploys. Validate there. (Dev backend sleeps after 15 min idle; first request may take ~3 min.)
-3. Release = PR `development` → `main`/`master`, merged with the owner's go. Never cherry-pick, never commit straight to `main`/`master`.
-4. Front depends on a backend change? Release the backend first.
+1. Branch off `development` and accumulate ALL of the task's changes there. Run the tests before pushing — the Render build does NOT run them.
+2. Open ONE PR into `development`; merge only when the task is complete. Never push straight to `development`: every merge redeploys dev (down for minutes on the free plan) and back-to-back merges cancel each other.
+3. Merge → dev deploys. Validate there. (Dev backend sleeps after 15 min idle; first request may take ~3 min.)
+4. Release = PR `development` → `main`/`master`, merged with the owner's go. Never cherry-pick, never commit straight to `main`/`master`.
+5. Front depends on a backend change? Release the backend first.
 
 - `git pull --rebase origin <branch>` before every push (the autofix bot pushes too).
 - Before reviewing a branch, `git fetch` and confirm which branch if ambiguous.
