@@ -52,13 +52,6 @@ public class PasswordResetService {
             return;
         }
         var user = userOpt.get();
-        if (user.getPassword() == null) {
-            // Account without a local password (social-only) has nothing to reset —
-            // silent no-op, same as an unknown email, so we don't leak which accounts
-            // are social. A social account that SET a password resets it normally.
-            log.info("password_reset.requested no_password_noop user={}", LogMasker.email(user.getEmail()));
-            return;
-        }
         // Kill any prior still-open code so only the newest one works.
         tokenRepository.consumeAllActiveForUser(user, LocalDateTime.now());
         var code = generateCode();

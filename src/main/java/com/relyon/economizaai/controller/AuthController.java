@@ -63,7 +63,8 @@ public class AuthController {
 
     @Operation(summary = "Password reset — step 1: request a code",
             description = "Emails a 6-digit code to the account (valid 60 min). Always returns 204, even for an " +
-                    "unknown or social-only email, so it never reveals which addresses exist.")
+                    "unknown email, so it never reveals which addresses exist. Social-only accounts (Google/Apple) " +
+                    "also receive the code and can use the flow to create a local password.")
     @PostMapping("/forgot-password")
     public ResponseEntity<Void> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
         passwordResetService.requestReset(request);
