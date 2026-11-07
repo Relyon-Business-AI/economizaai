@@ -1,5 +1,16 @@
 # economizai — what's new
 
+## 2026-11-07 — Notas com falha não somem mais + mensagem de chave errada
+
+- `GET /receipts?status=FAILED_PARSE` agora **lista** as notas com falha (antes o filtro de status
+  era ignorado pra elas e voltava vazio). A lista padrão (sem `status`) continua escondendo-as. Cada
+  linha traz `parseErrorReason` + `parseErrorMessage`; sem `issuedAt`, então ordenar por
+  `sort=createdAt,desc`. App: atalho "N notas não foram lidas · Ver" + filtro "Com falha".
+- `chave-corrupted` (dígito verificador inválido — na prática chave DIGITADA errada): mensagem dizia
+  "escaneie o QR de novo"; agora "Um dos números da chave de acesso não confere. Confira os 44
+  dígitos e envie de novo, ou escaneie o QR code da nota." `receipt.processing.timeout` reescrita
+  (menos seca, oferece tentar de novo).
+
 ## 2026-11-06 — Aquisição: "conversão web" não passa mais de 100%
 
 - `GET /admin/acquisition` → `visits`: o funil visita→cadastro agora conta **só cadastros feitos
