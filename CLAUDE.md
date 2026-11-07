@@ -127,24 +127,26 @@ GitHub repo: `economizaai` (https://github.com/Relyon-Business-AI/economizaai.gi
 - **Atomic commits** — each commit should represent one logical change (one feature, one fix, one refactor)
 - Do not bundle unrelated changes in the same commit
 - **Never mention Claude, AI, or any co-author in commit messages** — no `Co-Authored-By` lines, no references to AI assistance
-- This is a personal project on a professional (work) MacBook — commit identity MUST be the personal economizai account, never the work (townsq) or wuups account. **Identity is `user.name = Alexandre Vieira`, `user.email = xandivieira@outlook.com`** (backend `Relyon-Business-AI/economizaai` AND frontend `Relyon-Business-AI/economiza-ai-front`).
-- Routing (set 2026-09-22 with the owner's explicit ok): `~/.gitconfig` has `includeIf gitdir:` blocks pointing the economizai dirs (`~/Downloads/economizai/`, `~/Documents/projects/economiza-ai-front*/`) at `~/.gitconfig-economizai` (the outlook identity); each economizai repo also sets it in local config as a backstop. The machine default is townsq (work) — that's why uncovered economizai clones once leaked 17 townsq-identity commits into the FE. **Do NOT change the global default; add an `includeIf` for any new economizai path instead.**
-- **The gh ACTIVE account is GLOBAL and shared across every terminal/Claude session on this machine** — the owner runs parallel sessions (e.g. a wuups session) and `gh auth switch` there flips it here too. NEVER rely on the active account, and NEVER run `gh auth switch` to "set" it (it races the other session).
-  - **git push/fetch/commit are already safe** — `~/.gitconfig` routes them by directory (`includeIf`) + explicit token (url `insteadOf` embeds `XandiVieira@`, credential block serves `gh auth token -u XandiVieira`), independent of the active account. So plain `git push` works correctly here now (auto-XandiVieira). The XandiVieira PAT is SSO-authorized for `Relyon-Business-AI` (done 2026-09-22), so both org repos push fine.
-  - **`gh` CLI (`gh api`, `gh pr`, `gh repo`…) DOES use the active account** — for economizai ALWAYS prefix `GH_TOKEN=$(gh auth token --user XandiVieira) gh …`. Never a bare `gh` command that writes.
-- Do not edit the global git config without the owner's explicit ok.
+- Use your own git identity and GitHub account. Anything specific to one person or machine (accounts, tokens, local paths) goes in `CLAUDE.local.md` (gitignored), never in this file.
 
-## Git Workflow
-- **Clean 2-env split (cutover done 2026-09-22).** Two Render services on one repo:
-  - **prod** = `economizai-api-prod`, branch **`main`**, domain **`api.economizaai.app`**, DB `economizai-db-prod` (the REAL data users hit).
-  - **dev** = `economizaai-api-dev` (`srv-dbklrqnf3r2c73f93cdg`, **Free plan since 2026-11-03**), branch **`development`**, domain **`api-dev.economizaai.app`**, DB `economizaai-db-dev` (`dpg-dbklrc59fdbs73bmvjsg-a`, Basic 256 MB, stale copy = test data). **Dev sleeps after 15 min idle and cold-starts in ~3.5 min** — a first request timing out is NOT an outage; wait and retry. It fits 512 MB only via `JAVA_TOOL_OPTIONS` on the service (heap 220 MB); heavy work there (OCR, big parses) may OOM-kill it. The old `srv-d9p4…` service, its `economizai-app-prod.onrender.com` host and the old `dpg-d9p4…` DB were DELETED — never reference them. Details + gotchas in `INFRASTRUCTURE.md` / `DEV_NOTES.md`.
-  - Both auto-deploy on push to their branch. **Pushing `development` = deploy to DEV only (safe, no real users).** Prod ships ONLY by merging `development` → `main` + push, on the owner's explicit go. Never commit directly to `main`. Full topology in `INFRASTRUCTURE.md`.
-- **GitHub account: ALWAYS `XandiVieira` for anything economizai** — if another account is active/cached (keychain may serve `wuupsuser`), override before acting: `GH_TOKEN=$(gh auth token --user XandiVieira) gh …`, or a one-off credential helper for `git push`.
-- **Deploy windows:** pushing `development` now only redeploys the **dev** service — safe to push anytime (no real-user impact). The daytime-blip caution now applies to the **prod release** (merge → `main`): that redeploys `api.economizaai.app` and blips real users, so gate prod releases on the owner's go (batch, prefer night). `main` == `development` in code before a release so prod doesn't regress.
-- **ALWAYS pull before push.** Before any `git push`, run `git pull --rebase origin <branch>` first so the push lands on the current tip. This repo has an autonomous watchdog that also pushes — racing it causes rejected pushes and rebase conflicts. Pull-rebase-then-push every time.
-- Before reviewing or analyzing a branch, ALWAYS run `git fetch` and confirm with the user which branch to work on if there's any ambiguity.
-- Do NOT propose code fixes when the user is asking for understanding/diagnosis only — wait for explicit fix request.
+## Git Workflow (same in backend and frontend)
+Two environments, no staging. Pushing a branch deploys it:
+
+| Branch | Backend | Frontend |
+|---|---|---|
+| `development` | API dev (`api-dev.economizaai.app`) | web dev (`dashboard-dev.economizaai.app`) |
+| `main` (front: `master`) | API prod (`api.economizaai.app`) | web prod + OTA to every phone |
+
+1. Work on `development` (or a branch → PR into `development`). Run the tests before pushing — the Render build does NOT run them.
+2. Push/merge → dev deploys. Validate there. (Dev backend sleeps after 15 min idle; first request may take ~3 min.)
+3. Release = PR `development` → `main`/`master`, merged with the owner's go. Never cherry-pick, never commit straight to `main`/`master`.
+4. Front depends on a backend change? Release the backend first.
+
+- `git pull --rebase origin <branch>` before every push (the autofix bot pushes too).
+- Before reviewing a branch, `git fetch` and confirm which branch if ambiguous.
+- Do NOT propose code fixes when the user is asking for understanding/diagnosis only.
 - When the user says "revert", confirm exactly what state they want before acting.
+- Infra details (Render services, DBs, gotchas): `INFRASTRUCTURE.md` / `DEV_NOTES.md`.
 
 ## Diagnosis Before Fixes
 - When investigating bugs, identify root cause first. Do not propose workarounds (e.g., cleanup scripts, defensive checks) until root cause is confirmed.

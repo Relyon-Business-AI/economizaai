@@ -91,7 +91,6 @@ Migrations são **aditivas/não-destrutivas** → reverter **só o código**:
 - Sem down-migration. O listener `@PrePersist` some ao reverter o código — sem efeito residual.
 
 ## Convenções no release
-- `git push` é roteado por diretório (identidade **XandiVieira** automática). Para `gh`:
-  `GH_TOKEN=$(gh auth token --user XandiVieira) gh …`. Nunca `gh auth switch`.
+- Conta/identidade git de cada um: ver o `CLAUDE.local.md` pessoal (não versionado).
 - Após o merge, `main` fica **== `development`** em código (prod não regride).
 - `main` = branch de prod do BACKEND; `master` = branch de prod do FE (nomes invertidos de propósito).
