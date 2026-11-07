@@ -2,6 +2,7 @@ package com.relyon.economizaai.service.llm;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.relyon.economizaai.service.ai.AiGateway;
+import com.relyon.economizaai.exception.InvalidReceiptPhotoException;
 import com.relyon.economizaai.exception.PhotoExtractionUnavailableException;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.Receipt;
@@ -20,10 +21,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -33,6 +37,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -63,7 +68,7 @@ class PhotoReceiptExtractionServiceTest {
     @BeforeEach
     void setUp() {
         service = new PhotoReceiptExtractionService(aiGateway, photoUploadValidator, paidApiGuard,
-                subscriptionGate, receiptRepository, receiptService, transactionTemplate, true, 60, 5);
+                subscriptionGate, receiptRepository, receiptService, transactionTemplate, true, 60, 6);
         var household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
         user = User.builder().id(UUID.randomUUID()).email("alexandre+photo@economizaai.app")
                 .household(household).build();
@@ -127,9 +132,33 @@ class PhotoReceiptExtractionServiceTest {
     }
 
     @Test
+    void extract_sevenPhotos_rejectedBeforeAnyWorkWithTheLimitAsArgument() {
+        when(aiGateway.isEnabled()).thenReturn(true);
+        List<MultipartFile> sevenPhotos = Collections.nCopies(7, photo());
+
+        var rejection = assertThrows(InvalidReceiptPhotoException.class, () -> service.extract(user, sevenPhotos));
+
+        assertThat(rejection.getMessageKey()).isEqualTo("receipt.photo.too-many");
+        assertThat(rejection.getArguments()).containsExactly("6");
+        verify(subscriptionGate, never()).require(any(), any());
+    }
+
+    @Test
+    void extract_sixPhotos_passesTheCountCheck() {
+        when(aiGateway.isEnabled()).thenReturn(true);
+        List<MultipartFile> sixPhotos = Collections.nCopies(6, photo());
+        // Para o fluxo logo após a checagem de quantidade: chegar no gate = 6 fotos aceitas.
+        doThrow(new IllegalStateException("past-count-check")).when(subscriptionGate).require(any(), any());
+
+        var stop = assertThrows(IllegalStateException.class, () -> service.extract(user, sixPhotos));
+
+        assertThat(stop.getMessage()).isEqualTo("past-count-check");
+    }
+
+    @Test
     void extract_disabledFlag_returns503Semantics() {
         var disabled = new PhotoReceiptExtractionService(aiGateway, photoUploadValidator, paidApiGuard,
-                subscriptionGate, receiptRepository, receiptService, transactionTemplate, false, 60, 5);
+                subscriptionGate, receiptRepository, receiptService, transactionTemplate, false, 60, 6);
 
         assertThrows(PhotoExtractionUnavailableException.class, () -> disabled.extract(user, photo()));
         verify(aiGateway, never()).completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt(), any());

@@ -1,5 +1,12 @@
 # economizai — what's new
 
+## 2026-11-07 — Foto da nota toda: até 6 fotos (era 5)
+
+- `POST /receipts/photo` (itens por foto): limite de fotos por nota subiu de 5 para **6**
+  (`economizaai.llm.photo-extraction.max-photos`, env `PHOTO_EXTRACTION_MAX_PHOTOS`). Acima disso
+  segue o 400 `receipt.photo.too-many` com o limite no texto. App: limite visível desde a primeira
+  foto ("2 de 6 fotos"), botão da câmera desabilitado ao atingir 6 com pedido pra remover uma.
+
 ## 2026-11-07 — Notas com falha não somem mais + mensagem de chave errada
 
 - `GET /receipts?status=FAILED_PARSE` agora **lista** as notas com falha (antes o filtro de status

@@ -89,7 +89,7 @@ public class PhotoReceiptExtractionService {
                                          TransactionTemplate transactionTemplate,
                                          @Value("${economizaai.llm.photo-extraction.enabled:true}") boolean enabled,
                                          @Value("${economizaai.llm.photo-extraction.max-items:60}") int maxItems,
-                                         @Value("${economizaai.llm.photo-extraction.max-photos:5}") int maxPhotos) {
+                                         @Value("${economizaai.llm.photo-extraction.max-photos:6}") int maxPhotos) {
         this.aiGateway = aiGateway;
         this.photoUploadValidator = photoUploadValidator;
         this.paidApiGuard = paidApiGuard;
