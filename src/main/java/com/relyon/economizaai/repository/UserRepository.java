@@ -110,6 +110,17 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     @Query("SELECT count(user) FROM User user WHERE user.createdAt >= :since" + INTERNAL_FILTER)
     long countSignupsSince(LocalDateTime since, boolean includeInternal);
 
+    /** Signups whose account was created from the web landing — the only signups the web beacon can have funneled. */
+    @Query("SELECT count(user) FROM User user WHERE user.createdAt >= :since "
+            + "AND user.registrationPlatform = 'WEB'" + INTERNAL_FILTER)
+    long countWebSignupsSince(LocalDateTime since, boolean includeInternal);
+
+    /** Per-campaign web signups in the window: (utmCampaign, count) — matched against web visits per campaign. */
+    @Query("SELECT user.utmCampaign, count(user) FROM User user WHERE user.createdAt >= :since "
+            + "AND user.registrationPlatform = 'WEB'" + INTERNAL_FILTER
+            + " GROUP BY user.utmCampaign")
+    List<Object[]> webCampaignSignupsSince(LocalDateTime since, boolean includeInternal);
+
     @Query("SELECT count(user) FROM User user WHERE user.createdAt >= :since "
             + "AND user.emailVerified = true" + INTERNAL_FILTER)
     long countVerifiedSince(LocalDateTime since, boolean includeInternal);
