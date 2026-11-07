@@ -66,3 +66,6 @@ db-backups/
 db-backup.log
 logs/
 .claude/scheduled_tasks.lock
+
+# Instruções pessoais/da máquina (conta, tokens, caminhos) — cada dev tem o seu
+CLAUDE.local.md

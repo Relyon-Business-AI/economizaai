@@ -95,7 +95,7 @@ class PasswordResetServiceTest {
     }
 
     @Test
-    void requestResetForSocialOnlyAccountIsNoOp() {
+    void requestResetForSocialOnlyAccountIssuesCodeSoUserCanCreatePassword() {
         var socialUser = User.builder().id(UUID.randomUUID())
                 .email("maria@example.com")
                 .authProvider(AuthProvider.GOOGLE)
@@ -104,8 +104,9 @@ class PasswordResetServiceTest {
 
         passwordResetService.requestReset(new ForgotPasswordRequest("maria@example.com"));
 
-        verify(tokenRepository, never()).save(any());
-        verifyNoInteractions(emailSender);
+        verify(tokenRepository).consumeAllActiveForUser(eq(socialUser), any(LocalDateTime.class));
+        verify(tokenRepository).save(any(PasswordResetToken.class));
+        verify(emailSender).sendPasswordResetCode(eq("maria@example.com"), any(), anyString(), anyInt());
     }
 
     @Test
