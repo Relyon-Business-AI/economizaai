@@ -50,6 +50,7 @@ import com.relyon.economizaai.service.sefaz.ReceiptIngestionService;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
 import com.relyon.economizaai.service.sefaz.StateCoverageService;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
+import com.relyon.economizaai.service.subscription.SubscriptionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -112,6 +113,7 @@ class ReceiptServiceTest {
     @Mock private HouseholdCacheGen householdCacheGen;
     @Mock private MarketNameService marketNameService;
     @Mock private SubscriptionGateService subscriptionGate;
+    @Mock private SubscriptionService subscriptionService;
     @Mock private SavingsAttributionService savingsAttributionService;
     @Mock private LocalizedMessageService localizedMessageService;
     @Mock private MerchantSupportGate merchantSupportGate;
@@ -970,6 +972,36 @@ class ReceiptServiceTest {
         assertEquals(ReceiptStatus.CONFIRMED, response.receipt().status());
         assertNotNull(response.receipt().confirmedAt());
         assertEquals(0, response.personalPromos().size());
+    }
+
+    @Test
+    void confirm_firstReceipt_grantsSignupPromo() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receiptRepository.save(receipt)).thenReturn(receipt);
+        when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
+        when(receiptRepository.countByUserIdAndStatus(user.getId(), ReceiptStatus.CONFIRMED)).thenReturn(1L);
+        var promoEnd = LocalDateTime.now().plusMonths(3);
+        when(subscriptionService.grantSignupPromoIfEnabled(user)).thenReturn(promoEnd);
+
+        receiptService.confirm(user, receipt.getId(), null);
+
+        verify(subscriptionService).grantSignupPromoIfEnabled(user);
+    }
+
+    @Test
+    void confirm_secondReceipt_doesNotGrantPromo() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receiptRepository.save(receipt)).thenReturn(receipt);
+        when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
+        when(receiptRepository.countByUserIdAndStatus(user.getId(), ReceiptStatus.CONFIRMED)).thenReturn(2L);
+
+        receiptService.confirm(user, receipt.getId(), null);
+
+        verify(subscriptionService, never()).grantSignupPromoIfEnabled(any(User.class));
     }
 
     @Test

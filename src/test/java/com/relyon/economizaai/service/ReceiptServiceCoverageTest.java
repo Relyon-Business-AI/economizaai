@@ -36,6 +36,7 @@ import com.relyon.economizaai.service.sefaz.ParsedReceipt;
 import com.relyon.economizaai.service.sefaz.ParsedReceiptItem;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
+import com.relyon.economizaai.service.subscription.SubscriptionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -103,6 +104,7 @@ class ReceiptServiceCoverageTest {
     @Mock private HouseholdCacheGen householdCacheGen;
     @Mock private MarketNameService marketNameService;
     @Mock private SubscriptionGateService subscriptionGate;
+    @Mock private SubscriptionService subscriptionService;
     @Mock private SavingsAttributionService savingsAttributionService;
     @Mock private MerchantSupportGate merchantSupportGate;
 

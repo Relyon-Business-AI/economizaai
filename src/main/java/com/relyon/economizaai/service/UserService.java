@@ -159,7 +159,6 @@ public class UserService {
 
         var savedUser = userRepository.save(user);
         notificationRuleService.ensureDefaults(savedUser);
-        var signupPromoValidUntil = subscriptionService.grantSignupPromoIfEnabled(savedUser);
         loginActivityRecorder.recordRegistration(savedUser, request.platform());
         signupAlertService.notifyNewAccount(savedUser, "e-mail/senha");
         metaConversionsService.reportCompleteRegistration(savedUser, "email");
@@ -169,8 +168,7 @@ public class UserService {
         log.info("New user registered: {} (household {}, terms v{}, privacy v{})",
                 LogMasker.email(savedUser.getEmail()), household.getId(),
                 savedUser.getAcceptedTermsVersion(), savedUser.getAcceptedPrivacyVersion());
-        return new AuthResponse(token, refreshToken, UserResponse.from(savedUser),
-                signupPromoValidUntil != null, signupPromoValidUntil);
+        return new AuthResponse(token, refreshToken, UserResponse.from(savedUser), false, null);
     }
 
     public AuthResponse login(LoginRequest request) {
