@@ -61,6 +61,12 @@ public class AiGateway {
     @Value("${economizaai.ai.budget-usd:0}")
     private double budgetUsd;
 
+    // Modelo de visão DEDICADO à extração de foto de nota — isolado do tier EXTRACTOR
+    // (compartilhado por rescue/categorização). Foto exige OCR forte; o Haiku confunde
+    // nome/preço entre fotos sobrepostas e quebra a deduplicação. Override por env sem redeploy.
+    @Value("${economizaai.ai.photo-extract-model:claude-sonnet-4-6}")
+    private String photoExtractModel;
+
     public AiGateway(java.util.List<AiChatPort> chatAdapters,
                      AiProviderSettingsService providerSettings,
                      AiUsageLogRepository usageRepository) {
@@ -84,6 +90,11 @@ public class AiGateway {
     /** Rótulo do provedor que serve este modelo (ANTHROPIC/OPENAI) — pro benchmark. */
     public String providerLabelForModel(String model) {
         return providerForModel(model).name();
+    }
+
+    /** Vision model for photo-receipt extraction — dedicated, not the shared EXTRACTOR-tier model. */
+    public String photoExtractModel() {
+        return photoExtractModel;
     }
 
     public String extractorModel() {

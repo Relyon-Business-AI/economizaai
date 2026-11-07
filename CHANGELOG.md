@@ -1,5 +1,17 @@
 # economizai — what's new
 
+## 2026-11-07 — Foto da nota: fim da duplicação entre fotos sobrepostas
+
+- `POST /receipts/photo`: a costura das fotos agora casa a sobreposição por **semelhança** (não mais
+  texto+preço idênticos) e exige um **run contíguo** (o contexto ao redor). Fotos que se cobrem no
+  meio — inevitável, a foto pega mais área que o scan — não duplicam mais itens: numa nota real de
+  Zaffari, 74 itens lidos em 4 fotos colapsaram pros **35** reais. Uma sequência inteira coincidente
+  = sobreposição (funde); um item que casa mas tem vizinhos diferentes = compra repetida legítima
+  (mantém). Sem mudança de contrato — a nota PENDING_CONFIRMATION só vem limpa.
+- Extração de foto passou a usar um **modelo de visão dedicado** (Sonnet, env
+  `ECONOMIZAAI_AI_PHOTO_EXTRACT_MODEL`), isolado do modelo compartilhado de extração/categorização —
+  OCR bem mais fiel em nome e preço (ex.: "SEARA" em vez de "SERRA").
+
 ## 2026-11-07 — Foto da nota toda: até 6 fotos (era 5)
 
 - `POST /receipts/photo` (itens por foto): limite de fotos por nota subiu de 5 para **6**
