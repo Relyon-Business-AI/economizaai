@@ -73,6 +73,29 @@ A rollback looks like:
 
 <!-- AUTONOMOUS ENTRIES BELOW - newest first. The watchdog inserts here. -->
 
+### [2026-11-07 12:05:47] [NEEDS-HUMAN] NO-TESTREF - E2E: 0. App config is public (force-update gate)
+- **Detected:**
+```
+A daily E2E run against the live dev server FAILED (78/220 assertions).
+Failing steps:
+- 0. App config is public (force-update gate): Error: ESOCKETTIMEDOUT
+- 0. App config is public (force-update gate): AssertionError: expected PostmanResponse{ …(5) } to have property 'code'
+- 0. App config is public (force-update gate): JSONError: "undefined" is not valid JSON
+- 1. Register new user: Error: ESOCKETTIMEDOUT
+- 1. Register new user: AssertionError: expected PostmanResponse{ …(5) } to have property 'code'
+- 1. Register new user: JSONError: "undefined" is not valid JSON
+- 2. Login with registered user: Error: ESOCKETTIMEDOUT
+- 2. Login with registered user: AssertionError: expected PostmanResponse{ …(5) } to have property 'code'
+
+Server-side errors during the run (the likely root cause):
+```
+2026-11-07 12:05:11.160 WARN  [req=19280fe7 user= ip=74.235.126.86 rcpt= item=] c.r.e.e.GlobalExceptionHandler - Failed login attempt: E-mail ou senha inválidos.
+```
+```
+- **Claude:** Failed to authenticate. API Error: 401 OAuth access token has been revoked.
+Ignoring 25 permissions.allow entries from .claude/settings.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog, or set projects["/home/runner/work/economizaai/economizaai"].hasTrustDialogAccepted: true in /home/runner/.claude.json.
+- **Outcome:** reply lacked a verifiable test reference; changes discarded.
+
 ### [2026-11-05 23:37:35] [NEEDS-HUMAN] NO-TESTREF - Terminating due to java.lang.OutOfMemoryError: Java heap spa
 - **Detected:**
 ```
