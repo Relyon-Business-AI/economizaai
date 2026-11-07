@@ -10,7 +10,7 @@ spring:
   servlet:
     multipart:
       max-file-size: 6MB     # leaves headroom over the app-level 5MB profile-picture cap
-      # Request total must fit MULTIPLE item photos (até max-photos=5 × ~5MB cada +
+      # Request total must fit MULTIPLE item photos (até max-photos=6 × ~5MB cada +
       # overhead) — uma nota longa fotografada em várias fotos vai toda num request só.
       max-request-size: 40MB
   datasource:
@@ -608,6 +608,9 @@ economizaai:
       # economizaai.paid-api (llm-vision-daily-cap-per-user).
       enabled: ${PHOTO_EXTRACTION_ENABLED:true}
       max-items: ${PHOTO_EXTRACTION_MAX_ITEMS:60}
+      # Fotos por nota (nota longa em várias fotos, uma chamada de IA). O app mostra o limite
+      # desde a 1ª foto e trava a câmera ao atingi-lo — manter em sincronia com MAX_ITEM_PHOTOS do FE.
+      max-photos: ${PHOTO_EXTRACTION_MAX_PHOTOS:6}
     html-rescue:
       # Parse rescue: when a state parser fails on already-fetched SEFAZ HTML,
       # the LLM extracts the receipt from the page text BEFORE the chain falls

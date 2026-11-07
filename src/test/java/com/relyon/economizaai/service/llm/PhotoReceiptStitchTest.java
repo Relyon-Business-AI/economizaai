@@ -17,7 +17,7 @@ class PhotoReceiptStitchTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final PhotoReceiptExtractionService service =
-            new PhotoReceiptExtractionService(null, null, null, null, null, null, null, true, 60, 5);
+            new PhotoReceiptExtractionService(null, null, null, null, null, null, null, true, 60, 6);
 
     /** Monta uma "extração" (uma foto) com itens "desc|qtd|unit|total". */
     private JsonNode photo(String... items) {

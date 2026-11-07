@@ -610,8 +610,11 @@ public class ReceiptService {
                 categoryNodeIds = categoryResolver.nodeAndDescendantIds(categorySlug);
             }
         }
+        // Failed scans stay out of the default "compras" list, but asking for them explicitly
+        // (status=FAILED_PARSE) lists them — the app's "Com falha" filter, so a failure never vanishes.
+        var hideFailedParse = status != ReceiptStatus.FAILED_PARSE;
         var spec = ReceiptSpecifications.forSearch(
-                householdId, from, to, cnpj, categories, status, trimmedSearch, true, null, null, categoryNodeIds);
+                householdId, from, to, cnpj, categories, status, trimmedSearch, hideFailedParse, null, null, categoryNodeIds);
         if (scope != null && scope != MarketScope.ALL) {
             spec = spec.and(scopeSpec(scope,
                     insightsRepository.householdListingCnpjsInSegment(householdId, scope.segments(),

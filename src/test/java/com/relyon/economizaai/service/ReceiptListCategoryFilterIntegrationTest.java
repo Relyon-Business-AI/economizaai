@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * Covers the category filter on {@code GET /receipts} after it became
@@ -124,6 +125,19 @@ class ReceiptListCategoryFilterIntegrationTest {
     }
 
     @Test
+    void failedReceipt_hiddenByDefault_listedWhenAskedExplicitly() {
+        failedReceipt(user.getHousehold());
+
+        var defaultList = receiptService.list(user, null, null, null, null, null, null, null, MarketScope.ALL, PageRequest.of(0, 20));
+        var failedOnly = receiptService.list(user, null, null, null, null, null, ReceiptStatus.FAILED_PARSE, null, MarketScope.ALL, PageRequest.of(0, 20));
+
+        assertEquals(3, defaultList.getTotalElements());
+        assertEquals(1, failedOnly.getTotalElements());
+        assertEquals("receipt.parse.failed:chave-corrupted", failedOnly.getContent().getFirst().parseErrorReason());
+        assertNotNull(failedOnly.getContent().getFirst().parseErrorMessage());
+    }
+
+    @Test
     void noCategory_returnsAll() {
         var page = receiptService.list(user, null, null, null, null, null, null, null, MarketScope.ALL, PageRequest.of(0, 20));
         assertEquals(3, page.getTotalElements());
@@ -175,6 +189,16 @@ class ReceiptListCategoryFilterIntegrationTest {
                 .user(user).household(household).chaveAcesso(uniqueChave())
                 .uf(UnidadeFederativa.RS).qrPayload("test")
                 .status(ReceiptStatus.PROCESSING)
+                .build());
+    }
+
+    /** A scan that failed before the parse (bad check digit): no CNPJ/issuedAt known. */
+    private void failedReceipt(Household household) {
+        receiptRepository.save(Receipt.builder()
+                .user(user).household(household).chaveAcesso(uniqueChave())
+                .uf(UnidadeFederativa.SP).qrPayload("test")
+                .status(ReceiptStatus.FAILED_PARSE)
+                .parseErrorReason("receipt.parse.failed:chave-corrupted")
                 .build());
     }
 

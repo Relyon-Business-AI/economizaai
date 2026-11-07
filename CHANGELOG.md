@@ -1,5 +1,34 @@
 # economizai — what's new
 
+## 2026-11-07 — Foto da nota toda: até 6 fotos (era 5)
+
+- `POST /receipts/photo` (itens por foto): limite de fotos por nota subiu de 5 para **6**
+  (`economizaai.llm.photo-extraction.max-photos`, env `PHOTO_EXTRACTION_MAX_PHOTOS`). Acima disso
+  segue o 400 `receipt.photo.too-many` com o limite no texto. App: limite visível desde a primeira
+  foto ("2 de 6 fotos"), botão da câmera desabilitado ao atingir 6 com pedido pra remover uma.
+
+## 2026-11-07 — Notas com falha não somem mais + mensagem de chave errada
+
+- `GET /receipts?status=FAILED_PARSE` agora **lista** as notas com falha (antes o filtro de status
+  era ignorado pra elas e voltava vazio). A lista padrão (sem `status`) continua escondendo-as. Cada
+  linha traz `parseErrorReason` + `parseErrorMessage`; sem `issuedAt`, então ordenar por
+  `sort=createdAt,desc`. App: atalho "N notas não foram lidas · Ver" + filtro "Com falha".
+- `chave-corrupted` (dígito verificador inválido — na prática chave DIGITADA errada): mensagem dizia
+  "escaneie o QR de novo"; agora "Um dos números da chave de acesso não confere. Confira os 44
+  dígitos e envie de novo, ou escaneie o QR code da nota." `receipt.processing.timeout` reescrita
+  (menos seca, oferece tentar de novo).
+
+## 2026-11-06 — Aquisição: "conversão web" não passa mais de 100%
+
+- `GET /admin/acquisition` → `visits`: o funil visita→cadastro agora conta **só cadastros feitos
+  pela web** (`registrationPlatform = WEB`), batendo com o denominador (visitantes web do beacon).
+  Antes somava cadastros de TODAS as plataformas contra visitantes só da web → dava taxa acima de
+  100% (ex.: 269%), já que a maioria dos cadastros vem do app e nunca passa pela landing. Vale pro
+  número geral (`visitToSignupRate`) e por campanha (`byCampaign[].conversionRate`), ambos agora em
+  `[0,1]`. Os campos `signups` de `visits` passam a significar **cadastros web** (mesma forma de
+  resposta, semântica web-only). Admin: seção renomeada p/ "Funil da web", stats "Cadastros web" /
+  "Conversão web" + tooltip explicando que cadastros do app ficam de fora.
+
 ## 2026-11-06 — Admin "Estados": conta NOTAS pelo resultado final (PA/RN não são mais "0%")
 
 - `GET /admin/state-coverage`: `attempts`/`successes`/`failures` agora contam **notas** criadas no

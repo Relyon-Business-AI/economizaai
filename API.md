@@ -720,13 +720,13 @@ GET /api/v1/receipts
     &to=2026-04-30T23:59:59
     &marketCnpj=83261420003255
     &category=GROCERIES               ← multi-value: repeat for OR (?category=GROCERIES&category=CLEANING)
-    &status=CONFIRMED                  ← optional: PENDING_CONFIRMATION|CONFIRMED|REJECTED|FAILED_PARSE (invalid → 400; absent → all)
+    &status=CONFIRMED                  ← optional: PENDING_CONFIRMATION|CONFIRMED|REJECTED|FAILED_PARSE (invalid → 400; absent → all EXCEPT FAILED_PARSE)
     &q=leite condensado
     &page=0&size=20
 → Page<ReceiptSummaryResponse>  (each row has marketName, issuedAt, totalAmount, householdTotalAmount, discountTotal, approxTaxTotal, itemCount, status)
 ```
 
-Default sort is `issuedAt DESC`. All filters optional. `category` accepts one or many (same as `/items` and `/insights/query`); **prefer `categorySlug=<slug da taxonomia>`** (categoria OU subcategoria, inclui descendentes) — o param `category` (enum legado) está deprecado. `categorySlug=outros` equivale ao enum `OTHER` (inclui itens sem produto).
+Default sort is `issuedAt DESC`. All filters optional. **Failed scans:** the default list hides `FAILED_PARSE`; `status=FAILED_PARSE` lists them (the app's "Com falha" filter — rows carry `parseErrorReason` + localized `parseErrorMessage`; they have no `issuedAt`, so sort with `sort=createdAt,desc`). `size=1` + `totalElements` = the failed count. `category` accepts one or many (same as `/items` and `/insights/query`); **prefer `categorySlug=<slug da taxonomia>`** (categoria OU subcategoria, inclui descendentes) — o param `category` (enum legado) está deprecado. `categorySlug=outros` equivale ao enum `OTHER` (inclui itens sem produto).
 
 **Content search (`q`)** — case-insensitive substring match against `rawDescription`, `friendlyDescription`, the linked product's normalized name, AND the receipt's market name. So `q=leite` finds every receipt that includes a milk item OR was issued by a market with "leite" in the name. Combine with `from`/`to`/`category` freely.
 
