@@ -62,6 +62,7 @@ import com.relyon.economizaai.service.sefaz.SefazIngestionService;
 import com.relyon.economizaai.service.sefaz.StateCoverageService;
 import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
+import com.relyon.economizaai.service.subscription.SubscriptionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
@@ -117,6 +118,7 @@ public class ReceiptService {
     private final LocalizedMessageService localizedMessageService;
     private final MarketNameService marketNameService;
     private final SubscriptionGateService subscriptionGate;
+    private final SubscriptionService subscriptionService;
     private final SavingsAttributionService savingsAttributionService;
     private final ReceiptIngestionService receiptIngestionService;
     private final TransactionTemplate transactionTemplate;
@@ -849,6 +851,12 @@ public class ReceiptService {
         marketLocationService.registerMarketFromReceipt(receipt);
         notifyPersonalPromos(user, receipt, personalPromos);
         var saved = receiptRepository.save(receipt);
+        if (receiptRepository.countByUserIdAndStatus(user.getId(), ReceiptStatus.CONFIRMED) == 1) {
+            var promoEnd = subscriptionService.grantSignupPromoIfEnabled(user);
+            if (promoEnd != null) {
+                log.info("confirm first_receipt_promo_granted user={} validUntil={}", user.getEmail(), promoEnd);
+            }
+        }
         attributeSavings(saved);
         householdCacheGen.bump(receipt.getHousehold().getId());
         log.info("confirm ok status=CONFIRMED personalPromos={}", personalPromos.size());

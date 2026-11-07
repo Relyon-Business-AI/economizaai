@@ -164,13 +164,12 @@ public class SocialLoginService {
         attributionResolver.applyTo(user, attribution);
         var savedUser = userRepository.save(user);
         notificationRuleService.ensureDefaults(savedUser);
-        var signupPromoValidUntil = subscriptionService.grantSignupPromoIfEnabled(savedUser);
         loginActivityRecorder.recordRegistration(savedUser, platform);
         signupAlertService.notifyNewAccount(savedUser, "social login " + provider);
         metaConversionsService.reportCompleteRegistration(savedUser, provider.name().toLowerCase());
         log.info("social.login created provider={} user={} household={}",
                 provider, LogMasker.email(savedUser.getEmail()), household.getId());
-        return new ResolvedUser(savedUser, signupPromoValidUntil);
+        return new ResolvedUser(savedUser, null);
     }
 
     private AuthResponse issueAuth(User user, LocalDateTime signupPromoValidUntil) {
