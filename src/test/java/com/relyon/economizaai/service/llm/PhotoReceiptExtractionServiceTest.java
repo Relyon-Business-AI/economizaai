@@ -93,7 +93,7 @@ class PhotoReceiptExtractionServiceTest {
     @Test
     void extract_finalizesPendingPhotoReceipt() {
         when(aiGateway.isEnabled()).thenReturn(true);
-        when(aiGateway.extractorModel()).thenReturn("claude-haiku");
+        when(aiGateway.photoExtractModel()).thenReturn("claude-sonnet-4-6");
         when(aiGateway.completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt(), any()))
                 .thenReturn("""
                         {"is_receipt": true, "market_name": "Bar do Ze", "cnpj": "12345678000199",
@@ -121,7 +121,7 @@ class PhotoReceiptExtractionServiceTest {
     @Test
     void extract_nonReceiptImage_marksReceiptFailed() {
         when(aiGateway.isEnabled()).thenReturn(true);
-        when(aiGateway.extractorModel()).thenReturn("claude-haiku");
+        when(aiGateway.photoExtractModel()).thenReturn("claude-sonnet-4-6");
         when(aiGateway.completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt(), any()))
                 .thenReturn("{\"is_receipt\": false}");
 
@@ -167,7 +167,7 @@ class PhotoReceiptExtractionServiceTest {
     @Test
     void extract_llmFailure_marksReceiptFailed() {
         when(aiGateway.isEnabled()).thenReturn(true);
-        when(aiGateway.extractorModel()).thenReturn("claude-haiku");
+        when(aiGateway.photoExtractModel()).thenReturn("claude-sonnet-4-6");
         when(aiGateway.completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt(), any()))
                 .thenThrow(new AiGateway.AiUnavailableException("timeout"));
 

@@ -35,6 +35,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -181,7 +182,7 @@ public class PhotoReceiptExtractionService {
                 break;
             }
             try {
-                var raw = aiGateway.completeWithImage(AiActivity.PHOTO_EXTRACT, aiGateway.extractorModel(),
+                var raw = aiGateway.completeWithImage(AiActivity.PHOTO_EXTRACT, aiGateway.photoExtractModel(),
                         systemPrompt(), "Extraia os itens desta nota.", photo.bytes(), photo.mediaType(), 8000, user.getId());
                 var extraction = parseJson(raw);
                 paidApiGuard.recordSuccess(user.getId(), PaidApiService.LLM_VISION, null, "anthropic");
@@ -289,9 +290,9 @@ public class PhotoReceiptExtractionService {
         return receiptRepository.save(receipt);
     }
 
-    /** Item extraído de uma foto, já normalizado, com uma chave pra detectar sobreposição. */
+    /** Item extraído de uma foto, já normalizado, com a descrição normalizada p/ casar sobreposição. */
     record PhotoItem(String description, BigDecimal quantity, String unit,
-                     BigDecimal unitPrice, BigDecimal totalPrice, String overlapKey) {}
+                     BigDecimal unitPrice, BigDecimal totalPrice, String normDesc) {}
 
     /**
      * Junta as fotos COSTURANDO pela sobreposição, não concatenando. Fotos consecutivas
@@ -322,20 +323,69 @@ public class PhotoReceiptExtractionService {
         return merged;
     }
 
-    /** Maior k tal que os últimos k de {@code merged} == os primeiros k de {@code next} (pela chave). */
+    /**
+     * Comprimento da sobreposição na emenda: maior k tal que os ÚLTIMOS k de {@code merged} são a
+     * MESMA SEQUÊNCIA que os PRIMEIROS k de {@code next}. O casamento é por SEMELHANÇA, não igualdade
+     * exata — o OCR lê o mesmo item de formas ligeiramente diferentes em cada foto (acento, sufixo
+     * "1UN", um preço que faltou). Exigimos um RUN contíguo: é o "contexto ao redor" — uma sequência
+     * inteira coincidente é sobreposição; um item solto que casa mas tem vizinhos diferentes é compra
+     * repetida legítima e NÃO é fundido (um run de 1 só funde com prova forte: descrição quase igual
+     * E mesmo total).
+     */
     private int overlapLength(List<PhotoItem> merged, List<PhotoItem> next) {
         var max = Math.min(merged.size(), next.size());
         for (var k = max; k >= 1; k--) {
-            var matches = true;
-            for (var i = 0; i < k; i++) {
-                if (!merged.get(merged.size() - k + i).overlapKey().equals(next.get(i).overlapKey())) {
-                    matches = false;
-                    break;
-                }
-            }
-            if (matches) return k;
+            if (!seamMatches(merged, next, k)) continue;
+            if (k >= 2) return k;
+            if (strongSameLine(merged.get(merged.size() - 1), next.get(0))) return 1;
         }
         return 0;
+    }
+
+    /** Os últimos k de {@code merged} casam (por semelhança) com os primeiros k de {@code next}? */
+    private boolean seamMatches(List<PhotoItem> merged, List<PhotoItem> next, int k) {
+        for (var i = 0; i < k; i++) {
+            if (!sameLine(merged.get(merged.size() - k + i), next.get(i))) return false;
+        }
+        return true;
+    }
+
+    /** Mesmo item lido em duas fotos, tolerante a ruído de OCR (descrição parecida, ou preço+qtd batendo). */
+    private static boolean sameLine(PhotoItem left, PhotoItem right) {
+        var similarity = descSimilarity(left.normDesc(), right.normDesc());
+        if (similarity >= 0.82) return true;
+        return similarity >= 0.5 && left.quantity().compareTo(right.quantity()) == 0
+                && left.totalPrice() != null && right.totalPrice() != null
+                && left.totalPrice().compareTo(right.totalPrice()) == 0;
+    }
+
+    /** Prova forte pra fundir um run de UM item só (sem vizinhança pra confirmar): quase idêntico + mesmo total. */
+    private static boolean strongSameLine(PhotoItem left, PhotoItem right) {
+        return descSimilarity(left.normDesc(), right.normDesc()) >= 0.9
+                && left.totalPrice() != null && right.totalPrice() != null
+                && left.totalPrice().compareTo(right.totalPrice()) == 0;
+    }
+
+    /** Semelhança [0,1] entre duas descrições normalizadas (1 − distância de edição ÷ maior tamanho). */
+    private static double descSimilarity(String left, String right) {
+        if (left.isEmpty() && right.isEmpty()) return 1.0;
+        var longest = Math.max(left.length(), right.length());
+        return longest == 0 ? 1.0 : 1.0 - (double) levenshtein(left, right) / longest;
+    }
+
+    private static int levenshtein(String left, String right) {
+        var previous = new int[right.length() + 1];
+        var current = new int[right.length() + 1];
+        for (var j = 0; j <= right.length(); j++) previous[j] = j;
+        for (var i = 1; i <= left.length(); i++) {
+            current[0] = i;
+            for (var j = 1; j <= right.length(); j++) {
+                var cost = left.charAt(i - 1) == right.charAt(j - 1) ? 0 : 1;
+                current[j] = Math.min(Math.min(current[j - 1] + 1, previous[j] + 1), previous[j - 1] + cost);
+            }
+            var swap = previous; previous = current; current = swap;
+        }
+        return previous[right.length()];
     }
 
     private PhotoItem toPhotoItem(JsonNode node, String description) {
@@ -343,11 +393,13 @@ public class PhotoReceiptExtractionService {
         var unit = unitOrDefault(node);
         var unitPrice = scaled(decimalOrNull(node, "unit_price"));
         var totalPrice = scaled(decimalOrNull(node, "total_price"));
-        var key = description.toUpperCase().replaceAll("\\s+", " ").trim()
-                + "|" + quantity.stripTrailingZeros().toPlainString()
-                + "|" + (unitPrice == null ? "" : unitPrice.toPlainString())
-                + "|" + (totalPrice == null ? "" : totalPrice.toPlainString());
-        return new PhotoItem(description, quantity, unit, unitPrice, totalPrice, key);
+        return new PhotoItem(description, quantity, unit, unitPrice, totalPrice, normalizeDesc(description));
+    }
+
+    /** Descrição sem acento, caixa-alta e espaços colapsados — base pra casar itens entre fotos. */
+    private static String normalizeDesc(String description) {
+        var noAccent = Normalizer.normalize(description, Normalizer.Form.NFD).replaceAll("\\p{M}+", "");
+        return noAccent.toUpperCase().replaceAll("\\s+", " ").trim();
     }
 
     /** Primeiro CNPJ válido (14 dígitos) extraído das fotos, ou null. */
