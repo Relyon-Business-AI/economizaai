@@ -130,6 +130,8 @@ GitHub repo: `economizaai` (https://github.com/Relyon-Business-AI/economizaai.gi
 - Use your own git identity and GitHub account. Anything specific to one person or machine (accounts, tokens, local paths) goes in `CLAUDE.local.md` (gitignored), never in this file.
 
 ## Git Workflow (same in backend and frontend)
+Human-readable version (pt-BR, with diagram): `DEPLOY.md`.
+
 Two environments, no staging. Pushing a branch deploys it:
 
 | Branch | Backend | Frontend |
