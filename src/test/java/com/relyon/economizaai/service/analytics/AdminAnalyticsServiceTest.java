@@ -77,6 +77,26 @@ class AdminAnalyticsServiceTest {
     }
 
     @Test
+    void visitFunnelCountsOnlyWebSignupsSoRateNeverExceedsOne() {
+        // 43 signups across all platforms but only 4 from the web, against 16 unique web visitors.
+        // The old all-platform numerator gave 43/16 = 269%; the web-only numerator gives 4/16 = 25%.
+        when(userRepository.countSignupsSince(any(), anyBoolean())).thenReturn(43L);
+        when(userRepository.countWebSignupsSince(any(), anyBoolean())).thenReturn(4L);
+        when(userRepository.webCampaignSignupsSince(any(), anyBoolean())).thenReturn(List.of());
+        when(visitRepository.countSince(any())).thenReturn(26L);
+        when(visitRepository.countUniqueVisitorsSince(any())).thenReturn(16L);
+        when(visitRepository.campaignTotalsSince(any())).thenReturn(List.of());
+        when(userRepository.channelBreakdownSince(any(), anyBoolean())).thenReturn(List.of());
+        when(metaAdsProperties.isConfigured()).thenReturn(false);
+
+        var visits = service.acquisition(7, false).visits();
+
+        assertThat(visits.signups()).isEqualTo(4L);
+        assertThat(visits.visitToSignupRate()).isEqualTo(0.25d);
+        assertThat(visits.visitToSignupRate()).isLessThanOrEqualTo(1.0d);
+    }
+
+    @Test
     void adSpendNotConfiguredCarriesHintAndZeroSpend() {
         stubEmptyFunnel();
         when(userRepository.channelBreakdownSince(any(), anyBoolean())).thenReturn(List.of());
@@ -206,6 +226,8 @@ class AdminAnalyticsServiceTest {
         when(userRepository.channelBreakdownSince(any(), anyBoolean())).thenReturn(List.of());
         Object[] campaignSignups = {"instagram", "paid", "promo", 2L, 1L, 0L, AcquisitionChannel.INSTAGRAM_PAID};
         when(userRepository.campaignBreakdownSince(any(), anyBoolean())).thenReturn(List.<Object[]>of(campaignSignups));
+        Object[] webCampaignSignups = {"promo", 2L};
+        when(userRepository.webCampaignSignupsSince(any(), anyBoolean())).thenReturn(List.<Object[]>of(webCampaignSignups));
         when(metaAdsProperties.isConfigured()).thenReturn(false);
         when(visitRepository.countSince(any())).thenReturn(10L);
         when(visitRepository.countUniqueVisitorsSince(any())).thenReturn(8L);

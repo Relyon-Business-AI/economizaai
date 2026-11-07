@@ -112,14 +112,17 @@ public record AcquisitionReportResponse(
     }
 
     /**
-     * First-party top of funnel: anonymous landing visits vs signups in the window,
-     * so we own the click→signup conversion independent of Meta. {@code note} is set
-     * when no visits have been recorded yet (beacon not live / no traffic).
+     * WEB LANDING click→signup funnel, independent of Meta. The beacon only fires on the web
+     * landing, so this measures ONLY the web path: unique anonymous landing visitors vs signups
+     * made on the web ({@code signups} = web registrations, NOT app-store installs). App signups
+     * are deliberately excluded — counting them against web visitors gave a rate above 100%.
+     * {@code visitToSignupRate} is in [0,1]. {@code note} is set when no visits were recorded yet.
      */
     public record VisitSummary(long totalVisits, long uniqueVisitors, long signups,
                                double visitToSignupRate, List<VisitCampaignLine> byCampaign, String note) {
     }
 
+    /** Per-campaign slice of the web funnel: web visits vs web signups for that campaign ({@code conversionRate} in [0,1]). */
     public record VisitCampaignLine(String channel, String source, String medium, String campaign,
                                     long uniqueVisitors, long signups, double conversionRate) {
     }

@@ -85,7 +85,7 @@ public class AdminAnalyticsService {
         var adSpend = buildAdSpend(from, to, byChannel, includeInternal);
         var byCampaign = buildCampaignLines(since, adSpend, includeInternal);
         var revenue = buildRevenue(since, byChannel, adSpend, funnel, includeInternal);
-        var visits = buildVisits(since, byCampaign, funnel.signups());
+        var visits = buildVisits(since, includeInternal);
         var retention = buildRetention(since, includeInternal);
 
         log.info("analytics.acquisition days={} includeInternal={} signups={} paidSignups={} spend={} realizedRevenue={} visits={}",
@@ -345,31 +345,38 @@ public class AdminAnalyticsService {
                 roas, projectedRoas, ltvToCac, channelLines, note);
     }
 
-    /** First-party click→signup: anonymous visits (unique by anon id) vs signups, per campaign. */
-    private VisitSummary buildVisits(LocalDateTime since, List<CampaignLine> byCampaign, long totalSignups) {
+    /**
+     * Web landing click→signup funnel: the beacon only fires on the web landing, so the ONLY
+     * signups it can take credit for are those made on the web (registrationPlatform = WEB).
+     * App-store installs never touch the landing, so counting all-platform signups against web
+     * visitors produced a nonsense rate above 100%. Numerator and denominator are both web-scoped.
+     */
+    private VisitSummary buildVisits(LocalDateTime since, boolean includeInternal) {
         var totalVisits = visitRepository.countSince(since);
         var uniqueVisitors = visitRepository.countUniqueVisitorsSince(since);
+        var webSignups = userRepository.countWebSignupsSince(since, includeInternal);
 
-        var signupsByCampaign = new LinkedHashMap<String, Long>();
-        for (var line : byCampaign) {
-            if (line.campaign() != null) {
-                signupsByCampaign.merge(line.campaign().toLowerCase(), line.signups(), Long::sum);
+        var webSignupsByCampaign = new LinkedHashMap<String, Long>();
+        for (var row : userRepository.webCampaignSignupsSince(since, includeInternal)) {
+            var campaign = (String) row[0];
+            if (campaign != null) {
+                webSignupsByCampaign.merge(campaign.toLowerCase(), ((Number) row[1]).longValue(), Long::sum);
             }
         }
         var lines = new ArrayList<VisitCampaignLine>();
         for (var row : visitRepository.campaignTotalsSince(since)) {
             var campaign = (String) row[0];
             var uniqueVisits = toLong(row[4]);
-            var signups = campaign == null ? 0L : signupsByCampaign.getOrDefault(campaign.toLowerCase(), 0L);
+            var signups = campaign == null ? 0L : webSignupsByCampaign.getOrDefault(campaign.toLowerCase(), 0L);
             lines.add(new VisitCampaignLine(channelName(row[3]), (String) row[1], (String) row[2], campaign,
                     uniqueVisits, signups, uniqueVisits > 0 ? rate(signups, uniqueVisits) : 0d));
         }
         lines.sort((left, right) -> Long.compare(right.uniqueVisitors(), left.uniqueVisitors()));
-        var overallRate = uniqueVisitors > 0 ? rate(totalSignups, uniqueVisitors) : 0d;
+        var overallRate = uniqueVisitors > 0 ? rate(webSignups, uniqueVisitors) : 0d;
         var note = totalVisits == 0
                 ? "No visits recorded yet — the web beacon isn't live or hasn't received traffic in this window."
                 : null;
-        return new VisitSummary(totalVisits, uniqueVisitors, totalSignups, overallRate, lines, note);
+        return new VisitSummary(totalVisits, uniqueVisitors, webSignups, overallRate, lines, note);
     }
 
     /**
