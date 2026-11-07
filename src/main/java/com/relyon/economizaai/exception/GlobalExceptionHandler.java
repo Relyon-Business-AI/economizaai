@@ -76,6 +76,12 @@ public class GlobalExceptionHandler {
         return respond(ex, HttpStatus.UNAUTHORIZED, "Invalid webhook secret");
     }
 
+    @ExceptionHandler(RefreshTokenRejectedException.class)
+    public ResponseEntity<ErrorResponse> handleRefreshRejected(RefreshTokenRejectedException ex) {
+        // 401 (não 400) pra o app deslogar limpo e pedir login — não travar "logado sem dados".
+        return respond(ex, HttpStatus.UNAUTHORIZED, "Refresh token rejected");
+    }
+
     @ExceptionHandler(InvalidCurrentPasswordException.class)
     public ResponseEntity<ErrorResponse> handleInvalidCurrentPassword(InvalidCurrentPasswordException ex) {
         return respond(ex, HttpStatus.BAD_REQUEST, "Invalid current password");

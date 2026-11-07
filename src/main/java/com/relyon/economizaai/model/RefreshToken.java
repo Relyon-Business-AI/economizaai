@@ -13,6 +13,7 @@ import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
 @Table(name = "refresh_tokens")
@@ -29,6 +30,11 @@ public class RefreshToken extends BaseEntity {
 
     @Column(nullable = false, unique = true, length = 255)
     private String token;
+
+    /** A cadeia de rotações nascida de um login (um dispositivo). A revogação por reuso atinge só
+     * esta família, não as outras sessões do usuário. Tokens pré-V132 têm family_id = seu próprio id. */
+    @Column(name = "family_id")
+    private UUID familyId;
 
     @Column(name = "expires_at", nullable = false)
     private LocalDateTime expiresAt;

@@ -101,10 +101,10 @@ public class AuthController {
 
     @PostMapping("/refresh")
     public ResponseEntity<AuthResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
-        var user = refreshTokenService.rotate(request.refreshToken());
-        var accessToken = jwtService.generateToken(user);
-        var newRefresh = refreshTokenService.issue(user);
-        return ResponseEntity.ok(new AuthResponse(accessToken, newRefresh, UserResponse.from(user), false, null));
+        var rotation = refreshTokenService.rotate(request.refreshToken());
+        var accessToken = jwtService.generateToken(rotation.user());
+        var newRefresh = refreshTokenService.issueInFamily(rotation.user(), rotation.familyId());
+        return ResponseEntity.ok(new AuthResponse(accessToken, newRefresh, UserResponse.from(rotation.user()), false, null));
     }
 
     @PostMapping("/logout")

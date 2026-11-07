@@ -1,6 +1,6 @@
 package com.relyon.economizaai.service.auth;
 
-import com.relyon.economizaai.exception.InvalidAuthTokenException;
+import com.relyon.economizaai.exception.RefreshTokenRejectedException;
 import com.relyon.economizaai.model.RefreshToken;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.repository.RefreshTokenRepository;
@@ -14,6 +14,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -41,6 +42,7 @@ class RefreshTokenServiceTest {
     void setUp() {
         service = new RefreshTokenService(tokenRepository);
         ReflectionTestUtils.setField(service, "refreshExpirationMs", THIRTY_DAYS_MS);
+        ReflectionTestUtils.setField(service, "reuseGraceMs", 60_000L);
         user = User.builder().email("test@test.com").password("encoded").build();
     }
 
@@ -71,13 +73,14 @@ class RefreshTokenServiceTest {
     }
 
     @Test
-    void rotate_consumesUsableTokenAndReturnsUser() {
+    void rotate_consumesUsableTokenAndReturnsUserAndFamily() {
         var stored = usableToken("presented-token");
         when(tokenRepository.findByToken(CodeHasher.sha256("presented-token"))).thenReturn(Optional.of(stored));
 
-        var rotatedUser = service.rotate("presented-token");
+        var rotation = service.rotate("presented-token");
 
-        assertEquals(user, rotatedUser);
+        assertEquals(user, rotation.user());
+        assertEquals(stored.getFamilyId(), rotation.familyId(), "successor stays in the same family");
         assertNotNull(stored.getConsumedAt(), "rotated token must be marked consumed");
         verify(tokenRepository).save(stored);
     }
@@ -86,7 +89,7 @@ class RefreshTokenServiceTest {
     void rotate_unknownToken_throws() {
         when(tokenRepository.findByToken(CodeHasher.sha256("nope"))).thenReturn(Optional.empty());
 
-        assertThrows(InvalidAuthTokenException.class, () -> service.rotate("nope"));
+        assertThrows(RefreshTokenRejectedException.class, () -> service.rotate("nope"));
         verify(tokenRepository, never()).save(any());
     }
 
@@ -96,30 +99,48 @@ class RefreshTokenServiceTest {
         stored.setExpiresAt(LocalDateTime.now().minusMinutes(1));
         when(tokenRepository.findByToken(CodeHasher.sha256("expired-token"))).thenReturn(Optional.of(stored));
 
-        assertThrows(InvalidAuthTokenException.class, () -> service.rotate("expired-token"));
+        assertThrows(RefreshTokenRejectedException.class, () -> service.rotate("expired-token"));
         verify(tokenRepository, never()).save(any());
     }
 
     @Test
-    void rotate_alreadyConsumedToken_throws_andRevokesWholeFamily() {
+    void rotate_reuseOutsideGrace_throws_andRevokesOnlyThatFamily() {
         var stored = usableToken("reused-token");
-        stored.setConsumedAt(LocalDateTime.now().minusMinutes(5));
+        stored.setConsumedAt(LocalDateTime.now().minusMinutes(5)); // bem além da janela de tolerância
         when(tokenRepository.findByToken(CodeHasher.sha256("reused-token"))).thenReturn(Optional.of(stored));
-        when(tokenRepository.revokeAllActiveForUser(user)).thenReturn(2);
+        when(tokenRepository.revokeActiveForFamily(stored.getFamilyId())).thenReturn(2);
 
-        assertThrows(InvalidAuthTokenException.class, () -> service.rotate("reused-token"));
+        assertThrows(RefreshTokenRejectedException.class, () -> service.rotate("reused-token"));
 
-        verify(tokenRepository).revokeAllActiveForUser(user);
-        verify(tokenRepository, never()).save(any());
+        // Revoga só a família afetada — NÃO todas as sessões do usuário (o app não cai com o web).
+        verify(tokenRepository).revokeActiveForFamily(stored.getFamilyId());
+        verify(tokenRepository, never()).revokeAllActiveForUser(any());
     }
 
     @Test
-    void rotate_normalRotation_doesNotTouchTheFamily() {
+    void rotate_reuseWithinGrace_rotatesAgainWithoutRevoking() {
+        // Duas abas / app+web renovando quase ao mesmo tempo: reapresentar o token recém-consumido
+        // dentro da janela é corrida legítima — rotaciona de novo, sem punir ninguém.
+        var stored = usableToken("racing-token");
+        stored.setConsumedAt(LocalDateTime.now().minusSeconds(2));
+        when(tokenRepository.findByToken(CodeHasher.sha256("racing-token"))).thenReturn(Optional.of(stored));
+
+        var rotation = service.rotate("racing-token");
+
+        assertEquals(user, rotation.user());
+        assertEquals(stored.getFamilyId(), rotation.familyId());
+        verify(tokenRepository, never()).revokeActiveForFamily(any());
+        verify(tokenRepository, never()).revokeAllActiveForUser(any());
+    }
+
+    @Test
+    void rotate_normalRotation_doesNotRevokeAnything() {
         var stored = usableToken("fresh-token");
         when(tokenRepository.findByToken(CodeHasher.sha256("fresh-token"))).thenReturn(Optional.of(stored));
 
         service.rotate("fresh-token");
 
+        verify(tokenRepository, never()).revokeActiveForFamily(any());
         verify(tokenRepository, never()).revokeAllActiveForUser(any());
     }
 
@@ -129,7 +150,7 @@ class RefreshTokenServiceTest {
         stored.setRevokedAt(LocalDateTime.now().minusMinutes(5));
         when(tokenRepository.findByToken(CodeHasher.sha256("revoked-token"))).thenReturn(Optional.of(stored));
 
-        assertThrows(InvalidAuthTokenException.class, () -> service.rotate("revoked-token"));
+        assertThrows(RefreshTokenRejectedException.class, () -> service.rotate("revoked-token"));
         verify(tokenRepository, never()).save(any());
     }
 
@@ -190,6 +211,7 @@ class RefreshTokenServiceTest {
     private RefreshToken usableToken(String tokenValue) {
         return RefreshToken.builder()
                 .user(user)
+                .familyId(UUID.randomUUID())
                 .token(CodeHasher.sha256(tokenValue))
                 .expiresAt(LocalDateTime.now().plusDays(30))
                 .build();
