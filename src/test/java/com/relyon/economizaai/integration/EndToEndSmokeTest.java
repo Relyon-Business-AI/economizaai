@@ -116,7 +116,8 @@ class EndToEndSmokeTest {
         var stale = "{\"refreshToken\":\"will-never-exist\"}";
         mockMvc.perform(post("/api/v1/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON).content(stale))
-                .andExpect(status().isBadRequest());
+                // 401 (não 400): refresh rejeitado é "sessão expirada → logar de novo", não bad request.
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

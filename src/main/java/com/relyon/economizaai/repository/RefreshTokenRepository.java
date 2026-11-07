@@ -21,4 +21,13 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID
     @Query("UPDATE RefreshToken refreshToken SET refreshToken.revokedAt = CURRENT_TIMESTAMP "
             + "WHERE refreshToken.user = :user AND refreshToken.revokedAt IS NULL AND refreshToken.consumedAt IS NULL")
     int revokeAllActiveForUser(User user);
+
+    /**
+     * Revoga só os tokens ativos de UMA família (a cadeia de rotações de um login/dispositivo) —
+     * a resposta a reuso detectado, que não deve derrubar as outras sessões do usuário.
+     */
+    @Modifying
+    @Query("UPDATE RefreshToken refreshToken SET refreshToken.revokedAt = CURRENT_TIMESTAMP "
+            + "WHERE refreshToken.familyId = :familyId AND refreshToken.revokedAt IS NULL AND refreshToken.consumedAt IS NULL")
+    int revokeActiveForFamily(UUID familyId);
 }

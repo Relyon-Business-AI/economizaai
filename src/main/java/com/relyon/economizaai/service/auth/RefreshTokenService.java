@@ -1,6 +1,6 @@
 package com.relyon.economizaai.service.auth;
 
-import com.relyon.economizaai.exception.InvalidAuthTokenException;
+import com.relyon.economizaai.exception.RefreshTokenRejectedException;
 import com.relyon.economizaai.model.RefreshToken;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.repository.RefreshTokenRepository;
@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.UUID;
 
 /**
  * Single-use refresh-token rotation. {@link #issue} mints a fresh token at
@@ -37,46 +38,76 @@ public class RefreshTokenService {
     @Value("${jwt.refresh-expiration:2592000000}")
     private long refreshExpirationMs;
 
+    // Reapresentar um token JÁ consumido dentro desta janela é tratado como CORRIDA legítima (duas
+    // abas / app+web / retry de rede renovando quase ao mesmo tempo), não reuso malicioso: rotaciona
+    // de novo sem revogar nada. Reuso FORA da janela segue sinalizando roubo → revoga a família.
+    @Value("${jwt.refresh-reuse-grace-ms:60000}")
+    private long reuseGraceMs;
+
+    /** Login/cadastro: abre uma família NOVA (um dispositivo = uma cadeia de rotações). */
     @Transactional
     public String issue(User user) {
+        return issueInFamily(user, UUID.randomUUID());
+    }
+
+    /** Emite o próximo token de uma família existente (sucessor de uma rotação). */
+    @Transactional
+    public String issueInFamily(User user, UUID familyId) {
         var token = generateToken();
         tokenRepository.save(RefreshToken.builder()
                 .user(user)
+                .familyId(familyId)
                 .token(CodeHasher.sha256(token))
                 .expiresAt(LocalDateTime.now().plusNanos(refreshExpirationMs * 1_000_000L))
                 .build());
-        log.debug("refresh.issued user={}", LogMasker.email(user.getEmail()));
+        log.debug("refresh.issued user={} family={}", LogMasker.email(user.getEmail()), familyId);
         return token;
     }
 
+    /** Resultado de uma rotação: o dono + a família a que o sucessor pertence. */
+    public record RotationResult(User user, UUID familyId) {}
+
     /**
-     * Rotates a refresh token: consumes the presented one and returns the
-     * user it belonged to so the caller can mint a new access + refresh
-     * pair. Throws {@link InvalidAuthTokenException} if the presented
-     * token is unknown, expired, already consumed, or revoked.
+     * Rotates a refresh token: consumes the presented one and returns the user + the family the
+     * successor belongs to, so the caller can mint the next access + refresh pair IN THE SAME family.
+     * Throws {@link RefreshTokenRejectedException} (→ 401, deslogar) when the token is unknown,
+     * expired, revoked, or reused outside the grace window.
      *
-     * <p>Presenting an ALREADY-CONSUMED token is the classic replay signal —
-     * either the legitimate client or a thief holds a stolen copy of the chain.
-     * The only safe response is to revoke the whole family (all active refresh
-     * tokens of the user), forcing a fresh login on every device.
-     * {@code noRollbackFor} keeps that revocation committed despite the 401.
+     * <p>Reapresentar um token JÁ CONSUMIDO é o sinal clássico de replay. Mas dentro da
+     * {@code reuseGraceMs} é quase sempre uma corrida legítima (duas abas / app+web / retry de rede
+     * renovando quase junto): rotaciona de novo sem punir. Só o reuso TARDIO revoga — e agora apenas
+     * a FAMÍLIA afetada (um dispositivo), não todas as sessões do usuário (o app não cai junto com o
+     * web). {@code noRollbackFor} mantém a revogação comitada apesar do 401.
      */
-    @Transactional(noRollbackFor = InvalidAuthTokenException.class)
-    public User rotate(String presented) {
+    @Transactional(noRollbackFor = RefreshTokenRejectedException.class)
+    public RotationResult rotate(String presented) {
         var stored = tokenRepository.findByToken(CodeHasher.sha256(presented))
-                .orElseThrow(InvalidAuthTokenException::new);
+                .orElseThrow(RefreshTokenRejectedException::new);
+        var now = LocalDateTime.now();
+        var familyId = familyOf(stored);
         if (stored.getConsumedAt() != null) {
-            revokeFamilyOnReuse(stored);
-            throw new InvalidAuthTokenException();
+            var withinGrace = stored.getRevokedAt() == null
+                    && stored.getConsumedAt().isAfter(now.minusNanos(reuseGraceMs * 1_000_000L));
+            if (withinGrace) {
+                log.info("refresh.rotated_within_grace user={} family={}",
+                        LogMasker.email(stored.getUser().getEmail()), familyId);
+                return new RotationResult(stored.getUser(), familyId);
+            }
+            revokeFamilyOnReuse(stored, familyId);
+            throw new RefreshTokenRejectedException();
         }
-        if (!stored.isUsable(LocalDateTime.now())) {
-            throw new InvalidAuthTokenException();
+        if (!stored.isUsable(now)) {
+            throw new RefreshTokenRejectedException();
         }
-        stored.setConsumedAt(LocalDateTime.now());
+        stored.setConsumedAt(now);
         tokenRepository.save(stored);
-        var user = stored.getUser();
-        log.info("refresh.rotated user={}", LogMasker.email(user.getEmail()));
-        return user;
+        log.info("refresh.rotated user={} family={}", LogMasker.email(stored.getUser().getEmail()), familyId);
+        return new RotationResult(stored.getUser(), familyId);
+    }
+
+    /** Tokens pré-V132 não têm família gravada — cada um é a sua própria família (o próprio id). */
+    private static UUID familyOf(RefreshToken token) {
+        return token.getFamilyId() != null ? token.getFamilyId() : token.getId();
     }
 
     /**
@@ -104,10 +135,11 @@ public class RefreshTokenService {
         log.info("refresh.revoked_all user={} count={}", LogMasker.email(user.getEmail()), revoked);
     }
 
-    private void revokeFamilyOnReuse(RefreshToken reused) {
+    private void revokeFamilyOnReuse(RefreshToken reused, UUID familyId) {
         var owner = reused.getUser();
-        var revoked = tokenRepository.revokeAllActiveForUser(owner);
-        log.warn("refresh_token.reuse_detected user={} revoked={}", LogMasker.email(owner.getEmail()), revoked);
+        var revoked = tokenRepository.revokeActiveForFamily(familyId);
+        log.warn("refresh_token.reuse_detected user={} family={} revoked={}",
+                LogMasker.email(owner.getEmail()), familyId, revoked);
     }
 
     private String generateToken() {
