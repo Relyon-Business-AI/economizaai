@@ -74,6 +74,20 @@ class PhotoReceiptStitchTest {
     }
 
     @Test
+    void mergesOverlapDespiteOcrVariance() {
+        // Mesma sobreposição, lida DIFERENTE em cada foto (pontuação, sufixo, um total ausente):
+        // o casamento é por semelhança + run contíguo, então ainda funde e não duplica.
+        var photo1 = photo("QJO MUSSARELA PRES FAT 300G|2|UN|37.96", "SUCO AURORA UVA INT 1,5L 1UN|1|UN|23.90");
+        var photo2 = photo("Q.J.O MUSSARELA PRES FAT 300G|2|UN|37.96", "SUCO AURORA UVA INT 1,5L|1|UN|null",
+                "NOZES PECAN S/CASCA KG|0.122|KG|23.17");
+
+        var merged = service.stitchItems(List.of(photo1, photo2));
+
+        assertEquals(3, merged.size());
+        assertEquals("NOZES PECAN S/CASCA KG", merged.get(2).description());
+    }
+
+    @Test
     void differentPriceIsNotOverlap() {
         // Mesma descrição mas preço diferente na junção → NÃO é o mesmo item, mantém os dois.
         var photo1 = photo("A|1|UN|1.00", "LEITE|1|UN|5.00");
