@@ -20,6 +20,7 @@ import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.ReceiptService;
 import com.relyon.economizaai.service.scan.PhotoUploadValidator;
 import com.relyon.economizaai.service.paidapi.PaidApiGuardService;
+import com.relyon.economizaai.service.photoattempt.PhotoRetentionService;
 import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import lombok.extern.slf4j.Slf4j;
@@ -72,6 +73,7 @@ public class PhotoReceiptExtractionService {
     private final ReceiptRepository receiptRepository;
     private final ReceiptService receiptService;
     private final TransactionTemplate transactionTemplate;
+    private final PhotoRetentionService photoRetentionService;
     private final boolean enabled;
     private final int maxItems;
     private final int maxPhotos;
@@ -88,6 +90,7 @@ public class PhotoReceiptExtractionService {
                                          ReceiptRepository receiptRepository,
                                          ReceiptService receiptService,
                                          TransactionTemplate transactionTemplate,
+                                         PhotoRetentionService photoRetentionService,
                                          @Value("${economizaai.llm.photo-extraction.enabled:true}") boolean enabled,
                                          @Value("${economizaai.llm.photo-extraction.max-items:60}") int maxItems,
                                          @Value("${economizaai.llm.photo-extraction.max-photos:6}") int maxPhotos) {
@@ -98,6 +101,7 @@ public class PhotoReceiptExtractionService {
         this.receiptRepository = receiptRepository;
         this.receiptService = receiptService;
         this.transactionTemplate = transactionTemplate;
+        this.photoRetentionService = photoRetentionService;
         this.enabled = enabled;
         this.maxItems = maxItems;
         this.maxPhotos = maxPhotos;
@@ -139,6 +143,11 @@ public class PhotoReceiptExtractionService {
         // Lê os bytes AGORA (o MultipartFile é da request, que termina ao retornarmos).
         var photoData = files.stream().map(file -> new PhotoData(fileBytes(file), mediaType(file))).toList();
         var receiptId = transactionTemplate.execute(txStatus -> createProcessingReceipt(user));
+        // Best-effort: guarda as fotos da tentativa (p/ replay enquanto afinamos o modelo).
+        // Temporário e desligável (toggle); nunca quebra a ingestão.
+        photoRetentionService.saveAttempt(receiptId,
+                photoData.stream().map(PhotoData::bytes).toList(),
+                photoData.stream().map(PhotoData::mediaType).toList());
         try {
             self.processPhotosAsync(receiptId, user, photoData);
         } catch (TaskRejectedException poolFull) {
@@ -181,18 +190,23 @@ public class PhotoReceiptExtractionService {
                 log.warn("photo_extract.cap_hit_mid_batch user={} extracted={}", user.getId(), extractions.size());
                 break;
             }
+            String raw;
             try {
-                var raw = aiGateway.completeWithImage(AiActivity.PHOTO_EXTRACT, aiGateway.photoExtractModel(),
+                raw = aiGateway.completeWithImage(AiActivity.PHOTO_EXTRACT, aiGateway.photoExtractModel(),
                         systemPrompt(), "Extraia os itens desta nota.", photo.bytes(), photo.mediaType(), 8000, user.getId());
-                var extraction = parseJson(raw);
-                paidApiGuard.recordSuccess(user.getId(), PaidApiService.LLM_VISION, null, "anthropic");
-                anyVisionCallSucceeded = true;
-                if (extraction.path("is_receipt").asBoolean(false)) {
-                    extractions.add(extraction);
-                }
-            } catch (AiGateway.AiUnavailableException | PhotoExtractionUnavailableException ex) {
+            } catch (AiGateway.AiUnavailableException ex) {
+                // A chamada de visão em si falhou (provedor fora/cota) — ISSO sim é falha do provedor.
                 paidApiGuard.recordFailure(user.getId(), PaidApiService.LLM_VISION, null, "anthropic");
-                log.warn("photo_extract.photo_failed user={} reason={} — pulando essa foto", user.getId(), ex.getMessage());
+                log.warn("photo_extract.photo_failed user={} reason={} — provedor indisponível, pulando", user.getId(), ex.getMessage());
+                continue;
+            }
+            // Chamada teve SUCESSO (respondeu, pagamos): marca sucesso ANTES do parse. Um JSON ruim
+            // é problema de OUTPUT do modelo, não indisponibilidade — não pode tripar o circuit breaker.
+            paidApiGuard.recordSuccess(user.getId(), PaidApiService.LLM_VISION, null, "anthropic");
+            anyVisionCallSucceeded = true;
+            var extraction = parseJson(raw);
+            if (extraction != null && extraction.path("is_receipt").asBoolean(false)) {
+                extractions.add(extraction);
             }
         }
         if (!anyVisionCallSucceeded) {
@@ -226,17 +240,36 @@ public class PhotoReceiptExtractionService {
         });
     }
 
-    /** O modelo responde JSON puro; tolera cercas de markdown que às vezes escapam. */
-    private JsonNode parseJson(String raw) {
+    /**
+     * O modelo deveria responder JSON puro, mas às vezes embrulha: cerca de markdown, uma frase
+     * antes ("Aqui estão os itens:"), ou texto depois. Tenta direto; se falhar, extrai do PRIMEIRO
+     * '{' ao ÚLTIMO '}' e tenta de novo. Retorna {@code null} se nem assim for JSON — o chamador
+     * PULA a foto (não é falha do provedor, então não conta pro circuit breaker).
+     */
+    JsonNode parseJson(String raw) {
+        if (raw == null) return null;
         var cleaned = raw.strip();
         if (cleaned.startsWith("```")) {
-            cleaned = cleaned.replaceAll("^```(?:json)?\\s*", "").replaceAll("```\\s*$", "");
+            cleaned = cleaned.replaceAll("^```(?:json)?\\s*", "").replaceAll("```\\s*$", "").strip();
         }
+        var direct = tryReadTree(cleaned);
+        if (direct != null) return direct;
+        var start = cleaned.indexOf('{');
+        var end = cleaned.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+            var extracted = tryReadTree(cleaned.substring(start, end + 1));
+            if (extracted != null) return extracted;
+        }
+        log.warn("photo_extract.bad_json len={}", raw.length());
+        return null;
+    }
+
+    private static JsonNode tryReadTree(String candidate) {
         try {
-            return OBJECT_MAPPER.readTree(cleaned);
+            var node = OBJECT_MAPPER.readTree(candidate);
+            return node != null && node.isObject() ? node : null;
         } catch (Exception ex) {
-            log.warn("photo_extract.bad_json len={}", raw.length());
-            throw new PhotoExtractionUnavailableException();
+            return null;
         }
     }
 

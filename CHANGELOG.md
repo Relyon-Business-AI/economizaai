@@ -1,5 +1,17 @@
 # economizai — what's new
 
+## 2026-11-08 — Foto da nota: parser tolerante + breaker não trippa por JSON ruim
+
+- **Extração de foto mais robusta**: quando o modelo embrulha o JSON (prosa antes/depois, cerca
+  de markdown no meio), o parser agora extrai o objeto do primeiro `{` ao último `}` em vez de
+  falhar a nota inteira. Antes, uma resposta "Aqui estão os itens: {…}" derrubava todas as fotos.
+- **JSON ruim não derruba a visão pra todo mundo**: um parse que falha é problema de OUTPUT do
+  modelo, não indisponibilidade — não conta mais pro circuit breaker do LLM_VISION (antes 5 fotos
+  mal-formatadas fechavam a visão por 5 min pra todos). Falha REAL da chamada ainda conta.
+- (Interno/admin) As fotos de cada tentativa passam a ser guardadas em R2 pra replay enquanto
+  afinamos o modelo — temporário, desligável por toggle (`POST /api/v1/admin/photo-attempts/settings`
+  ou env `PHOTO_RETENTION_ENABLED`). Admin: `GET /api/v1/admin/photo-attempts/{receiptId}`.
+
 ## 2026-11-08 — Promo pessoal: sem falso positivo de foto + preço formatado
 
 - **Notas de FOTO não disparam mais "você economizou"** e nem entram no histórico que serve de

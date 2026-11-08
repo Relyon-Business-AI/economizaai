@@ -13,6 +13,7 @@ import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.ReceiptService;
 import com.relyon.economizaai.service.paidapi.PaidApiGuardService;
+import com.relyon.economizaai.service.photoattempt.PhotoRetentionService;
 import com.relyon.economizaai.service.scan.PhotoUploadValidator;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import org.junit.jupiter.api.BeforeEach;
@@ -59,6 +60,7 @@ class PhotoReceiptExtractionServiceTest {
     @Mock private ReceiptRepository receiptRepository;
     @Mock private ReceiptService receiptService;
     @Mock private TransactionTemplate transactionTemplate;
+    @Mock private PhotoRetentionService photoRetentionService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private PhotoReceiptExtractionService service;
@@ -68,7 +70,7 @@ class PhotoReceiptExtractionServiceTest {
     @BeforeEach
     void setUp() {
         service = new PhotoReceiptExtractionService(aiGateway, photoUploadValidator, paidApiGuard,
-                subscriptionGate, receiptRepository, receiptService, transactionTemplate, true, 60, 6);
+                subscriptionGate, receiptRepository, receiptService, transactionTemplate, photoRetentionService, true, 60, 6);
         var household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
         user = User.builder().id(UUID.randomUUID()).email("alexandre+photo@economizaai.app")
                 .household(household).build();
@@ -158,7 +160,7 @@ class PhotoReceiptExtractionServiceTest {
     @Test
     void extract_disabledFlag_returns503Semantics() {
         var disabled = new PhotoReceiptExtractionService(aiGateway, photoUploadValidator, paidApiGuard,
-                subscriptionGate, receiptRepository, receiptService, transactionTemplate, false, 60, 6);
+                subscriptionGate, receiptRepository, receiptService, transactionTemplate, photoRetentionService, false, 60, 6);
 
         assertThrows(PhotoExtractionUnavailableException.class, () -> disabled.extract(user, photo()));
         verify(aiGateway, never()).completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt(), any());
@@ -176,5 +178,54 @@ class PhotoReceiptExtractionServiceTest {
         verify(paidApiGuard).recordFailure(user.getId(), PaidApiService.LLM_VISION, null, "anthropic");
         assertThat(savedReceipt.getStatus()).isEqualTo(ReceiptStatus.FAILED_PARSE);
         assertThat(savedReceipt.getParseErrorReason()).isEqualTo("receipt.photo.extraction-failed");
+    }
+
+    @Test
+    void extract_badJsonResponse_isSuccessNotProviderFailure() {
+        when(aiGateway.isEnabled()).thenReturn(true);
+        when(aiGateway.photoExtractModel()).thenReturn("claude-sonnet-4-6");
+        // A chamada de visão RESPONDEU (sucesso), mas o texto não é JSON — não pode tripar o breaker.
+        when(aiGateway.completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt(), any()))
+                .thenReturn("Desculpe, não consegui ler esta foto com clareza.");
+
+        service.extract(user, photo());
+
+        verify(paidApiGuard).recordSuccess(user.getId(), PaidApiService.LLM_VISION, null, "anthropic");
+        verify(paidApiGuard, never()).recordFailure(any(), any(), any(), any());
+        assertThat(savedReceipt.getStatus()).isEqualTo(ReceiptStatus.FAILED_PARSE);
+    }
+
+    @Test
+    void extract_proseWrappedJson_stillParses() {
+        when(aiGateway.isEnabled()).thenReturn(true);
+        when(aiGateway.photoExtractModel()).thenReturn("claude-sonnet-4-6");
+        // Modelo embrulha o JSON em prosa + cerca — parseJson deve extrair mesmo assim.
+        when(aiGateway.completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt(), any()))
+                .thenReturn("""
+                        Claro! Aqui estão os itens que consegui ler:
+                        ```json
+                        {"is_receipt": true, "items": [
+                          {"description": "Arroz 5kg", "quantity": 1, "unit": "UN", "unit_price": 25.0, "total_price": 25.0}]}
+                        ```
+                        Espero ter ajudado.""");
+
+        service.extract(user, photo());
+
+        assertThat(savedReceipt.getStatus()).isEqualTo(ReceiptStatus.PENDING_CONFIRMATION);
+        assertThat(savedReceipt.getItems()).hasSize(1);
+    }
+
+    @Test
+    void parseJson_handlesCleanFencedProseAndTrailing_rejectsGarbage() {
+        var clean = service.parseJson("{\"is_receipt\": true, \"items\": []}");
+        assertThat(clean).isNotNull();
+        assertThat(clean.path("is_receipt").asBoolean()).isTrue();
+
+        assertThat(service.parseJson("```json\n{\"a\": 1}\n```")).isNotNull();
+        assertThat(service.parseJson("Aqui está:\n{\"a\": 1}\nfim.")).isNotNull();
+        assertThat(service.parseJson("prefixo ```json {\"a\": 1} ``` sufixo")).isNotNull();
+
+        assertThat(service.parseJson("isto não é json nenhum")).isNull();
+        assertThat(service.parseJson(null)).isNull();
     }
 }
