@@ -44,7 +44,10 @@ public record ReceiptSummaryResponse(
 ) {
     public static ReceiptSummaryResponse from(Receipt receipt) {
         var householdTotal = receipt.getItems().stream()
-                .filter(item -> !item.isExcluded() && !item.isExcludedFromPersonal())
+                // totalPrice pode ser null numa nota de FOTO cujo preço a IA não leu (fica pra
+                // revisão). Sem o guard, uma única linha sem preço fazia BigDecimal.add(null) → NPE
+                // e DERRUBAVA a listagem inteira (500 → app mostra "nenhuma nota").
+                .filter(item -> !item.isExcluded() && !item.isExcludedFromPersonal() && item.getTotalPrice() != null)
                 .map(ReceiptItem::getTotalPrice)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return new ReceiptSummaryResponse(

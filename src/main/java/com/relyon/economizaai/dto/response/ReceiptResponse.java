@@ -82,7 +82,9 @@ public record ReceiptResponse(
                                        Map<UUID, String> aiNodeSlugByItem,
                                        Map<UUID, String> aiNodeLabelByItem) {
         var householdTotal = receipt.getItems().stream()
-                .filter(item -> !item.isExcluded() && !item.isExcludedFromPersonal())
+                // totalPrice null = linha de FOTO cujo preço a IA não leu (fica pra revisão).
+                // Sem o guard, BigDecimal.add(null) dava NPE e 500 ao abrir/listar a nota.
+                .filter(item -> !item.isExcluded() && !item.isExcludedFromPersonal() && item.getTotalPrice() != null)
                 .map(ReceiptItem::getTotalPrice)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return new ReceiptResponse(

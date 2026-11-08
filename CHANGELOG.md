@@ -1,5 +1,13 @@
 # economizai — what's new
 
+## 2026-11-08 — Hotfix: item sem preço não derruba mais a lista de notas
+
+- Regressão da V134 (total_price nullable): uma nota de FOTO com uma linha sem preço fazia a soma
+  do total do domicílio (`ReceiptSummaryResponse`/`ReceiptResponse`) somar `BigDecimal.add(null)` →
+  **NPE → 500** na listagem E no detalhe. Efeito: a lista de notas aparecia **vazia** ("nenhuma
+  nota") pra quem tivesse uma nota pendente com item sem preço. Corrigido: a soma ignora linhas
+  sem preço. Sem mudança de contrato.
+
 ## 2026-11-08 — Foto da nota: parser tolerante + breaker não trippa por JSON ruim
 
 - **Extração de foto mais robusta**: quando o modelo embrulha o JSON (prosa antes/depois, cerca

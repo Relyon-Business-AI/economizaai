@@ -55,6 +55,23 @@ class ReceiptResponseDiscountMappingTest {
     }
 
     @Test
+    void nullPricedItem_doesNotNpeAndSumsOnlyPricedItems() {
+        // Nota de FOTO: uma linha SEM preço (IA não leu) + duas com preço. A soma do total do
+        // domicílio não pode dar NPE — antes BigDecimal.add(null) derrubava listagem/detalhe (500).
+        var receipt = Receipt.builder()
+                .id(UUID.randomUUID())
+                .totalAmount(new BigDecimal("80.00"))
+                .status(ReceiptStatus.PENDING_CONFIRMATION)
+                .build();
+        receipt.addItem(ReceiptItem.builder().totalPrice(new BigDecimal("50.00")).build());
+        receipt.addItem(ReceiptItem.builder().totalPrice(null).build()); // linha sem preço
+        receipt.addItem(ReceiptItem.builder().totalPrice(new BigDecimal("30.00")).build());
+
+        assertEquals(0, ReceiptResponse.from(receipt).householdTotalAmount().compareTo(new BigDecimal("80.00")));
+        assertEquals(0, ReceiptSummaryResponse.from(receipt).householdTotalAmount().compareTo(new BigDecimal("80.00")));
+    }
+
+    @Test
     void discountTotal_isNullWhenReceiptHadNoDiscount() {
         assertNull(ReceiptResponse.from(receiptWithDiscount(null)).discountTotal());
         assertNull(ReceiptSummaryResponse.from(receiptWithDiscount(null)).discountTotal());
