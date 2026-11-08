@@ -576,6 +576,19 @@ economizaai:
       access-key: ${R2_ACCESS_KEY_ID:}
       secret-key: ${R2_SECRET_ACCESS_KEY:}
       region: ${R2_REGION:auto}
+  # TEMPORÁRIO (teste): guarda as fotos enviadas em cada tentativa de extração em R2 pra
+  # replay. storage segue o profile-picture (r2 em prod), então não precisa de env novo.
+  # enabled: liga/desliga (padrão true pra testar agora; desligar depois — ver DEV_NOTES).
+  # Também é flipável ao vivo no admin (POST /api/v1/admin/photo-attempts/settings).
+  photo-retention:
+    enabled: ${PHOTO_RETENTION_ENABLED:true}
+    storage: ${PHOTO_RETENTION_STORAGE:${PROFILE_PICTURE_STORAGE:local}}
+    r2:
+      endpoint: ${R2_ENDPOINT:}
+      bucket: ${R2_BUCKET:}
+      access-key: ${R2_ACCESS_KEY_ID:}
+      secret-key: ${R2_SECRET_ACCESS_KEY:}
+      region: ${R2_REGION:auto}
   receipt-photo:
     max-size-mb: 5            # QR-photo submit and chave-OCR uploads (multipart cap above must stay higher)
   ocr:

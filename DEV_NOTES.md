@@ -10,6 +10,22 @@ mirror entries here.
 
 ---
 
+## Retenção das fotos de extração em R2 — TEMPORÁRIO (2026-11-08)
+- **Now**: toda tentativa de extração por foto guarda as imagens enviadas em R2
+  (`photo-attempts/<receiptId>/<idx>.<ext>` + `manifest.json`), ligado por padrão
+  (`PHOTO_RETENTION_ENABLED=true`). Serve pra re-rodar o modelo com as MESMAS fotos
+  enquanto afinamos prompt/modelo. Recuperação ADMIN-only:
+  `GET /api/v1/admin/photo-attempts/{receiptId}` (lista) e `/{index}` (bytes).
+- **Por que OK por ora**: volume baixo, só pra debugar o extrator; é best-effort
+  (nunca quebra a ingestão) e as imagens são do próprio usuário (não entram no índice).
+- **Mudar antes de prod "pra valer"**: DECIDIR se mantém. Se não, **desligar**
+  (`PHOTO_RETENTION_ENABLED=false` ou toggle admin `POST /photo-attempts/settings`) e
+  **apagar o prefixo `photo-attempts/` no R2**. Se mantiver, precisa de: retenção/TTL
+  (lifecycle rule no bucket), consentimento/privacidade (LGPD — são fotos de compras),
+  e talvez só guardar em FALHA. Hoje guarda SEMPRE e pra SEMPRE. Toggle admin é
+  em-memória (reseta no restart pro default do env) — a env var é a fonte durável.
+- **Esforço**: baixo pra desligar; médio pra tornar permanente com TTL+consentimento.
+
 ## Dev no plano Free do Render + db-dev mínimo (2026-11-03)
 - **Now**: `economizaai-api-dev` roda no plano **Free** (512 MB, CPU mínima, dorme após 15 min
   sem tráfego) e `economizaai-db-dev` é Basic 256 MB / 1 GB de disco (recriado do dump; o
