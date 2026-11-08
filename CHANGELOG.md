@@ -1,5 +1,18 @@
 # economizai — what's new
 
+## 2026-11-08 — Foto da nota: linha sem preço não trava mais a nota
+
+- `receipt_items.total_price` agora é **nullable** (migration V134). Uma foto cuja IA não leu o
+  preço de uma linha (papel desbotado/coluna cortada) não estoura mais o NOT NULL no meio da
+  extração async — antes a nota ficava presa em PROCESSING ~10min até o sweeper força-falhar.
+  Agora o item entra com `totalPrice: null` e aparece na revisão. **FE:** `ReceiptItemResponse.totalPrice`
+  e `unitPrice` passam a ser `number | null`.
+- `POST /receipts/{id}/confirm` **bloqueia** (400, `receipt.confirm.unpriced-items`) se sobrar item
+  sem preço que não foi excluído — o usuário define o preço (PATCH item) ou remove/exclui o item.
+  O auto-confirm (sweeper de pendentes) exclui os itens sem preço sozinho (não há usuário pra definir).
+- A finalização da extração de foto virou resiliente: qualquer erro de persistência marca a nota
+  FAILED_PARSE na hora em vez de deixá-la presa até o sweeper.
+
 ## 2026-11-07 — Foto da nota: fim da duplicação entre fotos sobrepostas
 
 - `POST /receipts/photo`: a costura das fotos agora casa a sobreposição por **semelhança** (não mais

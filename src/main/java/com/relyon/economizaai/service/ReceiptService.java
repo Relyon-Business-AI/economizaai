@@ -22,6 +22,7 @@ import com.relyon.economizaai.exception.ReceiptItemNotFoundException;
 import com.relyon.economizaai.exception.InvalidItemPriceException;
 import com.relyon.economizaai.exception.InvalidCategoryTargetException;
 import com.relyon.economizaai.exception.InvalidCnpjException;
+import com.relyon.economizaai.exception.ReceiptHasUnpricedItemsException;
 import com.relyon.economizaai.exception.ReceiptNotEditableException;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
 import com.relyon.economizaai.exception.UnsupportedMerchantException;
@@ -820,7 +821,23 @@ public class ReceiptService {
         var receipt = loadOwned(user, receiptId);
         requirePending(receipt);
         applyItemExclusions(receipt, request);
+        requireAllItemsPriced(receipt);
         return doConfirm(user, receipt);
+    }
+
+    /**
+     * A photo-extracted line whose price the model couldn't read lands with total_price null so it
+     * still shows on the review screen. We refuse to CONFIRM one: the user must set the price or
+     * remove/exclude the item first (an excluded item is out of totals, so it's allowed to stay null).
+     */
+    private void requireAllItemsPriced(Receipt receipt) {
+        var unpriced = receipt.getItems().stream()
+                .filter(item -> !item.isExcluded() && item.getTotalPrice() == null)
+                .count();
+        if (unpriced > 0) {
+            log.info("confirm blocked unpriced_items={}", unpriced);
+            throw new ReceiptHasUnpricedItemsException((int) unpriced);
+        }
     }
 
     /**
@@ -837,7 +854,23 @@ public class ReceiptService {
         }
         MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
         log.info("confirm auto-stale started");
+        // No user to set a missing price here — drop the unpriced lines so the auto-confirm
+        // stays clean (they contribute nothing anyway) instead of blocking like the manual path.
+        excludeUnpricedItems(receipt);
         doConfirm(receipt.getUser(), receipt);
+    }
+
+    private void excludeUnpricedItems(Receipt receipt) {
+        var excluded = 0;
+        for (var item : receipt.getItems()) {
+            if (!item.isExcluded() && item.getTotalPrice() == null) {
+                item.setExcluded(true);
+                excluded++;
+            }
+        }
+        if (excluded > 0) {
+            log.info("confirm auto-stale excluded_unpriced={}", excluded);
+        }
     }
 
     /** The confirm fan-out shared by the manual and the auto (sweeper) paths. */
