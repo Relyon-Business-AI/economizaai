@@ -4,6 +4,7 @@ import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.Receipt;
+import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
@@ -21,6 +22,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -95,6 +97,20 @@ class PromoDetectorTest {
         assertEquals(1, promos.size());
         assertEquals(currentItem.getId(), promos.get(0).receiptItemId());
         assertTrue(promos.get(0).savingsPct().compareTo(new BigDecimal("20")) > 0);
+    }
+
+    @Test
+    void doesNotFlagPhotoReceipt_unverifiedOcrPrice() {
+        var household = Household.builder().id(UUID.randomUUID()).inviteCode("X").build();
+        var product = Product.builder().id(UUID.randomUUID()).normalizedName("Noz Pecã").build();
+        var receipt = Receipt.builder().id(UUID.randomUUID())
+                .user(User.builder().id(UUID.randomUUID()).email("u@e").household(household).build())
+                .household(household).origin(ReceiptOrigin.PHOTO).build();
+        itemWithProduct(receipt, product, new BigDecimal("99.90")); // preço de OCR
+
+        // Mesmo que estivesse "bem abaixo", foto não dispara — nem consulta o histórico.
+        assertEquals(0, detector.detectPersonalPromos(receipt).size());
+        verifyNoInteractions(receiptItemRepository);
     }
 
     @Test

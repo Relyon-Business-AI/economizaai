@@ -966,8 +966,10 @@ public class ReceiptService {
         }
         for (var promo : promos) {
             var title = "Você economizou em " + promo.productName();
+            var paid = promo.paidPrice().setScale(2, RoundingMode.HALF_UP).toPlainString().replace('.', ',');
+            var pct = promo.savingsPct().setScale(0, RoundingMode.HALF_UP).toPlainString();
             var body = String.format("No %s você pagou R$ %s no %s — %s%% abaixo do que normalmente paga.",
-                    promo.productName(), promo.paidPrice(), receipt.getMarketName(), promo.savingsPct());
+                    promo.productName(), paid, receipt.getMarketName(), pct);
             notificationService.notifyAfterCommit(new NotificationPayload(
                     user,
                     NotificationType.PROMO_PERSONAL,

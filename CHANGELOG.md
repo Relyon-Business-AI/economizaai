@@ -1,5 +1,13 @@
 # economizai — what's new
 
+## 2026-11-08 — Promo pessoal: sem falso positivo de foto + preço formatado
+
+- **Notas de FOTO não disparam mais "você economizou"** e nem entram no histórico que serve de
+  baseline da promo pessoal. Preço de foto vem de OCR (não verificado) — comparar isso gerava alerta
+  falso (ex.: "noz pecã 47% abaixo" com preços bagunçados 99,90/189,90/519,90 lidos errado).
+- Corpo da notificação de promo agora formata o preço como **R$ 99,90** (era `R$ 99.9000` cru) e o
+  percentual como inteiro (`47%`).
+
 ## 2026-11-08 — Foto da nota: linha sem preço não trava mais a nota
 
 - `receipt_items.total_price` agora é **nullable** (migration V134). Uma foto cuja IA não leu o
