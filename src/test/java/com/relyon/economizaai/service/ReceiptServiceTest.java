@@ -13,6 +13,8 @@ import com.relyon.economizaai.exception.PaywallException;
 import com.relyon.economizaai.exception.PrefetchedUnsupportedException;
 import com.relyon.economizaai.exception.ReceiptAlreadyIngestedException;
 import com.relyon.economizaai.exception.ReceiptItemNotFoundException;
+import com.relyon.economizaai.dto.request.ConfirmReceiptRequest;
+import com.relyon.economizaai.exception.ReceiptHasUnpricedItemsException;
 import com.relyon.economizaai.exception.ReceiptNotEditableException;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
 import com.relyon.economizaai.exception.UnsupportedMerchantException;
@@ -972,6 +974,41 @@ class ReceiptServiceTest {
         assertEquals(ReceiptStatus.CONFIRMED, response.receipt().status());
         assertNotNull(response.receipt().confirmedAt());
         assertEquals(0, response.personalPromos().size());
+    }
+
+    @Test
+    void confirm_withUnpricedItem_blocksUntilPricedOrRemoved() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        // foto: linha cujo preço o modelo não leu (total_price null) — entra na revisão.
+        receipt.addItem(ReceiptItem.builder()
+                .id(UUID.randomUUID()).lineNumber(2)
+                .rawDescription("COCA-COLA S/ACUCAR 600ML").quantity(new BigDecimal("1")).unit("UN")
+                .totalPrice(null).build());
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        assertThrows(ReceiptHasUnpricedItemsException.class,
+                () -> receiptService.confirm(user, receipt.getId(), null));
+        verify(receiptRepository, never()).save(any(Receipt.class));
+        assertEquals(ReceiptStatus.PENDING_CONFIRMATION, receipt.getStatus());
+    }
+
+    @Test
+    void confirm_unpricedItemExcluded_proceeds() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        var unpricedId = UUID.randomUUID();
+        receipt.addItem(ReceiptItem.builder()
+                .id(unpricedId).lineNumber(2)
+                .rawDescription("COCA-COLA S/ACUCAR 600ML").quantity(new BigDecimal("1")).unit("UN")
+                .totalPrice(null).build());
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receiptRepository.save(receipt)).thenReturn(receipt);
+        when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
+
+        var response = receiptService.confirm(user, receipt.getId(), new ConfirmReceiptRequest(List.of(unpricedId)));
+
+        assertEquals(ReceiptStatus.CONFIRMED, response.receipt().status());
     }
 
     @Test

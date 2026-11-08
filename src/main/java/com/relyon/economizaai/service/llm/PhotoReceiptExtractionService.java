@@ -204,7 +204,15 @@ public class PhotoReceiptExtractionService {
             markFailed(receiptId, "receipt.photo.not-receipt");
             return;
         }
-        transactionTemplate.execute(txStatus -> finalizePhotoReceipt(receiptId, extractions));
+        try {
+            transactionTemplate.execute(txStatus -> finalizePhotoReceipt(receiptId, extractions));
+        } catch (RuntimeException ex) {
+            // Nada pode escapar daqui sem transicionar a nota — senão ela fica presa em PROCESSING
+            // até o sweeper (o usuário espera ~10min por um erro). Força FAILED_PARSE e segue.
+            log.error("photo_extract.finalize_failed receipt={} — marcando FAILED_PARSE", receiptId, ex);
+            markFailed(receiptId, "receipt.photo.extraction-failed");
+            return;
+        }
         log.info("photo_extract.ok user={} receipt={} photos={}", user.getId(), receiptId, photos.size());
     }
 
