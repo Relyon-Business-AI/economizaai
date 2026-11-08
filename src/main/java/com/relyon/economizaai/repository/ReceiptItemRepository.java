@@ -224,7 +224,8 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
 
     /** Same intent as the method above but fetches receipt + household up front,
      *  used by promo detection where we filter by household + receipt status per row.
-     *  Excludes items the household marked as not-mine. */
+     *  Excludes items the household marked as not-mine, and PHOTO notes — a photo's
+     *  prices come from OCR (unverified) and must never become a promo baseline. */
     @Query("""
         SELECT ri FROM ReceiptItem ri
         JOIN FETCH ri.receipt r
@@ -233,6 +234,7 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
           AND r.household.id = :householdId
           AND r.status = 'CONFIRMED'
           AND ri.excluded = false
+          AND r.origin <> 'PHOTO'
         ORDER BY r.issuedAt ASC NULLS FIRST
     """)
     List<ReceiptItem> findHouseholdHistoryForProduct(@Param("productId") UUID productId,

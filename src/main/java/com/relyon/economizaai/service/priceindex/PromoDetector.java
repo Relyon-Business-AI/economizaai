@@ -2,6 +2,7 @@ package com.relyon.economizaai.service.priceindex;
 
 import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.model.Receipt;
+import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,6 +41,11 @@ public class PromoDetector {
     @Transactional(readOnly = true)
     public List<PersonalPromo> detectPersonalPromos(Receipt receipt) {
         var promos = new ArrayList<PersonalPromo>();
+        // Nota de FOTO tem preço de OCR (não verificado) — nunca dispara "você economizou":
+        // comparar um preço bagunçado contra o histórico gera alerta falso.
+        if (receipt.getOrigin() == ReceiptOrigin.PHOTO) {
+            return promos;
+        }
         var householdId = receipt.getHousehold().getId();
         for (var item : receipt.getItems()) {
             // Personal notification — skip "not mine" lines too (no promo alert for someone else's item).
