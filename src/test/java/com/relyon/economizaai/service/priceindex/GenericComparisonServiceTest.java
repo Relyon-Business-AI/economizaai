@@ -12,8 +12,10 @@ import com.relyon.economizaai.repository.PriceObservationAuditRepository;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository.ProductMarketHouseholdCount;
 import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.HouseholdProductAliasService;
 import com.relyon.economizaai.service.extraction.ProductTypeResolver;
 import com.relyon.economizaai.service.geo.MarketLocationService;
+import com.relyon.economizaai.service.geo.MarketNameService;
 import com.relyon.economizaai.service.geo.ViewerLocationService;
 import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +35,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
@@ -43,9 +46,11 @@ class GenericComparisonServiceTest {
     @Mock private PriceObservationRepository observationRepository;
     @Mock private PriceObservationAuditRepository auditRepository;
     @Mock private MarketLocationService marketLocationService;
+    @Mock private MarketNameService marketNameService;
     @Mock private ViewerLocationService viewerLocationService;
     @Mock private PrivacyTierResolver privacyTierResolver;
     @Mock private ProductTypeResolver productTypeResolver;
+    @Mock private HouseholdProductAliasService householdProductAliasService;
 
     private final CollaborativeProperties properties = new CollaborativeProperties();
 
@@ -57,12 +62,17 @@ class GenericComparisonServiceTest {
     void setUp() {
         // Inject the real properties record (not a mock) so thresholds/radius are concrete.
         service = new GenericComparisonService(productRepository, observationRepository, auditRepository,
-                marketLocationService, viewerLocationService, privacyTierResolver, productTypeResolver, properties);
+                marketLocationService, marketNameService, viewerLocationService, privacyTierResolver,
+                productTypeResolver, householdProductAliasService, properties);
         var household = Household.builder().id(UUID.randomUUID()).build();
         user = User.builder().id(UUID.randomUUID()).household(household).build();
         lenient().when(viewerLocationService.resolve(any()))
                 .thenReturn(new ViewerLocation(null, null, ViewerLocationService.Source.NONE, "RS"));
         lenient().when(marketLocationService.findByCnpjs(anyList())).thenReturn(Map.of());
+        lenient().when(marketNameService.resolveNames(any(), anyList())).thenReturn(Map.of());
+        lenient().when(marketNameService.resolveChainNames(anyList())).thenReturn(Map.of());
+        lenient().when(marketNameService.friendlyName(any(), any(), any(), any()))
+                .thenAnswer(invocation -> invocation.getArgument(3));
         // Grocery tier (relaxed) by default; thresholds come from the real properties.
         lenient().when(privacyTierResolver.isSensitiveProduct(any(UUID.class))).thenReturn(false);
         lenient().when(privacyTierResolver.thresholdsFor(false))
@@ -254,6 +264,77 @@ class GenericComparisonServiceTest {
 
         assertThat(result.offers()).isEmpty();
         assertThat(result.scannedProductId()).isNull();
+    }
+
+    // --- price history per (product, market) for the expandable row chart ---
+
+    @Test
+    void priceHistoryForMarket_returnsChronologicalPointsWhenKAnonPasses() {
+        var productId = UUID.randomUUID();
+        var product = product(productId, "Nestlé", new BigDecimal("200"));
+        var cnpj = "11111111000100";
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        // Repo returns DESC; service must re-sort ASC for the line chart.
+        when(observationRepository.findRecentByProductAndMarket(any(), eq(cnpj), any()))
+                .thenReturn(List.of(
+                        observation(product, cnpj, "RS", new BigDecimal("3.49"), LocalDateTime.of(2026, 1, 9, 0, 0)),
+                        observation(product, cnpj, "RS", new BigDecimal("4.00"), LocalDateTime.of(2026, 1, 1, 0, 0))));
+        when(auditRepository.countDistinctHouseholdsForProductMarket(eq(productId), eq(cnpj), any())).thenReturn(2L);
+
+        var result = service.priceHistoryForMarket(productId, cnpj, user);
+
+        assertThat(result.points()).hasSize(2);
+        assertThat(result.points().get(0).issuedAt()).isEqualTo(LocalDateTime.of(2026, 1, 1, 0, 0));
+        assertThat(result.points().get(0).unitPrice()).isEqualByComparingTo("4.00");
+        assertThat(result.points().get(1).issuedAt()).isEqualTo(LocalDateTime.of(2026, 1, 9, 0, 0));
+    }
+
+    @Test
+    void priceHistoryForMarket_handlesSinglePointWithoutCrashing() {
+        var productId = UUID.randomUUID();
+        var product = product(productId, "Nestlé", new BigDecimal("200"));
+        var cnpj = "11111111000100";
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        when(observationRepository.findRecentByProductAndMarket(any(), eq(cnpj), any()))
+                .thenReturn(List.of(
+                        observation(product, cnpj, "RS", new BigDecimal("3.49"), LocalDateTime.of(2026, 1, 9, 0, 0))));
+        when(auditRepository.countDistinctHouseholdsForProductMarket(eq(productId), eq(cnpj), any())).thenReturn(1L);
+
+        var result = service.priceHistoryForMarket(productId, cnpj, user);
+
+        assertThat(result.points()).hasSize(1);
+        assertThat(result.points().get(0).unitPrice()).isEqualByComparingTo("3.49");
+    }
+
+    @Test
+    void priceHistoryForMarket_emptyWhenNoObservations() {
+        var productId = UUID.randomUUID();
+        var product = product(productId, "Nestlé", new BigDecimal("200"));
+        var cnpj = "11111111000100";
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        when(observationRepository.findRecentByProductAndMarket(any(), eq(cnpj), any())).thenReturn(List.of());
+
+        var result = service.priceHistoryForMarket(productId, cnpj, user);
+
+        assertThat(result.points()).isEmpty();
+    }
+
+    @Test
+    void priceHistoryForMarket_blockedByKAnonForSensitiveProductBelowThreshold() {
+        var productId = UUID.randomUUID();
+        var product = product(productId, "Nestlé", new BigDecimal("200"));
+        var cnpj = "44444444000100";
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        when(privacyTierResolver.isSensitiveProduct(productId)).thenReturn(true);
+        when(observationRepository.findRecentByProductAndMarket(any(), eq(cnpj), any()))
+                .thenReturn(List.of(
+                        observation(product, cnpj, "RS", new BigDecimal("9.90"), LocalDateTime.of(2026, 1, 2, 0, 0))));
+        // Sensitive → K=3 households required; only 1 → blocked, empty series.
+        when(auditRepository.countDistinctHouseholdsForProductMarket(eq(productId), eq(cnpj), any())).thenReturn(1L);
+
+        var result = service.priceHistoryForMarket(productId, cnpj, user);
+
+        assertThat(result.points()).isEmpty();
     }
 
     @Test

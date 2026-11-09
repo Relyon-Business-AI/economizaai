@@ -55,8 +55,11 @@ class InsightsServiceTest {
     @BeforeEach
     void stubMarketNames() {
         lenient().when(marketNameService.resolveNames(any(), any())).thenReturn(Map.of());
+        lenient().when(marketNameService.resolveChainNames(any())).thenReturn(Map.of());
         lenient().when(marketNameService.applyOverride(any(), any(), any()))
                 .thenAnswer(invocation -> invocation.getArgument(2));
+        lenient().when(marketNameService.friendlyName(any(), any(), any(), any()))
+                .thenAnswer(invocation -> invocation.getArgument(3));
         // Default: PRO passthrough (no history clamping).
         lenient().when(subscriptionGate.clampFrom(any(), any()))
                 .thenAnswer(invocation -> invocation.getArgument(1));

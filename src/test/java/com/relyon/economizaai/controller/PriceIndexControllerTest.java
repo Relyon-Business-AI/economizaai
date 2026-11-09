@@ -2,6 +2,8 @@ package com.relyon.economizaai.controller;
 
 import com.relyon.economizaai.dto.response.GenericComparisonResponse;
 import com.relyon.economizaai.dto.response.GenericComparisonResponse.GenericOffer;
+import com.relyon.economizaai.dto.response.PriceHistoryResponse;
+import com.relyon.economizaai.dto.response.PriceHistoryResponse.PricePoint;
 import com.relyon.economizaai.service.geo.NearbyScope;
 import com.relyon.economizaai.service.geo.NearbyScopeService;
 import com.relyon.economizaai.config.SecurityConfig;
@@ -159,11 +161,13 @@ class PriceIndexControllerTest {
                 List.of(
                         new GenericOffer(
                                 cheaperId, "Italac 200g", "Italac", "200g",
-                                new BigDecimal("2.99"), "Mercado A", "Porto Alegre", "RS", null,
+                                new BigDecimal("2.99"), "11111111000100", "SUPERMERCADO A COMERCIO LTDA",
+                                "Supermercado A", "Porto Alegre", "RS", null,
                                 LocalDateTime.of(2026, 1, 1, 0, 0), "IN_STORE", false),
                         new GenericOffer(
                                 scannedId, "Nestlé 200g", "Nestlé", "200g",
-                                new BigDecimal("3.49"), "Mercado B", "Porto Alegre", "RS", 2.5,
+                                new BigDecimal("3.49"), "22222222000100", "COMPANHIA ZAFFARI COMERCIO E INDUSTRIA",
+                                "Zaffari", "Porto Alegre", "RS", 2.5,
                                 LocalDateTime.of(2026, 1, 1, 0, 0), "IN_STORE", true)));
         when(genericComparisonService.forProduct(eq(scannedId), any())).thenReturn(response);
 
@@ -176,14 +180,19 @@ class PriceIndexControllerTest {
                 .andExpect(jsonPath("$.offers[0].unitPrice").value(2.99))
                 .andExpect(jsonPath("$.offers[0].scanned").value(false))
                 .andExpect(jsonPath("$.offers[1].scanned").value(true))
-                .andExpect(jsonPath("$.offers[1].unitPrice").value(3.49));
+                .andExpect(jsonPath("$.offers[1].unitPrice").value(3.49))
+                // row shows the friendly name; details keep the full razão social + CNPJ
+                .andExpect(jsonPath("$.offers[1].marketFriendlyName").value("Zaffari"))
+                .andExpect(jsonPath("$.offers[1].marketName").value("COMPANHIA ZAFFARI COMERCIO E INDUSTRIA"))
+                .andExpect(jsonPath("$.offers[1].marketCnpj").value("22222222000100"));
     }
 
     @Test
     void genericComparisonByType_resolvesFromTypeQuery() throws Exception {
         var response = new GenericComparisonResponse("Creme de Leite", null, "NATIONAL",
                 List.of(new GenericOffer(UUID.randomUUID(), "Italac 200g", "Italac", "200g",
-                        new BigDecimal("2.99"), "Mercado A", "Porto Alegre", "RS", null,
+                        new BigDecimal("2.99"), "11111111000100", "SUPERMERCADO A COMERCIO LTDA",
+                        "Supermercado A", "Porto Alegre", "RS", null,
                         LocalDateTime.of(2026, 1, 1, 0, 0), "IN_STORE", false)));
         when(genericComparisonService.forType(eq("Creme de Leite"), any())).thenReturn(response);
 
@@ -194,6 +203,37 @@ class PriceIndexControllerTest {
                 .andExpect(jsonPath("$.typeName").value("Creme de Leite"))
                 .andExpect(jsonPath("$.scannedProductId").doesNotExist())
                 .andExpect(jsonPath("$.offers[0].productName").value("Italac 200g"));
+    }
+
+    @Test
+    void priceHistoryForMarket_returnsPricePointsForPair() throws Exception {
+        var pid = UUID.randomUUID();
+        var cnpj = "22222222000100";
+        var response = new PriceHistoryResponse(pid, "Creme de Leite Nestlé", null,
+                List.of(new PricePoint(LocalDateTime.of(2026, 1, 1, 0, 0), cnpj,
+                        "COMPANHIA ZAFFARI COMERCIO E INDUSTRIA", "Zaffari",
+                        new BigDecimal("3.49"), new BigDecimal("1.000"))));
+        when(genericComparisonService.priceHistoryForMarket(eq(pid), eq(cnpj), any())).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/price-index/products/" + pid + "/markets/" + cnpj + "/price-history")
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.productName").value("Creme de Leite Nestlé"))
+                .andExpect(jsonPath("$.points[0].unitPrice").value(3.49))
+                .andExpect(jsonPath("$.points[0].marketFriendlyName").value("Zaffari"));
+    }
+
+    @Test
+    void priceHistoryForMarket_returnsEmptyPointsWhenBlocked() throws Exception {
+        var pid = UUID.randomUUID();
+        var cnpj = "44444444000100";
+        when(genericComparisonService.priceHistoryForMarket(eq(pid), eq(cnpj), any()))
+                .thenReturn(new PriceHistoryResponse(pid, "Remédio X", null, List.of()));
+
+        mockMvc.perform(get("/api/v1/price-index/products/" + pid + "/markets/" + cnpj + "/price-history")
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.points").isEmpty());
     }
 
     @Test
@@ -244,5 +284,7 @@ class PriceIndexControllerTest {
         mockMvc.perform(get("/api/v1/price-index/promos")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/v1/price-index/products/" + pid + "/best-markets")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/v1/price-index/products/" + pid + "/in-store-reference")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/price-index/products/" + pid + "/markets/22222222000100/price-history"))
+                .andExpect(status().isUnauthorized());
     }
 }

@@ -5076,64 +5076,93 @@
 				},
 				{
 					"name": "Generic comparison for a product (ver todos)",
-						"request": {
-							"method": "GET",
-							"header": [
-								{
-									"key": "Accept-Language",
-									"value": "pt"
-								}
-							],
-							"url": {
-								"raw": "{{baseUrl}}/api/v1/price-index/products/{{e2eProductId}}/generic-comparison",
-								"host": [
-									"{{baseUrl}}"
-								],
-								"path": [
-									"api",
-									"v1",
-									"price-index",
-									"products",
-									"{{e2eProductId}}",
-									"generic-comparison"
-								]
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
 							}
-						},
-						"response": []
-					},
-					{
-						"name": "Generic comparison by type (catalog preview fallback)",
-						"request": {
-							"method": "GET",
-							"header": [
-								{
-									"key": "Accept-Language",
-									"value": "pt"
-								}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/price-index/products/{{e2eProductId}}/generic-comparison",
+							"host": [
+								"{{baseUrl}}"
 							],
-							"url": {
-								"raw": "{{baseUrl}}/api/v1/price-index/generic-comparison?type=Creme de Leite",
-								"host": [
-									"{{baseUrl}}"
-								],
-								"path": [
-									"api",
-									"v1",
-									"price-index",
-									"generic-comparison"
-								],
-								"query": [
-									{
-										"key": "type",
-										"value": "Creme de Leite"
-									}
-								]
-							}
-						},
-						"response": []
+							"path": [
+								"api",
+								"v1",
+								"price-index",
+								"products",
+								"{{e2eProductId}}",
+								"generic-comparison"
+							]
+						}
 					},
-					{
-						"name": "Current community promos",
+					"response": []
+				},
+				{
+					"name": "Generic comparison by type (catalog preview fallback)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/price-index/generic-comparison?type=Creme de Leite",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"price-index",
+								"generic-comparison"
+							],
+							"query": [
+								{
+									"key": "type",
+									"value": "Creme de Leite"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Price history for a (product, market) pair",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/price-index/products/{{e2eProductId}}/markets/{{e2eMarketCnpj}}/price-history",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"price-index",
+								"products",
+								"{{e2eProductId}}",
+								"markets",
+								"{{e2eMarketCnpj}}",
+								"price-history"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Current community promos",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -8707,7 +8736,67 @@
 								"exec": [
 									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id \u2014 skipping'); return; }",
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
-									"pm.test('Returns an array', function () { pm.expect(pm.response.json()).to.be.an('array'); });"
+									"pm.test('Returns an array', function () { pm.expect(pm.response.json()).to.be.an('array'); });",
+									"var rows = pm.response.json();",
+									"if (Array.isArray(rows) && rows.length > 0 && rows[0].cnpj) {",
+									"  pm.collectionVariables.set('e2eMarketCnpj', rows[0].cnpj);",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "26b. Price history for a (product, market) pair",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/price-index/products/{{e2eProductId}}/markets/{{e2eMarketCnpj}}/price-history",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"price-index",
+								"products",
+								"{{e2eProductId}}",
+								"markets",
+								"{{e2eMarketCnpj}}",
+								"price-history"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Seed a market CNPJ from the previous best-markets call; skip if none.",
+									"if (!pm.collectionVariables.get('e2eMarketCnpj')) {",
+									"  pm.execution.skipRequest();",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eMarketCnpj')) { return; }",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Has a points array (may be empty under k-anon)', function () {",
+									"  pm.expect(pm.response.json().points).to.be.an('array');",
+									"});"
 								]
 							}
 						}
@@ -15095,7 +15184,7 @@
 									"if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin \u2014 pulando'); return; }",
 									"pm.test('GET /admin/merchants/grey -> 200', function () { pm.response.to.have.status(200); });",
 									"pm.test('resposta e uma lista', function () { pm.expect(pm.response.json()).to.be.an('array'); });",
-										"var grey = pm.response.json(); if (Array.isArray(grey) && grey.length) { pm.collectionVariables.set('greyCnpj', grey[0].cnpj); }"
+									"var grey = pm.response.json(); if (Array.isArray(grey) && grey.length) { pm.collectionVariables.set('greyCnpj', grey[0].cnpj); }"
 								]
 							}
 						}
@@ -15146,8 +15235,8 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin — pulando'); return; }",
-									"if (!pm.collectionVariables.get('greyCnpj')) { pm.test.skip('Sem merchant cinza — pulando'); return; }",
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test.skip('Sem admin \u2014 pulando'); return; }",
+									"if (!pm.collectionVariables.get('greyCnpj')) { pm.test.skip('Sem merchant cinza \u2014 pulando'); return; }",
 									"pm.test('PUT /admin/merchants/{cnpj}/classification -> 200', function () { pm.response.to.have.status(200); });",
 									"pm.test('resposta tem segment', function () { pm.expect(pm.response.json().segment).to.eql('SUPERMARKET'); });"
 								]

@@ -1220,7 +1220,11 @@ GET /api/v1/price-index/products/{productId}/generic-comparison
     scope: "STATE",                       // which cascade tier produced the list: NEARBY | STATE | NATIONAL
     offers: [                             // FLAT list, one row per (product, market), cheapest first
       { productId, productName: "Italac 200g", brand, packLabel: "200g",
-        unitPrice: 2.99, marketName: "Mercado A", city: "Porto Alegre", state: "RS",
+        unitPrice: 2.99,
+        marketCnpj: "11111111000100",    // 14 digits; key for the per-market price history below
+        marketName: "SUPERMERCADO A COMERCIO LTDA",   // full legal razão social (show in details)
+        marketFriendlyName: "Supermercado A",          // friendly label for the ROW (alias → chain → cleaned)
+        city: "Porto Alegre", state: "RS",
         distanceKm: 2.3,                 // nullable (null when no coordinates)
         observedAt, channel: "IN_STORE", scanned: false },
       …
@@ -1239,12 +1243,42 @@ market): grocery may disclose at n=1, pharmacy/health keep K=3 (fail-closed). Em
 These are **different brands/sizes** — a price-range reference, not the same product
 (show the caveat). Keep the scanner admin-only in the app for now.
 
+**Market naming (new):** `marketName` is now the full legal razão social (for the
+expanded details), and `marketFriendlyName` is the display label for the row — the
+same derivation used in insights price-history: household rename (`HouseholdMarketAlias`)
+→ chain name (`MarketChain` by CNPJ root) → a cleaning heuristic that strips corporate
+boilerplate (`COMERCIO E INDUSTRIA`, `LTDA`, `S/A`, `EIRELI`, `ME`, …) and title-cases.
+Fall back to `marketName` when `marketFriendlyName` is absent.
+
 When the scan only returned a `catalogPreview` (no exact product to anchor on),
 resolve the type by name instead — same shape, `scannedProductId: null`:
 
 ```
 GET /api/v1/price-index/generic-comparison?type=Creme%20de%20Leite
 ```
+
+### Price history for one (product, market) pair
+
+Backs the **expandable offer row** (stock/dollar-style line chart). Same response
+shape as the insights price-history (`PriceHistoryResponse`, so the FE reuses the
+same chart), the **same tiered k-anon per (product, market)** as the offers above
+(grocery n=1, pharmacy/health K=3, fail-closed). Blocked or no data → `points: []`
+(never partial). One point = render the single price, no crash.
+
+```
+GET /api/v1/price-index/products/{productId}/markets/{marketCnpj}/price-history
+→ {
+    productId, productName, friendlyDescription,   // friendlyDescription = household product rename
+    points: [
+      { issuedAt, marketCnpj, marketName,          // marketName = full legal razão social
+        marketFriendlyName,                         // row-friendly label (same derivation as above)
+        unitPrice, quantity },
+      …                                             // ascending by time (oldest → newest)
+    ]
+  }
+```
+
+Authenticated like the other price-index endpoints.
 
 ---
 

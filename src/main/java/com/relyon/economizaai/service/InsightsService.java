@@ -132,14 +132,16 @@ public class InsightsService {
                         discountFor(discountByMarket, (String) row[0]),
                         ((Number) row[3]).longValue()))
                 .toList();
-        var marketOverrides = marketNameService.resolveNames(householdId, marketBuckets.stream()
+        var marketCnpjs = marketBuckets.stream()
                 .map(bucket -> bucket.cnpj())
                 .filter(Objects::nonNull)
                 .distinct()
-                .toList());
+                .toList();
+        var marketOverrides = marketNameService.resolveNames(householdId, marketCnpjs);
+        var marketChainNames = marketNameService.resolveChainNames(marketCnpjs);
         return marketBuckets.stream()
-                .map(bucket -> bucket.withMarketFriendlyName(marketNameService.applyOverride(
-                        marketOverrides, bucket.cnpj(), bucket.marketName())))
+                .map(bucket -> bucket.withMarketFriendlyName(marketNameService.friendlyName(
+                        marketOverrides, marketChainNames, bucket.cnpj(), bucket.marketName())))
                 .toList();
     }
 
@@ -271,14 +273,16 @@ public class InsightsService {
                         toBigDecimal(row[3]),
                         toBigDecimal(row[4])))
                 .toList();
-        var overrides = marketNameService.resolveNames(householdId, rawPoints.stream()
+        var cnpjs = rawPoints.stream()
                 .map(point -> point.marketCnpj())
                 .filter(Objects::nonNull)
                 .distinct()
-                .toList());
+                .toList();
+        var overrides = marketNameService.resolveNames(householdId, cnpjs);
+        var chainNames = marketNameService.resolveChainNames(cnpjs);
         var points = rawPoints.stream()
-                .map(point -> point.withMarketFriendlyName(marketNameService.applyOverride(
-                        overrides, point.marketCnpj(), point.marketName())))
+                .map(point -> point.withMarketFriendlyName(marketNameService.friendlyName(
+                        overrides, chainNames, point.marketCnpj(), point.marketName())))
                 .toList();
         var friendlyDescription = householdProductAliasService.findFor(user.getHousehold(), product);
         return new PriceHistoryResponse(product.getId(), product.getNormalizedName(), friendlyDescription, points);
