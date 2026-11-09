@@ -36,7 +36,12 @@ public record GenericComparisonResponse(
             String brand,
             String packLabel,
             BigDecimal unitPrice,
+            @Schema(description = "CNPJ do mercado (14 dígitos); chave para o histórico de preço por mercado")
+            String marketCnpj,
+            @Schema(description = "Razão social completa do mercado (mostrada nos detalhes)")
             String marketName,
+            @Schema(description = "Nome amigável do mercado para a linha (apelido do lar → rede → razão social limpa)")
+            String marketFriendlyName,
             String city,
             String state,
             @Schema(description = "Distância em km do usuário até o mercado; null quando não há coordenadas")

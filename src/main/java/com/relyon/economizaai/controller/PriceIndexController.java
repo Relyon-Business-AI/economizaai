@@ -1,6 +1,7 @@
 package com.relyon.economizaai.controller;
 
 import com.relyon.economizaai.dto.response.GenericComparisonResponse;
+import com.relyon.economizaai.dto.response.PriceHistoryResponse;
 import com.relyon.economizaai.dto.response.PromoFeedResponse;
 import com.relyon.economizaai.dto.response.SponsoredPromoResponse;
 import com.relyon.economizaai.model.User;
@@ -131,6 +132,20 @@ public class PriceIndexController {
             @AuthenticationPrincipal User user,
             @RequestParam String type) {
         return ResponseEntity.ok(genericComparisonService.forType(type, user));
+    }
+
+    /**
+     * Histórico de preço de UM produto num UM mercado (par produto, CNPJ), para o gráfico
+     * stock/dólar da linha expandida da comparação genérica. Mesmo shape de
+     * {@link PriceHistoryResponse} das insights (o FE reaproveita o gráfico) e o MESMO gate
+     * k-anônimo por tier do par usado nas ofertas: bloqueado devolve {@code points} vazio.
+     */
+    @GetMapping("/products/{productId}/markets/{marketCnpj}/price-history")
+    public ResponseEntity<PriceHistoryResponse> priceHistoryForMarket(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID productId,
+            @PathVariable String marketCnpj) {
+        return ResponseEntity.ok(genericComparisonService.priceHistoryForMarket(productId, marketCnpj, user));
     }
 
     @GetMapping("/promos")
