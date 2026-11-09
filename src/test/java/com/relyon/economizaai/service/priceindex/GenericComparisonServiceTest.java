@@ -4,6 +4,7 @@ import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.extraction.ProductTypeResolver;
 import com.relyon.economizaai.service.geo.ViewerLocationService;
 import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import com.relyon.economizaai.service.geo.WatchedMarketService;
@@ -26,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -35,6 +37,7 @@ class GenericComparisonServiceTest {
     @Mock private PriceIndexService priceIndexService;
     @Mock private ViewerLocationService viewerLocationService;
     @Mock private WatchedMarketService watchedMarketService;
+    @Mock private ProductTypeResolver productTypeResolver;
 
     @InjectMocks private GenericComparisonService service;
 
@@ -44,9 +47,9 @@ class GenericComparisonServiceTest {
     void setUp() {
         var household = Household.builder().id(UUID.randomUUID()).build();
         user = User.builder().id(UUID.randomUUID()).household(household).build();
-        when(viewerLocationService.resolve(any()))
+        lenient().when(viewerLocationService.resolve(any()))
                 .thenReturn(new ViewerLocation(null, null, ViewerLocationService.Source.NONE, "RS"));
-        when(watchedMarketService.watchedCnpjs(any())).thenReturn(Set.of());
+        lenient().when(watchedMarketService.watchedCnpjs(any())).thenReturn(Set.of());
     }
 
     private Product product(UUID id, String brand, BigDecimal size) {
@@ -109,20 +112,34 @@ class GenericComparisonServiceTest {
     }
 
     @Test
-    void byTypeNormalizesTermAndRanks() {
+    void byTypeResolvesCanonicalTypeFromNoisyCatalogNameThenRanks() {
+        // Nome cru do catálogo (Open Food Facts) → o resolver (pipeline da ingestão) devolve o
+        // tipo canônico "creme de leite"; a busca por generic_name_norm então casa os produtos.
         var italac = UUID.randomUUID();
+        when(productTypeResolver.typeKey("CREME DE LEITE UHT NESTLE")).thenReturn("creme de leite");
         when(productRepository.findByGenericNameNormOrderByBrandNormAscPackSizeAsc("creme de leite"))
                 .thenReturn(List.of(product(italac, "Italac", new BigDecimal("200"))));
         when(priceIndexService.bestMarketsForViewer(eq(italac), anyInt(), any(), any()))
                 .thenReturn(List.of(row(new BigDecimal("2.99"))));
 
-        var result = service.forType("Creme de Leite", user);
+        var result = service.forType("CREME DE LEITE UHT NESTLE", user);
 
+        // typeName de display vem do genericName de um produto do tipo.
         assertThat(result.typeName()).isEqualTo("Creme de Leite");
         assertThat(result.scannedProductId()).isNull();
         assertThat(result.products()).hasSize(1);
         assertThat(result.products().get(0).scanned()).isFalse();
         assertThat(result.products().get(0).price()).isEqualByComparingTo("2.99");
+    }
+
+    @Test
+    void byTypeReturnsEmptyWhenResolverYieldsNoType() {
+        when(productTypeResolver.typeKey("???")).thenReturn(null);
+
+        var result = service.forType("???", user);
+
+        assertThat(result.products()).isEmpty();
+        assertThat(result.scannedProductId()).isNull();
     }
 
     @Test

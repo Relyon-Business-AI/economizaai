@@ -8,6 +8,7 @@ import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ProductScanRepository;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import com.relyon.economizaai.service.extraction.EanCatalogService;
+import com.relyon.economizaai.service.extraction.ProductTypeResolver;
 import com.relyon.economizaai.service.geo.ViewerLocationService;
 import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import com.relyon.economizaai.time.BrazilClock;
@@ -32,17 +33,20 @@ public class ProductScanLogService {
     private final EanCatalogService eanCatalogService;
     private final ViewerLocationService viewerLocationService;
     private final ProductScanRepository productScanRepository;
+    private final ProductTypeResolver productTypeResolver;
     private final TransactionTemplate scanTxTemplate;
 
     public ProductScanLogService(ProductRepository productRepository,
                                  EanCatalogService eanCatalogService,
                                  ViewerLocationService viewerLocationService,
                                  ProductScanRepository productScanRepository,
+                                 ProductTypeResolver productTypeResolver,
                                  PlatformTransactionManager transactionManager) {
         this.productRepository = productRepository;
         this.eanCatalogService = eanCatalogService;
         this.viewerLocationService = viewerLocationService;
         this.productScanRepository = productScanRepository;
+        this.productTypeResolver = productTypeResolver;
         this.scanTxTemplate = new TransactionTemplate(transactionManager);
         this.scanTxTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
@@ -79,7 +83,9 @@ public class ProductScanLogService {
         var catalogEntry = eanCatalogService.lookup(ean).orElse(null);
         if (catalogEntry != null) {
             scan.setMatchType(ScanMatchType.GENERIC);
-            scan.setGenericNameNorm(DescriptionNormalizer.normalizeOrNull(catalogEntry.getGenericName()));
+            // Nome de catálogo é cru ("CREME DE LEITE UHT NESTLE") — resolve o tipo canônico pelo
+            // mesmo extrator da ingestão, pra casar o generic_name_norm dos produtos ("creme de leite").
+            scan.setGenericNameNorm(productTypeResolver.typeKey(catalogEntry.getGenericName()));
             return scan;
         }
         scan.setMatchType(ScanMatchType.NONE);
