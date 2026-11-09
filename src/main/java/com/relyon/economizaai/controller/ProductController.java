@@ -11,6 +11,7 @@ import com.relyon.economizaai.dto.response.UnmatchedItemResponse;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.service.HouseholdProductService;
 import com.relyon.economizaai.service.ProductRecentViewService;
+import com.relyon.economizaai.service.ProductScanLogService;
 import com.relyon.economizaai.service.ProductService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -43,6 +44,7 @@ public class ProductController {
     private final ProductService productService;
     private final HouseholdProductService householdProductService;
     private final ProductRecentViewService recentViewService;
+    private final ProductScanLogService productScanLogService;
 
     @GetMapping
     public ResponseEntity<Page<ProductResponse>> search(@AuthenticationPrincipal User user,
@@ -112,7 +114,12 @@ public class ProductController {
     @GetMapping("/by-ean/{ean}")
     public ResponseEntity<EanLookupResponse> lookupByEan(@AuthenticationPrincipal User user,
                                                          @PathVariable String ean) {
-        return ResponseEntity.ok(productService.lookupByEan(ean, user));
+        try {
+            return ResponseEntity.ok(productService.lookupByEan(ean, user));
+        } finally {
+            // Log do scan é best-effort e nunca pode quebrar o lookup — roda mesmo no 404.
+            productScanLogService.record(user, ean);
+        }
     }
 
     @PostMapping
