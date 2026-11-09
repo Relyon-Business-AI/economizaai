@@ -1,5 +1,19 @@
 # economizai — what's new
 
+## 2026-11-09 — "Comparar preço" liberado pra todos + scanner único (QR + código de barras)
+
+- **Comparação de preço por código de barras deixou de ser ADMIN-only.** Qualquer usuário
+  autenticado agora chega no fluxo (melhores preços por EAN / comparação genérica por tipo). Só FE:
+  os endpoints que o fluxo usa (`products/by-ean`, `price-index/.../best-markets`,
+  `generic-comparison` nas duas variantes, `.../price-history` e o log de scan embutido no by-ean)
+  **já eram acessíveis a usuário autenticado** — nenhuma mudança de SecurityConfig. K-anon por tier
+  intacto (mercearia n=1, farmácia/saúde K=3, fail-closed).
+- **Scanner principal unificado.** O scanner da aba central agora lê **QR da nota fiscal E código
+  de barras de produto** no mesmo visor. Ramifica estritamente pelo tipo do código: QR da NFC-e →
+  fluxo de ingestão da nota (inalterado); `ean13`/`ean8`/`upc_a`/`upc_e` → fluxo de comparação de
+  preço. O atalho "Comparar preço" dedicado em Ajustes (antes só admin) saiu — o scanner cobre todo
+  mundo.
+
 ## 2026-11-09 — Comparação genérica: nome amigável do mercado + histórico por mercado (linha expansível)
 
 - **Ofertas ganham `marketCnpj` e `marketFriendlyName`.** Cada `GenericOffer` agora traz o CNPJ
