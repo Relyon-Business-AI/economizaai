@@ -3,8 +3,10 @@ package com.relyon.economizaai.service.geo;
 import com.relyon.economizaai.exception.InvalidCnpjException;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.HouseholdMarketAlias;
+import com.relyon.economizaai.model.MarketChain;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.repository.HouseholdMarketAliasRepository;
+import com.relyon.economizaai.repository.MarketChainRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -33,6 +35,7 @@ class MarketNameServiceTest {
     private static final String CNPJ = "12345678000199";
 
     @Mock private HouseholdMarketAliasRepository aliasRepository;
+    @Mock private MarketChainRepository marketChainRepository;
     @InjectMocks private MarketNameService service;
 
     @Test
@@ -185,6 +188,97 @@ class MarketNameServiceTest {
         service.clearName(user, CNPJ);
 
         verify(aliasRepository).deleteByHouseholdIdAndMarketCnpj(HOUSEHOLD_ID, CNPJ);
+    }
+
+    // --- friendly-name cascade + cleaning heuristic ---
+
+    @Test
+    void cleanLegalName_stripsComercioEIndustriaAndTitleCases() {
+        assertEquals("Companhia Zaffari",
+                MarketNameService.cleanLegalName("COMPANHIA ZAFFARI COMERCIO E INDUSTRIA"));
+    }
+
+    @Test
+    void cleanLegalName_stripsSaAndLtdaSuffixes() {
+        assertEquals("Carrefour", MarketNameService.cleanLegalName("CARREFOUR COMERCIO E INDUSTRIA S/A"));
+        assertEquals("Atacadao", MarketNameService.cleanLegalName("ATACADAO S.A."));
+        // "S A" space-separated (common razão social) is stripped too
+        assertEquals("Mateus", MarketNameService.cleanLegalName("MATEUS SUPERMERCADOS S A"));
+    }
+
+    @Test
+    void cleanLegalName_stripsWmsSupermercadosBoilerplate() {
+        // WMS Supermercados do Brasil Ltda (BIG/Bompreço razão social)
+        assertEquals("Wms do Brasil",
+                MarketNameService.cleanLegalName("WMS SUPERMERCADOS DO BRASIL LTDA"));
+    }
+
+    @Test
+    void cleanLegalName_keepsConnectivesLowercase() {
+        assertEquals("Pague Menos",
+                MarketNameService.cleanLegalName("DISTRIBUIDORA DE ALIMENTOS PAGUE MENOS LTDA"));
+        assertEquals("Mercado do Ze",
+                MarketNameService.cleanLegalName("MERCADO DO ZE LTDA"));
+    }
+
+    @Test
+    void cleanLegalName_fallsBackToTitleCasedOriginalWhenOnlyBoilerplate() {
+        assertEquals("Supermercados Ltda", MarketNameService.cleanLegalName("SUPERMERCADOS LTDA"));
+    }
+
+    @Test
+    void cleanLegalName_nullAndBlankPassThrough() {
+        assertEquals(null, MarketNameService.cleanLegalName(null));
+        assertEquals("   ", MarketNameService.cleanLegalName("   "));
+    }
+
+    @Test
+    void friendlyName_prefersHouseholdRenameOverChainAndClean() {
+        var overrides = Map.of(CNPJ, "Zaffari de casa");
+        var chainNames = Map.of(CNPJ.substring(0, 8), "Zaffari");
+
+        assertEquals("Zaffari de casa",
+                service.friendlyName(overrides, chainNames, CNPJ, "COMPANHIA ZAFFARI COMERCIO E INDUSTRIA"));
+    }
+
+    @Test
+    void friendlyName_usesChainNameWhenNoRename() {
+        var chainNames = Map.of(CNPJ.substring(0, 8), "Zaffari");
+
+        assertEquals("Zaffari",
+                service.friendlyName(Map.of(), chainNames, CNPJ, "COMPANHIA ZAFFARI COMERCIO E INDUSTRIA"));
+    }
+
+    @Test
+    void friendlyName_fallsBackToCleanedRazaoSocialWhenNoChain() {
+        assertEquals("Companhia Zaffari",
+                service.friendlyName(Map.of(), Map.of(), CNPJ, "COMPANHIA ZAFFARI COMERCIO E INDUSTRIA"));
+    }
+
+    @Test
+    void friendlyName_singleValue_loadsMapsAndResolvesChain() {
+        when(aliasRepository.findAllByHouseholdIdAndMarketCnpjIn(HOUSEHOLD_ID, List.of(CNPJ)))
+                .thenReturn(List.of());
+        when(marketChainRepository.findByCnpjRoot(CNPJ.substring(0, 8)))
+                .thenReturn(Optional.of(chain("Zaffari")));
+
+        assertEquals("Zaffari",
+                service.friendlyName(HOUSEHOLD_ID, CNPJ, "COMPANHIA ZAFFARI COMERCIO E INDUSTRIA"));
+    }
+
+    @Test
+    void resolveChainNames_mapsRootToName() {
+        when(marketChainRepository.findByCnpjRoot(CNPJ.substring(0, 8)))
+                .thenReturn(Optional.of(chain("Zaffari")));
+
+        var names = service.resolveChainNames(List.of(CNPJ));
+
+        assertEquals(1, names.size());
+        assertEquals("Zaffari", names.get(CNPJ.substring(0, 8)));
+    }
+
+    private MarketChain chain(String name) {
+        return MarketChain.builder().cnpjRoot(CNPJ.substring(0, 8)).name(name).build();
     }
 
     private HouseholdMarketAlias alias(String customName) {
