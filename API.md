@@ -1204,6 +1204,42 @@ Scan the product barcode, call `by-ean`:
 - `404` → barcode unknown to both. Non-digits in the path are stripped
   server-side; anything under 8 digits is a 404.
 
+Every `by-ean` call is logged (append-only `product_scan`) with the match result
+(exact/generic/none), the resolved type, and a snapshot of the resolved location —
+best-effort, never affects the response.
+
+**Exact-first + "ver todos".** Prefer the exact match (same product, where it's
+cheapest). When the exact product has **no price** (empty `best-markets`), or to let
+the user open the full brand/size range, call the generic comparison:
+
+```
+GET /api/v1/price-index/products/{productId}/generic-comparison
+→ {
+    typeName: "Creme de Leite",          // header, the scanned product's generic name
+    scannedProductId: "…",               // highlight this row ("escaneado")
+    products: [                           // same type (generic_name_norm), cheapest first
+      { productId, label: "Italac 200g", brand, packLabel: "200g",
+        scanned: false, hasPrice: true, price: 2.99, typicalPrice: 3.10,
+        marketName: "Mercado A", observedAt, sampleCount, distinctHouseholds },
+      …
+    ]
+  }
+```
+
+All products of the same type, each with its **best price near the user** (same
+"perto de você" cascade + tiered k-anon as `best-markets`). `price` is the real
+most-recent observed price in the cheapest nearby chain; `typicalPrice` is the
+median. Rows with `hasPrice: false` have no nearby data yet and sort to the end.
+These are **different brands/sizes** — a price-range reference, not the same product
+(show the caveat). Keep the scanner admin-only in the app for now.
+
+When the scan only returned a `catalogPreview` (no exact product to anchor on),
+resolve the type by name instead — same shape, `scannedProductId: null`:
+
+```
+GET /api/v1/price-index/generic-comparison?type=Creme%20de%20Leite
+```
+
 ---
 
 ## 7b. Deals — "Ofertas pra você"

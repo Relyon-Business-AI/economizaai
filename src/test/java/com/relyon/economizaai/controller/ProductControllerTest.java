@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.relyon.economizaai.config.SecurityConfig;
 import com.relyon.economizaai.dto.request.CreateAliasRequest;
 import com.relyon.economizaai.dto.request.CreateProductRequest;
+import com.relyon.economizaai.dto.response.EanLookupResponse;
 import com.relyon.economizaai.dto.response.ProductResponse;
 import com.relyon.economizaai.dto.response.UnmatchedItemResponse;
 import com.relyon.economizaai.exception.EanConflictException;
@@ -18,6 +19,7 @@ import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.HouseholdProductService;
 import com.relyon.economizaai.service.ProductRecentViewService;
+import com.relyon.economizaai.service.ProductScanLogService;
 import com.relyon.economizaai.service.ProductService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,6 +60,7 @@ class ProductControllerTest {
     @MockitoBean private ProductService productService;
     @MockitoBean private HouseholdProductService householdProductService;
     @MockitoBean private ProductRecentViewService recentViewService;
+    @MockitoBean private ProductScanLogService productScanLogService;
     @MockitoBean private JwtService jwtService;
     @MockitoBean private UserDetailsService userDetailsService;
     @MockitoBean private LocalizedMessageService localizedMessageService;
@@ -90,6 +93,21 @@ class ProductControllerTest {
                         .with(SecurityMockMvcRequestPostProcessors.user(user)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].normalizedName").value("Arroz Tio Joao"));
+    }
+
+    @Test
+    void lookupByEan_returnsProductAndLogsScan() throws Exception {
+        var user = buildUser();
+        var id = UUID.randomUUID();
+        when(productService.lookupByEan(eq("7891000100103"), any(User.class)))
+                .thenReturn(EanLookupResponse.ofProduct(sampleProduct(id)));
+
+        mockMvc.perform(get("/api/v1/products/by-ean/7891000100103")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.known").value(true));
+
+        verify(productScanLogService).record(any(User.class), eq("7891000100103"));
     }
 
     @Test
