@@ -1,5 +1,7 @@
 package com.relyon.economizaai.controller;
 
+import com.relyon.economizaai.dto.response.GenericComparisonResponse;
+import com.relyon.economizaai.dto.response.GenericComparisonResponse.GenericProductRow;
 import com.relyon.economizaai.service.geo.NearbyScope;
 import com.relyon.economizaai.service.geo.NearbyScopeService;
 import com.relyon.economizaai.config.SecurityConfig;
@@ -12,6 +14,7 @@ import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import com.relyon.economizaai.service.geo.WatchedMarketService;
 import com.relyon.economizaai.service.merchant.SponsoredPromoService;
 import com.relyon.economizaai.service.priceindex.CommunityPromoService;
+import com.relyon.economizaai.service.priceindex.GenericComparisonService;
 import com.relyon.economizaai.service.priceindex.PriceIndexService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,6 +53,7 @@ class PriceIndexControllerTest {
     @MockitoBean private SponsoredPromoService sponsoredPromoService;
     @MockitoBean private ViewerLocationService viewerLocationService;
     @MockitoBean private NearbyScopeService nearbyScopeService;
+    @MockitoBean private GenericComparisonService genericComparisonService;
     @MockitoBean private JwtService jwtService;
     @MockitoBean private UserDetailsService userDetailsService;
     @MockitoBean private LocalizedMessageService localizedMessageService;
@@ -144,6 +148,50 @@ class PriceIndexControllerTest {
 
         verify(priceIndexService).bestMarkets(any(), anyInt(),
                 eq(new BigDecimal("-30.05")), eq(new BigDecimal("-51.20")), eq(5.0), any());
+    }
+
+    @Test
+    void genericComparison_returnsTypeRowsCheapestFirst() throws Exception {
+        var scannedId = UUID.randomUUID();
+        var cheaperId = UUID.randomUUID();
+        var response = new GenericComparisonResponse(
+                "Creme de Leite", scannedId,
+                List.of(
+                        new GenericProductRow(
+                                cheaperId, "Italac 200g", "Italac", "200g", false, true,
+                                new BigDecimal("2.99"), new BigDecimal("3.10"), "Mercado A",
+                                LocalDateTime.of(2026, 1, 1, 0, 0), 4, 2L),
+                        new GenericProductRow(
+                                scannedId, "Nestlé 200g", "Nestlé", "200g", true, true,
+                                new BigDecimal("3.49"), new BigDecimal("3.50"), "Mercado A",
+                                LocalDateTime.of(2026, 1, 1, 0, 0), 5, 3L)));
+        when(genericComparisonService.forProduct(eq(scannedId), any())).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/price-index/products/" + scannedId + "/generic-comparison")
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.typeName").value("Creme de Leite"))
+                .andExpect(jsonPath("$.products[0].label").value("Italac 200g"))
+                .andExpect(jsonPath("$.products[0].scanned").value(false))
+                .andExpect(jsonPath("$.products[1].scanned").value(true))
+                .andExpect(jsonPath("$.products[1].price").value(3.49));
+    }
+
+    @Test
+    void genericComparisonByType_resolvesFromTypeQuery() throws Exception {
+        var response = new GenericComparisonResponse("Creme de Leite", null,
+                List.of(new GenericProductRow(UUID.randomUUID(), "Italac 200g", "Italac", "200g",
+                        false, true, new BigDecimal("2.99"), new BigDecimal("3.10"), "Mercado A",
+                        LocalDateTime.of(2026, 1, 1, 0, 0), 4, 2L)));
+        when(genericComparisonService.forType(eq("Creme de Leite"), any())).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/price-index/generic-comparison")
+                        .param("type", "Creme de Leite")
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.typeName").value("Creme de Leite"))
+                .andExpect(jsonPath("$.scannedProductId").doesNotExist())
+                .andExpect(jsonPath("$.products[0].label").value("Italac 200g"));
     }
 
     @Test

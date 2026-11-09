@@ -257,6 +257,13 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
                                  @Param("packUnit") String packUnit);
 
     /**
+     * Todos os produtos do mesmo TIPO ({@code genericNameNorm}, ex.: "creme de leite"),
+     * para a comparação genérica "ver todos" do scanner. Ordenado por marca/tamanho para
+     * uma lista estável; o preço (e o "mais barato") é resolvido na camada de serviço.
+     */
+    List<Product> findByGenericNameNormOrderByBrandNormAscPackSizeAsc(String genericNameNorm);
+
+    /**
      * Products without a brand — used by the admin curation endpoint
      * (Item C.2). Sorted by normalizedName so the same product surfaces
      * in the same place across pages.
