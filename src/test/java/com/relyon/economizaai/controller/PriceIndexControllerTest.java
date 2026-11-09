@@ -1,7 +1,7 @@
 package com.relyon.economizaai.controller;
 
 import com.relyon.economizaai.dto.response.GenericComparisonResponse;
-import com.relyon.economizaai.dto.response.GenericComparisonResponse.GenericProductRow;
+import com.relyon.economizaai.dto.response.GenericComparisonResponse.GenericOffer;
 import com.relyon.economizaai.service.geo.NearbyScope;
 import com.relyon.economizaai.service.geo.NearbyScopeService;
 import com.relyon.economizaai.config.SecurityConfig;
@@ -151,38 +151,40 @@ class PriceIndexControllerTest {
     }
 
     @Test
-    void genericComparison_returnsTypeRowsCheapestFirst() throws Exception {
+    void genericComparison_returnsFlatOffersCheapestFirst() throws Exception {
         var scannedId = UUID.randomUUID();
         var cheaperId = UUID.randomUUID();
         var response = new GenericComparisonResponse(
-                "Creme de Leite", scannedId,
+                "Creme de Leite", scannedId, "STATE",
                 List.of(
-                        new GenericProductRow(
-                                cheaperId, "Italac 200g", "Italac", "200g", false, true,
-                                new BigDecimal("2.99"), new BigDecimal("3.10"), "Mercado A",
-                                LocalDateTime.of(2026, 1, 1, 0, 0), 4, 2L),
-                        new GenericProductRow(
-                                scannedId, "Nestlé 200g", "Nestlé", "200g", true, true,
-                                new BigDecimal("3.49"), new BigDecimal("3.50"), "Mercado A",
-                                LocalDateTime.of(2026, 1, 1, 0, 0), 5, 3L)));
+                        new GenericOffer(
+                                cheaperId, "Italac 200g", "Italac", "200g",
+                                new BigDecimal("2.99"), "Mercado A", "Porto Alegre", "RS", null,
+                                LocalDateTime.of(2026, 1, 1, 0, 0), "IN_STORE", false),
+                        new GenericOffer(
+                                scannedId, "Nestlé 200g", "Nestlé", "200g",
+                                new BigDecimal("3.49"), "Mercado B", "Porto Alegre", "RS", 2.5,
+                                LocalDateTime.of(2026, 1, 1, 0, 0), "IN_STORE", true)));
         when(genericComparisonService.forProduct(eq(scannedId), any())).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/price-index/products/" + scannedId + "/generic-comparison")
                         .with(SecurityMockMvcRequestPostProcessors.user(principal())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.typeName").value("Creme de Leite"))
-                .andExpect(jsonPath("$.products[0].label").value("Italac 200g"))
-                .andExpect(jsonPath("$.products[0].scanned").value(false))
-                .andExpect(jsonPath("$.products[1].scanned").value(true))
-                .andExpect(jsonPath("$.products[1].price").value(3.49));
+                .andExpect(jsonPath("$.scope").value("STATE"))
+                .andExpect(jsonPath("$.offers[0].productName").value("Italac 200g"))
+                .andExpect(jsonPath("$.offers[0].unitPrice").value(2.99))
+                .andExpect(jsonPath("$.offers[0].scanned").value(false))
+                .andExpect(jsonPath("$.offers[1].scanned").value(true))
+                .andExpect(jsonPath("$.offers[1].unitPrice").value(3.49));
     }
 
     @Test
     void genericComparisonByType_resolvesFromTypeQuery() throws Exception {
-        var response = new GenericComparisonResponse("Creme de Leite", null,
-                List.of(new GenericProductRow(UUID.randomUUID(), "Italac 200g", "Italac", "200g",
-                        false, true, new BigDecimal("2.99"), new BigDecimal("3.10"), "Mercado A",
-                        LocalDateTime.of(2026, 1, 1, 0, 0), 4, 2L)));
+        var response = new GenericComparisonResponse("Creme de Leite", null, "NATIONAL",
+                List.of(new GenericOffer(UUID.randomUUID(), "Italac 200g", "Italac", "200g",
+                        new BigDecimal("2.99"), "Mercado A", "Porto Alegre", "RS", null,
+                        LocalDateTime.of(2026, 1, 1, 0, 0), "IN_STORE", false)));
         when(genericComparisonService.forType(eq("Creme de Leite"), any())).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/price-index/generic-comparison")
@@ -191,7 +193,7 @@ class PriceIndexControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.typeName").value("Creme de Leite"))
                 .andExpect(jsonPath("$.scannedProductId").doesNotExist())
-                .andExpect(jsonPath("$.products[0].label").value("Italac 200g"));
+                .andExpect(jsonPath("$.offers[0].productName").value("Italac 200g"));
     }
 
     @Test
