@@ -156,9 +156,11 @@ economizaai:
     sweeper-delay-ms: ${INGEST_SWEEPER_DELAY_MS:60000}
     # Probe de estados "pausados" no Infosimples (portal da SEFAZ fora): sonda a cada 6h
     # e alerta o dono UMA vez quando a rota volta a responder 200, pra onboardar o estado.
-    # SE é o caso atual (funcionou 100% em out, portal caiu ~22/10). Vazio = desliga.
+    # Estados com portal caído (615) sob vigilância: SE (caiu ~22/10) e TO (caiu ~09/11), ambos
+    # 615. Quando qualquer um voltar → validar com nota real e CRIAR ADAPTER NATIVO (igual AM/CE),
+    # pra não depender de Infosimples/portal instável (ver docs/MULTI_STATE_RECON.md). Vazio = desliga.
     paused-state-probe:
-      ufs: ${SEFAZ_PAUSED_STATE_PROBE_UFS:SE}
+      ufs: ${SEFAZ_PAUSED_STATE_PROBE_UFS:SE,TO}
     paused-state-probe-delay-ms: ${SEFAZ_PAUSED_STATE_PROBE_DELAY_MS:21600000}
     paused-state-probe-initial-delay-ms: ${SEFAZ_PAUSED_STATE_PROBE_INITIAL_DELAY_MS:60000}
     device-fetch:
