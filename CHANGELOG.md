@@ -1,5 +1,14 @@
 # economizai — what's new
 
+## 2026-11-09 — App forçado em português (fim das mensagens em inglês)
+
+- O backend passa a **forçar pt** em toda mensagem (FixedLocaleResolver), ignorando o
+  `Accept-Language` do aparelho. Causa do bug: o app não tem seletor de idioma, então o locale era
+  capturado do idioma do CELULAR no cadastro — celular em inglês virava `locale=en` e recebia
+  digest/e-mails em inglês. Agora: request sempre pt **e** novo cadastro grava `locale=pt`.
+- **V135** normaliza as contas existentes marcadas `en` para `pt`. Os textos em `messages_en`
+  ficam no código pra um futuro seletor de idioma de verdade. Sem mudança de contrato.
+
 ## 2026-11-08 — Hotfix: item sem preço não derruba mais a lista de notas
 
 - Regressão da V134 (total_price nullable): uma nota de FOTO com uma linha sem preço fazia a soma

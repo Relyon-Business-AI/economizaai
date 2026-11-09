@@ -42,6 +42,13 @@ spring:
     basename: i18n/messages
     encoding: UTF-8
     fallback-to-system-locale: false
+  # Produto brasileiro (NFC-e/CPF/SEFAZ), sem seletor de idioma no app: força TODO conteúdo em
+  # pt, ignorando o Accept-Language do aparelho. Sem isto, um celular em inglês recebia mensagens
+  # de request em inglês (e o cadastro gravava locale=en, caindo o digest/e-mail em inglês também).
+  # Os textos em i18n/messages_en ficam pra um futuro seletor de idioma de verdade.
+  web:
+    locale: pt
+    locale-resolver: fixed
   mail:
     host: ${SMTP_HOST:smtp.gmail.com}
     port: ${SMTP_PORT:587}
