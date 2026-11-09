@@ -122,6 +122,17 @@ public class PriceIndexController {
         return ResponseEntity.ok(genericComparisonService.forProduct(productId, user));
     }
 
+    /**
+     * Comparação genérica por TIPO (nome), usada quando o scanner só achou a prévia do catálogo
+     * (sem produto exato pra ancorar): agrupa pelos produtos do mesmo {@code generic_name_norm}.
+     */
+    @GetMapping("/generic-comparison")
+    public ResponseEntity<GenericComparisonResponse> genericComparisonByType(
+            @AuthenticationPrincipal User user,
+            @RequestParam String type) {
+        return ResponseEntity.ok(genericComparisonService.forType(type, user));
+    }
+
     @GetMapping("/promos")
     public ResponseEntity<List<CommunityPromoService.CommunityPromo>> currentPromos(
             @AuthenticationPrincipal User user,

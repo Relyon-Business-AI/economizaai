@@ -5102,6 +5102,37 @@
 						"response": []
 					},
 					{
+						"name": "Generic comparison by type (catalog preview fallback)",
+						"request": {
+							"method": "GET",
+							"header": [
+								{
+									"key": "Accept-Language",
+									"value": "pt"
+								}
+							],
+							"url": {
+								"raw": "{{baseUrl}}/api/v1/price-index/generic-comparison?type=Creme de Leite",
+								"host": [
+									"{{baseUrl}}"
+								],
+								"path": [
+									"api",
+									"v1",
+									"price-index",
+									"generic-comparison"
+								],
+								"query": [
+									{
+										"key": "type",
+										"value": "Creme de Leite"
+									}
+								]
+							}
+						},
+						"response": []
+					},
+					{
 						"name": "Current community promos",
 					"request": {
 						"method": "GET",

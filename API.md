@@ -1233,6 +1233,13 @@ median. Rows with `hasPrice: false` have no nearby data yet and sort to the end.
 These are **different brands/sizes** — a price-range reference, not the same product
 (show the caveat). Keep the scanner admin-only in the app for now.
 
+When the scan only returned a `catalogPreview` (no exact product to anchor on),
+resolve the type by name instead — same shape, `scannedProductId: null`:
+
+```
+GET /api/v1/price-index/generic-comparison?type=Creme%20de%20Leite
+```
+
 ---
 
 ## 7b. Deals — "Ofertas pra você"

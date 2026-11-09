@@ -109,6 +109,23 @@ class GenericComparisonServiceTest {
     }
 
     @Test
+    void byTypeNormalizesTermAndRanks() {
+        var italac = UUID.randomUUID();
+        when(productRepository.findByGenericNameNormOrderByBrandNormAscPackSizeAsc("creme de leite"))
+                .thenReturn(List.of(product(italac, "Italac", new BigDecimal("200"))));
+        when(priceIndexService.bestMarketsForViewer(eq(italac), anyInt(), any(), any()))
+                .thenReturn(List.of(row(new BigDecimal("2.99"))));
+
+        var result = service.forType("Creme de Leite", user);
+
+        assertThat(result.typeName()).isEqualTo("Creme de Leite");
+        assertThat(result.scannedProductId()).isNull();
+        assertThat(result.products()).hasSize(1);
+        assertThat(result.products().get(0).scanned()).isFalse();
+        assertThat(result.products().get(0).price()).isEqualByComparingTo("2.99");
+    }
+
+    @Test
     void productWithoutGenericTypeReturnsOnlyItself() {
         var scanned = UUID.randomUUID();
         var noType = Product.builder().id(scanned).normalizedName("Produto X")

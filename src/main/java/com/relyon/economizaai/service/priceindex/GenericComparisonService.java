@@ -6,6 +6,7 @@ import com.relyon.economizaai.exception.ProductNotFoundException;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import com.relyon.economizaai.service.geo.ViewerLocationService;
 import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import com.relyon.economizaai.service.geo.WatchedMarketService;
@@ -57,13 +58,41 @@ public class GenericComparisonService {
             log.info("generic_comparison.capped type={} total={} cap={}", typeKey, siblings.size(), MAX_PRODUCTS);
             siblings = siblings.subList(0, MAX_PRODUCTS);
         }
+        return rank(typeName, typeKey, productId, siblings, location, watched);
+    }
+
+    /**
+     * Comparação genérica por TIPO (nome livre), quando só temos a prévia do catálogo e não há
+     * um produto exato pra ancorar. Normaliza o termo e agrupa por {@code generic_name_norm}.
+     */
+    @Transactional(readOnly = true)
+    public GenericComparisonResponse forType(String rawType, User user) {
+        var typeKey = DescriptionNormalizer.normalizeOrNull(rawType);
+        if (typeKey == null) {
+            return new GenericComparisonResponse(rawType, null, List.of());
+        }
+        var location = viewerLocationService.resolve(user);
+        var watched = watchedMarketService.watchedCnpjs(user);
+        var siblings = productRepository.findByGenericNameNormOrderByBrandNormAscPackSizeAsc(typeKey);
+        if (siblings.size() > MAX_PRODUCTS) {
+            log.info("generic_comparison.capped type={} total={} cap={}", typeKey, siblings.size(), MAX_PRODUCTS);
+            siblings = siblings.subList(0, MAX_PRODUCTS);
+        }
+        // typeName de display: o genericName de um produto do tipo (casa a acentuação do catálogo), ou o termo.
+        var typeName = siblings.stream().map(Product::getGenericName).filter(name -> name != null)
+                .findFirst().orElse(rawType);
+        return rank(typeName, typeKey, null, siblings, location, watched);
+    }
+
+    private GenericComparisonResponse rank(String typeName, String typeKey, UUID scannedId,
+                                           List<Product> siblings, ViewerLocation location, Set<String> watched) {
         var rows = siblings.stream()
-                .map(sibling -> toRow(sibling, productId, location, watched))
+                .map(sibling -> toRow(sibling, scannedId, location, watched))
                 .sorted(byCheapestFirst())
                 .toList();
         log.info("generic_comparison.done type={} products={} priced={}",
                 typeKey, rows.size(), rows.stream().filter(GenericProductRow::hasPrice).count());
-        return new GenericComparisonResponse(typeName, productId, rows);
+        return new GenericComparisonResponse(typeName, scannedId, rows);
     }
 
     private GenericProductRow toRow(Product product, UUID scannedId, ViewerLocation location, Set<String> watched) {

@@ -178,6 +178,23 @@ class PriceIndexControllerTest {
     }
 
     @Test
+    void genericComparisonByType_resolvesFromTypeQuery() throws Exception {
+        var response = new GenericComparisonResponse("Creme de Leite", null,
+                List.of(new GenericProductRow(UUID.randomUUID(), "Italac 200g", "Italac", "200g",
+                        false, true, new BigDecimal("2.99"), new BigDecimal("3.10"), "Mercado A",
+                        LocalDateTime.of(2026, 1, 1, 0, 0), 4, 2L)));
+        when(genericComparisonService.forType(eq("Creme de Leite"), any())).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/price-index/generic-comparison")
+                        .param("type", "Creme de Leite")
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.typeName").value("Creme de Leite"))
+                .andExpect(jsonPath("$.scannedProductId").doesNotExist())
+                .andExpect(jsonPath("$.products[0].label").value("Italac 200g"));
+    }
+
+    @Test
     void promos_returnsCurrentPromos() throws Exception {
         var scope = new NearbyScope(new ViewerLocation(null, null, ViewerLocationService.Source.NONE, "RS"), Set.of(), 10);
         when(nearbyScopeService.forUser(any(), isNull())).thenReturn(scope);

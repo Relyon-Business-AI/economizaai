@@ -9,7 +9,8 @@
   Resposta: `{ typeName, scannedProductId, products: [{ productId, label, brand, packLabel, scanned,
   hasPrice, price, typicalPrice, marketName, observedAt, sampleCount, distinctHouseholds }] }`.
   Produtos sem preço vão pro fim da lista. Serve o fluxo exato-primeiro: achou o exato → CTA "ver
-  todos"; não achou exato com preço → abre essa tela direto.
+  todos"; não achou exato com preço → abre essa tela direto. Variante por tipo (quando o scan só
+  achou a prévia do catálogo, sem produto exato): `GET /api/v1/price-index/generic-comparison?type=…`.
 - **Log de scans** (`product_scan`, migration **V136**): cada leitura de código de barras do fluxo
   admin "Comparar preço" é registrada (EAN, se casou exato/genérico/nenhum, o tipo, e um retrato da
   localização resolvida). Best-effort — nunca quebra o lookup. Sem mudança no contrato de `by-ean`.
