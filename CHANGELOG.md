@@ -1,5 +1,22 @@
 # economizai — what's new
 
+## 2026-11-09 — Comparação genérica vira LISTA PLANA de ofertas (mudança de contrato)
+
+- O endpoint `generic-comparison` (ambas as variantes — por produto e por `?type=`) deixa de
+  devolver um **roster** (um produto por linha, muitas vezes sem preço) e passa a devolver uma
+  **lista plana de ofertas ordenada por preço**: uma linha por **(produto, mercado)**, o mesmo
+  produto podendo aparecer várias vezes, do mais barato ao mais caro. Cada oferta:
+  `{ productId, productName, brand, packLabel, unitPrice, marketName, city, state, distanceKm
+  (nullable), observedAt, channel, scanned }`. Novo campo **`scope`** no envelope: qual tier da
+  cascata gerou a lista (`NEARBY` | `STATE` | `NATIONAL`). **`products` saiu**, entrou **`offers`**.
+- **Escopo alarga agora.** Antes a visão usava o raio fixo de 10 km do best-markets e nunca
+  alargava — marcas cujas observações ficavam fora do raio apareciam **todas "sem preço perto de
+  você"**. Como esta é uma "faixa de preço de referência" (explícita), a cascata agora **alarga**:
+  raio (~10 km) → UF do usuário → nacional, parando no primeiro tier com ofertas. O best-markets
+  de um produto **não** mudou (continua parando no raio de propósito). Estado vazio honesto só
+  quando não há observação nenhuma do tipo em toda a cascata.
+- K-anon por tier mantido, por (produto, mercado): mercearia n=1, farmácia/saúde K=3 (fail-closed).
+
 ## 2026-11-09 — Fix: comparação genérica da prévia do catálogo resolve o tipo canônico
 
 - O fallback por tipo (scan que acha só a prévia do catálogo, sem produto exato) usava o nome

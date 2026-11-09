@@ -71,6 +71,23 @@ public interface PriceObservationAuditRepository extends JpaRepository<PriceObse
         long getHouseholds();
     }
 
+    /** Generic-comparison k-anon: distinct contributing households per (product, market) for a
+     *  SET of products, in one query. The gate is applied per offer (product, store) in the
+     *  service — grocery n=1, pharmacy/health K=3 (fail-closed). */
+    @Query("""
+        SELECT a.observation.product.id AS productId, a.observation.marketCnpj AS cnpj,
+               COUNT(DISTINCT a.householdId) AS households
+        FROM PriceObservationAudit a
+        WHERE a.observation.product.id IN :productIds
+          AND a.observation.channel = 'IN_STORE'
+          AND a.observation.outlier = false
+          AND a.observation.observedAt >= :since
+        GROUP BY a.observation.product.id, a.observation.marketCnpj
+    """)
+    List<ProductMarketHouseholdCount> countDistinctHouseholdsForProductsByMarket(
+            @Param("productIds") List<UUID> productIds,
+            @Param("since") LocalDateTime since);
+
     /** K-anonymity helper for the best-markets ranking, at CHAIN granularity: distinct
      * contributing households per market chain (CNPJ root) for a product. Stores of one
      * chain pool their contributors, so K is reached far sooner than per store. */
