@@ -69,10 +69,12 @@ public class PausedStateRecoveryProbe {
                 alreadyRecovered.add(uf);
                 log.info("paused_state.recovered uf={} via={}", uf, via);
                 alertService.alertAdmin(
-                        "SEFAZ " + uf + " voltou (" + via + ") — pronto pra onboardar",
+                        "SEFAZ " + uf + " voltou (" + via + ") — CRIAR ADAPTER NATIVO",
                         "A consulta de " + uf.name().toLowerCase() + "/nfce voltou via " + via + ". Próximo passo: "
-                                + "limpar o cap de evidência do " + uf + ", revalidar a nota real em dev, "
-                                + "adicionar ao teste de estados e subir pra prod.");
+                                + "validar com a nota real e CRIAR UM ADAPTER NATIVO pro " + uf + " (igual AM/CE — "
+                                + "GET/scrape do portal + ResponsiveDanfeParser, fixture + teste), pra NÃO depender "
+                                + "mais de Infosimples/portal instável. Depois: limpar o cap de evidência, revalidar "
+                                + "em dev, adicionar ao teste de estados e subir pra prod. Ver docs/MULTI_STATE_RECON.md.");
             } else {
                 log.debug("paused_state.still_down uf={} infosimplesCode={}", uf, code);
             }
