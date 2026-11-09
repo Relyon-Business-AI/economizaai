@@ -6,7 +6,7 @@ import com.relyon.economizaai.exception.ProductNotFoundException;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.repository.ProductRepository;
-import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
+import com.relyon.economizaai.service.extraction.ProductTypeResolver;
 import com.relyon.economizaai.service.geo.ViewerLocationService;
 import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import com.relyon.economizaai.service.geo.WatchedMarketService;
@@ -40,6 +40,7 @@ public class GenericComparisonService {
     private final PriceIndexService priceIndexService;
     private final ViewerLocationService viewerLocationService;
     private final WatchedMarketService watchedMarketService;
+    private final ProductTypeResolver productTypeResolver;
 
     @Transactional(readOnly = true)
     public GenericComparisonResponse forProduct(UUID productId, User user) {
@@ -67,7 +68,9 @@ public class GenericComparisonService {
      */
     @Transactional(readOnly = true)
     public GenericComparisonResponse forType(String rawType, User user) {
-        var typeKey = DescriptionNormalizer.normalizeOrNull(rawType);
+        // Nomes de catálogo (OFF) são crus ("CREME DE LEITE UHT NESTLE") — resolve o tipo canônico
+        // pelo MESMO extrator da ingestão de nota, senão a busca por generic_name_norm casa 0.
+        var typeKey = productTypeResolver.typeKey(rawType);
         if (typeKey == null) {
             return new GenericComparisonResponse(rawType, null, List.of());
         }
@@ -78,9 +81,10 @@ public class GenericComparisonService {
             log.info("generic_comparison.capped type={} total={} cap={}", typeKey, siblings.size(), MAX_PRODUCTS);
             siblings = siblings.subList(0, MAX_PRODUCTS);
         }
-        // typeName de display: o genericName de um produto do tipo (casa a acentuação do catálogo), ou o termo.
+        // typeName de display: o genericName de um produto do tipo (casa a acentuação), senão o
+        // tipo canônico resolvido, senão o termo cru.
         var typeName = siblings.stream().map(Product::getGenericName).filter(name -> name != null)
-                .findFirst().orElse(rawType);
+                .findFirst().orElseGet(() -> productTypeResolver.canonicalGenericName(rawType));
         return rank(typeName, typeKey, null, siblings, location, watched);
     }
 
