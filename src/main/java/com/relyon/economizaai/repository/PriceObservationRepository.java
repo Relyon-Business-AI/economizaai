@@ -143,6 +143,18 @@ public interface PriceObservationRepository extends JpaRepository<PriceObservati
                                                            @Param("states") List<String> states,
                                                            @Param("since") LocalDateTime since);
 
+    /** Generic comparison: recent IN_STORE observations across a SET of products (all states). */
+    @Query("""
+        SELECT po FROM PriceObservation po
+        WHERE po.product.id IN :productIds
+          AND po.channel = 'IN_STORE'
+          AND po.outlier = false
+          AND po.observedAt >= :since
+        ORDER BY po.observedAt DESC
+    """)
+    List<PriceObservation> findRecentByProductIds(@Param("productIds") List<UUID> productIds,
+                                                  @Param("since") LocalDateTime since);
+
     @Query("""
         SELECT DISTINCT po.product.id FROM PriceObservation po
         WHERE po.product.id IN :productIds

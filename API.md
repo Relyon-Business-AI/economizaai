@@ -1216,20 +1216,26 @@ the user open the full brand/size range, call the generic comparison:
 GET /api/v1/price-index/products/{productId}/generic-comparison
 → {
     typeName: "Creme de Leite",          // header, the scanned product's generic name
-    scannedProductId: "…",               // highlight this row ("escaneado")
-    products: [                           // same type (generic_name_norm), cheapest first
-      { productId, label: "Italac 200g", brand, packLabel: "200g",
-        scanned: false, hasPrice: true, price: 2.99, typicalPrice: 3.10,
-        marketName: "Mercado A", observedAt, sampleCount, distinctHouseholds },
+    scannedProductId: "…",               // flag this offer's row ("escaneado")
+    scope: "STATE",                       // which cascade tier produced the list: NEARBY | STATE | NATIONAL
+    offers: [                             // FLAT list, one row per (product, market), cheapest first
+      { productId, productName: "Italac 200g", brand, packLabel: "200g",
+        unitPrice: 2.99, marketName: "Mercado A", city: "Porto Alegre", state: "RS",
+        distanceKm: 2.3,                 // nullable (null when no coordinates)
+        observedAt, channel: "IN_STORE", scanned: false },
       …
     ]
   }
 ```
 
-All products of the same type, each with its **best price near the user** (same
-"perto de você" cascade + tiered k-anon as `best-markets`). `price` is the real
-most-recent observed price in the cheapest nearby chain; `typicalPrice` is the
-median. Rows with `hasPrice: false` have no nearby data yet and sort to the end.
+A **flat, price-ascending list of offers** across every brand/size of the type — the
+same product can appear multiple times (one row per market). Each offer is the
+**most-recent observed price** for that (product, market) pair. Scope **widens** until
+it finds offers: within ~10 km of the user → the user's state (`STATE`) → national
+(`NATIONAL`) — unlike single-product `best-markets`, which stays near the user on
+purpose (this is an explicit "price-range reference"). Tiered k-anon per (product,
+market): grocery may disclose at n=1, pharmacy/health keep K=3 (fail-closed). Empty
+`offers` only when there is genuinely no data for the type across the whole cascade.
 These are **different brands/sizes** — a price-range reference, not the same product
 (show the caveat). Keep the scanner admin-only in the app for now.
 
