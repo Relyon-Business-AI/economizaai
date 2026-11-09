@@ -1,5 +1,16 @@
 # economizai — what's new
 
+## 2026-11-09 — Fix: comparação genérica da prévia do catálogo resolve o tipo canônico
+
+- O fallback por tipo (scan que acha só a prévia do catálogo, sem produto exato) usava o nome
+  **cru** do catálogo (Open Food Facts), ex.: "CREME DE LEITE UHT NESTLE" → normalizava pra
+  `"creme de leite uht nestle"` e casava **0 produtos** ("Sem comparação ainda"), apesar de
+  existirem dezenas de "creme de leite" na base. Agora o tipo é resolvido pelo **mesmo extrator
+  da ingestão de nota** (`ProductTypeResolver` → `ProductExtractor`/dicionário), que transforma o
+  nome ruidoso no `generic_name_norm` canônico `"creme de leite"`. Vale pra consulta
+  (`generic-comparison?type=`) e pro valor gravado em `product_scan.generic_name_norm`. O caminho
+  de match exato (EAN com produto) já funcionava e não mudou.
+
 ## 2026-11-09 — Scanner "Comparar preço": log de scans + comparação genérica ("ver todos")
 
 - **Novo endpoint** `GET /api/v1/price-index/products/{productId}/generic-comparison` — "Ver todos os

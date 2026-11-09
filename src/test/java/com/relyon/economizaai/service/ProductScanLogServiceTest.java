@@ -9,6 +9,7 @@ import com.relyon.economizaai.model.enums.ScanMatchType;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ProductScanRepository;
 import com.relyon.economizaai.service.extraction.EanCatalogService;
+import com.relyon.economizaai.service.extraction.ProductTypeResolver;
 import com.relyon.economizaai.service.geo.ViewerLocationService;
 import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,6 +41,7 @@ class ProductScanLogServiceTest {
     @Mock private EanCatalogService eanCatalogService;
     @Mock private ViewerLocationService viewerLocationService;
     @Mock private ProductScanRepository productScanRepository;
+    @Mock private ProductTypeResolver productTypeResolver;
     @Mock private PlatformTransactionManager transactionManager;
 
     private ProductScanLogService service;
@@ -48,7 +50,7 @@ class ProductScanLogServiceTest {
     @BeforeEach
     void setUp() {
         service = new ProductScanLogService(productRepository, eanCatalogService,
-                viewerLocationService, productScanRepository, transactionManager);
+                viewerLocationService, productScanRepository, productTypeResolver, transactionManager);
         var household = Household.builder().id(UUID.randomUUID()).build();
         user = User.builder().id(UUID.randomUUID()).household(household).build();
         lenient().when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
@@ -81,11 +83,13 @@ class ProductScanLogServiceTest {
     }
 
     @Test
-    void logsGenericWhenOnlyInCatalog() {
+    void logsGenericWithCanonicalTypeFromNoisyCatalogName() {
         when(productRepository.findByEan("7891000100103")).thenReturn(Optional.empty());
         var entry = mock(EanCatalogEntry.class);
-        when(entry.getGenericName()).thenReturn("Creme de Leite");
+        when(entry.getGenericName()).thenReturn("CREME DE LEITE UHT NESTLE");
         when(eanCatalogService.lookup("7891000100103")).thenReturn(Optional.of(entry));
+        // o resolver (pipeline da ingestão) transforma o nome cru no tipo canônico normalizado
+        when(productTypeResolver.typeKey("CREME DE LEITE UHT NESTLE")).thenReturn("creme de leite");
 
         service.record(user, "7891000100103");
 
