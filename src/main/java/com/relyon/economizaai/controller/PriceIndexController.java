@@ -1,5 +1,6 @@
 package com.relyon.economizaai.controller;
 
+import com.relyon.economizaai.dto.response.GenericComparisonResponse;
 import com.relyon.economizaai.dto.response.PromoFeedResponse;
 import com.relyon.economizaai.dto.response.SponsoredPromoResponse;
 import com.relyon.economizaai.model.User;
@@ -8,6 +9,7 @@ import com.relyon.economizaai.service.geo.ViewerLocationService;
 import com.relyon.economizaai.service.geo.WatchedMarketService;
 import com.relyon.economizaai.service.merchant.SponsoredPromoService;
 import com.relyon.economizaai.service.priceindex.CommunityPromoService;
+import com.relyon.economizaai.service.priceindex.GenericComparisonService;
 import com.relyon.economizaai.service.priceindex.PriceIndexService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -46,6 +48,7 @@ public class PriceIndexController {
     private final SponsoredPromoService sponsoredPromoService;
     private final ViewerLocationService viewerLocationService;
     private final NearbyScopeService nearbyScopeService;
+    private final GenericComparisonService genericComparisonService;
 
     @GetMapping("/products/{productId}/markets/{marketCnpj}/reference")
     public ResponseEntity<PriceIndexService.ReferencePrice> reference(@PathVariable UUID productId,
@@ -104,6 +107,19 @@ public class PriceIndexController {
         }
         return ResponseEntity.ok(priceIndexService.bestMarketsForViewer(productId, limit,
                 viewerLocationService.resolve(user), watched));
+    }
+
+    /**
+     * "Ver todos os [tipo]" — comparação genérica do scanner: todos os produtos do mesmo
+     * tipo que o escaneado ({@code generic_name_norm}, ex.: "creme de leite"), cada um com
+     * seu melhor preço perto do usuário (mesma cascata + k-anon do best-markets), do mais
+     * barato ao mais caro. Marcas/tamanhos diferentes: referência de faixa de preço.
+     */
+    @GetMapping("/products/{productId}/generic-comparison")
+    public ResponseEntity<GenericComparisonResponse> genericComparison(
+            @AuthenticationPrincipal User user,
+            @PathVariable UUID productId) {
+        return ResponseEntity.ok(genericComparisonService.forProduct(productId, user));
     }
 
     @GetMapping("/promos")

@@ -5075,7 +5075,34 @@
 					"response": []
 				},
 				{
-					"name": "Current community promos",
+					"name": "Generic comparison for a product (ver todos)",
+						"request": {
+							"method": "GET",
+							"header": [
+								{
+									"key": "Accept-Language",
+									"value": "pt"
+								}
+							],
+							"url": {
+								"raw": "{{baseUrl}}/api/v1/price-index/products/{{e2eProductId}}/generic-comparison",
+								"host": [
+									"{{baseUrl}}"
+								],
+								"path": [
+									"api",
+									"v1",
+									"price-index",
+									"products",
+									"{{e2eProductId}}",
+									"generic-comparison"
+								]
+							}
+						},
+						"response": []
+					},
+					{
+						"name": "Current community promos",
 					"request": {
 						"method": "GET",
 						"header": [

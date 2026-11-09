@@ -1,5 +1,19 @@
 # economizai — what's new
 
+## 2026-11-09 — Scanner "Comparar preço": log de scans + comparação genérica ("ver todos")
+
+- **Novo endpoint** `GET /api/v1/price-index/products/{productId}/generic-comparison` — "Ver todos os
+  [tipo]". Dado o produto escaneado, devolve **todos os produtos do mesmo tipo** (ex.: todos os
+  "creme de leite", agrupados por `generic_name_norm`), cada um com o **melhor preço perto do
+  usuário**, do mais barato ao mais caro. Mesma cascata de localização e **k-anon** do best-markets.
+  Resposta: `{ typeName, scannedProductId, products: [{ productId, label, brand, packLabel, scanned,
+  hasPrice, price, typicalPrice, marketName, observedAt, sampleCount, distinctHouseholds }] }`.
+  Produtos sem preço vão pro fim da lista. Serve o fluxo exato-primeiro: achou o exato → CTA "ver
+  todos"; não achou exato com preço → abre essa tela direto.
+- **Log de scans** (`product_scan`, migration **V136**): cada leitura de código de barras do fluxo
+  admin "Comparar preço" é registrada (EAN, se casou exato/genérico/nenhum, o tipo, e um retrato da
+  localização resolvida). Best-effort — nunca quebra o lookup. Sem mudança no contrato de `by-ean`.
+
 ## 2026-11-09 — App forçado em português (fim das mensagens em inglês)
 
 - O backend passa a **forçar pt** em toda mensagem (FixedLocaleResolver), ignorando o
