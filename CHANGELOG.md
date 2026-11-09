@@ -1,5 +1,24 @@
 # economizai — what's new
 
+## 2026-11-09 — Comparação genérica: nome amigável do mercado + histórico por mercado (linha expansível)
+
+- **Ofertas ganham `marketCnpj` e `marketFriendlyName`.** Cada `GenericOffer` agora traz o CNPJ
+  (14 dígitos) do mercado e um **nome amigável** pra linha — derivado igual ao histórico das
+  insights: apelido do lar (`HouseholdMarketAlias`) → nome da rede (`MarketChain` por raiz de CNPJ)
+  → heurística que limpa a razão social (tira `COMERCIO E INDUSTRIA`, `LTDA`, `S/A`, `EIRELI`, `ME`…
+  e title-case). O `marketName` passou a ser a **razão social completa** (pros detalhes). FE: mostre
+  `marketFriendlyName` na linha (fallback `marketName`) e a razão social completa nos detalhes.
+- **Novo endpoint** `GET /api/v1/price-index/products/{productId}/markets/{marketCnpj}/price-history`
+  — série de preço no tempo de UM produto num UM mercado, mesmo shape do `PriceHistoryResponse` das
+  insights (o FE reaproveita o mesmo gráfico SVG). **Mesmo k-anon por tier do par** das ofertas
+  (mercearia n=1, farmácia/saúde K=3, fail-closed): bloqueado/sem dado → `points: []` (nunca
+  parcial); 1 ponto renderiza o preço único sem quebrar. Autenticado como os demais price-index.
+- **FE:** a linha de oferta agora **expande ao toque** revelando razão social completa, distância
+  (ou cidade/UF), data por extenso e o **gráfico de preço daquele produto naquele mercado** (busca
+  sob demanda ao expandir, com loading e estado vazio). Fix do bug "RI": o `region` do GPS (nome
+  completo do estado, ex. "Rio Grande do Sul") agora vira a UF correta (`RS`) por um mapa dos 27
+  estados; UF de 2 letras é mantida; nome desconhecido não inventa sigla.
+
 ## 2026-11-09 — Comparação genérica vira LISTA PLANA de ofertas (mudança de contrato)
 
 - O endpoint `generic-comparison` (ambas as variantes — por produto e por `?type=`) deixa de

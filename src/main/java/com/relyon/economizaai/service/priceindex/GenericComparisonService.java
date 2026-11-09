@@ -3,6 +3,8 @@ package com.relyon.economizaai.service.priceindex;
 import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.dto.response.GenericComparisonResponse;
 import com.relyon.economizaai.dto.response.GenericComparisonResponse.GenericOffer;
+import com.relyon.economizaai.dto.response.PriceHistoryResponse;
+import com.relyon.economizaai.dto.response.PriceHistoryResponse.PricePoint;
 import com.relyon.economizaai.exception.ProductNotFoundException;
 import com.relyon.economizaai.model.MarketLocation;
 import com.relyon.economizaai.model.PriceObservation;
@@ -12,9 +14,12 @@ import com.relyon.economizaai.repository.PriceObservationAuditRepository;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository.ProductMarketHouseholdCount;
 import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.HouseholdProductAliasService;
 import com.relyon.economizaai.service.extraction.ProductTypeResolver;
+import com.relyon.economizaai.service.geo.CnpjNormalizer;
 import com.relyon.economizaai.service.geo.DistanceCalculator;
 import com.relyon.economizaai.service.geo.MarketLocationService;
+import com.relyon.economizaai.service.geo.MarketNameService;
 import com.relyon.economizaai.service.geo.ViewerLocationService;
 import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import com.relyon.economizaai.time.BrazilClock;
@@ -58,9 +63,11 @@ public class GenericComparisonService {
     private final PriceObservationRepository observationRepository;
     private final PriceObservationAuditRepository auditRepository;
     private final MarketLocationService marketLocationService;
+    private final MarketNameService marketNameService;
     private final ViewerLocationService viewerLocationService;
     private final PrivacyTierResolver privacyTierResolver;
     private final ProductTypeResolver productTypeResolver;
+    private final HouseholdProductAliasService householdProductAliasService;
     private final CollaborativeProperties properties;
 
     @Transactional(readOnly = true)
@@ -93,6 +100,47 @@ public class GenericComparisonService {
         var typeName = siblings.stream().map(Product::getGenericName).filter(name -> name != null)
                 .findFirst().orElseGet(() -> productTypeResolver.canonicalGenericName(rawType));
         return build(typeName, typeKey, null, siblings, user);
+    }
+
+    /**
+     * Série de preço no tempo de UM produto num UM mercado (par produto, CNPJ), para o gráfico
+     * stock/dólar da linha expandida da comparação genérica. Reusa {@code PriceHistoryResponse}
+     * pra o FE aproveitar o mesmo gráfico. Mesmo gate k-anônimo por tier do par usado nas ofertas
+     * (mercearia n=1, farmácia/saúde K=3, fail-closed): bloqueado devolve série vazia, nunca parcial.
+     */
+    @Transactional(readOnly = true)
+    public PriceHistoryResponse priceHistoryForMarket(UUID productId, String marketCnpj, User user) {
+        var product = productRepository.findById(productId).orElseThrow(ProductNotFoundException::new);
+        var cnpj = CnpjNormalizer.normalize(marketCnpj);
+        var since = BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getBestMarketsLookbackDays());
+        var observations = observationRepository.findRecentByProductAndMarket(productId, cnpj, since);
+        var friendlyDescription = householdProductAliasService.findFor(user.getHousehold(), product);
+        if (observations.isEmpty() || isBlockedByKanon(product, cnpj, observations, since)) {
+            log.info("price_history_market.done product={} cnpj={} points=0 blocked={}",
+                    productId, cnpj, !observations.isEmpty());
+            return new PriceHistoryResponse(productId, product.getNormalizedName(), friendlyDescription, List.of());
+        }
+        var rawName = observations.get(0).getMarketName();
+        var marketFriendlyName = marketNameService.friendlyName(user.getHousehold().getId(), cnpj, rawName);
+        // ASC no tempo: o gráfico de linha desenha do mais antigo ao mais recente (igual às insights).
+        var points = observations.stream()
+                .sorted(Comparator.comparing(PriceObservation::getObservedAt))
+                .map(observation -> new PricePoint(observation.getObservedAt(), cnpj, rawName,
+                        marketFriendlyName, observation.getUnitPrice(), observation.getQuantity()))
+                .toList();
+        log.info("price_history_market.done product={} cnpj={} points={}", productId, cnpj, points.size());
+        return new PriceHistoryResponse(productId, product.getNormalizedName(), friendlyDescription, points);
+    }
+
+    /** K-anon do par (produto, mercado): conta todas as observações do par + households distintos. */
+    private boolean isBlockedByKanon(Product product, String cnpj,
+                                     List<PriceObservation> observations, LocalDateTime since) {
+        var households = auditRepository.countDistinctHouseholdsForProductMarket(product.getId(), cnpj, since);
+        var sensitiveProduct = privacyTierResolver.isSensitiveProduct(product.getId());
+        var sensitiveMarket = PrivacyTierResolver.isSensitiveMarket(
+                marketLocationService.findByCnpjs(List.of(cnpj)).get(cnpj));
+        var thresholds = privacyTierResolver.thresholdsFor(sensitiveProduct || sensitiveMarket);
+        return thresholds.blocks(observations.size(), households);
     }
 
     private List<Product> siblings(String typeKey) {
@@ -182,6 +230,8 @@ public class GenericComparisonService {
         private final Map<ProductMarket, Long> householdsByPair;
         private final Map<ProductMarket, Long> observationsByPair;
         private final Map<UUID, Boolean> sensitiveByProduct;
+        private final Map<String, String> marketNameOverrides;
+        private final Map<String, String> chainNames;
 
         OfferContext(List<Product> products, List<PriceObservation> observations, UUID scannedId, User user) {
             this.productsById = products.stream().collect(Collectors.toMap(Product::getId, product -> product));
@@ -190,6 +240,8 @@ public class GenericComparisonService {
             this.location = viewerLocationService.resolve(user);
             var cnpjs = observations.stream().map(PriceObservation::getMarketCnpj).distinct().toList();
             this.marketLocations = marketLocationService.findByCnpjs(new ArrayList<>(cnpjs));
+            this.marketNameOverrides = marketNameService.resolveNames(user.getHousehold().getId(), cnpjs);
+            this.chainNames = marketNameService.resolveChainNames(cnpjs);
             var productIds = new ArrayList<>(productsById.keySet());
             var since = BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getBestMarketsLookbackDays());
             this.householdsByPair = auditRepository.countDistinctHouseholdsForProductsByMarket(productIds, since).stream()
@@ -233,9 +285,11 @@ public class GenericComparisonService {
             var product = productsById.get(observation.getProduct().getId());
             var packLabel = packLabelOf(product);
             var scanned = product.getId().equals(scannedId);
+            var friendlyName = marketNameService.friendlyName(
+                    marketNameOverrides, chainNames, observation.getMarketCnpj(), observation.getMarketName());
             return new GenericOffer(product.getId(), labelOf(product, packLabel), product.getBrand(), packLabel,
-                    observation.getUnitPrice(), observation.getMarketName(), observation.getCity(),
-                    observation.getState(), distanceKm(observation), observation.getObservedAt(),
+                    observation.getUnitPrice(), observation.getMarketCnpj(), observation.getMarketName(), friendlyName,
+                    observation.getCity(), observation.getState(), distanceKm(observation), observation.getObservedAt(),
                     observation.getChannel() == null ? null : observation.getChannel().name(), scanned);
         }
     }
