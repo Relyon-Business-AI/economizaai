@@ -1631,6 +1631,65 @@
 					"response": []
 				},
 				{
+					"name": "Preview an invite code (name, host, member count — before joining)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/households/invites/ABC123",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"households",
+								"invites",
+								"ABC123"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Rename my household (any member; blank clears)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/households/me",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"households",
+								"me"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Casa da Ana\"\n}"
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "Leave household",
 					"request": {
 						"method": "POST",
@@ -7536,6 +7595,136 @@
 									"    pm.expect(d.members[0].email).to.eql(pm.collectionVariables.get('e2eEmail'));",
 									"    pm.collectionVariables.set('e2eHouseholdId', d.id);",
 									"    pm.collectionVariables.set('e2eInviteCode', d.inviteCode);",
+									"});",
+									"pm.test('Registering user is the host', function () {",
+									"    pm.expect(d.hostId).to.eql(d.members[0].id);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "8a. Rename my household",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/households/me",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"households",
+								"me"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Casa E2E\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 200 with the new name', function () {",
+									"    pm.response.to.have.status(200);",
+									"    pm.expect(pm.response.json().name).to.eql('Casa E2E');",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "8b. Preview my own invite code",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/households/invites/{{e2eInviteCode}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"households",
+								"invites",
+								"{{e2eInviteCode}}"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Preview shows the renamed household with one member', function () {",
+									"    pm.response.to.have.status(200);",
+									"    var d = pm.response.json();",
+									"    pm.expect(d.householdName).to.eql('Casa E2E');",
+									"    pm.expect(d.memberCount).to.eql(1);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "8c. Leave while alone is refused (400)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/households/leave",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"households",
+								"leave"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Solo leave returns 400 and keeps the household', function () {",
+									"    pm.response.to.have.status(400);",
 									"});"
 								]
 							}
