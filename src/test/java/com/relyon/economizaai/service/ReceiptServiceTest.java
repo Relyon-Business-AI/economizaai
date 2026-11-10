@@ -34,6 +34,7 @@ import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
+import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.HouseholdProductAliasService;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.cache.HouseholdCacheGen;
@@ -100,6 +101,7 @@ class ReceiptServiceTest {
             "https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx?p=" + CHAVE_RS + "|2|1|1|hash";
 
     @Mock private ReceiptRepository receiptRepository;
+    @Mock private UserRepository userRepository;
     @Mock private ReceiptItemRepository receiptItemRepository;
     @Mock private SefazIngestionService sefazIngestionService;
     @Mock private StateCoverageService stateCoverageService;

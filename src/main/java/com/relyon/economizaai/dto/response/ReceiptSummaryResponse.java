@@ -40,7 +40,9 @@ public record ReceiptSummaryResponse(
         // Machine key (FE never renders it raw) — lets the list decide if a FAILED nota is
         // worth retrying (transient) or final. parseErrorMessage is the localized text to show.
         String parseErrorReason,
-        String parseErrorMessage
+        String parseErrorMessage,
+        // Who scanned it — the per-member attribution a shared household shows ("por Ana").
+        ScannedBy scannedBy
 ) {
     public static ReceiptSummaryResponse from(Receipt receipt) {
         var householdTotal = receipt.getItems().stream()
@@ -62,7 +64,8 @@ public record ReceiptSummaryResponse(
                 receipt.getItems().size(),
                 receipt.getStatus(),
                 receipt.getParseErrorReason(),
-                null
+                null,
+                ScannedBy.of(receipt.getUser())
         );
     }
 
@@ -70,14 +73,22 @@ public record ReceiptSummaryResponse(
     public ReceiptSummaryResponse withMarketFriendlyName(String marketFriendlyName) {
         return new ReceiptSummaryResponse(id, marketName, marketFriendlyName, issuedAt,
                 totalAmount, householdTotalAmount, discountTotal, approxTaxTotal, itemCount, status,
-                parseErrorReason, parseErrorMessage);
+                parseErrorReason, parseErrorMessage, scannedBy);
     }
 
     /** Copy with the localized failure message (null for non-failed rows). */
     public ReceiptSummaryResponse withParseErrorMessage(String parseErrorMessage) {
         return new ReceiptSummaryResponse(id, marketName, marketFriendlyName, issuedAt,
                 totalAmount, householdTotalAmount, discountTotal, approxTaxTotal, itemCount, status,
-                parseErrorReason, parseErrorMessage);
+                parseErrorReason, parseErrorMessage, scannedBy);
+    }
+
+    /** Copy with the scanner's name resolved (lists load user names in one batch, not per row). */
+    public ReceiptSummaryResponse withScannedByName(String scannerName) {
+        if (scannedBy == null || scannerName == null) return this;
+        return new ReceiptSummaryResponse(id, marketName, marketFriendlyName, issuedAt,
+                totalAmount, householdTotalAmount, discountTotal, approxTaxTotal, itemCount, status,
+                parseErrorReason, parseErrorMessage, scannedBy.withName(scannerName));
     }
 
     private static BigDecimal approxTaxTotal(Receipt receipt) {

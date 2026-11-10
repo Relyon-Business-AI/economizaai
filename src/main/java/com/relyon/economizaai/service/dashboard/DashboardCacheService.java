@@ -13,6 +13,11 @@ import com.relyon.economizaai.model.enums.MarketScope;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
+import com.relyon.economizaai.repository.UserRepository;
+import com.relyon.economizaai.model.User;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.stream.Collectors;
 import com.relyon.economizaai.service.InsightsService;
 import com.relyon.economizaai.service.consumption.ConsumptionIntelligenceService;
 import com.relyon.economizaai.service.geo.MarketNameService;
@@ -58,6 +63,7 @@ public class DashboardCacheService {
     private final InsightsService insightsService;
     private final InsightsRepository insightsRepository;
     private final ReceiptRepository receiptRepository;
+    private final UserRepository userRepository;
     private final ConsumptionIntelligenceService consumptionService;
     private final CommunityPromoService communityPromoService;
     private final NearbyScopeService nearbyScopeService;
@@ -114,11 +120,30 @@ public class DashboardCacheService {
                 .distinct()
                 .toList();
         var recentOverrides = marketNameService.resolveNames(householdId, recentCnpjs);
+        var scannerNames = scannerNamesFor(recentReceipts);
         return recentReceipts.stream()
                 .map(receipt -> ReceiptSummaryResponse.from(receipt)
                         .withMarketFriendlyName(marketNameService.applyOverride(
-                                recentOverrides, receipt.getCnpjEmitente(), receipt.getMarketName())))
+                                recentOverrides, receipt.getCnpjEmitente(), receipt.getMarketName()))
+                        .withScannedByName(scannerNames.get(scannerId(receipt))))
                 .toList();
+    }
+
+    private static UUID scannerId(Receipt receipt) {
+        return receipt.getUser() == null ? null : receipt.getUser().getId();
+    }
+
+    // One query for the scanners' names ("por Ana" on the home list) instead of a lazy load per row.
+    private Map<UUID, String> scannerNamesFor(List<Receipt> receipts) {
+        var userIds = receipts.stream()
+                .map(DashboardCacheService::scannerId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        // HashMap, not Map.of(): the lookup key may be null for a user-less row, and Map.of().get(null) throws.
+        if (userIds.isEmpty()) return new HashMap<>();
+        return userRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(User::getId, User::getName, (first, second) -> first, HashMap::new));
     }
 
     private List<CommunityPromo> loadTopPromos(User user, UUID householdId) {

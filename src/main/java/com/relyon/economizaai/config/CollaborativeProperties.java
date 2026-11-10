@@ -82,11 +82,18 @@ public class CollaborativeProperties {
          * {@code SUBSCRIPTION_ENFORCE=true}. When true, FREE caps below apply.
          */
         private boolean enforce = false;
+        /**
+         * Absolute member cap of a household (the PRO / family-plan ceiling). Applies
+         * even with enforcement off — it bounds the merge/restore work, not the paywall.
+         */
+        private int householdMembersMax = 6;
         private final Free free = new Free();
         private final Promo promo = new Promo();
 
         public boolean isEnforce() { return enforce; }
         public void setEnforce(boolean v) { this.enforce = v; }
+        public int getHouseholdMembersMax() { return householdMembersMax; }
+        public void setHouseholdMembersMax(int v) { this.householdMembersMax = v; }
         public Free getFree() { return free; }
         public Promo getPromo() { return promo; }
 
@@ -119,7 +126,11 @@ public class CollaborativeProperties {
             private int historyDays = 90;
             /** Max receipts a FREE user may submit per calendar month. */
             private int monthlyReceipts = 5;
+            /** Max members of a household with no PRO member (a couple). */
+            private int householdMembers = 2;
 
+            public int getHouseholdMembers() { return householdMembers; }
+            public void setHouseholdMembers(int v) { this.householdMembers = v; }
             public int getWatchedMarkets() { return watchedMarkets; }
             public void setWatchedMarkets(int v) { this.watchedMarkets = v; }
             public int getHistoryDays() { return historyDays; }

@@ -4,7 +4,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.relyon.economizaai.config.SecurityConfig;
 import com.relyon.economizaai.dto.request.JoinHouseholdRequest;
 import com.relyon.economizaai.dto.response.HouseholdResponse;
+import com.relyon.economizaai.dto.response.InvitePreviewResponse;
+import com.relyon.economizaai.exception.HouseholdFullException;
 import com.relyon.economizaai.exception.InvalidInviteCodeException;
+import com.relyon.economizaai.exception.NotHouseholdHostException;
+import com.relyon.economizaai.exception.SoloHouseholdLeaveException;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.security.JwtService;
@@ -25,8 +29,11 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -68,6 +75,8 @@ class HouseholdControllerTest {
 
     private HouseholdResponse sampleResponse() {
         return new HouseholdResponse(
+                UUID.randomUUID(),
+                "Casa Teste",
                 UUID.randomUUID(),
                 "ABC123",
                 LocalDateTime.now().plusHours(48),
@@ -129,5 +138,109 @@ class HouseholdControllerTest {
                         .with(SecurityMockMvcRequestPostProcessors.user(user)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.inviteCode").value("ABC123"));
+    }
+
+    @Test
+    void leave_whenAlone_returns400() throws Exception {
+        var user = buildUser();
+        when(householdService.leave(any(User.class))).thenThrow(new SoloHouseholdLeaveException());
+
+        mockMvc.perform(post("/api/v1/households/leave")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void join_whenFreeCapHit_returns402() throws Exception {
+        var user = buildUser();
+        when(householdService.join(any(User.class), any(JoinHouseholdRequest.class)))
+                .thenThrow(new HouseholdFullException(2, true));
+
+        mockMvc.perform(post("/api/v1/households/join")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new JoinHouseholdRequest("ABC123", null, null))))
+                .andExpect(status().isPaymentRequired());
+    }
+
+    @Test
+    void join_whenAbsoluteCapHit_returns400() throws Exception {
+        var user = buildUser();
+        when(householdService.join(any(User.class), any(JoinHouseholdRequest.class)))
+                .thenThrow(new HouseholdFullException(6, false));
+
+        mockMvc.perform(post("/api/v1/households/join")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new JoinHouseholdRequest("ABC123", null, null))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void rename_returnsHouseholdWithNameAndHost() throws Exception {
+        var user = buildUser();
+        when(householdService.rename(any(User.class), eq("Casa Teste"))).thenReturn(sampleResponse());
+
+        mockMvc.perform(patch("/api/v1/households/me")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Casa Teste\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Casa Teste"))
+                .andExpect(jsonPath("$.hostId").isNotEmpty());
+    }
+
+    @Test
+    void rename_rejectsNamesOver60Chars() throws Exception {
+        var user = buildUser();
+
+        mockMvc.perform(patch("/api/v1/households/me")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"" + "x".repeat(61) + "\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void previewInvite_returnsFirstNamesOnly() throws Exception {
+        var user = buildUser();
+        when(householdService.previewInvite("ABC123"))
+                .thenReturn(new InvitePreviewResponse("Casa Teste", "Ana", 2, List.of("Ana", "Bruno")));
+
+        mockMvc.perform(get("/api/v1/households/invites/ABC123")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.householdName").value("Casa Teste"))
+                .andExpect(jsonPath("$.hostFirstName").value("Ana"))
+                .andExpect(jsonPath("$.memberCount").value(2))
+                .andExpect(jsonPath("$.memberFirstNames[1]").value("Bruno"));
+    }
+
+    @Test
+    void previewInvite_requiresAuthentication() throws Exception {
+        mockMvc.perform(get("/api/v1/households/invites/ABC123"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void removeMember_nonHost_returns403() throws Exception {
+        var user = buildUser();
+        when(householdService.removeMember(any(User.class), any(UUID.class)))
+                .thenThrow(new NotHouseholdHostException());
+
+        mockMvc.perform(delete("/api/v1/households/me/members/" + UUID.randomUUID())
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void removeMember_host_returnsRemainingMembers() throws Exception {
+        var user = buildUser();
+        when(householdService.removeMember(any(User.class), any(UUID.class))).thenReturn(sampleResponse());
+
+        mockMvc.perform(delete("/api/v1/households/me/members/" + UUID.randomUUID())
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.members.length()").value(1));
     }
 }

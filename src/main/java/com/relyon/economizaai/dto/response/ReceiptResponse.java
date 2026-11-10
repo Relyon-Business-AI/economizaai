@@ -35,7 +35,9 @@ public record ReceiptResponse(
         String parseErrorMessage,
         LocalDateTime confirmedAt,
         LocalDateTime createdAt,
-        List<ReceiptItemResponse> items
+        List<ReceiptItemResponse> items,
+        // Who scanned it — the per-member attribution a shared household shows ("por Ana").
+        ScannedBy scannedBy
 ) {
     public static ReceiptResponse from(Receipt receipt) {
         return from(receipt, Map.of(), Map.of());
@@ -122,7 +124,8 @@ public record ReceiptResponse(
                             var suggested = (label != null || nodeSlug != null) && item.getProduct() == null;
                             return ReceiptItemResponse.from(item, label, suggested, nodeSlug, nodeLabel);
                         })
-                        .toList()
+                        .toList(),
+                ScannedBy.of(receipt.getUser())
         );
     }
 
@@ -131,7 +134,7 @@ public record ReceiptResponse(
         return new ReceiptResponse(
                 id, chaveAcesso, qrPayload, uf, cnpjEmitente, marketName, marketFriendlyName, marketAddress,
                 issuedAt, totalAmount, householdTotalAmount, discountTotal, approxTaxFederal, approxTaxEstadual,
-                approxTaxTotal, status, parseErrorReason, parseErrorMessage, confirmedAt, createdAt, items);
+                approxTaxTotal, status, parseErrorReason, parseErrorMessage, confirmedAt, createdAt, items, scannedBy);
     }
 
     /** Copy with the localized, user-showable failure message (Accept-Language resolved). */
@@ -139,7 +142,17 @@ public record ReceiptResponse(
         return new ReceiptResponse(
                 id, chaveAcesso, qrPayload, uf, cnpjEmitente, marketName, marketFriendlyName, marketAddress,
                 issuedAt, totalAmount, householdTotalAmount, discountTotal, approxTaxFederal, approxTaxEstadual,
-                approxTaxTotal, status, parseErrorReason, parseErrorMessage, confirmedAt, createdAt, items);
+                approxTaxTotal, status, parseErrorReason, parseErrorMessage, confirmedAt, createdAt, items, scannedBy);
+    }
+
+    /** Copy with the scanner's name resolved when the entity's user was a lazy proxy. */
+    public ReceiptResponse withScannedByName(String scannerName) {
+        if (scannedBy == null || scannerName == null) return this;
+        return new ReceiptResponse(
+                id, chaveAcesso, qrPayload, uf, cnpjEmitente, marketName, marketFriendlyName, marketAddress,
+                issuedAt, totalAmount, householdTotalAmount, discountTotal, approxTaxFederal, approxTaxEstadual,
+                approxTaxTotal, status, parseErrorReason, parseErrorMessage, confirmedAt, createdAt, items,
+                scannedBy.withName(scannerName));
     }
 
     /** Household override wins; for unlinked items fall back to the dictionary suggestion. */

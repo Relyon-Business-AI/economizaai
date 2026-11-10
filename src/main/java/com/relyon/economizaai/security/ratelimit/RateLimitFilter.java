@@ -214,10 +214,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
                     EXTRACT_POLICY,
                     req -> "POST".equals(req.getMethod()) && EXTRACT_PATH.equals(req.getRequestURI()),
                     KeyStrategy.USER_OR_IP),
+            // Join AND preview share the budget: both answer "is this code valid?", so a
+            // guesser can't use the preview endpoint to probe codes for free.
             new Rule(
                     HOUSEHOLD_JOIN_POLICY,
-                    req -> "POST".equals(req.getMethod())
-                            && "/api/v1/households/join".equals(req.getRequestURI()),
+                    req -> ("POST".equals(req.getMethod())
+                            && "/api/v1/households/join".equals(req.getRequestURI()))
+                            || ("GET".equals(req.getMethod())
+                            && req.getRequestURI().startsWith("/api/v1/households/invites/")),
                     KeyStrategy.USER_OR_IP),
             new Rule(
                     RESEND_POLICY,
