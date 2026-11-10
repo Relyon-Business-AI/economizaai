@@ -5,6 +5,7 @@ import com.relyon.economizaai.dto.response.HouseholdResponse;
 import com.relyon.economizaai.dto.response.InvitePreviewResponse;
 import com.relyon.economizaai.exception.AlreadyInHouseholdException;
 import com.relyon.economizaai.exception.HouseholdFullException;
+import com.relyon.economizaai.exception.HouseholdLeaveFirstException;
 import com.relyon.economizaai.exception.InvalidInviteCodeException;
 import com.relyon.economizaai.exception.NotHouseholdHostException;
 import com.relyon.economizaai.exception.NotInHouseholdException;
@@ -47,15 +48,18 @@ public class HouseholdService {
     private static final int INVITE_TTL_HOURS = 48;
     private static final String HOUSEHOLD_MISSING_MSG = "Household missing for user ";
 
-    // Oldest account first — the deterministic "who inherits the host role" order.
+    // Who has been in the household longest: the original host (never joined — null
+    // joined-at) first, then guests by join time. Decides who inherits the host role.
     private static final Comparator<User> BY_SENIORITY =
-            Comparator.comparing(User::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder()))
+            Comparator.comparing(User::getHouseholdJoinedAt, Comparator.nullsFirst(Comparator.naturalOrder()))
+                    .thenComparing(User::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder()))
                     .thenComparing(User::getId);
 
     private final HouseholdRepository householdRepository;
     private final UserRepository userRepository;
     private final ReceiptRepository receiptRepository;
     private final HouseholdMergeService mergeService;
+    private final HouseholdSplitService splitService;
     private final HouseholdCacheGen householdCacheGen;
     private final SubscriptionGateService subscriptionGate;
     private final NotificationService notificationService;
@@ -76,6 +80,10 @@ public class HouseholdService {
     // a "home" until its data is restored or removed.
     private void deleteHouseholdIfEmptyAndOwnsNoData(Household household) {
         if (userRepository.countByHouseholdId(household.getId()) != 0) {
+            return;
+        }
+        if (userRepository.existsByHomeHouseholdId(household.getId())) {
+            log.info("household.keep_dormant {} is the home of a member away as a guest; not deleting", household.getId());
             return;
         }
         var ownsData = receiptRepository.existsByHouseholdId(household.getId())
@@ -111,11 +119,12 @@ public class HouseholdService {
     @Transactional
     public HouseholdResponse regenerateInviteCode(User user) {
         var household = loadHouseholdOf(user);
+        requireHost(user, household, membersOf(household));
         household.setInviteCode(generateUniqueInviteCode());
         household.setInviteCodeExpiresAt(LocalDateTime.now().plusHours(INVITE_TTL_HOURS));
         var saved = householdRepository.save(household);
         log.info("Household {} invite code rotated (expires {})", saved.getId(), saved.getInviteCodeExpiresAt());
-        return respond(saved);
+        return respond(saved, user);
     }
 
     /** Any member may rename; blank clears the name (the app falls back to a default). */
@@ -126,12 +135,12 @@ public class HouseholdService {
         household.setName(trimmed == null || trimmed.isEmpty() ? null : trimmed);
         var saved = householdRepository.save(household);
         log.info("household.renamed {} by {}", saved.getId(), LogMasker.email(user.getEmail()));
-        return respond(saved);
+        return respond(saved, user);
     }
 
     /**
-     * Only the host may remove someone else. The removed member lands back in their
-     * origin household with everything they brought (same restore as leaving).
+     * Only the host may remove someone else. The removed member moves out exactly as if
+     * they had left (see {@link #moveOut}).
      */
     @Transactional
     public HouseholdResponse removeMember(User actor, UUID memberId) {
@@ -145,20 +154,20 @@ public class HouseholdService {
         if (!household.getId().equals(target.getHousehold().getId())) {
             throw new NotInHouseholdException();
         }
-        var home = relocateToHome(target);
+        var home = moveOut(target, household);
         householdCacheGen.bump(household.getId());
         log.info("User {} kicked user {} from household {} (relocated to household {})",
                 LogMasker.email(actor.getEmail()), LogMasker.email(target.getEmail()), household.getId(), home.getId());
 
         var remaining = members.stream().filter(member -> !member.getId().equals(target.getId())).toList();
         notifyMembers(remaining, actor, NotificationType.HOUSEHOLD_MEMBER_LEFT, target.getName());
-        return HouseholdResponse.from(household, remaining);
+        return HouseholdResponse.forViewer(household, remaining, actor);
     }
 
     @Transactional
     public HouseholdResponse getMine(User user) {
         var household = loadHouseholdOf(user);
-        return respond(household);
+        return respond(household, user);
     }
 
     /** What the code unlocks, shown before the user commits to joining. */
@@ -180,12 +189,22 @@ public class HouseholdService {
         if (target.getId().equals(user.getHousehold().getId())) {
             throw new AlreadyInHouseholdException();
         }
+        if (membersOf(user.getHousehold()).size() > 1) {
+            throw new HouseholdLeaveFirstException();
+        }
         var currentMembers = membersOf(target);
         requireRoom(target, currentMembers, user);
+        returnHomeIfAway(user);
+        if (target.getId().equals(user.getHousehold().getId())) {
+            return respond(target, user);
+        }
 
         var previous = user.getHousehold();
         user.setHousehold(target);
+        user.setHomeHousehold(previous);
+        user.setHouseholdJoinedAt(LocalDateTime.now());
         userRepository.save(user);
+        expireInviteCode(previous);
         log.info("User {} joined household {} (left {})", LogMasker.email(user.getEmail()), target.getId(), previous.getId());
 
         // Data merge runs BEFORE the delete guard so moved data lands in the target;
@@ -203,18 +222,28 @@ public class HouseholdService {
         deleteHouseholdIfEmptyAndOwnsNoData(previous);
 
         notifyMembers(currentMembers, user, NotificationType.HOUSEHOLD_MEMBER_JOINED, user.getName());
-        return respond(target);
+        return respond(target, user);
     }
 
+    /**
+     * Leaving with company: the leaver moves out (see {@link #moveOut}) and the oldest
+     * remaining member inherits the host role if needed. Leaving ALONE: a guest whose
+     * home is elsewhere returns there taking the whole household with them (it is then
+     * deleted); someone alone in their own home has nowhere to go → 400.
+     */
     @Transactional
     public HouseholdResponse leave(User user) {
         var previous = user.getHousehold();
         var members = membersOf(previous);
         if (members.size() <= 1) {
-            throw new SoloHouseholdLeaveException();
+            if (!isAwayFromHome(user)) {
+                throw new SoloHouseholdLeaveException();
+            }
+            var home = returnHomeWithEverything(user);
+            return respond(home, user);
         }
 
-        var home = relocateToHome(user);
+        var home = moveOut(user, previous);
         householdCacheGen.bump(previous.getId());
         log.info("User {} left household {} for household {}", LogMasker.email(user.getEmail()), previous.getId(), home.getId());
 
@@ -223,56 +252,92 @@ public class HouseholdService {
         deleteHouseholdIfEmptyAndOwnsNoData(previous);
 
         notifyMembers(remaining, user, NotificationType.HOUSEHOLD_MEMBER_LEFT, user.getName());
-        return HouseholdResponse.from(home, List.of(user));
+        return respond(home, user);
     }
 
     // ---------- membership moves ----------
 
     /**
-     * Where a leaver (or kicked member) lands. With merge on: their dormant ORIGIN
-     * household if one still exists (data they brought in, kept as their "home"), with
-     * everything that originated there restored — including rows shadowed (parked)
-     * during the merge. Otherwise a fresh solo household. They host wherever they land.
+     * Takes {@code user} out of the {@code shared} household, which keeps everything.
+     * A guest returns home: what they brought comes back, plus a COPY of what was
+     * created since they joined. The original host (it was their home) starts a new
+     * household with a COPY of everything, including what guests brought.
      */
-    private Household relocateToHome(User user) {
-        Household home;
-        if (mergeEnabled) {
-            home = reclaimOriginHomeOrFresh(user);
-            user.setHousehold(home);
-            userRepository.save(user);
-            var restored = mergeService.restoreOriginals(home);
-            log.info("relocate.restore user={} home={} restored={}",
-                    LogMasker.email(user.getEmail()), home.getId(), restored.moved());
-        } else {
-            home = createSoloHousehold();
-            user.setHousehold(home);
-            userRepository.save(user);
-        }
-        if (home.getOwner() == null) {
-            home.setOwner(user);
-            home = householdRepository.save(home);
-        }
-        householdCacheGen.bump(home.getId());
+    private Household moveOut(User user, Household shared) {
+        return isAwayFromHome(user) ? returnGuestHome(user, shared) : startOwnHousehold(user, shared);
+    }
+
+    private Household returnGuestHome(User guest, Household shared) {
+        var joinedAt = guest.getHouseholdJoinedAt();
+        var home = guest.getHomeHousehold();
+        settleAtHome(guest, home);
+        restoreWhatTheyBrought(guest, home);
+        var copied = splitService.copyInto(shared, home, joinedAt);
+        log.info("leave.guest_home user={} home={} copied={} since={}",
+                LogMasker.email(guest.getEmail()), home.getId(), copied.total(), joinedAt);
         return home;
     }
 
-    // The leaver's "home" to return to: their data's origin household if one still
-    // exists and differs from the one they're leaving; else a fresh solo household.
-    // We read origin from the leaver's OWN receipts (user_id is the stable owner), so
-    // a user always lands back where their data came from.
-    private Household reclaimOriginHomeOrFresh(User user) {
-        var currentId = user.getHousehold().getId();
-        var originId = receiptRepository.findFirstByUserIdAndOriginHouseholdIdNotOrderByCreatedAtAsc(
-                        user.getId(), currentId)
-                .map(receipt -> receipt.getOriginHousehold().getId())
-                .orElse(null);
-        if (originId != null) {
-            var origin = householdRepository.findById(originId).orElse(null);
-            if (origin != null) {
-                return origin;
-            }
+    private Household startOwnHousehold(User originalHost, Household shared) {
+        var fresh = createSoloHousehold();
+        settleAtHome(originalHost, fresh);
+        var copied = splitService.copyInto(shared, fresh, null);
+        log.info("leave.host_new_household user={} household={} copied={}",
+                LogMasker.email(originalHost.getEmail()), fresh.getId(), copied.total());
+        return fresh;
+    }
+
+    // The last member leaves: the household's data moves into their home and the
+    // emptied household is deleted.
+    private Household returnHomeWithEverything(User lastMember) {
+        var shared = lastMember.getHousehold();
+        var home = lastMember.getHomeHousehold();
+        settleAtHome(lastMember, home);
+        restoreWhatTheyBrought(lastMember, home);
+        var moved = splitService.absorbInto(shared, home);
+        log.info("leave.last_member user={} home={} absorbed={} moved={}",
+                LogMasker.email(lastMember.getEmail()), home.getId(), shared.getId(), moved);
+        return home;
+    }
+
+    // Someone alone in a household that isn't theirs must go home before joining
+    // another one, or that household would be stranded with nobody in it.
+    private void returnHomeIfAway(User user) {
+        if (isAwayFromHome(user)) {
+            returnHomeWithEverything(user);
         }
-        return createSoloHousehold();
+    }
+
+    private void settleAtHome(User user, Household home) {
+        user.setHousehold(home);
+        user.setHomeHousehold(null);
+        user.setHouseholdJoinedAt(null);
+        userRepository.save(user);
+        if (home.getOwner() == null) {
+            home.setOwner(user);
+            householdRepository.save(home);
+        }
+        householdCacheGen.bump(home.getId());
+    }
+
+    private void restoreWhatTheyBrought(User user, Household home) {
+        if (!mergeEnabled) {
+            return;
+        }
+        var restored = mergeService.restoreOriginals(home);
+        log.info("relocate.restore user={} home={} restored={}",
+                LogMasker.email(user.getEmail()), home.getId(), restored.moved());
+    }
+
+    private static boolean isAwayFromHome(User user) {
+        return user.getHomeHousehold() != null
+                && !user.getHomeHousehold().getId().equals(user.getHousehold().getId());
+    }
+
+    // While its owner is away the household must not take in strangers.
+    private void expireInviteCode(Household household) {
+        household.setInviteCodeExpiresAt(LocalDateTime.now());
+        householdRepository.save(household);
     }
 
     // ---------- host (anfitrião) ----------
@@ -353,10 +418,10 @@ public class HouseholdService {
         return userRepository.findAllByHouseholdId(household.getId()).stream().sorted(BY_SENIORITY).toList();
     }
 
-    private HouseholdResponse respond(Household household) {
+    private HouseholdResponse respond(Household household, User viewer) {
         var members = membersOf(household);
         resolveHost(household, members);
-        return HouseholdResponse.from(household, members);
+        return HouseholdResponse.forViewer(household, members, viewer);
     }
 
     private Household findValidByInviteCode(String rawCode) {

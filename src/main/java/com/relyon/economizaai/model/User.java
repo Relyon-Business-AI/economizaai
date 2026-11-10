@@ -112,6 +112,18 @@ public class User extends BaseEntity implements UserDetails {
     @JoinColumn(name = "household_id", nullable = false)
     private Household household;
 
+    /**
+     * The user's own household while they are a GUEST in someone else's (null while they
+     * are home). Leaving returns them here; never discovered from receipts.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "home_household_id")
+    private Household homeHousehold;
+
+    /** When the user joined their current household as a guest — bounds what they copy out on leaving. */
+    @Column(name = "household_joined_at")
+    private LocalDateTime householdJoinedAt;
+
     @Column(name = "accepted_terms_version", nullable = false, length = 20)
     private String acceptedTermsVersion;
 

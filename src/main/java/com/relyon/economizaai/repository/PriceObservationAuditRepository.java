@@ -2,6 +2,7 @@ package com.relyon.economizaai.repository;
 
 import com.relyon.economizaai.model.PriceObservationAudit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -11,6 +12,17 @@ import java.util.List;
 import java.util.UUID;
 
 public interface PriceObservationAuditRepository extends JpaRepository<PriceObservationAudit, UUID> {
+
+    /** Keeps the k-anonymity trail when a household is absorbed into another before being deleted. */
+    @Modifying
+    @Query("UPDATE PriceObservationAudit audit SET audit.householdId = :toHouseholdId WHERE audit.householdId = :fromHouseholdId")
+    int reassignHousehold(@Param("fromHouseholdId") UUID fromHouseholdId, @Param("toHouseholdId") UUID toHouseholdId);
+
+    /** Points a duplicate receipt's contributions at the surviving copy before the duplicate is deleted. */
+    @Modifying
+    @Query("UPDATE PriceObservationAudit audit SET audit.receiptId = :toReceiptId, audit.householdId = :toHouseholdId WHERE audit.receiptId = :fromReceiptId")
+    int reassignReceipt(@Param("fromReceiptId") UUID fromReceiptId, @Param("toReceiptId") UUID toReceiptId,
+                        @Param("toHouseholdId") UUID toHouseholdId);
 
     /** Community-scale gauge for onboarding: how many distinct households have ever
      * contributed a (non-outlier) observation. Drives the collaborative cold-start

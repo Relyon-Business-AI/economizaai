@@ -1,5 +1,22 @@
 # economizai — what's new
 
+## 2026-11-10 — Domicílio: sair leva cópia, domicílio de origem salvo na conta, só o anfitrião convida
+
+- **Domicílio de origem salvo no usuário** (V139: `users.home_household_id` + `household_joined_at`) — não é
+  mais deduzido pelas notas. Quem não tinha nota nenhuma também volta pra casa certa.
+- **Sair (ou ser removido) agora leva uma CÓPIA** — ninguém perde dados:
+  - convidado (inclusive anfitrião promovido) → volta pra origem com o que trouxe + cópia de tudo criado desde a entrada;
+  - anfitrião original → casa **nova** com cópia de tudo (inclusive o que os convidados trouxeram);
+  - último membro (convidado sozinho) → os dados **vão** pra origem dele e a casa é excluída (antes: `400`);
+  - sozinho na própria casa → segue `400 household.leave.solo`.
+  Cópias de nota entram com itens e `indexEligible=false` (não contam de novo no índice).
+- **Só o anfitrião gera/renova o convite** (`POST /me/invite-code/regenerate` → `403 household.not.host`).
+  `inviteCode`/`inviteCodeExpiresAt` vêm **null pra convidados** no `GET /households/me`.
+- **`canLeave`** no `HouseholdResponse` (esconder "sair" quando `false`) e **`members[].joinedAt`** (null = anfitrião original).
+  O anfitrião herdado é o convidado que **entrou primeiro** (antes: conta mais antiga).
+- **`/join` enquanto ainda divide uma casa → `409 household.join.leave.first`.**
+- Link de convite sugerido pro app: `https://economizaai.app/convite/<code>` → preview → "levar meus dados?" → `/join`.
+
 ## 2026-11-10 — Domicílio compartilhado: merge ligado, anfitrião, nome, preview, limite, "quem escaneou"
 
 - **Entrar num domicílio agora LEVA os dados** (`economizaai.households.merge-enabled` default `true`):
