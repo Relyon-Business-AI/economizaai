@@ -98,9 +98,8 @@ public class AdminUserService {
                 ? PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by(Sort.Direction.DESC, "createdAt"))
                 : pageable;
         var page = userRepository.findAll(searchSpec(filters), sortedPageable);
-        var counts = receiptCountsFor(page.getContent());
-        var spend = spendFor(page.getContent());
-        return page.map(user -> summaryFor(user, counts, spend));
+        var context = enrich(page.getContent());
+        return page.map(user -> summaryFor(user, context));
     }
 
     /**
@@ -113,9 +112,8 @@ public class AdminUserService {
                                                                  Pageable pageable, Sort.Order order) {
         var all = userRepository.findAll(searchSpec(filters),
                 PageRequest.of(0, AGGREGATE_SORT_CAP, Sort.by(Sort.Direction.DESC, "createdAt"))).getContent();
-        var counts = receiptCountsFor(all);
-        var spend = spendFor(all);
-        var summaries = new ArrayList<>(all.stream().map(user -> summaryFor(user, counts, spend)).toList());
+        var context = enrich(all);
+        var summaries = new ArrayList<>(all.stream().map(user -> summaryFor(user, context)).toList());
 
         Comparator<AdminUserSummaryResponse> comparator;
         if ("cost".equals(order.getProperty())) {
@@ -136,19 +134,56 @@ public class AdminUserService {
         return new PageImpl<>(summaries.subList(from, to), pageable, summaries.size());
     }
 
-    private AdminUserSummaryResponse summaryFor(User user, Map<UUID, Long> counts, Map<UUID, BigDecimal> spend) {
-        var householdId = householdIdOf(user);
-        return AdminUserSummaryResponse.from(user,
-                counts.getOrDefault(householdId, 0L),
-                spend.getOrDefault(householdId, BigDecimal.ZERO));
+    /**
+     * Batched enrichment for a page of users: the USER-OWN receipt count + confirmed spend (keyed
+     * by user_id), plus the HOUSEHOLD receipt count + member count (keyed by household_id) as
+     * separate, clearly-labeled context. One query each — no N+1.
+     */
+    private ListContext enrich(List<User> users) {
+        var userIds = users.stream().map(User::getId).toList();
+        var householdIds = householdIdsOf(users);
+        return new ListContext(
+                countByUser(userIds),
+                spendByUser(userIds),
+                householdReceiptCounts(householdIds),
+                householdMemberCounts(householdIds));
     }
 
-    /** One batched count query for the page's households — avoids N+1 while showing "nº de notas" per user. */
-    private Map<UUID, Long> receiptCountsFor(List<User> users) {
-        var householdIds = householdIdsOf(users);
-        if (householdIds.isEmpty()) {
-            return Map.of();
+    private record ListContext(Map<UUID, Long> userReceiptCounts, Map<UUID, BigDecimal> userSpend,
+                               Map<UUID, Long> householdReceiptCounts, Map<UUID, Long> householdMemberCounts) {}
+
+    private AdminUserSummaryResponse summaryFor(User user, ListContext context) {
+        var householdId = householdIdOf(user);
+        return AdminUserSummaryResponse.from(user,
+                context.userReceiptCounts().getOrDefault(user.getId(), 0L),
+                context.userSpend().getOrDefault(user.getId(), BigDecimal.ZERO),
+                context.householdReceiptCounts().getOrDefault(householdId, 0L),
+                context.householdMemberCounts().getOrDefault(householdId, 0L));
+    }
+
+    /** USER-OWN receipt count (receipts WHERE user_id = user), batched — "nº de notas" per user. */
+    private Map<UUID, Long> countByUser(List<UUID> userIds) {
+        if (userIds.isEmpty()) return Map.of();
+        var counts = new HashMap<UUID, Long>();
+        for (var row : receiptRepository.countByUserIds(userIds)) {
+            counts.put((UUID) row[0], ((Number) row[1]).longValue());
         }
+        return counts;
+    }
+
+    /** USER-OWN confirmed spend, batched — "valor total" per user. */
+    private Map<UUID, BigDecimal> spendByUser(List<UUID> userIds) {
+        if (userIds.isEmpty()) return Map.of();
+        var spend = new HashMap<UUID, BigDecimal>();
+        for (var row : receiptRepository.sumConfirmedTotalByUserIds(userIds)) {
+            spend.put((UUID) row[0], (BigDecimal) row[1]);
+        }
+        return spend;
+    }
+
+    /** HOUSEHOLD receipt count (all members), batched — kept separate from the user's own count. */
+    private Map<UUID, Long> householdReceiptCounts(List<UUID> householdIds) {
+        if (householdIds.isEmpty()) return Map.of();
         var counts = new HashMap<UUID, Long>();
         for (var row : receiptRepository.countByHouseholdIds(householdIds)) {
             counts.put((UUID) row[0], ((Number) row[1]).longValue());
@@ -156,17 +191,14 @@ public class AdminUserService {
         return counts;
     }
 
-    /** One batched sum query for the page's households — "valor total" (confirmed spend) per user. */
-    private Map<UUID, BigDecimal> spendFor(List<User> users) {
-        var householdIds = householdIdsOf(users);
-        if (householdIds.isEmpty()) {
-            return Map.of();
+    /** HOUSEHOLD member count, batched — powers the "Domicílio N" badge (shown when > 1). */
+    private Map<UUID, Long> householdMemberCounts(List<UUID> householdIds) {
+        if (householdIds.isEmpty()) return Map.of();
+        var counts = new HashMap<UUID, Long>();
+        for (var row : userRepository.countByHouseholdIds(householdIds)) {
+            counts.put((UUID) row[0], ((Number) row[1]).longValue());
         }
-        var spend = new HashMap<UUID, BigDecimal>();
-        for (var row : receiptRepository.sumConfirmedTotalByHouseholdIds(householdIds)) {
-            spend.put((UUID) row[0], (BigDecimal) row[1]);
-        }
-        return spend;
+        return counts;
     }
 
     /**
@@ -309,20 +341,30 @@ public class AdminUserService {
 
     private AdminUserDetailResponse detail(User user) {
         var householdId = user.getHousehold().getId();
-        var receipts = countReceiptsByStatus(householdId);
-        var spend = insightsRepository.totalSpend(
+        // USER-OWN: status breakdown + 30-day spend from THIS user's receipts.
+        var receipts = countReceiptsByStatusForUser(user.getId());
+        var spend = receiptRepository.sumConfirmedTotalByUserSince(
+                user.getId(), LocalDateTime.now().minusDays(SPEND_WINDOW_DAYS));
+        // HOUSEHOLD context (clearly separate): members + all-member receipt count + confirmed spend.
+        var memberCount = userRepository.countByHouseholdId(householdId);
+        var householdReceiptCount = receiptRepository.countByHouseholdId(householdId);
+        var householdSpend = insightsRepository.totalSpend(
                 householdId, LocalDateTime.now().minusDays(SPEND_WINDOW_DAYS), LocalDateTime.now(),
                 "ALL", List.of("__none__"));
-        var memberCount = userRepository.countByHouseholdId(householdId);
-        return AdminUserDetailResponse.from(user, memberCount, receipts, spend);
+        return AdminUserDetailResponse.from(user, memberCount, receipts, spend,
+                householdReceiptCount, householdSpend);
     }
 
-    private ReceiptCounts countReceiptsByStatus(UUID householdId) {
+    private ReceiptCounts countReceiptsByStatusForUser(UUID userId) {
+        var byStatus = new HashMap<ReceiptStatus, Long>();
+        for (var row : receiptRepository.statusBreakdownByUserId(userId)) {
+            byStatus.put((ReceiptStatus) row[0], ((Number) row[1]).longValue());
+        }
         return new ReceiptCounts(
-                receiptRepository.countByHouseholdIdAndStatus(householdId, ReceiptStatus.PENDING_CONFIRMATION),
-                receiptRepository.countByHouseholdIdAndStatus(householdId, ReceiptStatus.CONFIRMED),
-                receiptRepository.countByHouseholdIdAndStatus(householdId, ReceiptStatus.REJECTED),
-                receiptRepository.countByHouseholdIdAndStatus(householdId, ReceiptStatus.FAILED_PARSE)
+                byStatus.getOrDefault(ReceiptStatus.PENDING_CONFIRMATION, 0L),
+                byStatus.getOrDefault(ReceiptStatus.CONFIRMED, 0L),
+                byStatus.getOrDefault(ReceiptStatus.REJECTED, 0L),
+                byStatus.getOrDefault(ReceiptStatus.FAILED_PARSE, 0L)
         );
     }
 

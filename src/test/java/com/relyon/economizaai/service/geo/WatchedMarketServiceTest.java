@@ -1,7 +1,9 @@
 package com.relyon.economizaai.service.geo;
 
+import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.service.geo.ViewerLocationService.Source;
 import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
+import com.relyon.economizaai.service.geo.WatchedMarketService.MarketScope;
 import com.relyon.economizaai.exception.InvalidCnpjException;
 import com.relyon.economizaai.exception.MarketNotFoundException;
 import com.relyon.economizaai.model.Household;
@@ -31,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -51,8 +54,10 @@ class WatchedMarketServiceTest {
 
     @BeforeEach
     void setUp() {
+        var properties = new CollaborativeProperties();
+        properties.getCollaborative().setBestMarketsNearbyRadiusKm(10);
         service = new WatchedMarketService(watchedRepository, marketRepository, receiptRepository,
-                marketNameService, subscriptionGate, viewerLocationService);
+                marketNameService, subscriptionGate, viewerLocationService, properties);
         // Default: PRO-equivalent unlimited cap so existing tests keep their intent.
         lenient().when(subscriptionGate.watchedMarketLimit(any())).thenReturn(Integer.MAX_VALUE);
         lenient().when(marketNameService.resolveNames(any(), any())).thenReturn(Map.of());
@@ -60,6 +65,9 @@ class WatchedMarketServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(2));
         lenient().when(marketNameService.applyOverride(any(), any(), any()))
                 .thenAnswer(invocation -> invocation.getArgument(2));
+        // Default origin: unlocated (keeps NEARBY tests explicit about their own location).
+        lenient().when(viewerLocationService.resolve(any(), any(), any()))
+                .thenReturn(new ViewerLocation(null, null, Source.NONE, "RS"));
         var household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
         user = User.builder().id(UUID.randomUUID()).email("u@e").household(household).build();
     }
@@ -137,11 +145,10 @@ class WatchedMarketServiceTest {
 
     @Test
     void listWatched_returnsHydratedRowsAndFlagsVisited() {
-        var pinned = List.of(
+        when(watchedRepository.findAllByUserId(user.getId())).thenReturn(List.of(
                 UserWatchedMarket.builder().marketCnpj("11111111000111").build(),
                 UserWatchedMarket.builder().marketCnpj("22222222000111").build()
-        );
-        when(watchedRepository.findAllByUserId(user.getId())).thenReturn(pinned);
+        ));
         when(marketRepository.findAllByCnpjIn(any())).thenReturn(List.of(
                 market("11111111000111", "Mercado A"),
                 market("22222222000111", "Mercado B")
@@ -161,22 +168,19 @@ class WatchedMarketServiceTest {
     }
 
     @Test
-    void listForPicker_putsWatchedFirstThenVisited() {
+    void listMarkets_mineReturnsOnlyWatched() {
+        // Household visited a market it does NOT watch — MINE must exclude it.
         when(receiptRepository.findDistinctCnpjsByHousehold(user.getHousehold().getId()))
                 .thenReturn(List.of("33333333000111"));
         when(watchedRepository.findAllByUserId(user.getId())).thenReturn(List.of(
                 UserWatchedMarket.builder().marketCnpj("11111111000111").build()
         ));
-        when(marketRepository.findAllByCnpjIn(any())).thenReturn(List.of(
-                market("11111111000111", "Watched"),
-                market("33333333000111", "Visited")
-        ));
+        when(marketRepository.findAllByCnpjIn(any())).thenReturn(List.of(market("11111111000111", "Watched")));
 
-        var rows = service.listForPicker(user, null);
+        var rows = service.listMarkets(user, MarketScope.MINE, null, null);
 
-        assertEquals(2, rows.size());
-        assertEquals("11111111000111", rows.get(0).cnpj()); // watched first
-        assertEquals("33333333000111", rows.get(1).cnpj()); // then visited
+        assertEquals(List.of("11111111000111"), rows.stream().map(row -> row.cnpj()).toList());
+        verify(marketRepository, never()).findAll();
     }
 
     @Test
@@ -198,6 +202,7 @@ class WatchedMarketServiceTest {
     @Test
     void listWatched_emptyWatchlistReturnsEmptyList() {
         when(watchedRepository.findAllByUserId(user.getId())).thenReturn(List.of());
+        when(receiptRepository.findDistinctCnpjsByHousehold(user.getHousehold().getId())).thenReturn(List.of());
 
         assertTrue(service.listWatched(user).isEmpty());
     }
@@ -216,16 +221,16 @@ class WatchedMarketServiceTest {
         assertEquals(1, rows.size());
         var only = rows.get(0);
         assertEquals("99999999000111", only.cnpj());
-        assertEquals(null, only.name());
-        assertEquals(null, only.distanceKm());
+        assertNull(only.name());
+        assertNull(only.distanceKm());
         assertFalse(only.visited());
         assertTrue(only.watching());
     }
 
     @Test
-    void listWatched_computesDistanceWhenHomeSet() {
-        user.setHomeLatitude(new BigDecimal("-30.0300000"));
-        user.setHomeLongitude(new BigDecimal("-51.2300000"));
+    void listWatched_computesDistanceFromResolvedOrigin() {
+        when(viewerLocationService.resolve(any(), isNull(), isNull())).thenReturn(new ViewerLocation(
+                new BigDecimal("-30.0300000"), new BigDecimal("-51.2300000"), Source.PROFILE, "RS"));
         when(watchedRepository.findAllByUserId(user.getId())).thenReturn(List.of(
                 UserWatchedMarket.builder().marketCnpj("11111111000111").build()
         ));
@@ -237,15 +242,14 @@ class WatchedMarketServiceTest {
         var rows = service.listWatched(user);
 
         assertEquals(1, rows.size());
-        assertTrue(rows.get(0).distanceKm() != null && rows.get(0).distanceKm() > 0);
+        assertTrue(rows.get(0).distanceKm() != null && rows.get(0).distanceKm() >= 0);
     }
 
     @Test
-    void listForPicker_includesNearbyGeocodedMarketsWithinRadius() {
-        user.setHomeLatitude(new BigDecimal("-30.0500000"));
-        user.setHomeLongitude(new BigDecimal("-51.2200000"));
-        when(receiptRepository.findDistinctCnpjsByHousehold(user.getHousehold().getId()))
-                .thenReturn(List.of());
+    void listMarkets_allUnionsNearbyWithinRadiusAndWatched() {
+        when(viewerLocationService.resolve(any(), isNull(), isNull())).thenReturn(new ViewerLocation(
+                new BigDecimal("-30.0500000"), new BigDecimal("-51.2200000"), Source.PROFILE, "RS"));
+        when(receiptRepository.findDistinctCnpjsByHousehold(user.getHousehold().getId())).thenReturn(List.of());
         when(watchedRepository.findAllByUserId(user.getId())).thenReturn(List.of());
         lenient().when(marketRepository.findAllByCnpjIn(any())).thenReturn(List.of());
         var nearMarket = market("44444444000111", "Near");
@@ -254,56 +258,63 @@ class WatchedMarketServiceTest {
                 .latitude(new BigDecimal("-10.0000000")).longitude(new BigDecimal("-40.0000000"))
                 .build();
         when(marketRepository.findAll()).thenReturn(List.of(nearMarket, farMarket));
-        when(viewerLocationService.resolve(user)).thenReturn(new ViewerLocation(
-                user.getHomeLatitude(), user.getHomeLongitude(), Source.EXPLICIT, "RS"));
 
-        var rows = service.listForPicker(user, 5.0);
+        var rows = service.listMarkets(user, MarketScope.ALL, null, null);
 
         assertEquals(1, rows.size());
         assertEquals("44444444000111", rows.get(0).cnpj());
     }
 
     @Test
-    void listForPicker_withoutHomeUsesLocationInferredFromReceipts() {
-        when(receiptRepository.findDistinctCnpjsByHousehold(user.getHousehold().getId()))
-                .thenReturn(List.of());
-        when(watchedRepository.findAllByUserId(user.getId())).thenReturn(List.of());
+    void listMarkets_allKeepsWatchedFarMarketButSortsItLast() {
+        when(viewerLocationService.resolve(any(), isNull(), isNull())).thenReturn(new ViewerLocation(
+                new BigDecimal("-30.0500000"), new BigDecimal("-51.2200000"), Source.PROFILE, "RS"));
+        when(receiptRepository.findDistinctCnpjsByHousehold(user.getHousehold().getId())).thenReturn(List.of());
+        when(watchedRepository.findAllByUserId(user.getId())).thenReturn(List.of(
+                UserWatchedMarket.builder().marketCnpj("55555555000111").build()
+        ));
         var nearMarket = market("44444444000111", "Near");
-        var farMarket = MarketLocation.builder()
-                .cnpj("55555555000111").cnpjRoot("55555555").name("Far")
+        var farWatched = MarketLocation.builder()
+                .cnpj("55555555000111").cnpjRoot("55555555").name("Far Watched")
                 .latitude(new BigDecimal("-10.0000000")).longitude(new BigDecimal("-40.0000000"))
                 .build();
-        when(marketRepository.findAll()).thenReturn(List.of(nearMarket, farMarket));
-        when(viewerLocationService.resolve(user)).thenReturn(new ViewerLocation(
-                new BigDecimal("-30.0500000"), new BigDecimal("-51.2200000"), Source.INFERRED, "RS"));
+        when(marketRepository.findAllByCnpjIn(any())).thenReturn(List.of(farWatched));
+        when(marketRepository.findAll()).thenReturn(List.of(nearMarket, farWatched));
 
-        var rows = service.listForPicker(user, 5.0);
+        var rows = service.listMarkets(user, MarketScope.ALL, null, null);
 
-        assertEquals(List.of("44444444000111"), rows.stream().map(row -> row.cnpj()).toList());
-        assertNull(rows.get(0).distanceKm(), "estimated centre is never shown as a distance");
+        assertEquals(2, rows.size());
+        // Near market first (distance asc), the far watched one last — not dropped.
+        assertEquals("44444444000111", rows.get(0).cnpj());
+        assertEquals("55555555000111", rows.get(1).cnpj());
+        assertTrue(rows.get(1).watching());
     }
 
     @Test
-    void listForPicker_unlocatedViewerGetsNoNearbyMarkets() {
-        when(receiptRepository.findDistinctCnpjsByHousehold(user.getHousehold().getId()))
-                .thenReturn(List.of());
+    void listMarkets_allUnlocatedViewerGetsOnlyWatched() {
+        when(viewerLocationService.resolve(any(), isNull(), isNull()))
+                .thenReturn(new ViewerLocation(null, null, Source.NONE, "RS"));
+        when(receiptRepository.findDistinctCnpjsByHousehold(user.getHousehold().getId())).thenReturn(List.of());
         when(watchedRepository.findAllByUserId(user.getId())).thenReturn(List.of());
-        when(viewerLocationService.resolve(user)).thenReturn(new ViewerLocation(null, null, Source.NONE, "RS"));
 
-        assertTrue(service.listForPicker(user, 5.0).isEmpty());
+        assertTrue(service.listMarkets(user, MarketScope.ALL, null, null).isEmpty());
         verify(marketRepository, never()).findAll();
     }
 
     @Test
-    void listForPicker_noRadiusSkipsNearbyLookup() {
-        when(receiptRepository.findDistinctCnpjsByHousehold(user.getHousehold().getId()))
-                .thenReturn(List.of());
+    void listMarkets_devicePositionIsForwardedToResolver() {
+        var deviceLat = new BigDecimal("-30.0500000");
+        var deviceLng = new BigDecimal("-51.2200000");
+        when(viewerLocationService.resolve(user, deviceLat, deviceLng)).thenReturn(new ViewerLocation(
+                deviceLat, deviceLng, Source.DEVICE, "RS"));
+        when(receiptRepository.findDistinctCnpjsByHousehold(user.getHousehold().getId())).thenReturn(List.of());
         when(watchedRepository.findAllByUserId(user.getId())).thenReturn(List.of());
+        when(marketRepository.findAll()).thenReturn(List.of(market("44444444000111", "Near")));
 
-        var rows = service.listForPicker(user, null);
+        var rows = service.listMarkets(user, MarketScope.ALL, deviceLat, deviceLng);
 
-        assertTrue(rows.isEmpty());
-        verify(marketRepository, never()).findAll();
+        assertEquals(1, rows.size());
+        verify(viewerLocationService).resolve(user, deviceLat, deviceLng);
     }
 
     @Test

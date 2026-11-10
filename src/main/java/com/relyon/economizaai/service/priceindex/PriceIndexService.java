@@ -338,8 +338,16 @@ public class PriceIndexService {
     public List<MarketPriceRow> bestMarkets(UUID productId, int limit,
                                             BigDecimal userLatitude, BigDecimal userLongitude, Double radiusKm,
                                             Set<String> watchedCnpjs) {
+        return bestMarkets(productId, limit, userLatitude, userLongitude, radiusKm, watchedCnpjs,
+                ComparisonSort.CHEAPEST);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MarketPriceRow> bestMarkets(UUID productId, int limit,
+                                            BigDecimal userLatitude, BigDecimal userLongitude, Double radiusKm,
+                                            Set<String> watchedCnpjs, ComparisonSort sort) {
         return rankChains(productId, limit, new Viewer(userLatitude, userLongitude, radiusKm,
-                watchedCnpjs == null ? Set.of() : watchedCnpjs), observation -> true);
+                watchedCnpjs == null ? Set.of() : watchedCnpjs), observation -> true, sort);
     }
 
     /**
@@ -358,24 +366,35 @@ public class PriceIndexService {
     @Transactional(readOnly = true)
     public List<MarketPriceRow> bestMarketsForViewer(UUID productId, int limit, ViewerLocation location,
                                                      Set<String> watchedCnpjs) {
+        return bestMarketsForViewer(productId, limit, location, watchedCnpjs, ComparisonSort.CHEAPEST);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MarketPriceRow> bestMarketsForViewer(UUID productId, int limit, ViewerLocation location,
+                                                     Set<String> watchedCnpjs, ComparisonSort sort) {
         return bestMarketsInScope(productId, limit, new NearbyScope(location,
                 watchedCnpjs == null ? Set.of() : watchedCnpjs,
-                properties.getCollaborative().getBestMarketsNearbyRadiusKm()));
+                properties.getCollaborative().getBestMarketsNearbyRadiusKm()), sort);
     }
 
     /** {@link #bestMarketsForViewer} with a caller-built scope (custom radius). */
     @Transactional(readOnly = true)
     public List<MarketPriceRow> bestMarketsInScope(UUID productId, int limit, NearbyScope scope) {
+        return bestMarketsInScope(productId, limit, scope, ComparisonSort.CHEAPEST);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MarketPriceRow> bestMarketsInScope(UUID productId, int limit, NearbyScope scope, ComparisonSort sort) {
         var location = scope.location();
         var watched = scope.watchedCnpjs();
         if (location.hasCoordinates()) {
             var viewer = new Viewer(location.latitude(), location.longitude(), scope.radiusKm(), watched);
             log.debug("best_markets.scope product={} scope=NEARBY source={} radiusKm={}", productId, location.source(), scope.radiusKm());
-            return rankChains(productId, limit, viewer, observation -> true);
+            return rankChains(productId, limit, viewer, observation -> true, sort);
         }
         var unlocated = new Viewer(null, null, null, watched);
         if (!watched.isEmpty()) {
-            var watchedRows = rankChains(productId, limit, unlocated, observation -> watched.contains(observation.getMarketCnpj()));
+            var watchedRows = rankChains(productId, limit, unlocated, observation -> watched.contains(observation.getMarketCnpj()), sort);
             if (!watchedRows.isEmpty()) {
                 log.debug("best_markets.scope product={} scope=WATCHED", productId);
                 return watchedRows;
@@ -383,10 +402,10 @@ public class PriceIndexService {
         }
         if (location.uf() != null) {
             log.debug("best_markets.scope product={} scope=STATE uf={}", productId, location.uf());
-            return rankChains(productId, limit, unlocated, observation -> location.uf().equals(observation.getState()));
+            return rankChains(productId, limit, unlocated, observation -> location.uf().equals(observation.getState()), sort);
         }
         log.debug("best_markets.scope product={} scope=NATIONAL", productId);
-        return rankChains(productId, limit, unlocated, observation -> true);
+        return rankChains(productId, limit, unlocated, observation -> true, sort);
     }
 
     /** Only the chains the viewer watches ("Mercados que sigo"); empty when they watch none. */
@@ -394,7 +413,7 @@ public class PriceIndexService {
     public List<MarketPriceRow> bestMarketsAtWatched(UUID productId, int limit, Set<String> watchedCnpjs) {
         if (watchedCnpjs == null || watchedCnpjs.isEmpty()) return List.of();
         return rankChains(productId, limit, new Viewer(null, null, null, watchedCnpjs),
-                observation -> watchedCnpjs.contains(observation.getMarketCnpj()));
+                observation -> watchedCnpjs.contains(observation.getMarketCnpj()), ComparisonSort.CHEAPEST);
     }
 
     /**
@@ -404,7 +423,7 @@ public class PriceIndexService {
      * would disclose fewer households than the gate checked.
      */
     private List<MarketPriceRow> rankChains(UUID productId, int limit, Viewer viewer,
-                                            Predicate<PriceObservation> storeInScope) {
+                                            Predicate<PriceObservation> storeInScope, ComparisonSort sort) {
         if (!properties.getCollaborative().isEnabled()) return List.of();
         var since = bestMarketsSince();
         var observations = observationRepository.findRecentByProduct(productId, since);
@@ -418,16 +437,49 @@ public class PriceIndexService {
                 .collect(Collectors.toMap(ChainHouseholdCount::getCnpjRoot, ChainHouseholdCount::getHouseholds));
         var sensitiveProduct = privacyTierResolver.isSensitiveProduct(productId);
 
-        return byChain.entrySet().stream()
+        var qualifying = byChain.entrySet().stream()
                 .map(entry -> toChainRow(entry.getKey(), entry.getValue(),
                         householdsByChain.getOrDefault(entry.getKey(), 0L), locations, viewer,
                         chainThresholds(sensitiveProduct, entry.getValue(), locations), storeInScope))
                 .filter(Objects::nonNull)
-                .sorted(Comparator
-                        .comparing(MarketPriceRow::watching, Comparator.reverseOrder())
-                        .thenComparing(MarketPriceRow::medianPrice))
+                .toList();
+        // Badges persistentes decididos sobre TODAS as linhas que passaram (antes do limite),
+        // depois ordena por sort e corta — assim "Mais barato"/"Mais perto" não dependem do corte.
+        return markAndSortChains(qualifying, sort).stream()
                 .limit(Math.max(0, limit))
                 .toList();
+    }
+
+    /**
+     * Marca os badges (menor preço = menor {@code medianPrice}; mais perto = menor
+     * {@code distanceKm} não-nulo) sobre a lista inteira e ordena: CHEAPEST mantém o
+     * comportamento histórico (seguidos primeiro, depois preço asc); NEAREST por distância
+     * asc (nulos por último). Os badges independem da ordenação.
+     */
+    private List<MarketPriceRow> markAndSortChains(List<MarketPriceRow> rows, ComparisonSort sort) {
+        var cheapest = rows.stream()
+                .filter(row -> row.medianPrice() != null)
+                .min(Comparator.comparing(MarketPriceRow::medianPrice))
+                .orElse(null);
+        var nearest = rows.stream()
+                .filter(row -> row.distanceKm() != null)
+                .min(Comparator.comparing(MarketPriceRow::distanceKm))
+                .orElse(null);
+        return rows.stream()
+                .map(row -> row.withBadges(row == cheapest, row == nearest))
+                .sorted(chainComparatorFor(sort))
+                .toList();
+    }
+
+    private static Comparator<MarketPriceRow> chainComparatorFor(ComparisonSort sort) {
+        if (sort == ComparisonSort.NEAREST) {
+            return Comparator
+                    .comparing(MarketPriceRow::distanceKm, Comparator.nullsLast(Comparator.naturalOrder()))
+                    .thenComparing(MarketPriceRow::medianPrice, Comparator.nullsLast(Comparator.naturalOrder()));
+        }
+        return Comparator
+                .comparing(MarketPriceRow::watching, Comparator.reverseOrder())
+                .thenComparing(MarketPriceRow::medianPrice, Comparator.nullsLast(Comparator.naturalOrder()));
     }
 
     private LocalDateTime bestMarketsSince() {
@@ -470,7 +522,8 @@ public class PriceIndexService {
         var mostRecent = mostRecent(rows);
         return new MarketPriceRow(displayStore.cnpj(), cnpjRoot, displayStore.name(),
                 medianForApi(prices), min(prices), mostRecent.getUnitPrice(), mostRecent.getObservedAt(),
-                rows.size(), distinctHouseholds, displayStore.distanceKm(), displayStore.watching());
+                rows.size(), distinctHouseholds, displayStore.distanceKm(), displayStore.watching(),
+                false, false);
     }
 
     /**
@@ -560,12 +613,21 @@ public class PriceIndexService {
     }
 
     /** One chain in the best-markets ranking; {@code cnpj}/{@code marketName}/{@code distanceKm}
-     *  describe the concrete store the chain is shown as (watched → closest → most recent). */
+     *  describe the concrete store the chain is shown as (watched → closest → most recent).
+     *  {@code isCheapest}/{@code isNearest} are persistent badges decided over the whole list,
+     *  independent of the active sort. */
     public record MarketPriceRow(String cnpj, String cnpjRoot, String marketName,
                                  BigDecimal medianPrice, BigDecimal minPrice,
                                  BigDecimal latestPrice, LocalDateTime latestObservedAt,
                                  int sampleCount, long distinctHouseholds,
-                                 Double distanceKm, boolean watching) {}
+                                 Double distanceKm, boolean watching,
+                                 boolean isCheapest, boolean isNearest) {
+        /** Copy com os badges persistentes definidos (decididos sobre a lista inteira). */
+        public MarketPriceRow withBadges(boolean cheapest, boolean nearest) {
+            return new MarketPriceRow(cnpj, cnpjRoot, marketName, medianPrice, minPrice, latestPrice,
+                    latestObservedAt, sampleCount, distinctHouseholds, distanceKm, watching, cheapest, nearest);
+        }
+    }
 
     /** Which slice the in-store typical price was computed over. */
     public enum ReferenceScope { STATE, NATIONAL }

@@ -1119,18 +1119,28 @@ automatically backfilled to all matching items.
 ## 6. Markets + watchlist
 
 ```
-GET    /api/v1/markets[?radiusKm=10]                 → catalogue (visited + watched + nearby)
-GET    /api/v1/markets/watched                       → "Meus mercados"
+GET    /api/v1/markets[?scope=ALL|MINE&lat=&lng=]    → "Mercados" screen (10 km ∪ watched)
+GET    /api/v1/markets/watched                       → "Meus mercados" (= scope=MINE)
 POST   /api/v1/markets/watched/{cnpj}                → pin
 DELETE /api/v1/markets/watched/{cnpj}                → unpin
 PUT    /api/v1/markets/{cnpj}/name                   { "name": "Zaffari de casa" } → set a household-only custom name
 DELETE /api/v1/markets/{cnpj}/name                   → revert to the global name
 ```
 
-Each row carries `visited` (household has shopped here) and `watching` (user
-pinned it) flags. Watched markets bypass the home-radius filter in price
-intelligence — useful for "the market on my commute is far from home but I want
-its promos anyway".
+`GET /markets` (2026-11-10): `scope=ALL` (default) returns markets within **10 km**
+(`best-markets-nearby-radius-km`) of the resolved origin UNION the household's watched
+markets; `scope=MINE` returns only the watched ones. Pass `lat`/`lng` (all-or-nothing)
+to measure from the device's current position; otherwise the origin follows the
+"perto de você" cascade (see §7: device → profile → receipts-median → UF). **Sorted by
+`distanceKm` ascending, nulls last** — a market from a receipt scanned far away (another
+state) sinks to the end instead of flooding the top; watched-but-far markets are KEPT.
+The old `radiusKm` param is gone (radius is fixed at 10 km).
+
+Each row: `{ cnpj, cnpjRoot, name, friendlyName, address, city, state, latitude,
+longitude, distanceKm, visited, watching, chainName, chainLogoUrl }`. `name` is the full
+legal razão social; `city`/`state` are new (2026-11-10, null until geocoded); `visited` =
+has bought here, `watching` = pinned. Watched markets bypass the radius filter — useful
+for "the market on my commute is far from home but I want its promos anyway".
 
 **Custom market name (household-only):** `PUT /markets/{cnpj}/name` saves a rename for your household. It does **not** overwrite the global name — instead every market-bearing response carries a separate **`friendlyName`** field (alongside the original `name`/`marketName`) that defaults to the original and is replaced by your rename when set. The FE should **display `friendlyName`**. It applies everywhere a market appears for your household (markets list, product-markets, receipts, items, insights, price history, notifications); the global name and other households are never affected. `DELETE` clears it (so `friendlyName` falls back to the original).
 
@@ -1183,10 +1193,30 @@ and the counts visible when even the national slice is sparse. Uses the wider
 best-markets window (180 days).
 
 ```
-GET /api/v1/price-index/products/{productId}/best-markets?limit=10&radiusKm=5[&lat=&lng=]
+GET /api/v1/price-index/products/{productId}/best-markets?limit=10&radiusKm=5[&lat=&lng=&sort=CHEAPEST|NEAREST]
+GET /api/v1/price-index/products/{productId}/generic-comparison?sort=CHEAPEST|NEAREST
+GET /api/v1/price-index/generic-comparison?type=creme+de+leite[&ean=&sort=CHEAPEST|NEAREST]
+GET /api/v1/price-index/scanned-products
 GET /api/v1/price-index/promos?radiusKm=5
 GET /api/v1/price-index/promos/feed
 ```
+
+**`sort` (2026-11-10)** on best-markets + both generic-comparison endpoints (default
+`CHEAPEST`): `CHEAPEST` = price ascending (historical; best-markets keeps watched-first);
+`NEAREST` = `distanceKm` ascending, nulls last. The radius/scope cascade is unchanged —
+`sort` only reorders. Independently of the order, each row/offer carries persistent
+`isCheapest`/`isNearest` booleans (decided over the whole result set) so the FE shows
+"Mais barato"/"Mais perto" badges regardless of the active sort. (No "vale a pena?"
+value judgment — that's a deferred Phase 2, see `docs/PRODUCT_COMPARISON.md`.)
+
+**`GET /scanned-products` (2026-11-10)** — the household's "produtos escaneados" history:
+products consulted (via best-markets / generic-comparison / barcode scan), deduped per
+product/type, newest-consult first, capped at 100. Each:
+`{ productId (nullable), productName, typeLabel, lastConsultedAt, snapshotBestPrice
+(nullable), snapshotScope, scanCount }`. Returns **only the stored snapshot** (the best
+price + scope captured at consult time) — instant, no live recompute. The FE lazily
+fetches the live price per visible item via the comparison endpoints above and computes
+the "mudou de preço desde a última consulta" delta client-side.
 
 `promos` returns currently-detected community promos in the user's area
 (recent median ≥ 15% below baseline, k-anon protected). Each promo now also
@@ -1194,10 +1224,13 @@ carries `uf` (the market's state).
 
 `promos/feed` wraps the same list with the LOCATION CONTEXT the app needs for
 its "perto de você" cascade: `{ locationSource, uf, promos }`.
-- `locationSource`: `EXPLICIT` (user set a location), `INFERRED` (estimated from
-  the **median** of the coordinates of the geocoded markets the household has
-  scanned) or `NONE`. When ≠ `NONE`, each promo's `distanceKm` is relative to that
-  location and the app filters by radius (10 km) + watched markets.
+- `locationSource` (renamed values 2026-11-10): `DEVICE` (real-time GPS passed on the
+  request), `PROFILE` (user set a home location), `RECEIPTS_MEDIAN` (estimated from the
+  **median** of the geocoded markets the household scanned), `UF_FALLBACK` (centroid of
+  the household's majority UF) or `NONE`. `RECEIPTS_MEDIAN`/`UF_FALLBACK` are **inferred**
+  — nudge "confirme sua localização". *(Old `EXPLICIT`→`PROFILE`, `INFERRED`→`RECEIPTS_MEDIAN`.)*
+  When ≠ `NONE`, each promo's `distanceKm` is relative to that location and the app filters
+  by radius (10 km) + watched markets.
 - `uf`: the user's majority receipt state — a state-level fallback when there are
   no coordinates (the app shows "markets in your state").
 - `promos`: the full list; the app does the nearby/"see more" split client-side.
@@ -1291,7 +1324,8 @@ GET /api/v1/price-index/products/{productId}/generic-comparison
         marketFriendlyName: "Supermercado A",          // friendly label for the ROW (alias → chain → cleaned)
         city: "Porto Alegre", state: "RS",
         distanceKm: 2.3,                 // nullable (null when no coordinates)
-        observedAt, channel: "IN_STORE", scanned: false },
+        observedAt, channel: "IN_STORE", scanned: false,
+        isCheapest: true, isNearest: false },   // persistent badges (see `sort` above)
       …
     ]
   }
@@ -1756,7 +1790,7 @@ POST   /api/v1/admin/dev/seed-discounted-receipt?targetEmail= → ReceiptRespons
 - **Delete product** — removes a product and its CASCADE dependents (aliases, observations, category overrides, alerts, snoozes, shopping-list items). Receipt items that referenced it are detached (`product_id` → null), so confirmed purchase history survives as unmatched rows. Refuses with `409 product.deletion.referenced` when the product still backs confirmed purchases unless `force=true`. Returns `{ productId, receiptItemsDetached }`.
 
 - **Users list** — `q` does substring match on email + name (case-insensitive). Sorted by `createdAt` desc by default.
-- **User detail** — bundles `householdId`, `householdMemberCount`, `receipts` counts (PENDING_CONFIRMATION / CONFIRMED / REJECTED / FAILED_PARSE), and `spendLast30Days`. Useful for triaging "why is X seeing Y".
+- **User detail** — the `receipts` counts (PENDING_CONFIRMATION / CONFIRMED / REJECTED / FAILED_PARSE) and `spendLast30Days` are now the **USER's own** (receipts whose `user_id` is this user), 2026-11-10. Household context is kept SEPARATE and labeled: `householdMemberCount`, `householdReceiptCount`, `householdSpend` (never conflated with the user's own numbers). Useful for triaging "why is X seeing Y".
 - **Receipts list** — same content-search semantics as `GET /receipts` (substring on raw + friendly description, product name, market name) but cross-household. `householdId` is an additional optional filter to scope to one household. Includes `FAILED_PARSE` rows (useful for parser triage).
 - **Receipts get** — bypasses the per-household ownership check.
 - **Reparse** — re-runs parsing on the receipt's stored raw HTML and replaces its items with the freshly-parsed ones. Resets `status` to `PENDING_CONFIRMATION` and clears `confirmedAt` — the owner re-confirms to commit. Useful when a parser fix lands. 400 if `rawHtml` is missing (e.g. legacy rows from before we persisted it).
@@ -1790,7 +1824,7 @@ POST   /api/v1/admin/dev/seed-discounted-receipt?targetEmail= → ReceiptRespons
 - **Trigger ad-spend sync** — `POST /admin/analytics/ad-spend/sync` → `{ "rowsSynced": n }`. Runs the Meta sync on demand (the dashboard otherwise refreshes via the daily cron). Returns `0` when Meta is unconfigured.
 - **`includeInternal` (both analytics GETs, default `false`)** — when false, excludes admins (`role = ADMIN`), test accounts (`email LIKE %@economizaai.app`), Google Firebase Test Lab robots (`email LIKE %@cloudtestlabaccounts.com` — Play Console pre-launch/review accounts), and any account flagged `excludedFromMetrics`. Pass `true` to include everyone.
 - **Exclude an account from metrics** — `PATCH /admin/users/{id}/metrics-exclusion` body `{ "excluded": true|false }` → `AdminUserDetailResponse`. Hides a store-review / robo test account from ALL metrics without deleting it. `excludedFromMetrics` also appears on `AdminUserSummaryResponse` (the list) and `AdminUserDetailResponse`. NOTE: `@icloud.com` / `@privaterelay.appleid.com` are **real** "Sign in with Apple" domains — NOT auto-excluded; flag a specific Apple reviewer account manually if needed.
-- **Admin user list ranking** — `AdminUserSummaryResponse` carries `receiptCount` (nº de notas do domicílio) and `totalSpend` (soma das notas confirmadas, R$). `/admin/users?sort=` accepts `receiptCount,desc` / `totalSpend,desc` on top of the entity sorts (`createdAt`, `name`, `subscriptionTier`) — the aggregate sorts are resolved server-side.
+- **Admin user list ranking** — `AdminUserSummaryResponse` carries `receiptCount` and `totalSpend` which are now the **USER's own** (receipts whose `user_id` is this user, confirmed spend), 2026-11-10. Household context is separate: `householdReceiptCount` (all members' notas) and `householdMemberCount` (show a "Domicílio N" badge when > 1). `/admin/users?sort=` accepts `receiptCount,desc` / `totalSpend,desc` (now rank by the user's own numbers) on top of the entity sorts (`createdAt`, `name`, `subscriptionTier`) — the aggregate sorts are resolved server-side.
 - **Ops error drill-down** — `/admin/receipts?parseErrorReason=<key>&status=FAILED_PARSE` lists the receipts behind one "erro mais comum" (the machine key before `:` in the ingestion-health breakdown). Matches the exact key or `key:details`.
 - **Market intel by chain** — `/admin/market-intel` returns `topMarketsByChain` (grouped by the **CNPJ root** = first 8 digits of the company registration, so every branch of a chain like Zaffari collapses into one row) alongside `topMarkets` (one row per full CNPJ). Same `{ cnpj, name, scans, spend }` shape; on the by-chain list `cnpj`/`name` are one representative unit of the chain.
 - **Sent notifications** — `GET /admin/notifications/sent?days=30&page=&size=` → `Page<AdminNotificationSummaryResponse>` `{ id, userEmail, type, channel, title, body, delivered, deliveredAt, failureReason, read, createdAt }`, newest first — the "notificações enviadas" list.

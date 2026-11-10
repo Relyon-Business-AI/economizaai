@@ -49,6 +49,17 @@ public record GenericComparisonResponse(
             LocalDateTime observedAt,
             String channel,
             @Schema(description = "True quando esta oferta é do produto exato que o usuário escaneou")
-            boolean scanned
-    ) {}
+            boolean scanned,
+            @Schema(description = "True para a oferta de MENOR preço da lista — badge persistente \"Mais barato\" (independe da ordenação)")
+            boolean isCheapest,
+            @Schema(description = "True para a oferta MAIS PERTO do usuário — badge persistente \"Mais perto\" (null distance nunca é a mais perto)")
+            boolean isNearest
+    ) {
+        /** Copy com os badges persistentes definidos (preço/distância são decididos sobre a lista inteira). */
+        public GenericOffer withBadges(boolean cheapest, boolean nearest) {
+            return new GenericOffer(productId, productName, brand, packLabel, unitPrice, marketCnpj,
+                    marketName, marketFriendlyName, city, state, distanceKm, observedAt, channel, scanned,
+                    cheapest, nearest);
+        }
+    }
 }

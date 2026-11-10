@@ -18,6 +18,9 @@ public interface MarketLocationRepository extends JpaRepository<MarketLocation, 
     /** Every known store of a chain (merchant panel — stores appear as receipts are scanned). */
     List<MarketLocation> findAllByCnpjRoot(String cnpjRoot);
 
+    /** Geocoded markets in a state — the sample for the UF-centroid fallback origin. */
+    List<MarketLocation> findAllByStateAndLatitudeIsNotNull(String state);
+
     /** Markets we know about but haven't successfully geocoded yet (for the
      *  scheduled geocoding job). */
     List<MarketLocation> findAllByLatitudeIsNullAndGeocodeAttemptsLessThan(int maxAttempts);

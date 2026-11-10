@@ -188,10 +188,15 @@ class AdminUserServiceCoverageTest {
                 .id(java.util.UUID.randomUUID()).name("Ana").email("ana@test.com").household(household).build();
 
         when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
-        when(receiptRepository.countByHouseholdIdAndStatus(householdId, ReceiptStatus.PENDING_CONFIRMATION)).thenReturn(1L);
-        when(receiptRepository.countByHouseholdIdAndStatus(householdId, ReceiptStatus.CONFIRMED)).thenReturn(2L);
-        when(receiptRepository.countByHouseholdIdAndStatus(householdId, ReceiptStatus.REJECTED)).thenReturn(3L);
-        when(receiptRepository.countByHouseholdIdAndStatus(householdId, ReceiptStatus.FAILED_PARSE)).thenReturn(4L);
+        // USER-OWN status breakdown mapped to each ReceiptCounts field.
+        when(receiptRepository.statusBreakdownByUserId(user.getId())).thenReturn(java.util.List.<Object[]>of(
+                new Object[]{ReceiptStatus.PENDING_CONFIRMATION, 1L},
+                new Object[]{ReceiptStatus.CONFIRMED, 2L},
+                new Object[]{ReceiptStatus.REJECTED, 3L},
+                new Object[]{ReceiptStatus.FAILED_PARSE, 4L}));
+        when(receiptRepository.sumConfirmedTotalByUserSince(eq(user.getId()), any()))
+                .thenReturn(new java.math.BigDecimal("12.00"));
+        when(receiptRepository.countByHouseholdId(householdId)).thenReturn(10L);
         when(insightsRepository.totalSpend(eq(householdId), any(), any(), any(), any())).thenReturn(new java.math.BigDecimal("99.00"));
         when(userRepository.countByHouseholdId(householdId)).thenReturn(5L);
 
@@ -202,6 +207,6 @@ class AdminUserServiceCoverageTest {
         org.junit.jupiter.api.Assertions.assertEquals(3L, detail.receipts().rejected());
         org.junit.jupiter.api.Assertions.assertEquals(4L, detail.receipts().failedParse());
         org.junit.jupiter.api.Assertions.assertEquals(5L, detail.householdMemberCount());
-        verify(receiptRepository, times(4)).countByHouseholdIdAndStatus(eq(householdId), any(ReceiptStatus.class));
+        org.junit.jupiter.api.Assertions.assertEquals(10L, detail.householdReceiptCount());
     }
 }

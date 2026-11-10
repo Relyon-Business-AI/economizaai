@@ -53,6 +53,7 @@ class GenericComparisonServiceTest {
     @Mock private ProductTypeResolver productTypeResolver;
     @Mock private EanCatalogService eanCatalogService;
     @Mock private HouseholdProductAliasService householdProductAliasService;
+    @Mock private ScanHistoryService scanHistoryService;
 
     private final CollaborativeProperties properties = new CollaborativeProperties();
 
@@ -65,7 +66,8 @@ class GenericComparisonServiceTest {
         // Inject the real properties record (not a mock) so thresholds/radius are concrete.
         service = new GenericComparisonService(productRepository, observationRepository, auditRepository,
                 marketLocationService, marketNameService, viewerLocationService, privacyTierResolver,
-                productTypeResolver, eanCatalogService, householdProductAliasService, properties);
+                productTypeResolver, eanCatalogService, householdProductAliasService, scanHistoryService,
+                properties);
         var household = Household.builder().id(UUID.randomUUID()).build();
         user = User.builder().id(UUID.randomUUID()).household(household).build();
         lenient().when(viewerLocationService.resolve(any()))
@@ -85,6 +87,12 @@ class GenericComparisonServiceTest {
                 .thenReturn(new PrivacyTierResolver.Thresholds(
                         properties.getCollaborative().getMinHouseholdsForPublic(),
                         properties.getCollaborative().getMinObservationsPerProductMarket()));
+    }
+
+    private MarketLocation geocoded(String cnpj, BigDecimal latitude, BigDecimal longitude) {
+        return MarketLocation.builder()
+                .cnpj(cnpj).cnpjRoot(cnpj.substring(0, 8)).name("Mercado " + cnpj.substring(0, 2))
+                .latitude(latitude).longitude(longitude).segment(MerchantSegment.SUPERMARKET).build();
     }
 
     private Product product(UUID id, String brand, BigDecimal size) {
@@ -147,6 +155,49 @@ class GenericComparisonServiceTest {
         assertThat(result.offers().get(1).unitPrice()).isEqualByComparingTo("3.49");
         assertThat(result.offers().get(1).scanned()).isTrue();
         assertThat(result.offers().get(1).productName()).isEqualTo("Nestlé 200g");
+    }
+
+    @Test
+    void nearestSortReordersButBadgesStayPersistent() {
+        var scanned = UUID.randomUUID();
+        var other = UUID.randomUUID();
+        var nestle = product(scanned, "Nestlé", new BigDecimal("200"));
+        var italac = product(other, "Italac", new BigDecimal("200"));
+        when(productRepository.findById(scanned)).thenReturn(Optional.of(nestle));
+        when(productRepository.findByGenericNameNormOrderByBrandNormAscPackSizeAsc("creme de leite"))
+                .thenReturn(List.of(nestle, italac));
+        // Both markets are within the 10 km NEARBY radius so both offers qualify. The cheapest
+        // (Italac 2.99) is slightly FARTHER (~2 km); the pricier Nestlé (3.49) is right at the viewer.
+        var cheapFarish = observation(italac, "22222222000100", "RS", new BigDecimal("2.99"), LocalDateTime.of(2026, 1, 6, 0, 0));
+        var dearNear = observation(nestle, "11111111000100", "RS", new BigDecimal("3.49"), LocalDateTime.of(2026, 1, 5, 0, 0));
+        when(observationRepository.findRecentByProductIds(anyList(), any())).thenReturn(List.of(cheapFarish, dearNear));
+        when(auditRepository.countDistinctHouseholdsForProductsByMarket(anyList(), any()))
+                .thenReturn(List.of(householdCount(other, "22222222000100", 1L),
+                                    householdCount(scanned, "11111111000100", 1L)));
+        // Viewer in Porto Alegre; Nestlé market at the viewer, Italac market ~2 km away.
+        when(viewerLocationService.resolve(user)).thenReturn(new ViewerLocation(
+                new BigDecimal("-30.0300"), new BigDecimal("-51.2300"),
+                ViewerLocationService.Source.PROFILE, "RS"));
+        when(marketLocationService.findByCnpjs(anyList())).thenReturn(Map.of(
+                "11111111000100", geocoded("11111111000100", new BigDecimal("-30.0300"), new BigDecimal("-51.2300")),
+                "22222222000100", geocoded("22222222000100", new BigDecimal("-30.0480"), new BigDecimal("-51.2300"))));
+
+        var cheapestSort = service.forProduct(scanned, user, ComparisonSort.CHEAPEST);
+        assertThat(cheapestSort.offers().get(0).unitPrice()).isEqualByComparingTo("2.99"); // price asc
+        // Badges decided over the whole list, independent of order.
+        var cheapRowC = cheapestSort.offers().stream().filter(offer -> offer.productId().equals(other)).findFirst().orElseThrow();
+        var nearRowC = cheapestSort.offers().stream().filter(offer -> offer.productId().equals(scanned)).findFirst().orElseThrow();
+        assertThat(cheapRowC.isCheapest()).isTrue();
+        assertThat(cheapRowC.isNearest()).isFalse();
+        assertThat(nearRowC.isNearest()).isTrue();
+        assertThat(nearRowC.isCheapest()).isFalse();
+
+        var nearestSort = service.forProduct(scanned, user, ComparisonSort.NEAREST);
+        // NEAREST puts the near (pricier) market first; badges unchanged.
+        assertThat(nearestSort.offers().get(0).productId()).isEqualTo(scanned);
+        assertThat(nearestSort.offers().get(0).isNearest()).isTrue();
+        assertThat(nearestSort.offers().get(1).productId()).isEqualTo(other);
+        assertThat(nearestSort.offers().get(1).isCheapest()).isTrue();
     }
 
     @Test

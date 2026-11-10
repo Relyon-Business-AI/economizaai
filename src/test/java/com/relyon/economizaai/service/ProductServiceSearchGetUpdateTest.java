@@ -76,7 +76,7 @@ class ProductServiceSearchGetUpdateTest {
                 householdProductAliasService, brandAliasPromotionService, viewerLocationService);
         lenient().when(viewerLocationService.resolve(any())).thenAnswer(invocation -> {
             User viewer = invocation.getArgument(0);
-            var source = viewer.getHomeLatitude() != null ? Source.EXPLICIT : Source.NONE;
+            var source = viewer.getHomeLatitude() != null ? Source.PROFILE : Source.NONE;
             return new ViewerLocation(viewer.getHomeLatitude(), viewer.getHomeLongitude(), source, null);
         });
     }
@@ -287,7 +287,7 @@ class ProductServiceSearchGetUpdateTest {
         var unrelated = buildProduct(UUID.randomUUID(), "Arroz Aaa");
         var viewer = user();
         when(viewerLocationService.resolve(viewer)).thenReturn(new ViewerLocation(
-                new BigDecimal("-30.0000000"), new BigDecimal("-51.0000000"), Source.INFERRED, "RS"));
+                new BigDecimal("-30.0000000"), new BigDecimal("-51.0000000"), Source.RECEIPTS_MEDIAN, "RS"));
         when(productRepository.searchAll("arroz")).thenReturn(List.of(unrelated, nearby));
         when(receiptItemRepository.findProductIdsWithHistoryForHousehold(anyList(), eq(HOUSEHOLD_ID)))
                 .thenReturn(List.of());

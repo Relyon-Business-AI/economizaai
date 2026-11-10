@@ -138,10 +138,7 @@ class AdminUserServiceTest {
         var user = User.builder().id(UUID.randomUUID()).name("Maria").email("maria@test.com")
                 .household(household).build();
         when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
-        when(receiptRepository.countByHouseholdIdAndStatus(eq(householdId), any(ReceiptStatus.class))).thenReturn(0L);
-        when(insightsRepository.totalSpend(eq(householdId), any(LocalDateTime.class), any(LocalDateTime.class), any(), any()))
-                .thenReturn(BigDecimal.ZERO);
-        when(userRepository.countByHouseholdId(householdId)).thenReturn(1L);
+        stubEmptyDetailAggregates(householdId, user.getId());
 
         var detail = service.setTier(user.getId(), SubscriptionTier.PRO);
 
@@ -156,10 +153,7 @@ class AdminUserServiceTest {
         var user = User.builder().id(UUID.randomUUID()).name("Joao").email("joao@test.com")
                 .household(household).build();
         when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
-        when(receiptRepository.countByHouseholdIdAndStatus(eq(householdId), any(ReceiptStatus.class))).thenReturn(0L);
-        when(insightsRepository.totalSpend(eq(householdId), any(LocalDateTime.class), any(LocalDateTime.class), any(), any()))
-                .thenReturn(BigDecimal.ZERO);
-        when(userRepository.countByHouseholdId(householdId)).thenReturn(1L);
+        stubEmptyDetailAggregates(householdId, user.getId());
 
         service.setTier(user.getId(), SubscriptionTier.FREE);
 
@@ -180,10 +174,7 @@ class AdminUserServiceTest {
         var user = User.builder().id(UUID.randomUUID()).name("Reviewer Test").email("testreviewer123@gmail.com")
                 .household(household).build();
         when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
-        when(receiptRepository.countByHouseholdIdAndStatus(eq(householdId), any(ReceiptStatus.class))).thenReturn(0L);
-        when(insightsRepository.totalSpend(eq(householdId), any(LocalDateTime.class), any(LocalDateTime.class), any(), any()))
-                .thenReturn(BigDecimal.ZERO);
-        when(userRepository.countByHouseholdId(householdId)).thenReturn(1L);
+        stubEmptyDetailAggregates(householdId, user.getId());
 
         var detail = service.setMetricsExclusion(user.getId(), true);
 
@@ -199,10 +190,7 @@ class AdminUserServiceTest {
         var user = User.builder().id(UUID.randomUUID()).name("Mercado Teste").email("merchant@economizaai.app")
                 .household(household).role(Role.USER).build();
         when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
-        when(receiptRepository.countByHouseholdIdAndStatus(eq(householdId), any(ReceiptStatus.class))).thenReturn(0L);
-        when(insightsRepository.totalSpend(eq(householdId), any(LocalDateTime.class), any(LocalDateTime.class), any(), any()))
-                .thenReturn(BigDecimal.ZERO);
-        when(userRepository.countByHouseholdId(householdId)).thenReturn(1L);
+        stubEmptyDetailAggregates(householdId, user.getId());
 
         service.setRole(user.getId(), Role.MERCHANT);
 
@@ -218,10 +206,7 @@ class AdminUserServiceTest {
         var user = User.builder().id(UUID.randomUUID()).name("Ex Mercado").email("exmerchant@economizaai.app")
                 .household(household).role(Role.MERCHANT).build();
         when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
-        when(receiptRepository.countByHouseholdIdAndStatus(eq(householdId), any(ReceiptStatus.class))).thenReturn(0L);
-        when(insightsRepository.totalSpend(eq(householdId), any(LocalDateTime.class), any(LocalDateTime.class), any(), any()))
-                .thenReturn(BigDecimal.ZERO);
-        when(userRepository.countByHouseholdId(householdId)).thenReturn(1L);
+        stubEmptyDetailAggregates(householdId, user.getId());
 
         service.setRole(user.getId(), Role.USER);
 
@@ -255,12 +240,17 @@ class AdminUserServiceTest {
                 .build();
 
         when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
-        when(receiptRepository.countByHouseholdIdAndStatus(householdId, ReceiptStatus.PENDING_CONFIRMATION)).thenReturn(2L);
-        when(receiptRepository.countByHouseholdIdAndStatus(householdId, ReceiptStatus.CONFIRMED)).thenReturn(7L);
-        when(receiptRepository.countByHouseholdIdAndStatus(householdId, ReceiptStatus.REJECTED)).thenReturn(0L);
-        when(receiptRepository.countByHouseholdIdAndStatus(householdId, ReceiptStatus.FAILED_PARSE)).thenReturn(1L);
-        when(insightsRepository.totalSpend(eq(householdId), any(LocalDateTime.class), any(LocalDateTime.class), any(), any()))
+        // USER-OWN status breakdown (one batched query returning (status, count) rows).
+        when(receiptRepository.statusBreakdownByUserId(user.getId())).thenReturn(List.<Object[]>of(
+                new Object[]{ReceiptStatus.PENDING_CONFIRMATION, 2L},
+                new Object[]{ReceiptStatus.CONFIRMED, 7L},
+                new Object[]{ReceiptStatus.FAILED_PARSE, 1L}));
+        when(receiptRepository.sumConfirmedTotalByUserSince(eq(user.getId()), any(LocalDateTime.class)))
                 .thenReturn(new BigDecimal("321.45"));
+        // HOUSEHOLD context, kept separate.
+        when(receiptRepository.countByHouseholdId(householdId)).thenReturn(12L);
+        when(insightsRepository.totalSpend(eq(householdId), any(LocalDateTime.class), any(LocalDateTime.class), any(), any()))
+                .thenReturn(new BigDecimal("999.00"));
         when(userRepository.countByHouseholdId(householdId)).thenReturn(2L);
 
         var detail = service.get(user.getId());
@@ -268,9 +258,14 @@ class AdminUserServiceTest {
         assertEquals("Maria", detail.name());
         assertEquals(householdId, detail.householdId());
         assertEquals(2L, detail.householdMemberCount());
+        // USER-OWN numbers.
         assertEquals(7L, detail.receipts().confirmed());
         assertEquals(2L, detail.receipts().pendingConfirmation());
+        assertEquals(1L, detail.receipts().failedParse());
         assertEquals(0, new BigDecimal("321.45").compareTo(detail.spendLast30Days()));
+        // HOUSEHOLD totals, separate and not conflated.
+        assertEquals(12L, detail.householdReceiptCount());
+        assertEquals(0, new BigDecimal("999.00").compareTo(detail.householdSpend()));
     }
 
     @Test
@@ -292,7 +287,10 @@ class AdminUserServiceTest {
                 .build();
 
         when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
-        when(receiptRepository.countByHouseholdIdAndStatus(eq(householdId), any(ReceiptStatus.class))).thenReturn(0L);
+        when(receiptRepository.statusBreakdownByUserId(user.getId())).thenReturn(List.of());
+        when(receiptRepository.sumConfirmedTotalByUserSince(eq(user.getId()), any(LocalDateTime.class)))
+                .thenReturn(null);
+        when(receiptRepository.countByHouseholdId(householdId)).thenReturn(0L);
         when(insightsRepository.totalSpend(eq(householdId), any(LocalDateTime.class), any(LocalDateTime.class), any(), any()))
                 .thenReturn(null);
         when(userRepository.countByHouseholdId(householdId)).thenReturn(1L);
@@ -300,6 +298,7 @@ class AdminUserServiceTest {
         var detail = service.get(user.getId());
 
         assertEquals(BigDecimal.ZERO, detail.spendLast30Days());
+        assertEquals(BigDecimal.ZERO, detail.householdSpend());
     }
 
     @Test
@@ -327,19 +326,28 @@ class AdminUserServiceTest {
     }
 
     @Test
-    void listEnrichesReceiptCountPerHousehold() {
+    void listEnrichesUserOwnReceiptCountAndHouseholdBadge() {
         var householdId = UUID.randomUUID();
         var household = Household.builder().id(householdId).inviteCode("ABC123").build();
         var user = User.builder().id(UUID.randomUUID()).name("Ana").email("ana@test.com").household(household).build();
         user.setCreatedAt(LocalDateTime.now());
         when(userRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(user)));
+        // USER-OWN receipt count (keyed by user_id), NOT the household total.
+        when(receiptRepository.countByUserIds(List.of(user.getId())))
+                .thenReturn(List.<Object[]>of(new Object[]{user.getId(), 7L}));
+        // HOUSEHOLD totals + member count, separate.
         when(receiptRepository.countByHouseholdIds(List.of(householdId)))
-                .thenReturn(List.<Object[]>of(new Object[]{householdId, 7L}));
+                .thenReturn(List.<Object[]>of(new Object[]{householdId, 40L}));
+        when(userRepository.countByHouseholdIds(List.of(householdId)))
+                .thenReturn(List.<Object[]>of(new Object[]{householdId, 3L}));
 
         var page = service.list(null, null, null, null, null, null, false, PageRequest.of(0, 20));
 
-        assertEquals(7L, page.getContent().get(0).receiptCount());
+        var summary = page.getContent().get(0);
+        assertEquals(7L, summary.receiptCount());            // user-own
+        assertEquals(40L, summary.householdReceiptCount());  // household total, not conflated
+        assertEquals(3L, summary.householdMemberCount());    // "Domicílio 3" badge
     }
 
     @Test
@@ -356,20 +364,19 @@ class AdminUserServiceTest {
     }
 
     @Test
-    void listRanksBySpendDescWhenSortIsTotalSpend() {
-        var poorHome = UUID.randomUUID();
-        var richHome = UUID.randomUUID();
+    void listRanksByUserOwnSpendDescWhenSortIsTotalSpend() {
         var poor = User.builder().id(UUID.randomUUID()).name("Poor").email("poor@test.com")
-                .household(Household.builder().id(poorHome).inviteCode("P").build()).build();
+                .household(Household.builder().id(UUID.randomUUID()).inviteCode("P").build()).build();
         var rich = User.builder().id(UUID.randomUUID()).name("Rich").email("rich@test.com")
-                .household(Household.builder().id(richHome).inviteCode("R").build()).build();
+                .household(Household.builder().id(UUID.randomUUID()).inviteCode("R").build()).build();
         poor.setCreatedAt(LocalDateTime.now().minusDays(1));
         rich.setCreatedAt(LocalDateTime.now());
         when(userRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(poor, rich)));
-        when(receiptRepository.sumConfirmedTotalByHouseholdIds(anyList())).thenReturn(List.<Object[]>of(
-                new Object[]{poorHome, new BigDecimal("10.00")},
-                new Object[]{richHome, new BigDecimal("999.00")}));
+        // Ranked by the USER's own spend (keyed by user_id), not the household's.
+        when(receiptRepository.sumConfirmedTotalByUserIds(anyList())).thenReturn(List.<Object[]>of(
+                new Object[]{poor.getId(), new BigDecimal("10.00")},
+                new Object[]{rich.getId(), new BigDecimal("999.00")}));
 
         var requested = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "totalSpend"));
         var page = service.list(null, null, null, null, null, null, false, requested);
@@ -380,24 +387,34 @@ class AdminUserServiceTest {
     }
 
     @Test
-    void listRanksByReceiptCountAndPaginatesInMemory() {
-        var homeA = UUID.randomUUID();
-        var homeB = UUID.randomUUID();
+    void listRanksByUserOwnReceiptCountAndPaginatesInMemory() {
         var userA = User.builder().id(UUID.randomUUID()).name("A").email("a@test.com")
-                .household(Household.builder().id(homeA).inviteCode("A").build()).build();
+                .household(Household.builder().id(UUID.randomUUID()).inviteCode("A").build()).build();
         var userB = User.builder().id(UUID.randomUUID()).name("B").email("b@test.com")
-                .household(Household.builder().id(homeB).inviteCode("B").build()).build();
+                .household(Household.builder().id(UUID.randomUUID()).inviteCode("B").build()).build();
         userA.setCreatedAt(LocalDateTime.now());
         userB.setCreatedAt(LocalDateTime.now());
         when(userRepository.findAll(any(Specification.class), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(userA, userB)));
-        when(receiptRepository.countByHouseholdIds(anyList())).thenReturn(List.<Object[]>of(
-                new Object[]{homeA, 2L}, new Object[]{homeB, 40L}));
+        // Ranked by the USER's own receipt count (keyed by user_id).
+        when(receiptRepository.countByUserIds(anyList())).thenReturn(List.<Object[]>of(
+                new Object[]{userA.getId(), 2L}, new Object[]{userB.getId(), 40L}));
 
         var page = service.list(null, null, null, null, null, null, false, PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "receiptCount")));
 
         assertEquals(2, page.getTotalElements());
         assertEquals(1, page.getContent().size());
         assertEquals("b@test.com", page.getContent().get(0).email()); // 40 notas ranks first
+    }
+
+    /** Stub the detail-view aggregates to empty/zero — for mutation tests that don't assert counts. */
+    private void stubEmptyDetailAggregates(UUID householdId, UUID userId) {
+        when(receiptRepository.statusBreakdownByUserId(userId)).thenReturn(List.of());
+        when(receiptRepository.sumConfirmedTotalByUserSince(eq(userId), any(LocalDateTime.class)))
+                .thenReturn(BigDecimal.ZERO);
+        when(receiptRepository.countByHouseholdId(householdId)).thenReturn(0L);
+        when(insightsRepository.totalSpend(eq(householdId), any(LocalDateTime.class), any(LocalDateTime.class), any(), any()))
+                .thenReturn(BigDecimal.ZERO);
+        when(userRepository.countByHouseholdId(householdId)).thenReturn(1L);
     }
 }

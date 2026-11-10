@@ -165,7 +165,7 @@ class PriceIndexServiceTest {
     void bestMarketsForViewer_withLocationKeepsOnlyChainsWithinTheNearbyRadius() {
         var productId = UUID.randomUUID();
         stubThreeChainsAcrossRegions(productId);
-        var location = new ViewerLocation(POA_LAT, POA_LNG, ViewerLocationService.Source.INFERRED, "RS");
+        var location = new ViewerLocation(POA_LAT, POA_LNG, ViewerLocationService.Source.RECEIPTS_MEDIAN, "RS");
 
         var rows = service.bestMarketsForViewer(productId, 10, location, Set.of());
 
@@ -177,7 +177,7 @@ class PriceIndexServiceTest {
     void bestMarketsForViewer_withLocationStillShowsAWatchedFarChain() {
         var productId = UUID.randomUUID();
         stubThreeChainsAcrossRegions(productId);
-        var location = new ViewerLocation(POA_LAT, POA_LNG, ViewerLocationService.Source.EXPLICIT, "RS");
+        var location = new ViewerLocation(POA_LAT, POA_LNG, ViewerLocationService.Source.PROFILE, "RS");
 
         var rows = service.bestMarketsForViewer(productId, 10, location, Set.of("BBBBBBBB000111"));
 
@@ -188,7 +188,7 @@ class PriceIndexServiceTest {
     void bestMarketsInScope_honoursTheScopeRadius() {
         var productId = UUID.randomUUID();
         stubThreeChainsAcrossRegions(productId);
-        var location = new ViewerLocation(POA_LAT, POA_LNG, ViewerLocationService.Source.EXPLICIT, "RS");
+        var location = new ViewerLocation(POA_LAT, POA_LNG, ViewerLocationService.Source.PROFILE, "RS");
 
         var rows = service.bestMarketsInScope(productId, 10, new NearbyScope(location, Set.of(), 500));
 
@@ -235,6 +235,29 @@ class PriceIndexServiceTest {
         var rows = service.bestMarketsForViewer(productId, 10, location, Set.of());
 
         assertEquals(3, rows.size());
+    }
+
+    @Test
+    void bestMarkets_nearestSortReordersButBadgesStayPersistent() {
+        var productId = UUID.randomUUID();
+        stubThreeChainsAcrossRegions(productId);
+        // National scope (explicit position, no radius) so all three chains appear.
+        var cheapest = service.bestMarkets(productId, 10, POA_LAT, POA_LNG, null, Set.of(), ComparisonSort.CHEAPEST);
+        // CHEAPEST: price asc → Muffato 4.49, Super Santi 4.99, Mercado POA 5.49.
+        assertEquals(List.of("Muffato", "Super Santi", "Mercado POA"), chainNames(cheapest));
+        var poaRow = cheapest.stream().filter(row -> row.cnpjRoot().equals("AAAAAAAA")).findFirst().orElseThrow();
+        var muffatoRow = cheapest.stream().filter(row -> row.cnpjRoot().equals("CCCCCCCC")).findFirst().orElseThrow();
+        // Badges over the whole list: Muffato cheapest; Mercado POA nearest to the POA viewer.
+        assertTrue(muffatoRow.isCheapest());
+        assertFalse(muffatoRow.isNearest());
+        assertTrue(poaRow.isNearest());
+        assertFalse(poaRow.isCheapest());
+
+        var nearest = service.bestMarkets(productId, 10, POA_LAT, POA_LNG, null, Set.of(), ComparisonSort.NEAREST);
+        // NEAREST: Mercado POA (~2 km) first; badges unchanged.
+        assertEquals("Mercado POA", nearest.get(0).marketName());
+        assertTrue(nearest.get(0).isNearest());
+        assertTrue(nearest.stream().filter(row -> row.cnpjRoot().equals("CCCCCCCC")).findFirst().orElseThrow().isCheapest());
     }
 
     @Test

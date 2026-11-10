@@ -1,5 +1,30 @@
 # economizai — what's new
 
+## 2026-11-10 — Comparação de produto: histórico, raio dos Mercados, ordenar por preço/distância, admin por usuário
+
+- **`GET /markets?scope=ALL|MINE&lat=&lng=`** (Mercados) agora devolve mercados a **10 km** da origem
+  resolvida ∪ os seguidos (`scope=ALL`, padrão) ou só os seguidos (`MINE`). **Ordenado por `distanceKm`
+  asc, nulos por último** — corrige mercados a 3.000 km (notas de outro estado) dominando a lista; os
+  seguidos-mas-longe ficam no fim, não somem. Cada linha ganhou `city`/`state`. O param `radiusKm` saiu
+  (raio fixo 10 km).
+- **`sort=CHEAPEST|NEAREST`** (padrão `CHEAPEST`) em `best-markets` e nas duas `generic-comparison`.
+  `CHEAPEST` = preço asc; `NEAREST` = distância asc (nulos por último). A cascata de escopo não muda.
+  Cada oferta/linha carrega `isCheapest`/`isNearest` persistentes (decididos sobre a lista inteira) pros
+  badges "Mais barato"/"Mais perto" independerem da ordenação. (Sem "vale a pena?" — Fase 2 adiada.)
+- **`GET /price-index/scanned-products`** — histórico "produtos escaneados" do domicílio (consultas via
+  best-markets / generic-comparison / scan de código de barras), dedupado por produto/tipo, consulta mais
+  recente primeiro, até 100. Devolve só o snapshot gravado (`snapshotBestPrice`, `snapshotScope`,
+  `scanCount`, `lastConsultedAt`) — **instantâneo, sem recálculo**. O app busca o preço ao vivo por item
+  visível (endpoints de comparação) e calcula o delta "mudou de preço" no cliente.
+- **`locationSource` renomeado**: `EXPLICIT`→`PROFILE`, `INFERRED`→`RECEIPTS_MEDIAN`; novos `DEVICE`
+  (GPS em tempo real via `lat`/`lng`) e `UF_FALLBACK`. `RECEIPTS_MEDIAN`/`UF_FALLBACK` são inferidos —
+  sugira "confirme sua localização".
+- **Admin por usuário**: `AdminUserSummaryResponse`/`AdminUserDetailResponse` — `receiptCount`/`totalSpend`
+  (e o breakdown por status / `spendLast30Days` no detalhe) agora são do **próprio usuário** (receipts com
+  `user_id` dele). Contexto de domicílio vem SEPARADO: `householdReceiptCount` + `householdMemberCount`
+  (badge "Domicílio N" quando > 1) na lista; `householdReceiptCount` + `householdSpend` + `householdMemberCount`
+  no detalhe.
+
 ## 2026-11-10 — `ReceiptSummaryResponse.createdAt` e recentes sem nota "sem data" no topo
 
 - **`createdAt`** em `ReceiptSummaryResponse` (lista, recentes da Home). `issuedAt` pode ser nulo (foto/

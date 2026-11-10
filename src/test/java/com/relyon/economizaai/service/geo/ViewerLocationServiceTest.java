@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -46,19 +47,47 @@ class ViewerLocationServiceTest {
     }
 
     @Test
-    void explicitLocationWins() {
+    void deviceLocationWinsEverything() {
+        // Even with a profile location set, a real-time device fix takes priority.
+        user.setHomeLatitude(new BigDecimal("-23.00"));
+        user.setHomeLongitude(new BigDecimal("-46.00"));
+
+        var location = service.resolve(user, new BigDecimal("-30.05"), new BigDecimal("-51.22"));
+
+        assertEquals(Source.DEVICE, location.source());
+        assertEquals(new BigDecimal("-30.05"), location.latitude());
+        assertEquals(new BigDecimal("-51.22"), location.longitude());
+        assertFalse(location.isInferred());
+        assertEquals("RS", location.uf());
+    }
+
+    @Test
+    void deviceCoordinatesAreAllOrNothing() {
+        // Only one of lat/lng provided → ignore it and fall through to the profile.
+        user.setHomeLatitude(new BigDecimal("-30.00"));
+        user.setHomeLongitude(new BigDecimal("-51.00"));
+
+        var location = service.resolve(user, new BigDecimal("-30.05"), null);
+
+        assertEquals(Source.PROFILE, location.source());
+        assertEquals(new BigDecimal("-30.00"), location.latitude());
+    }
+
+    @Test
+    void profileLocationWinsWhenNoDeviceFix() {
         user.setHomeLatitude(new BigDecimal("-30.00"));
         user.setHomeLongitude(new BigDecimal("-51.00"));
 
         var location = service.resolve(user);
 
-        assertEquals(Source.EXPLICIT, location.source());
+        assertEquals(Source.PROFILE, location.source());
         assertEquals(new BigDecimal("-30.00"), location.latitude());
+        assertFalse(location.isInferred());
         assertEquals("RS", location.uf());
     }
 
     @Test
-    void infersMedianCentroidFromGeocodedMarkets() {
+    void receiptsMedianWhenNoProfileLocation() {
         when(receiptRepository.findDistinctCnpjsByHousehold(householdId))
                 .thenReturn(List.of("111", "222", "333"));
         when(marketLocationRepository.findAllByCnpjIn(any())).thenReturn(List.of(
@@ -68,7 +97,8 @@ class ViewerLocationServiceTest {
 
         var location = service.resolve(user);
 
-        assertEquals(Source.INFERRED, location.source());
+        assertEquals(Source.RECEIPTS_MEDIAN, location.source());
+        assertTrue(location.isInferred());
         // mediana dos 3 pontos = o do meio.
         assertEquals(0, new BigDecimal("-30.10").compareTo(location.latitude()));
         assertEquals(0, new BigDecimal("-51.10").compareTo(location.longitude()));
@@ -76,15 +106,34 @@ class ViewerLocationServiceTest {
     }
 
     @Test
-    void noGeocodedMarkets_isNoneButKeepsUf() {
+    void ufFallbackCentroidWhenNoReceiptCoordinates() {
+        // Household has receipts but none of those markets are geocoded → fall back to the
+        // centroid of all geocoded markets in the majority UF.
         when(receiptRepository.findDistinctCnpjsByHousehold(householdId)).thenReturn(List.of("111"));
-        when(marketLocationRepository.findAllByCnpjIn(any()))
-                .thenReturn(List.of(market(null, null))); // sem coordenadas
+        when(marketLocationRepository.findAllByCnpjIn(any())).thenReturn(List.of(market(null, null)));
+        when(marketLocationRepository.findAllByStateAndLatitudeIsNotNull("RS")).thenReturn(List.of(
+                market(new BigDecimal("-29.00"), new BigDecimal("-51.00")),
+                market(new BigDecimal("-30.00"), new BigDecimal("-52.00")),
+                market(new BigDecimal("-31.00"), new BigDecimal("-53.00"))));
+
+        var location = service.resolve(user);
+
+        assertEquals(Source.UF_FALLBACK, location.source());
+        assertTrue(location.isInferred());
+        assertEquals(0, new BigDecimal("-30.00").compareTo(location.latitude()));
+        assertEquals(0, new BigDecimal("-52.00").compareTo(location.longitude()));
+        assertEquals("RS", location.uf());
+    }
+
+    @Test
+    void noneWhenUfHasNoGeocodedMarkets() {
+        when(receiptRepository.findDistinctCnpjsByHousehold(householdId)).thenReturn(List.of());
+        when(marketLocationRepository.findAllByStateAndLatitudeIsNotNull("RS")).thenReturn(List.of());
 
         var location = service.resolve(user);
 
         assertEquals(Source.NONE, location.source());
-        assertTrue(!location.hasCoordinates());
+        assertFalse(location.hasCoordinates());
         assertEquals("RS", location.uf());
     }
 
