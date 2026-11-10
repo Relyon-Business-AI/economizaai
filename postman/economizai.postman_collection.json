@@ -1742,6 +1742,34 @@
 					"response": []
 				},
 				{
+					"name": "Member profile picture (same household only)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/households/me/members/{{memberId}}/profile-picture",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"households",
+								"me",
+								"members",
+								"{{memberId}}",
+								"profile-picture"
+							]
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "Remove a member (kick \u2014 moves them to a fresh solo household)",
 					"request": {
 						"method": "DELETE",

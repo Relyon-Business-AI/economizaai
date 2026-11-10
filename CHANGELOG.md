@@ -1,5 +1,11 @@
 # economizai — what's new
 
+## 2026-11-10 — Foto de perfil dos membros da casa
+
+- **`GET /households/me/members/{memberId}/profile-picture`** — foto (ou avatar gerado) de outro membro da
+  casa, com os mesmos headers de `/users/me/profile-picture` (`X-Profile-Picture-Fallback`). `404
+  household.not.member` se a pessoa não está na sua casa. Pra tela de Casa mostrar foto em vez de iniciais.
+
 ## 2026-11-10 — Domicílio: sair leva cópia, domicílio de origem salvo na conta, só o anfitrião convida
 
 - **Domicílio de origem salvo no usuário** (V139: `users.home_household_id` + `household_joined_at`) — não é
