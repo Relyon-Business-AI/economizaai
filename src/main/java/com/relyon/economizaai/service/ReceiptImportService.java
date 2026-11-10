@@ -8,11 +8,12 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ReceiptEntryMethod;
 import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
+import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.geo.MerchantSupportGate;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import com.relyon.economizaai.service.sefaz.ChaveAcessoParser;
-import com.relyon.economizaai.service.sefaz.ChaveReconsultService;
+import com.relyon.economizaai.service.sefaz.SefazIngestionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,7 +28,8 @@ import java.util.regex.Pattern;
 /**
  * Bulk import of receipts from a list of access keys (chaves) — the onboarding
  * path that fills a new user's history from their Nota Fiscal Gaúcha export
- * without scanning each nota. Only RS is reconsultable today (NFC-e 65 + NF-e 55).
+ * without scanning each nota. No state is hard-blocked: each chave rides the same by-chave
+ * fetch chain as a typed chave (free legacy reconsult → paid Infosimples → admin alert).
  *
  * <p>Each eligible chave is persisted as {@link ReceiptStatus#IMPORT_QUEUED} — NOT
  * dispatched to the async pool. The paced {@link com.relyon.economizaai.service.sefaz.ImportReconsultWorker}
@@ -50,6 +52,7 @@ public class ReceiptImportService {
     private final ReceiptService receiptService;
     private final MerchantSupportGate merchantSupportGate;
     private final LocalizedMessageService localizedMessageService;
+    private final SefazIngestionService sefazIngestionService;
 
     /**
      * Queue every reconsultable chave as IMPORT_QUEUED and report the rest. The paced
@@ -110,7 +113,7 @@ public class ReceiptImportService {
             if (receipt == null || !receipt.getHousehold().getId().equals(householdId)) continue;
             if (receipt.getStatus() != ReceiptStatus.FAILED_PARSE) continue;
             var chave = receipt.getChaveAcesso();
-            if (chave == null || !ChaveReconsultService.isReconsultable(chave)) continue;
+            if (chave == null || !hasFetchPath(chave)) continue;
             receipt.setStatus(ReceiptStatus.IMPORT_QUEUED);
             receipt.setParseErrorReason(null);
             receiptRepository.save(receipt);
@@ -154,8 +157,10 @@ public class ReceiptImportService {
         if (!ChaveAcessoParser.hasValidCheckDigit(chave)) {
             return reject(chave, "receipt.chave.typo");
         }
-        if (!ChaveReconsultService.isReconsultable(chave)) {
-            return reject(chave, "receipt.import.unsupported");
+        // Same rule as a typed chave: reject at submit only when NO fetch path exists for
+        // it (no portal adapter, no free reconsult, Infosimples off) — never a UF allow-list.
+        if (!hasFetchPath(chave)) {
+            return reject(chave, unsupportedReasonKey(chave), ChaveAcessoParser.extractUf(chave));
         }
         if (merchantSupportGate.isKnownBlockedCnpj(ChaveAcessoParser.extractCnpj(chave))) {
             return reject(chave, "receipt.import.merchant_unsupported");
@@ -171,6 +176,19 @@ public class ReceiptImportService {
             receiptRepository.flush();
         }
         return null;
+    }
+
+    private boolean hasFetchPath(String chave) {
+        if (!sefazIngestionService.supportsBareChave(chave)) return false;
+        return !isNfe55(chave) || sefazIngestionService.supportsTypedNfe55(ChaveAcessoParser.extractUf(chave));
+    }
+
+    private static String unsupportedReasonKey(String chave) {
+        return isNfe55(chave) ? "receipt.manual-chave.nfe-unsupported" : "receipt.manual-chave.unsupported";
+    }
+
+    private static boolean isNfe55(String chave) {
+        return "55".equals(ChaveAcessoParser.extractModel(chave));
     }
 
     private UUID queue(User user, String chave) {
@@ -190,6 +208,10 @@ public class ReceiptImportService {
 
     private RejectedChave reject(String chave, String reasonKey) {
         return new RejectedChave(chave, reasonKey, localizedMessageService.translate(reasonKey));
+    }
+
+    private RejectedChave reject(String chave, String reasonKey, UnidadeFederativa uf) {
+        return new RejectedChave(chave, reasonKey, localizedMessageService.translate(reasonKey, uf.name()));
     }
 
     private static String abbrev(UUID id) {

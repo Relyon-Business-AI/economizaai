@@ -74,7 +74,6 @@ public class ReceiptIngestionService {
     private final EanCatalogEnrichmentService eanCatalogEnrichmentService;
     private final MarketLocationService marketLocationService;
     private final MerchantSupportGate merchantSupportGate;
-    private final ChaveReconsultService chaveReconsultService;
     private final NotificationService notificationService;
     private final LocalizedMessageService messageService;
     private final PrefetchPolicy prefetchPolicy;
@@ -204,15 +203,16 @@ public class ReceiptIngestionService {
     }
 
     /**
-     * As {@link #ingest} but the item data is <b>reconsulted from the bare chave</b>
-     * (no QR scan) on a public RS portal — the engine of the CSV/chaves bulk import.
-     * Reuses the whole persist pipeline (merchant gate, EAN warm-up, parse-failure
-     * keeps the raw HTML) via {@link ChaveReconsultService} (RS gratis; BA custa 1 solve de captcha). Not device-retryable:
-     * a reconsult dead end is a plain FAILED_PARSE.
+     * As {@link #ingest} but the item data is fetched from the <b>bare chave</b> (no QR scan) —
+     * the engine of the CSV/chaves bulk import. Runs the same by-chave chain as a typed chave
+     * ({@link SefazIngestionService#fetch}): free legacy reconsult (RS/CE/BA/AM) → paid Infosimples
+     * → admin alert + honest failure, so no state is hard-blocked. Reuses the whole persist
+     * pipeline (merchant gate, EAN warm-up, parse-failure keeps the raw HTML). Not
+     * device-retryable: a dead end is a plain FAILED_PARSE.
      */
     @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
     public void ingestReconsult(UUID receiptId, String chave) {
-        ingestResolved(receiptId, receipt -> chaveReconsultService.reconsult(chave), false, null);
+        ingestResolved(receiptId, receipt -> sefazIngestionService.fetch(chave, receipt.getUser().getId()), false, null);
     }
 
     /**

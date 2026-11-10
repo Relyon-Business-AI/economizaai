@@ -457,10 +457,12 @@ POST /api/v1/receipts/import/extract-chaves   (multipart/form-data, field "file"
   reaches `PENDING_CONFIRMATION` (then confirm as usual) or `FAILED_PARSE`. Same
   monthly cap as `POST /receipts` (over the cap → the rest come back as
   `receipt.import.cap_reached`).
-- Rejection `reason` keys: `receipt.import.invalid_chave`, `receipt.import.unsupported`
-  (not RS / unsupported model), `receipt.import.duplicate`, `receipt.import.merchant_unsupported`,
-  `receipt.import.cap_reached`. `reasonMessage` is already localized.
-- **RS only** today; other UFs → `receipt.import.unsupported`.
+- Rejection `reason` keys: `receipt.import.invalid_chave`, `receipt.chave.typo`,
+  `receipt.manual-chave.unsupported` / `receipt.manual-chave.nfe-unsupported` (no fetch path at
+  all for that chave — same rule as a typed chave), `receipt.import.duplicate`,
+  `receipt.import.merchant_unsupported`, `receipt.import.cap_reached`. `reasonMessage` is already localized.
+- **Every UF** (2026-11-10): each chave rides the by-chave chain (free legacy reconsult →
+  Infosimples → admin alert). `receipt.import.unsupported` no longer exists.
 - **Segment policy (same for scan and import).** Any merchant is accepted into the user's personal
   history — restaurants, pet, apparel, e-commerce, etc. Only an explicit **admin BLOCKED override**
   rejects. What's gated is **index contribution**: only grocery/pharmacy (supermarket, pharmacy,

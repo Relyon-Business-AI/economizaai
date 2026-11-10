@@ -30,7 +30,7 @@ localizado (`receipt.import.*`).
 `SatWebNfceParser` (NFC-e 65) e `SvrsNfeProdutosParser` (NF-e 55, com EAN real).
 Fixtures reais (CPF mascarado) em `src/test/resources/fixtures/sefaz/rs/`.
 
-**Limites/riscos:** só RS por ora (outras UFs → `receipt.import.unsupported`); o
+**Limites/riscos:** desde 2026-11-10 toda UF entra (cadeia por chave: reconsulta grátis → Infosimples → alerta; `receipt.import.unsupported` foi removida); o
 "Código" do NFC-e é PLU interno, não EAN (NF-e 55 traz EAN real); reconsulta
 server-side em lote pode ser **rate-limited/bloqueada por IP** pelo SEFAZ (o pool
 async limita a concorrência) — fallback futuro é on-device PE-style; o POST da
