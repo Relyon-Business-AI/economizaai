@@ -1,5 +1,24 @@
 # economizai — what's new
 
+## 2026-11-10 — Fim do "0 km" por centroide de cidade no "perto de você"
+
+- **Geocoder rejeita centroide de cidade.** Quando o Nominatim não achava o endereço exato ele devolvia
+  o CENTRO DA CIDADE e gravávamos como se fosse preciso — vários mercados colapsavam na MESMA coordenada
+  e apareciam todos a ~0 km em "perto de você". O geocoder agora recusa matches de nível
+  cidade/município/estado/administrativo/boundary (campos `addresstype`/`class`/`type`/`place_rank` do
+  Nominatim) e trata como falha (fica sem coordenada em vez de aproximar). **Migração V143** zera as
+  coordenadas poluídas já gravadas (só linhas onde >1 mercado distinto compartilha a MESMA lat/long — a
+  assinatura do centroide) e reabre o re-geocode; city/UF são preservados.
+
+## 2026-11-10 — `friendlyName` limpo em `GET /markets`
+
+- **`GET /api/v1/markets` (e `/markets/mine`, pin em `POST /markets/{cnpj}`): `friendlyName` agora vem
+  limpo.** Antes o campo repetia a razão social legal (`"BISTEK SUPERMERCADOS LTDA"`,
+  `"DIMED S/A DISTRIBUIDORA DE MEDICAMENTOS"`); agora passa pela MESMA cascata usada nas ofertas de
+  comparação — apelido do domicílio → nome da rede (`MarketChain`) → heurística `cleanLegalName`
+  (`"Bistek"`, `"Dimed Distribuidora de Medicamentos"`). O campo `name` continua sendo a razão social
+  legal completa.
+
 ## 2026-11-10 — Backfill de cidade/UF nas observações de preço
 
 - **Migração de dados V142** (só preenche NULLs, nunca sobrescreve): completa `city`/`state` das
