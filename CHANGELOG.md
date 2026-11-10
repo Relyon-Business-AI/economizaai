@@ -1,5 +1,14 @@
 # economizai — what's new
 
+## 2026-11-10 — Backfill de cidade/UF nas observações de preço
+
+- **Migração de dados V142** (só preenche NULLs, nunca sobrescreve): completa `city`/`state` das
+  observações de preço a partir do `market_locations` (por CNPJ) e, onde ainda faltar, a UF a partir
+  da nota de origem (via a tabela de auditoria → `receipts.uf`). Fecha metade das observações sem UF.
+- **Propagação nova**: quando um mercado geocodifica, suas observações antigas (city/state nulos)
+  herdam cidade/UF na hora — antes o snapshot só era gravado no momento da observação e nunca atualizado.
+- (O re-geocode dos mercados que falharam é tratado pela V141 — zera `geocode_attempts` dos sem-coordenada.)
+
 ## 2026-11-10 — Promoção da comunidade: "% mais barato" ignora preços-fora-da-curva
 
 - **`GET /price-index/promos/feed`** e a notificação "N% mais barato" não computam mais o desconto

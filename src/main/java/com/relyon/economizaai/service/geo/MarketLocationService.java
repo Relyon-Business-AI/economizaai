@@ -8,6 +8,7 @@ import com.relyon.economizaai.model.enums.MerchantSegment;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.MarketChainRepository;
 import com.relyon.economizaai.repository.MarketLocationRepository;
+import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.ContactService;
@@ -55,6 +56,7 @@ public class MarketLocationService {
     private static final String BRASIL_SUFFIX = ", Brasil";
 
     private final MarketLocationRepository repository;
+    private final PriceObservationRepository priceObservationRepository;
     private final MarketChainRepository chainRepository;
     private final NominatimGeocoder geocoder;
     private final CnpjActivityClient cnpjActivityClient;
@@ -230,14 +232,32 @@ public class MarketLocationService {
             market.setState(hit.state() != null ? hit.state() : ufOf(knownAddress));
             market.setGeocodedAt(LocalDateTime.now());
             market.setGeocodeFailedAt(null);
+            repository.save(market);
+            propagateLocationToObservations(market);
         } else {
             if (market.getState() == null && knownAddress != null) {
                 market.setCity(knownAddress.city());
                 market.setState(knownAddress.uf());
             }
             market.setGeocodeFailedAt(LocalDateTime.now());
+            repository.save(market);
         }
-        repository.save(market);
+    }
+
+    /**
+     * After a market geocodes, fill city/state on its observations that were
+     * written before (city/state are snapshotted at write time and otherwise
+     * never back-filled). Only NULL-city rows are touched — existing snapshots
+     * are preserved.
+     */
+    private void propagateLocationToObservations(MarketLocation market) {
+        if (market.getCity() == null && market.getState() == null) return;
+        var updated = priceObservationRepository.backfillLocationForMarket(
+                market.getCnpj(), market.getCity(), market.getState());
+        if (updated > 0) {
+            log.info("geocode.observation_backfill cnpj={} city={} state={} observations={}",
+                    market.getCnpj(), market.getCity(), market.getState(), updated);
+        }
     }
 
     private static String cityOf(MarketAddress address) {
