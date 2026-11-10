@@ -170,6 +170,16 @@ public class HouseholdService {
         return respond(household, user);
     }
 
+    /** A fellow member of the caller's household, or 404 when they're not in it. */
+    @Transactional(readOnly = true)
+    public User memberOf(User actor, UUID memberId) {
+        var member = userRepository.findById(memberId).orElseThrow(NotInHouseholdException::new);
+        if (!actor.getHousehold().getId().equals(member.getHousehold().getId())) {
+            throw new NotInHouseholdException();
+        }
+        return member;
+    }
+
     /** What the code unlocks, shown before the user commits to joining. */
     @Transactional(readOnly = true)
     public InvitePreviewResponse previewInvite(String rawCode) {

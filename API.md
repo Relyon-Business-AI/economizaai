@@ -320,6 +320,7 @@ POST /api/v1/households/join               { "inviteCode": "ABC123", "bringData"
 POST /api/v1/households/leave              → see "Leaving" below
 POST /api/v1/households/me/invite-code/regenerate   → HOST ONLY (403); rotates the code, extends TTL another 48h
 DELETE /api/v1/households/me/members/{memberId}     → HOST ONLY (403); the member moves out as if they left
+GET  /api/v1/households/me/members/{memberId}/profile-picture → that member's photo (same headers as /users/me/profile-picture); 404 if not in my household
 ```
 
 **Roles.** The **host** (`hostId`) is whoever created the household, or the guest

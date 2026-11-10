@@ -6,10 +6,12 @@ import com.relyon.economizaai.dto.response.HouseholdResponse;
 import com.relyon.economizaai.dto.response.InvitePreviewResponse;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.service.HouseholdService;
+import com.relyon.economizaai.service.profile.ProfilePictureService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -30,6 +32,23 @@ import java.util.UUID;
 public class HouseholdController {
 
     private final HouseholdService householdService;
+    private final ProfilePictureService profilePictureService;
+
+    /**
+     * A fellow member's profile picture (or their generated initials avatar). Household
+     * members already see each other's names and e-mails; the photo is the same scope.
+     * Same headers as {@code GET /users/me/profile-picture}.
+     */
+    @GetMapping("/me/members/{memberId}/profile-picture")
+    public ResponseEntity<byte[]> memberProfilePicture(@AuthenticationPrincipal User user,
+                                                       @PathVariable UUID memberId) {
+        var member = householdService.memberOf(user, memberId);
+        var pic = profilePictureService.read(member);
+        return ResponseEntity.ok()
+                .header("X-Profile-Picture-Fallback", String.valueOf(pic.fallback()))
+                .contentType(MediaType.parseMediaType(pic.contentType() == null ? "application/octet-stream" : pic.contentType()))
+                .body(pic.bytes());
+    }
 
     @GetMapping("/me")
     public ResponseEntity<HouseholdResponse> getMine(@AuthenticationPrincipal User user) {
