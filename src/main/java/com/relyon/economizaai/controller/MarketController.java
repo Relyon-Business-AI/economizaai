@@ -5,6 +5,7 @@ import com.relyon.economizaai.dto.response.MarketResponse;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.service.geo.MarketNameService;
 import com.relyon.economizaai.service.geo.WatchedMarketService;
+import com.relyon.economizaai.service.geo.WatchedMarketService.MarketScope;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -37,11 +39,19 @@ public class MarketController {
     private final WatchedMarketService watchedMarketService;
     private final MarketNameService marketNameService;
 
-    /** Catalogue for the picker UI: visited + watched + (optionally) nearby. */
+    /**
+     * "Mercados" screen. {@code scope=ALL} (default) returns markets within 10 km of the
+     * viewer's resolved origin UNION the household's watched markets; {@code scope=MINE}
+     * returns only the watched ones. Sorted by {@code distanceKm} ascending (nulls last),
+     * so a market from a receipt scanned far away never dominates the top. Pass
+     * {@code lat}/{@code lng} (all-or-nothing) to measure from the device's current position.
+     */
     @GetMapping
     public ResponseEntity<List<MarketResponse>> list(@AuthenticationPrincipal User user,
-                                                     @RequestParam(required = false) Double radiusKm) {
-        return ResponseEntity.ok(watchedMarketService.listForPicker(user, radiusKm));
+                                                     @RequestParam(defaultValue = "ALL") MarketScope scope,
+                                                     @RequestParam(required = false) BigDecimal lat,
+                                                     @RequestParam(required = false) BigDecimal lng) {
+        return ResponseEntity.ok(watchedMarketService.listMarkets(user, scope, lat, lng));
     }
 
     /** "Meus mercados" — only the markets the user has explicitly pinned. */
