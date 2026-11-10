@@ -1,0 +1,49 @@
+# Low-memory profile — ONLY for the Render dev service on the Free plan (512 MB total),
+# activated there with SPRING_PROFILES_ACTIVE=dev,lowmem. Local dev and prod never use it.
+#
+# The app no longer fits 512 MB when everything starts at once: the OOM (Metaspace/heap)
+# hit ~1 min after boot, exactly when the eager singletons, the startup backfills and the
+# jobs with short initial delays all load their classes together. This profile spreads
+# that out instead of growing the JVM limits again:
+#   - lazy beans: classes load on first use, not at boot (@Scheduled beans stay eager —
+#     Spring Boot excludes them from lazy init);
+#   - no startup backfills (idempotent and already applied on the dev database);
+#   - jobs wait 10 min after boot (dev sleeps after 15 min idle, so most never fire there);
+#   - fewer request threads and DB connections.
+
+spring:
+  main:
+    lazy-initialization: true
+  datasource:
+    hikari:
+      maximum-pool-size: 5
+
+server:
+  tomcat:
+    threads:
+      max: 20
+      min-spare: 2
+
+economizaai:
+  startup-backfills:
+    enabled: false
+  ingestion:
+    paused-state-probe-initial-delay-ms: 600000
+  subscription:
+    expiry-initial-delay-ms: 600000
+  categorizer:
+    consensus:
+      initial-delay-ms: 86400000
+  ml:
+    auto-promote-initial-delay-ms: 86400000
+    retrain-initial-delay-ms: 604800000
+  geo:
+    geocode-initial-delay-ms: 600000
+  merchant:
+    classify:
+      initial-delay-ms: 600000
+  notifications:
+    replenishment:
+      initial-delay-ms: 600000
+    budget:
+      initial-delay-ms: 600000

@@ -35,6 +35,15 @@ mirror entries here.
   -Xss512k -XX:+UseSerialGC -XX:TieredStopAtLevel=1`). `-Xmx` explícito vence o
   `MaxRAMPercentage=50` do Dockerfile. Memória em repouso fica em ~500 MB: qualquer carga real
   (parse pesado, OCR) pode OOM-killar o dev.
+- **Profile `lowmem` (2026-11-10)**: o app deixou de caber (OOM de Metaspace ~1 min após o
+  boot, em loop). Em vez de subir limites de novo, o dev roda `SPRING_PROFILES_ACTIVE=dev,lowmem`
+  (`application-lowmem.yaml`): lazy-init (@Scheduled segue eager), backfills de boot desligados
+  (`economizaai.startup-backfills.enabled=false`), jobs com initial-delay de 10 min+ (o dev dorme
+  em 15, então quase nunca rodam lá), Tomcat 20 threads, Hikari 5. Flags da JVM atuais:
+  `-Xmx256m -XX:MaxMetaspaceSize=128m -XX:ReservedCodeCacheSize=32m` (resto igual). Efeito
+  colateral: o 1º request de cada endpoint é mais lento (beans criados sob demanda) e erros de
+  wiring só aparecem no uso — `LowMemProfileContextTest` resolve todos os beans pra pegar isso.
+  Se voltar a estourar mesmo assim, o caminho é plano maior, não mais flags.
 - **OK for dev**: quase não usamos o dev; o cold start de ~3 min só atinge autofix/E2E
   (health wait precisa tolerar) e quem abrir o dashboard-dev depois de 15 min parado.
 - **Before prod / revisitar**: prod NÃO usa nada disso (segue Standard 2 GB). Se o dev virar
