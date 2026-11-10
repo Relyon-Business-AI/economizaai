@@ -1,5 +1,23 @@
 # economizai — what's new
 
+## 2026-11-10 — Textos novos (guia de voz) + marca "Economiza AI" + import por chave em toda UF
+
+- **Todas as mensagens ao usuário foram reescritas** no tom do `docs/VOICE.md` (pt + en): erros da
+  API, push, e-mail, WhatsApp, relatórios/exportações. Mesmas chaves, texto novo — o FE que renderiza
+  `message`/`parseErrorMessage`/`reasonMessage` não precisa mudar nada. Nenhuma mensagem lista estados suportados.
+- **Marca:** todo texto visível agora diz **"Economiza AI"** (e-mails, assunto, WhatsApp, rodapé de
+  relatório, título do Swagger). Arquivo exportado passa a se chamar `economizaai-historico-<data>.<ext>`.
+- **Sem nome de máquina na mensagem:** `receipt.not.editable`, `subscription.upgrade_required` e
+  `legal.version.invalid` não interpolam mais status/feature/versão (ex.: "CONFIRMED", "PRO").
+- **Validação de campo:** `errors.<campo>` agora traz o texto específico da regra (ex.: "o código tem
+  6 números", "até 500 notas por vez") em vez do genérico "não está no formato certo".
+- **Push de economia pessoal (PROMO_PERSONAL) e resumo do WhatsApp** saem no idioma do usuário (antes fixos em pt).
+- **`POST /receipts/import` não é mais só RS.** Cada chave segue a mesma cadeia da chave digitada
+  (reconsulta grátis → Infosimples → alerta). A chave **`receipt.import.unsupported` foi removida**;
+  quando não há NENHUM caminho para a chave, a rejeição vem como `receipt.manual-chave.unsupported`
+  (ou `receipt.manual-chave.nfe-unsupported` para NF-e 55). `receipt.import.duplicate` e
+  `receipt.already.ingested` agora têm o mesmo texto.
+
 ## 2026-11-10 — Comparação genérica resolve nomes de catálogo estrangeiros (OFF em inglês)
 
 - **`GET /price-index/generic-comparison` ganhou o parâmetro opcional `ean`.** Passe o
