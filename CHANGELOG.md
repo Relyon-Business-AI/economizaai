@@ -1,5 +1,16 @@
 # economizai — what's new
 
+## 2026-11-10 — Domicílio: regras de entrada/saída v2 (origem no usuário, cópia pra quem sai, anfitrião herda)
+
+- **Origem e data de entrada agora ficam no usuário** (`users.origin_household_id`, `users.household_joined_at`, V139 com backfill). Nada mais é deduzido pelas notas.
+- **Entrar**: `bringData` (default `true`) move os dados da casa de origem pra casa compartilhada; `false` deixa tudo na origem, intacto. A origem nunca é apagada enquanto alguém a tiver como casa.
+- **Convidado sai ou é removido**: volta pra origem com o que estava lá + o que trouxe (restore) + **cópia** de tudo que a casa gerou depois da entrada dele (notas com itens — inclusive as do anfitrião —, listas, categorias, apelidos, preferências de marca, compras manuais). Quem fica não perde nada.
+- **Anfitrião original sai**: casa nova com cópia de tudo; o convidado mais antigo (por `household_joined_at`) vira anfitrião. **Anfitrião promovido sai**: volta pra origem como convidado.
+- **Último membro sai**: dados MOVEM pra origem dele (sem cópia), duplicatas por chave são descartadas, casa vazia é apagada.
+- **Só o anfitrião gera código novo** (`POST /households/me/invite-code/regenerate` → `403 household.not.host` pros demais). FE: esconder a seção de convite pros convidados.
+- **Cópias de nota** têm `copiedFromReceiptId` e `indexEligible=false` — não entram de novo no índice de preços.
+- Mensagem `household.not.host` ficou genérica ("Só o anfitrião da casa pode fazer isso.").
+
 ## 2026-11-10 — Domicílio compartilhado: merge ligado, anfitrião, nome, preview, limite, "quem escaneou"
 
 - **Entrar num domicílio agora LEVA os dados** (`economizaai.households.merge-enabled` default `true`):

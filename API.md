@@ -315,27 +315,45 @@ dashboard, lists, predictions, custom categories, friendly names).
 GET  /api/v1/households/me                 → { id, name, hostId, inviteCode, inviteCodeExpiresAt, members[{id,name,email}], createdAt }
 PATCH /api/v1/households/me                { "name": "Casa da Ana" }   ← any member; blank clears (app shows a default)
 GET  /api/v1/households/invites/{code}     → { householdName, hostFirstName, memberCount, memberFirstNames[] } — preview BEFORE joining
-POST /api/v1/households/join               { "inviteCode": "ABC123" }   ← case-insensitive; your data MOVES with you
-POST /api/v1/households/leave              → back to your own household with what you brought; 400 if you're alone
-POST /api/v1/households/me/invite-code/regenerate   → rotates the code, extends TTL another 48h
-DELETE /api/v1/households/me/members/{memberId}     → HOST ONLY (403 otherwise); the member gets their data back
+POST /api/v1/households/join               { "inviteCode": "ABC123", "bringData": true }   ← case-insensitive; bringData default true
+POST /api/v1/households/leave              → back to your origin household (see rules below); 400 if you're the host alone at home
+POST /api/v1/households/me/invite-code/regenerate   → HOST ONLY (403 otherwise); rotates the code, extends TTL another 48h
+DELETE /api/v1/households/me/members/{memberId}     → HOST ONLY (403 otherwise); the member leaves under the same rules
 ```
 
-**Join moves data (since 2026-11).** Receipts, shopping lists, manual purchases,
-snoozes, custom categories, category overrides, product/market friendly names and
-brand preferences of the joiner move into the shared household. On a collision
-(same NFC-e already in the target) the target's copy wins and the joiner's stays
-parked in their old household. `bringData: false` opts out (membership only).
+**Roles.** `hostId` is the **host** (anfitrião): the creator, or the guest promoted
+when the host left. Only the host rotates the invite code and removes members
+(`403 household.not.host`). Everyone else is a **guest**. Each user carries their
+*origin household* (the one they own and return to) and the instant they joined
+the current one — nothing is deduced from receipts.
 
-**Leave / kick restore.** The leaver (or the kicked member) returns to the
-household their data came from, with everything that originated there restored.
-Receipts scanned *while* in the shared household stay with the household. A
-member who is alone cannot leave (400 `household.leave.solo`).
+**Join: bring data or not.** The guest chooses. `bringData: true` (default) MOVES
+their origin's receipts, shopping lists, manual purchases, snoozes, custom
+categories, category overrides, friendly names and brand preferences into the
+shared household (on a collision, e.g. the same NFC-e, the target's copy wins and
+the guest's stays parked at their origin). `bringData: false` leaves everything at
+their origin, intact. The origin household is never deleted while someone calls it
+home. Joining while sharing another house first applies the departure rules below.
 
-**Host (anfitrião).** `hostId` is the member who created the household. Only the
-host may remove members (`403 household.not.host`). When the host leaves or
-deletes the account, the most senior remaining member becomes host. Renaming and
-rotating the code are open to every member.
+**Guest leaves or is removed.** Back to their origin with everything that was
+there, plus what they brought (restored), plus a **copy** of everything the shared
+household generated after they joined — receipts (items included, whoever scanned
+them), lists, categories, friendly names, brand preferences, manual purchases.
+Those who stay lose nothing.
+
+**Host leaves.** The *original* host moves to a brand-new household with a copy of
+everything (what guests brought included); the longest-standing guest becomes host
+and the household goes on. A *promoted* host leaves like a guest. The host alone in
+their own household cannot leave (400 `household.leave.solo`).
+
+**Last member leaves.** The data MOVES to their origin (nobody stays, so no copy),
+rows that already exist there by key are dropped (one NFC-e, not two), and the
+empty household is deleted.
+
+**Copies and the price index.** Copied receipts carry `copiedFromReceiptId` and
+`indexEligible=false`: the original already contributed its prices, the copy never
+does. Nothing requires approval on departure — the invite flow is where consent is
+given (the app shows the notices).
 
 **Member cap.** `/join` answers `402` (`household.full.free`) when the household
 has the FREE maximum (2) and nobody in it is PRO — Premium lifts it to 6. The

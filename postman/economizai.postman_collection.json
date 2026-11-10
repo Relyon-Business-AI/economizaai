@@ -1625,7 +1625,7 @@
 						},
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"inviteCode\": \"ABC123\"\n}"
+							"raw": "{\n  \"inviteCode\": \"ABC123\",\n  \"bringData\": true\n}"
 						}
 					},
 					"response": []
