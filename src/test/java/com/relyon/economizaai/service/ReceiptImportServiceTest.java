@@ -100,6 +100,17 @@ class ReceiptImportServiceTest {
     }
 
     @Test
+    void rejectsChaveWithValidCheckDigitButImpossibleStructure_asTypoMessage() {
+        // Caso real de prod: DV bate por sorte, mas mês "98", modelo "60" e tpEmis "0" não existem.
+        var impossible = "24009899180236001500600516265112000546334172";
+
+        var response = service.importChaves(user, List.of(impossible));
+
+        assertThat(response.rejected()).isEqualTo(1);
+        assertThat(response.rejectedChaves().get(0).reason()).isEqualTo("receipt.chave.typo");
+    }
+
+    @Test
     void queuesChaveFromStateWithoutFreeReconsult_noUfAllowList() {
         // SP has no free legacy reconsult, but the by-chave chain (Infosimples) covers it —
         // import is no longer RS-only.
@@ -202,5 +213,25 @@ class ReceiptImportServiceTest {
         assertThat(requeued).isZero();
         assertThat(pending.getStatus()).isEqualTo(ReceiptStatus.PENDING_CONFIRMATION);
         verify(receiptRepository, never()).save(any(Receipt.class));
+    }
+
+    @Test
+    void retrySkipsFailedPhotoReceiptWithSyntheticChave() {
+        // Nota de foto tem chave sintética (sem UF): não há o que reconsultar, e parsear ela
+        // estourava "QR code inválido" em vez da mensagem honesta de "não dá pra tentar de novo".
+        var receiptId = UUID.randomUUID();
+        var failedPhoto = Receipt.builder()
+                .id(receiptId)
+                .household(user.getHousehold())
+                .chaveAcesso("PHOTO" + "0".repeat(39))
+                .origin(ReceiptOrigin.PHOTO)
+                .status(ReceiptStatus.FAILED_PARSE)
+                .build();
+        when(receiptRepository.findById(receiptId)).thenReturn(Optional.of(failedPhoto));
+
+        var requeued = service.retry(user, List.of(receiptId));
+
+        assertThat(requeued).isZero();
+        assertThat(failedPhoto.getStatus()).isEqualTo(ReceiptStatus.FAILED_PARSE);
     }
 }

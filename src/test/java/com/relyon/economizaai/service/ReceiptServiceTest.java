@@ -15,6 +15,9 @@ import com.relyon.economizaai.exception.ReceiptAlreadyIngestedException;
 import com.relyon.economizaai.exception.ReceiptItemNotFoundException;
 import com.relyon.economizaai.dto.request.ConfirmReceiptRequest;
 import com.relyon.economizaai.exception.ReceiptHasUnpricedItemsException;
+import com.relyon.economizaai.exception.ReceiptPhotoIncompleteException;
+import com.relyon.economizaai.exception.InvalidIssuedAtException;
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.exception.ReceiptNotEditableException;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
 import com.relyon.economizaai.exception.UnsupportedMerchantException;
@@ -1097,6 +1100,132 @@ class ReceiptServiceTest {
         receiptService.confirmStale(receipt.getId());
 
         verify(receiptRepository, never()).save(any());
+    }
+
+    private Receipt completePhotoReceipt(User user) {
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        receipt.setOrigin(ReceiptOrigin.PHOTO);
+        receipt.setQrPayload("PHOTO");
+        receipt.setMarketName("Mercado X");
+        receipt.setIssuedAt(LocalDateTime.of(2026, 11, 8, 14, 30));
+        return receipt;
+    }
+
+    @Test
+    void confirm_photoWithoutDate_blocksWithDateMessage() {
+        var user = buildUser();
+        var receipt = completePhotoReceipt(user);
+        receipt.setIssuedAt(null);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        var thrown = assertThrows(ReceiptPhotoIncompleteException.class,
+                () -> receiptService.confirm(user, receipt.getId(), null));
+
+        assertEquals("receipt.confirm.photo.missing-date", thrown.getMessageKey());
+        assertEquals(ReceiptStatus.PENDING_CONFIRMATION, receipt.getStatus());
+    }
+
+    @Test
+    void confirm_photoWithoutMarket_blocksWithMarketMessage() {
+        var user = buildUser();
+        var receipt = completePhotoReceipt(user);
+        receipt.setMarketName(" ");
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        var thrown = assertThrows(ReceiptPhotoIncompleteException.class,
+                () -> receiptService.confirm(user, receipt.getId(), null));
+
+        assertEquals("receipt.confirm.photo.missing-market", thrown.getMessageKey());
+    }
+
+    @Test
+    void confirm_photoWithUnnamedProduct_blocksWithCount() {
+        var user = buildUser();
+        var receipt = completePhotoReceipt(user);
+        receipt.addItem(ReceiptItem.builder()
+                .id(UUID.randomUUID()).lineNumber(2)
+                .rawDescription("").quantity(BigDecimal.ONE).unit("UN")
+                .totalPrice(new BigDecimal("5.00")).build());
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        var thrown = assertThrows(ReceiptPhotoIncompleteException.class,
+                () -> receiptService.confirm(user, receipt.getId(), null));
+
+        assertEquals("receipt.confirm.photo.missing-names", thrown.getMessageKey());
+        assertEquals("1", thrown.getArguments()[0]);
+    }
+
+    @Test
+    void confirm_photoOnlyMissingPrice_fallsThroughToUnpricedMessage() {
+        var user = buildUser();
+        var receipt = completePhotoReceipt(user);
+        receipt.addItem(ReceiptItem.builder()
+                .id(UUID.randomUUID()).lineNumber(2)
+                .rawDescription("COCA-COLA S/ACUCAR 600ML").quantity(BigDecimal.ONE).unit("UN")
+                .totalPrice(null).build());
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        assertThrows(ReceiptHasUnpricedItemsException.class,
+                () -> receiptService.confirm(user, receipt.getId(), null));
+    }
+
+    @Test
+    void confirm_photoComplete_confirms() {
+        var user = buildUser();
+        var receipt = completePhotoReceipt(user);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receiptRepository.save(receipt)).thenReturn(receipt);
+        when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
+
+        var response = receiptService.confirm(user, receipt.getId(), null);
+
+        assertEquals(ReceiptStatus.CONFIRMED, response.receipt().status());
+    }
+
+    @Test
+    void confirmStale_incompletePhoto_staysInReview() {
+        var user = buildUser();
+        var receipt = completePhotoReceipt(user);
+        receipt.setIssuedAt(null);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        receiptService.confirmStale(receipt.getId());
+
+        assertEquals(ReceiptStatus.PENDING_CONFIRMATION, receipt.getStatus());
+        verify(receiptRepository, never()).save(any());
+    }
+
+    @Test
+    void updateIssuedAt_photoInReview_setsDateAndClearsMissingField() {
+        var user = buildUser();
+        var receipt = completePhotoReceipt(user);
+        receipt.setIssuedAt(null);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        var response = receiptService.updateIssuedAt(user, receipt.getId(), LocalDateTime.of(2026, 11, 8, 14, 30, 45));
+
+        assertEquals(LocalDateTime.of(2026, 11, 8, 14, 30), receipt.getIssuedAt());
+        assertEquals(List.of(), response.missingFields());
+    }
+
+    @Test
+    void updateIssuedAt_futureDate_rejected() {
+        var user = buildUser();
+        var receipt = completePhotoReceipt(user);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        assertThrows(InvalidIssuedAtException.class,
+                () -> receiptService.updateIssuedAt(user, receipt.getId(), BrazilClock.nowDateTime().plusDays(2)));
+    }
+
+    @Test
+    void updateIssuedAt_sefazReceipt_notEditable() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        assertThrows(ReceiptNotEditableException.class,
+                () -> receiptService.updateIssuedAt(user, receipt.getId(), LocalDateTime.of(2026, 11, 8, 14, 30)));
     }
 
     @Test

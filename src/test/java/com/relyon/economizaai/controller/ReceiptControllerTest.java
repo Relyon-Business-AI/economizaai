@@ -210,6 +210,7 @@ class ReceiptControllerTest {
                         null,
                         null
                 )),
+                null,
                 null
         );
     }
@@ -222,6 +223,29 @@ class ReceiptControllerTest {
 
         mockMvc.perform(post("/api/v1/receipts/" + UUID.randomUUID() + "/retry")
                         .with(SecurityMockMvcRequestPostProcessors.user(buildUser())))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void updateIssuedAt_returnsUpdatedReceipt() throws Exception {
+        var receiptId = UUID.randomUUID();
+        when(receiptService.updateIssuedAt(any(User.class), eq(receiptId), eq(LocalDateTime.of(2026, 11, 8, 14, 30))))
+                .thenReturn(sampleReceipt(ReceiptStatus.PENDING_CONFIRMATION));
+
+        mockMvc.perform(patch("/api/v1/receipts/" + receiptId + "/issued-at")
+                        .with(SecurityMockMvcRequestPostProcessors.user(buildUser()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"issuedAt\":\"2026-11-08T14:30:00\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PENDING_CONFIRMATION"));
+    }
+
+    @Test
+    void updateIssuedAt_missingDate_returns400() throws Exception {
+        mockMvc.perform(patch("/api/v1/receipts/" + UUID.randomUUID() + "/issued-at")
+                        .with(SecurityMockMvcRequestPostProcessors.user(buildUser()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
                 .andExpect(status().isBadRequest());
     }
 
