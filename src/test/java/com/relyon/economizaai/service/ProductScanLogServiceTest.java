@@ -86,10 +86,10 @@ class ProductScanLogServiceTest {
     void logsGenericWithCanonicalTypeFromNoisyCatalogName() {
         when(productRepository.findByEan("7891000100103")).thenReturn(Optional.empty());
         var entry = mock(EanCatalogEntry.class);
-        when(entry.getGenericName()).thenReturn("CREME DE LEITE UHT NESTLE");
         when(eanCatalogService.lookup("7891000100103")).thenReturn(Optional.of(entry));
-        // o resolver (pipeline da ingestão) transforma o nome cru no tipo canônico normalizado
-        when(productTypeResolver.typeKey("CREME DE LEITE UHT NESTLE")).thenReturn("creme de leite");
+        // o resolver (gate → mapa → IA closed-set, com cache por EAN) transforma o nome cru/órfão
+        // do catálogo no tipo canônico normalizado
+        when(productTypeResolver.resolveCatalogTypeKey(entry)).thenReturn("creme de leite");
 
         service.record(user, "7891000100103");
 

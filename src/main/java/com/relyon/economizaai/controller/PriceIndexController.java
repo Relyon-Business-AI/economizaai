@@ -126,12 +126,21 @@ public class PriceIndexController {
     /**
      * Comparação genérica por TIPO (nome), usada quando o scanner só achou a prévia do catálogo
      * (sem produto exato pra ancorar): agrupa pelos produtos do mesmo {@code generic_name_norm}.
+     *
+     * <p>Passar o {@code ean} opcional (o {@code catalogPreview.ean} do by-ean) ancora a resolução
+     * na entrada de catálogo: nomes do Open Food Facts em inglês/órfãos ("White Rice") são mapeados
+     * para um tipo existente ("arroz") via mapa estático ou IA closed-set (com cache por EAN). Sem
+     * {@code ean}, o comportamento é o de sempre (resolve só pelo nome cru).
      */
     @GetMapping("/generic-comparison")
     public ResponseEntity<GenericComparisonResponse> genericComparisonByType(
             @AuthenticationPrincipal User user,
-            @RequestParam String type) {
-        return ResponseEntity.ok(genericComparisonService.forType(type, user));
+            @RequestParam String type,
+            @RequestParam(required = false) String ean) {
+        var response = ean == null || ean.isBlank()
+                ? genericComparisonService.forType(type, user)
+                : genericComparisonService.forCatalog(ean, type, user);
+        return ResponseEntity.ok(response);
     }
 
     /**

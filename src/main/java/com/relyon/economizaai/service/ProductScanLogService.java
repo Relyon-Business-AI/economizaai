@@ -83,9 +83,10 @@ public class ProductScanLogService {
         var catalogEntry = eanCatalogService.lookup(ean).orElse(null);
         if (catalogEntry != null) {
             scan.setMatchType(ScanMatchType.GENERIC);
-            // Nome de catálogo é cru ("CREME DE LEITE UHT NESTLE") — resolve o tipo canônico pelo
-            // mesmo extrator da ingestão, pra casar o generic_name_norm dos produtos ("creme de leite").
-            scan.setGenericNameNorm(productTypeResolver.typeKey(catalogEntry.getGenericName()));
+            // Nome de catálogo é cru ("CREME DE LEITE UHT NESTLE") — resolve o tipo canônico (gate →
+            // mapa estático → IA closed-set, com cache por EAN) pra casar o generic_name_norm dos
+            // produtos ("creme de leite"), inclusive quando o OFF guardou o nome em inglês.
+            scan.setGenericNameNorm(productTypeResolver.resolveCatalogTypeKey(catalogEntry));
             return scan;
         }
         scan.setMatchType(ScanMatchType.NONE);

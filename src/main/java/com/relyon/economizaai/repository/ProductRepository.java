@@ -263,6 +263,23 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
      */
     List<Product> findByGenericNameNormOrderByBrandNormAscPackSizeAsc(String genericNameNorm);
 
+    /** Esse TIPO ({@code generic_name_norm}) já existe no nosso catálogo? Gate da resolução órfã:
+     *  nome que já casa não passa por mapa nem IA. */
+    boolean existsByGenericNameNorm(String genericNameNorm);
+
+    /**
+     * Conjunto FECHADO de tipos de comparação válidos para a resolução IA closed-set: os
+     * {@code generic_name_norm} distintos que têm AO MENOS uma observação de preço (via
+     * {@link com.relyon.economizaai.model.PriceObservation}). Só esses viram candidatos — mapear
+     * para um tipo sem preço não ajudaria a comparação.
+     */
+    @Query("""
+        SELECT DISTINCT product.genericNameNorm FROM PriceObservation observation
+        JOIN observation.product product
+        WHERE product.genericNameNorm IS NOT NULL AND product.genericNameNorm <> ''
+    """)
+    List<String> findDistinctGenericNameNormsWithObservations();
+
     /**
      * Products without a brand — used by the admin curation endpoint
      * (Item C.2). Sorted by normalizedName so the same product surfaces
