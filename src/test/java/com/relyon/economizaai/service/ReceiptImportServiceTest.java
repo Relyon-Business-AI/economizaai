@@ -214,4 +214,24 @@ class ReceiptImportServiceTest {
         assertThat(pending.getStatus()).isEqualTo(ReceiptStatus.PENDING_CONFIRMATION);
         verify(receiptRepository, never()).save(any(Receipt.class));
     }
+
+    @Test
+    void retrySkipsFailedPhotoReceiptWithSyntheticChave() {
+        // Nota de foto tem chave sintética (sem UF): não há o que reconsultar, e parsear ela
+        // estourava "QR code inválido" em vez da mensagem honesta de "não dá pra tentar de novo".
+        var receiptId = UUID.randomUUID();
+        var failedPhoto = Receipt.builder()
+                .id(receiptId)
+                .household(user.getHousehold())
+                .chaveAcesso("PHOTO" + "0".repeat(39))
+                .origin(ReceiptOrigin.PHOTO)
+                .status(ReceiptStatus.FAILED_PARSE)
+                .build();
+        when(receiptRepository.findById(receiptId)).thenReturn(Optional.of(failedPhoto));
+
+        var requeued = service.retry(user, List.of(receiptId));
+
+        assertThat(requeued).isZero();
+        assertThat(failedPhoto.getStatus()).isEqualTo(ReceiptStatus.FAILED_PARSE);
+    }
 }

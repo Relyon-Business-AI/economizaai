@@ -112,6 +112,9 @@ public class ReceiptImportService {
             var receipt = receiptRepository.findById(receiptId).orElse(null);
             if (receipt == null || !receipt.getHousehold().getId().equals(householdId)) continue;
             if (receipt.getStatus() != ReceiptStatus.FAILED_PARSE) continue;
+            // A photo nota carries a synthetic chave (no UF) — there's nothing to re-fetch, and parsing
+            // it threw "QR code inválido" instead of the honest "can't retry" message.
+            if (receipt.getOrigin() == ReceiptOrigin.PHOTO) continue;
             var chave = receipt.getChaveAcesso();
             if (chave == null || !hasFetchPath(chave)) continue;
             receipt.setStatus(ReceiptStatus.IMPORT_QUEUED);
