@@ -1,6 +1,7 @@
 package com.relyon.economizaai.dto.response;
 
 import com.relyon.economizaai.model.Receipt;
+import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 
@@ -42,7 +43,10 @@ public record ReceiptSummaryResponse(
         String parseErrorReason,
         String parseErrorMessage,
         // Who scanned it — the per-member attribution a shared household shows ("por Ana").
-        ScannedBy scannedBy
+        ScannedBy scannedBy,
+        // When it entered the app. issuedAt can be null (photo/import without a date) — the
+        // list falls back to this so a row never shows "—".
+        LocalDateTime createdAt
 ) {
     public static ReceiptSummaryResponse from(Receipt receipt) {
         var householdTotal = receipt.getItems().stream()
@@ -65,7 +69,8 @@ public record ReceiptSummaryResponse(
                 receipt.getStatus(),
                 receipt.getParseErrorReason(),
                 null,
-                ScannedBy.of(receipt.getUser())
+                ScannedBy.of(receipt.getUser()),
+                BrazilClock.fromUtc(receipt.getCreatedAt())
         );
     }
 
@@ -73,14 +78,14 @@ public record ReceiptSummaryResponse(
     public ReceiptSummaryResponse withMarketFriendlyName(String marketFriendlyName) {
         return new ReceiptSummaryResponse(id, marketName, marketFriendlyName, issuedAt,
                 totalAmount, householdTotalAmount, discountTotal, approxTaxTotal, itemCount, status,
-                parseErrorReason, parseErrorMessage, scannedBy);
+                parseErrorReason, parseErrorMessage, scannedBy, createdAt);
     }
 
     /** Copy with the localized failure message (null for non-failed rows). */
     public ReceiptSummaryResponse withParseErrorMessage(String parseErrorMessage) {
         return new ReceiptSummaryResponse(id, marketName, marketFriendlyName, issuedAt,
                 totalAmount, householdTotalAmount, discountTotal, approxTaxTotal, itemCount, status,
-                parseErrorReason, parseErrorMessage, scannedBy);
+                parseErrorReason, parseErrorMessage, scannedBy, createdAt);
     }
 
     /** Copy with the scanner's name resolved (lists load user names in one batch, not per row). */
@@ -88,7 +93,7 @@ public record ReceiptSummaryResponse(
         if (scannedBy == null || scannerName == null) return this;
         return new ReceiptSummaryResponse(id, marketName, marketFriendlyName, issuedAt,
                 totalAmount, householdTotalAmount, discountTotal, approxTaxTotal, itemCount, status,
-                parseErrorReason, parseErrorMessage, scannedBy.withName(scannerName));
+                parseErrorReason, parseErrorMessage, scannedBy.withName(scannerName), createdAt);
     }
 
     private static BigDecimal approxTaxTotal(Receipt receipt) {

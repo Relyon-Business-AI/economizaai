@@ -1,5 +1,11 @@
 # economizai — what's new
 
+## 2026-11-10 — `ReceiptSummaryResponse.createdAt` e recentes sem nota "sem data" no topo
+
+- **`createdAt`** em `ReceiptSummaryResponse` (lista, recentes da Home). `issuedAt` pode ser nulo (foto/
+  importação sem data): o app usa `createdAt` como fallback em vez de mostrar "—".
+- `recentReceipts` do `/dashboard` ordena `issuedAt DESC NULLS LAST` — nota sem data ia pro topo no Postgres.
+
 ## 2026-11-10 — Home mais rápida: `GET /dashboard?light=true` e cache de 30 min
 
 - **`GET /dashboard?light=true`** devolve só o que a Home usa (herói do mês, notas recentes, sininho);
