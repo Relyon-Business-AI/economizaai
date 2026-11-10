@@ -1,5 +1,47 @@
 # economizai — what's new
 
+## 2026-11-10 — Domicílio compartilhado: merge ligado, anfitrião, nome, preview, limite, "quem escaneou"
+
+- **Entrar num domicílio agora LEVA os dados** (`economizaai.households.merge-enabled` default `true`):
+  notas, listas, compras manuais, snoozes, categorias custom, overrides, apelidos e preferências de marca
+  do novato passam pro domicílio compartilhado. Colisão (mesma NFC-e) → fica a do anfitrião. `bringData: false`
+  mantém só a adesão. **Sair ou ser removido devolve** o que a pessoa trouxe (restore pelo `origin_household_id`);
+  o que foi escaneado enquanto estavam juntos fica com a casa. O cache do dashboard dos dois domicílios é invalidado.
+- **Anfitrião (`hostId` no `HouseholdResponse`)** — quem criou a casa. **Só o anfitrião remove membros**
+  (`DELETE /households/me/members/{id}` → `403 household.not.host`). Anfitrião que sai → o membro mais
+  antigo herda. Casas antigas sem dono recebem o membro mais antigo (V134 + self-heal).
+- **`name` no domicílio + `PATCH /households/me { name }`** (qualquer membro; vazio limpa).
+- **`GET /households/invites/{code}`** — preview (nome da casa, primeiro nome do anfitrião, nº de membros,
+  primeiros nomes) pra confirmar antes de entrar. Mesmo rate limit do `/join`.
+- **Limite de membros** via `SubscriptionGateService.householdMemberCap`: FREE 2 / PRO 6 (qualquer membro
+  PRO libera a casa). FREE cheio → `402 household.full.free`; teto absoluto → `400 household.full.max`.
+  Com `SUBSCRIPTION_ENFORCE=false` só o teto de 6 vale.
+- **`POST /households/leave` sozinho → `400 household.leave.solo`** (antes parqueava todos os dados num
+  domicílio dormente e o usuário "perdia" o histórico).
+- **Notificações `HOUSEHOLD_MEMBER_JOINED` / `HOUSEHOLD_MEMBER_LEFT`** (destination `HOUSEHOLD`) pros outros
+  membros quando alguém entra, sai ou é removido. FE: adicionar os dois tipos no `TYPE_CONFIG` e rotear
+  `HOUSEHOLD` pra tela de domicílio.
+- **`scannedBy: { id, name }`** em `ReceiptSummaryResponse` (lista, `recentReceipts` da Home) e
+  `ReceiptResponse` (detalhe) — "por Ana" no histórico compartilhado. Nomes carregados em lote (sem N+1).
+
+## 2026-11-10 — Textos novos (guia de voz) + marca "Economiza AI" + import por chave em toda UF
+
+- **Todas as mensagens ao usuário foram reescritas** no tom do `docs/VOICE.md` (pt + en): erros da
+  API, push, e-mail, WhatsApp, relatórios/exportações. Mesmas chaves, texto novo — o FE que renderiza
+  `message`/`parseErrorMessage`/`reasonMessage` não precisa mudar nada. Nenhuma mensagem lista estados suportados.
+- **Marca:** todo texto visível agora diz **"Economiza AI"** (e-mails, assunto, WhatsApp, rodapé de
+  relatório, título do Swagger). Arquivo exportado passa a se chamar `economizaai-historico-<data>.<ext>`.
+- **Sem nome de máquina na mensagem:** `receipt.not.editable`, `subscription.upgrade_required` e
+  `legal.version.invalid` não interpolam mais status/feature/versão (ex.: "CONFIRMED", "PRO").
+- **Validação de campo:** `errors.<campo>` agora traz o texto específico da regra (ex.: "o código tem
+  6 números", "até 500 notas por vez") em vez do genérico "não está no formato certo".
+- **Push de economia pessoal (PROMO_PERSONAL) e resumo do WhatsApp** saem no idioma do usuário (antes fixos em pt).
+- **`POST /receipts/import` não é mais só RS.** Cada chave segue a mesma cadeia da chave digitada
+  (reconsulta grátis → Infosimples → alerta). A chave **`receipt.import.unsupported` foi removida**;
+  quando não há NENHUM caminho para a chave, a rejeição vem como `receipt.manual-chave.unsupported`
+  (ou `receipt.manual-chave.nfe-unsupported` para NF-e 55). `receipt.import.duplicate` e
+  `receipt.already.ingested` agora têm o mesmo texto.
+
 ## 2026-11-10 — Comparação genérica resolve nomes de catálogo estrangeiros (OFF em inglês)
 
 - **`GET /price-index/generic-comparison` ganhou o parâmetro opcional `ean`.** Passe o

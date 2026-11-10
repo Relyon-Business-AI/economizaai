@@ -10,6 +10,8 @@ import java.util.UUID;
 
 public record HouseholdResponse(
         UUID id,
+        String name,
+        UUID hostId,
         String inviteCode,
         LocalDateTime inviteCodeExpiresAt,
         List<HouseholdMember> members,
@@ -24,6 +26,8 @@ public record HouseholdResponse(
     public static HouseholdResponse from(Household household, List<User> members) {
         return new HouseholdResponse(
                 household.getId(),
+                household.getName(),
+                household.getOwner() != null ? household.getOwner().getId() : null,
                 household.getInviteCode(),
                 household.getInviteCodeExpiresAt(),
                 members.stream().map(HouseholdMember::from).toList(),

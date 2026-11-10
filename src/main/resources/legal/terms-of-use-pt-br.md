@@ -1,4 +1,4 @@
-# Termos de Uso — economizai
+# Termos de Uso — Economiza AI
 
 **Versão 1.0** — vigente desde 2026-05-01.
 
@@ -8,12 +8,12 @@
 
 ## 1. Aceitação dos termos
 
-Ao se cadastrar no economizai, você declara ter lido, entendido e
+Ao se cadastrar no Economiza AI, você declara ter lido, entendido e
 concordado com estes Termos de Uso e com a Política de Privacidade.
 
 ## 2. Descrição do serviço
 
-O economizai permite ao usuário escanear o QR Code de Notas Fiscais de
+O Economiza AI permite ao usuário escanear o QR Code de Notas Fiscais de
 Consumidor Eletrônica (NFC-e) emitidas no Brasil para:
 
 - registrar automaticamente suas compras;
@@ -37,7 +37,7 @@ em detalhes na Política de Privacidade.
 
 ## 5. Limitação de responsabilidade
 
-O economizai não se responsabiliza por:
+O Economiza AI não se responsabiliza por:
 
 - erros ou indisponibilidades nos portais da SEFAZ que impeçam o
   processamento de uma nota;

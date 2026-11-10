@@ -45,7 +45,7 @@ public class ContactService {
 
     public void submit(ContactRequest request) {
         var name = singleLine(request.name());
-        var subject = "[economizai contato] " + name;
+        var subject = "[Economiza AI contato] " + name;
         var phone = singleLine(request.phone());
         var body = "Nome: " + name
                 + "\nE-mail: " + request.email()
@@ -61,7 +61,7 @@ public class ContactService {
      */
     public void submitBetaSignup(BetaSignupRequest request) {
         var name = singleLine(request.name());
-        var subject = "[economizai beta tester] " + name;
+        var subject = "[Economiza AI beta tester] " + name;
         var phone = singleLine(request.phone());
         var body = "Interessado(a) em ser beta tester:"
                 + "\n\nNome: " + name
@@ -76,7 +76,7 @@ public class ContactService {
      * throws (deliver logs failures), so an alert can't break the caller's flow.
      */
     public void notifyAdmin(String subject, String body) {
-        deliver("[economizai admin] " + subject, body, from, recipient);
+        deliver("[Economiza AI admin] " + subject, body, from, recipient);
     }
 
     private void deliver(String subject, String body, String replyTo, String recipient) {

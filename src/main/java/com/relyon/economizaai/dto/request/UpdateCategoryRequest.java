@@ -17,7 +17,7 @@ public record UpdateCategoryRequest(
 
         @Schema(description = "Hex color for the chip (null = keep current).", example = "#F5A623")
         @Size(max = 9) @Pattern(regexp = "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
-                message = "must be a hex color like #F5A623") String color,
+                message = "{validation.color.hex}") String color,
 
         @Schema(description = "Slug of the built-in taxonomy CATEGORY to nest under.", example = "pet")
         @Size(max = 60) String parentGroupSlug,

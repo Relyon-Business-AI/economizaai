@@ -40,7 +40,7 @@ class ContactServiceTest {
         var captor = ArgumentCaptor.forClass(MimeMessage.class);
         verify(mailSender).send(captor.capture());
         var sent = captor.getValue();
-        assertEquals("[economizai contato] John Doe", sent.getSubject());
+        assertEquals("[Economiza AI contato] John Doe", sent.getSubject());
         assertEquals("support@economiz.ai", sent.getAllRecipients()[0].toString());
         assertEquals("john@test.com", sent.getReplyTo()[0].toString());
         assertTrue(sent.getContent().toString().contains("Adorei o app"));
@@ -111,7 +111,7 @@ class ContactServiceTest {
         var captor = ArgumentCaptor.forClass(MimeMessage.class);
         verify(mailSender).send(captor.capture());
         var sent = captor.getValue();
-        assertEquals("[economizai beta tester] Jane Beta", sent.getSubject());
+        assertEquals("[Economiza AI beta tester] Jane Beta", sent.getSubject());
         // beta recipient blank → falls back to the contact recipient
         assertEquals("support@economiz.ai", sent.getAllRecipients()[0].toString());
         assertEquals("jane@test.com", sent.getReplyTo()[0].toString());

@@ -67,6 +67,11 @@ economizaai:
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:8081}
   default-locale: pt
+  households:
+    # Household sharing (2026-11): joining MOVES your data into the shared household
+    # (receipts, lists, categories, aliases…) and leaving/kick restores what you brought.
+    # Off = membership-only (Phase 0): data stays parked in a dormant household.
+    merge-enabled: ${HOUSEHOLDS_MERGE_ENABLED:true}
   # Public base URL of this API (prod domain). Used to reconstruct the exact URL Twilio signed
   # when validating inbound-webhook X-Twilio-Signature.
   public-base-url: ${PUBLIC_BASE_URL:https://api.economizaai.app}
@@ -351,10 +356,13 @@ economizaai:
       enabled: ${SUBSCRIPTION_PROMO_ENABLED:true}
       months: ${SUBSCRIPTION_PROMO_MONTHS:3}
       until: ${SUBSCRIPTION_PROMO_UNTIL:2026-12-31}
+    # Absolute household size (the PRO / family ceiling). Applies even with enforcement off.
+    household-members-max: ${HOUSEHOLD_MEMBERS_MAX:6}
     free:
       watched-markets: 3                       # FREE: max pinned markets (PRO unlimited)
       history-days: 90                         # FREE: rolling analytics/history window (PRO unlimited)
       monthly-receipts: 5                      # FREE: max receipt submissions per calendar month (PRO unlimited)
+      household-members: 2                     # FREE: household size when no member is PRO (any PRO member lifts it to the max)
   monetization:
     # PRO plan price used to MODEL revenue/LTV/ROAS in the admin acquisition
     # dashboard while real payment data is still sparse (RevenueCat captures real

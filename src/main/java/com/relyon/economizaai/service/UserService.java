@@ -158,6 +158,7 @@ public class UserService {
         attributionResolver.applyTo(user, request.attribution());
 
         var savedUser = userRepository.save(user);
+        householdService.assignHost(household, savedUser);
         notificationRuleService.ensureDefaults(savedUser);
         loginActivityRecorder.recordRegistration(savedUser, request.platform());
         signupAlertService.notifyNewAccount(savedUser, "e-mail/senha");

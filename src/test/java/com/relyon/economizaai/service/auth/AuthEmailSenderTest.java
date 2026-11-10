@@ -82,10 +82,10 @@ class AuthEmailSenderTest {
         var sent = captor.getValue();
         assertArrayEquals(new jakarta.mail.Address[]{new jakarta.mail.internet.InternetAddress(RECIPIENT)},
                 sent.getRecipients(MimeMessage.RecipientType.TO));
-        assertEquals("Seu código de redefinição de senha — economizai", sent.getSubject());
+        assertEquals("Seu código de redefinição de senha — Economiza AI", sent.getSubject());
         var body = bodyOf(sent);
         assertTrue(body.contains(RESET_CODE), "rendered email must contain the code");
-        assertTrue(body.contains("economizai"), "rendered email must be branded");
+        assertTrue(body.contains("Economiza AI"), "rendered email must be branded");
     }
 
     @Test
@@ -98,7 +98,7 @@ class AuthEmailSenderTest {
         var captor = ArgumentCaptor.forClass(MimeMessage.class);
         verify(mailSender).send(captor.capture());
         var sent = captor.getValue();
-        assertEquals("Your password reset code — economizai", sent.getSubject());
+        assertEquals("Your password reset code — Economiza AI", sent.getSubject());
         var body = bodyOf(sent);
         assertTrue(body.contains("Password reset"), "en heading");
         assertTrue(body.contains(RESET_CODE));
@@ -114,7 +114,7 @@ class AuthEmailSenderTest {
         var captor = ArgumentCaptor.forClass(MimeMessage.class);
         verify(mailSender).send(captor.capture());
         var sent = captor.getValue();
-        assertEquals("Seu código de confirmação — economizai", sent.getSubject());
+        assertEquals("Seu código de confirmação — Economiza AI", sent.getSubject());
         var body = bodyOf(sent);
         assertTrue(body.contains(VERIFY_CODE), "rendered email must contain the code");
         assertTrue(body.contains("24 horas"), "rendered email must state the TTL");

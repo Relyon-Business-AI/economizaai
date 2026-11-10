@@ -19,6 +19,7 @@ import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
+import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.cache.HouseholdCacheGen;
 import com.relyon.economizaai.service.canonicalization.CanonicalizationService;
 import com.relyon.economizaai.service.geo.MarketLocationService;
@@ -55,6 +56,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.Month;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -90,6 +92,7 @@ class ReceiptServiceCoverageTest {
             "https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx?p=" + CHAVE_RS + "|2|1|1|hash";
 
     @Mock private ReceiptRepository receiptRepository;
+    @Mock private UserRepository userRepository;
     @Mock private ReceiptItemRepository receiptItemRepository;
     @Mock private SefazIngestionService sefazIngestionService;
     @Mock private ReceiptIngestionService receiptIngestionService;
@@ -107,6 +110,7 @@ class ReceiptServiceCoverageTest {
     @Mock private SubscriptionService subscriptionService;
     @Mock private SavingsAttributionService savingsAttributionService;
     @Mock private MerchantSupportGate merchantSupportGate;
+    @Mock private LocalizedMessageService localizedMessageService;
 
     @InjectMocks private ReceiptService receiptService;
 
@@ -322,6 +326,11 @@ class ReceiptServiceCoverageTest {
                 new BigDecimal("31.14"), 4);
         when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of(promo));
         lenient().when(notificationRuleService.isEnabled(any(), eq(NotificationType.PROMO_PERSONAL))).thenReturn(true);
+        user.setLocale("en");
+        when(localizedMessageService.translate("notification.personal_promo.title", Locale.forLanguageTag("en"),
+                "ARROZ TIO J 5KG")).thenReturn("You saved on ARROZ TIO J 5KG");
+        when(localizedMessageService.translate("notification.personal_promo.body", Locale.forLanguageTag("en"),
+                "ARROZ TIO J 5KG", "19,90", "Mercado X", "31")).thenReturn("localized body");
 
         var response = receiptService.confirm(user, receipt.getId(), new ConfirmReceiptRequest(null));
 
@@ -331,6 +340,8 @@ class ReceiptServiceCoverageTest {
         var payload = payloadCaptor.getValue();
         assertEquals(NotificationType.PROMO_PERSONAL, payload.type());
         assertEquals(user, payload.user());
+        assertEquals("You saved on ARROZ TIO J 5KG", payload.title());
+        assertEquals("localized body", payload.body());
         assertEquals(receipt.getId().toString(), payload.extras().get("receiptId"));
         assertEquals(productId.toString(), payload.extras().get("productId"));
     }

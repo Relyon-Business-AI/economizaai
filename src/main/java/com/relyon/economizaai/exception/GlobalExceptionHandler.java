@@ -2,6 +2,7 @@ package com.relyon.economizaai.exception;
 
 import com.relyon.economizaai.service.LocalizedMessageService;
 import io.sentry.Sentry;
+import jakarta.validation.ConstraintViolation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -20,6 +21,8 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Optional;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -28,6 +31,8 @@ import java.util.stream.Collectors;
 public class GlobalExceptionHandler {
 
     private static final String VALIDATION_FAILED_KEY = "validation.failed";
+    /** A constraint whose message is one of our own bundle keys, e.g. {@code message = "{validation.color.hex}"}. */
+    private static final Pattern CUSTOM_VALIDATION_MESSAGE = Pattern.compile("\\{(validation\\.[\\w.-]+)}");
 
     private final LocalizedMessageService messageService;
 
@@ -118,6 +123,23 @@ public class GlobalExceptionHandler {
         return respond(ex, HttpStatus.BAD_REQUEST, "Bad request");
     }
 
+    @ExceptionHandler(SoloHouseholdLeaveException.class)
+    public ResponseEntity<ErrorResponse> handleSoloLeave(SoloHouseholdLeaveException ex) {
+        return respond(ex, HttpStatus.BAD_REQUEST, "Leave refused: user is alone in the household");
+    }
+
+    @ExceptionHandler(NotHouseholdHostException.class)
+    public ResponseEntity<ErrorResponse> handleNotHost(NotHouseholdHostException ex) {
+        return respond(ex, HttpStatus.FORBIDDEN, "Household action reserved to the host");
+    }
+
+    /** FREE cap → 402 (Premium lifts it); absolute cap → 400 (nothing to buy). */
+    @ExceptionHandler(HouseholdFullException.class)
+    public ResponseEntity<ErrorResponse> handleHouseholdFull(HouseholdFullException ex) {
+        var status = ex.isUpgradeAvailable() ? HttpStatus.PAYMENT_REQUIRED : HttpStatus.BAD_REQUEST;
+        return respond(ex, status, "Household member cap reached");
+    }
+
     @ExceptionHandler({ReceiptAlreadyIngestedException.class, ProductAliasConflictException.class, EanConflictException.class, InvalidProductDeletionException.class, AudienceInUseException.class, AudienceNameConflictException.class, WhatsAppOptInRequiredException.class, DuplicateCustomCategoryException.class})
     public ResponseEntity<ErrorResponse> handleConflict(DomainException ex) {
         return respond(ex, HttpStatus.CONFLICT, "Conflict");
@@ -165,7 +187,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(PaywallException.class)
     public ResponseEntity<ErrorResponse> handlePaywall(PaywallException ex) {
-        return respond(ex, HttpStatus.PAYMENT_REQUIRED, "Paywall: PRO feature blocked for FREE tier");
+        return respond(ex, HttpStatus.PAYMENT_REQUIRED, "Paywall: PRO feature " + ex.getFeatureName() + " blocked for FREE tier");
     }
 
     @ExceptionHandler(PaidApiQuotaExceededException.class)
@@ -354,6 +376,20 @@ public class GlobalExceptionHandler {
 
     /** Localize a field error via the message bundle; never null (falls back to the raw default). */
     private String localizedFieldError(FieldError fieldError) {
+        return customValidationMessageKey(fieldError)
+                .map(messageService::translate)
+                .orElseGet(() -> genericFieldError(fieldError));
+    }
+
+    /** The bundle key a constraint declared as its message — it wins over the generic per-constraint text. */
+    private Optional<String> customValidationMessageKey(FieldError fieldError) {
+        if (!fieldError.contains(ConstraintViolation.class)) return Optional.empty();
+        var template = fieldError.unwrap(ConstraintViolation.class).getMessageTemplate();
+        var matcher = CUSTOM_VALIDATION_MESSAGE.matcher(template == null ? "" : template);
+        return matcher.matches() ? Optional.of(matcher.group(1)) : Optional.empty();
+    }
+
+    private String genericFieldError(FieldError fieldError) {
         var localized = messageService.resolve(fieldError);
         if (localized != null) return localized;
         return fieldError.getDefaultMessage() != null ? fieldError.getDefaultMessage() : "invalid";

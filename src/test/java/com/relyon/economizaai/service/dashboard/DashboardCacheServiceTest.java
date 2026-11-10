@@ -12,6 +12,7 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
+import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.InsightsService;
 import com.relyon.economizaai.service.consumption.ConsumptionIntelligenceService;
 import com.relyon.economizaai.service.geo.MarketNameService;
@@ -67,6 +68,7 @@ class DashboardCacheServiceTest {
     @Mock private InsightsService insightsService;
     @Mock private InsightsRepository insightsRepository;
     @Mock private ReceiptRepository receiptRepository;
+    @Mock private UserRepository userRepository;
     @Mock private ConsumptionIntelligenceService consumptionService;
     @Mock private CommunityPromoService communityPromoService;
     @Mock private NearbyScopeService nearbyScopeService;

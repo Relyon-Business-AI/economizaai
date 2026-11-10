@@ -47,7 +47,11 @@ public enum NotificationType {
     /** A scanned note that took a while could not be processed and ended as FAILED_PARSE. */
     RECEIPT_FAILED(Scope.SYSTEM, false, false),
     /** Convite in-app (sininho) pra ativar push — só pra quem nunca registrou token. */
-    PUSH_OPTIN(Scope.SYSTEM, false, false);
+    PUSH_OPTIN(Scope.SYSTEM, false, false),
+    /** Someone joined your household (sent to every OTHER member). */
+    HOUSEHOLD_MEMBER_JOINED(Scope.SYSTEM, false, false),
+    /** Someone left (or was removed from) your household (sent to every remaining member). */
+    HOUSEHOLD_MEMBER_LEFT(Scope.SYSTEM, false, false);
 
     public enum Scope { DEFAULT, USER, SYSTEM }
 
@@ -101,6 +105,7 @@ public enum NotificationType {
             case RECEIPT_RECOVERED, RECEIPT_READY, RECEIPT_FAILED -> NotificationDestination.RECEIPT;
             case SYSTEM -> NotificationDestination.INBOX;
             case PUSH_OPTIN -> NotificationDestination.ENABLE_PUSH;
+            case HOUSEHOLD_MEMBER_JOINED, HOUSEHOLD_MEMBER_LEFT -> NotificationDestination.HOUSEHOLD;
         };
     }
 }

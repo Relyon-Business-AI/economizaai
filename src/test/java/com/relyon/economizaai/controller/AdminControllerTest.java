@@ -173,7 +173,8 @@ class AdminControllerTest {
                 List.of(new ReceiptItemResponse(
                         UUID.randomUUID(), UUID.randomUUID(), 1, "ARROZ 5KG", null, "ARROZ 5KG",
                         "7891234567890", new BigDecimal("1"), "UN",
-                        new BigDecimal("28.90"), new BigDecimal("28.90"), null, null, false, false, false, false, null, false, null, null)));
+                        new BigDecimal("28.90"), new BigDecimal("28.90"), null, null, false, false, false, false, null, false, null, null)),
+                null);
     }
 
     private ProductResponse sampleProduct() {
@@ -436,7 +437,7 @@ class AdminControllerTest {
     @Test
     void listReceipts_returnsPagedSummaries() throws Exception {
         var summary = new ReceiptSummaryResponse(UUID.randomUUID(), "Mercado X", "Mercado X", LocalDateTime.now(),
-                new BigDecimal("57.80"), new BigDecimal("57.80"), null, null, 1, ReceiptStatus.CONFIRMED, null, null);
+                new BigDecimal("57.80"), new BigDecimal("57.80"), null, null, 1, ReceiptStatus.CONFIRMED, null, null, null);
         var owner = new AdminReceiptDetailResponse.Owner(UUID.randomUUID(), "Robson", "robson@economizaai.app");
         var row = new AdminReceiptSummaryResponse(summary, owner, UnidadeFederativa.RS, LocalDateTime.now(),
                 "receipt.parse.failed:no-items-found", "Não foi possível extrair os dados da NFC-e.");

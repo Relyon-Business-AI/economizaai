@@ -22,5 +22,7 @@ public enum NotificationDestination {
     /** Generic inbox — transactional/system notifications and the fallback. */
     INBOX,
     /** CTA pra ativar push: o app dispara o pedido de permissão, não navega. */
-    ENABLE_PUSH
+    ENABLE_PUSH,
+    /** The household screen (members, invite code) — someone joined or left. */
+    HOUSEHOLD
 }

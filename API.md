@@ -307,24 +307,55 @@ A verified phone is required for the **SMS** and **WHATSAPP** notification chann
 
 ## 2. Households
 
-Every user already has a household (auto-created at register). To merge two
-users into one shared history:
+Every user already has a household (auto-created at register; they are its
+**host**). Several users share one household = one shared history (receipts,
+dashboard, lists, predictions, custom categories, friendly names).
 
 ```
-POST /api/v1/households/join          { "inviteCode": "ABC123" }   ← case-insensitive
-POST /api/v1/households/leave         → moves caller into a fresh solo household
-GET  /api/v1/households/me            → current household + members + invite code + expiration
+GET  /api/v1/households/me                 → { id, name, hostId, inviteCode, inviteCodeExpiresAt, members[{id,name,email}], createdAt }
+PATCH /api/v1/households/me                { "name": "Casa da Ana" }   ← any member; blank clears (app shows a default)
+GET  /api/v1/households/invites/{code}     → { householdName, hostFirstName, memberCount, memberFirstNames[] } — preview BEFORE joining
+POST /api/v1/households/join               { "inviteCode": "ABC123" }   ← case-insensitive; your data MOVES with you
+POST /api/v1/households/leave              → back to your own household with what you brought; 400 if you're alone
 POST /api/v1/households/me/invite-code/regenerate   → rotates the code, extends TTL another 48h
-DELETE /api/v1/households/me/members/{memberId}     → kicks a member; they get a fresh solo household
+DELETE /api/v1/households/me/members/{memberId}     → HOST ONLY (403 otherwise); the member gets their data back
 ```
 
-**Invite codes expire after 48h.** When that happens, `/join` returns 400 with
-the same message as an unknown code (we don't tell the requester whether the
-code was wrong vs. stale — both look the same to a malicious user). The owner
-regenerates and shares the new one.
+**Join moves data (since 2026-11).** Receipts, shopping lists, manual purchases,
+snoozes, custom categories, category overrides, product/market friendly names and
+brand preferences of the joiner move into the shared household. On a collision
+(same NFC-e already in the target) the target's copy wins and the joiner's stays
+parked in their old household. `bringData: false` opts out (membership only).
 
-When the last member leaves a household, the household row is deleted
-automatically.
+**Leave / kick restore.** The leaver (or the kicked member) returns to the
+household their data came from, with everything that originated there restored.
+Receipts scanned *while* in the shared household stay with the household. A
+member who is alone cannot leave (400 `household.leave.solo`).
+
+**Host (anfitrião).** `hostId` is the member who created the household. Only the
+host may remove members (`403 household.not.host`). When the host leaves or
+deletes the account, the most senior remaining member becomes host. Renaming and
+rotating the code are open to every member.
+
+**Member cap.** `/join` answers `402` (`household.full.free`) when the household
+has the FREE maximum (2) and nobody in it is PRO — Premium lifts it to 6. The
+absolute cap (6, `household.full.max`) is a plain `400`. With
+`SUBSCRIPTION_ENFORCE=false` (current prod) only the absolute cap applies.
+
+**Notifications.** Every other member gets `HOUSEHOLD_MEMBER_JOINED` /
+`HOUSEHOLD_MEMBER_LEFT` (destination `HOUSEHOLD`) when someone joins, leaves or
+is removed.
+
+**Invite codes expire after 48h.** When that happens, `/join` and the preview
+return 400 with the same message as an unknown code (we don't tell the requester
+whether the code was wrong vs. stale). Preview shares the join rate limit (10/h),
+so it can't be used to probe codes.
+
+When the last member leaves, the household row is deleted only if it owns no
+data; otherwise it stays dormant as the origin "home" of that data.
+
+**Receipts carry `scannedBy: { id, name }`** (list, detail and the Home
+`recentReceipts`) so the app can show "por Ana" on a shared history.
 
 ### Data-share consents (household split)
 
@@ -457,10 +488,12 @@ POST /api/v1/receipts/import/extract-chaves   (multipart/form-data, field "file"
   reaches `PENDING_CONFIRMATION` (then confirm as usual) or `FAILED_PARSE`. Same
   monthly cap as `POST /receipts` (over the cap → the rest come back as
   `receipt.import.cap_reached`).
-- Rejection `reason` keys: `receipt.import.invalid_chave`, `receipt.import.unsupported`
-  (not RS / unsupported model), `receipt.import.duplicate`, `receipt.import.merchant_unsupported`,
-  `receipt.import.cap_reached`. `reasonMessage` is already localized.
-- **RS only** today; other UFs → `receipt.import.unsupported`.
+- Rejection `reason` keys: `receipt.import.invalid_chave`, `receipt.chave.typo`,
+  `receipt.manual-chave.unsupported` / `receipt.manual-chave.nfe-unsupported` (no fetch path at
+  all for that chave — same rule as a typed chave), `receipt.import.duplicate`,
+  `receipt.import.merchant_unsupported`, `receipt.import.cap_reached`. `reasonMessage` is already localized.
+- **Every UF** (2026-11-10): each chave rides the by-chave chain (free legacy reconsult →
+  Infosimples → admin alert). `receipt.import.unsupported` no longer exists.
 - **Segment policy (same for scan and import).** Any merchant is accepted into the user's personal
   history — restaurants, pet, apparel, e-commerce, etc. Only an explicit **admin BLOCKED override**
   rejects. What's gated is **index contribution**: only grocery/pharmacy (supermarket, pharmacy,

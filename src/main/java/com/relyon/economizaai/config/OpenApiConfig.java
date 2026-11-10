@@ -27,7 +27,7 @@ public class OpenApiConfig {
                 .bearerFormat("JWT")
                 .description("JWT from POST /api/v1/auth/login (or /auth/register). Paste the raw token — no 'Bearer ' prefix needed.");
         return new OpenAPI()
-                .info(new Info().title("economizai API").version("v1"))
+                .info(new Info().title("Economiza AI API").version("v1"))
                 .components(new Components().addSecuritySchemes(BEARER_SCHEME, jwtBearer))
                 .addSecurityItem(new SecurityRequirement().addList(BEARER_SCHEME));
     }

@@ -174,7 +174,7 @@ public class AuthEmailSender {
                              style="max-width:600px;width:100%%;background:#ffffff;border-radius:16px;overflow:hidden;
                                     box-shadow:0 1px 3px rgba(0,0,0,0.08);font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
                         <tr><td style="background:#16a34a;padding:24px 32px;">
-                          <span style="color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.5px;">economizai</span>
+                          <span style="color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.5px;">Economiza AI</span>
                         </td></tr>
                         <tr><td style="padding:32px 32px 8px;">
                           <h1 style="margin:0 0 12px;color:#0f172a;font-size:20px;font-weight:700;">%s</h1>
