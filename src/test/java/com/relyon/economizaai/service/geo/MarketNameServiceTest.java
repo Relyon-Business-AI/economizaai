@@ -7,6 +7,7 @@ import com.relyon.economizaai.model.MarketChain;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.repository.HouseholdMarketAliasRepository;
 import com.relyon.economizaai.repository.MarketChainRepository;
+import com.relyon.economizaai.service.cache.HouseholdCacheGen;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -36,6 +37,7 @@ class MarketNameServiceTest {
 
     @Mock private HouseholdMarketAliasRepository aliasRepository;
     @Mock private MarketChainRepository marketChainRepository;
+    @Mock private HouseholdCacheGen householdCacheGen;
     @InjectMocks private MarketNameService service;
 
     @Test

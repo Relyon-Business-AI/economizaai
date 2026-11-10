@@ -8,12 +8,14 @@ import com.relyon.economizaai.dto.response.InvitePreviewResponse;
 import com.relyon.economizaai.exception.HouseholdFullException;
 import com.relyon.economizaai.exception.InvalidInviteCodeException;
 import com.relyon.economizaai.exception.NotHouseholdHostException;
+import com.relyon.economizaai.exception.NotInHouseholdException;
 import com.relyon.economizaai.exception.SoloHouseholdLeaveException;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.HouseholdService;
 import com.relyon.economizaai.service.LocalizedMessageService;
+import com.relyon.economizaai.service.profile.ProfilePictureService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -35,6 +37,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -58,6 +62,53 @@ class HouseholdControllerTest {
 
     @MockitoBean
     private LocalizedMessageService localizedMessageService;
+
+    @MockitoBean
+    private ProfilePictureService profilePictureService;
+
+    @Test
+    void memberProfilePicture_returnsBytesWithFallbackHeader() throws Exception {
+        var user = buildUser();
+        var member = buildUser();
+        when(householdService.memberOf(any(User.class), eq(member.getId()))).thenReturn(member);
+        when(profilePictureService.etag(member)).thenReturn("\"pp/abc.jpg\"");
+        when(profilePictureService.read(member))
+                .thenReturn(new ProfilePictureService.ProfilePictureBytes(new byte[] {1, 2, 3}, "image/png", false));
+
+        mockMvc.perform(get("/api/v1/households/me/members/" + member.getId() + "/profile-picture")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("ETag", "\"pp/abc.jpg\""))
+                .andExpect(header().string("Cache-Control", "max-age=300, private"))
+                .andExpect(header().string("X-Profile-Picture-Fallback", "false"))
+                .andExpect(content().contentType("image/png"))
+                .andExpect(content().bytes(new byte[] {1, 2, 3}));
+    }
+
+    @Test
+    void memberProfilePicture_ifNoneMatchReturns304WithoutReading() throws Exception {
+        var user = buildUser();
+        var member = buildUser();
+        when(householdService.memberOf(any(User.class), eq(member.getId()))).thenReturn(member);
+        when(profilePictureService.etag(member)).thenReturn("\"pp/abc.jpg\"");
+
+        mockMvc.perform(get("/api/v1/households/me/members/" + member.getId() + "/profile-picture")
+                        .header("If-None-Match", "\"pp/abc.jpg\"")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isNotModified())
+                .andExpect(header().string("ETag", "\"pp/abc.jpg\""));
+        org.mockito.Mockito.verify(profilePictureService, org.mockito.Mockito.never()).read(any(User.class));
+    }
+
+    @Test
+    void memberProfilePicture_strangerIs404() throws Exception {
+        var user = buildUser();
+        when(householdService.memberOf(any(User.class), any(UUID.class))).thenThrow(new NotInHouseholdException());
+
+        mockMvc.perform(get("/api/v1/households/me/members/" + UUID.randomUUID() + "/profile-picture")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isNotFound());
+    }
 
     private User buildUser() {
         var household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();

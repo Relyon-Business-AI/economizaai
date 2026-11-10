@@ -1,5 +1,34 @@
 # economizai — what's new
 
+## 2026-11-10 — `ReceiptSummaryResponse.createdAt` e recentes sem nota "sem data" no topo
+
+- **`createdAt`** em `ReceiptSummaryResponse` (lista, recentes da Home). `issuedAt` pode ser nulo (foto/
+  importação sem data): o app usa `createdAt` como fallback em vez de mostrar "—".
+- `recentReceipts` do `/dashboard` ordena `issuedAt DESC NULLS LAST` — nota sem data ia pro topo no Postgres.
+
+## 2026-11-10 — Home mais rápida: `GET /dashboard?light=true` e cache de 30 min
+
+- **`GET /dashboard?light=true`** devolve só o que a Home usa (herói do mês, notas recentes, sininho);
+  `suggestedShoppingList` e `communityPromosNearby` vêm vazios. Pula as previsões de consumo e a detecção
+  de promoções próximas — que rodavam em TODA abertura da Home (ver `consumption.predict.done` nos logs)
+  sem a tela exibir nada disso. Sem o parâmetro o comportamento é o antigo.
+- Cache do dashboard passa de 2 min pra **30 min** (a chave já inclui a geração do domicílio, então
+  qualquer mudança em nota invalida na hora; o sininho continua ao vivo).
+
+## 2026-11-10 — Foto de perfil: ETag/304 e cache quente
+
+- **`GET /users/me/profile-picture` e `GET /households/me/members/{id}/profile-picture`** agora respondem
+  com `ETag` forte (chave do upload, ou hash das iniciais) e `Cache-Control: private, max-age=300`.
+  Mande `If-None-Match` e receba **304** sem bytes quando nada mudou. `X-Profile-Picture-Fallback` vem nos dois.
+- Bytes renderizados ficam em cache no servidor por ETag (Caffeine, 500 entradas / 30 min) — um foco de tela
+  não vai mais buscar o objeto no R2 de novo. Upload/remoção invalidam.
+
+## 2026-11-10 — Foto de perfil dos membros da casa
+
+- **`GET /households/me/members/{memberId}/profile-picture`** — foto (ou avatar gerado) de outro membro da
+  casa, com os mesmos headers de `/users/me/profile-picture` (`X-Profile-Picture-Fallback`). `404
+  household.not.member` se a pessoa não está na sua casa. Pra tela de Casa mostrar foto em vez de iniciais.
+
 ## 2026-11-10 — Domicílio: sair leva cópia, domicílio de origem salvo na conta, só o anfitrião convida
 
 - **Domicílio de origem salvo no usuário** (V139: `users.home_household_id` + `household_joined_at`) — não é

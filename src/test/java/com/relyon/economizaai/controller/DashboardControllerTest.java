@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -51,7 +52,7 @@ class DashboardControllerTest {
         var snapshot = new DashboardResponse.SpendSnapshot(2026, 6, new BigDecimal("450.30"),
                 new BigDecimal("12.50"), 4L, new BigDecimal("112.58"));
         var response = new DashboardResponse(snapshot, List.of(), List.of(), List.of(), 7L, LocalDateTime.now());
-        when(dashboardService.build(any(User.class), any())).thenReturn(response);
+        when(dashboardService.build(any(User.class), any(), anyBoolean())).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/dashboard")
                         .with(SecurityMockMvcRequestPostProcessors.user(user)))
@@ -65,7 +66,21 @@ class DashboardControllerTest {
                 .andExpect(jsonPath("$.suggestedShoppingList").isEmpty())
                 .andExpect(jsonPath("$.communityPromosNearby").isEmpty());
 
-        verify(dashboardService).build(user, MarketScope.ALL);
+        verify(dashboardService).build(user, MarketScope.ALL, false);
+    }
+
+    @Test
+    void dashboard_lightFlagReachesTheService() throws Exception {
+        var user = buildUser();
+        var snapshot = new DashboardResponse.SpendSnapshot(2026, 6, BigDecimal.ONE, BigDecimal.ZERO, 1L, BigDecimal.ONE);
+        when(dashboardService.build(any(User.class), any(), anyBoolean()))
+                .thenReturn(new DashboardResponse(snapshot, List.of(), List.of(), List.of(), 0L, LocalDateTime.now()));
+
+        mockMvc.perform(get("/api/v1/dashboard").param("light", "true")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isOk());
+
+        verify(dashboardService).build(user, MarketScope.ALL, true);
     }
 
     @Test

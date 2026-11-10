@@ -44,6 +44,12 @@ Single round-trip returns:
 
 Each section silently degrades to empty/zero when there's nothing to show. Use this instead of fan-out calls on cold start (saves you ~5×30s on Render free tier).
 
+**`?light=true`** (the app's Home uses this): same shape, but `suggestedShoppingList` and
+`communityPromosNearby` come back empty and the server skips computing them — those two are
+the slow part (consumption predictions + nearby promo detection) and the Home doesn't render
+them. Cached 30 min per household generation (any receipt change invalidates immediately);
+`unreadNotificationCount` is always live. Supports `If-None-Match` → 304.
+
 ```
 GET /api/v1/home/availability
 ```
@@ -241,7 +247,8 @@ PUT    /api/v1/users/me/digest-preferences
 
 POST   /api/v1/users/me/profile-picture   ← multipart form, field name "file"
                                             JPG/PNG/WEBP, max 5MB
-GET    /api/v1/users/me/profile-picture   ← returns the bytes (Content-Type matches the upload)
+GET    /api/v1/users/me/profile-picture   ← returns the bytes (Content-Type matches the upload). Strong ETag +
+                                             Cache-Control private/5min; send If-None-Match → 304 without bytes.
 DELETE /api/v1/users/me/profile-picture
 ```
 
@@ -320,6 +327,7 @@ POST /api/v1/households/join               { "inviteCode": "ABC123", "bringData"
 POST /api/v1/households/leave              → see "Leaving" below
 POST /api/v1/households/me/invite-code/regenerate   → HOST ONLY (403); rotates the code, extends TTL another 48h
 DELETE /api/v1/households/me/members/{memberId}     → HOST ONLY (403); the member moves out as if they left
+GET  /api/v1/households/me/members/{memberId}/profile-picture → that member's photo (same headers as /users/me/profile-picture); 404 if not in my household
 ```
 
 **Roles.** The **host** (`hostId`) is whoever created the household, or the guest

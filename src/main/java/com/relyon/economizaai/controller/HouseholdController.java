@@ -6,6 +6,7 @@ import com.relyon.economizaai.dto.response.HouseholdResponse;
 import com.relyon.economizaai.dto.response.InvitePreviewResponse;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.service.HouseholdService;
+import com.relyon.economizaai.service.profile.ProfilePictureService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -30,6 +32,20 @@ import java.util.UUID;
 public class HouseholdController {
 
     private final HouseholdService householdService;
+    private final ProfilePictureService profilePictureService;
+
+    /**
+     * A fellow member's profile picture (or their generated initials avatar). Household
+     * members already see each other's names and e-mails; the photo is the same scope.
+     * Same headers as {@code GET /users/me/profile-picture}.
+     */
+    @GetMapping("/me/members/{memberId}/profile-picture")
+    public ResponseEntity<byte[]> memberProfilePicture(@AuthenticationPrincipal User user,
+                                                       @PathVariable UUID memberId,
+                                                       @RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch) {
+        var member = householdService.memberOf(user, memberId);
+        return ProfilePictureResponses.respond(profilePictureService, member, ifNoneMatch);
+    }
 
     @GetMapping("/me")
     public ResponseEntity<HouseholdResponse> getMine(@AuthenticationPrincipal User user) {

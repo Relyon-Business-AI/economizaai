@@ -24,7 +24,9 @@ Bird's-eye map of the WHOLE product (mobile, web, admin, landing, e-mail, costs)
 - **Dev is on the Free plan (since 2026-11-03, cost cut US$ 48 → 6/mo):** 512 MB, minimal CPU,
   **sleeps after 15 min idle, cold start ~3 min**. It fits in 512 MB only because of the
   `JAVA_TOOL_OPTIONS` env var on the service (`-Xmx220m … -XX:+UseSerialGC`); resting memory is
-  ~500 MB, so heavy work (OCR, big parses) may OOM-kill it. The service was RECREATED (Render
+  ~500 MB, so heavy work (OCR, big parses) may OOM-kill it. Since 2026-11-10 it also runs the
+  `lowmem` Spring profile (`SPRING_PROFILES_ACTIVE=dev,lowmem`: lazy beans, no boot backfills,
+  delayed jobs — see DEV_NOTES). The service was RECREATED (Render
   can't switch paid→Free) and `db-dev` was recreated at Basic 256 MB from a dump (disks never
   shrink). The old `srv-d9p4…` service and the Basic 1 GB / 15 GB DB were deleted. Gotchas:
   `PUT env-vars` via API does not redeploy (trigger `POST /deploys`); from a service always use

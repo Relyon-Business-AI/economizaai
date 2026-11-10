@@ -5,6 +5,7 @@ import com.relyon.economizaai.model.MarketChain;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.repository.HouseholdMarketAliasRepository;
 import com.relyon.economizaai.repository.MarketChainRepository;
+import com.relyon.economizaai.service.cache.HouseholdCacheGen;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -43,6 +44,7 @@ public class MarketNameService {
 
     private final HouseholdMarketAliasRepository aliasRepository;
     private final MarketChainRepository marketChainRepository;
+    private final HouseholdCacheGen householdCacheGen;
 
     /** Corporate boilerplate stripped from a razão social before title-casing. Longest first. */
     private static final Pattern CORPORATE_BOILERPLATE = Pattern.compile(
@@ -161,6 +163,8 @@ public class MarketNameService {
                         .household(user.getHousehold()).marketCnpj(normalized).build());
         alias.setCustomName(customName.trim());
         var saved = aliasRepository.save(alias);
+        // The friendly name is baked into cached dashboard/insights payloads — invalidate them.
+        householdCacheGen.bump(householdId);
         log.info("market_alias.set user={} cnpj={} name='{}'", LogMasker.email(user.getEmail()), normalized, saved.getCustomName());
         return saved.getCustomName();
     }
@@ -168,7 +172,9 @@ public class MarketNameService {
     @Transactional
     public void clearName(User user, String cnpj) {
         var normalized = CnpjNormalizer.normalize(cnpj);
-        aliasRepository.deleteByHouseholdIdAndMarketCnpj(user.getHousehold().getId(), normalized);
+        var householdId = user.getHousehold().getId();
+        aliasRepository.deleteByHouseholdIdAndMarketCnpj(householdId, normalized);
+        householdCacheGen.bump(householdId);
         log.info("market_alias.cleared user={} cnpj={}", LogMasker.email(user.getEmail()), normalized);
     }
 }

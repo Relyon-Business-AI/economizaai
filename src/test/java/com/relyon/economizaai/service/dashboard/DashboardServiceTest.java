@@ -47,7 +47,7 @@ class DashboardServiceTest {
     void build_passesAllCachedSectionsThroughUnchanged() {
         var user = user();
         var core = core();
-        when(dashboardCacheService.buildCachedDashboard(eq(user), any())).thenReturn(core);
+        when(dashboardCacheService.buildCachedDashboard(eq(user), any(), eq(false))).thenReturn(core);
         when(notificationInboxService.unreadCount(user)).thenReturn(7L);
 
         var response = service.build(user);
@@ -67,7 +67,7 @@ class DashboardServiceTest {
                 new SpendSnapshot(2026, 6, BigDecimal.ZERO, BigDecimal.ZERO, 0, BigDecimal.ZERO),
                 List.of(), List.of(), List.of(), 0L,
                 LocalDateTime.of(2026, Month.JUNE, 6, 10, 0));
-        when(dashboardCacheService.buildCachedDashboard(eq(user), any())).thenReturn(emptyCore);
+        when(dashboardCacheService.buildCachedDashboard(eq(user), any(), eq(false))).thenReturn(emptyCore);
         when(notificationInboxService.unreadCount(user)).thenReturn(0L);
 
         var response = service.build(user);
@@ -83,7 +83,7 @@ class DashboardServiceTest {
     @Test
     void unreadCount_isAlwaysLive_evenWhenCoreIsCached() {
         var user = user();
-        when(dashboardCacheService.buildCachedDashboard(eq(user), any())).thenReturn(core());
+        when(dashboardCacheService.buildCachedDashboard(eq(user), any(), eq(false))).thenReturn(core());
         // unread changes between calls (user read a notification); core stays cached
         when(notificationInboxService.unreadCount(user)).thenReturn(3L, 0L);
 
