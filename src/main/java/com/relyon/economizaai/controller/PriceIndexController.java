@@ -194,8 +194,10 @@ public class PriceIndexController {
     @GetMapping("/promos")
     public ResponseEntity<List<CommunityPromoService.CommunityPromo>> currentPromos(
             @AuthenticationPrincipal User user,
-            @RequestParam(required = false) Double radiusKm) {
-        return ResponseEntity.ok(communityPromoService.detectInScope(nearbyScopeService.forUser(user, radiusKm)));
+            @RequestParam(required = false) Double radiusKm,
+            @RequestParam(required = false) BigDecimal lat,
+            @RequestParam(required = false) BigDecimal lng) {
+        return ResponseEntity.ok(communityPromoService.detectInScope(nearbyScopeService.forUser(user, radiusKm, lat, lng)));
     }
 
     /**
@@ -207,12 +209,15 @@ public class PriceIndexController {
     @GetMapping("/promos/feed")
     public ResponseEntity<PromoFeedResponse> promosFeed(
             @AuthenticationPrincipal User user,
-            @RequestParam(required = false) Double radiusKm) {
-        var location = viewerLocationService.resolve(user);
+            @RequestParam(required = false) Double radiusKm,
+            @RequestParam(required = false) BigDecimal lat,
+            @RequestParam(required = false) BigDecimal lng) {
+        var location = viewerLocationService.resolve(user, lat, lng);
         var promos = communityPromoService.detectAll(
                 location.latitude(), location.longitude(), radiusKm,
                 watchedMarketService.watchedCnpjs(user));
-        return ResponseEntity.ok(new PromoFeedResponse(location.source().name(), location.uf(), promos));
+        return ResponseEntity.ok(new PromoFeedResponse(location.source().name(), location.uf(),
+                nearbyScopeService.defaultRadiusKm(), promos));
     }
 
     /**

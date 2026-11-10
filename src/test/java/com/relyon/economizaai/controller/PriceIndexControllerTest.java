@@ -242,7 +242,7 @@ class PriceIndexControllerTest {
     @Test
     void promos_returnsCurrentPromos() throws Exception {
         var scope = new NearbyScope(new ViewerLocation(null, null, ViewerLocationService.Source.NONE, "RS"), Set.of(), 10);
-        when(nearbyScopeService.forUser(any(), isNull())).thenReturn(scope);
+        when(nearbyScopeService.forUser(any(), isNull(), isNull(), isNull())).thenReturn(scope);
         when(communityPromoService.detectInScope(scope))
                 .thenReturn(List.of(
                         new CommunityPromoService.CommunityPromo(UUID.randomUUID(), "Arroz",
@@ -261,9 +261,10 @@ class PriceIndexControllerTest {
     @Test
     void promosFeed_wrapsPromosWithLocationContext() throws Exception {
         when(watchedMarketService.watchedCnpjs(any())).thenReturn(Set.of());
-        when(viewerLocationService.resolve(any()))
+        when(viewerLocationService.resolve(any(), isNull(), isNull()))
                 .thenReturn(new ViewerLocation(new BigDecimal("-30.05"), new BigDecimal("-51.20"),
                         ViewerLocationService.Source.RECEIPTS_MEDIAN, "RS"));
+        when(nearbyScopeService.defaultRadiusKm()).thenReturn(20.0);
         when(communityPromoService.detectAll(any(), any(), isNull(), any()))
                 .thenReturn(List.of(
                         new CommunityPromoService.CommunityPromo(UUID.randomUUID(), "Arroz",
@@ -277,8 +278,23 @@ class PriceIndexControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.locationSource").value("RECEIPTS_MEDIAN"))
                 .andExpect(jsonPath("$.uf").value("RS"))
+                .andExpect(jsonPath("$.radiusKm").value(20.0))
                 .andExpect(jsonPath("$.promos[0].productName").value("Arroz"))
                 .andExpect(jsonPath("$.promos[0].uf").value("RS"));
+    }
+
+    @Test
+    void promosFeed_deviceCoordinatesLeadTheLocationCascade() throws Exception {
+        when(watchedMarketService.watchedCnpjs(any())).thenReturn(Set.of());
+        when(viewerLocationService.resolve(any(), eq(new BigDecimal("-30.03")), eq(new BigDecimal("-51.22"))))
+                .thenReturn(new ViewerLocation(new BigDecimal("-30.03"), new BigDecimal("-51.22"),
+                        ViewerLocationService.Source.DEVICE, "RS"));
+        when(communityPromoService.detectAll(any(), any(), isNull(), any())).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/price-index/promos/feed?lat=-30.03&lng=-51.22")
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.locationSource").value("DEVICE"));
     }
 
     @Test
