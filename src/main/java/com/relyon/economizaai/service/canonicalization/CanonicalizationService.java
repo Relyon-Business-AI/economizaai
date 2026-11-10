@@ -407,25 +407,6 @@ public class CanonicalizationService {
     }
 
     /**
-     * Dedup gate before creating a new {@link Product} for an unknown EAN.
-     * Some markets (especially small mercadinhos) emit internal pseudo-EANs
-     * for the same physical product, which would otherwise inflate the
-     * catalog with duplicates. When all four metadata dimensions are
-     * extracted with confidence and an existing product matches them
-     * exactly, link to it instead of creating a new one. The new EAN is
-     * deliberately NOT propagated onto the existing product — keeping
-     * {@code Product.ean} as a single canonical code per row simplifies
-     * downstream queries; the new alias takes care of future descriptions.
-     *
-     * <p>Returns null (→ fall through to create-new) when:
-     * <ul>
-     *   <li>any of genericName / brand / packSize / packUnit is missing,</li>
-     *   <li>no product matches the full profile.</li>
-     * </ul>
-     * If multiple match (already-duplicated catalog rows), picks the first —
-     * the admin merge tool is the right place to consolidate the rest.
-     */
-    /**
      * Variant + EAN-authority gate on every name/metadata/fuzzy merge (EAN-exact
      * is exempt — an identical real GTIN IS the product). Rejects a merge when:
      * <ol>
@@ -456,6 +437,25 @@ public class CanonicalizationService {
         return true;
     }
 
+    /**
+     * Dedup gate before creating a new {@link Product} for an unknown EAN.
+     * Some markets (especially small mercadinhos) emit internal pseudo-EANs
+     * for the same physical product, which would otherwise inflate the
+     * catalog with duplicates. When all four metadata dimensions are
+     * extracted with confidence and an existing product matches them
+     * exactly, link to it instead of creating a new one. The new EAN is
+     * deliberately NOT propagated onto the existing product — keeping
+     * {@code Product.ean} as a single canonical code per row simplifies
+     * downstream queries; the new alias takes care of future descriptions.
+     *
+     * <p>Returns null (→ fall through to create-new) when:
+     * <ul>
+     *   <li>any of genericName / brand / packSize / packUnit is missing,</li>
+     *   <li>no product matches the full profile.</li>
+     * </ul>
+     * If multiple match (already-duplicated catalog rows), picks the first —
+     * the admin merge tool is the right place to consolidate the rest.
+     */
     private Product tryMetadataDedup(ProductExtraction extraction) {
         if (extraction.genericName() == null || extraction.brand() == null
                 || extraction.packSize() == null || extraction.packUnit() == null) {
