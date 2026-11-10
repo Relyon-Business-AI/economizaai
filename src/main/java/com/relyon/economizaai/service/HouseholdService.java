@@ -199,7 +199,7 @@ public class HouseholdService {
             return respond(target, user);
         }
 
-        var previous = user.getHousehold();
+        var previous = reload(user.getHousehold());
         user.setHousehold(target);
         user.setHomeHousehold(previous);
         user.setHouseholdJoinedAt(LocalDateTime.now());
@@ -233,7 +233,7 @@ public class HouseholdService {
      */
     @Transactional
     public HouseholdResponse leave(User user) {
-        var previous = user.getHousehold();
+        var previous = reload(user.getHousehold());
         var members = membersOf(previous);
         if (members.size() <= 1) {
             if (!isAwayFromHome(user)) {
@@ -269,7 +269,7 @@ public class HouseholdService {
 
     private Household returnGuestHome(User guest, Household shared) {
         var joinedAt = guest.getHouseholdJoinedAt();
-        var home = guest.getHomeHousehold();
+        var home = reload(guest.getHomeHousehold());
         settleAtHome(guest, home);
         restoreWhatTheyBrought(guest, home);
         var copied = splitService.copyInto(shared, home, joinedAt);
@@ -290,8 +290,8 @@ public class HouseholdService {
     // The last member leaves: the household's data moves into their home and the
     // emptied household is deleted.
     private Household returnHomeWithEverything(User lastMember) {
-        var shared = lastMember.getHousehold();
-        var home = lastMember.getHomeHousehold();
+        var shared = reload(lastMember.getHousehold());
+        var home = reload(lastMember.getHomeHousehold());
         settleAtHome(lastMember, home);
         restoreWhatTheyBrought(lastMember, home);
         var moved = splitService.absorbInto(shared, home);
@@ -408,6 +408,13 @@ public class HouseholdService {
     }
 
     // ---------- helpers ----------
+
+    // The authenticated User comes from another session, so its household references are
+    // detached proxies — anything beyond getId() must go through a fresh, managed load.
+    private Household reload(Household household) {
+        return householdRepository.findById(household.getId())
+                .orElseThrow(() -> new IllegalStateException("Household missing: " + household.getId()));
+    }
 
     private Household loadHouseholdOf(User user) {
         return householdRepository.findById(user.getHousehold().getId())

@@ -130,6 +130,7 @@ class HouseholdServiceTest {
         var household = Household.builder().id(UUID.randomUUID()).inviteCode(code).build();
         household.setCreatedAt(LocalDateTime.now());
         household.setUpdatedAt(LocalDateTime.now());
+        lenient().when(householdRepository.findById(household.getId())).thenReturn(Optional.of(household));
         return household;
     }
 
