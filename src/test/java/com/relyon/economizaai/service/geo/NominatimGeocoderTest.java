@@ -139,6 +139,85 @@ class NominatimGeocoderTest {
     }
 
     @Test
+    void geocode_cityCentroidResult_isRejectedAsMiss() {
+        // Nominatim falls back to the Porto Alegre centroid when it can't resolve the street.
+        // Storing it would collapse every PoA market onto one coordinate (~0 km distances),
+        // so we must treat it as a miss (no coords) rather than a hit.
+        var centroid = """
+                [{"lat":"-30.0330","lon":"-51.2300","addresstype":"city","class":"place",
+                  "type":"city","place_rank":16,
+                  "address":{"city":"Porto Alegre","ISO3166-2-lvl4":"BR-RS"}}]
+                """;
+        var mockedGeocoder = geocoderReturning(centroid);
+
+        assertThat(mockedGeocoder.geocode("Rua Inexistente 999, Porto Alegre, RS")).isEmpty();
+    }
+
+    @Test
+    void geocode_administrativeBoundaryResult_isRejectedAsMiss() {
+        var boundary = """
+                [{"lat":"-30.0","lon":"-51.0","addresstype":"administrative","class":"boundary",
+                  "type":"administrative","place_rank":12,
+                  "address":{"municipality":"Porto Alegre","ISO3166-2-lvl4":"BR-RS"}}]
+                """;
+        var mockedGeocoder = geocoderReturning(boundary);
+
+        assertThat(mockedGeocoder.geocode("Porto Alegre, RS")).isEmpty();
+    }
+
+    @Test
+    void geocode_coarsePlaceRank_isRejectedEvenWithoutAddressType() {
+        // place_rank alone (coarser than street level, 26) marks a non-precise match.
+        var coarse = """
+                [{"lat":"-23.5","lon":"-46.6","place_rank":20,
+                  "address":{"city":"São Paulo","ISO3166-2-lvl4":"BR-SP"}}]
+                """;
+        var mockedGeocoder = geocoderReturning(coarse);
+
+        assertThat(mockedGeocoder.geocode("Bairro X, São Paulo")).isEmpty();
+    }
+
+    @Test
+    void geocode_preciseStreetAddress_isAccepted() {
+        var street = """
+                [{"lat":"-30.0500","lon":"-51.2200","addresstype":"road","class":"highway",
+                  "type":"residential","place_rank":26,
+                  "address":{"road":"Av Juca Batista","city":"Porto Alegre","ISO3166-2-lvl4":"BR-RS"}}]
+                """;
+        var mockedGeocoder = geocoderReturning(street);
+
+        var result = mockedGeocoder.geocode("Av Juca Batista 1305, Porto Alegre, RS");
+
+        assertThat(result).isPresent();
+        assertThat(result.get().latitude()).isEqualByComparingTo("-30.05");
+        assertThat(result.get().state()).isEqualTo("RS");
+    }
+
+    @Test
+    void geocode_preciseBuildingResult_isAccepted() {
+        var building = """
+                [{"lat":"-30.06","lon":"-51.21","addresstype":"shop","class":"shop",
+                  "type":"supermarket","place_rank":30,
+                  "address":{"road":"Rua Y","city":"Porto Alegre","ISO3166-2-lvl4":"BR-RS"}}]
+                """;
+        var mockedGeocoder = geocoderReturning(building);
+
+        assertThat(mockedGeocoder.geocode("Supermercado Y, Porto Alegre")).isPresent();
+    }
+
+    @Test
+    void geocode_resultWithoutPrecisionFields_isAccepted() {
+        // Older fixtures / minimal responses carry neither addresstype nor place_rank;
+        // default to accepting so the existing success-path tests keep passing.
+        var minimal = """
+                [{"lat":"-1.0","lon":"-2.0","address":{"city":"Somewhere","ISO3166-2-lvl4":"BR-SP"}}]
+                """;
+        var mockedGeocoder = geocoderReturning(minimal);
+
+        assertThat(mockedGeocoder.geocode("Somewhere")).isPresent();
+    }
+
+    @Test
     void geocode_emptyJsonArrayBody_returnsEmpty() {
         var mockedGeocoder = geocoderReturning("[]");
 
