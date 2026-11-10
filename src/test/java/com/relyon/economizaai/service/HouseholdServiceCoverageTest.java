@@ -5,7 +5,6 @@ import com.relyon.economizaai.exception.InvalidInviteCodeException;
 import com.relyon.economizaai.exception.NotHouseholdHostException;
 import com.relyon.economizaai.exception.NotInHouseholdException;
 import com.relyon.economizaai.model.Household;
-import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.repository.HouseholdRepository;
@@ -62,6 +61,9 @@ class HouseholdServiceCoverageTest {
     private HouseholdMergeService mergeService;
 
     @Mock
+    private HouseholdSplitService splitService;
+
+    @Mock
     private HouseholdCacheGen householdCacheGen;
 
     @Mock
@@ -91,6 +93,8 @@ class HouseholdServiceCoverageTest {
         });
         lenient().when(mergeService.restoreOriginals(any()))
                 .thenReturn(new HouseholdMergeService.MergeResult(0, 0));
+        lenient().when(splitService.copyInto(any(), any(), any()))
+                .thenReturn(new HouseholdSplitService.CopyResult(0, 0, 0));
     }
 
     private User buildUser(Household household, String name, LocalDateTime createdAt) {
@@ -160,19 +164,19 @@ class HouseholdServiceCoverageTest {
     // ---------- removeMember ----------
 
     @Test
-    void removeMember_hostKicks_targetReturnsToOriginWithDataRestoredAndRemainingNotified() {
+    void removeMember_hostKicks_targetReturnsHomeWithRestoreAndCopySinceJoin() {
         var household = buildHousehold("FAM111");
         var origin = buildHousehold("ORG222");
         var actor = buildUser(household, "Host", LocalDateTime.now().minusDays(10));
         var target = buildUser(household, "Target", LocalDateTime.now());
+        target.setHomeHousehold(origin);
+        var joinedAt = LocalDateTime.now().minusDays(4);
+        target.setHouseholdJoinedAt(joinedAt);
         var bystander = buildUser(household, "Bystander", LocalDateTime.now().minusDays(1));
         household.setOwner(actor);
         when(householdRepository.findById(household.getId())).thenReturn(Optional.of(household));
         when(userRepository.findAllByHouseholdId(household.getId())).thenReturn(List.of(actor, target, bystander));
         when(userRepository.findById(target.getId())).thenReturn(Optional.of(target));
-        when(receiptRepository.findFirstByUserIdAndOriginHouseholdIdNotOrderByCreatedAtAsc(target.getId(), household.getId()))
-                .thenReturn(Optional.of(Receipt.builder().originHousehold(origin).build()));
-        when(householdRepository.findById(origin.getId())).thenReturn(Optional.of(origin));
 
         var response = householdService.removeMember(actor, target.getId());
 
@@ -181,6 +185,7 @@ class HouseholdServiceCoverageTest {
         assertEquals(household.getId(), response.id());
         assertEquals(2, response.members().size());
         verify(mergeService).restoreOriginals(origin);
+        verify(splitService).copyInto(household, origin, joinedAt);
         verify(userRepository).save(target);
         verify(householdCacheGen).bump(household.getId());
         // bystander is told; the actor already knows

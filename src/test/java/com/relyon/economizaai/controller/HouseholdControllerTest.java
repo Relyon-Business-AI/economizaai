@@ -80,8 +80,9 @@ class HouseholdControllerTest {
                 UUID.randomUUID(),
                 "ABC123",
                 LocalDateTime.now().plusHours(48),
-                List.of(new HouseholdResponse.HouseholdMember(UUID.randomUUID(), "John", "john@test.com")),
-                LocalDateTime.now()
+                List.of(new HouseholdResponse.HouseholdMember(UUID.randomUUID(), "John", "john@test.com", null)),
+                LocalDateTime.now(),
+                true
         );
     }
 
