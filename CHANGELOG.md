@@ -1,5 +1,16 @@
 # economizai — what's new
 
+## 2026-11-10 — Canonicalização por variante (não mistura mais "zero" com "ao leite")
+
+- **Matcher de produto agora respeita a variante.** Dois itens só viram o MESMO produto se os
+  tokens distintivos baterem: percentual (`50%`), `zero`/`diet`/`light`, `sem açúcar`/`s/açúcar`,
+  `sem glúten`/`sglut`, `sem lactose`, e sabor (chocolate/morango/…). Antes, "CHOC DIVINE 50% ZERO"
+  (EAN interno) era absorvido em "CHOCOLATE DIVINE AO LEITE SGLUT" (EAN real) só pelo nome — corrigido.
+- **EAN real manda.** Um EAN placeholder/interno (`00000001124676`) não é mais absorvido num produto
+  com EAN real DIFERENTE só pelo nome; dois EANs reais distintos nunca se fundem por nome/metadados.
+- **Admin:** `GET /api/v1/admin/products/variant-conflicts` — relatório (só leitura) de produtos que
+  parecem mal-fundidos; não altera nada, é pra revisão manual do dono.
+
 ## 2026-11-10 — Lojas sem localização voltam a ser geocodificadas
 
 - ~Metade das lojas estava **sem coordenadas e sem UF** (o endereço do SEFAZ, `"RUA X , 34 , , CENTRO , CIDADE , UF"`,

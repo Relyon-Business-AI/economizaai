@@ -200,6 +200,9 @@ public class CanonicalizationService {
                     abbrev(dedup.getId()), item.getRawDescription());
             dedup = null;
         }
+        if (dedup != null && !canMergeIntoExisting(item, dedup)) {
+            dedup = null;
+        }
         if (dedup != null) {
             item.setProduct(dedup);
             ensureAlias(dedup, item.getRawDescription(), normalized);
@@ -308,7 +311,7 @@ public class CanonicalizationService {
         }
         var extraction = withAiFallback(item, productExtractor.extract(item.getRawDescription()));
         var dedup = tryMetadataDedup(extraction);
-        if (dedup != null) {
+        if (dedup != null && canMergeIntoExisting(item, dedup)) {
             item.setProduct(dedup);
             ensureAlias(dedup, item.getRawDescription(), normalized);
             log.info("item.matched_by_metadata ean={} product={} brand={} pack={}{}",
@@ -348,7 +351,7 @@ public class CanonicalizationService {
             return ItemResult.MATCHED;
         }
         var fuzzy = tryFuzzyAliasMatch(item, normalized);
-        if (fuzzy != null) {
+        if (fuzzy != null && canMergeIntoExisting(item, fuzzy.getProduct())) {
             item.setProduct(fuzzy.getProduct());
             ensureAlias(fuzzy.getProduct(), item.getRawDescription(), normalized);
             return ItemResult.MATCHED;
@@ -422,6 +425,37 @@ public class CanonicalizationService {
      * If multiple match (already-duplicated catalog rows), picks the first —
      * the admin merge tool is the right place to consolidate the rest.
      */
+    /**
+     * Variant + EAN-authority gate on every name/metadata/fuzzy merge (EAN-exact
+     * is exempt — an identical real GTIN IS the product). Rejects a merge when:
+     * <ol>
+     *   <li>the item's and the candidate's distinguishing tokens differ
+     *       ("50% zero" vs "ao leite sglut" → different products even with the
+     *       same brand + pack) — see {@link VariantDiscriminator}; or</li>
+     *   <li>EAN authority is violated: the item carries a REAL GTIN that differs
+     *       from the candidate's real GTIN (two distinct real codes are two
+     *       products), OR the item's placeholder/internal EAN would be absorbed
+     *       into a product with a DIFFERENT real GTIN — only safe when the
+     *       variants also match, which (1) already guarantees here.</li>
+     * </ol>
+     */
+    private boolean canMergeIntoExisting(ReceiptItem item, Product candidate) {
+        if (!VariantDiscriminator.sameVariant(item.getRawDescription(), candidate.getNormalizedName())) {
+            log.info("item.merge_rejected_variant product={} item='{}' product_name='{}'",
+                    abbrev(candidate.getId()), item.getRawDescription(), candidate.getNormalizedName());
+            return false;
+        }
+        var itemEan = item.getEan();
+        var candidateEan = candidate.getEan();
+        if (EanAuthority.isReal(itemEan) && EanAuthority.isReal(candidateEan)
+                && !itemEan.trim().equals(candidateEan.trim())) {
+            log.info("item.merge_rejected_distinct_real_ean product={} itemEan={} productEan={}",
+                    abbrev(candidate.getId()), itemEan, candidateEan);
+            return false;
+        }
+        return true;
+    }
+
     private Product tryMetadataDedup(ProductExtraction extraction) {
         if (extraction.genericName() == null || extraction.brand() == null
                 || extraction.packSize() == null || extraction.packUnit() == null) {

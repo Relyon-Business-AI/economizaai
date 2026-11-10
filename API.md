@@ -1751,6 +1751,7 @@ PATCH  /api/v1/admin/products/{id}/category    → 200 ProductResponse — body 
 PATCH  /api/v1/admin/products/{id}/category-node?slug=queijos → 200 ProductResponse — seta a FOLHA fina (products.category_id), source=USER. slug de GET /categories/taxonomy. 400 se slug desconhecido
 GET    /api/v1/admin/products/taxonomy-coverage → { total, withLeaf, withoutLeaf } — cobertura da migração pra taxonomia
 GET    /api/v1/admin/products/duplicates       → List<DuplicateProductGroupResponse>
+GET    /api/v1/admin/products/variant-conflicts?max=200 → VariantConflictResponse — READ-ONLY audit of likely MIS-MERGED products (a single product whose linked items carry >1 distinct REAL EAN, or inconsistent distinguishing-token signatures e.g. "AO LEITE SGLUT" + "50% ZERO" under one product). Reports productId + conflicting item names/EANs for MANUAL review; mutates nothing.
 POST   /api/v1/admin/products/{id}/merge       → 200 ProductMergeResultResponse
 POST   /api/v1/admin/products/refresh-brands       → BrandBackfillResponse (fill missing brands)
 POST   /api/v1/admin/markets/classify-segments     → SegmentClassificationSummary (CNAE-classify pending markets)
