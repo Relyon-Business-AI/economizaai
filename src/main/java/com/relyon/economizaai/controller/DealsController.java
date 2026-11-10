@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -36,7 +37,9 @@ public class DealsController {
             @AuthenticationPrincipal User user,
             @RequestParam(defaultValue = "false") boolean includeNearby,
             @RequestParam(required = false) Double radiusKm,
-            @RequestParam(defaultValue = "20") int limit) {
-        return ResponseEntity.ok(dealsService.findDeals(user, includeNearby, radiusKm, limit));
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(required = false) BigDecimal lat,
+            @RequestParam(required = false) BigDecimal lng) {
+        return ResponseEntity.ok(dealsService.findDeals(user, includeNearby, radiusKm, limit, lat, lng));
     }
 }

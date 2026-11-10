@@ -58,7 +58,7 @@ class DealsControllerTest {
     @Test
     void returnsRankedDealsScopedToUser() throws Exception {
         var user = principal();
-        when(dealsService.findDeals(eq(user), anyBoolean(), any(), anyInt()))
+        when(dealsService.findDeals(eq(user), anyBoolean(), any(), anyInt(), any(), any()))
                 .thenReturn(List.of(deal()));
 
         mockMvc.perform(get("/api/v1/deals")
@@ -69,24 +69,24 @@ class DealsControllerTest {
                 .andExpect(jsonPath("$[0].savingsPct").value(30.00))
                 .andExpect(jsonPath("$[0].isWatched").value(true));
 
-        verify(dealsService).findDeals(eq(user), anyBoolean(), any(), anyInt());
+        verify(dealsService).findDeals(eq(user), anyBoolean(), any(), anyInt(), any(), any());
     }
 
     @Test
     void forwardsParams() throws Exception {
-        when(dealsService.findDeals(any(), eq(true), eq(5.0), eq(50)))
+        when(dealsService.findDeals(any(), eq(true), eq(5.0), eq(50), any(), any()))
                 .thenReturn(List.of());
 
         mockMvc.perform(get("/api/v1/deals?includeNearby=true&radiusKm=5.0&limit=50")
                         .with(SecurityMockMvcRequestPostProcessors.user(principal())))
                 .andExpect(status().isOk());
 
-        verify(dealsService).findDeals(any(), eq(true), eq(5.0), eq(50));
+        verify(dealsService).findDeals(any(), eq(true), eq(5.0), eq(50), any(), any());
     }
 
     @Test
     void nonPositiveLimitReturnsEmptyWithoutThrowing() throws Exception {
-        when(dealsService.findDeals(any(), anyBoolean(), any(), eq(0)))
+        when(dealsService.findDeals(any(), anyBoolean(), any(), eq(0), any(), any()))
                 .thenReturn(List.of());
 
         mockMvc.perform(get("/api/v1/deals?limit=0")

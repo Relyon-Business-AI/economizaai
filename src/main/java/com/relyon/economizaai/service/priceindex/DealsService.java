@@ -70,6 +70,13 @@ public class DealsService {
 
     @Transactional(readOnly = true)
     public List<DealResponse> findDeals(User user, boolean includeNearby, Double radiusKm, int limit) {
+        return findDeals(user, includeNearby, radiusKm, limit, null, null);
+    }
+
+    /** Same, with the device's live coordinates (both or neither) leading the location cascade. */
+    @Transactional(readOnly = true)
+    public List<DealResponse> findDeals(User user, boolean includeNearby, Double radiusKm, int limit,
+                                        BigDecimal deviceLatitude, BigDecimal deviceLongitude) {
         if (!properties.getCollaborative().isEnabled() || limit <= 0) return List.of();
 
         var householdId = user.getHousehold().getId();
@@ -79,7 +86,7 @@ public class DealsService {
 
         var relevanceMode = dealFeedbackService.mode();
         var suppressions = dealFeedbackService.suppressionsFor(user);
-        var scope = nearbyScopeService.forUser(user, radiusKm);
+        var scope = nearbyScopeService.forUser(user, radiusKm, deviceLatitude, deviceLongitude);
         var friendlyNames = householdProductAliasService.friendlyNamesFor(householdId,
                 List.copyOf(purchased.keySet()));
         var deals = new ArrayList<DealResponse>();

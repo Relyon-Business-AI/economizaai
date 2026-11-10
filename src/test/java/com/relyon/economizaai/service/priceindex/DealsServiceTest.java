@@ -65,7 +65,7 @@ class DealsServiceTest {
         lenient().when(dealFeedbackService.mode()).thenReturn(RelevanceMode.OFF);
         lenient().when(dealFeedbackService.suppressionsFor(any()))
                 .thenReturn(DealFeedbackService.SuppressionSet.empty());
-        lenient().when(nearbyScopeService.forUser(any(), any())).thenReturn(new NearbyScope(
+        lenient().when(nearbyScopeService.forUser(any(), any(), any(), any())).thenReturn(new NearbyScope(
                 new ViewerLocation(null, null, Source.NONE, "RS"), Set.of(WATCHED_CNPJ), 10));
         lenient().when(marketNameService.resolve(any(), any(), any()))
                 .thenAnswer(invocation -> invocation.getArgument(2));
@@ -201,7 +201,7 @@ class DealsServiceTest {
         var user = user();
         var scope = new NearbyScope(new ViewerLocation(new BigDecimal("-30"), new BigDecimal("-51"),
                 Source.RECEIPTS_MEDIAN, "RS"), Set.of(WATCHED_CNPJ), 5.0);
-        when(nearbyScopeService.forUser(user, 5.0)).thenReturn(scope);
+        when(nearbyScopeService.forUser(user, 5.0, null, null)).thenReturn(scope);
         when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID))
                 .thenReturn(List.of(purchase(new BigDecimal("10.00"), LocalDateTime.now())));
         when(priceIndexService.bestMarketsInScope(eq(PRODUCT_ID), anyInt(), eq(scope)))

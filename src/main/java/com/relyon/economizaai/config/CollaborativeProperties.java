@@ -189,9 +189,9 @@ public class CollaborativeProperties {
         private int bestMarketsLookbackDays = 180;
         /**
          * "Perto de você" radius for the best-markets ranking when the viewer has a location
-         * (explicit or inferred). Same 10 km the app uses for the promos feed cascade.
+         * (explicit or inferred). Same 20 km the app uses for the promos feed cascade.
          */
-        private double bestMarketsNearbyRadiusKm = 10;
+        private double bestMarketsNearbyRadiusKm = 20;
         private int communityPromoRecentWindowDays = 7;
         /**
          * TTL of the SHARED community-promo cache (seconds). Detection scans every

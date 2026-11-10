@@ -46,7 +46,7 @@ import java.util.stream.Collectors;
  * mais barato ao mais caro. É uma "faixa de preço de referência" — marcas/tamanhos diferentes.
  *
  * <p>Escopo: ao contrário do best-markets de UM produto (que para no raio "perto de você"), esta
- * visão ALARGA explicitamente a cascata — raio (10 km) → UF → nacional — até achar ofertas, já
+ * visão ALARGA explicitamente a cascata — raio (20 km) → UF → nacional — até achar ofertas, já
  * que o ponto é mostrar a faixa do tipo. K-anônimo por tier, por (produto, mercado): mercearia
  * n=1, farmácia/saúde K=3 (fail-closed, igual ao resto do índice).
  */

@@ -14,7 +14,7 @@ import java.util.UUID;
  * vezes (um mercado por linha). Marcas e tamanhos diferentes: é referência de FAIXA de preço,
  * NÃO o mesmo produto. K-anônimo por tier (mercearia n=1, farmácia/saúde K=3, fail-closed).
  *
- * <p>Escopo: cascata explícita "faixa de referência" — raio perto de você (10 km) →, se
+ * <p>Escopo: cascata explícita "faixa de referência" — raio perto de você (20 km) →, se
  * poucas ofertas, ALARGA pra UF → nacional (diferente do best-markets de um produto, que
  * para de propósito no raio).
  */
