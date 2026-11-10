@@ -131,7 +131,9 @@ public class DashboardCacheService {
     private List<ReceiptSummaryResponse> loadRecentReceipts(User user, UUID householdId, MarketScope scope) {
         var recentReceipts = receiptRepository
                 .findAll(recentForHousehold(user, scope), PageRequest.of(0, RECENT_RECEIPTS,
-                        Sort.by(Sort.Direction.DESC, "issuedAt")))
+                        // Postgres puts NULLs first on DESC: a nota without an issue date (photo/import)
+                        // would pin itself to the top of "recentes". Dateless rows go last.
+                        Sort.by(Sort.Order.desc("issuedAt").nullsLast())))
                 .getContent();
         var recentCnpjs = recentReceipts.stream()
                 .map(Receipt::getCnpjEmitente)
