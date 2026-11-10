@@ -39,6 +39,7 @@ import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
+import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.cache.HouseholdCacheGen;
 import com.relyon.economizaai.service.canonicalization.CanonicalizationService;
 import com.relyon.economizaai.service.geo.MarketLocationService;
@@ -88,9 +89,11 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.regex.Pattern;
 
 @Slf4j
@@ -99,6 +102,7 @@ import java.util.regex.Pattern;
 public class ReceiptService {
 
     private final ReceiptRepository receiptRepository;
+    private final UserRepository userRepository;
     private final InsightsRepository insightsRepository;
     private final ReceiptItemRepository receiptItemRepository;
     private final SefazIngestionService sefazIngestionService;
@@ -630,10 +634,32 @@ public class ReceiptService {
                 .distinct()
                 .toList();
         var overrides = marketNameService.resolveNames(householdId, cnpjs);
+        var scannerNames = scannerNamesFor(page.getContent());
         return page.map(receipt -> ReceiptSummaryResponse.from(receipt)
                 .withMarketFriendlyName(marketNameService.applyOverride(
                         overrides, receipt.getCnpjEmitente(), receipt.getMarketName()))
-                .withParseErrorMessage(localizedParseError(receipt)));
+                .withParseErrorMessage(localizedParseError(receipt))
+                .withScannedByName(scannerNames.get(scannerId(receipt))));
+    }
+
+    private static UUID scannerId(Receipt receipt) {
+        return receipt.getUser() == null ? null : receipt.getUser().getId();
+    }
+
+    /**
+     * Scanner display names for a page of receipts in ONE query. {@code receipt.user} is a
+     * lazy proxy on list reads; touching {@code getName()} per row would be N+1.
+     */
+    private Map<UUID, String> scannerNamesFor(List<Receipt> receipts) {
+        var userIds = receipts.stream()
+                .map(ReceiptService::scannerId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        // HashMap, not Map.of(): the lookup key may be null for a user-less row, and Map.of().get(null) throws.
+        if (userIds.isEmpty()) return new HashMap<>();
+        return userRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(User::getId, User::getName, (first, second) -> first, HashMap::new));
     }
 
     /**
@@ -1231,7 +1257,15 @@ public class ReceiptService {
     private ReceiptResponse withFriendlyName(UUID householdId, Receipt receipt, ReceiptResponse response) {
         var friendly = marketNameService.resolve(householdId, receipt.getCnpjEmitente(), receipt.getMarketName());
         return response.withMarketFriendlyName(friendly)
-                .withParseErrorMessage(localizedParseError(receipt));
+                .withParseErrorMessage(localizedParseError(receipt))
+                .withScannedByName(scannerNameIfMissing(response));
+    }
+
+    // Single-receipt reads built from a lazy user proxy carry the scanner's id but no name.
+    private String scannerNameIfMissing(ReceiptResponse response) {
+        var scannedBy = response.scannedBy();
+        if (scannedBy == null || scannedBy.name() != null || scannedBy.id() == null) return null;
+        return userRepository.findById(scannedBy.id()).map(User::getName).orElse(null);
     }
 
     /**
