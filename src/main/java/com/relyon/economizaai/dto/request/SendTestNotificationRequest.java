@@ -10,7 +10,7 @@ public record SendTestNotificationRequest(
         @Schema(description = "Target user's email — must already exist.", example = "user@example.com")
         @NotBlank @Email String email,
 
-        @Schema(description = "Notification title shown on the device. Defaults to 'economizai test'.")
+        @Schema(description = "Notification title shown on the device. Defaults to 'Economiza AI test'.")
         @Size(max = 120) String title,
 
         @Schema(description = "Notification body. Defaults to a canned message.")

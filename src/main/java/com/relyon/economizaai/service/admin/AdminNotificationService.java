@@ -30,7 +30,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AdminNotificationService {
 
-    private static final String DEFAULT_TITLE = "economizai test";
+    private static final String DEFAULT_TITLE = "Economiza AI test";
     private static final String DEFAULT_BODY = "If you can read this, push notifications are working.";
 
     private final UserRepository userRepository;
