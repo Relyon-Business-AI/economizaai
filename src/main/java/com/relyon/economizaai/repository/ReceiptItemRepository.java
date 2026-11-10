@@ -270,6 +270,32 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
     @Query("SELECT ri FROM ReceiptItem ri WHERE ri.receipt.id = :receiptId AND ri.product IS NULL AND ri.excluded = false")
     List<ReceiptItem> findUnmatchedByReceiptId(@Param("receiptId") UUID receiptId);
 
+    /**
+     * Variant-conflict audit pre-filter: product ids whose linked, confirmed,
+     * non-excluded items carry MORE THAN ONE distinct non-blank EAN. A cheap
+     * GROUP BY/HAVING gate — placeholder-vs-real EAN refinement and the
+     * distinguishing-token check run in Java over {@link #findItemEanAndDescriptionByProductIds}.
+     * Capped by the caller's Pageable.
+     */
+    @Query("""
+        SELECT ri.product.id FROM ReceiptItem ri
+        JOIN ri.receipt r
+        WHERE r.status = 'CONFIRMED' AND ri.excluded = false AND ri.product IS NOT NULL
+          AND ri.ean IS NOT NULL AND ri.ean <> ''
+        GROUP BY ri.product.id
+        HAVING COUNT(DISTINCT ri.ean) > 1
+    """)
+    List<UUID> findProductIdsWithMultipleItemEans(Pageable pageable);
+
+    /** (productId, rawDescription, ean) for the linked, confirmed, non-excluded items of the
+     *  given products — the raw material the variant-conflict audit inspects in Java. */
+    @Query("""
+        SELECT ri.product.id, ri.rawDescription, ri.ean FROM ReceiptItem ri
+        JOIN ri.receipt r
+        WHERE r.status = 'CONFIRMED' AND ri.excluded = false AND ri.product.id IN :productIds
+    """)
+    List<Object[]> findItemEanAndDescriptionByProductIds(@Param("productIds") Collection<UUID> productIds);
+
     /** Loads an item with its receipt + household initialized up front, so the
      *  item-correction ownership check (receipt id + household id) can run without
      *  an open session. Accessing the lazy Receipt proxy's household otherwise throws

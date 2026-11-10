@@ -11,6 +11,9 @@ import org.springframework.web.client.RestClient;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Looks up a CNPJ's business segment from its CNAE (economic activity) via the
@@ -81,7 +84,7 @@ public class CnpjActivityClient {
             var json = objectMapper.readTree(body);
             var cnaes = parseCnaes(json);
             return new CnpjLookup(segmentFromCnae(cnaes), parseIbgeCityCode(json), cnaes,
-                    parseText(json, "email"), parseText(json, "razao_social"));
+                    parseText(json, "email"), parseText(json, "razao_social"), parseRegistryAddress(json));
         } catch (Exception ex) {
             log.warn("merchant.classify.parse_failed cnpj={} {}: {}", cnpj, ex.getClass().getSimpleName(), ex.getMessage());
             return CnpjLookup.empty();
@@ -89,7 +92,12 @@ public class CnpjActivityClient {
     }
 
     public record CnpjLookup(MerchantSegment segment, String ibgeCityCode, List<String> cnaeCodes,
-                             String email, String razaoSocial) {
+                             String email, String razaoSocial, MarketAddress registryAddress) {
+
+        public CnpjLookup(MerchantSegment segment, String ibgeCityCode, List<String> cnaeCodes,
+                          String email, String razaoSocial) {
+            this(segment, ibgeCityCode, cnaeCodes, email, razaoSocial, null);
+        }
 
         /** Segment/geo-only convenience — callers that don't care about registry contact data. */
         public CnpjLookup(MerchantSegment segment, String ibgeCityCode, List<String> cnaeCodes) {
@@ -141,6 +149,19 @@ public class CnpjActivityClient {
     }
 
     /** BrasilAPI returns the municipality as `codigo_municipio_ibge` (7-digit number). */
+    /** Endereço do cadastro da Receita — usado pra geocodificar loja cuja nota não traz endereço. */
+    private MarketAddress parseRegistryAddress(JsonNode json) {
+        var city = parseText(json, "municipio");
+        var uf = parseText(json, "uf");
+        var street = Stream.of(parseText(json, "descricao_tipo_de_logradouro"), parseText(json, "logradouro"))
+                .filter(Objects::nonNull)
+                .collect(Collectors.joining(" "));
+        if (city == null || uf == null) return null;
+        var number = parseText(json, "numero");
+        var numericNumber = number != null && number.matches("\\d+[A-Za-z]?") ? number : null;
+        return new MarketAddress(street.isBlank() ? null : street, numericNumber, city, uf, parseText(json, "cep"));
+    }
+
     private String parseIbgeCityCode(JsonNode json) {
         var code = json.get("codigo_municipio_ibge");
         if (code == null || code.isNull()) return null;

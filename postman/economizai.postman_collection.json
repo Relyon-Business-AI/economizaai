@@ -14289,6 +14289,62 @@
 					]
 				},
 				{
+					"name": "COV admin: Variant-conflict audit (admin, read-only)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/products/variant-conflicts?max=200",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"products",
+								"variant-conflicts"
+							],
+							"query": [
+								{
+									"key": "max",
+									"value": "200"
+								}
+							]
+						},
+						"description": "READ-ONLY audit of likely mis-merged products (a single product whose linked items carry >1 distinct REAL EAN, or inconsistent distinguishing-token signatures). Mutates nothing.",
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(pm.info.requestName + ' no server error (<500)', function () {",
+									"    pm.expect(pm.response.code).to.be.below(500);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
 					"name": "COV admin: LLM teacher-layer report (admin)",
 					"request": {
 						"method": "GET",

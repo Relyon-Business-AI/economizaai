@@ -41,6 +41,23 @@ public interface PriceObservationRepository extends JpaRepository<PriceObservati
     @Query("UPDATE PriceObservation po SET po.product = :survivor WHERE po.product = :absorbed")
     int repointProduct(@Param("absorbed") Product absorbed, @Param("survivor") Product survivor);
 
+    /**
+     * Fills city/state on a market's observations that were written before the
+     * market was geocoded (city/state are snapshotted at write time and never
+     * back-filled otherwise). ONLY touches rows where city is still NULL — an
+     * existing snapshot is never overwritten. Called right after a market
+     * geocodes. Returns rows updated.
+     */
+    @Modifying
+    @Query("""
+        UPDATE PriceObservation po
+        SET po.city = :city, po.state = :state
+        WHERE po.marketCnpj = :marketCnpj AND po.city IS NULL
+    """)
+    int backfillLocationForMarket(@Param("marketCnpj") String marketCnpj,
+                                  @Param("city") String city,
+                                  @Param("state") String state);
+
     // Physical index reads: the "cheapest market near you" series. Filter to IN_STORE so
     // online observations (national, different price dynamics) never leak into geo results.
     @Query("""

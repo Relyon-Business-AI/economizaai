@@ -689,6 +689,66 @@ class CanonicalizationServiceTest {
     }
 
     @Test
+    void placeholderEanDifferentVariant_notAbsorbedIntoRealEanProduct() {
+        // The real Divine bug: a placeholder-EAN item "CHOC DIVINE 50% ZERO 70G"
+        // must NOT merge into the real-EAN "AO LEITE SGLUT" product on metadata alone.
+        var aoLeite = Product.builder().id(UUID.randomUUID())
+                .ean("7899516211450")
+                .normalizedName("CHOCOLATE DIVINE 70G AO LEITE SGLUT")
+                .genericName("Chocolate").brand("Divine")
+                .packSize(new BigDecimal("70")).packUnit("G")
+                .category(ProductCategory.GROCERIES)
+                .build();
+        var receipt = buildReceipt(item("CHOC DIVINE 50% ZERO 70G", "00000001124676"));
+        when(productRepository.findByEan("00000001124676")).thenReturn(Optional.empty());
+        when(productExtractor.extract("CHOC DIVINE 50% ZERO 70G")).thenReturn(
+                new ProductExtraction("Chocolate", "Divine", new BigDecimal("70"), "G",
+                        ProductCategory.GROCERIES, null, CategorizationSource.DICTIONARY));
+        when(productRepository.findByMetadata("chocolate", "divine", new BigDecimal("70"), "G"))
+                .thenReturn(List.of(aoLeite));
+        when(productRepository.save(any(Product.class))).thenAnswer(inv -> {
+            var saved = inv.<Product>getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+        when(aliasRepository.existsByNormalizedDescription(anyString())).thenReturn(false);
+
+        var outcome = service.canonicalize(receipt);
+
+        assertEquals(1, outcome.created(), "different variant must create a separate product");
+        assertEquals(0, outcome.matched());
+        assertNotNull(receipt.getItems().get(0).getProduct());
+        assertEquals("00000001124676", receipt.getItems().get(0).getProduct().getEan());
+    }
+
+    @Test
+    void sameVariantUnknownEanMetadataMatch_stillMerges() {
+        // Control: same variant (no distinguishing-token difference) with a pseudo-EAN
+        // still dedups to the existing product — the discriminator must not over-block.
+        var existing = Product.builder().id(UUID.randomUUID())
+                .ean("7899516211450")
+                .normalizedName("CHOCOLATE DIVINE 70G AO LEITE")
+                .genericName("Chocolate").brand("Divine")
+                .packSize(new BigDecimal("70")).packUnit("G")
+                .category(ProductCategory.GROCERIES)
+                .build();
+        var receipt = buildReceipt(item("CHOC DIVINE 70G AO LEITE", "INTERNO42"));
+        when(productRepository.findByEan("INTERNO42")).thenReturn(Optional.empty());
+        when(productExtractor.extract("CHOC DIVINE 70G AO LEITE")).thenReturn(
+                new ProductExtraction("Chocolate", "Divine", new BigDecimal("70"), "G",
+                        ProductCategory.GROCERIES, null, CategorizationSource.DICTIONARY));
+        when(productRepository.findByMetadata("chocolate", "divine", new BigDecimal("70"), "G"))
+                .thenReturn(List.of(existing));
+        when(aliasRepository.existsByNormalizedDescription(anyString())).thenReturn(false);
+
+        var outcome = service.canonicalize(receipt);
+
+        assertEquals(1, outcome.matched(), "same variant must still dedup");
+        assertEquals(existing.getId(), receipt.getItems().get(0).getProduct().getId());
+        verify(productRepository, never()).save(any(Product.class));
+    }
+
+    @Test
     void createsProductWhenFuzzySkippedButDescriptionIsCategorized() {
         // No packSize extracted — fuzzy is skipped to avoid wide-net false positives
         var receipt = buildReceipt(item("BANANA PRATA KG", null));

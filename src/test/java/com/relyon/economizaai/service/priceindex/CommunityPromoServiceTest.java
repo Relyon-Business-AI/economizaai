@@ -62,6 +62,10 @@ class CommunityPromoServiceTest {
     }
 
     private PriceObservation obs(BigDecimal price, LocalDateTime observedAt) {
+        return obs(price, observedAt, false);
+    }
+
+    private PriceObservation obs(BigDecimal price, LocalDateTime observedAt, boolean outlier) {
         return PriceObservation.builder()
                 .id(UUID.randomUUID())
                 .product(Product.builder().id(productId).normalizedName("Arroz").build())
@@ -71,6 +75,7 @@ class CommunityPromoServiceTest {
                 .unitPrice(price)
                 .quantity(BigDecimal.ONE)
                 .observedAt(observedAt)
+                .outlier(outlier)
                 .build();
     }
 
@@ -124,6 +129,33 @@ class CommunityPromoServiceTest {
                 .thenReturn(Optional.of(Product.builder().id(productId).category(ProductCategory.HEALTH).build()));
 
         assertTrue(service.detectAll().isEmpty());
+    }
+
+    @Test
+    void promoPricesArePackagePricesEvenWhenDetectionRunsPerKilo() {
+        var now = LocalDateTime.now();
+        var observations = new ArrayList<PriceObservation>();
+        for (var index = 0; index < 8; index++) {
+            observations.add(packageObservation(new BigDecimal("1.39"), new BigDecimal("92.67"), now.minusDays(30)));
+        }
+        for (var index = 0; index < 5; index++) {
+            observations.add(packageObservation(new BigDecimal("0.89"), new BigDecimal("59.33"), now.minusDays(2)));
+        }
+        when(observationRepository.findRecent(any())).thenReturn(observations);
+        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(1L)))
+                .thenReturn(List.of(groupCount(productId, marketCnpj, 3L)));
+
+        var promo = service.detectAll().get(0);
+
+        assertEquals(new BigDecimal("0.89"), promo.currentMedianPrice());
+        assertEquals(new BigDecimal("1.39"), promo.baselineMedianPrice());
+        assertEquals(new BigDecimal("35.98"), promo.dropPct());
+    }
+
+    private PriceObservation packageObservation(BigDecimal packagePrice, BigDecimal pricePerKilo, LocalDateTime observedAt) {
+        var observation = obs(packagePrice, observedAt);
+        observation.setNormalizedUnitPrice(pricePerKilo);
+        return observation;
     }
 
     @Test
@@ -221,6 +253,75 @@ class CommunityPromoServiceTest {
 
         assertTrue(service.detectInScope(gaucho).isEmpty(), "a Recife promo is noise for Porto Alegre");
         assertEquals(1, service.detectInScope(pernambucano).size());
+    }
+
+    @Test
+    void loneOutlierRecentObservationDoesNotManufactureAPromo() {
+        // The real bug: a SINGLE bogus R$2,98 scan (typical ~R$5,49) fabricated a
+        // "~42% mais barato". With the min-recent-cluster gate the lone obs can't
+        // drive a promo even though baseline has plenty of rows.
+        var now = LocalDateTime.now();
+        var observations = new ArrayList<PriceObservation>();
+        for (var i = 0; i < 10; i++) observations.add(obs(new BigDecimal("5.49"), now.minusDays(30)));
+        observations.add(obs(new BigDecimal("2.98"), now.minusDays(2))); // lone outlier
+
+        when(observationRepository.findRecent(any())).thenReturn(observations);
+
+        assertTrue(service.detectAll().isEmpty(), "a single outlier must not fabricate a promo");
+    }
+
+    @Test
+    void outlierWithinAConsistentRecentWindowDoesNotManufactureAPromo() {
+        // Recent window is mostly ~5.49 with one 2.98 stray. Both samples are
+        // genuinely at the same level — no real drop. The stray must not pull the
+        // recent median below the baseline.
+        var now = LocalDateTime.now();
+        var observations = new ArrayList<PriceObservation>();
+        for (var i = 0; i < 8; i++) observations.add(obs(new BigDecimal("5.49"), now.minusDays(30)));
+        observations.add(obs(new BigDecimal("2.98"), now.minusDays(2))); // outlier low
+        for (var i = 0; i < 4; i++) observations.add(obs(new BigDecimal("5.49"), now.minusDays(2)));
+
+        when(observationRepository.findRecent(any())).thenReturn(observations);
+
+        assertTrue(service.detectAll().isEmpty(), "stray outlier must not fabricate a promo");
+    }
+
+    @Test
+    void honorsIsOutlierFlag_excludingFlaggedObservationsFromBaselineAndRecent() {
+        // Same as above but the bogus scan is explicitly is_outlier=true: it must be
+        // dropped regardless of the MAD trim (future outlier-tagging job compatibility).
+        var now = LocalDateTime.now();
+        var observations = new ArrayList<PriceObservation>();
+        for (var i = 0; i < 8; i++) observations.add(obs(new BigDecimal("5.49"), now.minusDays(30)));
+        observations.add(obs(new BigDecimal("2.98"), now.minusDays(2), true)); // flagged outlier
+        for (var i = 0; i < 4; i++) observations.add(obs(new BigDecimal("5.49"), now.minusDays(2)));
+
+        when(observationRepository.findRecent(any())).thenReturn(observations);
+
+        assertTrue(service.detectAll().isEmpty(), "flagged outlier must be excluded");
+    }
+
+    @Test
+    void realDropStillDetectedWithAnOutlierPresent() {
+        // Genuine drop 28 → 22 with one wild 2.00 outlier in the recent window: the
+        // outlier is trimmed but the real ~22% drop is still detected.
+        var now = LocalDateTime.now();
+        var observations = new ArrayList<PriceObservation>();
+        for (var i = 0; i < 8; i++) observations.add(obs(new BigDecimal("28"), now.minusDays(30)));
+        observations.add(obs(new BigDecimal("2.00"), now.minusDays(2), true));
+        for (var i = 0; i < 5; i++) observations.add(obs(new BigDecimal("22"), now.minusDays(2)));
+
+        when(observationRepository.findRecent(any())).thenReturn(observations);
+        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(1L)))
+                .thenReturn(List.of(groupCount(productId, marketCnpj, 3L)));
+
+        var promos = service.detectAll();
+
+        assertEquals(1, promos.size());
+        // Drop computed against 22 (not dragged toward 2.00): ~21-22%, not ~90%.
+        var dropPct = promos.get(0).dropPct();
+        assertTrue(dropPct.compareTo(new BigDecimal("15")) > 0);
+        assertTrue(dropPct.compareTo(new BigDecimal("30")) < 0, "drop reflects 22, not the 2.00 outlier");
     }
 
     @Test

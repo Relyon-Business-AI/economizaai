@@ -105,3 +105,43 @@ travel cost (distance → fuel/time proxy). Surface a small callout ("economiza 
 a Y km") — never auto-reordering, just advisory. Needs: a basket-size assumption, a
 cost-per-km constant, and a confidence floor (don't advise on a single observation). This is
 explicitly OUT of Phase 1.
+
+## 3. Variant-aware canonicalization (the "same product?" guard)
+
+Two receipt items canonicalize to ONE product only when they are the SAME VARIANT. A real
+bug: "CHOC DIVINE 50% ZERO 70G" (placeholder EAN `00000001124676`) was absorbed into
+"CHOCOLATE DIVINE 70G AO LEITE SGLUT" (real EAN `7899516211450`) because the metadata dedup
+and fuzzy name match ignored the distinguishing tokens — a zero-sugar 50% bar and a
+gluten-free milk bar are different products.
+
+### Discriminator rule (`VariantDiscriminator`)
+
+Each description yields a signature of distinguishing tokens, detected by PATTERN (not by
+enumerating every value). Two strengths:
+
+- **STRONG** — sugar/intensity (`\d+%`, `zero`, `diet`, `light`, `sem acucar`/`s/acucar`/
+  `zero acucar`) and dietary claims (`sem gluten`/`sglut`, `sem lactose`/`zero lactose`).
+  Rarely dropped from a receipt name, so STRONG present-on-one-side-only IS a real difference.
+- **WEAK** — flavor words (`chocolate`, `morango`, `baunilha`, …) and soft descriptors
+  (`integral`, `desnatado`, `tradicional`). A receipt often abbreviates these away
+  ("LEITE ITAMBE INT" vs "…INTEGRAL"), so WEAK is a difference ONLY when BOTH sides carry a
+  (different) weak token — never when one side simply omits it.
+
+A merge is allowed when STRONG signatures are equal AND WEAK signatures don't directly
+contradict. Applied at every name/metadata/fuzzy merge point in `CanonicalizationService`
+(`canMergeIntoExisting`). EXACT real-EAN match is exempt — an identical GTIN IS the product.
+
+### EAN authority (`EanAuthority`)
+
+A REAL GTIN is the primary match key. A PLACEHOLDER/internal code (`^0{6,}\d*$`, all-zeros,
+non-digit, or outside 8–14 digits) is NOT trusted: a placeholder-EAN item is never absorbed
+into a product with a DIFFERENT real EAN on name alone (the discriminator must also pass).
+Two items with DISTINCT real EANs never merge via name/metadata.
+
+### Audit (report only, no mutation)
+
+`GET /api/v1/admin/products/variant-conflicts` lists EXISTING products that look mis-merged: a
+single product whose linked confirmed items carry MORE THAN ONE distinct REAL EAN, OR
+inconsistent distinguishing-token signatures (the Divine case). Output = productId +
+conflicting item names/EANs/signatures. A REPORT for the owner to review and split MANUALLY
+(via the existing merge tools) — it does NOT auto-split or reassign anything.

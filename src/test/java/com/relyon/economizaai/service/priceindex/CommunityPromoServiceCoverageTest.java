@@ -203,9 +203,10 @@ class CommunityPromoServiceCoverageTest {
 
         assertEquals(1, promos.size());
         var promo = promos.get(0);
-        // medians come from the normalized field, not the raw 28
-        assertEquals(0, promo.currentMedianPrice().compareTo(new BigDecimal("20")));
-        assertEquals(0, promo.baselineMedianPrice().compareTo(new BigDecimal("28")));
+        // detection uses the normalized drop; the card shows today's package (28) and what that
+        // same package would have cost at the old per-unit price (28 × 28/20)
+        assertEquals(0, promo.currentMedianPrice().compareTo(new BigDecimal("28")));
+        assertEquals(0, promo.baselineMedianPrice().compareTo(new BigDecimal("39.20")));
     }
 
     @Test
