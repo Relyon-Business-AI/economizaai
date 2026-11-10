@@ -28,6 +28,9 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
 
     long countByHouseholdId(UUID householdId);
 
+    /** True when some user still calls this household home (origin) — it must not be deleted. */
+    boolean existsByOriginHouseholdId(UUID householdId);
+
     /** Users who opted in to the public leaderboard — for public handles + the opted-in household set. */
     List<User> findByShareInLeaderboardTrue();
 

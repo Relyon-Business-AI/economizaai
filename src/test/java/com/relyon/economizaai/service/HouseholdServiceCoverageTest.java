@@ -5,7 +5,6 @@ import com.relyon.economizaai.exception.InvalidInviteCodeException;
 import com.relyon.economizaai.exception.NotHouseholdHostException;
 import com.relyon.economizaai.exception.NotInHouseholdException;
 import com.relyon.economizaai.model.Household;
-import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.repository.HouseholdRepository;
@@ -22,7 +21,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -36,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -43,42 +42,27 @@ import static org.mockito.Mockito.when;
 
 /**
  * Covers the HouseholdService branches not exercised by {@link HouseholdServiceTest}:
- * getMine/regenerate not-found, removeMember (all paths, host-only rule, restore on kick),
- * expired invite code, and the regenerate happy path.
+ * getMine/regenerate not-found, host-only regenerate, removeMember (all paths, restore +
+ * copy on kick), expired invite code.
  */
 @ExtendWith(MockitoExtension.class)
 class HouseholdServiceCoverageTest {
 
-    @Mock
-    private HouseholdRepository householdRepository;
+    @Mock private HouseholdRepository householdRepository;
+    @Mock private UserRepository userRepository;
+    @Mock private ReceiptRepository receiptRepository;
+    @Mock private HouseholdMergeService mergeService;
+    @Mock private HouseholdCacheGen householdCacheGen;
+    @Mock private SubscriptionGateService subscriptionGate;
+    @Mock private NotificationService notificationService;
+    @Mock private LocalizedMessageService messageService;
 
-    @Mock
-    private UserRepository userRepository;
+    @InjectMocks private HouseholdService householdService;
 
-    @Mock
-    private ReceiptRepository receiptRepository;
-
-    @Mock
-    private HouseholdMergeService mergeService;
-
-    @Mock
-    private HouseholdCacheGen householdCacheGen;
-
-    @Mock
-    private SubscriptionGateService subscriptionGate;
-
-    @Mock
-    private NotificationService notificationService;
-
-    @Mock
-    private LocalizedMessageService messageService;
-
-    @InjectMocks
-    private HouseholdService householdService;
+    private static final LocalDateTime LONG_AGO = LocalDateTime.of(2026, 1, 1, 12, 0);
 
     @BeforeEach
     void setUp() {
-        ReflectionTestUtils.setField(householdService, "mergeEnabled", true);
         lenient().when(messageService.translate(anyString(), any(Locale.class), any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(householdRepository.save(any(Household.class))).thenAnswer(invocation -> {
@@ -89,41 +73,50 @@ class HouseholdServiceCoverageTest {
             }
             return saved;
         });
-        lenient().when(mergeService.restoreOriginals(any()))
-                .thenReturn(new HouseholdMergeService.MergeResult(0, 0));
+        lenient().when(householdRepository.existsByInviteCode(any())).thenReturn(false);
+        lenient().when(mergeService.restoreOriginals(any())).thenReturn(new HouseholdMergeService.MergeResult(0, 0));
+        lenient().when(mergeService.copyGeneratedSince(any(), any(), any())).thenReturn(0);
     }
 
-    private User buildUser(Household household, String name, LocalDateTime createdAt) {
+    private Household household(String code) {
+        var household = Household.builder().id(UUID.randomUUID()).inviteCode(code).build();
+        household.setCreatedAt(LocalDateTime.now());
+        household.setUpdatedAt(LocalDateTime.now());
+        return household;
+    }
+
+    private User user(String name, Household current, Household origin, LocalDateTime joinedAt) {
         var user = User.builder()
                 .id(UUID.randomUUID())
                 .name(name)
                 .email(name.toLowerCase() + "@test.com")
                 .password("encoded")
-                .household(household)
+                .household(current)
+                .originHousehold(origin)
+                .householdJoinedAt(joinedAt)
                 .build();
-        user.setCreatedAt(createdAt);
-        user.setUpdatedAt(createdAt);
+        user.setCreatedAt(joinedAt);
+        user.setUpdatedAt(joinedAt);
         return user;
     }
 
-    private User buildUser(Household household) {
-        return buildUser(household, "John", LocalDateTime.now());
+    private User hostOf(Household home, String name) {
+        var host = user(name, home, home, LONG_AGO);
+        home.setOwner(host);
+        return host;
     }
 
-    private Household buildHousehold(String inviteCode) {
-        var household = Household.builder().id(UUID.randomUUID()).inviteCode(inviteCode).build();
-        household.setCreatedAt(LocalDateTime.now());
-        household.setUpdatedAt(LocalDateTime.now());
-        return household;
+    private void members(Household household, User... members) {
+        when(userRepository.findAllByHouseholdId(household.getId())).thenReturn(List.of(members));
     }
 
     // ---------- getMine ----------
 
     @Test
     void getMine_throwsWhenHouseholdMissing() {
-        var household = buildHousehold("ABC123");
-        var user = buildUser(household);
-        when(householdRepository.findById(household.getId())).thenReturn(Optional.empty());
+        var home = household("ABC123");
+        var user = hostOf(home, "Ana");
+        when(householdRepository.findById(home.getId())).thenReturn(Optional.empty());
 
         assertThrows(IllegalStateException.class, () -> householdService.getMine(user));
     }
@@ -131,28 +124,38 @@ class HouseholdServiceCoverageTest {
     // ---------- regenerateInviteCode ----------
 
     @Test
-    void regenerateInviteCode_rotatesCodeAndReturnsMembers() {
-        var household = buildHousehold("OLD999");
-        var user = buildUser(household);
-        household.setOwner(user);
-        when(householdRepository.findById(household.getId())).thenReturn(Optional.of(household));
-        when(householdRepository.existsByInviteCode(any())).thenReturn(false);
-        when(userRepository.findAllByHouseholdId(household.getId())).thenReturn(List.of(user));
+    void regenerateInviteCode_hostRotatesCodeAndReturnsMembers() {
+        var home = household("OLD999");
+        var host = hostOf(home, "Ana");
+        when(householdRepository.findById(home.getId())).thenReturn(Optional.of(home));
+        members(home, host);
 
-        var response = householdService.regenerateInviteCode(user);
+        var response = householdService.regenerateInviteCode(host);
 
         assertNotNull(response.inviteCode());
         assertEquals(6, response.inviteCode().length());
         assertNotEquals("OLD999", response.inviteCode());
-        assertNotNull(household.getInviteCodeExpiresAt());
-        verify(householdRepository).save(household);
+        assertNotNull(home.getInviteCodeExpiresAt());
+        verify(householdRepository).save(home);
+    }
+
+    @Test
+    void regenerateInviteCode_guestIsForbidden() {
+        var home = household("OLD999");
+        var host = hostOf(home, "Ana");
+        var guest = user("Bruno", home, household("BRU001"), LocalDateTime.now());
+        when(householdRepository.findById(home.getId())).thenReturn(Optional.of(home));
+        members(home, host, guest);
+
+        assertThrows(NotHouseholdHostException.class, () -> householdService.regenerateInviteCode(guest));
+        assertEquals("OLD999", home.getInviteCode());
     }
 
     @Test
     void regenerateInviteCode_throwsWhenHouseholdMissing() {
-        var household = buildHousehold("ABC123");
-        var user = buildUser(household);
-        when(householdRepository.findById(household.getId())).thenReturn(Optional.empty());
+        var home = household("ABC123");
+        var user = hostOf(home, "Ana");
+        when(householdRepository.findById(home.getId())).thenReturn(Optional.empty());
 
         assertThrows(IllegalStateException.class, () -> householdService.regenerateInviteCode(user));
     }
@@ -160,29 +163,29 @@ class HouseholdServiceCoverageTest {
     // ---------- removeMember ----------
 
     @Test
-    void removeMember_hostKicks_targetReturnsToOriginWithDataRestoredAndRemainingNotified() {
-        var household = buildHousehold("FAM111");
-        var origin = buildHousehold("ORG222");
-        var actor = buildUser(household, "Host", LocalDateTime.now().minusDays(10));
-        var target = buildUser(household, "Target", LocalDateTime.now());
-        var bystander = buildUser(household, "Bystander", LocalDateTime.now().minusDays(1));
-        household.setOwner(actor);
-        when(householdRepository.findById(household.getId())).thenReturn(Optional.of(household));
-        when(userRepository.findAllByHouseholdId(household.getId())).thenReturn(List.of(actor, target, bystander));
+    void removeMember_hostKicks_targetReturnsToOriginWithRestoreAndCopy_remainingNotified() {
+        var home = household("FAM111");
+        var host = hostOf(home, "Ana");
+        var targetOrigin = household("TGT001");
+        var joinedAt = LocalDateTime.now().minusDays(4);
+        var target = user("Target", home, targetOrigin, joinedAt);
+        var bystander = user("Bystander", home, household("BYS001"), LocalDateTime.now().minusDays(1));
+        when(householdRepository.findById(home.getId())).thenReturn(Optional.of(home));
+        when(householdRepository.findById(targetOrigin.getId())).thenReturn(Optional.of(targetOrigin));
+        members(home, host, target, bystander);
         when(userRepository.findById(target.getId())).thenReturn(Optional.of(target));
-        when(receiptRepository.findFirstByUserIdAndOriginHouseholdIdNotOrderByCreatedAtAsc(target.getId(), household.getId()))
-                .thenReturn(Optional.of(Receipt.builder().originHousehold(origin).build()));
-        when(householdRepository.findById(origin.getId())).thenReturn(Optional.of(origin));
 
-        var response = householdService.removeMember(actor, target.getId());
+        var response = householdService.removeMember(host, target.getId());
 
-        assertEquals(origin.getId(), target.getHousehold().getId());
-        assertEquals(target, origin.getOwner(), "kicked member hosts the home they return to");
-        assertEquals(household.getId(), response.id());
+        assertEquals(targetOrigin.getId(), target.getHousehold().getId());
+        assertEquals(target, targetOrigin.getOwner(), "kicked member hosts their own household again");
+        assertEquals(home.getId(), response.id());
         assertEquals(2, response.members().size());
-        verify(mergeService).restoreOriginals(origin);
+        verify(mergeService).restoreOriginals(targetOrigin);
+        verify(mergeService).copyGeneratedSince(home, targetOrigin, joinedAt);
         verify(userRepository).save(target);
-        verify(householdCacheGen).bump(household.getId());
+        verify(householdCacheGen).bump(home.getId());
+        assertEquals(host, home.getOwner(), "host unchanged");
         // bystander is told; the actor already knows
         var captor = ArgumentCaptor.forClass(NotificationPayload.class);
         verify(notificationService).notifyAfterCommit(captor.capture());
@@ -192,83 +195,79 @@ class HouseholdServiceCoverageTest {
 
     @Test
     void removeMember_nonHost_isForbidden() {
-        var household = buildHousehold("FAM111");
-        var host = buildUser(household, "Host", LocalDateTime.now().minusDays(10));
-        var actor = buildUser(household, "Member", LocalDateTime.now());
-        var target = buildUser(household, "Target", LocalDateTime.now());
-        household.setOwner(host);
-        when(householdRepository.findById(household.getId())).thenReturn(Optional.of(household));
-        when(userRepository.findAllByHouseholdId(household.getId())).thenReturn(List.of(host, actor, target));
+        var home = household("FAM111");
+        var host = hostOf(home, "Ana");
+        var actor = user("Member", home, household("MEM001"), LocalDateTime.now());
+        var target = user("Target", home, household("TGT001"), LocalDateTime.now());
+        when(householdRepository.findById(home.getId())).thenReturn(Optional.of(home));
+        members(home, host, actor, target);
         var targetId = target.getId();
 
         assertThrows(NotHouseholdHostException.class, () -> householdService.removeMember(actor, targetId));
         verify(userRepository, never()).save(any());
         verify(mergeService, never()).restoreOriginals(any());
+        verify(mergeService, never()).copyGeneratedSince(any(), any(), any());
     }
 
     @Test
-    void removeMember_legacyHouseholdWithoutHost_mostSeniorMemberIsHost() {
-        var household = buildHousehold("FAM111");
-        var elder = buildUser(household, "Elder", LocalDateTime.now().minusDays(10));
-        var newer = buildUser(household, "Newer", LocalDateTime.now());
-        when(householdRepository.findById(household.getId())).thenReturn(Optional.of(household));
-        when(userRepository.findAllByHouseholdId(household.getId())).thenReturn(List.of(newer, elder));
+    void removeMember_legacyHouseholdWithoutHost_longestStandingMemberIsHost() {
+        var home = household("FAM111");
+        var elder = user("Elder", home, home, LONG_AGO);
+        var newer = user("Newer", home, household("NEW001"), LocalDateTime.now());
+        when(householdRepository.findById(home.getId())).thenReturn(Optional.of(home));
+        members(home, newer, elder);
         var elderId = elder.getId();
 
         assertThrows(NotHouseholdHostException.class, () -> householdService.removeMember(newer, elderId));
-        assertEquals(elder, household.getOwner());
+        assertEquals(elder, home.getOwner());
     }
 
     @Test
     void removeMember_throwsWhenActorTriesToKickThemselves() {
-        var household = buildHousehold("FAM111");
-        var actor = buildUser(household);
-        household.setOwner(actor);
-        when(householdRepository.findById(household.getId())).thenReturn(Optional.of(household));
-        when(userRepository.findAllByHouseholdId(household.getId())).thenReturn(List.of(actor));
-        var actorId = actor.getId();
+        var home = household("FAM111");
+        var host = hostOf(home, "Ana");
+        when(householdRepository.findById(home.getId())).thenReturn(Optional.of(home));
+        members(home, host);
+        var actorId = host.getId();
 
-        assertThrows(IllegalArgumentException.class, () -> householdService.removeMember(actor, actorId));
+        assertThrows(IllegalArgumentException.class, () -> householdService.removeMember(host, actorId));
         verify(userRepository, never()).save(any());
     }
 
     @Test
     void removeMember_throwsWhenActorHouseholdMissing() {
-        var household = buildHousehold("FAM111");
-        var actor = buildUser(household);
-        when(householdRepository.findById(household.getId())).thenReturn(Optional.empty());
+        var home = household("FAM111");
+        var host = hostOf(home, "Ana");
+        when(householdRepository.findById(home.getId())).thenReturn(Optional.empty());
         var memberId = UUID.randomUUID();
 
-        assertThrows(IllegalStateException.class,
-                () -> householdService.removeMember(actor, memberId));
+        assertThrows(IllegalStateException.class, () -> householdService.removeMember(host, memberId));
     }
 
     @Test
     void removeMember_throwsWhenTargetNotFound() {
-        var household = buildHousehold("FAM111");
-        var actor = buildUser(household);
-        household.setOwner(actor);
+        var home = household("FAM111");
+        var host = hostOf(home, "Ana");
         var memberId = UUID.randomUUID();
-        when(householdRepository.findById(household.getId())).thenReturn(Optional.of(household));
-        when(userRepository.findAllByHouseholdId(household.getId())).thenReturn(List.of(actor));
+        when(householdRepository.findById(home.getId())).thenReturn(Optional.of(home));
+        members(home, host);
         when(userRepository.findById(memberId)).thenReturn(Optional.empty());
 
-        assertThrows(NotInHouseholdException.class, () -> householdService.removeMember(actor, memberId));
+        assertThrows(NotInHouseholdException.class, () -> householdService.removeMember(host, memberId));
     }
 
     @Test
     void removeMember_throwsWhenTargetInDifferentHousehold() {
-        var actorHousehold = buildHousehold("FAM111");
-        var otherHousehold = buildHousehold("OTHER2");
-        var actor = buildUser(actorHousehold);
-        var target = buildUser(otherHousehold);
-        actorHousehold.setOwner(actor);
-        when(householdRepository.findById(actorHousehold.getId())).thenReturn(Optional.of(actorHousehold));
-        when(userRepository.findAllByHouseholdId(actorHousehold.getId())).thenReturn(List.of(actor));
+        var home = household("FAM111");
+        var host = hostOf(home, "Ana");
+        var other = household("OTHER2");
+        var target = hostOf(other, "Bruno");
+        when(householdRepository.findById(home.getId())).thenReturn(Optional.of(home));
+        members(home, host);
         when(userRepository.findById(target.getId())).thenReturn(Optional.of(target));
         var targetId = target.getId();
 
-        assertThrows(NotInHouseholdException.class, () -> householdService.removeMember(actor, targetId));
+        assertThrows(NotInHouseholdException.class, () -> householdService.removeMember(host, targetId));
         verify(userRepository, never()).save(any());
     }
 
@@ -276,15 +275,15 @@ class HouseholdServiceCoverageTest {
 
     @Test
     void join_throwsWhenInviteCodeExpired() {
-        var current = buildHousehold("CUR123");
-        var target = buildHousehold("EXP456");
+        var home = household("CUR123");
+        var user = hostOf(home, "Ana");
+        var target = household("EXP456");
         target.setInviteCodeExpiresAt(LocalDateTime.now().minusHours(1));
-        var user = buildUser(current);
         when(householdRepository.findByInviteCode("EXP456")).thenReturn(Optional.of(target));
         var request = new JoinHouseholdRequest("exp456", null, null);
 
-        assertThrows(InvalidInviteCodeException.class,
-                () -> householdService.join(user, request));
+        assertThrows(InvalidInviteCodeException.class, () -> householdService.join(user, request));
         verify(userRepository, never()).save(any());
+        verify(mergeService, never()).merge(eq(home), any(), any());
     }
 }

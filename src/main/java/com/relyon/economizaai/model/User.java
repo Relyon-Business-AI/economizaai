@@ -112,6 +112,20 @@ public class User extends BaseEntity implements UserDetails {
     @JoinColumn(name = "household_id", nullable = false)
     private Household household;
 
+    /**
+     * The household this user "owns" and returns to when leaving a shared one — set at
+     * registration (their solo household) and never changed by joining. Nullable only
+     * because the FK is ON DELETE SET NULL; HouseholdService creates a fresh one when
+     * it's missing.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "origin_household_id")
+    private Household originHousehold;
+
+    /** When the user entered the CURRENT household. Leavers take a copy of what was generated after it. */
+    @Column(name = "household_joined_at")
+    private LocalDateTime householdJoinedAt;
+
     @Column(name = "accepted_terms_version", nullable = false, length = 20)
     private String acceptedTermsVersion;
 

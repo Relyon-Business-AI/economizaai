@@ -23,7 +23,6 @@ import com.relyon.economizaai.service.privacy.LogMasker;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,6 +35,27 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+/**
+ * Household membership — the rules (2026-11):
+ *
+ * <ul>
+ *   <li><b>Host</b> (anfitrião): the creator, or the guest promoted when the host left. Only
+ *       the host rotates the invite code and removes members.</li>
+ *   <li><b>Guest</b>: joined by invite. Each user carries their ORIGIN household and the
+ *       instant they JOINED the current one — nothing is deduced from receipts.</li>
+ *   <li><b>Join</b>: the guest may bring their data (moved from their origin) or leave it
+ *       parked there, intact.</li>
+ *   <li><b>Guest leaves / is removed</b>: back to the origin household with everything that
+ *       was there, plus what they brought (restored), plus a COPY of what the shared
+ *       household generated after they joined. Those who stay lose nothing.</li>
+ *   <li><b>Original host leaves</b>: a new household with a copy of everything; the oldest
+ *       guest becomes host and the household goes on with everyone else.</li>
+ *   <li><b>Promoted host leaves</b>: back to their origin like a guest.</li>
+ *   <li><b>Last member leaves</b>: the data MOVES to their origin (nobody stays), duplicates
+ *       are dropped, the empty household is deleted.</li>
+ *   <li>A host alone in their own household has nowhere to go: leave is refused.</li>
+ * </ul>
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -47,9 +67,11 @@ public class HouseholdService {
     private static final int INVITE_TTL_HOURS = 48;
     private static final String HOUSEHOLD_MISSING_MSG = "Household missing for user ";
 
-    // Oldest account first — the deterministic "who inherits the host role" order.
+    // "Oldest guest" = who has been in the household longest; account age breaks ties
+    // (and covers legacy rows backfilled without a join instant).
     private static final Comparator<User> BY_SENIORITY =
-            Comparator.comparing(User::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder()))
+            Comparator.comparing(User::getHouseholdJoinedAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                    .thenComparing(User::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder()))
                     .thenComparing(User::getId);
 
     private final HouseholdRepository householdRepository;
@@ -62,31 +84,7 @@ public class HouseholdService {
     private final LocalizedMessageService messageService;
     private final SecureRandom random = new SecureRandom();
 
-    // Merge/restore: ON since household sharing launched (2026-11). Joining MOVES the
-    // joiner's data into the shared household; leaving/kick restores what they brought.
-    // Off = Phase 0 (membership-only): data is never merged, but also never lost
-    // (provenance + delete guard keep it parked in a dormant household).
-    @Value("${economizaai.households.merge-enabled:true}")
-    private boolean mergeEnabled;
-
-    // Delete a now-empty household ONLY if it owns no data (as current home OR as the
-    // origin of data parked elsewhere awaiting restore on split). Without this guard,
-    // a 0-member household was hard-deleted, orphaning/destroying its receipts and the
-    // provenance of any data that originated there. Keeps a dormant household alive as
-    // a "home" until its data is restored or removed.
-    private void deleteHouseholdIfEmptyAndOwnsNoData(Household household) {
-        if (userRepository.countByHouseholdId(household.getId()) != 0) {
-            return;
-        }
-        var ownsData = receiptRepository.existsByHouseholdId(household.getId())
-                || receiptRepository.existsByOriginHouseholdId(household.getId());
-        if (ownsData) {
-            log.info("household.keep_dormant {} has no members but still owns data; not deleting", household.getId());
-            return;
-        }
-        householdRepository.delete(household);
-        log.info("Household {} deleted (no members left, no data)", household.getId());
-    }
+    // ---------------------------------------------------------------- creation / host
 
     @Transactional
     public Household createSoloHousehold() {
@@ -101,16 +99,24 @@ public class HouseholdService {
         return saved;
     }
 
-    /** Make {@code user} the host of a household created for them (registration, split). */
+    /**
+     * Make {@code user} the host of the household created for them (registration): it
+     * becomes their origin — the place they return to — and their membership starts now.
+     */
     @Transactional
     public void assignHost(Household household, User user) {
         household.setOwner(user);
         householdRepository.save(household);
+        user.setOriginHousehold(household);
+        user.setHouseholdJoinedAt(LocalDateTime.now());
+        userRepository.save(user);
     }
 
+    /** Host only: a new code invalidates the old one on the spot. */
     @Transactional
     public HouseholdResponse regenerateInviteCode(User user) {
         var household = loadHouseholdOf(user);
+        requireHost(user, household, membersOf(household));
         household.setInviteCode(generateUniqueInviteCode());
         household.setInviteCodeExpiresAt(LocalDateTime.now().plusHours(INVITE_TTL_HOURS));
         var saved = householdRepository.save(household);
@@ -129,36 +135,9 @@ public class HouseholdService {
         return respond(saved);
     }
 
-    /**
-     * Only the host may remove someone else. The removed member lands back in their
-     * origin household with everything they brought (same restore as leaving).
-     */
-    @Transactional
-    public HouseholdResponse removeMember(User actor, UUID memberId) {
-        var household = loadHouseholdOf(actor);
-        var members = membersOf(household);
-        requireHost(actor, household, members);
-        if (actor.getId().equals(memberId)) {
-            throw new IllegalArgumentException("Use POST /households/leave to leave on your own — kick is for others");
-        }
-        var target = userRepository.findById(memberId).orElseThrow(NotInHouseholdException::new);
-        if (!household.getId().equals(target.getHousehold().getId())) {
-            throw new NotInHouseholdException();
-        }
-        var home = relocateToHome(target);
-        householdCacheGen.bump(household.getId());
-        log.info("User {} kicked user {} from household {} (relocated to household {})",
-                LogMasker.email(actor.getEmail()), LogMasker.email(target.getEmail()), household.getId(), home.getId());
-
-        var remaining = members.stream().filter(member -> !member.getId().equals(target.getId())).toList();
-        notifyMembers(remaining, actor, NotificationType.HOUSEHOLD_MEMBER_LEFT, target.getName());
-        return HouseholdResponse.from(household, remaining);
-    }
-
     @Transactional
     public HouseholdResponse getMine(User user) {
-        var household = loadHouseholdOf(user);
-        return respond(household);
+        return respond(loadHouseholdOf(user));
     }
 
     /** What the code unlocks, shown before the user commits to joining. */
@@ -174,6 +153,14 @@ public class HouseholdService {
                 members.stream().map(member -> firstName(member.getName())).toList());
     }
 
+    // ---------------------------------------------------------------- join
+
+    /**
+     * Enter another household. If the user was sharing a house (or sitting alone in one
+     * that isn't theirs) they first depart it under the usual rules, landing at their
+     * origin; then membership moves and, when {@code bringData} isn't false, their origin's
+     * data is merged into the target. Their origin household stays alive either way.
+     */
     @Transactional
     public HouseholdResponse join(User user, JoinHouseholdRequest request) {
         var target = findValidByInviteCode(request.inviteCode());
@@ -183,99 +170,212 @@ public class HouseholdService {
         var currentMembers = membersOf(target);
         requireRoom(target, currentMembers, user);
 
-        var previous = user.getHousehold();
-        user.setHousehold(target);
-        userRepository.save(user);
-        log.info("User {} joined household {} (left {})", LogMasker.email(user.getEmail()), target.getId(), previous.getId());
+        var home = settleAtHomeBeforeJoining(user);
 
-        // Data merge runs BEFORE the delete guard so moved data lands in the target;
-        // anything shadowed (collision) stays parked on `previous`, which then keeps it
-        // alive as a dormant home for later restore. Default is to bring everything.
-        if (mergeEnabled && !Boolean.FALSE.equals(request.bringData())) {
+        user.setHousehold(target);
+        user.setHouseholdJoinedAt(LocalDateTime.now());
+        userRepository.save(user);
+        log.info("User {} joined household {} (from {})", LogMasker.email(user.getEmail()), target.getId(), home.getId());
+
+        var bringData = !Boolean.FALSE.equals(request.bringData());
+        if (bringData) {
             var categories = resolveCategories(request.mergeCategories());
-            var result = mergeService.merge(previous, target, categories);
+            var result = mergeService.merge(home, target, categories);
             log.info("join.merge user={} categories={} moved={} shadowed={}",
                     LogMasker.email(user.getEmail()), categories, result.moved(), result.shadowed());
+        } else {
+            log.info("join.keep_data_at_origin user={} origin={}", LogMasker.email(user.getEmail()), home.getId());
         }
-        householdCacheGen.bump(previous.getId());
+        householdCacheGen.bump(home.getId());
         householdCacheGen.bump(target.getId());
-
-        deleteHouseholdIfEmptyAndOwnsNoData(previous);
 
         notifyMembers(currentMembers, user, NotificationType.HOUSEHOLD_MEMBER_JOINED, user.getName());
         return respond(target);
     }
 
+    // Where the joiner's data lives right before the merge: their own household. A solo
+    // host is already home; anyone else departs their current house first.
+    private Household settleAtHomeBeforeJoining(User user) {
+        var current = user.getHousehold();
+        var members = membersOf(current);
+        if (members.size() <= 1 && isOrigin(user, current)) {
+            return current;
+        }
+        var home = departCurrent(user, current, members);
+        var remaining = members.stream().filter(member -> !member.getId().equals(user.getId())).toList();
+        notifyMembers(remaining, user, NotificationType.HOUSEHOLD_MEMBER_LEFT, user.getName());
+        return home;
+    }
+
+    // ---------------------------------------------------------------- leave / remove
+
     @Transactional
     public HouseholdResponse leave(User user) {
-        var previous = user.getHousehold();
-        var members = membersOf(previous);
-        if (members.size() <= 1) {
+        var current = user.getHousehold();
+        var members = membersOf(current);
+        if (members.size() <= 1 && isOrigin(user, current)) {
             throw new SoloHouseholdLeaveException();
         }
-
-        var home = relocateToHome(user);
-        householdCacheGen.bump(previous.getId());
-        log.info("User {} left household {} for household {}", LogMasker.email(user.getEmail()), previous.getId(), home.getId());
+        var home = departCurrent(user, current, members);
+        log.info("User {} left household {} for household {}", LogMasker.email(user.getEmail()), current.getId(), home.getId());
 
         var remaining = members.stream().filter(member -> !member.getId().equals(user.getId())).toList();
-        transferHostIfLeaving(previous, user, remaining);
-        deleteHouseholdIfEmptyAndOwnsNoData(previous);
-
         notifyMembers(remaining, user, NotificationType.HOUSEHOLD_MEMBER_LEFT, user.getName());
         return HouseholdResponse.from(home, List.of(user));
     }
 
-    // ---------- membership moves ----------
+    /** Host only. The removed member leaves exactly as if they had chosen to. */
+    @Transactional
+    public HouseholdResponse removeMember(User actor, UUID memberId) {
+        var household = loadHouseholdOf(actor);
+        var members = membersOf(household);
+        requireHost(actor, household, members);
+        if (actor.getId().equals(memberId)) {
+            throw new IllegalArgumentException("Use POST /households/leave to leave on your own — kick is for others");
+        }
+        var target = userRepository.findById(memberId).orElseThrow(NotInHouseholdException::new);
+        if (!household.getId().equals(target.getHousehold().getId())) {
+            throw new NotInHouseholdException();
+        }
+        var home = departAsGuest(target, household, members);
+        log.info("User {} kicked user {} from household {} (relocated to household {})",
+                LogMasker.email(actor.getEmail()), LogMasker.email(target.getEmail()), household.getId(), home.getId());
+
+        var remaining = members.stream().filter(member -> !member.getId().equals(target.getId())).toList();
+        notifyMembers(remaining, actor, NotificationType.HOUSEHOLD_MEMBER_LEFT, target.getName());
+        return HouseholdResponse.from(household, remaining);
+    }
+
+    // ---------------------------------------------------------------- departure engine
+
+    /** Applies the departure rules for {@code user} leaving {@code current}; returns where they live now. */
+    private Household departCurrent(User user, Household current, List<User> members) {
+        if (members.size() <= 1) {
+            return departAsLastMember(user, current);
+        }
+        if (isHostOf(user, current) && isOrigin(user, current)) {
+            return departAsOriginalHost(user, current, members);
+        }
+        return departAsGuest(user, current, members);
+    }
 
     /**
-     * Where a leaver (or kicked member) lands. With merge on: their dormant ORIGIN
-     * household if one still exists (data they brought in, kept as their "home"), with
-     * everything that originated there restored — including rows shadowed (parked)
-     * during the merge. Otherwise a fresh solo household. They host wherever they land.
+     * Guest (or promoted host) leaving: back to origin with everything that was there,
+     * what they brought (restored) and a copy of what was generated since they joined.
+     * If they hosted, the oldest remaining guest inherits.
      */
-    private Household relocateToHome(User user) {
-        Household home;
-        if (mergeEnabled) {
-            home = reclaimOriginHomeOrFresh(user);
-            user.setHousehold(home);
-            userRepository.save(user);
-            var restored = mergeService.restoreOriginals(home);
-            log.info("relocate.restore user={} home={} restored={}",
-                    LogMasker.email(user.getEmail()), home.getId(), restored.moved());
-        } else {
-            home = createSoloHousehold();
-            user.setHousehold(home);
-            userRepository.save(user);
+    private Household departAsGuest(User user, Household current, List<User> members) {
+        var joinedAt = user.getHouseholdJoinedAt();
+        var home = returnHome(user, current);
+        moveUser(user, home);
+        var restored = mergeService.restoreOriginals(home);
+        var copied = mergeService.copyGeneratedSince(current, home, joinedAt);
+        log.info("depart.guest user={} from={} home={} restored={} copied={}",
+                LogMasker.email(user.getEmail()), current.getId(), home.getId(), restored.moved(), copied);
+        if (isHostOf(user, current)) {
+            transferHost(current, remainingWithout(members, user));
         }
-        if (home.getOwner() == null) {
-            home.setOwner(user);
-            home = householdRepository.save(home);
-        }
+        bumpBoth(current, home);
+        return home;
+    }
+
+    /** Original host leaving a shared household: fresh household with a copy of everything; oldest guest inherits. */
+    private Household departAsOriginalHost(User user, Household current, List<User> members) {
+        var home = createSoloHouseholdFor(user);
+        moveUser(user, home);
+        var copied = mergeService.copyGeneratedSince(current, home, null);
+        log.info("depart.original_host user={} from={} home={} copied={}",
+                LogMasker.email(user.getEmail()), current.getId(), home.getId(), copied);
+        transferHost(current, remainingWithout(members, user));
+        bumpBoth(current, home);
+        return home;
+    }
+
+    /** Nobody stays: the data moves home with the leaver, duplicates are dropped, the household is deleted. */
+    private Household departAsLastMember(User user, Household current) {
+        var home = returnHome(user, current);
+        moveUser(user, home);
+        var result = mergeService.evacuate(current, home);
+        log.info("depart.last_member user={} from={} home={} moved={} dropped={}",
+                LogMasker.email(user.getEmail()), current.getId(), home.getId(), result.moved(), result.shadowed());
+        deleteHouseholdIfOrphan(current);
         householdCacheGen.bump(home.getId());
         return home;
     }
 
-    // The leaver's "home" to return to: their data's origin household if one still
-    // exists and differs from the one they're leaving; else a fresh solo household.
-    // We read origin from the leaver's OWN receipts (user_id is the stable owner), so
-    // a user always lands back where their data came from.
-    private Household reclaimOriginHomeOrFresh(User user) {
-        var currentId = user.getHousehold().getId();
-        var originId = receiptRepository.findFirstByUserIdAndOriginHouseholdIdNotOrderByCreatedAtAsc(
-                        user.getId(), currentId)
-                .map(receipt -> receipt.getOriginHousehold().getId())
-                .orElse(null);
-        if (originId != null) {
-            var origin = householdRepository.findById(originId).orElse(null);
-            if (origin != null) {
-                return origin;
+    // The leaver's own household — their recorded origin when it still exists (and isn't
+    // the one being left); otherwise a brand-new one that becomes their origin.
+    private Household returnHome(User user, Household current) {
+        var origin = user.getOriginHousehold();
+        if (origin != null && !origin.getId().equals(current.getId())) {
+            var alive = householdRepository.findById(origin.getId()).orElse(null);
+            if (alive != null) {
+                if (alive.getOwner() == null) {
+                    alive.setOwner(user);
+                    alive = householdRepository.save(alive);
+                }
+                return alive;
             }
         }
-        return createSoloHousehold();
+        return createSoloHouseholdFor(user);
     }
 
-    // ---------- host (anfitrião) ----------
+    private Household createSoloHouseholdFor(User user) {
+        var fresh = createSoloHousehold();
+        fresh.setOwner(user);
+        fresh = householdRepository.save(fresh);
+        user.setOriginHousehold(fresh);
+        return fresh;
+    }
+
+    private void moveUser(User user, Household home) {
+        user.setHousehold(home);
+        user.setHouseholdJoinedAt(LocalDateTime.now());
+        if (user.getOriginHousehold() == null) {
+            user.setOriginHousehold(home);
+        }
+        userRepository.save(user);
+    }
+
+    private void bumpBoth(Household first, Household second) {
+        householdCacheGen.bump(first.getId());
+        householdCacheGen.bump(second.getId());
+    }
+
+    private static List<User> remainingWithout(List<User> members, User leaver) {
+        return members.stream().filter(member -> !member.getId().equals(leaver.getId())).toList();
+    }
+
+    // A household with no members, no data and nobody calling it home has no reason to exist.
+    private void deleteHouseholdIfOrphan(Household household) {
+        if (userRepository.countByHouseholdId(household.getId()) != 0) {
+            return;
+        }
+        if (userRepository.existsByOriginHouseholdId(household.getId())) {
+            log.info("household.keep_origin {} has no members but is someone's origin; not deleting", household.getId());
+            return;
+        }
+        var ownsData = receiptRepository.existsByHouseholdId(household.getId())
+                || receiptRepository.existsByOriginHouseholdId(household.getId());
+        if (ownsData) {
+            log.info("household.keep_dormant {} has no members but still owns data; not deleting", household.getId());
+            return;
+        }
+        householdRepository.delete(household);
+        log.info("Household {} deleted (no members left, no data)", household.getId());
+    }
+
+    // ---------------------------------------------------------------- host (anfitrião)
+
+    private boolean isHostOf(User user, Household household) {
+        var owner = household.getOwner();
+        return owner != null && owner.getId().equals(user.getId());
+    }
+
+    private static boolean isOrigin(User user, Household household) {
+        var origin = user.getOriginHousehold();
+        return origin != null && origin.getId().equals(household.getId());
+    }
 
     private void requireHost(User actor, Household household, List<User> members) {
         var host = resolveHost(household, members);
@@ -286,7 +386,7 @@ public class HouseholdService {
 
     /**
      * The host, self-healing a missing or stale one (account deleted, legacy row) to the
-     * most senior current member. Null only for an empty household.
+     * longest-standing current member. Null only for an empty household.
      */
     private User resolveHost(Household household, List<User> members) {
         var owner = household.getOwner();
@@ -297,7 +397,12 @@ public class HouseholdService {
                 return stillMember.get();
             }
         }
-        var heir = members.stream().min(BY_SENIORITY).orElse(null);
+        return transferHost(household, members);
+    }
+
+    /** The oldest guest becomes host (rule 14). Returns the new host, or null when nobody is left. */
+    private User transferHost(Household household, List<User> remaining) {
+        var heir = remaining.stream().min(BY_SENIORITY).orElse(null);
         if (heir != null) {
             household.setOwner(heir);
             householdRepository.save(household);
@@ -306,15 +411,7 @@ public class HouseholdService {
         return heir;
     }
 
-    private void transferHostIfLeaving(Household household, User leaver, List<User> remaining) {
-        var owner = household.getOwner();
-        if (owner != null && !owner.getId().equals(leaver.getId())) {
-            return;
-        }
-        resolveHost(household, remaining);
-    }
-
-    // ---------- capacity ----------
+    // ---------------------------------------------------------------- capacity
 
     private void requireRoom(Household target, List<User> currentMembers, User joiner) {
         var everyone = new ArrayList<>(currentMembers);
@@ -327,7 +424,7 @@ public class HouseholdService {
         }
     }
 
-    // ---------- notifications ----------
+    // ---------------------------------------------------------------- notifications
 
     private void notifyMembers(List<User> recipients, User actor, NotificationType type, String subjectName) {
         var keyPrefix = type == NotificationType.HOUSEHOLD_MEMBER_JOINED
@@ -342,7 +439,7 @@ public class HouseholdService {
                 });
     }
 
-    // ---------- helpers ----------
+    // ---------------------------------------------------------------- helpers
 
     private Household loadHouseholdOf(User user) {
         return householdRepository.findById(user.getHousehold().getId())

@@ -29,6 +29,7 @@ import org.hibernate.annotations.OnDeleteAction;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.UUID;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -138,6 +139,14 @@ public class Receipt extends BaseEntity implements HouseholdScoped {
     @Column(name = "index_eligible", nullable = false)
     @Builder.Default
     private boolean indexEligible = true;
+
+    /**
+     * Set on receipts duplicated for a member who left a shared household (they take a
+     * copy of what was generated while they were in). Copies are never index-eligible —
+     * the original already contributed its prices.
+     */
+    @Column(name = "copied_from_receipt_id")
+    private UUID copiedFromReceiptId;
 
     // BatchSize: list endpoints (GET /receipts, dashboard) read items per row —
     // batching turns that page-sized N+1 into one IN query.
