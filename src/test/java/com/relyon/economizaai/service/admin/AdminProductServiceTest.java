@@ -341,4 +341,72 @@ class AdminProductServiceTest {
         when(productRepository.findById(id)).thenReturn(Optional.empty());
         assertThrows(ProductNotFoundException.class, () -> service.delete(id, false));
     }
+
+    @Test
+    void variantConflicts_flagsProductWithTwoDistinctRealEans() {
+        var productId = UUID.randomUUID();
+        var product = Product.builder().id(productId).ean("7899516211450")
+                .normalizedName("CHOCOLATE DIVINE 70G").build();
+        when(receiptItemRepository.findProductIdsWithMultipleItemEans(any()))
+                .thenReturn(List.of(productId));
+        when(receiptItemRepository.findItemEanAndDescriptionByProductIds(List.of(productId)))
+                .thenReturn(List.of(
+                        new Object[]{productId, "CHOCOLATE DIVINE 70G AO LEITE SGLUT", "7899516211450"},
+                        new Object[]{productId, "CHOC DIVINE 50% ZERO 70G", "7899516299999"}));
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+
+        var response = service.variantConflicts(200);
+
+        assertEquals(1, response.conflicts().size());
+        var conflict = response.conflicts().get(0);
+        assertEquals(productId, conflict.productId());
+        assertEquals(2, conflict.distinctRealEans().size());
+        assertEquals(2, conflict.samples().size());
+    }
+
+    @Test
+    void variantConflicts_flagsProductWithInconsistentSignatures_evenWithPlaceholderEans() {
+        var productId = UUID.randomUUID();
+        var product = Product.builder().id(productId).ean("7899516211450")
+                .normalizedName("CHOCOLATE DIVINE 70G").build();
+        when(receiptItemRepository.findProductIdsWithMultipleItemEans(any()))
+                .thenReturn(List.of(productId));
+        // Both placeholder EANs → only ONE distinct real EAN, but the signatures differ
+        // ("ao leite sglut" vs "50% zero") — still a genuine mis-merge.
+        when(receiptItemRepository.findItemEanAndDescriptionByProductIds(List.of(productId)))
+                .thenReturn(List.of(
+                        new Object[]{productId, "CHOC DIVINE 70G AO LEITE SGLUT", "00000001124676"},
+                        new Object[]{productId, "CHOC DIVINE 50% ZERO 70G", "00000009999999"}));
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+
+        var response = service.variantConflicts(200);
+
+        assertEquals(1, response.conflicts().size());
+        assertTrue(response.conflicts().get(0).distinctSignatures().size() >= 2);
+    }
+
+    @Test
+    void variantConflicts_doesNotFlagConsistentSameVariantProduct() {
+        var productId = UUID.randomUUID();
+        var product = Product.builder().id(productId).ean("7899516211450")
+                .normalizedName("CHOCOLATE DIVINE 70G AO LEITE").build();
+        when(receiptItemRepository.findProductIdsWithMultipleItemEans(any()))
+                .thenReturn(List.of(productId));
+        // Same variant, same single real EAN with a placeholder alias — NOT a conflict.
+        when(receiptItemRepository.findItemEanAndDescriptionByProductIds(List.of(productId)))
+                .thenReturn(List.of(
+                        new Object[]{productId, "CHOC DIVINE 70G AO LEITE", "7899516211450"},
+                        new Object[]{productId, "CHOC DIVINE 70G AO LEITE", "00000001124676"}));
+
+        var response = service.variantConflicts(200);
+
+        assertTrue(response.conflicts().isEmpty());
+        verify(productRepository, never()).findById(any());
+    }
+
+    @Test
+    void variantConflicts_emptyWhenNoCandidates() {
+        when(receiptItemRepository.findProductIdsWithMultipleItemEans(any())).thenReturn(List.of());
+        assertTrue(service.variantConflicts(200).conflicts().isEmpty());
+    }
 }

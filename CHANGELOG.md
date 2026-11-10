@@ -1,5 +1,33 @@
 # economizai — what's new
 
+## 2026-11-10 — Backfill de cidade/UF nas observações de preço
+
+- **Migração de dados V142** (só preenche NULLs, nunca sobrescreve): completa `city`/`state` das
+  observações de preço a partir do `market_locations` (por CNPJ) e, onde ainda faltar, a UF a partir
+  da nota de origem (via a tabela de auditoria → `receipts.uf`). Fecha metade das observações sem UF.
+- **Propagação nova**: quando um mercado geocodifica, suas observações antigas (city/state nulos)
+  herdam cidade/UF na hora — antes o snapshot só era gravado no momento da observação e nunca atualizado.
+- (O re-geocode dos mercados que falharam é tratado pela V141 — zera `geocode_attempts` dos sem-coordenada.)
+
+## 2026-11-10 — Promoção da comunidade: "% mais barato" ignora preços-fora-da-curva
+
+- **`GET /price-index/promos/feed`** e a notificação "N% mais barato" não computam mais o desconto
+  contra uma observação-fora-da-curva. O detector agora: (1) ignora observações marcadas `is_outlier`,
+  (2) apara outliers por MAD (mediana ± desvio robusto) na janela recente E no baseline, e (3) exige um
+  pequeno CLUSTER recente (≥3 observações não-outlier) — um único preço errado (ex.: R$2,98 quando o
+  típico é ~R$5,49) não fabrica mais um "42% mais barato". O `dropPct` exibido reflete uma comparação real.
+
+## 2026-11-10 — Canonicalização por variante (não mistura mais "zero" com "ao leite")
+
+- **Matcher de produto agora respeita a variante.** Dois itens só viram o MESMO produto se os
+  tokens distintivos baterem: percentual (`50%`), `zero`/`diet`/`light`, `sem açúcar`/`s/açúcar`,
+  `sem glúten`/`sglut`, `sem lactose`, e sabor (chocolate/morango/…). Antes, "CHOC DIVINE 50% ZERO"
+  (EAN interno) era absorvido em "CHOCOLATE DIVINE AO LEITE SGLUT" (EAN real) só pelo nome — corrigido.
+- **EAN real manda.** Um EAN placeholder/interno (`00000001124676`) não é mais absorvido num produto
+  com EAN real DIFERENTE só pelo nome; dois EANs reais distintos nunca se fundem por nome/metadados.
+- **Admin:** `GET /api/v1/admin/products/variant-conflicts` — relatório (só leitura) de produtos que
+  parecem mal-fundidos; não altera nada, é pra revisão manual do dono.
+
 ## 2026-11-10 — Lojas sem localização voltam a ser geocodificadas
 
 - ~Metade das lojas estava **sem coordenadas e sem UF** (o endereço do SEFAZ, `"RUA X , 34 , , CENTRO , CIDADE , UF"`,

@@ -9,6 +9,7 @@ import com.relyon.economizaai.model.enums.MerchantSegment;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.MarketChainRepository;
 import com.relyon.economizaai.repository.MarketLocationRepository;
+import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.service.ContactService;
 import com.relyon.economizaai.service.geo.NominatimGeocoder.GeocodeResult;
@@ -40,6 +41,7 @@ import static org.mockito.Mockito.when;
 class MarketLocationServiceTest {
 
     @Mock private MarketLocationRepository repository;
+    @Mock private PriceObservationRepository priceObservationRepository;
     @Mock private MarketChainRepository chainRepository;
     @Mock private CategoryResolver categoryResolver;
     @Mock private NominatimGeocoder geocoder;
@@ -52,8 +54,8 @@ class MarketLocationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new MarketLocationService(repository, chainRepository, geocoder, cnpjActivityClient, cepLocationService, productRepository,
-                categoryResolver, contactService);
+        service = new MarketLocationService(repository, priceObservationRepository, chainRepository, geocoder,
+                cnpjActivityClient, cepLocationService, productRepository, categoryResolver, contactService);
     }
 
     // ---------- registerMarketFromReceipt ----------
@@ -117,6 +119,21 @@ class MarketLocationServiceTest {
         assertThat(market.getGeocodedAt()).isNotNull();
         assertThat(market.getGeocodeFailedAt()).isNull();
         verify(repository).save(market);
+        // city/state propagated to this market's previously-null observations
+        verify(priceObservationRepository).backfillLocationForMarket("11111111000111", "Porto Alegre", "RS");
+    }
+
+    @Test
+    void geocodeOne_onMiss_doesNotPropagateLocation() {
+        var market = MarketLocation.builder()
+                .cnpj("22222222000122").cnpjRoot("22222222")
+                .address("Nowhere").geocodeAttempts(0).build();
+        when(geocoder.geocode(any())).thenReturn(Optional.empty());
+        when(repository.findById(any())).thenReturn(Optional.of(market));
+
+        service.geocodeOne(market);
+
+        verify(priceObservationRepository, never()).backfillLocationForMarket(any(), any(), any());
     }
 
     @Test

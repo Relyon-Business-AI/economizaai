@@ -7,6 +7,9 @@ import com.relyon.economizaai.dto.response.MissingBrandProductResponse;
 import com.relyon.economizaai.dto.response.BrandBackfillResponse;
 import com.relyon.economizaai.dto.response.BrandCoverageReportResponse;
 import com.relyon.economizaai.dto.response.UnmatchedReportResponse;
+import com.relyon.economizaai.dto.response.VariantConflictResponse;
+import com.relyon.economizaai.dto.response.VariantConflictResponse.ConflictingItem;
+import com.relyon.economizaai.dto.response.VariantConflictResponse.VariantConflict;
 import com.relyon.economizaai.dto.response.ProductDeletionResponse;
 import com.relyon.economizaai.dto.response.ProductMergeResultResponse;
 import com.relyon.economizaai.dto.response.ProductResponse;
@@ -29,6 +32,8 @@ import com.relyon.economizaai.repository.ShoppingListItemRepository;
 import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.dto.response.TaxonomyCoverageResponse;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
+import com.relyon.economizaai.service.canonicalization.EanAuthority;
+import com.relyon.economizaai.service.canonicalization.VariantDiscriminator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -303,6 +308,76 @@ public class AdminProductService {
         }
         return result;
     }
+
+    /**
+     * READ-ONLY audit of EXISTING products that look mis-merged: a single
+     * canonical product whose linked (confirmed, non-excluded) items carry MORE
+     * THAN ONE distinct REAL EAN, or inconsistent distinguishing-token
+     * signatures (the "CHOC DIVINE 50% ZERO" vs "CHOCOLATE DIVINE AO LEITE
+     * SGLUT" case). Mutates NOTHING — it only reports product id + the
+     * conflicting item descriptions/EANs for the owner to review and decide on a
+     * manual split. Cap bounds the SQL pre-filter.
+     */
+    @Transactional(readOnly = true)
+    public VariantConflictResponse variantConflicts(int maxProducts) {
+        var cap = Math.max(1, Math.min(maxProducts, 500));
+        var candidateIds = receiptItemRepository.findProductIdsWithMultipleItemEans(PageRequest.of(0, cap));
+        if (candidateIds.isEmpty()) return new VariantConflictResponse(List.of());
+
+        var itemsByProduct = new LinkedHashMap<UUID, List<ConflictItem>>();
+        for (var row : receiptItemRepository.findItemEanAndDescriptionByProductIds(candidateIds)) {
+            var productId = (UUID) row[0];
+            var description = (String) row[1];
+            var ean = (String) row[2];
+            itemsByProduct.computeIfAbsent(productId, key -> new ArrayList<>())
+                    .add(new ConflictItem(description, ean, signatureKey(description)));
+        }
+
+        var conflicts = new ArrayList<VariantConflict>();
+        for (var productId : candidateIds) {
+            var items = itemsByProduct.get(productId);
+            if (items == null) continue;
+            var conflict = buildConflict(productId, items);
+            if (conflict != null) conflicts.add(conflict);
+        }
+        conflicts.sort((left, right) -> Integer.compare(
+                right.distinctRealEans().size(), left.distinctRealEans().size()));
+        log.info("admin.product.variant_conflicts candidates={} flagged={}", candidateIds.size(), conflicts.size());
+        return new VariantConflictResponse(conflicts);
+    }
+
+    private VariantConflict buildConflict(UUID productId, List<ConflictItem> items) {
+        var distinctRealEans = items.stream()
+                .map(ConflictItem::ean)
+                .filter(EanAuthority::isReal)
+                .map(String::trim)
+                .distinct()
+                .sorted()
+                .toList();
+        var distinctSignatures = items.stream()
+                .map(ConflictItem::signature)
+                .distinct()
+                .sorted()
+                .toList();
+        // Flag only genuine conflicts: two distinct REAL EANs (two products), or
+        // inconsistent distinguishing-token signatures (a merged variant).
+        if (distinctRealEans.size() < 2 && distinctSignatures.size() < 2) return null;
+        var product = productRepository.findById(productId).orElse(null);
+        if (product == null) return null;
+        var samples = items.stream()
+                .limit(SAMPLE_DESCRIPTION_LIMIT)
+                .map(item -> new ConflictingItem(item.description(), item.ean(), item.signature()))
+                .toList();
+        return new VariantConflict(productId, product.getNormalizedName(), product.getEan(),
+                distinctRealEans, distinctSignatures, samples);
+    }
+
+    /** Stable string form of an item's distinguishing-token signature, for grouping/report. */
+    private static String signatureKey(String rawDescription) {
+        return String.join(",", VariantDiscriminator.signature(rawDescription));
+    }
+
+    private record ConflictItem(String description, String ean, String signature) {}
 
     /**
      * Merges {@code absorbed} into {@code survivor}: aliases, receipt items,

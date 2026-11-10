@@ -43,6 +43,7 @@ import com.relyon.economizaai.dto.response.IngestionHealthResponse;
 import com.relyon.economizaai.dto.response.MarketIntelResponse;
 import com.relyon.economizaai.dto.response.NotificationEffectivenessResponse;
 import com.relyon.economizaai.dto.response.UnmatchedReportResponse;
+import com.relyon.economizaai.dto.response.VariantConflictResponse;
 import com.relyon.economizaai.dto.response.AdminUserSummaryResponse;
 import com.relyon.economizaai.dto.response.DuplicateProductGroupResponse;
 import com.relyon.economizaai.dto.response.GreyMerchantResponse;
@@ -775,6 +776,18 @@ public class AdminController {
     @GetMapping("/products/duplicates")
     public ResponseEntity<List<DuplicateProductGroupResponse>> listDuplicates() {
         return ResponseEntity.ok(adminProductService.listDuplicateGroups());
+    }
+
+    /**
+     * READ-ONLY audit of EXISTING products that look mis-merged: a single product
+     * whose linked items carry more than one distinct REAL EAN, or inconsistent
+     * distinguishing-token signatures (variants wrongly collapsed). Reports the
+     * product + conflicting item names/EANs for a MANUAL review — mutates nothing.
+     */
+    @GetMapping("/products/variant-conflicts")
+    public ResponseEntity<VariantConflictResponse> variantConflicts(
+            @RequestParam(defaultValue = "200") int max) {
+        return ResponseEntity.ok(adminProductService.variantConflicts(max));
     }
 
     @PostMapping("/products/{id}/merge")
