@@ -40,7 +40,9 @@ mirror entries here.
   (`application-lowmem.yaml`): lazy-init (@Scheduled segue eager), backfills de boot desligados
   (`economizaai.startup-backfills.enabled=false`), jobs com initial-delay de 10 min+ (o dev dorme
   em 15, então quase nunca rodam lá), Tomcat 20 threads, Hikari 5. Flags da JVM atuais:
-  `-Xmx256m -XX:MaxMetaspaceSize=128m -XX:ReservedCodeCacheSize=32m` (resto igual). Efeito
+  `-Xmx240m -XX:MaxMetaspaceSize=160m -XX:ReservedCodeCacheSize=32m` (resto igual). Medido em
+  2026-11-10 com lowmem: 256/128 estoura Metaspace no 1º cadastro; 216/176 estoura heap logo após
+  o boot; 240/160 passou no smoke test do domicílio. **Não há mais folga** nos 512 MB. Efeito
   colateral: o 1º request de cada endpoint é mais lento (beans criados sob demanda) e erros de
   wiring só aparecem no uso — `LowMemProfileContextTest` resolve todos os beans pra pegar isso.
   Se voltar a estourar mesmo assim, o caminho é plano maior, não mais flags.
