@@ -44,6 +44,12 @@ Single round-trip returns:
 
 Each section silently degrades to empty/zero when there's nothing to show. Use this instead of fan-out calls on cold start (saves you ~5×30s on Render free tier).
 
+**`?light=true`** (the app's Home uses this): same shape, but `suggestedShoppingList` and
+`communityPromosNearby` come back empty and the server skips computing them — those two are
+the slow part (consumption predictions + nearby promo detection) and the Home doesn't render
+them. Cached 30 min per household generation (any receipt change invalidates immediately);
+`unreadNotificationCount` is always live. Supports `If-None-Match` → 304.
+
 ```
 GET /api/v1/home/availability
 ```
