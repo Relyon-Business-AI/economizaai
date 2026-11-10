@@ -693,6 +693,14 @@ PATCH  /api/v1/receipts/{id}/market { "marketName": "...", "cnpj": "14 dígitos|
                                                        verificado, livre pra corrigir). Corrigir o CNPJ
                                                        reencaixa a nota na lente certa. 400 se não for
                                                        nota de foto / não estiver em revisão / CNPJ inválido.
+PATCH  /api/v1/receipts/{id}/issued-at { "issuedAt": "2026-11-08T14:30:00" }
+                                                     → data da compra de uma nota de FOTO em revisão (hora
+                                                       local do Brasil). 400 se não for foto / não estiver
+                                                       em revisão / data no futuro ou antes de 2000.
+                                                       Nota de FOTO em revisão: `missingFields` no
+                                                       ReceiptResponse lista o que falta (ISSUED_AT, MARKET,
+                                                       ITEM_NAMES, ITEM_PRICES); confirmar com algo faltando
+                                                       → 400 localizado. Não é confirmada automaticamente.
 POST   /api/v1/receipts/items-photo                  → multipart (1+ fotos) do cupom impresso. ASSÍNCRONO:
                                                         retorna 201 com a nota em PROCESSING na hora; a visão
                                                         roda em background e a nota vira PENDING_CONFIRMATION

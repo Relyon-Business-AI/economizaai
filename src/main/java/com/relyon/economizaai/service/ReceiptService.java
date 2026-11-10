@@ -23,6 +23,8 @@ import com.relyon.economizaai.exception.InvalidItemPriceException;
 import com.relyon.economizaai.exception.InvalidCategoryTargetException;
 import com.relyon.economizaai.exception.InvalidCnpjException;
 import com.relyon.economizaai.exception.ReceiptHasUnpricedItemsException;
+import com.relyon.economizaai.exception.ReceiptPhotoIncompleteException;
+import com.relyon.economizaai.exception.InvalidIssuedAtException;
 import com.relyon.economizaai.exception.ReceiptNotEditableException;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
 import com.relyon.economizaai.exception.UnsupportedMerchantException;
@@ -31,6 +33,7 @@ import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.NotificationType;
+import com.relyon.economizaai.model.enums.PhotoReceiptField;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.model.enums.ReceiptEntryMethod;
@@ -698,12 +701,7 @@ public class ReceiptService {
     public ReceiptResponse updateMarket(User user, UUID receiptId, String marketName, String cnpj) {
         MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
         var receipt = loadOwned(user, receiptId);
-        if (receipt.getOrigin() != ReceiptOrigin.PHOTO) {
-            throw new ReceiptNotEditableException("NOT_PHOTO");
-        }
-        if (receipt.getStatus() != ReceiptStatus.PENDING_CONFIRMATION) {
-            throw new ReceiptNotEditableException(receipt.getStatus().name());
-        }
+        requireEditablePhoto(receipt);
         if (marketName != null && !marketName.isBlank()) {
             receipt.setMarketName(marketName.trim());
         }
@@ -717,6 +715,33 @@ public class ReceiptService {
         receiptRepository.save(receipt);
         log.info("receipt.market_edited rcpt={} hasCnpj={}", abbrev(receiptId), receipt.getCnpjEmitente() != null);
         return toResponse(user, receipt);
+    }
+
+    /**
+     * Sets the purchase date of a photo nota under review — the photo may not show it, and a
+     * nota without a date can't be confirmed. Rejects a date in the future or before 2000.
+     */
+    @Transactional
+    public ReceiptResponse updateIssuedAt(User user, UUID receiptId, LocalDateTime issuedAt) {
+        MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
+        var receipt = loadOwned(user, receiptId);
+        requireEditablePhoto(receipt);
+        if (issuedAt.isAfter(BrazilClock.nowDateTime()) || issuedAt.getYear() < 2000) {
+            throw new InvalidIssuedAtException();
+        }
+        receipt.setIssuedAt(issuedAt.withSecond(0).withNano(0));
+        receiptRepository.save(receipt);
+        log.info("receipt.issued_at_edited rcpt={}", abbrev(receiptId));
+        return toResponse(user, receipt);
+    }
+
+    private void requireEditablePhoto(Receipt receipt) {
+        if (receipt.getOrigin() != ReceiptOrigin.PHOTO) {
+            throw new ReceiptNotEditableException("NOT_PHOTO");
+        }
+        if (receipt.getStatus() != ReceiptStatus.PENDING_CONFIRMATION) {
+            throw new ReceiptNotEditableException(receipt.getStatus().name());
+        }
     }
 
     /**
@@ -847,8 +872,32 @@ public class ReceiptService {
         var receipt = loadOwned(user, receiptId);
         requirePending(receipt);
         applyItemExclusions(receipt, request);
+        requirePhotoHeaderAndNames(receipt);
         requireAllItemsPriced(receipt);
         return doConfirm(user, receipt);
+    }
+
+    /**
+     * A photo nota must carry what a SEFAZ nota always has before it's confirmed: purchase date,
+     * market and a name on every product (prices are checked right after, for every origin).
+     */
+    private void requirePhotoHeaderAndNames(Receipt receipt) {
+        if (receipt.getOrigin() != ReceiptOrigin.PHOTO) {
+            return;
+        }
+        var missing = PhotoReceiptCompleteness.missingFields(receipt);
+        if (missing.isEmpty() || missing.equals(List.of(PhotoReceiptField.ITEM_PRICES))) {
+            return;
+        }
+        log.info("confirm blocked photo_incomplete missing={}", missing);
+        if (missing.contains(PhotoReceiptField.ISSUED_AT)) {
+            throw new ReceiptPhotoIncompleteException("receipt.confirm.photo.missing-date");
+        }
+        if (missing.contains(PhotoReceiptField.MARKET)) {
+            throw new ReceiptPhotoIncompleteException("receipt.confirm.photo.missing-market");
+        }
+        throw new ReceiptPhotoIncompleteException("receipt.confirm.photo.missing-names",
+                String.valueOf(PhotoReceiptCompleteness.countUnnamedItems(receipt)));
     }
 
     /**
@@ -879,6 +928,12 @@ public class ReceiptService {
             return;
         }
         MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
+        // Unverified photo data the user never completed stays in review: auto-confirming it would
+        // put a nota without date/market/names (or with guessed prices) in the history and index.
+        if (receipt.getOrigin() == ReceiptOrigin.PHOTO && !PhotoReceiptCompleteness.missingFields(receipt).isEmpty()) {
+            log.debug("confirm auto-stale skipped photo_incomplete");
+            return;
+        }
         log.info("confirm auto-stale started");
         // No user to set a missing price here — drop the unpriced lines so the auto-confirm
         // stays clean (they contribute nothing anyway) instead of blocking like the manual path.

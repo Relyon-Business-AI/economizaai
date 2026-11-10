@@ -3,8 +3,10 @@ package com.relyon.economizaai.dto.response;
 import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
+import com.relyon.economizaai.model.enums.PhotoReceiptField;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
+import com.relyon.economizaai.service.PhotoReceiptCompleteness;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -37,7 +39,10 @@ public record ReceiptResponse(
         LocalDateTime createdAt,
         List<ReceiptItemResponse> items,
         // Who scanned it — the per-member attribution a shared household shows ("por Ana").
-        ScannedBy scannedBy
+        ScannedBy scannedBy,
+        // Photo nota under review only: what the user still has to fill before confirming
+        // (empty = complete). null for every other nota.
+        List<PhotoReceiptField> missingFields
 ) {
     public static ReceiptResponse from(Receipt receipt) {
         return from(receipt, Map.of(), Map.of());
@@ -125,7 +130,8 @@ public record ReceiptResponse(
                             return ReceiptItemResponse.from(item, label, suggested, nodeSlug, nodeLabel);
                         })
                         .toList(),
-                ScannedBy.of(receipt.getUser())
+                ScannedBy.of(receipt.getUser()),
+                PhotoReceiptCompleteness.missingFieldsForReview(receipt)
         );
     }
 
@@ -134,7 +140,7 @@ public record ReceiptResponse(
         return new ReceiptResponse(
                 id, chaveAcesso, qrPayload, uf, cnpjEmitente, marketName, marketFriendlyName, marketAddress,
                 issuedAt, totalAmount, householdTotalAmount, discountTotal, approxTaxFederal, approxTaxEstadual,
-                approxTaxTotal, status, parseErrorReason, parseErrorMessage, confirmedAt, createdAt, items, scannedBy);
+                approxTaxTotal, status, parseErrorReason, parseErrorMessage, confirmedAt, createdAt, items, scannedBy, missingFields);
     }
 
     /** Copy with the localized, user-showable failure message (Accept-Language resolved). */
@@ -142,7 +148,7 @@ public record ReceiptResponse(
         return new ReceiptResponse(
                 id, chaveAcesso, qrPayload, uf, cnpjEmitente, marketName, marketFriendlyName, marketAddress,
                 issuedAt, totalAmount, householdTotalAmount, discountTotal, approxTaxFederal, approxTaxEstadual,
-                approxTaxTotal, status, parseErrorReason, parseErrorMessage, confirmedAt, createdAt, items, scannedBy);
+                approxTaxTotal, status, parseErrorReason, parseErrorMessage, confirmedAt, createdAt, items, scannedBy, missingFields);
     }
 
     /** Copy with the scanner's name resolved when the entity's user was a lazy proxy. */
@@ -152,7 +158,7 @@ public record ReceiptResponse(
                 id, chaveAcesso, qrPayload, uf, cnpjEmitente, marketName, marketFriendlyName, marketAddress,
                 issuedAt, totalAmount, householdTotalAmount, discountTotal, approxTaxFederal, approxTaxEstadual,
                 approxTaxTotal, status, parseErrorReason, parseErrorMessage, confirmedAt, createdAt, items,
-                scannedBy.withName(scannerName));
+                scannedBy.withName(scannerName), missingFields);
     }
 
     /** Household override wins; for unlinked items fall back to the dictionary suggestion. */
