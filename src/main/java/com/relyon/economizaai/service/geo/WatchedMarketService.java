@@ -75,7 +75,7 @@ public class WatchedMarketService {
 
     /**
      * Markets for the "Mercados" screen. {@code scope=ALL} returns every market within
-     * {@code bestMarketsNearbyRadiusKm} (10 km) of the viewer's resolved origin UNION the
+     * {@code bestMarketsNearbyRadiusKm} (20 km) of the viewer's resolved origin UNION the
      * household's watched markets; {@code scope=MINE} returns only the watched ones.
      *
      * <p>Rows are sorted by distance ascending, nulls last — so watched-but-far markets

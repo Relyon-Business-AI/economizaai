@@ -8,10 +8,14 @@ import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.model.PriceObservation;
 import com.relyon.economizaai.model.Product;
+import com.relyon.economizaai.model.enums.MerchantSegment;
+import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository.ProductMarketHouseholdCount;
 import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.service.geo.MarketLocationService;
+import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.CategoryResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,6 +26,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -46,11 +51,14 @@ class CommunityPromoServiceTest {
     private final String marketCnpj = "93015006005182";
 
     @Mock private MarketLocationService marketLocationService;
+    @Mock private ProductRepository productRepository;
+    @Mock private CategoryResolver categoryResolver;
 
     @BeforeEach
     void setUp() {
         properties = new CollaborativeProperties();
-        service = new CommunityPromoService(observationRepository, auditRepository, properties, marketLocationService);
+        service = new CommunityPromoService(observationRepository, auditRepository, properties, marketLocationService,
+                new PrivacyTierResolver(productRepository, categoryResolver, properties));
     }
 
     private PriceObservation obs(BigDecimal price, LocalDateTime observedAt) {
@@ -74,6 +82,50 @@ class CommunityPromoServiceTest {
         };
     }
 
+    private List<PriceObservation> droppedPriceSeries() {
+        var now = LocalDateTime.now();
+        var observations = new ArrayList<PriceObservation>();
+        for (var i = 0; i < 8; i++) observations.add(obs(new BigDecimal("28"), now.minusDays(30)));
+        for (var i = 0; i < 5; i++) observations.add(obs(new BigDecimal("22"), now.minusDays(2)));
+        return observations;
+    }
+
+    @Test
+    void groceryPromoFromASingleHouseholdIsShown() {
+        when(observationRepository.findRecent(any())).thenReturn(droppedPriceSeries());
+        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(1L)))
+                .thenReturn(List.of(groupCount(productId, marketCnpj, 1L)));
+        when(productRepository.findById(productId))
+                .thenReturn(Optional.of(Product.builder().id(productId).category(ProductCategory.GROCERIES).build()));
+
+        var promos = service.detectAll();
+
+        assertEquals(1, promos.size());
+        assertEquals(1L, promos.get(0).distinctHouseholds());
+    }
+
+    @Test
+    void pharmacyPromoBelowFullKIsHidden() {
+        when(observationRepository.findRecent(any())).thenReturn(droppedPriceSeries());
+        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(1L)))
+                .thenReturn(List.of(groupCount(productId, marketCnpj, 2L)));
+        when(marketLocationService.findByCnpjs(List.of(marketCnpj)))
+                .thenReturn(Map.of(marketCnpj, MarketLocation.builder().cnpj(marketCnpj).segment(MerchantSegment.PHARMACY).build()));
+
+        assertTrue(service.detectAll().isEmpty());
+    }
+
+    @Test
+    void healthProductPromoBelowFullKIsHidden() {
+        when(observationRepository.findRecent(any())).thenReturn(droppedPriceSeries());
+        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(1L)))
+                .thenReturn(List.of(groupCount(productId, marketCnpj, 1L)));
+        when(productRepository.findById(productId))
+                .thenReturn(Optional.of(Product.builder().id(productId).category(ProductCategory.HEALTH).build()));
+
+        assertTrue(service.detectAll().isEmpty());
+    }
+
     @Test
     void detectsCommunityPromoWhenRecentMedianFarBelowBaseline() {
         var now = LocalDateTime.now();
@@ -84,7 +136,7 @@ class CommunityPromoServiceTest {
         for (var i = 0; i < 5; i++) observations.add(obs(new BigDecimal("22"), now.minusDays(2)));
 
         when(observationRepository.findRecent(any())).thenReturn(observations);
-        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(3L)))
+        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(1L)))
                 .thenReturn(List.of(groupCount(productId, marketCnpj, 3L)));
 
         var promos = service.detectAll();
@@ -118,7 +170,7 @@ class CommunityPromoServiceTest {
 
         when(observationRepository.findRecent(any())).thenReturn(observations);
         // Below k-anon=3: the HAVING >= K clause filters the group out in the database.
-        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(3L)))
+        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(1L)))
                 .thenReturn(List.of());
 
         assertEquals(0, service.detectAll().size());
@@ -138,7 +190,7 @@ class CommunityPromoServiceTest {
         for (var index = 0; index < 8; index++) observations.add(obs(new BigDecimal("28"), now.minusDays(30)));
         for (var index = 0; index < 5; index++) observations.add(obs(new BigDecimal("22"), now.minusDays(2)));
         when(observationRepository.findRecent(any())).thenReturn(observations);
-        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(3L)))
+        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(1L)))
                 .thenReturn(List.of(groupCount(productId, marketCnpj, 3L)));
 
         var firstViewer = service.detectAll();
@@ -161,7 +213,7 @@ class CommunityPromoServiceTest {
         when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of(marketCnpj,
                 MarketLocation.builder().cnpj(marketCnpj).state("PE").build()));
         when(observationRepository.findRecent(any())).thenReturn(observations);
-        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(3L)))
+        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(1L)))
                 .thenReturn(List.of(groupCount(productId, marketCnpj, 3L)));
 
         var gaucho = new NearbyScope(new ViewerLocation(null, null, Source.NONE, "RS"), Set.of(), 10);

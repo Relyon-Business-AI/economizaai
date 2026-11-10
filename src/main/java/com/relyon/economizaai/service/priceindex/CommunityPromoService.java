@@ -57,6 +57,7 @@ public class CommunityPromoService {
     private final PriceObservationAuditRepository auditRepository;
     private final CollaborativeProperties properties;
     private final MarketLocationService marketLocationService;
+    private final PrivacyTierResolver privacyTierResolver;
 
     /** Shared (NOT per-user) cache of the viewer-independent promo list. */
     private final AtomicReference<SharedPromoCache> sharedPromoCache = new AtomicReference<>();
@@ -135,10 +136,11 @@ public class CommunityPromoService {
         var observations = observationRepository.findRecent(since);
         if (observations.isEmpty()) return List.of();
 
-        // K-gate resolved in ONE GROUP BY query (HAVING >= K) instead of one
-        // count-query per (product, market) group.
+        // K-gate resolved in ONE GROUP BY query (HAVING >= K) instead of one count-query per
+        // (product, market) group. The query uses the relaxed GROCERY K; the sensitive tier
+        // (health products, pharmacies) re-checks the full K per candidate promo.
         var householdsByGroup = auditRepository.countDistinctHouseholdsPerProductMarket(
-                        since, properties.getCollaborative().getMinHouseholdsForPublic()).stream()
+                        since, privacyTierResolver.thresholdsFor(false).minHouseholds()).stream()
                 .collect(Collectors.toMap(
                         row -> new ProductMarket(row.getProductId(), row.getCnpj()),
                         ProductMarketHouseholdCount::getHouseholds));
@@ -192,6 +194,7 @@ public class CommunityPromoService {
 
         var priceDrop = computePriceDrop(rows, recentCutoff);
         if (priceDrop == null) return null;
+        if (failsSensitiveTier(productId, marketCnpj, distinctHouseholds)) return null;
 
         var firstRow = rows.get(0);
         log.info("community_promo.detected product={} market={} recent={} baseline={} dropPct={} samples={} households={}",
@@ -213,6 +216,21 @@ public class CommunityPromoService {
                 false,
                 null
         );
+    }
+
+    /**
+     * Health products and pharmacies keep the full K (a disclosed price there says what someone is
+     * treating). Only checked for promos already below that K, so grocery promos cost no extra query.
+     */
+    private boolean failsSensitiveTier(UUID productId, String marketCnpj, long distinctHouseholds) {
+        var fullK = privacyTierResolver.thresholdsFor(true).minHouseholds();
+        if (distinctHouseholds >= fullK) return false;
+        var market = marketLocationService.findByCnpjs(List.of(marketCnpj)).get(marketCnpj);
+        var sensitive = PrivacyTierResolver.isSensitiveMarket(market) || privacyTierResolver.isSensitiveProduct(productId);
+        if (sensitive) {
+            log.debug("community_promo.blocked_sensitive_tier product={} market={} households={}", productId, marketCnpj, distinctHouseholds);
+        }
+        return sensitive;
     }
 
     /** Geo-radius eligibility: distance (possibly null when not computable) when eligible, null record on rejection. */

@@ -1127,7 +1127,7 @@ automatically backfilled to all matching items.
 ## 6. Markets + watchlist
 
 ```
-GET    /api/v1/markets[?scope=ALL|MINE&lat=&lng=]    → "Mercados" screen (10 km ∪ watched)
+GET    /api/v1/markets[?scope=ALL|MINE&lat=&lng=]    → "Mercados" screen (20 km ∪ watched)
 GET    /api/v1/markets/watched                       → "Meus mercados" (= scope=MINE)
 POST   /api/v1/markets/watched/{cnpj}                → pin
 DELETE /api/v1/markets/watched/{cnpj}                → unpin
@@ -1135,14 +1135,14 @@ PUT    /api/v1/markets/{cnpj}/name                   { "name": "Zaffari de casa"
 DELETE /api/v1/markets/{cnpj}/name                   → revert to the global name
 ```
 
-`GET /markets` (2026-11-10): `scope=ALL` (default) returns markets within **10 km**
+`GET /markets` (2026-11-10): `scope=ALL` (default) returns markets within **20 km**
 (`best-markets-nearby-radius-km`) of the resolved origin UNION the household's watched
 markets; `scope=MINE` returns only the watched ones. Pass `lat`/`lng` (all-or-nothing)
 to measure from the device's current position; otherwise the origin follows the
 "perto de você" cascade (see §7: device → profile → receipts-median → UF). **Sorted by
 `distanceKm` ascending, nulls last** — a market from a receipt scanned far away (another
 state) sinks to the end instead of flooding the top; watched-but-far markets are KEPT.
-The old `radiusKm` param is gone (radius is fixed at 10 km).
+The old `radiusKm` param is gone (radius is fixed at 20 km).
 
 Each row: `{ cnpj, cnpjRoot, name, friendlyName, address, city, state, latitude,
 longitude, distanceKm, visited, watching, chainName, chainLogoUrl }`. `name` is the full
@@ -1206,7 +1206,7 @@ GET /api/v1/price-index/products/{productId}/generic-comparison?sort=CHEAPEST|NE
 GET /api/v1/price-index/generic-comparison?type=creme+de+leite[&ean=&sort=CHEAPEST|NEAREST]
 GET /api/v1/price-index/scanned-products
 GET /api/v1/price-index/promos?radiusKm=5
-GET /api/v1/price-index/promos/feed
+GET /api/v1/price-index/promos/feed[?lat=&lng=]   (lat/lng = GPS do aparelho, os dois ou nenhum; lidera a cascata)
 ```
 
 **`sort` (2026-11-10)** on best-markets + both generic-comparison endpoints (default
@@ -1238,7 +1238,7 @@ its "perto de você" cascade: `{ locationSource, uf, promos }`.
   the household's majority UF) or `NONE`. `RECEIPTS_MEDIAN`/`UF_FALLBACK` are **inferred**
   — nudge "confirme sua localização". *(Old `EXPLICIT`→`PROFILE`, `INFERRED`→`RECEIPTS_MEDIAN`.)*
   When ≠ `NONE`, each promo's `distanceKm` is relative to that location and the app filters
-  by radius (10 km) + watched markets.
+  by radius (20 km) + watched markets.
 - `uf`: the user's majority receipt state — a state-level fallback when there are
   no coordinates (the app shows "markets in your state").
 - `promos`: the full list; the app does the nearby/"see more" split client-side.
@@ -1258,7 +1258,7 @@ always a real store the FE can watch/unwatch or route to. Window: 180 days
 **Default scope (no `lat`/`lng`/`radiusKm`) = the "perto de você" cascade (2026-11-05)**,
 same as `/promos/feed`, resolved server-side:
 1. user has a location — explicit (GPS/CEP) or **inferred** (median of the markets the
-   household scanned) → only chains with a store within **10 km**
+   household scanned) → only chains with a store within **20 km**
    (`best-markets-nearby-radius-km`) or a **watched** store. No widening to the whole
    state: an empty list is the honest "nothing near you" (the in-store card covers it);
 2. no location but watches markets → only the watched chains;
@@ -1267,7 +1267,7 @@ same as `/promos/feed`, resolved server-side:
 
 **The same rule (`NearbyScope`) applies app-wide:** `/deals` (`includeNearby=true`;
 `false` = watched only), the daily deals digest push, PRICE_DROP alerts (rule radius or
-10 km; unlocated → same UF), dashboard top promos, legacy `/price-index/promos`,
+20 km; unlocated → same UF), dashboard top promos, legacy `/price-index/promos`,
 `/products/{id}/markets?includeNearby=true`, and "nearby" in `/markets` + product search
 (use the inferred location when no address is set).
 
@@ -1342,7 +1342,7 @@ GET /api/v1/price-index/products/{productId}/generic-comparison
 A **flat, price-ascending list of offers** across every brand/size of the type — the
 same product can appear multiple times (one row per market). Each offer is the
 **most-recent observed price** for that (product, market) pair. Scope **widens** until
-it finds offers: within ~10 km of the user → the user's state (`STATE`) → national
+it finds offers: within ~20 km of the user → the user's state (`STATE`) → national
 (`NATIONAL`) — unlike single-product `best-markets`, which stays near the user on
 purpose (this is an explicit "price-range reference"). Tiered k-anon per (product,
 market): grocery may disclose at n=1, pharmacy/health keep K=3 (fail-closed). Empty

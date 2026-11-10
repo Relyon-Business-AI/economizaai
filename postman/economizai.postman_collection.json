@@ -5364,7 +5364,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{baseUrl}}/api/v1/price-index/promos/feed",
+							"raw": "{{baseUrl}}/api/v1/price-index/promos/feed?lat=-30.03&lng=-51.22",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -5374,9 +5374,20 @@
 								"price-index",
 								"promos",
 								"feed"
+							],
+							"query": [
+								{
+									"key": "lat",
+									"value": "-30.03",
+									"description": "Opcional: GPS do aparelho (junto com lng). Lidera a cascata de localizacao."
+								},
+								{
+									"key": "lng",
+									"value": "-51.22"
+								}
 							]
 						},
-						"description": "Feed com contexto de localizacao: {locationSource (DEVICE|PROFILE|RECEIPTS_MEDIAN|UF_FALLBACK|NONE), uf, promos[]}. Recorte 'perto de voce' (seguidos + raio/estado) feito no app."
+						"description": "Feed com contexto de localizacao: {locationSource (DEVICE|PROFILE|RECEIPTS_MEDIAN|UF_FALLBACK|NONE), uf, radiusKm, promos[]}. Recorte 'perto de voce' (seguidos + raio/estado) feito no app."
 					},
 					"response": []
 				},

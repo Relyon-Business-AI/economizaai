@@ -1,5 +1,15 @@
 # economizai — what's new
 
+## 2026-11-10 — "Perto de você" com 20 km + GPS do aparelho; promoções da comunidade a partir de 1 casa
+
+- **Raio "perto de você" 10 → 20 km** em todo lugar que usa o padrão (Mercados, melhores preços, comparação,
+  ofertas "Mercados próximos", promoções, dashboard).
+- **`GET /price-index/promos/feed`** e **`GET /deals`** aceitam `lat`/`lng` opcionais (os dois ou nenhum) = GPS do
+  aparelho, que lidera a cascata (aparelho → perfil → mediana das notas → UF). `locationSource` pode vir `DEVICE`.
+  O feed ganhou **`radiusKm`** (raio que o app deve usar no recorte).
+- **Promoções da comunidade** seguem a regra por faixa de privacidade: mercearia aparece a partir de **1 casa**
+  (era 3); saúde e farmácia continuam exigindo 3.
+
 ## 2026-11-10 — Nota por foto: data, mercado, nomes e preços obrigatórios
 
 - **`ReceiptResponse.missingFields`** (`ISSUED_AT` | `MARKET` | `ITEM_NAMES` | `ITEM_PRICES`): preenchido só

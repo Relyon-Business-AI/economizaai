@@ -40,7 +40,7 @@ public class MarketController {
     private final MarketNameService marketNameService;
 
     /**
-     * "Mercados" screen. {@code scope=ALL} (default) returns markets within 10 km of the
+     * "Mercados" screen. {@code scope=ALL} (default) returns markets within 20 km of the
      * viewer's resolved origin UNION the household's watched markets; {@code scope=MINE}
      * returns only the watched ones. Sorted by {@code distanceKm} ascending (nulls last),
      * so a market from a receipt scanned far away never dominates the top. Pass
