@@ -177,6 +177,13 @@ public class CollaborativeProperties {
         /** Category GROUP slugs whose products keep the full K regardless of the store. */
         private List<String> sensitiveCategoryGroups = List.of("saude");
         private int minObservationsForCommunityPromo = 10;
+        /**
+         * Minimum NON-outlier recent observations needed for a promo. A lone (or
+         * paired) bogus low scan can't fabricate a drop — a real promo is a
+         * SUSTAINED lower price, so require a small cluster. Below this, the
+         * group is skipped regardless of how low the single value is.
+         */
+        private int communityPromoMinRecentObservations = 3;
         private int communityPromoThresholdPct = 15;
         private int lookbackDays = 90;
         /**
@@ -215,6 +222,8 @@ public class CollaborativeProperties {
         public void setSensitiveCategoryGroups(List<String> v) { this.sensitiveCategoryGroups = v; }
         public int getMinObservationsForCommunityPromo() { return minObservationsForCommunityPromo; }
         public void setMinObservationsForCommunityPromo(int v) { this.minObservationsForCommunityPromo = v; }
+        public int getCommunityPromoMinRecentObservations() { return communityPromoMinRecentObservations; }
+        public void setCommunityPromoMinRecentObservations(int v) { this.communityPromoMinRecentObservations = v; }
         public int getCommunityPromoThresholdPct() { return communityPromoThresholdPct; }
         public void setCommunityPromoThresholdPct(int v) { this.communityPromoThresholdPct = v; }
         public int getLookbackDays() { return lookbackDays; }

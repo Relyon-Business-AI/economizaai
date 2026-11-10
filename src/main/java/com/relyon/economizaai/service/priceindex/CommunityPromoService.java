@@ -265,8 +265,11 @@ public class CommunityPromoService {
                 ? (Function<PriceObservation, BigDecimal>) PriceObservation::getNormalizedUnitPrice
                 : (Function<PriceObservation, BigDecimal>) PriceObservation::getUnitPrice;
 
+        // Drop observations flagged as outliers (the is_outlier gate, honored here
+        // too so a future outlier-tagging job takes effect without touching this code).
         var recentPrices = rows.stream()
                 .filter(observation -> observation.getObservedAt().isAfter(recentCutoff))
+                .filter(observation -> !observation.isOutlier())
                 .map(priceFn)
                 .toList();
         // Baseline excludes prior promo-flagged rows: comparing a current
@@ -275,12 +278,23 @@ public class CommunityPromoService {
         var baselinePrices = rows.stream()
                 .filter(observation -> !observation.getObservedAt().isAfter(recentCutoff))
                 .filter(observation -> !observation.isPromoFlag())
+                .filter(observation -> !observation.isOutlier())
                 .map(priceFn)
                 .toList();
-        if (recentPrices.isEmpty() || baselinePrices.size() < 3) return null;
+        // A promo is a SUSTAINED lower price — require a small cluster of recent
+        // observations so one bogus low scan (e.g. a lone R$2,98 when the typical is
+        // ~R$5,49) can't manufacture a "42% mais barato".
+        var minRecent = properties.getCollaborative().getCommunityPromoMinRecentObservations();
+        if (recentPrices.size() < minRecent || baselinePrices.size() < 3) return null;
 
-        var recentMedian = PriceIndexService.median(recentPrices);
-        var baselineMedian = PriceIndexService.median(baselinePrices);
+        // Robust-trim BOTH samples before the median so a stray scan inside an
+        // otherwise-consistent window doesn't skew the comparison.
+        var recentTrimmed = RobustStats.withoutOutliers(recentPrices);
+        var baselineTrimmed = RobustStats.withoutOutliers(baselinePrices);
+        if (recentTrimmed.isEmpty() || baselineTrimmed.size() < 3) return null;
+
+        var recentMedian = PriceIndexService.median(recentTrimmed);
+        var baselineMedian = PriceIndexService.median(baselineTrimmed);
         var threshold = baselineMedian
                 .multiply(BigDecimal.valueOf(100L - properties.getCollaborative().getCommunityPromoThresholdPct()))
                 .divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP);
@@ -293,13 +307,14 @@ public class CommunityPromoService {
         var recentPackagePrice = recentPackagePrice(rows, recentCutoff);
         var baselinePackagePrice = baselineInPackageTerms(baselineMedian, recentMedian, recentPackagePrice);
         return new PriceDrop(recentMedian, baselineMedian, recentPackagePrice.setScale(2, RoundingMode.HALF_UP),
-                baselinePackagePrice, dropPct, recentPrices.size());
+                baselinePackagePrice, dropPct, recentTrimmed.size());
     }
 
     /** What the shopper pays on the shelf now — detection may run on R$/kg, but the card shows the package. */
     private BigDecimal recentPackagePrice(List<PriceObservation> rows, LocalDateTime recentCutoff) {
         return PriceIndexService.median(rows.stream()
                 .filter(observation -> observation.getObservedAt().isAfter(recentCutoff))
+                .filter(observation -> !observation.isOutlier())
                 .map(PriceObservation::getUnitPrice)
                 .toList());
     }

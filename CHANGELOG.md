@@ -1,5 +1,13 @@
 # economizai — what's new
 
+## 2026-11-10 — Promoção da comunidade: "% mais barato" ignora preços-fora-da-curva
+
+- **`GET /price-index/promos/feed`** e a notificação "N% mais barato" não computam mais o desconto
+  contra uma observação-fora-da-curva. O detector agora: (1) ignora observações marcadas `is_outlier`,
+  (2) apara outliers por MAD (mediana ± desvio robusto) na janela recente E no baseline, e (3) exige um
+  pequeno CLUSTER recente (≥3 observações não-outlier) — um único preço errado (ex.: R$2,98 quando o
+  típico é ~R$5,49) não fabrica mais um "42% mais barato". O `dropPct` exibido reflete uma comparação real.
+
 ## 2026-11-10 — Canonicalização por variante (não mistura mais "zero" com "ao leite")
 
 - **Matcher de produto agora respeita a variante.** Dois itens só viram o MESMO produto se os
