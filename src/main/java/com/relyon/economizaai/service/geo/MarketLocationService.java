@@ -21,6 +21,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -124,7 +125,10 @@ public class MarketLocationService {
         if (pending.isEmpty()) return;
         log.info("geocode.batch.start pending={}", pending.size());
         for (var market : pending) {
-            self.geocodeOne(market);
+            if (!self.geocodeOne(market)) {
+                log.warn("geocode.batch.paused reason=rate_limited remaining={}", pending.size() - pending.indexOf(market));
+                return;
+            }
             // Throttle to respect Nominatim's 1 req/sec policy
             try {
                 Thread.sleep(geocodeDelayMs);
@@ -142,23 +146,30 @@ public class MarketLocationService {
      * The query is built from the already-loaded entity, the geocode runs untransacted,
      * and only the result is persisted in a short transaction.
      */
-    public void geocodeOne(MarketLocation market) {
+    /** @return false when Nominatim rate-limited us: nothing is recorded, the market keeps its attempts. */
+    public boolean geocodeOne(MarketLocation market) {
+        var startedAt = Instant.now();
         var receiptAddress = MarketAddress.parse(market.getAddress());
         var result = geocodeFirstHit(receiptAddressQueries(market, receiptAddress));
         var knownAddress = receiptAddress.orElse(null);
-        if (result.isEmpty()) {
+        if (result.isEmpty() && !geocoder.rateLimitedSince(startedAt)) {
             var registryAddress = registryAddress(market);
             if (registryAddress != null) {
                 result = geocodeFromRegistry(registryAddress);
                 if (knownAddress == null) knownAddress = registryAddress;
             }
         }
-        if (result.isEmpty() && MarketAddress.isMissing(market.getAddress())) {
+        if (result.isEmpty() && MarketAddress.isMissing(market.getAddress()) && !geocoder.rateLimitedSince(startedAt)) {
             result = geocodeFirstHit(List.of(buildGeocodeQuery(market)));
+        }
+        if (result.isEmpty() && geocoder.rateLimitedSince(startedAt)) {
+            log.warn("market_geocode.rate_limited cnpj={}", market.getCnpj());
+            return false;
         }
         log.info("market_geocode.{} cnpj={} uf={}", result.isPresent() ? "ok" : "miss", market.getCnpj(),
                 result.map(NominatimGeocoder.GeocodeResult::state).orElse(knownAddress != null ? knownAddress.uf() : null));
         self.persistGeocodeResult(market.getId(), result, knownAddress);
+        return true;
     }
 
     /** Cleaned SEFAZ address when it parses; the raw text (minus empty segments) when it doesn't. */
@@ -177,17 +188,22 @@ public class MarketLocationService {
     private Optional<NominatimGeocoder.GeocodeResult> geocodeFromRegistry(MarketAddress registryAddress) {
         var byStreet = geocodeFirstHit(registryAddress.geocodeQueries());
         if (byStreet.isPresent() || registryAddress.cep() == null) return byStreet;
+        pauseForNominatim(); // the CEP lookup may geocode through Nominatim too
         return cepLocationService.resolve(registryAddress.cep())
                 .map(cep -> new NominatimGeocoder.GeocodeResult(cep.latitude(), cep.longitude(),
                         registryAddress.city(), registryAddress.uf()));
     }
 
-    /** Tries each query in order, pausing between calls (Nominatim allows 1 req/sec). */
+    /**
+     * Tries each query in order, pausing before every call (Nominatim allows 1 req/sec, and a market may chain
+     * receipt → registry queries). Stops at the first hit or at a 429 — more queries would only extend the ban.
+     */
     private Optional<NominatimGeocoder.GeocodeResult> geocodeFirstHit(List<String> queries) {
-        for (var index = 0; index < queries.size(); index++) {
-            if (index > 0) pauseForNominatim();
-            var result = geocoder.geocode(queries.get(index));
-            if (result.isPresent()) return result;
+        for (var query : queries) {
+            pauseForNominatim();
+            var calledAt = Instant.now();
+            var result = geocoder.geocode(query);
+            if (result.isPresent() || geocoder.rateLimitedSince(calledAt)) return result;
         }
         return Optional.empty();
     }

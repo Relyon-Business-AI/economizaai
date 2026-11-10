@@ -4,9 +4,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.net.URI;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -47,6 +51,24 @@ class NominatimGeocoderTest {
     @Test
     void geocode_blankAddress_returnsEmpty() {
         assertThat(geocoder.geocode("  ")).isEmpty();
+    }
+
+    @Test
+    void geocode_tooManyRequests_flagsRateLimit() {
+        var startedAt = Instant.now();
+        var rateLimited = geocoderThrowing(HttpClientErrorException.create(
+                HttpStatus.TOO_MANY_REQUESTS, "Too many requests", HttpHeaders.EMPTY, new byte[0], null));
+
+        assertThat(rateLimited.geocode("Rua X, Porto Alegre, RS")).isEmpty();
+        assertThat(rateLimited.rateLimitedSince(startedAt)).isTrue();
+    }
+
+    @Test
+    void geocode_ordinaryMiss_isNotARateLimit() {
+        var startedAt = Instant.now();
+
+        assertThat(geocoderReturning("[]").geocode("Rua X, Porto Alegre, RS")).isEmpty();
+        assertThat(geocoder.rateLimitedSince(startedAt)).isFalse();
     }
 
     @Test
