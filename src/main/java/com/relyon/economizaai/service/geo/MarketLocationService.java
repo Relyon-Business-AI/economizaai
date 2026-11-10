@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -57,6 +58,7 @@ public class MarketLocationService {
     private final MarketChainRepository chainRepository;
     private final NominatimGeocoder geocoder;
     private final CnpjActivityClient cnpjActivityClient;
+    private final CepLocationService cepLocationService;
     private final ProductRepository productRepository;
     private final CategoryResolver categoryResolver;
     private final ContactService contactService;
@@ -141,13 +143,82 @@ public class MarketLocationService {
      * and only the result is persisted in a short transaction.
      */
     public void geocodeOne(MarketLocation market) {
-        var query = buildGeocodeQuery(market);
-        var result = geocoder.geocode(query);
-        self.persistGeocodeResult(market.getId(), result);
+        var receiptAddress = MarketAddress.parse(market.getAddress());
+        var result = geocodeFirstHit(receiptAddressQueries(market, receiptAddress));
+        var knownAddress = receiptAddress.orElse(null);
+        if (result.isEmpty()) {
+            var registryAddress = registryAddress(market);
+            if (registryAddress != null) {
+                result = geocodeFromRegistry(registryAddress);
+                if (knownAddress == null) knownAddress = registryAddress;
+            }
+        }
+        if (result.isEmpty() && MarketAddress.isMissing(market.getAddress())) {
+            result = geocodeFirstHit(List.of(buildGeocodeQuery(market)));
+        }
+        log.info("market_geocode.{} cnpj={} uf={}", result.isPresent() ? "ok" : "miss", market.getCnpj(),
+                result.map(NominatimGeocoder.GeocodeResult::state).orElse(knownAddress != null ? knownAddress.uf() : null));
+        self.persistGeocodeResult(market.getId(), result, knownAddress);
+    }
+
+    /** Cleaned SEFAZ address when it parses; the raw text (minus empty segments) when it doesn't. */
+    private List<String> receiptAddressQueries(MarketLocation market, Optional<MarketAddress> receiptAddress) {
+        if (receiptAddress.isPresent()) return receiptAddress.get().geocodeQueries();
+        if (MarketAddress.isMissing(market.getAddress())) return List.of();
+        return List.of(withoutEmptySegments(market.getAddress()) + BRASIL_SUFFIX);
+    }
+
+    private MarketAddress registryAddress(MarketLocation market) {
+        if (!cnpjActivityClient.isEnabled()) return null;
+        return cnpjActivityClient.lookup(market.getCnpj()).registryAddress();
+    }
+
+    /** Receita address first; its CEP (BrasilAPI coordinates) when OSM doesn't know the street. */
+    private Optional<NominatimGeocoder.GeocodeResult> geocodeFromRegistry(MarketAddress registryAddress) {
+        var byStreet = geocodeFirstHit(registryAddress.geocodeQueries());
+        if (byStreet.isPresent() || registryAddress.cep() == null) return byStreet;
+        return cepLocationService.resolve(registryAddress.cep())
+                .map(cep -> new NominatimGeocoder.GeocodeResult(cep.latitude(), cep.longitude(),
+                        registryAddress.city(), registryAddress.uf()));
+    }
+
+    /** Tries each query in order, pausing between calls (Nominatim allows 1 req/sec). */
+    private Optional<NominatimGeocoder.GeocodeResult> geocodeFirstHit(List<String> queries) {
+        for (var index = 0; index < queries.size(); index++) {
+            if (index > 0) pauseForNominatim();
+            var result = geocoder.geocode(queries.get(index));
+            if (result.isPresent()) return result;
+        }
+        return Optional.empty();
+    }
+
+    private void pauseForNominatim() {
+        try {
+            Thread.sleep(geocodeDelayMs);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private static String withoutEmptySegments(String address) {
+        return Arrays.stream(address.split(","))
+                .map(String::trim)
+                .filter(segment -> !segment.isEmpty())
+                .collect(Collectors.joining(", "));
     }
 
     @Transactional
     public void persistGeocodeResult(UUID marketId, Optional<NominatimGeocoder.GeocodeResult> result) {
+        persistGeocodeResult(marketId, result, null);
+    }
+
+    /**
+     * On a miss, the city/UF we already know from the address still go in: they put the store in its state's
+     * scope ("melhores preços no seu estado") even before it has coordinates.
+     */
+    @Transactional
+    public void persistGeocodeResult(UUID marketId, Optional<NominatimGeocoder.GeocodeResult> result,
+                                     MarketAddress knownAddress) {
         var market = repository.findById(marketId).orElse(null);
         if (market == null) return;
         market.setGeocodeAttempts(market.getGeocodeAttempts() + 1);
@@ -155,14 +226,26 @@ public class MarketLocationService {
             var hit = result.get();
             market.setLatitude(hit.latitude());
             market.setLongitude(hit.longitude());
-            market.setCity(hit.city());
-            market.setState(hit.state());
+            market.setCity(hit.city() != null ? hit.city() : cityOf(knownAddress));
+            market.setState(hit.state() != null ? hit.state() : ufOf(knownAddress));
             market.setGeocodedAt(LocalDateTime.now());
             market.setGeocodeFailedAt(null);
         } else {
+            if (market.getState() == null && knownAddress != null) {
+                market.setCity(knownAddress.city());
+                market.setState(knownAddress.uf());
+            }
             market.setGeocodeFailedAt(LocalDateTime.now());
         }
         repository.save(market);
+    }
+
+    private static String cityOf(MarketAddress address) {
+        return address != null ? address.city() : null;
+    }
+
+    private static String ufOf(MarketAddress address) {
+        return address != null ? address.uf() : null;
     }
 
     /**

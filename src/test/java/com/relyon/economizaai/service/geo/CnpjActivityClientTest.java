@@ -164,6 +164,25 @@ class CnpjActivityClientTest {
                 .lookup("11111111000111");
         assertEquals(MerchantSegment.SUPERMARKET, lookup.segment());
         assertEquals("4314902", lookup.ibgeCityCode());
+        assertEquals(null, lookup.registryAddress());
+    }
+
+    @Test
+    void lookup_extractsRegistryAddressForGeocoding() {
+        var lookup = clientWithBody("{\"cnae_fiscal\":\"4711301\",\"descricao_tipo_de_logradouro\":\"RUA\","
+                + "\"logradouro\":\"XV DE NOVEMBRO\",\"numero\":\"100\",\"municipio\":\"BLUMENAU\",\"uf\":\"SC\","
+                + "\"cep\":\"89010000\"}")
+                .lookup("11111111000111");
+
+        assertEquals(new MarketAddress("RUA XV DE NOVEMBRO", "100", "BLUMENAU", "SC", "89010000"), lookup.registryAddress());
+    }
+
+    @Test
+    void lookup_registryNumberSnIsDropped() {
+        var lookup = clientWithBody("{\"logradouro\":\"BR 116\",\"numero\":\"S/N\",\"municipio\":\"CANOAS\",\"uf\":\"RS\"}")
+                .lookup("11111111000111");
+
+        assertEquals(null, lookup.registryAddress().number());
     }
 
     @Test

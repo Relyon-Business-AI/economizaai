@@ -1,5 +1,13 @@
 # economizai — what's new
 
+## 2026-11-10 — Lojas sem localização voltam a ser geocodificadas
+
+- ~Metade das lojas estava **sem coordenadas e sem UF** (o endereço do SEFAZ, `"RUA X , 34 , , CENTRO , CIDADE , UF"`,
+  não era entendido pelo geocodificador). Agora o endereço é limpo antes da busca; sem endereço na nota (ou com o
+  CNPJ no lugar), usa o endereço do cadastro do CNPJ e o CEP. Se nada achar, a loja ao menos ganha cidade/UF.
+- Efeito no app: essas lojas passam a aparecer em **Melhores preços**, distância e filtros por estado. Sem mudança de
+  contrato. Migration V141 recoloca as lojas sem coordenadas na fila (roda no próximo ciclo, ~1 req/s).
+
 ## 2026-11-10 — Promoção da comunidade mostra o preço do pacote
 
 - **`currentMedianPrice` / `baselineMedianPrice`** das promoções da comunidade agora são o **preço de prateleira
