@@ -300,10 +300,10 @@ class HouseholdProductServiceTest {
                 .thenReturn(List.of(
                         new MarketPriceRow(CNPJ_NACIONAL, "99887766", "Nacional",
                                 new BigDecimal("4.00"), new BigDecimal("3.50"),
-                                new BigDecimal("3.50"), LocalDateTime.of(2026, 1, 1, 0, 0), 5, 3L, 2.0, false),
+                                new BigDecimal("3.50"), LocalDateTime.of(2026, 1, 1, 0, 0), 5, 3L, 2.0, false, false, false),
                         new MarketPriceRow(CNPJ_ZAFFARI, "12345678", "Zaffari Community",
                                 new BigDecimal("6.00"), new BigDecimal("5.50"),
-                                new BigDecimal("5.50"), LocalDateTime.of(2026, 1, 1, 0, 0), 4, 3L, 1.0, false)));
+                                new BigDecimal("5.50"), LocalDateTime.of(2026, 1, 1, 0, 0), 4, 3L, 1.0, false, false, false)));
 
         var result = service.productMarkets(user, product.getId(), false, null);
 
@@ -329,7 +329,7 @@ class HouseholdProductServiceTest {
         when(priceIndexService.bestMarketsAtWatched(eq(product.getId()), anyInt(), any()))
                 .thenReturn(List.of(new MarketPriceRow(CNPJ_NACIONAL, "99887766", "Nacional",
                         new BigDecimal("5.3350"), new BigDecimal("3.50"),
-                        new BigDecimal("3.50"), LocalDateTime.of(2026, 1, 1, 0, 0), 5, 3L, 2.0, false)));
+                        new BigDecimal("3.50"), LocalDateTime.of(2026, 1, 1, 0, 0), 5, 3L, 2.0, false, false, false)));
 
         var result = service.productMarkets(user, product.getId(), false, null);
 
@@ -482,7 +482,7 @@ class HouseholdProductServiceTest {
         // k-anon-suppressed market: row present but no median price.
         when(priceIndexService.bestMarketsAtWatched(eq(product.getId()), anyInt(), any()))
                 .thenReturn(List.of(new MarketPriceRow(CNPJ_NACIONAL, "99887766", "Nacional",
-                        null, null, null, null, 2, 2L, 2.0, false)));
+                        null, null, null, null, 2, 2L, 2.0, false, false, false)));
 
         var result = service.productMarkets(user, product.getId(), false, null);
 
