@@ -11,6 +11,7 @@ import com.relyon.economizaai.service.extraction.EanCatalogService;
 import com.relyon.economizaai.service.extraction.ProductTypeResolver;
 import com.relyon.economizaai.service.geo.ViewerLocationService;
 import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
+import com.relyon.economizaai.service.priceindex.ScanHistoryService;
 import com.relyon.economizaai.time.BrazilClock;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -34,6 +35,7 @@ public class ProductScanLogService {
     private final ViewerLocationService viewerLocationService;
     private final ProductScanRepository productScanRepository;
     private final ProductTypeResolver productTypeResolver;
+    private final ScanHistoryService scanHistoryService;
     private final TransactionTemplate scanTxTemplate;
 
     public ProductScanLogService(ProductRepository productRepository,
@@ -41,12 +43,14 @@ public class ProductScanLogService {
                                  ViewerLocationService viewerLocationService,
                                  ProductScanRepository productScanRepository,
                                  ProductTypeResolver productTypeResolver,
+                                 ScanHistoryService scanHistoryService,
                                  PlatformTransactionManager transactionManager) {
         this.productRepository = productRepository;
         this.eanCatalogService = eanCatalogService;
         this.viewerLocationService = viewerLocationService;
         this.productScanRepository = productScanRepository;
         this.productTypeResolver = productTypeResolver;
+        this.scanHistoryService = scanHistoryService;
         this.scanTxTemplate = new TransactionTemplate(transactionManager);
         this.scanTxTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
@@ -58,6 +62,10 @@ public class ProductScanLogService {
             if (digits.length() < 8) return;
             var scan = classify(user, digits);
             scanTxTemplate.executeWithoutResult(status -> productScanRepository.save(scan));
+            // Snapshot do histórico "produtos escaneados" — o preço é capturado quando a
+            // comparação é servida; aqui só marcamos a consulta (bump de count + data).
+            scanHistoryService.recordConsult(user.getHousehold().getId(),
+                    scan.getMatchedProductId(), scan.getGenericNameNorm(), null, null);
             log.info("scan.logged ean={} match={} generic={}", digits, scan.getMatchType(), scan.getGenericNameNorm());
         } catch (Exception logFailure) {
             log.warn("scan.log_failed ean={} reason={}", rawEan, logFailure.toString());

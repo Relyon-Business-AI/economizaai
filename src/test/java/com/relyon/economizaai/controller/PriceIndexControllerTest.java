@@ -18,6 +18,7 @@ import com.relyon.economizaai.service.merchant.SponsoredPromoService;
 import com.relyon.economizaai.service.priceindex.CommunityPromoService;
 import com.relyon.economizaai.service.priceindex.GenericComparisonService;
 import com.relyon.economizaai.service.priceindex.PriceIndexService;
+import com.relyon.economizaai.service.priceindex.ScanHistoryService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -56,6 +57,7 @@ class PriceIndexControllerTest {
     @MockitoBean private ViewerLocationService viewerLocationService;
     @MockitoBean private NearbyScopeService nearbyScopeService;
     @MockitoBean private GenericComparisonService genericComparisonService;
+    @MockitoBean private ScanHistoryService scanHistoryService;
     @MockitoBean private JwtService jwtService;
     @MockitoBean private UserDetailsService userDetailsService;
     @MockitoBean private LocalizedMessageService localizedMessageService;
@@ -117,14 +119,15 @@ class PriceIndexControllerTest {
     void bestMarkets_withoutPositionUsesViewerLocationCascade() throws Exception {
         var pid = UUID.randomUUID();
         var location = new ViewerLocation(new BigDecimal("-30.03"), new BigDecimal("-51.22"),
-                ViewerLocationService.Source.INFERRED, "RS");
+                ViewerLocationService.Source.RECEIPTS_MEDIAN, "RS");
         when(watchedMarketService.watchedCnpjs(any())).thenReturn(Set.of());
-        when(viewerLocationService.resolve(any())).thenReturn(location);
-        when(priceIndexService.bestMarketsForViewer(any(), anyInt(), eq(location), any()))
+        when(viewerLocationService.resolve(any(), any(), any())).thenReturn(location);
+        when(priceIndexService.bestMarketsForViewer(any(), anyInt(), eq(location), any(), any()))
                 .thenReturn(List.of(
                         new PriceIndexService.MarketPriceRow("93015006005182", "93015006", "Mercado X",
                                 new BigDecimal("10"), new BigDecimal("9"),
-                                new BigDecimal("9"), LocalDateTime.of(2026, 1, 1, 0, 0), 5, 3L, null, false)
+                                new BigDecimal("9"), LocalDateTime.of(2026, 1, 1, 0, 0), 5, 3L, null, false,
+                                true, false)
                 ));
 
         mockMvc.perform(get("/api/v1/price-index/products/" + pid + "/best-markets")
@@ -140,7 +143,7 @@ class PriceIndexControllerTest {
         var pid = UUID.randomUUID();
         when(watchedMarketService.watchedCnpjs(any())).thenReturn(Set.of());
         when(priceIndexService.bestMarkets(any(), anyInt(),
-                eq(new BigDecimal("-30.05")), eq(new BigDecimal("-51.20")), eq(5.0), any()))
+                eq(new BigDecimal("-30.05")), eq(new BigDecimal("-51.20")), eq(5.0), any(), any()))
                 .thenReturn(List.of());
 
         mockMvc.perform(get("/api/v1/price-index/products/" + pid + "/best-markets")
@@ -149,7 +152,7 @@ class PriceIndexControllerTest {
                 .andExpect(status().isOk());
 
         verify(priceIndexService).bestMarkets(any(), anyInt(),
-                eq(new BigDecimal("-30.05")), eq(new BigDecimal("-51.20")), eq(5.0), any());
+                eq(new BigDecimal("-30.05")), eq(new BigDecimal("-51.20")), eq(5.0), any(), any());
     }
 
     @Test
@@ -163,13 +166,13 @@ class PriceIndexControllerTest {
                                 cheaperId, "Italac 200g", "Italac", "200g",
                                 new BigDecimal("2.99"), "11111111000100", "SUPERMERCADO A COMERCIO LTDA",
                                 "Supermercado A", "Porto Alegre", "RS", null,
-                                LocalDateTime.of(2026, 1, 1, 0, 0), "IN_STORE", false),
+                                LocalDateTime.of(2026, 1, 1, 0, 0), "IN_STORE", false, true, false),
                         new GenericOffer(
                                 scannedId, "Nestlé 200g", "Nestlé", "200g",
                                 new BigDecimal("3.49"), "22222222000100", "COMPANHIA ZAFFARI COMERCIO E INDUSTRIA",
                                 "Zaffari", "Porto Alegre", "RS", 2.5,
-                                LocalDateTime.of(2026, 1, 1, 0, 0), "IN_STORE", true)));
-        when(genericComparisonService.forProduct(eq(scannedId), any())).thenReturn(response);
+                                LocalDateTime.of(2026, 1, 1, 0, 0), "IN_STORE", true, false, true)));
+        when(genericComparisonService.forProduct(eq(scannedId), any(), any())).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/price-index/products/" + scannedId + "/generic-comparison")
                         .with(SecurityMockMvcRequestPostProcessors.user(principal())))
@@ -193,8 +196,8 @@ class PriceIndexControllerTest {
                 List.of(new GenericOffer(UUID.randomUUID(), "Italac 200g", "Italac", "200g",
                         new BigDecimal("2.99"), "11111111000100", "SUPERMERCADO A COMERCIO LTDA",
                         "Supermercado A", "Porto Alegre", "RS", null,
-                        LocalDateTime.of(2026, 1, 1, 0, 0), "IN_STORE", false)));
-        when(genericComparisonService.forType(eq("Creme de Leite"), any())).thenReturn(response);
+                        LocalDateTime.of(2026, 1, 1, 0, 0), "IN_STORE", false, true, false)));
+        when(genericComparisonService.forType(eq("Creme de Leite"), any(), any())).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/price-index/generic-comparison")
                         .param("type", "Creme de Leite")
@@ -260,7 +263,7 @@ class PriceIndexControllerTest {
         when(watchedMarketService.watchedCnpjs(any())).thenReturn(Set.of());
         when(viewerLocationService.resolve(any()))
                 .thenReturn(new ViewerLocation(new BigDecimal("-30.05"), new BigDecimal("-51.20"),
-                        ViewerLocationService.Source.INFERRED, "RS"));
+                        ViewerLocationService.Source.RECEIPTS_MEDIAN, "RS"));
         when(communityPromoService.detectAll(any(), any(), isNull(), any()))
                 .thenReturn(List.of(
                         new CommunityPromoService.CommunityPromo(UUID.randomUUID(), "Arroz",
@@ -272,7 +275,7 @@ class PriceIndexControllerTest {
         mockMvc.perform(get("/api/v1/price-index/promos/feed")
                         .with(SecurityMockMvcRequestPostProcessors.user(principal())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.locationSource").value("INFERRED"))
+                .andExpect(jsonPath("$.locationSource").value("RECEIPTS_MEDIAN"))
                 .andExpect(jsonPath("$.uf").value("RS"))
                 .andExpect(jsonPath("$.promos[0].productName").value("Arroz"))
                 .andExpect(jsonPath("$.promos[0].uf").value("RS"));

@@ -3,6 +3,7 @@ package com.relyon.economizaai.controller;
 import com.relyon.economizaai.dto.response.GenericComparisonResponse;
 import com.relyon.economizaai.dto.response.PriceHistoryResponse;
 import com.relyon.economizaai.dto.response.PromoFeedResponse;
+import com.relyon.economizaai.dto.response.ScannedProductResponse;
 import com.relyon.economizaai.dto.response.SponsoredPromoResponse;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.service.geo.NearbyScopeService;
@@ -10,8 +11,11 @@ import com.relyon.economizaai.service.geo.ViewerLocationService;
 import com.relyon.economizaai.service.geo.WatchedMarketService;
 import com.relyon.economizaai.service.merchant.SponsoredPromoService;
 import com.relyon.economizaai.service.priceindex.CommunityPromoService;
+import com.relyon.economizaai.service.priceindex.ComparisonSort;
 import com.relyon.economizaai.service.priceindex.GenericComparisonService;
 import com.relyon.economizaai.service.priceindex.PriceIndexService;
+import com.relyon.economizaai.service.priceindex.PriceIndexService.MarketPriceRow;
+import com.relyon.economizaai.service.priceindex.ScanHistoryService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -50,6 +54,7 @@ public class PriceIndexController {
     private final ViewerLocationService viewerLocationService;
     private final NearbyScopeService nearbyScopeService;
     private final GenericComparisonService genericComparisonService;
+    private final ScanHistoryService scanHistoryService;
 
     @GetMapping("/products/{productId}/markets/{marketCnpj}/reference")
     public ResponseEntity<PriceIndexService.ReferencePrice> reference(@PathVariable UUID productId,
@@ -93,21 +98,36 @@ public class PriceIndexController {
             @RequestParam(defaultValue = "10") int limit,
             @RequestParam(required = false) Double radiusKm,
             @RequestParam(required = false) BigDecimal lat,
-            @RequestParam(required = false) BigDecimal lng) {
+            @RequestParam(required = false) BigDecimal lng,
+            @RequestParam(defaultValue = "CHEAPEST") ComparisonSort sort) {
         // lat/lng are an all-or-nothing pair — using one with the home value of the
         // other would be a garbage coordinate that skews distance/radius filtering.
         var useCurrentPosition = lat != null && lng != null;
         var watched = watchedMarketService.watchedCnpjs(user);
         // Explicit position/radius (barcode scan inside a store) keeps the caller's own scope;
-        // otherwise the "perto de você" cascade (explícita → estimada pelas notas → UF → nacional).
+        // otherwise the "perto de você" cascade (device → perfil → estimada pelas notas → UF → nacional).
+        List<MarketPriceRow> rows;
         if (useCurrentPosition || radiusKm != null) {
             var originLatitude = useCurrentPosition ? lat : user.getHomeLatitude();
             var originLongitude = useCurrentPosition ? lng : user.getHomeLongitude();
-            return ResponseEntity.ok(priceIndexService.bestMarkets(productId, limit,
-                    originLatitude, originLongitude, radiusKm, watched));
+            rows = priceIndexService.bestMarkets(productId, limit,
+                    originLatitude, originLongitude, radiusKm, watched, sort);
+        } else {
+            rows = priceIndexService.bestMarketsForViewer(productId, limit,
+                    viewerLocationService.resolve(user, lat, lng), watched, sort);
         }
-        return ResponseEntity.ok(priceIndexService.bestMarketsForViewer(productId, limit,
-                viewerLocationService.resolve(user), watched));
+        recordBestMarketsConsult(user, productId, rows);
+        return ResponseEntity.ok(rows);
+    }
+
+    /** Snapshot da consulta pro histórico "produtos escaneados": preço = linha MAIS BARATA servida. */
+    private void recordBestMarketsConsult(User user, UUID productId, List<MarketPriceRow> rows) {
+        var cheapest = rows.stream()
+                .map(MarketPriceRow::medianPrice)
+                .filter(price -> price != null)
+                .min(BigDecimal::compareTo)
+                .orElse(null);
+        scanHistoryService.recordConsult(user.getHousehold().getId(), productId, null, cheapest, null);
     }
 
     /**
@@ -119,8 +139,9 @@ public class PriceIndexController {
     @GetMapping("/products/{productId}/generic-comparison")
     public ResponseEntity<GenericComparisonResponse> genericComparison(
             @AuthenticationPrincipal User user,
-            @PathVariable UUID productId) {
-        return ResponseEntity.ok(genericComparisonService.forProduct(productId, user));
+            @PathVariable UUID productId,
+            @RequestParam(defaultValue = "CHEAPEST") ComparisonSort sort) {
+        return ResponseEntity.ok(genericComparisonService.forProduct(productId, user, sort));
     }
 
     /**
@@ -136,10 +157,11 @@ public class PriceIndexController {
     public ResponseEntity<GenericComparisonResponse> genericComparisonByType(
             @AuthenticationPrincipal User user,
             @RequestParam String type,
-            @RequestParam(required = false) String ean) {
+            @RequestParam(required = false) String ean,
+            @RequestParam(defaultValue = "CHEAPEST") ComparisonSort sort) {
         var response = ean == null || ean.isBlank()
-                ? genericComparisonService.forType(type, user)
-                : genericComparisonService.forCatalog(ean, type, user);
+                ? genericComparisonService.forType(type, user, sort)
+                : genericComparisonService.forCatalog(ean, type, user, sort);
         return ResponseEntity.ok(response);
     }
 
@@ -155,6 +177,18 @@ public class PriceIndexController {
             @PathVariable UUID productId,
             @PathVariable String marketCnpj) {
         return ResponseEntity.ok(genericComparisonService.priceHistoryForMarket(productId, marketCnpj, user));
+    }
+
+    /**
+     * Histórico "produtos escaneados" do domicílio: produtos consultados, dedupados por
+     * produto/tipo, consulta mais recente primeiro, limitado a 100. Devolve SÓ o snapshot
+     * gravado (preço + escopo do momento da consulta) — INSTANTÂNEO, sem recálculo ao vivo e
+     * sem N+1. O FE busca o preço ao vivo por item visível (endpoints de comparação) e calcula
+     * o delta "mudou de preço desde a última consulta" no cliente.
+     */
+    @GetMapping("/scanned-products")
+    public ResponseEntity<List<ScannedProductResponse>> scannedProducts(@AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(scanHistoryService.listScannedProducts(user));
     }
 
     @GetMapping("/promos")
