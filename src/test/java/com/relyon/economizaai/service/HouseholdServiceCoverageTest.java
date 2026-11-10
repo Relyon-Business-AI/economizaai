@@ -118,6 +118,7 @@ class HouseholdServiceCoverageTest {
         var household = Household.builder().id(UUID.randomUUID()).inviteCode(inviteCode).build();
         household.setCreatedAt(LocalDateTime.now());
         household.setUpdatedAt(LocalDateTime.now());
+        lenient().when(householdRepository.findById(household.getId())).thenReturn(Optional.of(household));
         return household;
     }
 
