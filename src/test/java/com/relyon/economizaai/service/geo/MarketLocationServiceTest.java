@@ -235,6 +235,24 @@ class MarketLocationServiceTest {
         verify(repository, times(2)).save(any());
     }
 
+    @Test
+    void geocodePending_rateLimitKeepsAttemptsAndPausesTheBatch() {
+        var marketOne = MarketLocation.builder().cnpj("1").cnpjRoot("11111111")
+                .address("RUA A , 1 , , CENTRO , CARAZINHO , RS").geocodeAttempts(0).build();
+        var marketTwo = MarketLocation.builder().cnpj("2").cnpjRoot("22222222")
+                .address("RUA B , 2 , , CENTRO , CARAZINHO , RS").geocodeAttempts(0).build();
+        when(repository.findAllByLatitudeIsNullAndGeocodeAttemptsLessThan(anyInt()))
+                .thenReturn(List.of(marketOne, marketTwo));
+        when(geocoder.geocode(any())).thenReturn(Optional.empty());
+        when(geocoder.rateLimitedSince(any())).thenReturn(true);
+
+        service.geocodePending();
+
+        verify(geocoder, times(1)).geocode(any());
+        verify(repository, never()).save(any());
+        assertThat(marketOne.getGeocodeAttempts()).isZero();
+    }
+
     // ---------- buildGeocodeQuery (via geocodeOne, asserting the query passed) ----------
 
     @Test

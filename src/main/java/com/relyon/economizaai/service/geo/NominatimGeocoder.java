@@ -6,10 +6,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 
@@ -33,6 +35,7 @@ public class NominatimGeocoder {
 
     private final RestClient restClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private volatile Instant rateLimitedAt;
 
     public NominatimGeocoder(RestClient.Builder builder,
                              @Value("${economizaai.geo.user-agent:economizai/0.1 (xandivieira@gmail.com)}") String userAgent,
@@ -45,6 +48,15 @@ public class NominatimGeocoder {
                 .defaultHeader("Accept", "application/json")
                 .requestFactory(requestFactory)
                 .build();
+    }
+
+    /**
+     * True when Nominatim answered 429 at or after {@code since}. A rate-limited miss says nothing about the
+     * address (Render's egress IP is shared), so callers must not count it as a failed attempt.
+     */
+    public boolean rateLimitedSince(Instant since) {
+        var lastRateLimit = rateLimitedAt;
+        return lastRateLimit != null && !lastRateLimit.isBefore(since);
     }
 
     public Optional<GeocodeResult> geocode(String address) {
@@ -74,6 +86,10 @@ public class NominatimGeocoder {
             log.info("geocode.ok address='{}' lat={} lon={} city={} state={}",
                     address, lat, lon, city, state);
             return Optional.of(new GeocodeResult(lat, lon, city, state));
+        } catch (HttpClientErrorException.TooManyRequests rateLimited) {
+            rateLimitedAt = Instant.now();
+            log.warn("geocode.rate_limited address='{}'", address);
+            return Optional.empty();
         } catch (Exception ex) {
             log.warn("geocode.failed address='{}' {}: {}", address, ex.getClass().getSimpleName(), ex.getMessage());
             return Optional.empty();
