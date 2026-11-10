@@ -13,6 +13,11 @@ import java.util.UUID;
  * Lightweight admin-facing snapshot of a user — what shows up in the
  * `GET /api/v1/admin/users` paginated list. Excludes home location and
  * other personal fields not relevant to triage.
+ *
+ * <p>{@code receiptCount}/{@code totalSpend} are the USER's OWN (receipts whose
+ * {@code user_id} is this user). The household totals ({@code householdReceiptCount})
+ * are kept separately and never conflated — the FE shows the "Domicílio N" badge
+ * from {@code householdMemberCount} when it's &gt; 1.
  */
 public record AdminUserSummaryResponse(
         UUID id,
@@ -27,17 +32,16 @@ public record AdminUserSummaryResponse(
         UUID householdId,
         LocalDateTime createdAt,
         long receiptCount,
-        BigDecimal totalSpend
+        BigDecimal totalSpend,
+        long householdReceiptCount,
+        long householdMemberCount
 ) {
     public static AdminUserSummaryResponse from(User user) {
-        return from(user, 0L, BigDecimal.ZERO);
+        return from(user, 0L, BigDecimal.ZERO, 0L, 0L);
     }
 
-    public static AdminUserSummaryResponse from(User user, long receiptCount) {
-        return from(user, receiptCount, BigDecimal.ZERO);
-    }
-
-    public static AdminUserSummaryResponse from(User user, long receiptCount, BigDecimal totalSpend) {
+    public static AdminUserSummaryResponse from(User user, long receiptCount, BigDecimal totalSpend,
+                                                long householdReceiptCount, long householdMemberCount) {
         return new AdminUserSummaryResponse(
                 user.getId(),
                 user.getName(),
@@ -51,7 +55,9 @@ public record AdminUserSummaryResponse(
                 user.getHousehold() == null ? null : user.getHousehold().getId(),
                 BrazilClock.fromUtc(user.getCreatedAt()),
                 receiptCount,
-                totalSpend == null ? BigDecimal.ZERO : totalSpend
+                totalSpend == null ? BigDecimal.ZERO : totalSpend,
+                householdReceiptCount,
+                householdMemberCount
         );
     }
 }

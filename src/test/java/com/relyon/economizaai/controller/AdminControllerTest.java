@@ -284,7 +284,7 @@ class AdminControllerTest {
     void listUsers_returnsPagedSummaries() throws Exception {
         var summary = new AdminUserSummaryResponse(UUID.randomUUID(), "John", "john@test.com",
                 Role.USER, SubscriptionTier.FREE, true, true, false, false, UUID.randomUUID(), LocalDateTime.now(),
-                5L, new BigDecimal("42.00"));
+                5L, new BigDecimal("42.00"), 8L, 2L);
         Page<AdminUserSummaryResponse> page = new PageImpl<>(List.of(summary));
         when(adminUserService.list(any(), any(), any(), any(), any(), any(), anyBoolean(), any(Pageable.class))).thenReturn(page);
 
@@ -356,7 +356,8 @@ class AdminControllerTest {
         var id = UUID.randomUUID();
         var detail = new AdminUserDetailResponse(id, "John", "john@test.com",
                 Role.USER, SubscriptionTier.FREE, true, true, true, false, UUID.randomUUID(),
-                3L, new ReceiptCounts(1L, 5L, 0L, 2L), new BigDecimal("99.90"), LocalDateTime.now(),
+                3L, new ReceiptCounts(1L, 5L, 0L, 2L), new BigDecimal("99.90"),
+                8L, new BigDecimal("250.00"), LocalDateTime.now(),
                 Platform.IOS, Platform.ANDROID, OffsetDateTime.now());
         when(adminUserService.get(id)).thenReturn(detail);
 
@@ -400,7 +401,8 @@ class AdminControllerTest {
         var id = UUID.randomUUID();
         var detail = new AdminUserDetailResponse(id, "John", "john@test.com",
                 Role.USER, SubscriptionTier.PRO, true, true, true, false, UUID.randomUUID(),
-                1L, new ReceiptCounts(0L, 0L, 0L, 0L), BigDecimal.ZERO, LocalDateTime.now(),
+                1L, new ReceiptCounts(0L, 0L, 0L, 0L), BigDecimal.ZERO,
+                0L, BigDecimal.ZERO, LocalDateTime.now(),
                 null, null, null);
         when(adminUserService.setTier(id, SubscriptionTier.PRO)).thenReturn(detail);
 

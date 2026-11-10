@@ -28,6 +28,11 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
 
     long countByHouseholdId(UUID householdId);
 
+    /** (householdId, memberCount) for the given households — batch for the admin list "Domicílio N" badge. */
+    @Query("SELECT user.household.id, count(user) FROM User user "
+            + "WHERE user.household.id IN :householdIds GROUP BY user.household.id")
+    List<Object[]> countByHouseholdIds(List<UUID> householdIds);
+
     /** Is this household still someone's home (a guest away who will return to it)? */
     boolean existsByHomeHouseholdId(UUID homeHouseholdId);
 
