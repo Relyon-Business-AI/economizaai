@@ -142,6 +142,20 @@ class ReceiptIngestionServiceTest {
     }
 
     @Test
+    void ingestReconsult_runsTheFullByChaveChain_notOnlyTheFreeReconsult() {
+        var receipt = processingReceipt();
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fetch(CHAVE_RS, receipt.getUser().getId())).thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(sampleParsed());
+
+        service.ingestReconsult(receipt.getId(), CHAVE_RS);
+
+        assertEquals(ReceiptStatus.PENDING_CONFIRMATION, receipt.getStatus());
+        verify(sefazIngestionService).fetch(CHAVE_RS, receipt.getUser().getId());
+    }
+
+    @Test
     void ingest_success_dispatchesAiCategorySuggestions() {
         var receipt = processingReceipt();
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);

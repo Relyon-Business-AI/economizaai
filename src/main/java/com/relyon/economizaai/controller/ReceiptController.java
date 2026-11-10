@@ -323,7 +323,7 @@ public class ReceiptController {
         var exportFormat = parseFormat(format);
         var exportDelivery = parseDelivery(delivery);
         var file = receiptExportService.exportPurchaseHistory(user, from, to, exportFormat);
-        var filename = "economizai-historico-" + BrazilClock.today() + "." + file.fileExtension();
+        var filename = "economizaai-historico-" + BrazilClock.today() + "." + file.fileExtension();
         if (exportDelivery == Delivery.EMAIL) {
             reportEmailService.sendToOwnEmail(user, file, filename);
             return ResponseEntity.accepted().build();

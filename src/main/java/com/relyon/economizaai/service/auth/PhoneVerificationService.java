@@ -166,7 +166,7 @@ public class PhoneVerificationService {
         }
         try {
             twilioMessageClient.sendSms(phoneNumber,
-                    "economizai: seu codigo de verificacao e " + code + " (valido por " + OTP_TTL_MINUTES + " min).");
+                    "Economiza AI: seu codigo de verificacao e " + code + " (valido por " + OTP_TTL_MINUTES + " min).");
             paidApiGuardService.recordSuccess(user.getId(), PaidApiService.TWILIO_MESSAGE, null, "twilio");
         } catch (TwilioMessageException ex) {
             paidApiGuardService.recordFailure(user.getId(), PaidApiService.TWILIO_MESSAGE, null, "twilio");

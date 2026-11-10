@@ -66,8 +66,8 @@ class I18nValidationMessagesTest {
         // phone is @Size(max = 30): 31 chars violates it. Pins arg order [field, max, min].
         var binding = validate(new BetaSignupRequest("Jane", "jane@test.com", "1".repeat(31)));
 
-        assertEquals("tamanho deve estar entre 0 e 30", resolve(binding, "phone", PT));
-        assertEquals("size must be between 0 and 30", resolve(binding, "phone", EN));
+        assertEquals("precisa ter entre 0 e 30 caracteres", resolve(binding, "phone", PT));
+        assertEquals("must be between 0 and 30 characters", resolve(binding, "phone", EN));
     }
 
     @Test

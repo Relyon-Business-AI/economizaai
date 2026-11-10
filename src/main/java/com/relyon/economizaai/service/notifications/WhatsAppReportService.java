@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 
 /**
  * Renders a household's last-7-days spending into a short WhatsApp-friendly text
@@ -38,36 +39,35 @@ public class WhatsAppReportService {
 
     @Transactional(readOnly = true)
     public WeeklyReport buildWeeklyReport(User user) {
+        var locale = LocalizedMessageService.toLocale(user.getLocale());
         var to = BrazilClock.nowDateTime();
         var from = to.minusDays(7);
         var data = reportAssembler.assemble(user, from, to);
         var kpis = data.kpis();
+        var header = messageService.translate("whatsapp.report.header", locale,
+                from.format(DAY_MONTH), to.format(DAY_MONTH));
 
         if (kpis.receiptCount() == 0) {
-            return new WeeklyReport("📊 *Seu resumo economizai* (" + from.format(DAY_MONTH)
-                    + " a " + to.format(DAY_MONTH) + ")\n\n"
-                    + "Nenhuma compra registrada essa semana. Escaneie suas notas pra acompanhar seus gastos! 🛒",
-                    false);
+            return new WeeklyReport(header + "\n\n" + messageService.translate("whatsapp.report.empty", locale), false);
         }
 
         var text = new StringBuilder();
-        text.append("📊 *Seu resumo economizai* (").append(from.format(DAY_MONTH))
-                .append(" a ").append(to.format(DAY_MONTH)).append(")\n\n");
-        text.append("💰 Total: ").append(money(kpis.totalSpent()))
-                .append(" em ").append(kpis.receiptCount())
-                .append(kpis.receiptCount() == 1 ? " compra" : " compras").append("\n");
+        text.append(header).append("\n\n");
+        text.append("💰 ").append(messageService.translate("whatsapp.report.total", locale,
+                money(kpis.totalSpent()), String.valueOf(kpis.receiptCount()),
+                purchaseWord(kpis.receiptCount(), locale))).append("\n");
 
         var categories = data.categoryBreakdown();
         if (!categories.isEmpty()) {
-            text.append("\n🏷️ Onde foi:\n");
+            text.append("\n🏷️ ").append(messageService.translate("whatsapp.report.categories-label", locale)).append("\n");
             categories.stream().limit(TOP_CATEGORIES).forEach(category ->
-                    text.append("• ").append(categoryLabel(category.category()))
+                    text.append("• ").append(categoryLabel(category.category(), locale))
                             .append(": ").append(money(category.total())).append("\n"));
         }
 
         var markets = data.topMarkets();
         if (!markets.isEmpty()) {
-            text.append("\n🛒 Mercados:\n");
+            text.append("\n🛒 ").append(messageService.translate("whatsapp.report.markets-label", locale)).append("\n");
             markets.stream().limit(TOP_MARKETS).forEach(market ->
                     text.append("• ").append(market.marketName() == null ? "—" : market.marketName())
                             .append(": ").append(money(market.total())).append("\n"));
@@ -82,25 +82,33 @@ public class WhatsAppReportService {
      */
     @Transactional(readOnly = true)
     public String buildWeeklySummaryLine(User user) {
+        var locale = LocalizedMessageService.toLocale(user.getLocale());
         var to = BrazilClock.nowDateTime();
         var from = to.minusDays(7);
         var kpis = reportAssembler.assemble(user, from, to).kpis();
         if (kpis.receiptCount() == 0) {
-            return "Nenhuma compra registrada essa semana.";
+            return messageService.translate("whatsapp.report.summary.empty", locale);
         }
-        return "Total " + money(kpis.totalSpent()) + " em " + kpis.receiptCount()
-                + (kpis.receiptCount() == 1 ? " compra" : " compras") + " essa semana.";
+        return messageService.translate("whatsapp.report.summary", locale,
+                amount(kpis.totalSpent()), String.valueOf(kpis.receiptCount()));
     }
 
-    private String categoryLabel(String categoryName) {
+    private String purchaseWord(long receiptCount, Locale locale) {
+        return messageService.translate(receiptCount == 1 ? "whatsapp.report.purchase.one" : "whatsapp.report.purchase.many", locale);
+    }
+
+    private String categoryLabel(String categoryName, Locale locale) {
         if (categoryName == null || categoryName.isBlank()) {
-            return messageService.translate("category.OTHER");
+            return messageService.translate("category.OTHER", locale);
         }
-        return messageService.translate("category." + categoryName);
+        return messageService.translate("category." + categoryName, locale);
     }
 
     private static String money(BigDecimal value) {
-        var amount = value == null ? BigDecimal.ZERO : value;
-        return "R$ " + String.format("%,.2f", amount);
+        return "R$ " + amount(value);
+    }
+
+    private static String amount(BigDecimal value) {
+        return String.format("%,.2f", value == null ? BigDecimal.ZERO : value);
     }
 }

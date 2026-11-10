@@ -17,7 +17,7 @@ public record OptimizeShoppingListRequest(
     public record Item(
             @NotNull UUID productId,
             @NotNull
-            @DecimalMin(value = "0.001", message = "quantity must be > 0")
+            @DecimalMin(value = "0.001", message = "{validation.quantity.positive}")
             BigDecimal quantity
     ) {}
 }

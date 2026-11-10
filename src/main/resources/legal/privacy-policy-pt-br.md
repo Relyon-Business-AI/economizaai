@@ -1,4 +1,4 @@
-# Política de Privacidade — economizai
+# Política de Privacidade — Economiza AI
 
 **Versão 1.0** — vigente desde 2026-05-01.
 
@@ -7,7 +7,7 @@
 
 ## 1. Quem somos
 
-O economizai é um aplicativo de inteligência de preços baseado em NFC-e
+O Economiza AI é um aplicativo de inteligência de preços baseado em NFC-e
 brasileiras. Esta política descreve como coletamos, usamos, armazenamos
 e protegemos seus dados pessoais, em conformidade com a Lei Geral de
 Proteção de Dados (LGPD — Lei 13.709/2018).

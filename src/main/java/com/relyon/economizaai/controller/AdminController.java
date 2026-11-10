@@ -197,7 +197,7 @@ public class AdminController {
     public ResponseEntity<Map<String, Object>> sendTestAlert() {
         var timestamp = BrazilClock.nowDateTime().toString();
         operationalAlertService.alertAdmin(
-                "economizai: teste de alerta admin",
+                "Economiza AI: teste de alerta admin",
                 "Disparo manual de teste em " + timestamp
                         + ". Se você recebeu isto, o canal de alerta está funcionando.");
         return ResponseEntity.ok(Map.of(

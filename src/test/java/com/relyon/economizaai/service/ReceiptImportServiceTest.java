@@ -8,6 +8,7 @@ import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.geo.MerchantSupportGate;
+import com.relyon.economizaai.service.sefaz.SefazIngestionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,12 +35,13 @@ class ReceiptImportServiceTest {
 
     private static final String RS_CHAVE = "43260593015006005182651200000076311055456577"; // RS, model 65, valid DV
     private static final String RS_CHAVE_55 = "43260915436940001177550010445204901195759810"; // RS, model 55, valid DV
-    private static final String SP_CHAVE = "35260593015006005182651200000076311055456575"; // SP (35), valid DV, NOT reconsultable
+    private static final String SP_CHAVE = "35260593015006005182651200000076311055456575"; // SP (35), valid DV, no free reconsult (Infosimples path)
 
     @Mock private ReceiptRepository receiptRepository;
     @Mock private ReceiptService receiptService;
     @Mock private MerchantSupportGate merchantSupportGate;
     @Mock private LocalizedMessageService localizedMessageService;
+    @Mock private SefazIngestionService sefazIngestionService;
     @InjectMocks private ReceiptImportService service;
 
     private User user;
@@ -54,6 +56,8 @@ class ReceiptImportServiceTest {
             if (receipt.getId() == null) receipt.setId(UUID.randomUUID());
             return receipt;
         });
+        lenient().when(sefazIngestionService.supportsBareChave(any())).thenReturn(true);
+        lenient().when(sefazIngestionService.supportsTypedNfe55(any())).thenReturn(true);
     }
 
     @Test
@@ -96,14 +100,38 @@ class ReceiptImportServiceTest {
     }
 
     @Test
-    void rejectsSupportedFormatButUnsupportedState() {
-        // Valid 44-digit chave with a good check digit, but UF=SP → not reconsultable (RS-only import).
-        // Fail-fast at classify, before any queue/spend.
+    void queuesChaveFromStateWithoutFreeReconsult_noUfAllowList() {
+        // SP has no free legacy reconsult, but the by-chave chain (Infosimples) covers it —
+        // import is no longer RS-only.
+        when(merchantSupportGate.isKnownBlockedCnpj(any())).thenReturn(false);
+        when(receiptRepository.findByHouseholdIdAndChaveAcesso(householdId, SP_CHAVE)).thenReturn(Optional.empty());
+
+        var response = service.importChaves(user, List.of(SP_CHAVE));
+
+        assertThat(response.queued()).isEqualTo(1);
+        assertThat(response.rejected()).isZero();
+    }
+
+    @Test
+    void rejectsOnlyWhenNoFetchPathExists_withStateInTheMessage() {
+        when(sefazIngestionService.supportsBareChave(SP_CHAVE)).thenReturn(false);
+        when(localizedMessageService.translate("receipt.manual-chave.unsupported", "SP")).thenReturn("sem consulta em SP");
+
         var response = service.importChaves(user, List.of(SP_CHAVE));
 
         assertThat(response.queued()).isZero();
-        assertThat(response.rejected()).isEqualTo(1);
-        assertThat(response.rejectedChaves().get(0).reason()).isEqualTo("receipt.import.unsupported");
+        assertThat(response.rejectedChaves().get(0).reason()).isEqualTo("receipt.manual-chave.unsupported");
+        assertThat(response.rejectedChaves().get(0).reasonMessage()).isEqualTo("sem consulta em SP");
+        verify(receiptRepository, never()).save(any(Receipt.class));
+    }
+
+    @Test
+    void rejectsTypedNfe55WhenNoProviderCoversIt() {
+        when(sefazIngestionService.supportsTypedNfe55(any())).thenReturn(false);
+
+        var response = service.importChaves(user, List.of(RS_CHAVE_55));
+
+        assertThat(response.rejectedChaves().get(0).reason()).isEqualTo("receipt.manual-chave.nfe-unsupported");
         verify(receiptRepository, never()).save(any(Receipt.class));
     }
 

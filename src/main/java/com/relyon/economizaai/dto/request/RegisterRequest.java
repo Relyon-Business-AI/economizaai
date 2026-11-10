@@ -34,7 +34,7 @@ public record RegisterRequest(
         this(name, email, password, acceptedTermsVersion, acceptedPrivacyVersion, platform, null);
     }
 
-    @AssertTrue(message = "Você deve aceitar a versão atual dos Termos de Uso e da Política de Privacidade")
+    @AssertTrue(message = "{validation.legal.acceptance-required}")
     public boolean isLegalAcceptanceValid() {
         return acceptedTermsVersion != null && !acceptedTermsVersion.isBlank()
                 && acceptedPrivacyVersion != null && !acceptedPrivacyVersion.isBlank();
