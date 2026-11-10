@@ -15,6 +15,7 @@ import com.relyon.economizaai.repository.PriceObservationAuditRepository.Product
 import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.service.HouseholdProductAliasService;
+import com.relyon.economizaai.service.extraction.EanCatalogService;
 import com.relyon.economizaai.service.extraction.ProductTypeResolver;
 import com.relyon.economizaai.service.geo.CnpjNormalizer;
 import com.relyon.economizaai.service.geo.DistanceCalculator;
@@ -67,6 +68,7 @@ public class GenericComparisonService {
     private final ViewerLocationService viewerLocationService;
     private final PrivacyTierResolver privacyTierResolver;
     private final ProductTypeResolver productTypeResolver;
+    private final EanCatalogService eanCatalogService;
     private final HouseholdProductAliasService householdProductAliasService;
     private final CollaborativeProperties properties;
 
@@ -90,7 +92,33 @@ public class GenericComparisonService {
     public GenericComparisonResponse forType(String rawType, User user) {
         // Nomes de catálogo (OFF) são crus ("CREME DE LEITE UHT NESTLE") — resolve o tipo canônico
         // pelo MESMO extrator da ingestão de nota, senão a busca por generic_name_norm casa 0.
-        var typeKey = productTypeResolver.typeKey(rawType);
+        return byTypeKey(productTypeResolver.typeKey(rawType), rawType, user);
+    }
+
+    /**
+     * Como {@link #forType}, mas ancorado numa entrada de catálogo (EAN conhecido). Quando o nome do
+     * OFF é estrangeiro/órfão ("White Rice") e não casa direto, resolve o tipo via mapa estático ou
+     * IA closed-set (com cache por EAN) e tenta esse tipo antes do fallback ao nome cru. A resolução
+     * (e a chamada de IA) roda FORA de transação aqui; a leitura da comparação abre sua própria tx
+     * curta readOnly ao entrar em {@link #byType(String, String, User)}.
+     */
+    public GenericComparisonResponse forCatalog(String ean, String rawType, User user) {
+        var resolvedKey = eanCatalogService.lookup(ean)
+                .map(productTypeResolver::resolveCatalogTypeKey)
+                .orElse(null);
+        if (resolvedKey != null) {
+            return byType(resolvedKey, rawType, user);
+        }
+        return forType(rawType, user);
+    }
+
+    /** Leitura da comparação por tipo já resolvido, numa tx curta readOnly (entrada via proxy). */
+    @Transactional(readOnly = true)
+    public GenericComparisonResponse byType(String typeKey, String rawType, User user) {
+        return byTypeKey(typeKey, rawType, user);
+    }
+
+    private GenericComparisonResponse byTypeKey(String typeKey, String rawType, User user) {
         if (typeKey == null) {
             return new GenericComparisonResponse(rawType, null, null, List.of());
         }

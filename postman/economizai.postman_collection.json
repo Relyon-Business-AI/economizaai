@@ -5126,6 +5126,12 @@
 								{
 									"key": "type",
 									"value": "Creme de Leite"
+								},
+								{
+									"key": "ean",
+									"value": "7896079431110",
+									"description": "Opcional: o catalogPreview.ean do by-ean. Ancora a resolucao de tipo na entrada de catalogo, mapeando nomes estrangeiros/orfaos do Open Food Facts (ex.: White Rice) para um tipo existente no catalogo pt (arroz). Sem ele, resolve so pelo nome cru.",
+									"disabled": true
 								}
 							]
 						}

@@ -1,5 +1,20 @@
 # economizai — what's new
 
+## 2026-11-10 — Comparação genérica resolve nomes de catálogo estrangeiros (OFF em inglês)
+
+- **`GET /price-index/generic-comparison` ganhou o parâmetro opcional `ean`.** Passe o
+  `catalogPreview.ean` do `by-ean` junto com o `type` e a comparação ancora a resolução na entrada de
+  catálogo. Quando o Open Food Facts guardou o nome em inglês/órfão (ex.: EAN de arroz branco brasileiro
+  com `generic_name` = "White Rice"), o backend mapeia esse nome para um tipo que EXISTE no nosso catálogo
+  pt ("arroz") — por um mapa estático de staples ou, como último recurso, por IA em **conjunto fechado**
+  (escolhe exatamente um dos tipos que têm preço, ou NONE). Isso tira comparações que antes vinham vazias.
+  **Sem `ean` o comportamento é idêntico ao de antes** (resolve só pelo nome cru). Nenhuma mudança no
+  contrato do `by-ean`, nem no nome/marca exibidos — só a chave de TIPO da comparação muda.
+- **Como não erra:** nome que já casa com o catálogo nunca passa por mapa nem IA; a resposta da IA é
+  validada contra o conjunto real de tipos (alucinação/NONE → estado vazio honesto, nada inventado); a
+  resolução fica em cache por EAN (no máximo uma chamada de IA por código). Sem API key de IA configurada,
+  o passo de IA é inerte e o fluxo cai no estado vazio de hoje.
+
 ## 2026-11-09 — "Comparar preço" liberado pra todos + scanner único (QR + código de barras)
 
 - **Comparação de preço por código de barras deixou de ser ADMIN-only.** Qualquer usuário

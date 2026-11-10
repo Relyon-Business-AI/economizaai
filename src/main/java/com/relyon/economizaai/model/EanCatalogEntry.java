@@ -64,6 +64,16 @@ public class EanCatalogEntry extends BaseEntity {
     @Column(name = "nova_group")
     private Integer novaGroup;
 
+    /**
+     * Cache do TIPO de comparação resolvido ({@code products.generic_name_norm}) para quando
+     * {@code genericName} é estrangeiro/órfão e não casa direto com o catálogo pt (ex.: OFF guarda
+     * "White Rice" para um arroz). Preenchido pelo {@link com.relyon.economizaai.service.extraction.ProductTypeResolver}
+     * (mapa estático ou IA closed-set) para que cada EAN custe no máximo uma chamada de IA. Null =
+     * ainda não resolvido ou resolução deu NONE (sem equivalente → estado vazio honesto).
+     */
+    @Column(name = "resolved_generic_name_norm", length = 160)
+    private String resolvedGenericNameNorm;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     @lombok.Builder.Default
