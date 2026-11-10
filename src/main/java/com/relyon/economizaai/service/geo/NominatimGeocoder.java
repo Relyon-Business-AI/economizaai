@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Free geocoder backed by OpenStreetMap Nominatim. Returns a single best-match
@@ -32,6 +33,15 @@ import java.util.Optional;
 public class NominatimGeocoder {
 
     private static final String NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
+
+    /** Nominatim place_rank: street-or-finer matches are &gt;= 26 (street 26, building/house 30). */
+    private static final int MIN_STREET_PLACE_RANK = 26;
+
+    /** addresstype/type values that denote a city/region/administrative centroid, never a precise address. */
+    private static final Set<String> COARSE_PLACE_LEVELS = Set.of(
+            "city", "town", "village", "hamlet", "municipality", "city_district", "district",
+            "county", "state", "state_district", "region", "province", "country",
+            "administrative", "boundary", "postcode");
 
     private final RestClient restClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -78,6 +88,12 @@ public class NominatimGeocoder {
             var json = objectMapper.readTree(body);
             if (!json.isArray() || json.size() == 0) return Optional.empty();
             JsonNode first = json.get(0);
+            if (isCityCentroid(first)) {
+                log.info("geocode.rejected_centroid address='{}' addresstype={} class={} type={} place_rank={}",
+                        address, textOf(first, "addresstype"), textOf(first, "class"),
+                        textOf(first, "type"), first.path("place_rank").asInt(-1));
+                return Optional.empty();
+            }
             var lat = new BigDecimal(first.get("lat").asText());
             var lon = new BigDecimal(first.get("lon").asText());
             var addr = first.get("address");
@@ -94,6 +110,39 @@ public class NominatimGeocoder {
             log.warn("geocode.failed address='{}' {}: {}", address, ex.getClass().getSimpleName(), ex.getMessage());
             return Optional.empty();
         }
+    }
+
+    /**
+     * Nominatim falls back to the CITY CENTROID when it can't resolve a precise street/building
+     * address. Storing that centroid collapses every market in the city onto one coordinate, so
+     * every "perto de você" distance comes out identical (~0 km). We reject those matches and treat
+     * them as a miss (NULL coords, geocode_failed_at set) — a wrong coordinate is worse than none.
+     *
+     * <p>A result is a centroid when its {@code addresstype}/{@code class}/{@code type} names a
+     * city/region/administrative/boundary level rather than a street or point of interest, OR when
+     * its {@code place_rank} is coarser than street level (Nominatim ranks: country 4 … state 8 …
+     * county 12 … city/town 16 … suburb 20 … street 26 … building 30; street-or-finer is &gt;= 26).
+     */
+    private boolean isCityCentroid(JsonNode result) {
+        var addressType = textOf(result, "addresstype");
+        var objectClass = textOf(result, "class");
+        var objectType = textOf(result, "type");
+        if (isCoarseLevel(addressType) || isCoarseLevel(objectType)) return true;
+        // place/city, place/town, place/state, boundary/administrative — all centroid-level.
+        if ("boundary".equals(objectClass) || "place".equals(objectClass) && isCoarseLevel(objectType)) {
+            return true;
+        }
+        var placeRank = result.path("place_rank").asInt(-1);
+        return placeRank >= 0 && placeRank < MIN_STREET_PLACE_RANK;
+    }
+
+    private static boolean isCoarseLevel(String level) {
+        return level != null && COARSE_PLACE_LEVELS.contains(level);
+    }
+
+    private static String textOf(JsonNode node, String field) {
+        var value = node.path(field);
+        return value.isMissingNode() || value.isNull() ? null : value.asText();
     }
 
     private String extractCity(JsonNode addr) {

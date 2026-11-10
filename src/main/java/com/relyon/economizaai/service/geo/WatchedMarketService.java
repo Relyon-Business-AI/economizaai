@@ -178,20 +178,24 @@ public class WatchedMarketService {
         }
         var visited = receiptRepository.findDistinctCnpjsByHousehold(user.getHousehold().getId()).contains(normalized);
         var response = MarketResponse.from(location, distanceFromHome(user, location), visited, true);
-        return response.withFriendlyName(marketNameService.resolve(user.getHousehold().getId(), normalized, response.name()));
+        var friendly = marketNameService.friendlyName(user.getHousehold().getId(), normalized, response.name());
+        return response.withFriendlyName(friendly);
     }
 
     /**
-     * Set each market's {@code friendlyName} to the household's custom rename when present
-     * (the original {@code name} is left intact). Batched to avoid N+1.
+     * Set each market's {@code friendlyName} through the full cascade — household custom rename
+     * → {@link com.relyon.economizaai.model.MarketChain} name → {@code cleanLegalName} heuristic —
+     * so the FE never shows the raw razão social (e.g. "BISTEK SUPERMERCADOS LTDA" → "Bistek").
+     * The original legal {@code name} is left intact. Both lookups are batched to avoid N+1.
      */
     private List<MarketResponse> applyFriendlyNames(UUID householdId, List<MarketResponse> rows) {
         if (rows.isEmpty()) return rows;
-        var overrides = marketNameService.resolveNames(householdId,
-                rows.stream().map(MarketResponse::cnpj).toList());
-        if (overrides.isEmpty()) return rows;
+        var cnpjs = rows.stream().map(MarketResponse::cnpj).toList();
+        var overrides = marketNameService.resolveNames(householdId, cnpjs);
+        var chainNames = marketNameService.resolveChainNames(cnpjs);
         return rows.stream()
-                .map(row -> row.withFriendlyName(marketNameService.applyOverride(overrides, row.cnpj(), row.friendlyName())))
+                .map(row -> row.withFriendlyName(
+                        marketNameService.friendlyName(overrides, chainNames, row.cnpj(), row.name())))
                 .toList();
     }
 

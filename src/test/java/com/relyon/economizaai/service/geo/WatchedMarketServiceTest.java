@@ -61,10 +61,17 @@ class WatchedMarketServiceTest {
         // Default: PRO-equivalent unlimited cap so existing tests keep their intent.
         lenient().when(subscriptionGate.watchedMarketLimit(any())).thenReturn(Integer.MAX_VALUE);
         lenient().when(marketNameService.resolveNames(any(), any())).thenReturn(Map.of());
+        lenient().when(marketNameService.resolveChainNames(any())).thenReturn(Map.of());
         lenient().when(marketNameService.resolve(any(), any(), any()))
                 .thenAnswer(invocation -> invocation.getArgument(2));
         lenient().when(marketNameService.applyOverride(any(), any(), any()))
                 .thenAnswer(invocation -> invocation.getArgument(2));
+        // Batch cascade: delegate to the real static cleanLegalName on the raw name (4th arg),
+        // so the list endpoint is exercised end-to-end through the heuristic.
+        lenient().when(marketNameService.friendlyName(any(Map.class), any(Map.class), any(), any()))
+                .thenAnswer(invocation -> MarketNameService.cleanLegalName(invocation.getArgument(3)));
+        lenient().when(marketNameService.friendlyName(any(UUID.class), any(), any()))
+                .thenAnswer(invocation -> MarketNameService.cleanLegalName(invocation.getArgument(2)));
         // Default origin: unlocated (keeps NEARBY tests explicit about their own location).
         lenient().when(viewerLocationService.resolve(any(), any(), any()))
                 .thenReturn(new ViewerLocation(null, null, Source.NONE, "RS"));
@@ -165,6 +172,32 @@ class WatchedMarketServiceTest {
         assertFalse(b.visited());
         assertTrue(a.watching());
         assertTrue(b.watching());
+    }
+
+    @Test
+    void listMarkets_setsFriendlyNameToCleanedName_keepsRawLegalName() {
+        // Regression: /markets used to return the raw razão social as friendlyName. It must now go
+        // through the MarketNameService cascade (→ cleanLegalName), while `name` keeps the legal string.
+        when(watchedRepository.findAllByUserId(user.getId())).thenReturn(List.of(
+                UserWatchedMarket.builder().marketCnpj("11111111000111").build(),
+                UserWatchedMarket.builder().marketCnpj("22222222000111").build()
+        ));
+        when(marketRepository.findAllByCnpjIn(any())).thenReturn(List.of(
+                market("11111111000111", "BISTEK SUPERMERCADOS LTDA"),
+                market("22222222000111", "DIMED S/A DISTRIBUIDORA DE MEDICAMENTOS")
+        ));
+        when(receiptRepository.findDistinctCnpjsByHousehold(user.getHousehold().getId())).thenReturn(List.of());
+
+        var rows = service.listMarkets(user, MarketScope.MINE, null, null);
+
+        var bistek = rows.stream().filter(row -> row.cnpj().equals("11111111000111")).findFirst().orElseThrow();
+        var dimed = rows.stream().filter(row -> row.cnpj().equals("22222222000111")).findFirst().orElseThrow();
+        assertEquals("Bistek", bistek.friendlyName());
+        assertEquals("BISTEK SUPERMERCADOS LTDA", bistek.name());
+        // "DISTRIBUIDORA DE MEDICAMENTOS" isn't corporate boilerplate, so it stays — only "S/A" is
+        // stripped. The point: the legal "DIMED S/A" prefix is gone and the string is title-cased.
+        assertEquals("Dimed Distribuidora de Medicamentos", dimed.friendlyName());
+        assertEquals("DIMED S/A DISTRIBUIDORA DE MEDICAMENTOS", dimed.name());
     }
 
     @Test
