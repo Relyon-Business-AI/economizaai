@@ -1146,7 +1146,9 @@ The old `radiusKm` param is gone (radius is fixed at 20 km).
 
 Each row: `{ cnpj, cnpjRoot, name, friendlyName, address, city, state, latitude,
 longitude, distanceKm, visited, watching, chainName, chainLogoUrl }`. `name` is the full
-legal razão social; `city`/`state` are new (2026-11-10, null until geocoded); `visited` =
+legal razão social; **`friendlyName` is the cleaned display name** (2026-11-10 — household
+rename → chain name → `cleanLegalName` heuristic, e.g. "BISTEK SUPERMERCADOS LTDA" → "Bistek"),
+so prefer it for display; `city`/`state` are new (2026-11-10, null until geocoded); `visited` =
 has bought here, `watching` = pinned. Watched markets bypass the radius filter — useful
 for "the market on my commute is far from home but I want its promos anyway".
 

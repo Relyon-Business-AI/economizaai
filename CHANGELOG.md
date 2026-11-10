@@ -1,5 +1,14 @@
 # economizai — what's new
 
+## 2026-11-10 — `friendlyName` limpo em `GET /markets`
+
+- **`GET /api/v1/markets` (e `/markets/mine`, pin em `POST /markets/{cnpj}`): `friendlyName` agora vem
+  limpo.** Antes o campo repetia a razão social legal (`"BISTEK SUPERMERCADOS LTDA"`,
+  `"DIMED S/A DISTRIBUIDORA DE MEDICAMENTOS"`); agora passa pela MESMA cascata usada nas ofertas de
+  comparação — apelido do domicílio → nome da rede (`MarketChain`) → heurística `cleanLegalName`
+  (`"Bistek"`, `"Dimed Distribuidora de Medicamentos"`). O campo `name` continua sendo a razão social
+  legal completa.
+
 ## 2026-11-10 — Backfill de cidade/UF nas observações de preço
 
 - **Migração de dados V142** (só preenche NULLs, nunca sobrescreve): completa `city`/`state` das
