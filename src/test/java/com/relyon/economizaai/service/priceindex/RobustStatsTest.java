@@ -3,6 +3,7 @@ package com.relyon.economizaai.service.priceindex;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -12,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RobustStatsTest {
 
     private static List<BigDecimal> prices(String... values) {
-        return java.util.Arrays.stream(values).map(BigDecimal::new).toList();
+        return Arrays.stream(values).map(BigDecimal::new).toList();
     }
 
     @Test
