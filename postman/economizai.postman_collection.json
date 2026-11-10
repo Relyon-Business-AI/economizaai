@@ -5139,7 +5139,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{baseUrl}}/api/v1/price-index/products/{{e2eProductId}}/best-markets?limit=10",
+							"raw": "{{baseUrl}}/api/v1/price-index/products/{{e2eProductId}}/best-markets?limit=10&sort=CHEAPEST",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -5155,6 +5155,11 @@
 								{
 									"key": "limit",
 									"value": "10"
+								},
+								{
+									"key": "sort",
+									"value": "CHEAPEST",
+									"description": "CHEAPEST (padrao, preco asc) ou NEAREST (distancia asc). Cada linha carrega isCheapest/isNearest persistentes."
 								}
 							]
 						}
@@ -5172,7 +5177,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{baseUrl}}/api/v1/price-index/products/{{e2eProductId}}/generic-comparison",
+							"raw": "{{baseUrl}}/api/v1/price-index/products/{{e2eProductId}}/generic-comparison?sort=CHEAPEST",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -5183,6 +5188,13 @@
 								"products",
 								"{{e2eProductId}}",
 								"generic-comparison"
+							],
+							"query": [
+								{
+									"key": "sort",
+									"value": "CHEAPEST",
+									"description": "CHEAPEST (padrao) ou NEAREST."
+								}
 							]
 						}
 					},
@@ -5215,6 +5227,11 @@
 									"value": "Creme de Leite"
 								},
 								{
+									"key": "sort",
+									"value": "CHEAPEST",
+									"description": "CHEAPEST (padrao) ou NEAREST."
+								},
+								{
 									"key": "ean",
 									"value": "7896079431110",
 									"description": "Opcional: o catalogPreview.ean do by-ean. Ancora a resolucao de tipo na entrada de catalogo, mapeando nomes estrangeiros/orfaos do Open Food Facts (ex.: White Rice) para um tipo existente no catalogo pt (arroz). Sem ele, resolve so pelo nome cru.",
@@ -5222,6 +5239,32 @@
 								}
 							]
 						}
+					},
+					"response": []
+				},
+				{
+					"name": "Scanned products history",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/price-index/scanned-products",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"price-index",
+								"scanned-products"
+							]
+						},
+						"description": "Historico produtos escaneados do domicilio, dedupado por produto/tipo, consulta mais recente primeiro, ate 100. So o snapshot gravado (snapshotBestPrice/snapshotScope/scanCount/lastConsultedAt). O app busca o preco ao vivo por item visivel e calcula o delta."
 					},
 					"response": []
 				},
@@ -5302,7 +5345,7 @@
 								"feed"
 							]
 						},
-						"description": "Feed com contexto de localizacao: {locationSource (EXPLICIT|INFERRED|NONE), uf, promos[]}. Recorte 'perto de voce' (seguidos + raio/estado) feito no app."
+						"description": "Feed com contexto de localizacao: {locationSource (DEVICE|PROFILE|RECEIPTS_MEDIAN|UF_FALLBACK|NONE), uf, promos[]}. Recorte 'perto de voce' (seguidos + raio/estado) feito no app."
 					},
 					"response": []
 				},
@@ -5440,7 +5483,7 @@
 			"description": "Market catalogue (visited + watched + nearby) and the user's watchlist of CNPJs to monitor regardless of distance.",
 			"item": [
 				{
-					"name": "List markets (catalogue for picker)",
+					"name": "List markets (Mercados screen)",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -5450,31 +5493,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{baseUrl}}/api/v1/markets",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"markets"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "List markets within radius (km)",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Accept-Language",
-								"value": "pt"
-							}
-						],
-						"url": {
-							"raw": "{{baseUrl}}/api/v1/markets?radiusKm=10",
+							"raw": "{{baseUrl}}/api/v1/markets?scope=ALL",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -5485,8 +5504,50 @@
 							],
 							"query": [
 								{
-									"key": "radiusKm",
-									"value": "10"
+									"key": "scope",
+									"value": "ALL",
+									"description": "ALL (padrao) = raio 10 km da origem resolvida UNIAO seguidos; MINE = so seguidos. Ordenado por distanceKm asc, nulos por ultimo."
+								},
+								{
+									"key": "lat",
+									"value": "-30.0346",
+									"description": "Opcional (par com lng): medir do GPS atual do aparelho.",
+									"disabled": true
+								},
+								{
+									"key": "lng",
+									"value": "-51.2177",
+									"disabled": true
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List markets (MINE = watched only)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/markets?scope=MINE",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"markets"
+							],
+							"query": [
+								{
+									"key": "scope",
+									"value": "MINE"
 								}
 							]
 						}
