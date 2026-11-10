@@ -964,11 +964,12 @@ public class ReceiptService {
             log.debug("personal_promo.skipped user_disabled count={}", promos.size());
             return;
         }
+        var locale = LocalizedMessageService.toLocale(user.getLocale());
         for (var promo : promos) {
-            var title = "Você economizou em " + promo.productName();
+            var title = localizedMessageService.translate("notification.personal_promo.title", locale, promo.productName());
             var paid = promo.paidPrice().setScale(2, RoundingMode.HALF_UP).toPlainString().replace('.', ',');
             var pct = promo.savingsPct().setScale(0, RoundingMode.HALF_UP).toPlainString();
-            var body = String.format("No %s você pagou R$ %s no %s — %s%% abaixo do que normalmente paga.",
+            var body = localizedMessageService.translate("notification.personal_promo.body", locale,
                     promo.productName(), paid, receipt.getMarketName(), pct);
             notificationService.notifyAfterCommit(new NotificationPayload(
                     user,

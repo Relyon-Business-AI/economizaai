@@ -55,6 +55,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.Month;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -107,6 +108,7 @@ class ReceiptServiceCoverageTest {
     @Mock private SubscriptionService subscriptionService;
     @Mock private SavingsAttributionService savingsAttributionService;
     @Mock private MerchantSupportGate merchantSupportGate;
+    @Mock private LocalizedMessageService localizedMessageService;
 
     @InjectMocks private ReceiptService receiptService;
 
@@ -322,6 +324,11 @@ class ReceiptServiceCoverageTest {
                 new BigDecimal("31.14"), 4);
         when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of(promo));
         lenient().when(notificationRuleService.isEnabled(any(), eq(NotificationType.PROMO_PERSONAL))).thenReturn(true);
+        user.setLocale("en");
+        when(localizedMessageService.translate("notification.personal_promo.title", Locale.forLanguageTag("en"),
+                "ARROZ TIO J 5KG")).thenReturn("You saved on ARROZ TIO J 5KG");
+        when(localizedMessageService.translate("notification.personal_promo.body", Locale.forLanguageTag("en"),
+                "ARROZ TIO J 5KG", "19,90", "Mercado X", "31")).thenReturn("localized body");
 
         var response = receiptService.confirm(user, receipt.getId(), new ConfirmReceiptRequest(null));
 
@@ -331,6 +338,8 @@ class ReceiptServiceCoverageTest {
         var payload = payloadCaptor.getValue();
         assertEquals(NotificationType.PROMO_PERSONAL, payload.type());
         assertEquals(user, payload.user());
+        assertEquals("You saved on ARROZ TIO J 5KG", payload.title());
+        assertEquals("localized body", payload.body());
         assertEquals(receipt.getId().toString(), payload.extras().get("receiptId"));
         assertEquals(productId.toString(), payload.extras().get("productId"));
     }

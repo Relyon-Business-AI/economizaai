@@ -19,7 +19,7 @@ public record CreateCategoryRequest(
 
         @Schema(description = "Hex color for the chip.", example = "#F5A623")
         @Size(max = 9) @Pattern(regexp = "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
-                message = "must be a hex color like #F5A623") String color,
+                message = "{validation.color.hex}") String color,
 
         @Schema(description = "Slug of the built-in taxonomy CATEGORY to nest under (null = standalone).",
                 example = "pet")

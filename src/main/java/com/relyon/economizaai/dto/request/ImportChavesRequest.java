@@ -12,6 +12,6 @@ import java.util.List;
  */
 public record ImportChavesRequest(
         @NotEmpty
-        @Size(max = 500, message = "no máximo 500 chaves por importação")
+        @Size(max = 500, message = "{validation.receipts.max-per-batch}")
         List<String> chaves
 ) {}
