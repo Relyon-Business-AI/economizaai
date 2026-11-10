@@ -127,6 +127,33 @@ class CommunityPromoServiceTest {
     }
 
     @Test
+    void promoPricesArePackagePricesEvenWhenDetectionRunsPerKilo() {
+        var now = LocalDateTime.now();
+        var observations = new ArrayList<PriceObservation>();
+        for (var index = 0; index < 8; index++) {
+            observations.add(packageObservation(new BigDecimal("1.39"), new BigDecimal("92.67"), now.minusDays(30)));
+        }
+        for (var index = 0; index < 5; index++) {
+            observations.add(packageObservation(new BigDecimal("0.89"), new BigDecimal("59.33"), now.minusDays(2)));
+        }
+        when(observationRepository.findRecent(any())).thenReturn(observations);
+        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(1L)))
+                .thenReturn(List.of(groupCount(productId, marketCnpj, 3L)));
+
+        var promo = service.detectAll().get(0);
+
+        assertEquals(new BigDecimal("0.89"), promo.currentMedianPrice());
+        assertEquals(new BigDecimal("1.39"), promo.baselineMedianPrice());
+        assertEquals(new BigDecimal("35.98"), promo.dropPct());
+    }
+
+    private PriceObservation packageObservation(BigDecimal packagePrice, BigDecimal pricePerKilo, LocalDateTime observedAt) {
+        var observation = obs(packagePrice, observedAt);
+        observation.setNormalizedUnitPrice(pricePerKilo);
+        return observation;
+    }
+
+    @Test
     void detectsCommunityPromoWhenRecentMedianFarBelowBaseline() {
         var now = LocalDateTime.now();
         var observations = new ArrayList<PriceObservation>();

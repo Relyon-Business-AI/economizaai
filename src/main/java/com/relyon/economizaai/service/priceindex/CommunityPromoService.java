@@ -207,8 +207,8 @@ public class CommunityPromoService {
                 PriceIndexService.cnpjRoot(marketCnpj),
                 firstRow.getMarketName(),
                 firstRow.getMarketName(),
-                priceDrop.recentMedian(),
-                priceDrop.baselineMedian(),
+                priceDrop.recentPackagePrice(),
+                priceDrop.baselinePackagePrice(),
                 priceDrop.dropPct(),
                 priceDrop.recentSampleCount(),
                 distinctHouseholds,
@@ -290,7 +290,25 @@ public class CommunityPromoService {
         var dropPct = baselineMedian.subtract(recentMedian)
                 .multiply(BigDecimal.valueOf(100))
                 .divide(baselineMedian, 2, RoundingMode.HALF_UP);
-        return new PriceDrop(recentMedian, baselineMedian, dropPct, recentPrices.size());
+        var recentPackagePrice = recentPackagePrice(rows, recentCutoff);
+        var baselinePackagePrice = baselineInPackageTerms(baselineMedian, recentMedian, recentPackagePrice);
+        return new PriceDrop(recentMedian, baselineMedian, recentPackagePrice.setScale(2, RoundingMode.HALF_UP),
+                baselinePackagePrice, dropPct, recentPrices.size());
+    }
+
+    /** What the shopper pays on the shelf now — detection may run on R$/kg, but the card shows the package. */
+    private BigDecimal recentPackagePrice(List<PriceObservation> rows, LocalDateTime recentCutoff) {
+        return PriceIndexService.median(rows.stream()
+                .filter(observation -> observation.getObservedAt().isAfter(recentCutoff))
+                .map(PriceObservation::getUnitPrice)
+                .toList());
+    }
+
+    /** The baseline scaled to the current package size, so "was → now" keeps the same drop percentage. */
+    private BigDecimal baselineInPackageTerms(BigDecimal baselineMedian, BigDecimal recentMedian, BigDecimal recentPackagePrice) {
+        if (recentMedian.signum() == 0) return baselineMedian.setScale(2, RoundingMode.HALF_UP);
+        return baselineMedian.multiply(recentPackagePrice)
+                .divide(recentMedian, 2, RoundingMode.HALF_UP);
     }
 
     private record GeoEligibility(Double distanceKm) {}
@@ -300,6 +318,7 @@ public class CommunityPromoService {
     private record SharedPromoCache(Instant computedAt, List<CommunityPromo> promos) {}
 
     private record PriceDrop(BigDecimal recentMedian, BigDecimal baselineMedian,
+                             BigDecimal recentPackagePrice, BigDecimal baselinePackagePrice,
                              BigDecimal dropPct, int recentSampleCount) {}
 
     public record CommunityPromo(

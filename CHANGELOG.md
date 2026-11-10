@@ -1,5 +1,11 @@
 # economizai — what's new
 
+## 2026-11-10 — Promoção da comunidade mostra o preço do pacote
+
+- **`currentMedianPrice` / `baselineMedianPrice`** das promoções da comunidade agora são o **preço de prateleira
+  do pacote** (ex.: Trink 15 g R$ 1,39 → R$ 0,89). Antes vinham em R$/kg quando o produto tinha preço normalizado
+  (R$ 92,67 → R$ 59,33), sem unidade. A detecção continua em R$/kg; `dropPct` não muda.
+
 ## 2026-11-10 — "Perto de você" com 20 km + GPS do aparelho; promoções da comunidade a partir de 1 casa
 
 - **Raio "perto de você" 10 → 20 km** em todo lugar que usa o padrão (Mercados, melhores preços, comparação,
