@@ -128,6 +128,11 @@ public class GlobalExceptionHandler {
         return respond(ex, HttpStatus.BAD_REQUEST, "Leave refused: user is alone in the household");
     }
 
+    @ExceptionHandler(HouseholdLeaveFirstException.class)
+    public ResponseEntity<ErrorResponse> handleLeaveFirst(HouseholdLeaveFirstException ex) {
+        return respond(ex, HttpStatus.CONFLICT, "Join refused: user still shares a household");
+    }
+
     @ExceptionHandler(NotHouseholdHostException.class)
     public ResponseEntity<ErrorResponse> handleNotHost(NotHouseholdHostException ex) {
         return respond(ex, HttpStatus.FORBIDDEN, "Household action reserved to the host");

@@ -28,6 +28,9 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
 
     long countByHouseholdId(UUID householdId);
 
+    /** Is this household still someone's home (a guest away who will return to it)? */
+    boolean existsByHomeHouseholdId(UUID homeHouseholdId);
+
     /** Users who opted in to the public leaderboard — for public handles + the opted-in household set. */
     List<User> findByShareInLeaderboardTrue();
 

@@ -326,8 +326,8 @@ class UserControllerTest {
                 AuthProvider.LOCAL, true);
         var hr = new HouseholdResponse(
                 UUID.randomUUID(), null, user.getId(), "ABC123", LocalDateTime.now().plusHours(48),
-                List.of(new HouseholdResponse.HouseholdMember(user.getId(), user.getName(), user.getEmail())),
-                LocalDateTime.now());
+                List.of(new HouseholdResponse.HouseholdMember(user.getId(), user.getName(), user.getEmail(), null)),
+                LocalDateTime.now(), false);
         var accountExtras = new UserDataExportResponse.AccountExtras(
                 null, null, true, null, true, null, false, null, null, null,
                 null, null, null, null, null, null, null, null);

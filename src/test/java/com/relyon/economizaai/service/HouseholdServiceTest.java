@@ -3,10 +3,11 @@ package com.relyon.economizaai.service;
 import com.relyon.economizaai.dto.request.JoinHouseholdRequest;
 import com.relyon.economizaai.exception.AlreadyInHouseholdException;
 import com.relyon.economizaai.exception.HouseholdFullException;
+import com.relyon.economizaai.exception.HouseholdLeaveFirstException;
 import com.relyon.economizaai.exception.InvalidInviteCodeException;
+import com.relyon.economizaai.exception.NotHouseholdHostException;
 import com.relyon.economizaai.exception.SoloHouseholdLeaveException;
 import com.relyon.economizaai.model.Household;
-import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.MergeCategory;
 import com.relyon.economizaai.model.enums.NotificationType;
@@ -27,7 +28,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -64,6 +67,9 @@ class HouseholdServiceTest {
     private HouseholdMergeService mergeService;
 
     @Mock
+    private HouseholdSplitService splitService;
+
+    @Mock
     private HouseholdCacheGen householdCacheGen;
 
     @Mock
@@ -85,7 +91,7 @@ class HouseholdServiceTest {
         // Room for everyone unless a test says otherwise; translations echo their key.
         lenient().when(subscriptionGate.householdMemberCap(anyList()))
                 .thenReturn(new SubscriptionGateService.MemberCap(6, false));
-        lenient().when(messageService.translate(anyString(), any(java.util.Locale.class), any()))
+        lenient().when(messageService.translate(anyString(), any(Locale.class), any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(householdRepository.save(any(Household.class))).thenAnswer(invocation -> {
             var saved = invocation.<Household>getArgument(0);
@@ -99,6 +105,8 @@ class HouseholdServiceTest {
                 .thenReturn(new HouseholdMergeService.MergeResult(0, 0));
         lenient().when(mergeService.restoreOriginals(any()))
                 .thenReturn(new HouseholdMergeService.MergeResult(0, 0));
+        lenient().when(splitService.copyInto(any(), any(), any()))
+                .thenReturn(new HouseholdSplitService.CopyResult(0, 0, 0));
     }
 
     private User buildUser(Household household, String name, LocalDateTime createdAt) {
@@ -123,12 +131,6 @@ class HouseholdServiceTest {
         household.setCreatedAt(LocalDateTime.now());
         household.setUpdatedAt(LocalDateTime.now());
         return household;
-    }
-
-    private void previousHouseholdIsDeletable(Household previous) {
-        when(userRepository.countByHouseholdId(previous.getId())).thenReturn(0L);
-        when(receiptRepository.existsByHouseholdId(previous.getId())).thenReturn(false);
-        when(receiptRepository.existsByOriginHouseholdId(previous.getId())).thenReturn(false);
     }
 
     // ---------- create / getMine ----------
@@ -231,31 +233,111 @@ class HouseholdServiceTest {
         assertThrows(InvalidInviteCodeException.class, () -> householdService.previewInvite("EXP456"));
     }
 
+    // ---------- regenerate invite ----------
+
+    @Test
+    void regenerateInviteCode_onlyHostMay() {
+        var household = buildHousehold("ABC123");
+        var host = buildUser(household, "Host", LocalDateTime.now().minusDays(5));
+        var guest = asGuest(buildUser(household, "Guest", LocalDateTime.now()), buildHousehold("HOME01"));
+        household.setOwner(host);
+        when(householdRepository.findById(household.getId())).thenReturn(Optional.of(household));
+        when(userRepository.findAllByHouseholdId(household.getId())).thenReturn(List.of(host, guest));
+
+        assertThrows(NotHouseholdHostException.class, () -> householdService.regenerateInviteCode(guest));
+
+        lenient().when(householdRepository.existsByInviteCode(any())).thenReturn(false);
+        var response = householdService.regenerateInviteCode(host);
+        assertNotEquals("ABC123", response.inviteCode());
+    }
+
+    @Test
+    void getMine_hidesInviteCodeFromGuests() {
+        var household = buildHousehold("ABC123");
+        var host = buildUser(household, "Host", LocalDateTime.now().minusDays(5));
+        var guest = asGuest(buildUser(household, "Guest", LocalDateTime.now()), buildHousehold("HOME01"));
+        household.setOwner(host);
+        when(householdRepository.findById(household.getId())).thenReturn(Optional.of(household));
+        when(userRepository.findAllByHouseholdId(household.getId())).thenReturn(List.of(host, guest));
+
+        var guestView = householdService.getMine(guest);
+        var hostView = householdService.getMine(host);
+
+        assertNull(guestView.inviteCode());
+        assertEquals("ABC123", hostView.inviteCode());
+        assertTrue(guestView.canLeave());
+    }
+
+    @Test
+    void getMine_aloneAtHomeCannotLeave() {
+        var household = buildHousehold("ABC123");
+        var user = buildUser(household);
+        household.setOwner(user);
+        when(householdRepository.findById(household.getId())).thenReturn(Optional.of(household));
+        when(userRepository.findAllByHouseholdId(household.getId())).thenReturn(List.of(user));
+
+        assertFalse(householdService.getMine(user).canLeave());
+    }
+
     // ---------- join ----------
 
     @Test
-    void join_movesUserMergesAllDataByDefaultAndDeletesEmptyPrevious() {
+    void join_movesUserRecordsHomeAndJoinTimeAndKeepsHomeHousehold() {
         var previous = buildHousehold("OLD123");
         var target = buildHousehold("NEW456");
         var user = buildUser(previous);
         var host = buildUser(target, "Host", LocalDateTime.now().minusDays(5));
         target.setOwner(host);
-
-        when(householdRepository.findByInviteCode("NEW456")).thenReturn(Optional.of(target));
-        when(userRepository.findAllByHouseholdId(target.getId()))
-                .thenReturn(List.of(host))            // before: capacity + recipients
-                .thenReturn(List.of(host, user));     // after: response
-        previousHouseholdIsDeletable(previous);
+        stubJoin(target, previous, user, List.of(host));
+        when(userRepository.countByHouseholdId(previous.getId())).thenReturn(0L);
+        when(userRepository.existsByHomeHouseholdId(previous.getId())).thenReturn(true);
 
         var response = householdService.join(user, new JoinHouseholdRequest("new456", null, null));
 
         assertEquals(target.getId(), user.getHousehold().getId());
+        assertEquals(previous, user.getHomeHousehold());
+        assertNotNull(user.getHouseholdJoinedAt());
         assertEquals(target.getId(), response.id());
-        assertEquals(2, response.members().size());
+        assertNull(response.inviteCode(), "a guest never sees the invite code");
+        assertTrue(previous.getInviteCodeExpiresAt().isBefore(LocalDateTime.now().plusSeconds(1)),
+                "the home's invite code is expired while its owner is away");
         verify(mergeService).merge(previous, target, Set.of(MergeCategory.values()));
         verify(householdCacheGen).bump(previous.getId());
         verify(householdCacheGen).bump(target.getId());
-        verify(householdRepository).delete(previous);
+        verify(householdRepository, never()).delete(previous);
+    }
+
+    @Test
+    void join_refusedWhileStillSharingAHousehold() {
+        var previous = buildHousehold("OLD123");
+        var target = buildHousehold("NEW456");
+        var user = buildUser(previous);
+        var partner = buildUser(previous, "Partner", LocalDateTime.now());
+        when(householdRepository.findByInviteCode("NEW456")).thenReturn(Optional.of(target));
+        when(userRepository.findAllByHouseholdId(previous.getId())).thenReturn(List.of(user, partner));
+        var request = new JoinHouseholdRequest("NEW456", null, null);
+
+        assertThrows(HouseholdLeaveFirstException.class, () -> householdService.join(user, request));
+
+        assertEquals(previous.getId(), user.getHousehold().getId());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void join_aloneAwayFromHome_goesHomeWithEverythingFirst() {
+        var home = buildHousehold("HOME01");
+        var stranded = buildHousehold("OLD123");
+        var target = buildHousehold("NEW456");
+        var user = asGuest(buildUser(stranded), home);
+        when(householdRepository.findByInviteCode("NEW456")).thenReturn(Optional.of(target));
+        lenient().when(userRepository.findAllByHouseholdId(stranded.getId())).thenReturn(List.of(user));
+        lenient().when(userRepository.findAllByHouseholdId(target.getId())).thenReturn(List.of());
+
+        householdService.join(user, new JoinHouseholdRequest("NEW456", false, null));
+
+        verify(splitService).absorbInto(stranded, home);
+        assertEquals(target.getId(), user.getHousehold().getId());
+        assertEquals(home, user.getHomeHousehold(), "home is where they came back to, not the absorbed household");
     }
 
     @Test
@@ -264,10 +346,7 @@ class HouseholdServiceTest {
         var target = buildHousehold("NEW456");
         var user = buildUser(previous, "Carla", LocalDateTime.now());
         var host = buildUser(target, "Host", LocalDateTime.now().minusDays(5));
-        when(householdRepository.findByInviteCode("NEW456")).thenReturn(Optional.of(target));
-        when(userRepository.findAllByHouseholdId(target.getId())).thenReturn(List.of(host));
-        when(userRepository.countByHouseholdId(previous.getId())).thenReturn(0L);
-        when(receiptRepository.existsByHouseholdId(previous.getId())).thenReturn(true);
+        stubJoin(target, previous, user, List.of(host));
 
         householdService.join(user, new JoinHouseholdRequest("NEW456", null, null));
 
@@ -284,10 +363,7 @@ class HouseholdServiceTest {
         var previous = buildHousehold("OLD123");
         var target = buildHousehold("NEW456");
         var user = buildUser(previous);
-        when(householdRepository.findByInviteCode("NEW456")).thenReturn(Optional.of(target));
-        when(userRepository.findAllByHouseholdId(target.getId())).thenReturn(List.of());
-        when(userRepository.countByHouseholdId(previous.getId())).thenReturn(0L);
-        when(receiptRepository.existsByHouseholdId(previous.getId())).thenReturn(true);
+        stubJoin(target, previous, user, List.of());
 
         householdService.join(user, new JoinHouseholdRequest("NEW456", false, null));
 
@@ -300,31 +376,11 @@ class HouseholdServiceTest {
         var previous = buildHousehold("OLD123");
         var target = buildHousehold("NEW456");
         var user = buildUser(previous);
-        when(householdRepository.findByInviteCode("NEW456")).thenReturn(Optional.of(target));
-        when(userRepository.findAllByHouseholdId(target.getId())).thenReturn(List.of());
-        when(userRepository.countByHouseholdId(previous.getId())).thenReturn(0L);
-        when(receiptRepository.existsByHouseholdId(previous.getId())).thenReturn(true);
+        stubJoin(target, previous, user, List.of());
 
         householdService.join(user, new JoinHouseholdRequest("NEW456", true, null));
 
         verify(mergeService, never()).merge(any(), any(), any());
-    }
-
-    @Test
-    void join_keepsEmptyPreviousHouseholdWhenItStillOwnsData() {
-        var previous = buildHousehold("OLD123");
-        var target = buildHousehold("NEW456");
-        var user = buildUser(previous);
-        when(householdRepository.findByInviteCode("NEW456")).thenReturn(Optional.of(target));
-        when(userRepository.countByHouseholdId(previous.getId())).thenReturn(0L);
-        // no members, but data (receipts) still reference it as origin -> must NOT delete
-        when(receiptRepository.existsByHouseholdId(previous.getId())).thenReturn(false);
-        when(receiptRepository.existsByOriginHouseholdId(previous.getId())).thenReturn(true);
-        when(userRepository.findAllByHouseholdId(target.getId())).thenReturn(List.of(user));
-
-        householdService.join(user, new JoinHouseholdRequest("NEW456", null, null));
-
-        verify(householdRepository, never()).delete(previous);
     }
 
     @Test
@@ -334,8 +390,7 @@ class HouseholdServiceTest {
         var user = buildUser(previous);
         var memberA = buildUser(target, "A", LocalDateTime.now());
         var memberB = buildUser(target, "B", LocalDateTime.now());
-        when(householdRepository.findByInviteCode("NEW456")).thenReturn(Optional.of(target));
-        when(userRepository.findAllByHouseholdId(target.getId())).thenReturn(List.of(memberA, memberB));
+        stubJoin(target, previous, user, List.of(memberA, memberB));
         when(subscriptionGate.householdMemberCap(anyList()))
                 .thenReturn(new SubscriptionGateService.MemberCap(2, true));
         var request = new JoinHouseholdRequest("NEW456", null, null);
@@ -354,10 +409,7 @@ class HouseholdServiceTest {
         var target = buildHousehold("NEW456");
         var user = buildUser(previous);
         var host = buildUser(target, "Host", LocalDateTime.now());
-        when(householdRepository.findByInviteCode("NEW456")).thenReturn(Optional.of(target));
-        when(userRepository.findAllByHouseholdId(target.getId())).thenReturn(List.of(host));
-        when(userRepository.countByHouseholdId(previous.getId())).thenReturn(0L);
-        when(receiptRepository.existsByHouseholdId(previous.getId())).thenReturn(true);
+        stubJoin(target, previous, user, List.of(host));
 
         householdService.join(user, new JoinHouseholdRequest("NEW456", null, null));
 
@@ -391,7 +443,7 @@ class HouseholdServiceTest {
     // ---------- leave ----------
 
     @Test
-    void leave_refusedWhenAloneInHousehold() {
+    void leave_refusedWhenAloneInOwnHome() {
         var household = buildHousehold("SOLO01");
         var user = buildUser(household);
         when(userRepository.findAllByHouseholdId(household.getId())).thenReturn(List.of(user));
@@ -403,27 +455,47 @@ class HouseholdServiceTest {
     }
 
     @Test
-    void leave_reclaimsOriginHomeRestoresDataAndNotifiesRemaining() {
+    void leave_lastMemberAwayFromHome_absorbsHouseholdIntoHome() {
+        var home = buildHousehold("HOME01");
         var shared = buildHousehold("FAM111");
-        var origin = buildHousehold("OLD123");
-        var leaver = buildUser(shared, "Leaver", LocalDateTime.now());
+        var lastMember = asGuest(buildUser(shared), home);
+        when(userRepository.findAllByHouseholdId(shared.getId())).thenReturn(List.of(lastMember));
+        lenient().when(userRepository.findAllByHouseholdId(home.getId())).thenReturn(List.of(lastMember));
+
+        var response = householdService.leave(lastMember);
+
+        assertEquals(home.getId(), lastMember.getHousehold().getId());
+        assertNull(lastMember.getHomeHousehold());
+        assertNull(lastMember.getHouseholdJoinedAt());
+        assertEquals(home.getId(), response.id());
+        verify(mergeService).restoreOriginals(home);
+        verify(splitService).absorbInto(shared, home);
+        verify(splitService, never()).copyInto(any(), any(), any());
+    }
+
+    @Test
+    void leave_guestReturnsHomeRestoresWhatTheyBroughtAndCopiesSinceJoin() {
+        var shared = buildHousehold("FAM111");
+        var home = buildHousehold("OLD123");
         var stayer = buildUser(shared, "Stayer", LocalDateTime.now().minusDays(3));
+        var leaver = asGuest(buildUser(shared, "Leaver", LocalDateTime.now()), home);
+        var joinedAt = leaver.getHouseholdJoinedAt();
         shared.setOwner(stayer);
-        var broughtReceipt = Receipt.builder().originHousehold(origin).build();
         when(userRepository.findAllByHouseholdId(shared.getId())).thenReturn(List.of(leaver, stayer));
-        when(receiptRepository.findFirstByUserIdAndOriginHouseholdIdNotOrderByCreatedAtAsc(leaver.getId(), shared.getId()))
-                .thenReturn(Optional.of(broughtReceipt));
-        when(householdRepository.findById(origin.getId())).thenReturn(Optional.of(origin));
+        lenient().when(userRepository.findAllByHouseholdId(home.getId())).thenReturn(List.of(leaver));
         when(userRepository.countByHouseholdId(shared.getId())).thenReturn(1L);
 
         var response = householdService.leave(leaver);
 
-        assertEquals(origin.getId(), leaver.getHousehold().getId());
-        assertEquals(origin.getId(), response.id());
+        assertEquals(home.getId(), leaver.getHousehold().getId());
+        assertNull(leaver.getHomeHousehold());
+        assertEquals(home.getId(), response.id());
         assertEquals(leaver.getId(), response.hostId(), "leaver hosts the home they return to");
-        verify(mergeService).restoreOriginals(origin);
+        assertEquals(stayer, shared.getOwner(), "the shared household keeps its host");
+        verify(mergeService).restoreOriginals(home);
+        verify(splitService).copyInto(shared, home, joinedAt);
         verify(householdCacheGen).bump(shared.getId());
-        verify(householdCacheGen).bump(origin.getId());
+        verify(householdCacheGen).bump(home.getId());
         var captor = ArgumentCaptor.forClass(NotificationPayload.class);
         verify(notificationService).notifyAfterCommit(captor.capture());
         assertEquals(stayer, captor.getValue().user());
@@ -431,49 +503,51 @@ class HouseholdServiceTest {
     }
 
     @Test
-    void leave_hostLeaving_transfersHostToMostSeniorRemainingMember() {
+    void leave_originalHost_startsNewHouseholdWithFullCopyAndOldestGuestInherits() {
         var shared = buildHousehold("FAM111");
         var host = buildUser(shared, "Host", LocalDateTime.now().minusDays(30));
-        var elder = buildUser(shared, "Elder", LocalDateTime.now().minusDays(20));
-        var newer = buildUser(shared, "Newer", LocalDateTime.now());
+        var firstGuest = asGuest(buildUser(shared, "First", LocalDateTime.now()), buildHousehold("HOME01"));
+        firstGuest.setHouseholdJoinedAt(LocalDateTime.now().minusDays(20));
+        var laterGuest = asGuest(buildUser(shared, "Later", LocalDateTime.now().minusDays(90)), buildHousehold("HOME02"));
+        laterGuest.setHouseholdJoinedAt(LocalDateTime.now().minusDays(2));
         shared.setOwner(host);
-        when(userRepository.findAllByHouseholdId(shared.getId())).thenReturn(List.of(host, newer, elder));
+        when(userRepository.findAllByHouseholdId(shared.getId())).thenReturn(List.of(host, laterGuest, firstGuest));
         when(householdRepository.existsByInviteCode(any())).thenReturn(false);
-        when(receiptRepository.findFirstByUserIdAndOriginHouseholdIdNotOrderByCreatedAtAsc(any(), any()))
-                .thenReturn(Optional.empty());
         when(userRepository.countByHouseholdId(shared.getId())).thenReturn(2L);
 
-        householdService.leave(host);
+        var response = householdService.leave(host);
 
-        assertEquals(elder, shared.getOwner());
         assertNotEquals(shared.getId(), host.getHousehold().getId());
+        assertEquals(host.getId(), response.hostId());
+        assertEquals(firstGuest, shared.getOwner(), "the guest who joined first inherits, not the oldest account");
+        verify(splitService).copyInto(shared, host.getHousehold(), null);
+        verify(mergeService, never()).restoreOriginals(any());
     }
 
     @Test
-    void leave_withoutOriginGetsFreshSoloHouseholdAndDeletesEmptyPrevious() {
-        var previous = buildHousehold("OLD123");
-        var user = buildUser(previous);
-        var other = buildUser(previous, "Other", LocalDateTime.now());
-        when(userRepository.findAllByHouseholdId(previous.getId())).thenReturn(List.of(user, other));
-        when(householdRepository.existsByInviteCode(any())).thenReturn(false);
-        when(receiptRepository.findFirstByUserIdAndOriginHouseholdIdNotOrderByCreatedAtAsc(any(), any()))
-                .thenReturn(Optional.empty());
-        previousHouseholdIsDeletable(previous);
+    void leave_promotedHostGoesBackToTheirOwnHome() {
+        var shared = buildHousehold("FAM111");
+        var home = buildHousehold("HOME01");
+        var promoted = asGuest(buildUser(shared, "Promoted", LocalDateTime.now()), home);
+        var other = asGuest(buildUser(shared, "Other", LocalDateTime.now()), buildHousehold("HOME02"));
+        shared.setOwner(promoted);
+        when(userRepository.findAllByHouseholdId(shared.getId())).thenReturn(List.of(promoted, other));
+        lenient().when(userRepository.findAllByHouseholdId(home.getId())).thenReturn(List.of(promoted));
+        when(userRepository.countByHouseholdId(shared.getId())).thenReturn(1L);
 
-        var response = householdService.leave(user);
+        householdService.leave(promoted);
 
-        assertNotEquals(previous.getId(), user.getHousehold().getId());
-        assertNotNull(response.inviteCode());
-        assertEquals(user.getId(), response.hostId());
-        verify(householdRepository).delete(previous);
+        assertEquals(home.getId(), promoted.getHousehold().getId());
+        verify(splitService).copyInto(eq(shared), eq(home), any());
+        assertEquals(other, shared.getOwner());
     }
 
     @Test
-    void leave_mergeDisabled_stillGetsFreshSoloHousehold() {
+    void leave_mergeDisabled_hostStillGetsFreshHouseholdWithoutRestore() {
         ReflectionTestUtils.setField(householdService, "mergeEnabled", false);
         var previous = buildHousehold("OLD123");
         var user = buildUser(previous);
-        var other = buildUser(previous, "Other", LocalDateTime.now());
+        var other = asGuest(buildUser(previous, "Other", LocalDateTime.now()), buildHousehold("HOME01"));
         when(userRepository.findAllByHouseholdId(previous.getId())).thenReturn(List.of(user, other));
         when(householdRepository.existsByInviteCode(any())).thenReturn(false);
         when(userRepository.countByHouseholdId(previous.getId())).thenReturn(1L);
@@ -483,5 +557,23 @@ class HouseholdServiceTest {
         assertNotEquals(previous.getId(), user.getHousehold().getId());
         verify(mergeService, never()).restoreOriginals(any());
         assertFalse(user.getHousehold().getInviteCode().isBlank());
+    }
+
+    // ---------- helpers ----------
+
+    private User asGuest(User user, Household home) {
+        user.setHomeHousehold(home);
+        user.setHouseholdJoinedAt(LocalDateTime.now().minusDays(1));
+        return user;
+    }
+
+    private void stubJoin(Household target, Household previous, User joiner, List<User> targetMembers) {
+        when(householdRepository.findByInviteCode("NEW456")).thenReturn(Optional.of(target));
+        lenient().when(userRepository.findAllByHouseholdId(previous.getId())).thenReturn(List.of(joiner));
+        var afterJoin = new ArrayList<>(targetMembers);
+        afterJoin.add(joiner);
+        lenient().when(userRepository.findAllByHouseholdId(target.getId()))
+                .thenReturn(targetMembers)
+                .thenReturn(afterJoin);
     }
 }

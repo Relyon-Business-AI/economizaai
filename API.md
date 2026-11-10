@@ -312,30 +312,52 @@ Every user already has a household (auto-created at register; they are its
 dashboard, lists, predictions, custom categories, friendly names).
 
 ```
-GET  /api/v1/households/me                 → { id, name, hostId, inviteCode, inviteCodeExpiresAt, members[{id,name,email}], createdAt }
+GET  /api/v1/households/me                 → { id, name, hostId, inviteCode, inviteCodeExpiresAt,
+                                               members[{id,name,email,joinedAt}], createdAt, canLeave }
 PATCH /api/v1/households/me                { "name": "Casa da Ana" }   ← any member; blank clears (app shows a default)
 GET  /api/v1/households/invites/{code}     → { householdName, hostFirstName, memberCount, memberFirstNames[] } — preview BEFORE joining
-POST /api/v1/households/join               { "inviteCode": "ABC123" }   ← case-insensitive; your data MOVES with you
-POST /api/v1/households/leave              → back to your own household with what you brought; 400 if you're alone
-POST /api/v1/households/me/invite-code/regenerate   → rotates the code, extends TTL another 48h
-DELETE /api/v1/households/me/members/{memberId}     → HOST ONLY (403 otherwise); the member gets their data back
+POST /api/v1/households/join               { "inviteCode": "ABC123", "bringData": true }   ← case-insensitive
+POST /api/v1/households/leave              → see "Leaving" below
+POST /api/v1/households/me/invite-code/regenerate   → HOST ONLY (403); rotates the code, extends TTL another 48h
+DELETE /api/v1/households/me/members/{memberId}     → HOST ONLY (403); the member moves out as if they left
 ```
 
-**Join moves data (since 2026-11).** Receipts, shopping lists, manual purchases,
-snoozes, custom categories, category overrides, product/market friendly names and
-brand preferences of the joiner move into the shared household. On a collision
-(same NFC-e already in the target) the target's copy wins and the joiner's stays
-parked in their old household. `bringData: false` opts out (membership only).
+**Roles.** The **host** (`hostId`) is whoever created the household, or the guest
+promoted after the host left. Only the host invites (rotates the code) and removes
+members (`403 household.not.host`). **`inviteCode`/`inviteCodeExpiresAt` come back
+only for the host** (null for guests) — show the share/invite UI only when they're
+present. Every user's **home** (their own household) is stored on the account while
+they are a guest elsewhere; it is never inferred from receipts.
 
-**Leave / kick restore.** The leaver (or the kicked member) returns to the
-household their data came from, with everything that originated there restored.
-Receipts scanned *while* in the shared household stay with the household. A
-member who is alone cannot leave (400 `household.leave.solo`).
+**Invite link.** The app shares `https://economizaai.app/convite/<code>` (WhatsApp
+etc.). Opening it shows the preview (`GET /invites/{code}`) and the
+"bring my data?" choice, then calls `/join`. Copy to show:
+- to the host when sharing: guests may take a **copy** of what is created from the
+  moment they join, if they ever leave;
+- to a guest who picks `bringData: true`: if the host ever leaves, the host may take
+  a **copy** of what the guest brought.
 
-**Host (anfitrião).** `hostId` is the member who created the household. Only the
-host may remove members (`403 household.not.host`). When the host leaves or
-deletes the account, the most senior remaining member becomes host. Renaming and
-rotating the code are open to every member.
+**Join.** `bringData` (default `true`) moves the joiner's receipts, lists, manual
+purchases, snoozes, custom categories, overrides, friendly names and brand
+preferences into the shared household. On a collision (same NFC-e already there)
+the household's row wins and the joiner's stays parked at home. `bringData: false`
+keeps everything at home, untouched. Joining while still sharing a household with
+others → **`409 household.join.leave.first`**.
+
+**Leaving** (also what happens to a removed member):
+- **Guest** (incl. a promoted host): returns to their home, gets back what they
+  brought, and takes a **copy** of everything created in the shared household since
+  they joined — including what others scanned. Starts empty if their home was empty.
+- **Original host**: starts a **new** household with a **copy** of everything,
+  including what guests brought. The guest who joined first becomes host.
+- **Last member** (a guest left alone): the household's data **moves** to their
+  home (one copy per NFC-e) and the household is deleted.
+- **Alone in your own home**: nothing to leave → `400 household.leave.solo`.
+  `canLeave=false` in `GET /me` tells the app to hide the button.
+
+Nobody loses data: whatever is taken is a copy, the household keeps its originals.
+Copies never feed the price index again (no double counting). `members[].joinedAt`
+is null for the original host.
 
 **Member cap.** `/join` answers `402` (`household.full.free`) when the household
 has the FREE maximum (2) and nobody in it is PRO — Premium lifts it to 6. The
@@ -349,15 +371,17 @@ is removed.
 **Invite codes expire after 48h.** When that happens, `/join` and the preview
 return 400 with the same message as an unknown code (we don't tell the requester
 whether the code was wrong vs. stale). Preview shares the join rate limit (10/h),
-so it can't be used to probe codes.
-
-When the last member leaves, the household row is deleted only if it owns no
-data; otherwise it stays dormant as the origin "home" of that data.
+so it can't be used to probe codes. While a user is away as a guest, their home's
+code is expired so nobody joins it in their absence.
 
 **Receipts carry `scannedBy: { id, name }`** (list, detail and the Home
 `recentReceipts`) so the app can show "por Ana" on a shared history.
 
 ### Data-share consents (household split)
+
+> **Not used by the leave flow (2026-11-10):** leaving already copies the shared
+> data with no approval step (the permission is given in the invite copy above).
+> These endpoints remain for compatibility and always return an empty inbox.
 
 When a member leaves and wants to take a **copy of another member's data** with
 them, the other member must consent first. The grantor sees pending requests
