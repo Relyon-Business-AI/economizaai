@@ -1,5 +1,14 @@
 # economizai — what's new
 
+## 2026-11-10 — Home mais rápida: `GET /dashboard?light=true` e cache de 30 min
+
+- **`GET /dashboard?light=true`** devolve só o que a Home usa (herói do mês, notas recentes, sininho);
+  `suggestedShoppingList` e `communityPromosNearby` vêm vazios. Pula as previsões de consumo e a detecção
+  de promoções próximas — que rodavam em TODA abertura da Home (ver `consumption.predict.done` nos logs)
+  sem a tela exibir nada disso. Sem o parâmetro o comportamento é o antigo.
+- Cache do dashboard passa de 2 min pra **30 min** (a chave já inclui a geração do domicílio, então
+  qualquer mudança em nota invalida na hora; o sininho continua ao vivo).
+
 ## 2026-11-10 — Foto de perfil: ETag/304 e cache quente
 
 - **`GET /users/me/profile-picture` e `GET /households/me/members/{id}/profile-picture`** agora respondem

@@ -9,6 +9,7 @@ import com.relyon.economizaai.dto.response.SuggestedShoppingListResponse;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.MarketScope;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
@@ -48,7 +49,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -113,6 +117,20 @@ class DashboardCacheServiceTest {
 
     private SpendInsightsResponse spend(BigDecimal total, BigDecimal discount, List<MarketBucket> byMarket) {
         return new SpendInsightsResponse(null, null, total, discount, List.of(), List.of(), byMarket, List.of());
+    }
+
+    // ---------------------------------------------------------- light (app Home)
+
+    @Test
+    void light_skipsPredictionsAndNearbyPromosEntirely() {
+        var response = service.buildCachedDashboard(user, MarketScope.ALL, true);
+
+        assertTrue(response.suggestedShoppingList().isEmpty());
+        assertTrue(response.communityPromosNearby().isEmpty());
+        assertNotNull(response.currentMonth());
+        verify(consumptionService, never()).suggestedList(any(), anyBoolean(), anyInt());
+        verify(communityPromoService, never()).detectInScope(any());
+        verify(nearbyScopeService, never()).forUser(any());
     }
 
     // ---------------------------------------------------------- empty household

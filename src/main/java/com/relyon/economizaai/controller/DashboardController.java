@@ -21,10 +21,16 @@ public class DashboardController {
 
     private final DashboardService dashboardService;
 
+    /**
+     * {@code light=true} skips the two expensive sections the Home doesn't render
+     * (consumption suggestions and nearby promos come back empty) — the hero numbers,
+     * recent receipts and unread badge are all the app needs on open.
+     */
     @GetMapping
     public ResponseEntity<DashboardResponse> dashboard(
             @AuthenticationPrincipal User user,
-            @RequestParam(defaultValue = "ALL") MarketScope scope) {
-        return ResponseEntity.ok(dashboardService.build(user, scope));
+            @RequestParam(defaultValue = "ALL") MarketScope scope,
+            @RequestParam(defaultValue = "false") boolean light) {
+        return ResponseEntity.ok(dashboardService.build(user, scope, light));
     }
 }

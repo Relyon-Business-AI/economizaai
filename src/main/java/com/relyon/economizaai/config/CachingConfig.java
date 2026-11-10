@@ -38,8 +38,11 @@ public class CachingConfig {
     @Bean
     public CacheManager cacheManager() {
         var manager = new CaffeineCacheManager();
+        // Keyed by the household's cache generation, so every receipt mutation already
+        // invalidates it; the TTL is only a safety net. 2 min meant a real user (opens the
+        // app a few times a day) never hit it and paid the full build every time.
         manager.registerCustomCache(DASHBOARD_CACHE, Caffeine.newBuilder()
-                .expireAfterWrite(Duration.ofMinutes(2))
+                .expireAfterWrite(Duration.ofMinutes(30))
                 .maximumSize(10_000)
                 .build());
         manager.registerCustomCache(INSIGHTS_SPEND_CACHE, Caffeine.newBuilder()

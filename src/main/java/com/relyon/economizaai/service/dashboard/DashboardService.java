@@ -33,7 +33,13 @@ public class DashboardService {
 
     @Transactional(readOnly = true)
     public DashboardResponse build(User user, MarketScope scope) {
-        var core = dashboardCacheService.buildCachedDashboard(user, scope);
+        return build(user, scope, false);
+    }
+
+    /** {@code light} = hero + recent receipts + unread only (no predictions, no nearby promos). */
+    @Transactional(readOnly = true)
+    public DashboardResponse build(User user, MarketScope scope, boolean light) {
+        var core = dashboardCacheService.buildCachedDashboard(user, scope, light);
         var unread = notificationInboxService.unreadCount(user);
         log.debug("dashboard.built household={} unread={}", user.getHousehold().getId(), unread);
         return new DashboardResponse(

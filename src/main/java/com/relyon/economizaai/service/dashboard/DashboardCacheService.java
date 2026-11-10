@@ -4,6 +4,7 @@ import com.relyon.economizaai.time.BrazilClock;
 import java.util.Objects;
 
 import com.relyon.economizaai.config.CachingConfig;
+import com.relyon.economizaai.dto.response.ConsumptionPredictionResponse;
 import com.relyon.economizaai.dto.response.DashboardResponse;
 import com.relyon.economizaai.dto.response.DashboardResponse.SpendSnapshot;
 import com.relyon.economizaai.dto.response.ReceiptSummaryResponse;
@@ -75,20 +76,38 @@ public class DashboardCacheService {
         return buildCachedDashboard(user, MarketScope.ALL);
     }
 
+    // Cached here too: the delegation below is a self-invocation, which the caching proxy
+    // can't see — without this annotation the full variant would never hit the cache.
     @Transactional(readOnly = true)
     @Cacheable(value = CachingConfig.DASHBOARD_CACHE,
-            key = "#user.id + ':' + #scope + ':' + @householdCacheGen.get(#user.household.id)")
+            key = "#user.id + ':' + #scope + ':false:' + @householdCacheGen.get(#user.household.id)")
     public DashboardResponse buildCachedDashboard(User user, MarketScope scope) {
+        return buildCachedDashboard(user, scope, false);
+    }
+
+    /**
+     * {@code light} skips consumption predictions and nearby promos — the two sections
+     * that dominate the build time and that the app's Home doesn't render. Cached under
+     * its own key so a light hit never hands a full client empty sections.
+     */
+    @Transactional(readOnly = true)
+    @Cacheable(value = CachingConfig.DASHBOARD_CACHE,
+            key = "#user.id + ':' + #scope + ':' + #light + ':' + @householdCacheGen.get(#user.household.id)")
+    public DashboardResponse buildCachedDashboard(User user, MarketScope scope, boolean light) {
         var householdId = user.getHousehold().getId();
         var spendSnapshot = buildSpendSnapshot(user, scope);
         var recent = loadRecentReceipts(user, householdId, scope);
-        var suggested = consumptionService.suggestedList(user, false, 0).items().stream()
-                .limit(SUGGESTED_TOP_N)
-                .toList();
-        var promos = loadTopPromos(user, householdId);
+        List<ConsumptionPredictionResponse> suggested = List.of();
+        List<CommunityPromo> promos = List.of();
+        if (!light) {
+            suggested = consumptionService.suggestedList(user, false, 0).items().stream()
+                    .limit(SUGGESTED_TOP_N)
+                    .toList();
+            promos = loadTopPromos(user, householdId);
+        }
 
-        log.debug("dashboard.core built household={} recent={} suggested={} promos={}",
-                householdId, recent.size(), suggested.size(), promos.size());
+        log.debug("dashboard.core built household={} light={} recent={} suggested={} promos={}",
+                householdId, light, recent.size(), suggested.size(), promos.size());
         // unread is filled live by DashboardService (cheap + must stay fresh).
         return new DashboardResponse(spendSnapshot, recent, suggested, promos, 0L, LocalDateTime.now());
     }
