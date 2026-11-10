@@ -1,5 +1,13 @@
 # economizai — what's new
 
+## 2026-11-10 — Foto de perfil: ETag/304 e cache quente
+
+- **`GET /users/me/profile-picture` e `GET /households/me/members/{id}/profile-picture`** agora respondem
+  com `ETag` forte (chave do upload, ou hash das iniciais) e `Cache-Control: private, max-age=300`.
+  Mande `If-None-Match` e receba **304** sem bytes quando nada mudou. `X-Profile-Picture-Fallback` vem nos dois.
+- Bytes renderizados ficam em cache no servidor por ETag (Caffeine, 500 entradas / 30 min) — um foco de tela
+  não vai mais buscar o objeto no R2 de novo. Upload/remoção invalidam.
+
 ## 2026-11-10 — Foto de perfil dos membros da casa
 
 - **`GET /households/me/members/{memberId}/profile-picture`** — foto (ou avatar gerado) de outro membro da

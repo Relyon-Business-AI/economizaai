@@ -1,5 +1,7 @@
 package com.relyon.economizaai.service.profile;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.relyon.economizaai.exception.InvalidProfilePictureException;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.repository.UserRepository;
@@ -19,6 +21,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Set;
 
@@ -51,8 +54,31 @@ public class ProfilePictureService {
     private final ProfilePictureStorage storage;
     private final UserRepository userRepository;
 
+    // Hot cache of rendered pictures keyed by ETag (storage key for uploads, a name/email
+    // hash for generated initials). Every Home/Settings/Casa focus used to re-fetch the
+    // object from R2 and re-stream it; a key never changes content (upload = new key), so
+    // a hit here is always correct. Bounded so a burst of users can't blow the heap.
+    private final Cache<String, byte[]> renderedByEtag = Caffeine.newBuilder()
+            .maximumSize(500)
+            .expireAfterAccess(Duration.ofMinutes(30))
+            .build();
+
     @Value("${economizaai.profile-picture.max-size-mb:5}")
     private int maxSizeMb;
+
+    /**
+     * Strong ETag for the user's current picture: the storage key (new upload = new key),
+     * or a stable hash of the initials inputs for the generated avatar. Lets the app
+     * revalidate with {@code If-None-Match} and get a 304 instead of the bytes.
+     */
+    public String etag(User user) {
+        var key = user.getProfilePictureKey();
+        if (key != null) {
+            return "\"" + key.replace("\"", "") + "\"";
+        }
+        var seed = (user.getName() == null ? "" : user.getName()) + "|" + (user.getEmail() == null ? "" : user.getEmail());
+        return "\"initials-" + Integer.toHexString(seed.hashCode()) + "\"";
+    }
 
     @Transactional
     public void upload(User user, MultipartFile file) {
@@ -69,6 +95,7 @@ public class ProfilePictureService {
         }
 
         var previousKey = user.getProfilePictureKey();
+        renderedByEtag.invalidate(etag(user));
         try {
             var processed = downscaleIfPossible(file.getBytes(), contentType);
             String key;
@@ -98,10 +125,16 @@ public class ProfilePictureService {
      */
     @Transactional(readOnly = true)
     public ProfilePictureBytes read(User user) {
+        var etag = etag(user);
+        var cached = renderedByEtag.getIfPresent(etag);
         if (user.getProfilePictureKey() != null) {
+            if (cached != null) {
+                return new ProfilePictureBytes(cached, user.getProfilePictureContentType(), false);
+            }
             try {
                 var bytes = storage.read(user.getProfilePictureKey());
                 if (bytes != null) {
+                    renderedByEtag.put(etag, bytes);
                     return new ProfilePictureBytes(bytes, user.getProfilePictureContentType(), false);
                 }
                 log.warn("profile_picture.read.missing user={} key={} — falling back to initials",
@@ -111,13 +144,15 @@ public class ProfilePictureService {
                         LogMasker.email(user.getEmail()), ex.getClass().getSimpleName(), ex.getMessage());
             }
         }
-        return new ProfilePictureBytes(generateInitialsAvatar(user), FALLBACK_CONTENT_TYPE, true);
+        var initials = cached != null ? cached : renderedByEtag.get(etag, ignored -> generateInitialsAvatar(user));
+        return new ProfilePictureBytes(initials, FALLBACK_CONTENT_TYPE, true);
     }
 
     @Transactional
     public void delete(User user) {
         var key = user.getProfilePictureKey();
         if (key == null) return;
+        renderedByEtag.invalidate(etag(user));
         user.setProfilePictureKey(null);
         user.setProfilePictureContentType(null);
         user.setProfilePictureUploadedAt(null);

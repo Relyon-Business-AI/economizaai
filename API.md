@@ -241,7 +241,8 @@ PUT    /api/v1/users/me/digest-preferences
 
 POST   /api/v1/users/me/profile-picture   ← multipart form, field name "file"
                                             JPG/PNG/WEBP, max 5MB
-GET    /api/v1/users/me/profile-picture   ← returns the bytes (Content-Type matches the upload)
+GET    /api/v1/users/me/profile-picture   ← returns the bytes (Content-Type matches the upload). Strong ETag +
+                                             Cache-Control private/5min; send If-None-Match → 304 without bytes.
 DELETE /api/v1/users/me/profile-picture
 ```
 
