@@ -165,7 +165,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(PaywallException.class)
     public ResponseEntity<ErrorResponse> handlePaywall(PaywallException ex) {
-        return respond(ex, HttpStatus.PAYMENT_REQUIRED, "Paywall: PRO feature blocked for FREE tier");
+        return respond(ex, HttpStatus.PAYMENT_REQUIRED, "Paywall: PRO feature " + ex.getFeatureName() + " blocked for FREE tier");
     }
 
     @ExceptionHandler(PaidApiQuotaExceededException.class)
