@@ -16,6 +16,7 @@ public enum AiActivity {
     RECEIPT_RESCUE(AiModelTier.EXTRACTOR), // parse-rescue: extracts the receipt from fetched SEFAZ HTML the state parser failed on
     FINE_CATEGORY_CLASSIFY(AiModelTier.CURATOR), // classifies products into the fine 2-level taxonomy leaf when keywords are low-confidence
     PHOTO_EXTRACT(AiModelTier.EXTRACTOR), // vision: extracts items from a photographed printed receipt (origin=PHOTO fallback)
+    TYPE_RESOLUTION(AiModelTier.EXTRACTOR), // closed-set: mapeia um nome de catálogo estrangeiro/órfão (OFF) para um generic_name_norm existente
     MODEL_BENCHMARK(AiModelTier.EXTRACTOR); // classifica o golden set com um modelo explícito pra medir acurácia pura
 
     private final AiModelTier tier;

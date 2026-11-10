@@ -1257,6 +1257,20 @@ resolve the type by name instead — same shape, `scannedProductId: null`:
 GET /api/v1/price-index/generic-comparison?type=Creme%20de%20Leite
 ```
 
+Optionally pass the `catalogPreview.ean` as `&ean=...`. This anchors the type
+resolution on the catalog entry: when Open Food Facts stored the name in English
+or junk (e.g. EAN 7896079431110 = a Brazilian white rice, OFF name "White Rice"),
+the backend maps it to a type that actually exists in our pt catalog ("arroz") via
+a small static staple map or, as a last resort, closed-set AI (returns exactly one
+of our existing priced types, or none). The displayed name/brand never change —
+only the comparison TYPE key. Without `ean` the behavior is unchanged (resolves
+from the raw name only). Resolution is cached per EAN (≤1 AI call per code), and
+is inert (falls back to the empty state) when no AI key is configured.
+
+```
+GET /api/v1/price-index/generic-comparison?type=White%20Rice&ean=7896079431110
+```
+
 ### Price history for one (product, market) pair
 
 Backs the **expandable offer row** (stock/dollar-style line chart). Same response

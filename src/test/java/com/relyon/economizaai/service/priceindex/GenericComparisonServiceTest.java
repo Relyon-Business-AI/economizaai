@@ -13,6 +13,7 @@ import com.relyon.economizaai.repository.PriceObservationAuditRepository.Product
 import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.service.HouseholdProductAliasService;
+import com.relyon.economizaai.service.extraction.EanCatalogService;
 import com.relyon.economizaai.service.extraction.ProductTypeResolver;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.geo.MarketNameService;
@@ -50,6 +51,7 @@ class GenericComparisonServiceTest {
     @Mock private ViewerLocationService viewerLocationService;
     @Mock private PrivacyTierResolver privacyTierResolver;
     @Mock private ProductTypeResolver productTypeResolver;
+    @Mock private EanCatalogService eanCatalogService;
     @Mock private HouseholdProductAliasService householdProductAliasService;
 
     private final CollaborativeProperties properties = new CollaborativeProperties();
@@ -63,7 +65,7 @@ class GenericComparisonServiceTest {
         // Inject the real properties record (not a mock) so thresholds/radius are concrete.
         service = new GenericComparisonService(productRepository, observationRepository, auditRepository,
                 marketLocationService, marketNameService, viewerLocationService, privacyTierResolver,
-                productTypeResolver, householdProductAliasService, properties);
+                productTypeResolver, eanCatalogService, householdProductAliasService, properties);
         var household = Household.builder().id(UUID.randomUUID()).build();
         user = User.builder().id(UUID.randomUUID()).household(household).build();
         lenient().when(viewerLocationService.resolve(any()))
