@@ -44,6 +44,7 @@ class MarketLocationServiceTest {
     @Mock private CategoryResolver categoryResolver;
     @Mock private NominatimGeocoder geocoder;
     @Mock private CnpjActivityClient cnpjActivityClient;
+    @Mock private CepLocationService cepLocationService;
     @Mock private ProductRepository productRepository;
     @Mock private ContactService contactService;
 
@@ -51,7 +52,7 @@ class MarketLocationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new MarketLocationService(repository, chainRepository, geocoder, cnpjActivityClient, productRepository,
+        service = new MarketLocationService(repository, chainRepository, geocoder, cnpjActivityClient, cepLocationService, productRepository,
                 categoryResolver, contactService);
     }
 
@@ -133,6 +134,78 @@ class MarketLocationServiceTest {
         assertThat(market.getGeocodeFailedAt()).isNotNull();
         assertThat(market.getGeocodedAt()).isNull();
         verify(repository).save(market);
+    }
+
+    @Test
+    void geocodeOne_cleansSefazAddressBeforeGeocoding() {
+        var market = MarketLocation.builder()
+                .cnpj("36093610000124").cnpjRoot("36093610")
+                .address("AVENIDA OLSEN , 34 , , CENTRO , PENAPOLIS , SP").geocodeAttempts(0).build();
+        when(geocoder.geocode("AVENIDA OLSEN 34, PENAPOLIS, SP, Brasil")).thenReturn(Optional.of(
+                new GeocodeResult(new BigDecimal("-21.42"), new BigDecimal("-50.07"), "Penápolis", "SP")));
+        when(repository.findById(any())).thenReturn(Optional.of(market));
+
+        service.geocodeOne(market);
+
+        assertThat(market.getLatitude()).isEqualByComparingTo("-21.42");
+        assertThat(market.getState()).isEqualTo("SP");
+    }
+
+    @Test
+    void geocodeOne_cnpjInAddressSlot_usesTheRegistryAddress() {
+        var market = MarketLocation.builder()
+                .cnpj("79257291000158").cnpjRoot("79257291")
+                .name("SUPERMERCADOS ARCHER").address("79.257.291/0001-58").geocodeAttempts(0).build();
+        when(cnpjActivityClient.isEnabled()).thenReturn(true);
+        when(cnpjActivityClient.lookup("79257291000158")).thenReturn(registryLookup(
+                new MarketAddress("RUA XV DE NOVEMBRO", "100", "BLUMENAU", "SC", "89010000")));
+        when(geocoder.geocode("RUA XV DE NOVEMBRO 100, BLUMENAU, SC, Brasil")).thenReturn(Optional.of(
+                new GeocodeResult(new BigDecimal("-26.92"), new BigDecimal("-49.07"), "Blumenau", "SC")));
+        when(repository.findById(any())).thenReturn(Optional.of(market));
+
+        service.geocodeOne(market);
+
+        assertThat(market.getLatitude()).isEqualByComparingTo("-26.92");
+        verify(geocoder, never()).geocode("SUPERMERCADOS ARCHER, Brasil");
+    }
+
+    @Test
+    void geocodeOne_streetUnknownToOsm_fallsBackToRegistryCep() {
+        var market = MarketLocation.builder()
+                .cnpj("04149637004516").cnpjRoot("04149637").geocodeAttempts(0).build();
+        when(cnpjActivityClient.isEnabled()).thenReturn(true);
+        when(cnpjActivityClient.lookup("04149637004516")).thenReturn(registryLookup(
+                new MarketAddress("RODOVIA BR 116", null, "CANOAS", "RS", "92000000")));
+        when(geocoder.geocode(any())).thenReturn(Optional.empty());
+        when(cepLocationService.resolve("92000000")).thenReturn(Optional.of(
+                new CepLocationService.CepLocation(new BigDecimal("-29.91"), new BigDecimal("-51.18"), "Canoas - RS")));
+        when(repository.findById(any())).thenReturn(Optional.of(market));
+
+        service.geocodeOne(market);
+
+        assertThat(market.getLatitude()).isEqualByComparingTo("-29.91");
+        assertThat(market.getCity()).isEqualTo("CANOAS");
+        assertThat(market.getState()).isEqualTo("RS");
+    }
+
+    @Test
+    void geocodeOne_missStillRecordsTheUfFromTheAddress() {
+        var market = MarketLocation.builder()
+                .cnpj("11111111000111").cnpjRoot("11111111")
+                .address("RUA INEXISTENTE , 1 , , BAIRRO , CAARAPO , MS").geocodeAttempts(0).build();
+        when(geocoder.geocode(any())).thenReturn(Optional.empty());
+        when(repository.findById(any())).thenReturn(Optional.of(market));
+
+        service.geocodeOne(market);
+
+        assertThat(market.getLatitude()).isNull();
+        assertThat(market.getCity()).isEqualTo("CAARAPO");
+        assertThat(market.getState()).isEqualTo("MS");
+        assertThat(market.getGeocodeFailedAt()).isNotNull();
+    }
+
+    private CnpjActivityClient.CnpjLookup registryLookup(MarketAddress address) {
+        return new CnpjActivityClient.CnpjLookup(MerchantSegment.SUPERMARKET, null, List.of(), null, null, address);
     }
 
     // ---------- geocodePending ----------
