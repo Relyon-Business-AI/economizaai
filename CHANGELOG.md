@@ -1,5 +1,17 @@
 # economizai — what's new
 
+## 2026-11-10 — Nota por foto: data, mercado, nomes e preços obrigatórios
+
+- **`ReceiptResponse.missingFields`** (`ISSUED_AT` | `MARKET` | `ITEM_NAMES` | `ITEM_PRICES`): preenchido só
+  pra nota de FOTO em `PENDING_CONFIRMATION` (lista vazia = completa); `null` pro resto. Itens excluídos não contam.
+- **`PATCH /receipts/{id}/issued-at`** `{ "issuedAt": "yyyy-MM-ddTHH:mm:ss" }` — define a data da compra de
+  nota de foto em revisão. 400 `receipt.issued-at.invalid` se no futuro/antes de 2000.
+- **`POST /receipts/{id}/confirm`** em nota de foto incompleta → 400 localizado (data → mercado → nomes →
+  preços, nessa ordem). `confirm-batch` pula a nota.
+- **Auto-confirmação** (nota parada na revisão) não confirma mais nota de foto incompleta: ela fica em revisão.
+- **Importação por chave**: chave com DV válido mas mês/modelo/tpEmis impossíveis é recusada como typo
+  (`receipt.chave.typo`), igual à chave digitada.
+
 ## 2026-11-10 — Comparação de produto: histórico, raio dos Mercados, ordenar por preço/distância, admin por usuário
 
 - **`GET /markets?scope=ALL|MINE&lat=&lng=`** (Mercados) agora devolve mercados a **10 km** da origem

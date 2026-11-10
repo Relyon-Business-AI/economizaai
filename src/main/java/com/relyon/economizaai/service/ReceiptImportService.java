@@ -154,7 +154,9 @@ public class ReceiptImportService {
         }
         // 44 dígitos mas DV mod-11 errado = quase certeza de erro de digitação — mensagem
         // acionável ("confira e tente de novo") em vez do jargão de dígito verificador.
-        if (!ChaveAcessoParser.hasValidCheckDigit(chave)) {
+        // DV ok but an impossible month/model/tpEmis = a typo that cleared the DV by luck; without
+        // this it would reach the fetch chain and fail later as a misleading "contingency" nota.
+        if (!ChaveAcessoParser.hasValidCheckDigit(chave) || !ChaveAcessoParser.hasPlausibleStructure(chave)) {
             return reject(chave, "receipt.chave.typo");
         }
         // Same rule as a typed chave: reject at submit only when NO fetch path exists for

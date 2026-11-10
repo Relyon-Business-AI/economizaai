@@ -2444,6 +2444,37 @@
 					"response": []
 				},
 				{
+					"name": "Edit purchase date (photo receipt)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"issuedAt\": \"2026-11-08T14:30:00\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/receipts/{{receiptId}}/issued-at",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"receipts",
+								"{{receiptId}}",
+								"issued-at"
+							]
+						},
+						"description": "Define a data da compra de uma nota de FOTO em revisao (hora local do Brasil). Obrigatoria pra confirmar. 400 se nao for foto / nao estiver em revisao / data no futuro ou antes de 2000."
+					},
+					"response": []
+				},
+				{
 					"name": "Update receipt item",
 					"request": {
 						"method": "PATCH",

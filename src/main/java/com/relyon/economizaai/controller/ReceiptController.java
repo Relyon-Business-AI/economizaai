@@ -12,6 +12,7 @@ import com.relyon.economizaai.dto.request.SubmitReceiptRequest;
 import com.relyon.economizaai.dto.request.UpdateItemCategoryRequest;
 import com.relyon.economizaai.dto.request.UpdateItemPersonalRequest;
 import com.relyon.economizaai.dto.request.UpdateReceiptItemRequest;
+import com.relyon.economizaai.dto.request.UpdateReceiptIssuedAtRequest;
 import com.relyon.economizaai.dto.request.UpdateReceiptMarketRequest;
 import com.relyon.economizaai.dto.response.ChaveExtractionResponse;
 import com.relyon.economizaai.exception.InvalidExportFormatException;
@@ -373,6 +374,14 @@ public class ReceiptController {
                                                         @PathVariable UUID id,
                                                         @Valid @RequestBody UpdateReceiptMarketRequest request) {
         return ResponseEntity.ok(receiptService.updateMarket(user, id, request.marketName(), request.cnpj()));
+    }
+
+    /** Define a data da compra de uma nota de FOTO em revisão (obrigatória pra confirmar). */
+    @PatchMapping("/{id}/issued-at")
+    public ResponseEntity<ReceiptResponse> updateIssuedAt(@AuthenticationPrincipal User user,
+                                                          @PathVariable UUID id,
+                                                          @Valid @RequestBody UpdateReceiptIssuedAtRequest request) {
+        return ResponseEntity.ok(receiptService.updateIssuedAt(user, id, request.issuedAt()));
     }
 
     @PostMapping("/{id}/items")
