@@ -163,6 +163,7 @@ public class SocialLoginService {
                 .build();
         attributionResolver.applyTo(user, attribution);
         var savedUser = userRepository.save(user);
+        householdService.assignHost(household, savedUser);
         notificationRuleService.ensureDefaults(savedUser);
         loginActivityRecorder.recordRegistration(savedUser, platform);
         signupAlertService.notifyNewAccount(savedUser, "social login " + provider);

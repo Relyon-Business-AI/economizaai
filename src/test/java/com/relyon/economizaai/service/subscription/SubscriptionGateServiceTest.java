@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -121,5 +122,45 @@ class SubscriptionGateServiceTest {
         var free = user(SubscriptionTier.FREE);
         var recent = LocalDateTime.now().minusDays(10);
         assertEquals(recent, gate.clampFrom(free, recent));
+    }
+
+    // ---------- household member cap ----------
+
+    @Test
+    void householdMemberCap_enforced_allFree_isFreeCapAndUpgradeable() {
+        var cap = gate.householdMemberCap(List.of(user(SubscriptionTier.FREE), user(SubscriptionTier.FREE)));
+
+        assertEquals(2, cap.limit());
+        assertTrue(cap.upgradeAvailable());
+    }
+
+    @Test
+    void householdMemberCap_enforced_anyProLiftsToMax() {
+        var cap = gate.householdMemberCap(List.of(user(SubscriptionTier.FREE), user(SubscriptionTier.PRO)));
+
+        assertEquals(6, cap.limit());
+        assertFalse(cap.upgradeAvailable(), "already at the ceiling — nothing to buy");
+    }
+
+    @Test
+    void householdMemberCap_enforcementOff_isAbsoluteMaxForEveryone() {
+        var dormant = new SubscriptionGateService(new CollaborativeProperties());
+
+        var cap = dormant.householdMemberCap(List.of(user(SubscriptionTier.FREE)));
+
+        assertEquals(6, cap.limit());
+        assertFalse(cap.upgradeAvailable());
+    }
+
+    @Test
+    void householdMemberCap_readsConfiguredLimits() {
+        var properties = new CollaborativeProperties();
+        properties.getSubscription().setEnforce(true);
+        properties.getSubscription().setHouseholdMembersMax(10);
+        properties.getSubscription().getFree().setHouseholdMembers(3);
+        var configured = new SubscriptionGateService(properties);
+
+        assertEquals(3, configured.householdMemberCap(List.of(user(SubscriptionTier.FREE))).limit());
+        assertEquals(10, configured.householdMemberCap(List.of(user(SubscriptionTier.PRO))).limit());
     }
 }

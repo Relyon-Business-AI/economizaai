@@ -123,6 +123,23 @@ public class GlobalExceptionHandler {
         return respond(ex, HttpStatus.BAD_REQUEST, "Bad request");
     }
 
+    @ExceptionHandler(SoloHouseholdLeaveException.class)
+    public ResponseEntity<ErrorResponse> handleSoloLeave(SoloHouseholdLeaveException ex) {
+        return respond(ex, HttpStatus.BAD_REQUEST, "Leave refused: user is alone in the household");
+    }
+
+    @ExceptionHandler(NotHouseholdHostException.class)
+    public ResponseEntity<ErrorResponse> handleNotHost(NotHouseholdHostException ex) {
+        return respond(ex, HttpStatus.FORBIDDEN, "Household action reserved to the host");
+    }
+
+    /** FREE cap → 402 (Premium lifts it); absolute cap → 400 (nothing to buy). */
+    @ExceptionHandler(HouseholdFullException.class)
+    public ResponseEntity<ErrorResponse> handleHouseholdFull(HouseholdFullException ex) {
+        var status = ex.isUpgradeAvailable() ? HttpStatus.PAYMENT_REQUIRED : HttpStatus.BAD_REQUEST;
+        return respond(ex, status, "Household member cap reached");
+    }
+
     @ExceptionHandler({ReceiptAlreadyIngestedException.class, ProductAliasConflictException.class, EanConflictException.class, InvalidProductDeletionException.class, AudienceInUseException.class, AudienceNameConflictException.class, WhatsAppOptInRequiredException.class, DuplicateCustomCategoryException.class})
     public ResponseEntity<ErrorResponse> handleConflict(DomainException ex) {
         return respond(ex, HttpStatus.CONFLICT, "Conflict");

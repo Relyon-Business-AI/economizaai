@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Single source of truth for FREE/PRO gating. Per CLAUDE.md, no controller or
@@ -65,6 +66,25 @@ public class SubscriptionGateService {
     public int monthlyReceiptLimit(User user) {
         return unlimited(user) ? Integer.MAX_VALUE : free().getMonthlyReceipts();
     }
+
+    /**
+     * How many people may live in a household, given everyone who'd be in it (current members
+     * plus the joiner). A household is PRO when ANY of them is PRO — the family-plan spirit:
+     * one subscriber lifts the cap for the whole house. With enforcement off, or with a PRO
+     * member, the absolute ceiling applies; otherwise the FREE cap. {@code upgradeAvailable}
+     * tells the caller whether subscribing would raise the limit (FREE cap hit) or not.
+     */
+    public MemberCap householdMemberCap(List<User> everyone) {
+        var enforced = properties.getSubscription().isEnforce();
+        var anyPro = everyone.stream().anyMatch(this::isPro);
+        var max = properties.getSubscription().getHouseholdMembersMax();
+        if (!enforced || anyPro) {
+            return new MemberCap(max, false);
+        }
+        return new MemberCap(free().getHouseholdMembers(), true);
+    }
+
+    public record MemberCap(int limit, boolean upgradeAvailable) {}
 
     /**
      * Clamp a requested query lower-bound to the user's allowed window. PRO is
