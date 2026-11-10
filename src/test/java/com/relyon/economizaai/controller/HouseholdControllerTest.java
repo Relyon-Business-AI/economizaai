@@ -71,15 +71,33 @@ class HouseholdControllerTest {
         var user = buildUser();
         var member = buildUser();
         when(householdService.memberOf(any(User.class), eq(member.getId()))).thenReturn(member);
+        when(profilePictureService.etag(member)).thenReturn("\"pp/abc.jpg\"");
         when(profilePictureService.read(member))
                 .thenReturn(new ProfilePictureService.ProfilePictureBytes(new byte[] {1, 2, 3}, "image/png", false));
 
         mockMvc.perform(get("/api/v1/households/me/members/" + member.getId() + "/profile-picture")
                         .with(SecurityMockMvcRequestPostProcessors.user(user)))
                 .andExpect(status().isOk())
+                .andExpect(header().string("ETag", "\"pp/abc.jpg\""))
+                .andExpect(header().string("Cache-Control", "max-age=300, private"))
                 .andExpect(header().string("X-Profile-Picture-Fallback", "false"))
                 .andExpect(content().contentType("image/png"))
                 .andExpect(content().bytes(new byte[] {1, 2, 3}));
+    }
+
+    @Test
+    void memberProfilePicture_ifNoneMatchReturns304WithoutReading() throws Exception {
+        var user = buildUser();
+        var member = buildUser();
+        when(householdService.memberOf(any(User.class), eq(member.getId()))).thenReturn(member);
+        when(profilePictureService.etag(member)).thenReturn("\"pp/abc.jpg\"");
+
+        mockMvc.perform(get("/api/v1/households/me/members/" + member.getId() + "/profile-picture")
+                        .header("If-None-Match", "\"pp/abc.jpg\"")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isNotModified())
+                .andExpect(header().string("ETag", "\"pp/abc.jpg\""));
+        org.mockito.Mockito.verify(profilePictureService, org.mockito.Mockito.never()).read(any(User.class));
     }
 
     @Test
