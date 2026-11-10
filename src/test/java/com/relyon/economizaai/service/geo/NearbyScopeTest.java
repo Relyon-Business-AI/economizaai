@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class NearbyScopeTest {
 
     private static final ViewerLocation LOCATED = new ViewerLocation(
-            new BigDecimal("-30.0331"), new BigDecimal("-51.2300"), Source.INFERRED, "RS");
+            new BigDecimal("-30.0331"), new BigDecimal("-51.2300"), Source.RECEIPTS_MEDIAN, "RS");
     private static final ViewerLocation UNLOCATED_RS = new ViewerLocation(null, null, Source.NONE, "RS");
     private static final ViewerLocation UNKNOWN = new ViewerLocation(null, null, Source.NONE, null);
 

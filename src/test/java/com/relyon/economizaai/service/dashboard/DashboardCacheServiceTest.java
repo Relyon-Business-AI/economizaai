@@ -81,7 +81,7 @@ class DashboardCacheServiceTest {
     @InjectMocks private DashboardCacheService service;
 
     private static final NearbyScope SCOPE = new NearbyScope(
-            new ViewerLocation(new BigDecimal("-30"), new BigDecimal("-51"), Source.EXPLICIT, "RS"),
+            new ViewerLocation(new BigDecimal("-30"), new BigDecimal("-51"), Source.PROFILE, "RS"),
             Set.of(), 10);
 
     private User user;

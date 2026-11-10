@@ -130,6 +130,8 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
 
     Optional<Receipt> findByHouseholdIdAndChaveAcesso(UUID householdId, String chaveAcesso);
 
+    long countByHouseholdId(UUID householdId);
+
     long countByHouseholdIdAndStatus(UUID householdId, ReceiptStatus status);
 
     /**
@@ -287,6 +289,31 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
             + "WHERE receipt.household.id IN :householdIds AND receipt.uf IS NOT NULL "
             + "GROUP BY receipt.household.id, receipt.uf")
     List<Object[]> ufFrequencyByHouseholdIds(List<UUID> householdIds);
+
+    /** (userId, receiptCount) for the given uploading users — the admin list's USER-OWN receipt count. */
+    @Query("SELECT receipt.user.id, count(receipt) FROM Receipt receipt "
+            + "WHERE receipt.user.id IN :userIds GROUP BY receipt.user.id")
+    List<Object[]> countByUserIds(List<UUID> userIds);
+
+    /** (userId, sum(confirmed totalAmount)) for the given uploading users — the admin list's USER-OWN spend. */
+    @Query("SELECT receipt.user.id, COALESCE(sum(receipt.totalAmount), 0) FROM Receipt receipt "
+            + "WHERE receipt.status = 'CONFIRMED' AND receipt.user.id IN :userIds "
+            + "GROUP BY receipt.user.id")
+    List<Object[]> sumConfirmedTotalByUserIds(List<UUID> userIds);
+
+    /** (status, count) for ONE user's own receipts — the admin detail's USER-OWN status breakdown. */
+    @Query("SELECT receipt.status, count(receipt) FROM Receipt receipt "
+            + "WHERE receipt.user.id = :userId GROUP BY receipt.status")
+    List<Object[]> statusBreakdownByUserId(@Param("userId") UUID userId);
+
+    /** Total R$ of ONE user's own confirmed receipts confirmed at/after the instant — admin detail USER-OWN spend. */
+    @Query("""
+        SELECT COALESCE(SUM(r.totalAmount), 0) FROM Receipt r
+        WHERE r.user.id = :userId
+          AND r.status = 'CONFIRMED'
+          AND r.confirmedAt >= :since
+    """)
+    BigDecimal sumConfirmedTotalByUserSince(@Param("userId") UUID userId, @Param("since") LocalDateTime since);
 
     // --- Ingestion health (ops dashboard) ---
 

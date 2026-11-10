@@ -15,9 +15,12 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 /**
- * Admin-facing detail view of a single user. Includes household stats,
- * receipt counts by status, and a 30-day spend snapshot — the things you
- * need when triaging "this user reported X is wrong".
+ * Admin-facing detail view of a single user.
+ *
+ * <p>{@code receipts} (status breakdown) and {@code spendLast30Days} are the USER's OWN
+ * (receipts whose {@code user_id} is this user). The HOUSEHOLD context is kept separately
+ * and clearly labeled — {@code householdMemberCount}, {@code householdReceiptCount},
+ * {@code householdSpend} — and never conflated with the user's own numbers.
  */
 public record AdminUserDetailResponse(
         UUID id,
@@ -33,6 +36,8 @@ public record AdminUserDetailResponse(
         long householdMemberCount,
         ReceiptCounts receipts,
         BigDecimal spendLast30Days,
+        long householdReceiptCount,
+        BigDecimal householdSpend,
         LocalDateTime createdAt,
         // Device the account was created on (immutable) and the one used on the
         // most recent login, plus when that last access happened — for ops triage.
@@ -45,7 +50,9 @@ public record AdminUserDetailResponse(
     public static AdminUserDetailResponse from(User user,
                                                long householdMemberCount,
                                                ReceiptCounts receipts,
-                                               BigDecimal spendLast30Days) {
+                                               BigDecimal spendLast30Days,
+                                               long householdReceiptCount,
+                                               BigDecimal householdSpend) {
         return new AdminUserDetailResponse(
                 user.getId(),
                 user.getName(),
@@ -60,6 +67,8 @@ public record AdminUserDetailResponse(
                 householdMemberCount,
                 receipts,
                 spendLast30Days == null ? BigDecimal.ZERO : spendLast30Days,
+                householdReceiptCount,
+                householdSpend == null ? BigDecimal.ZERO : householdSpend,
                 BrazilClock.fromUtc(user.getCreatedAt()),
                 user.getRegistrationPlatform(),
                 user.getLastPlatform(),

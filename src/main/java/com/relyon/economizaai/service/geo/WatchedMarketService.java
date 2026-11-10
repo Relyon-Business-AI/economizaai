@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.geo;
 
+import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.dto.response.MarketResponse;
 import com.relyon.economizaai.exception.MarketNotFoundException;
 import com.relyon.economizaai.model.MarketLocation;
@@ -17,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -46,6 +48,10 @@ public class WatchedMarketService {
     private final MarketNameService marketNameService;
     private final SubscriptionGateService subscriptionGate;
     private final ViewerLocationService viewerLocationService;
+    private final CollaborativeProperties properties;
+
+    /** Scope da listagem de mercados: ALL = raio ∪ seguidos; MINE = só os seguidos. */
+    public enum MarketScope { ALL, MINE }
 
     /** CNPJs the user is watching. Cheap helper for query-layer joins. */
     @Transactional(readOnly = true)
@@ -59,86 +65,98 @@ public class WatchedMarketService {
      * Just the user's own watchlist, hydrated with location data when we
      * have it. Used by the FE for the "Meus mercados" screen — separate
      * from the picker so we don't pay the picker's joins on every fetch.
+     * Distance is from the viewer's resolved origin (device → profile →
+     * notas → UF), so a user who never set a home still gets a real distance.
      */
     @Transactional(readOnly = true)
     public List<MarketResponse> listWatched(User user) {
-        var pinned = watchedRepository.findAllByUserId(user.getId());
-        if (pinned.isEmpty()) return List.of();
-
-        var cnpjs = pinned.stream().map(UserWatchedMarket::getMarketCnpj).toList();
-        var locations = marketRepository.findAllByCnpjIn(cnpjs).stream()
-                .collect(Collectors.toMap(MarketLocation::getCnpj, m -> m));
-        var visitedCnpjs = new HashSet<>(receiptRepository.findDistinctCnpjsByHousehold(user.getHousehold().getId()));
-
-        var rows = pinned.stream()
-                .map(p -> {
-                    var loc = locations.get(p.getMarketCnpj());
-                    if (loc == null) {
-                        return new MarketResponse(p.getMarketCnpj(), null, null, null, null, null, null, null,
-                                visitedCnpjs.contains(p.getMarketCnpj()), true, null, null);
-                    }
-                    return MarketResponse.from(loc, distanceFromHome(user, loc),
-                            visitedCnpjs.contains(p.getMarketCnpj()), true);
-                })
-                .sorted(Comparator
-                        .comparing((MarketResponse r) -> r.distanceKm() == null ? Double.MAX_VALUE : r.distanceKm())
-                        .thenComparing(r -> r.name() == null ? "" : r.name()))
-                .toList();
-        return applyFriendlyNames(user.getHousehold().getId(), rows);
+        return listMarkets(user, MarketScope.MINE, null, null);
     }
 
     /**
-     * Catalogue markets for the picker. Combines:
-     * <ul>
-     *   <li>Markets the household has shopped at (best signal).</li>
-     *   <li>Markets the user already watches.</li>
-     *   <li>If radiusKm + home set: nearby markets we already have geocoded.</li>
-     * </ul>
+     * Markets for the "Mercados" screen. {@code scope=ALL} returns every market within
+     * {@code bestMarketsNearbyRadiusKm} (10 km) of the viewer's resolved origin UNION the
+     * household's watched markets; {@code scope=MINE} returns only the watched ones.
+     *
+     * <p>Rows are sorted by distance ascending, nulls last — so watched-but-far markets
+     * (a receipt scanned 3 000 km away on a trip) sink to the end instead of flooding the
+     * top. The origin follows the "perto de você" cascade, with an optional real-time device
+     * fix ({@code deviceLatitude}/{@code deviceLongitude}, all-or-nothing) winning when present.
      */
     @Transactional(readOnly = true)
-    public List<MarketResponse> listForPicker(User user, Double radiusKm) {
-        var visitedCnpjs = new HashSet<>(receiptRepository.findDistinctCnpjsByHousehold(user.getHousehold().getId()));
+    public List<MarketResponse> listMarkets(User user, MarketScope scope,
+                                            BigDecimal deviceLatitude, BigDecimal deviceLongitude) {
+        var householdId = user.getHousehold().getId();
+        var visitedCnpjs = new HashSet<>(receiptRepository.findDistinctCnpjsByHousehold(householdId));
         var watchedCnpjs = watchedCnpjs(user);
+        var origin = viewerLocationService.resolve(user, deviceLatitude, deviceLongitude);
 
-        var unionCnpjs = new HashSet<String>();
-        unionCnpjs.addAll(visitedCnpjs);
-        unionCnpjs.addAll(watchedCnpjs);
-        var visitedAndWatched = unionCnpjs.isEmpty()
-                ? List.<MarketLocation>of()
-                : marketRepository.findAllByCnpjIn(List.copyOf(unionCnpjs));
+        var locationsByCnpj = marketsByCnpj(scope, origin, watchedCnpjs);
+        // MINE lists EVERY pinned market, even one we haven't geocoded yet (shown unhydrated,
+        // distance null → sorted last). ALL lists only markets we have a location for.
+        var cnpjsToShow = scope == MarketScope.MINE
+                ? new HashSet<>(watchedCnpjs)
+                : new HashSet<>(locationsByCnpj.keySet());
+        cnpjsToShow.addAll(locationsByCnpj.keySet());
 
-        var nearby = nearbyMarkets(user, radiusKm, unionCnpjs);
-
-        var rows = Stream.concat(visitedAndWatched.stream(), nearby.stream())
-                .map(m -> MarketResponse.from(
-                        m,
-                        distanceFromHome(user, m),
-                        visitedCnpjs.contains(m.getCnpj()),
-                        watchedCnpjs.contains(m.getCnpj())))
+        var rows = cnpjsToShow.stream()
+                .map(cnpj -> hydrate(cnpj, locationsByCnpj.get(cnpj), origin, visitedCnpjs, watchedCnpjs))
                 .sorted(Comparator
-                        .comparing(MarketResponse::watching).reversed()
-                        .thenComparing(MarketResponse::visited, Comparator.reverseOrder())
-                        .thenComparing(r -> r.distanceKm() == null ? Double.MAX_VALUE : r.distanceKm()))
+                        .comparing(MarketResponse::distanceKm, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(row -> row.name() == null ? "" : row.name()))
                 .toList();
-        return applyFriendlyNames(user.getHousehold().getId(), rows);
+        var named = applyFriendlyNames(householdId, rows);
+        log.debug("markets.list household={} scope={} source={} rows={}",
+                householdId, scope, origin.source(), named.size());
+        return named;
     }
 
     /**
-     * Markets within {@code radiusKm} of the viewer's effective location — explicit GPS/CEP
-     * or, without one, the centre inferred from their receipts — so a user who never set an
-     * address still sees the markets around where they actually shop.
+     * The geocoded {@link MarketLocation}s to consider, keyed by CNPJ. For MINE: the watched
+     * markets we have a location for. For ALL: markets within the nearby radius of the origin
+     * UNION the watched markets (watched always included regardless of distance — they may be
+     * far on purpose).
      */
-    private List<MarketLocation> nearbyMarkets(User user, Double radiusKm, Set<String> excludedCnpjs) {
-        if (radiusKm == null) return List.of();
-        var location = viewerLocationService.resolve(user);
-        if (!location.hasCoordinates()) return List.of();
-        return marketRepository.findAll().stream()
-                .filter(MarketLocation::hasCoordinates)
-                .filter(market -> !excludedCnpjs.contains(market.getCnpj()))
-                .filter(market -> DistanceCalculator.kmBetween(
-                        location.latitude(), location.longitude(),
-                        market.getLatitude(), market.getLongitude()) <= radiusKm)
-                .toList();
+    private Map<String, MarketLocation> marketsByCnpj(MarketScope scope,
+                                                      ViewerLocationService.ViewerLocation origin,
+                                                      Set<String> watchedCnpjs) {
+        var watched = watchedCnpjs.isEmpty()
+                ? List.<MarketLocation>of()
+                : marketRepository.findAllByCnpjIn(List.copyOf(watchedCnpjs));
+        if (scope == MarketScope.MINE) {
+            return byCnpj(watched.stream());
+        }
+        var radiusKm = properties.getCollaborative().getBestMarketsNearbyRadiusKm();
+        var nearby = origin.hasCoordinates()
+                ? marketRepository.findAll().stream()
+                    .filter(MarketLocation::hasCoordinates)
+                    .filter(market -> DistanceCalculator.kmBetween(
+                            origin.latitude(), origin.longitude(),
+                            market.getLatitude(), market.getLongitude()) <= radiusKm)
+                : Stream.<MarketLocation>empty();
+        return byCnpj(Stream.concat(nearby, watched.stream()));
+    }
+
+    private Map<String, MarketLocation> byCnpj(Stream<MarketLocation> markets) {
+        return markets.collect(Collectors.toMap(
+                MarketLocation::getCnpj, market -> market, (first, ignored) -> first));
+    }
+
+    private MarketResponse hydrate(String cnpj, MarketLocation market,
+                                   ViewerLocationService.ViewerLocation origin,
+                                   Set<String> visitedCnpjs, Set<String> watchedCnpjs) {
+        if (market == null) {
+            return new MarketResponse(cnpj, null, null, null, null, null, null, null, null, null,
+                    visitedCnpjs.contains(cnpj), watchedCnpjs.contains(cnpj), null, null);
+        }
+        return MarketResponse.from(market, distanceFromOrigin(origin, market),
+                visitedCnpjs.contains(cnpj), watchedCnpjs.contains(cnpj));
+    }
+
+    private Double distanceFromOrigin(ViewerLocationService.ViewerLocation origin, MarketLocation market) {
+        if (!origin.hasCoordinates() || !market.hasCoordinates()) return null;
+        return DistanceCalculator.kmBetween(
+                origin.latitude(), origin.longitude(), market.getLatitude(), market.getLongitude());
     }
 
     @Transactional

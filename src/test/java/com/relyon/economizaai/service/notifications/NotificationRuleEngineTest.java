@@ -68,7 +68,7 @@ class NotificationRuleEngineTest {
 
     /** Explicit home when set, else unlocated; {@code uf} null = no state known (national). */
     private static NearbyScope scopeFromHome(User user, String uf, Set<String> watched) {
-        var source = user.getHomeLatitude() != null ? Source.EXPLICIT : Source.NONE;
+        var source = user.getHomeLatitude() != null ? Source.PROFILE : Source.NONE;
         return new NearbyScope(new ViewerLocation(user.getHomeLatitude(), user.getHomeLongitude(), source, uf),
                 watched, 10);
     }

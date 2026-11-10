@@ -90,7 +90,8 @@ class DealsServiceTest {
     private PriceIndexService.MarketPriceRow market(String cnpj, BigDecimal median, long households,
                                                     Double distanceKm, boolean watching) {
         return new PriceIndexService.MarketPriceRow(cnpj, PriceIndexService.cnpjRoot(cnpj), "Mercado",
-                median, median, median, LocalDateTime.of(2026, 1, 1, 0, 0), 5, households, distanceKm, watching);
+                median, median, median, LocalDateTime.of(2026, 1, 1, 0, 0), 5, households, distanceKm, watching,
+                false, false);
     }
 
     @Test
@@ -199,7 +200,7 @@ class DealsServiceTest {
     void includeNearbyUsesViewerScopeWithRadiusAndSurfacesNearbyDeal() {
         var user = user();
         var scope = new NearbyScope(new ViewerLocation(new BigDecimal("-30"), new BigDecimal("-51"),
-                Source.INFERRED, "RS"), Set.of(WATCHED_CNPJ), 5.0);
+                Source.RECEIPTS_MEDIAN, "RS"), Set.of(WATCHED_CNPJ), 5.0);
         when(nearbyScopeService.forUser(user, 5.0)).thenReturn(scope);
         when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID))
                 .thenReturn(List.of(purchase(new BigDecimal("10.00"), LocalDateTime.now())));

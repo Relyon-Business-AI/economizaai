@@ -27,6 +27,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import com.relyon.economizaai.service.priceindex.ScanHistoryService;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -42,6 +44,7 @@ class ProductScanLogServiceTest {
     @Mock private ViewerLocationService viewerLocationService;
     @Mock private ProductScanRepository productScanRepository;
     @Mock private ProductTypeResolver productTypeResolver;
+    @Mock private ScanHistoryService scanHistoryService;
     @Mock private PlatformTransactionManager transactionManager;
 
     private ProductScanLogService service;
@@ -50,13 +53,14 @@ class ProductScanLogServiceTest {
     @BeforeEach
     void setUp() {
         service = new ProductScanLogService(productRepository, eanCatalogService,
-                viewerLocationService, productScanRepository, productTypeResolver, transactionManager);
+                viewerLocationService, productScanRepository, productTypeResolver,
+                scanHistoryService, transactionManager);
         var household = Household.builder().id(UUID.randomUUID()).build();
         user = User.builder().id(UUID.randomUUID()).household(household).build();
         lenient().when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
         lenient().when(viewerLocationService.resolve(any()))
                 .thenReturn(new ViewerLocation(new BigDecimal("-30.03"), new BigDecimal("-51.22"),
-                        ViewerLocationService.Source.INFERRED, "RS"));
+                        ViewerLocationService.Source.RECEIPTS_MEDIAN, "RS"));
     }
 
     private ProductScan captureSaved() {
@@ -79,7 +83,7 @@ class ProductScanLogServiceTest {
         assertThat(saved.getMatchedProductId()).isEqualTo(productId);
         assertThat(saved.getGenericNameNorm()).isEqualTo("creme de leite");
         assertThat(saved.getUf()).isEqualTo("RS");
-        assertThat(saved.getLocationSource()).isEqualTo("INFERRED");
+        assertThat(saved.getLocationSource()).isEqualTo("RECEIPTS_MEDIAN");
     }
 
     @Test

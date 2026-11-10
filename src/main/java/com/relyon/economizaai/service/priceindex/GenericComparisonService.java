@@ -70,18 +70,24 @@ public class GenericComparisonService {
     private final ProductTypeResolver productTypeResolver;
     private final EanCatalogService eanCatalogService;
     private final HouseholdProductAliasService householdProductAliasService;
+    private final ScanHistoryService scanHistoryService;
     private final CollaborativeProperties properties;
 
     @Transactional(readOnly = true)
     public GenericComparisonResponse forProduct(UUID productId, User user) {
+        return forProduct(productId, user, ComparisonSort.CHEAPEST);
+    }
+
+    @Transactional(readOnly = true)
+    public GenericComparisonResponse forProduct(UUID productId, User user, ComparisonSort sort) {
         var scanned = productRepository.findById(productId).orElseThrow(ProductNotFoundException::new);
         var typeKey = scanned.getGenericNameNorm();
         var typeName = scanned.getGenericName();
         if (typeKey == null) {
             // Sem tipo genérico resolvido: nada pra generalizar, usa só o escaneado.
-            return build(typeName, typeKey, productId, List.of(scanned), user);
+            return build(typeName, typeKey, productId, List.of(scanned), user, sort);
         }
-        return build(typeName, typeKey, productId, siblings(typeKey), user);
+        return build(typeName, typeKey, productId, siblings(typeKey), user, sort);
     }
 
     /**
@@ -90,9 +96,14 @@ public class GenericComparisonService {
      */
     @Transactional(readOnly = true)
     public GenericComparisonResponse forType(String rawType, User user) {
+        return forType(rawType, user, ComparisonSort.CHEAPEST);
+    }
+
+    @Transactional(readOnly = true)
+    public GenericComparisonResponse forType(String rawType, User user, ComparisonSort sort) {
         // Nomes de catálogo (OFF) são crus ("CREME DE LEITE UHT NESTLE") — resolve o tipo canônico
         // pelo MESMO extrator da ingestão de nota, senão a busca por generic_name_norm casa 0.
-        return byTypeKey(productTypeResolver.typeKey(rawType), rawType, user);
+        return byTypeKey(productTypeResolver.typeKey(rawType), rawType, user, sort);
     }
 
     /**
@@ -103,22 +114,26 @@ public class GenericComparisonService {
      * curta readOnly ao entrar em {@link #byType(String, String, User)}.
      */
     public GenericComparisonResponse forCatalog(String ean, String rawType, User user) {
+        return forCatalog(ean, rawType, user, ComparisonSort.CHEAPEST);
+    }
+
+    public GenericComparisonResponse forCatalog(String ean, String rawType, User user, ComparisonSort sort) {
         var resolvedKey = eanCatalogService.lookup(ean)
                 .map(productTypeResolver::resolveCatalogTypeKey)
                 .orElse(null);
         if (resolvedKey != null) {
-            return byType(resolvedKey, rawType, user);
+            return byType(resolvedKey, rawType, user, sort);
         }
-        return forType(rawType, user);
+        return forType(rawType, user, sort);
     }
 
     /** Leitura da comparação por tipo já resolvido, numa tx curta readOnly (entrada via proxy). */
     @Transactional(readOnly = true)
-    public GenericComparisonResponse byType(String typeKey, String rawType, User user) {
-        return byTypeKey(typeKey, rawType, user);
+    public GenericComparisonResponse byType(String typeKey, String rawType, User user, ComparisonSort sort) {
+        return byTypeKey(typeKey, rawType, user, sort);
     }
 
-    private GenericComparisonResponse byTypeKey(String typeKey, String rawType, User user) {
+    private GenericComparisonResponse byTypeKey(String typeKey, String rawType, User user, ComparisonSort sort) {
         if (typeKey == null) {
             return new GenericComparisonResponse(rawType, null, null, List.of());
         }
@@ -127,7 +142,7 @@ public class GenericComparisonService {
         // tipo canônico resolvido, senão o termo cru.
         var typeName = siblings.stream().map(Product::getGenericName).filter(name -> name != null)
                 .findFirst().orElseGet(() -> productTypeResolver.canonicalGenericName(rawType));
-        return build(typeName, typeKey, null, siblings, user);
+        return build(typeName, typeKey, null, siblings, user, sort);
     }
 
     /**
@@ -181,7 +196,7 @@ public class GenericComparisonService {
     }
 
     private GenericComparisonResponse build(String typeName, String typeKey, UUID scannedId,
-                                            List<Product> products, User user) {
+                                            List<Product> products, User user, ComparisonSort sort) {
         if (!properties.getCollaborative().isEnabled() || products.isEmpty()) {
             return new GenericComparisonResponse(typeName, scannedId, null, List.of());
         }
@@ -200,13 +215,58 @@ public class GenericComparisonService {
         for (var scope : cascade) {
             var offers = offersInScope(context, scope.filter());
             if (!offers.isEmpty()) {
-                log.info("generic_comparison.done type={} products={} offers={} scope={}",
-                        typeKey, products.size(), offers.size(), scope.name());
-                return new GenericComparisonResponse(typeName, scannedId, scope.name(), offers);
+                var badgedAndSorted = markAndSort(offers, sort);
+                log.info("generic_comparison.done type={} products={} offers={} scope={} sort={}",
+                        typeKey, products.size(), badgedAndSorted.size(), scope.name(), sort);
+                recordConsult(user, scannedId, typeKey, badgedAndSorted, scope.name());
+                return new GenericComparisonResponse(typeName, scannedId, scope.name(), badgedAndSorted);
             }
         }
         log.info("generic_comparison.done type={} products={} offers=0 scope=NATIONAL", typeKey, products.size());
         return new GenericComparisonResponse(typeName, scannedId, "NATIONAL", List.of());
+    }
+
+    /**
+     * Grava o snapshot da consulta pro histórico "produtos escaneados": chave = produto
+     * escaneado quando houver, senão o tipo ({@code typeKey} = generic_name_norm); preço = o
+     * da oferta MAIS BARATA servida. Best-effort, tx curta própria, nunca quebra a leitura.
+     */
+    private void recordConsult(User user, UUID scannedId, String typeKey,
+                               List<GenericOffer> offers, String scope) {
+        var cheapestPrice = offers.stream()
+                .map(GenericOffer::unitPrice)
+                .filter(price -> price != null)
+                .min(BigDecimal::compareTo)
+                .orElse(null);
+        scanHistoryService.recordConsult(user.getHousehold().getId(), scannedId, typeKey, cheapestPrice, scope);
+    }
+
+    /**
+     * Marca os badges persistentes (a oferta de MENOR preço e a MAIS PERTO, decididas sobre a
+     * lista inteira) e ordena por {@code sort} (CHEAPEST = preço asc; NEAREST = distância asc,
+     * nulos por último). Os badges independem da ordenação — o FE os mostra sempre.
+     */
+    private List<GenericOffer> markAndSort(List<GenericOffer> offers, ComparisonSort sort) {
+        var cheapest = offers.stream()
+                .filter(offer -> offer.unitPrice() != null)
+                .min(Comparator.comparing(GenericOffer::unitPrice))
+                .orElse(null);
+        var nearest = offers.stream()
+                .filter(offer -> offer.distanceKm() != null)
+                .min(Comparator.comparing(GenericOffer::distanceKm))
+                .orElse(null);
+        return offers.stream()
+                .map(offer -> offer.withBadges(offer == cheapest, offer == nearest))
+                .sorted(comparatorFor(sort))
+                .toList();
+    }
+
+    private static Comparator<GenericOffer> comparatorFor(ComparisonSort sort) {
+        if (sort == ComparisonSort.NEAREST) {
+            return Comparator.comparing(GenericOffer::distanceKm, Comparator.nullsLast(Comparator.naturalOrder()))
+                    .thenComparing(GenericOffer::unitPrice, Comparator.nullsLast(Comparator.naturalOrder()));
+        }
+        return Comparator.comparing(GenericOffer::unitPrice, Comparator.nullsLast(Comparator.naturalOrder()));
     }
 
     /** NEARBY (raio, só com coordenadas) → STATE (UF majoritária) → NATIONAL, nessa ordem. */
@@ -318,7 +378,8 @@ public class GenericComparisonService {
             return new GenericOffer(product.getId(), labelOf(product, packLabel), product.getBrand(), packLabel,
                     observation.getUnitPrice(), observation.getMarketCnpj(), observation.getMarketName(), friendlyName,
                     observation.getCity(), observation.getState(), distanceKm(observation), observation.getObservedAt(),
-                    observation.getChannel() == null ? null : observation.getChannel().name(), scanned);
+                    observation.getChannel() == null ? null : observation.getChannel().name(), scanned,
+                    false, false);
         }
     }
 
