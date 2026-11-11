@@ -1,6 +1,9 @@
 # RELEASE — Taxonomia de categorias (V99–V108) + notificações multi-canal
 
-**Status:** PRONTO em dev (suíte backend **2531 verde**, FE `tsc=0`). Baseline prod = **V98**.
+> **Atualização (2026-11-10): release EXECUTADO** — `main` (prod) já contém as migrations
+> até a V143, portanto V99–V108 estão aplicadas. Este runbook fica só como histórico.
+
+**Status (na época):** PRONTO em dev (suíte backend **2531 verde**, FE `tsc=0`). Baseline prod = **V98**.
 **Executar à noite, no go explícito do owner.** Migrations todas aditivas (0 destrutivas), rápidas
 (3.403 produtos em prod).
 

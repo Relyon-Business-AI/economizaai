@@ -29,9 +29,12 @@ public class AsyncConfig {
     @Profile("!test")
     public Executor receiptIngestExecutor() {
         var executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(4);
+        // core == max: a ThreadPoolExecutor only grows past core once the queue is FULL,
+        // so core 4 / max 8 ran 4 threads until 50 scans were already waiting.
+        executor.setCorePoolSize(8);
         executor.setMaxPoolSize(8);
-        executor.setQueueCapacity(50);
+        executor.setAllowCoreThreadTimeOut(true);
+        executor.setQueueCapacity(200);
         executor.setThreadNamePrefix("receipt-ingest-");
         // Propagate the request's MDC (req=, user=) onto the ingest thread so
         // async ingestion log lines stay traceable per user — otherwise only the

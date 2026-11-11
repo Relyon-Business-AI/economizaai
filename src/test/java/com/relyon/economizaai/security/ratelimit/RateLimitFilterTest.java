@@ -304,4 +304,31 @@ class RateLimitFilterTest {
         if (forwardedFor != null) request.addHeader("X-Forwarded-For", forwardedFor);
         return request;
     }
+
+    @Test
+    void percentEncodedPathIsLimitedLikeTheDecodedOne() throws Exception {
+        // Spring routes "/api/v1/%61uth/login" to the login controller — the limiter must too.
+        for (var attempt = 0; attempt < 15; attempt++) invokePost("/api/v1/%61uth/login", "20.0.0.1");
+        var blocked = invokePost("/api/v1/%61uth/login", "20.0.0.1");
+        assertEquals(429, blocked.getStatus());
+    }
+
+    @Test
+    void signupHasItsOwnBucketSeparateFromCodeGuessingEndpoints() throws Exception {
+        // A carrier-NAT'd crowd: 20 signups/min from one IP pass, and they do not drain
+        // the tight 5/min bucket that protects the reset-code endpoints.
+        for (var attempt = 0; attempt < 20; attempt++) {
+            assertEquals(200, invokePost("/api/v1/auth/register", "20.0.0.2").getStatus());
+        }
+        assertEquals(429, invokePost("/api/v1/auth/register", "20.0.0.2").getStatus());
+        assertEquals(200, invokePost("/api/v1/auth/forgot-password", "20.0.0.2").getStatus());
+    }
+
+    @Test
+    void receiptRetrySharesTheSubmitBudget() throws Exception {
+        for (var attempt = 0; attempt < 30; attempt++) {
+            invokePost("/api/v1/receipts/0b7c9d0e-0000-0000-0000-000000000001/retry", "20.0.0.3");
+        }
+        assertEquals(429, invokePost("/api/v1/receipts", "20.0.0.3").getStatus());
+    }
 }

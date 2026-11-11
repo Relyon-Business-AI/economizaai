@@ -118,6 +118,17 @@ public class SocialLoginService {
                         provider, LogMasker.email(user.getEmail()));
                 throw new InvalidOAuthTokenException();
             }
+            // Pre-hijack guard: a password account whose e-mail was NEVER verified may have been
+            // registered by someone else on this address. The provider just proved who owns it,
+            // so whoever set that password (and any session they hold) loses access.
+            if (!user.isEmailVerified()) {
+                user.setPassword(null);
+                user.setEmailVerified(true);
+                user.setEmailVerifiedAt(LocalDateTime.now());
+                refreshTokenService.revokeAllForUser(user);
+                log.warn("social.login unverified_local_account_claimed provider={} user={}",
+                        provider, LogMasker.email(user.getEmail()));
+            }
             user.setAuthProvider(provider);
             user.setProviderSubject(subject);
             user = userRepository.save(user);

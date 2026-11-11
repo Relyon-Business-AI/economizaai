@@ -41,6 +41,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -439,7 +440,12 @@ public class ReceiptController {
         var response = receiptService.confirm(user, id, request);
         // AI fallback runs AFTER the confirm transaction commits — never holds a DB
         // connection across the outbound HTTP call (see CLAUDE.md transaction rules).
-        aiItemFallbackService.applyFallback(id);
+        // The confirm is already committed: a full AI lane must not turn it into a 500.
+        try {
+            aiItemFallbackService.applyFallback(id);
+        } catch (TaskRejectedException aiLaneFull) {
+            log.warn("confirm.ai_fallback_skipped reason=ai_lane_full");
+        }
         return ResponseEntity.ok(response);
     }
 

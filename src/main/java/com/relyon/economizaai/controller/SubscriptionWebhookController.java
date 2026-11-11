@@ -69,9 +69,12 @@ public class SubscriptionWebhookController {
         return ResponseEntity.ok().build();
     }
 
+    private static final String PLACEHOLDER_SECRET = "CHANGEME";
+
     private void verifySecret(String providedSecret) {
-        if (webhookSecret == null || webhookSecret.isBlank()) {
-            // Fail closed: no secret configured → webhook disabled, reject everything.
+        if (webhookSecret == null || webhookSecret.isBlank() || PLACEHOLDER_SECRET.equals(webhookSecret)) {
+            // Fail closed: no secret configured (or still the placeholder, which is public
+            // knowledge) → webhook disabled, reject everything.
             log.warn("webhook.secret.not_configured rejecting");
             throw new InvalidWebhookSecretException();
         }

@@ -40,7 +40,12 @@ Bird's-eye map of the WHOLE product (mobile, web, admin, landing, e-mail, costs)
   is now **prod** on branch **`main`** (`srv-d7odp…`). The old standby (`srv-d9p4…`) became
   **dev** on `development` with its own DB + `api-dev.economizaai.app`. This was a rename +
   branch-flip only — **no data moved** (the `DATABASE_URL`s were untouched; only the Render
-  resource labels changed). Done via the Render API; zero downtime on prod.
+  resource labels changed). Done via the Render API; zero downtime on prod. (That standby
+  service was later deleted and dev recreated on Free as `srv-dbklrqnf…` — see the first
+  bullet.)
+- **Prod instance:** Standard 2 GB (see DEV_NOTES "Dev no plano Free"). The `Dockerfile`
+  caps the heap at 50 % of container RAM (`-XX:MaxRAMPercentage=50.0`) with
+  `-XX:+ExitOnOutOfMemoryError`; the image build runs `-DskipTests`, so run the tests locally.
 - **Deploy semantics now:** push `development` → deploys **dev only** (safe, no real users);
   merge `development` → `main` + push → deploys **prod** (`api.economizaai.app`). Keep `main`
   == `development` in code before a release so prod never regresses.
@@ -48,9 +53,12 @@ Bird's-eye map of the WHOLE product (mobile, web, admin, landing, e-mail, costs)
 - **Postgres:** managed by Render, plan **basic-256mb** (never the free tier — its Postgres
   expires in 30 days). Postgres 18, separate DB per env, separate secrets. Never point dev
   and prod at the same DB.
-- **Profile pictures:** persisted on a **Render Disk** mounted at `/data/profile-pics`
-  (`PROFILE_PICTURE_DIR`) — Render's container filesystem is ephemeral and wiped on every
-  deploy, so this disk keeps uploads across deploys.
+- **Profile pictures:** stored in **Cloudflare R2** (`PROFILE_PICTURE_STORAGE=r2` + `R2_*`
+  env vars → `CloudflareR2ProfilePictureStorage`; since 2026-10-09, see DEV_NOTES "Profile
+  picture storage"). The old Render Disk at `/data/profile-pics` was removed after the
+  migration — a disk pins the service to one instance and blocked zero-downtime deploys.
+  With `PROFILE_PICTURE_STORAGE` unset the app falls back to local disk (`PROFILE_PICTURE_DIR`),
+  which is ephemeral on Render.
 - **Logs:** the app logs to **stdout**, captured by Render's log stream (use the Render
   dashboard log view; no disk needed for logs).
 - **Env vars / secrets:** set on each Web Service under **Environment** (see `RENDER_SETUP.md`
@@ -64,19 +72,18 @@ The old trap (the domain `api.economizaai.app` was bound to the *dev-branch* ser
 the **prod** service on **`main`**, and `development` deploys an isolated **dev** env at
 `api-dev.economizaai.app`. Pushing `development` no longer touches real users.
 
-**Releasing to prod** = merge `development` → `main` and push `main`. That push IS the
-`economizai-app-prod` deploy — a **GATED** action (owner's go), never autonomous; `main` is
-otherwise never committed to directly. Until the domain cutover, this alone does NOT reach
-real users — you must also push `development`.
+**Releasing to prod** = PR `development` → `main`, merged with the owner's go (see `DEPLOY.md`).
+That merge IS the `economizai-api-prod` deploy — a **GATED** action, never autonomous; `main`
+is otherwise never committed to directly.
 
 ## 🔗 Quick Links
 
 | What | Link | Notes |
 |---|---|---|
-| **API base** | https://api.economizaai.app/api/v1 | de-facto prod (dev-branch service) |
-| **Swagger** | https://api.economizaai.app/swagger-ui/index.html | |
+| **API base** | https://api.economizaai.app/api/v1 | prod (`main`); dev = https://api-dev.economizaai.app/api/v1 |
+| **Swagger** | https://api-dev.economizaai.app/swagger-ui/index.html | dev; the `prod` Spring profile disables Swagger/api-docs (`application-prod.yaml`) |
 | **Health check** | https://api.economizaai.app/actuator/health | returns `{"status":"UP"}` |
-| **OpenAPI JSON** | https://api.economizaai.app/v3/api-docs | for codegen/import |
+| **OpenAPI JSON** | https://api-dev.economizaai.app/v3/api-docs | for codegen/import (dev — see Swagger note) |
 | **Render dashboard** | https://dashboard.render.com | services, env vars, logs, deploys |
 | **CI / deploy runs** | Render dashboard → service → Events | auto-deploy status + build logs |
 | **Uptime monitor** | https://uptimerobot.com (dashboard) | down/up alerts |
@@ -92,7 +99,9 @@ migration). Two repo artifacts it references:
 
 - **`render.yaml`** — a Blueprint (Render → New → Blueprint) that provisions the web service
   + Postgres + the profile-pics persistent disk in one shot. `DATABASE_URL`/creds are still
-  set by hand (the `jdbc:` gotcha above).
+  set by hand (the `jdbc:` gotcha above). ⚠️ The file still describes the ORIGINAL dev setup
+  (service `economizai-app`, plan `starter`, a 1 GB profile-pics disk, no R2 vars) — it does
+  not match the live services in the table above; don't re-apply it without updating it.
 - **`migrate-to-render.ps1`** — copied the old box's data (accounts, receipts, the
   **~910k-row EAN catalog**) into Render via `pg_dump --data-only` with row-count
   verification. Historical — used during the initial cutover.
@@ -101,7 +110,11 @@ migration). Two repo artifacts it references:
 
 ## Going to prod — the dev→prod migration map
 
-Still-accurate checklist for the real prod cutover (repointing `api.economizaai.app` at
+> ⚠️ Written BEFORE the 2026-09-22 cutover described above — the domain already points at the
+> prod service on `main`, and step 4's profile-pics item is done (R2). Kept as a checklist for
+> standing up a fresh prod; the "currently on the dev service" wording below is historical.
+
+Checklist for the real prod cutover (repointing `api.economizaai.app` at
 `economizai-app-prod`/`main`):
 
 0. **Spring profile:** set `SPRING_PROFILES_ACTIVE=prod`. No profile (today's setup) defaults
@@ -177,4 +190,4 @@ GitHub runner Windows service.
 
 ---
 
-_Last updated: 2026-09-22. Keep this in sync when infra changes._
+_Last updated: 2026-11-10. Keep this in sync when infra changes._

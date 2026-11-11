@@ -1,4 +1,4 @@
-# economizai — Monetization Strategy
+# Economiza AI — Monetization Strategy
 
 Monetization is treated as a **Day-1 architectural concern**, not a Phase-N
 afterthought. The entities, anonymization boundaries, and feature gates listed
@@ -49,7 +49,9 @@ de ser rolling ("3 meses do cadastro") e passou a valer **até 31/12/2026 pra ba
 checkout, expirações contínuas por usuário = downgrade sem botão de upgrade (pior choque
 possível); data única = um evento de "pricing launch" orquestrável (anúncio 30d antes,
 preço de fundador pra base atual, campanha). O Q4/2026 é a janela pra integrar o provedor
-de pagamento e medir retenção antes da virada.
+de pagamento e medir retenção antes da virada. **Desde então o grant deixou de acontecer no
+cadastro:** conta nova ganha o PRO promocional ao confirmar a **primeira nota**
+(`ReceiptService.doConfirm` → `grantSignupPromoIfEnabled`).
 
 **3. Acesso antecipado como valor contínuo do PRO (novo perk):** PRO recebe features primeiro
 (exclusividade temporária), entregue pela mesma infra de flags. Reduz churn sem capar o free.
@@ -129,17 +131,26 @@ across markets, and basket-level inflation tracking."
 - ✅ Delivery gate — `NotificationService.notify` persists the inbox row for all,
   dispatches push/email only for PRO (`PUSH_AND_EMAIL_DELIVERY`).
 - ✅ Basket optimization gate — `ShoppingListOptimizer.optimize` requires PRO.
+- ✅ History export gate — `ReceiptExportService` requires `CSV_EXPORT`.
+- ✅ Photo-receipt gate — `PhotoReceiptExtractionService` requires `PHOTO_EXTRACTION` (and counts toward the monthly receipt cap).
+- ✅ Household member-count gate — `SubscriptionGateService.householdMemberCap`: FREE ≤ 2
+  (`free.household-members`), any PRO member lifts the household to `household-members-max` (6, applies even with enforcement off).
+- ⚠️ **Master switch:** all gates above are dormant while `economizaai.subscription.enforce=false`
+  (`SUBSCRIPTION_ENFORCE`, default off) — with it off every user behaves as PRO.
 - ✅ `Subscription` entity + `SubscriptionService.activatePro/cancel` (tier kept in sync).
 - ✅ Admin set-tier — `PUT /api/v1/admin/users/{id}/subscription-tier`.
 - ✅ Provider-agnostic webhook — `POST /api/v1/webhooks/subscription` (seam for a real provider).
-- ⬜ Payment provider (Stripe Brasil / Mercado Pago / Pagar.me + Pix) — **not chosen yet**.
-  Needs API keys + map the provider webhook onto `/api/v1/webhooks/subscription`
-  and set `economizaai.billing.webhook-secret`. See DEV_NOTES.
-- ⬜ Self-serve subscription-management page + PUT `/users/me/subscription`.
+- 🟡 Payment provider — **chosen and wired, INERT until credentialed** (see "2a" above): web =
+  Mercado Pago (`GET /subscriptions/plan`, `POST /subscriptions/checkout`,
+  `POST /webhooks/mercadopago`; inert until `MP_ACCESS_TOKEN`/`MP_WEBHOOK_SECRET`); apps =
+  RevenueCat (`POST /webhooks/revenuecat`, fail-closed without the auth header; FE
+  `src/services/iap.ts` + `PremiumScreen`). The generic `POST /api/v1/webhooks/subscription`
+  seam stays available.
+- 🟡 Self-serve subscription: read side shipped (`GET /users/me/subscription`); there is no
+  `PUT /users/me/subscription` / in-app cancel endpoint.
 - ⬜ Feature-flag service so we can A/B individual gates.
 - ⬜ Top markets/categories `?limit` hard cap for FREE (history window is gated; the limit cap is not yet).
 - ⬜ Manual preference override (AVOID/MUST_HAVE) — depends on Phase 2.6.
-- ⬜ Household member-count gate (FREE ≤ 2).
 
 #### Gating sequence (which paywalls to ship first)
 1. ✅ **Watched markets cap** (3 free) — shipped.
@@ -351,10 +362,15 @@ receipt *costs us* in paid external calls. Treated as a Day-1 concern too.
 | Path | Cost/receipt | Why |
 |---|---|---|
 | RS / PR / SP / MS / SC scrape | ~R$0.03–0.09 | captcha solve only (1–3 solves) |
-| **CE** | **~R$0.24** | Infosimples paid API on **every** note (no native scraper yet) |
+| **CE** | ~R$0.00 | Native scraper since 2026-10 (`CearaNfcePortalAdapter`, qrcodev3 JSON API, no captcha) — Infosimples (~R$0.24) only rescues genuine fetch failures, like any other state |
 | Any-state fallback | +R$0.24 | primary scraper failed → Infosimples rescue |
 | **Categorização/extração por IA (LLM, por nota)** | **~R$0.03–0.08** | Agora padrão (aposentou o Naive Bayes); prompt cacheado. **Meter no `PaidApiGuardService`** — escala com o volume grátis. |
 | OFF product enrichment | R$0.00 | Open Food Facts is free/open data |
+
+> **Update 2026-11:** the CE analysis below (and the CE figures in the Business-plan
+> section) was written when CE was Infosimples-only. The native CE scraper has since
+> shipped (`CearaNfcePortalAdapter`), so the "structurally expensive CE" case no longer
+> holds; the reasoning still applies to any state that falls back to Infosimples.
 
 The danger case: a heavy CE user scanning 40 notes/month costs ~R$9.60 — nearly
 the whole R$9.90 subscription. **The problem is not the price, it's that CE is

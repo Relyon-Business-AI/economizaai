@@ -6,6 +6,7 @@ import com.relyon.economizaai.service.LocalizedMessageService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +15,7 @@ import org.springframework.http.MediaType;
 import org.springframework.lang.NonNull;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.UrlPathHelper;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -64,6 +66,18 @@ public class RateLimitFilter extends OncePerRequestFilter {
      */
     private static final RateLimitPolicy LOGIN_POLICY =
             new RateLimitPolicy("auth-login", 15, Duration.ofMinutes(1));
+
+    /**
+     * Account creation and social sign-in (which is also the LOGIN of every Google/Apple
+     * user) get their own per-IP bucket for the same reason login did: Brazilian mobile
+     * carriers put many subscribers behind one CGNAT address, so an ad burst from one
+     * carrier drained the shared 5/min bucket and the third signup per minute got a 429
+     * at the top of the funnel. None of these is a code-guessing surface.
+     */
+    private static final RateLimitPolicy SIGNUP_POLICY =
+            new RateLimitPolicy("auth-signup", 20, Duration.ofMinutes(1));
+    private static final Set<String> SIGNUP_PATHS = Set.of(
+            "/api/v1/auth/register", "/api/v1/auth/google", "/api/v1/auth/apple");
     private static final RateLimitPolicy REFRESH_POLICY =
             new RateLimitPolicy("auth-refresh", 60, Duration.ofMinutes(1));
 
@@ -172,7 +186,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
      */
     private static final Set<String> SUBMIT_PATHS = Set.of(
             "/api/v1/receipts", "/api/v1/receipts/photo", "/api/v1/receipts/chave/photo",
-            "/api/v1/receipts/prefetched", "/api/v1/receipts/items-photo");
+            "/api/v1/receipts/prefetched", "/api/v1/receipts/items-photo",
+            "/api/v1/receipts/xml", "/api/v1/receipts/retry");
 
     private static final Set<String> IMPORT_PATHS = Set.of(
             "/api/v1/receipts/import", "/api/v1/receipts/import/nfg-csv");
@@ -187,6 +202,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return uri.startsWith("/api/v1/receipts/") && uri.endsWith("/device-content");
     }
 
+    /** POST /api/v1/receipts/{id}/retry — re-runs the whole (possibly paid) fetch chain. */
+    private static boolean isRetryPath(String uri) {
+        return uri.startsWith("/api/v1/receipts/") && uri.endsWith("/retry");
+    }
+
     private final List<Rule> rules = List.of(
             // Login and refresh match BEFORE the catch-all /auth/* rule (first match wins).
             new Rule(
@@ -198,13 +218,18 @@ public class RateLimitFilter extends OncePerRequestFilter {
                     req -> "POST".equals(req.getMethod()) && "/api/v1/auth/refresh".equals(req.getRequestURI()),
                     KeyStrategy.IP),
             new Rule(
+                    SIGNUP_POLICY,
+                    req -> "POST".equals(req.getMethod()) && SIGNUP_PATHS.contains(req.getRequestURI()),
+                    KeyStrategy.IP),
+            new Rule(
                     AUTH_POLICY,
                     req -> "POST".equals(req.getMethod()) && req.getRequestURI().startsWith("/api/v1/auth/"),
                     KeyStrategy.IP),
             new Rule(
                     SUBMIT_POLICY,
                     req -> "POST".equals(req.getMethod())
-                            && (SUBMIT_PATHS.contains(req.getRequestURI()) || isDeviceContentPath(req.getRequestURI())),
+                            && (SUBMIT_PATHS.contains(req.getRequestURI())
+                            || isDeviceContentPath(req.getRequestURI()) || isRetryPath(req.getRequestURI())),
                     KeyStrategy.USER_OR_IP),
             new Rule(
                     IMPORT_POLICY,
@@ -259,7 +284,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
     protected void doFilterInternal(@NonNull HttpServletRequest request,
                                     @NonNull HttpServletResponse response,
                                     @NonNull FilterChain filterChain) throws ServletException, IOException {
-        var rule = rules.stream().filter(r -> r.matcher.test(request)).findFirst().orElse(null);
+        // Rules compare the DECODED path — the one Spring MVC routes on. Matching the raw URI
+        // let "/api/v1/%61uth/login" reach the controller while skipping every limit.
+        var routedRequest = new RoutedPathRequest(request);
+        var rule = rules.stream().filter(candidate -> candidate.matcher.test(routedRequest)).findFirst().orElse(null);
         if (rule == null) {
             filterChain.doFilter(request, response);
             return;
@@ -278,6 +306,21 @@ public class RateLimitFilter extends OncePerRequestFilter {
         log.warn("rate_limit.blocked policy={} key={} path={} retry_after_s={}",
                 rule.policy.name(), key, request.getRequestURI(), retryAfterSeconds);
         writeTooManyRequestsResponse(response, retryAfterSeconds);
+    }
+
+    /** Exposes the decoded, application-relative path as the request URI for rule matching. */
+    private static final class RoutedPathRequest extends HttpServletRequestWrapper {
+        private final String routedPath;
+
+        private RoutedPathRequest(HttpServletRequest request) {
+            super(request);
+            this.routedPath = UrlPathHelper.defaultInstance.getPathWithinApplication(request);
+        }
+
+        @Override
+        public String getRequestURI() {
+            return routedPath;
+        }
     }
 
     private void writeTooManyRequestsResponse(HttpServletResponse response, long retryAfterSeconds) throws IOException {

@@ -5,7 +5,9 @@
 >   `HouseholdScoped` on all movable entities, deletion guard for empty households owning data.
 > - **Phase 1 (merge + restore): DONE** — `HouseholdMergeService` (generic, transactional,
 >   host-wins collisions) + per-category `MergeCategory` selection. Gated behind
->   `economizaai.households.merge-enabled` (default false).
+>   `economizaai.households.merge-enabled` (default false at the time; **default `true`
+  since the 2026-11 household-sharing release** — `HOUSEHOLDS_MERGE_ENABLED:true` in
+  `application.yaml`).
 > - **Phase 2 (mutual consent): PARTIAL** — `DataShareConsentService` + `data_share_consent`
 >   table exist; the full block/proceed/backfill flow isn't fully wired.
 > - **Known TODOs before enabling in prod:** merge copies the receipt HEADER only (item-level

@@ -264,7 +264,7 @@
      "consumidor_final": "1 - Consumidor final",
      "presenca_comprador": "2 - Operação pela internet",
      "normalizado_cnpj": "",
-     "normalizado_cpf": "33981356845",
+     "normalizado_cpf": "",
      "normalizado_destino_operacao": 1,
      "normalizado_consumidor_final": 1,
      "normalizado_presenca_comprador": 2,
@@ -482,7 +482,7 @@
      "uf": "SP",
      "pais": "1058 - Brasil",
      "normalizado_cnpj": "",
-     "normalizado_cpf": "33981356845"
+     "normalizado_cpf": ""
     },
     "produtos": [
      {

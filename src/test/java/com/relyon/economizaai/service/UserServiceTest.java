@@ -628,4 +628,18 @@ class UserServiceTest {
         assertEquals(0, response.shoppingLists().size());
         assertEquals(0, response.notifications().size());
     }
+
+    @Test
+    void deleteAccount_keepsEmptyHouseholdThatStillOwnsReceipts() {
+        // An ex-member's notas stayed behind: hard-deleting the household would hit their FK.
+        var user = buildUser();
+        var householdId = user.getHousehold().getId();
+        when(userRepository.countByHouseholdId(householdId)).thenReturn(0L);
+        when(receiptRepository.existsByHouseholdId(householdId)).thenReturn(true);
+
+        userService.deleteAccount(user);
+
+        verify(userRepository).delete(user);
+        verify(householdRepository, never()).deleteById(any());
+    }
 }
