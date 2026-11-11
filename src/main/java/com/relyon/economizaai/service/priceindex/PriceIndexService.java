@@ -130,6 +130,8 @@ public class PriceIndexService {
             // On-device fetch from a non-trusted state: client-authored content whose only
             // tie to SEFAZ is the embedded chave (forgeable), so personal history only —
             // same trust class as PHOTO. Server-fetched and trusted device-fetch are eligible.
+            // Same for a user-uploaded XML whose authenticity was not established (in-store XML
+            // never is; online XML needs the issuer signature or a matching reconsult).
             log.info("price_index.write.skipped reason=not_index_eligible receipt={}", receipt.getId());
             return true;
         }

@@ -431,6 +431,16 @@ economizaai:
       plan-amount: ${MP_PLAN_AMOUNT:9.90}        # R$/mês da assinatura Premium
       plan-reason: ${MP_PLAN_REASON:Economiza AI Premium}
       back-url: ${MP_BACK_URL:https://economizaai.app/premium/obrigado}
+  xml-import:
+    # Receipts from a user-uploaded NF-e XML never feed the in-store index. For the ONLINE index
+    # the file must prove its origin: (1) issuer signature anchored in ICP-Brasil, or (2) a paid
+    # reconsult of the chave that matches the file. Otherwise it is personal history only.
+    # PEM bundle with the ICP-Brasil root + intermediate AC certificates. Empty (default) = no
+    # anchor → a signature alone is never accepted and every online XML goes to the reconsult.
+    trust-bundle-path: ${NFE_XML_TRUST_BUNDLE_PATH:}
+    # Paid confirmation (Infosimples, same per-user cap / daily budget / ledger as any other
+    # by-chave fallback). false = online XML without an anchored signature stays out of the index.
+    paid-reconsult-enabled: ${NFE_XML_PAID_RECONSULT_ENABLED:true}
   collaborative:
     enabled: true                              # master switch — disables all observation writes/reads
     min-households-for-public: 3               # k-anon: aggregate queries return empty until this many distinct households contributed

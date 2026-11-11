@@ -51,10 +51,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -73,6 +75,7 @@ class ReceiptIngestionServiceTest {
     @Mock private NotificationService notificationService;
     @Mock private LocalizedMessageService messageService;
     @Mock private ReceiptAiCategorySuggestionService aiCategorySuggestionService;
+    @Mock private XmlIndexEligibilityService xmlIndexEligibilityService;
 
     @InjectMocks private ReceiptIngestionService service;
 
@@ -345,6 +348,72 @@ class ReceiptIngestionServiceTest {
 
         assertEquals(ReceiptStatus.PENDING_CONFIRMATION, receipt.getStatus());
         assertTrue(receipt.isIndexEligible(), "the server-side Infosimples rescue is index-eligible");
+    }
+
+    @Test
+    void ingestXml_authenticityEstablished_persistsIndexEligible() {
+        var receipt = processingReceipt();
+        var parsed = sampleParsed();
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<xml/>", CHAVE_RS, UnidadeFederativa.RS, null, parsed);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fromXml("<uploaded/>", CHAVE_RS, null)).thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(parsed);
+        when(xmlIndexEligibilityService.isIndexEligible("<uploaded/>", parsed, receipt.getUser().getId()))
+                .thenReturn(true);
+
+        service.ingestXml(receipt.getId(), "<uploaded/>");
+
+        assertEquals(ReceiptStatus.PENDING_CONFIRMATION, receipt.getStatus());
+        assertTrue(receipt.isIndexEligible());
+    }
+
+    @Test
+    void ingestXml_authenticityNotEstablished_keepsTheNotaAsPersonalHistoryOnly() {
+        var receipt = processingReceipt();
+        var parsed = sampleParsed();
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<xml/>", CHAVE_RS, UnidadeFederativa.RS, null, parsed);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fromXml("<uploaded/>", CHAVE_RS, null)).thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(parsed);
+        when(xmlIndexEligibilityService.isIndexEligible("<uploaded/>", parsed, receipt.getUser().getId()))
+                .thenReturn(false);
+
+        service.ingestXml(receipt.getId(), "<uploaded/>");
+
+        assertEquals(ReceiptStatus.PENDING_CONFIRMATION, receipt.getStatus(), "the user still gets the nota");
+        assertEquals(1, receipt.getItems().size());
+        assertFalse(receipt.isIndexEligible(), "but it must not feed the shared index");
+    }
+
+    @Test
+    void ingestXml_authenticityIsCheckedOutsideTheDatabaseTransaction() {
+        var receipt = processingReceipt();
+        var parsed = sampleParsed();
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<xml/>", CHAVE_RS, UnidadeFederativa.RS, null, parsed);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fromXml("<uploaded/>", CHAVE_RS, null)).thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(parsed);
+
+        service.ingestXml(receipt.getId(), "<uploaded/>");
+
+        // The check may reconsult over HTTP: it has to finish before the persist block opens.
+        var order = inOrder(xmlIndexEligibilityService, transactionTemplate);
+        order.verify(xmlIndexEligibilityService).isIndexEligible(any(), any(), any());
+        order.verify(transactionTemplate).executeWithoutResult(any());
+    }
+
+    @Test
+    void ingest_serverFetchedNotaStaysIndexEligibleWithoutTheXmlCheck() {
+        var receipt = processingReceipt();
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(sampleParsed());
+
+        service.ingest(receipt.getId(), QR);
+
+        assertTrue(receipt.isIndexEligible());
+        verifyNoInteractions(xmlIndexEligibilityService);
     }
 
     @Test
