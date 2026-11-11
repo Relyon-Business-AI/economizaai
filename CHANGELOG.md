@@ -1,5 +1,23 @@
 # economizai — what's new
 
+## 2026-11-10 — Split de produtos mal-mesclados por variante (admin)
+
+- **Novo endpoint ADMIN `POST /api/v1/admin/products/split-variants?dryRun=true|false&max=500`.**
+  Limpeza one-time e revisável do backlog deixado pelo matcher ANTIGO, que mesclava por nome/tipo
+  sem autoridade de EAN — um mesmo `products` acabava carregando itens de variantes/marcas/sabores
+  DIFERENTES (ex.: "CR LTE NESTLE 200G" guardando Nestlé 7891000126905 + Dália 7898681790401;
+  "REFR.TANG 18G MOR." com 12 sabores; "CAFE MELITTA 500G" com várias marcas).
+- **Como decide (determinístico, reusa o `VariantDiscriminator`):** agrupa os itens do produto pela
+  ASSINATURA de variante = marca (via `BrandExtractor`) + tokens fortes/fracos do discriminator
+  (`%`/zero/diet/sem glúten + sabor). Mesma assinatura fica junto — então "mesmo produto, vários EANs"
+  (ex. "Água Crystal sem gás 500ml") continua UM produto. Produto com mais de uma assinatura é
+  dividido: uma assinatura fica no row original, cada outra vira um novo `products` com os
+  `receipt_items`, `price_observations` (rastreadas via auditoria → recibo + preço + quantidade) e
+  `product_aliases` reapontados. `generic_name_norm` é copiado igual, então o agrupamento por tipo
+  ("ver todos os cremes de leite") não muda.
+- **`dryRun=true` (padrão) não muta nada** — devolve o PLANO (assinaturas, EANs/contagens por produto
+  resultante). `dryRun=false` aplica em transação. Idempotente: produto com uma assinatura é pulado.
+
 ## 2026-11-10 — Fim do "0 km" por centroide de cidade no "perto de você"
 
 - **Geocoder rejeita centroide de cidade.** Quando o Nominatim não achava o endereço exato ele devolvia

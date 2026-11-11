@@ -53,6 +53,7 @@ import com.relyon.economizaai.dto.response.ProductDeletionResponse;
 import com.relyon.economizaai.dto.response.MarketChainResponse;
 import com.relyon.economizaai.dto.response.OrphanedObservationsResponse;
 import com.relyon.economizaai.dto.response.ProductMergeResultResponse;
+import com.relyon.economizaai.dto.response.ProductVariantSplitResponse;
 import com.relyon.economizaai.dto.response.PurgeObservationsResponse;
 import com.relyon.economizaai.dto.response.RelevanceReportResponse;
 import com.relyon.economizaai.dto.response.StateCoverageResponse;
@@ -74,6 +75,7 @@ import com.relyon.economizaai.service.merchant.MerchantClaimService;
 import com.relyon.economizaai.service.admin.AdminNotificationEffectivenessService;
 import com.relyon.economizaai.service.admin.AdminNotificationService;
 import com.relyon.economizaai.service.admin.AdminProductService;
+import com.relyon.economizaai.service.admin.ProductVariantSplitService;
 import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.dto.response.TaxonomyCoverageResponse;
 import com.relyon.economizaai.service.admin.AdminDevService;
@@ -149,6 +151,7 @@ public class AdminController {
     private final MerchantClaimService merchantClaimService;
     private final AdminLlmService adminLlmService;
     private final AdminProductService adminProductService;
+    private final ProductVariantSplitService productVariantSplitService;
     private final CategoryResolver categoryResolver;
     private final MarketLocationService marketLocationService;
     private final RelevanceReportService relevanceReportService;
@@ -794,6 +797,26 @@ public class AdminController {
     public ResponseEntity<ProductMergeResultResponse> mergeProduct(
             @PathVariable UUID id, @Valid @RequestBody MergeProductRequest request) {
         return ResponseEntity.ok(adminProductService.merge(id, request));
+    }
+
+    /**
+     * One-time, reviewable cleanup that SPLITS mis-merged products: a single
+     * canonical product holding items of DIFFERENT variants/brands/flavours
+     * (the old name/type matcher merged without EAN authority). Items are grouped
+     * by variant signature ({@code VariantDiscriminator} tokens + brand); a product
+     * spanning more than one signature is split into one product per signature,
+     * with {@code receipt_items}, {@code price_observations} and {@code product_aliases}
+     * reassigned. {@code generic_name_norm} is preserved so the type grouping is unchanged.
+     *
+     * <p>{@code dryRun=true} (default) returns the PLAN and mutates nothing.
+     * {@code dryRun=false} applies the split. Idempotent: single-signature products
+     * are skipped, so re-running once clean is a no-op.
+     */
+    @PostMapping("/products/split-variants")
+    public ResponseEntity<ProductVariantSplitResponse> splitVariants(
+            @RequestParam(defaultValue = "true") boolean dryRun,
+            @RequestParam(defaultValue = "500") int max) {
+        return ResponseEntity.ok(productVariantSplitService.splitVariants(max, dryRun));
     }
 
     @GetMapping("/chains")
