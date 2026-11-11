@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -45,6 +46,7 @@ public class InfosimplesFinanceService {
     private final InfosimplesMonthHistoryRepository historyRepository;
     private final Optional<InfosimplesService> infosimples;
     private final InfosimplesAlertService alertService;
+    private final TransactionTemplate transactionTemplate;
     private final Clock clock = Clock.system(BR);
 
     /** The admin panel payload: live account + month ledger + lifetime totals. */
@@ -86,9 +88,10 @@ public class InfosimplesFinanceService {
      * accumulated on the current month's row.
      */
     @Scheduled(cron = "${economizaai.infosimples.snapshot-cron:0 40 23 * * *}", zone = "America/Sao_Paulo")
-    @Transactional
     public void takeDailySnapshot() {
         if (infosimples.isEmpty()) return; // integration disabled — nothing to watch
+        // Deliberately NOT @Transactional: the account read and the alerts are outbound HTTP,
+        // so they run with no DB connection held; only the write below is a (short) transaction.
         var account = infosimples.flatMap(InfosimplesService::fetchAccount).orElse(null);
         if (account == null) {
             // Enabled but unreadable (API down / token revogado) — a CE outage
@@ -97,6 +100,11 @@ public class InfosimplesFinanceService {
             return;
         }
         alertService.checkLowBalance(account.balance());
+        transactionTemplate.execute(txStatus -> recordSnapshot(account));
+        log.info("infosimples.finance.snapshot saldo={} consumoMes={}", account.balance(), account.currentUsage());
+    }
+
+    private InfosimplesAccountSnapshot recordSnapshot(InfosimplesAccount account) {
         var previous = snapshotRepository.findTopByOrderByTakenAtDesc().orElse(null);
         var snapshot = snapshotRepository.save(InfosimplesAccountSnapshot.builder()
                 .takenAt(OffsetDateTime.now(clock))
@@ -105,7 +113,7 @@ public class InfosimplesFinanceService {
                 .minBill(account.minBill())
                 .build());
         detectRecarga(previous, snapshot);
-        log.info("infosimples.finance.snapshot saldo={} consumoMes={}", account.balance(), account.currentUsage());
+        return snapshot;
     }
 
     /**
