@@ -7,6 +7,7 @@ import com.relyon.economizaai.model.NotificationPreference;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.DigestFrequency;
 import com.relyon.economizaai.model.enums.NotificationChannel;
+import com.relyon.economizaai.model.enums.SubscriptionTier;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.repository.NotificationPreferenceRepository;
 import com.relyon.economizaai.repository.UserRepository;
@@ -18,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -26,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -128,57 +131,82 @@ class NotificationPreferenceServiceTest {
         verify(preferenceRepository, times(3)).save(any()); // push+email for promo, email for price_drop
     }
 
+    /** The row as the database has it now — newer than the request principal (tier changed meanwhile). */
+    private User storedVersionOf(User principal) {
+        var stored = User.builder().id(principal.getId()).email(principal.getEmail())
+                .subscriptionTier(SubscriptionTier.PRO)
+                .pushDeviceToken(principal.getPushDeviceToken())
+                .digestSendHour(principal.getDigestSendHour())
+                .build();
+        when(userRepository.findById(principal.getId())).thenReturn(Optional.of(stored));
+        return stored;
+    }
+
     @Test
     void updatePushTokenStoresTrimmableNonBlankToken() {
-        var user = user();
-        var request = new UpdatePushTokenRequest("ExponentPushToken[abc]");
+        var principal = user();
+        var stored = storedVersionOf(principal);
 
-        preferenceService.updatePushToken(user, request);
+        preferenceService.updatePushToken(principal, new UpdatePushTokenRequest("ExponentPushToken[abc]"));
 
-        assertEquals("ExponentPushToken[abc]", user.getPushDeviceToken());
-        assertNotNull(user.getPushTokenUpdatedAt());
-        verify(userRepository).save(user);
+        assertEquals("ExponentPushToken[abc]", stored.getPushDeviceToken());
+        assertNotNull(stored.getPushTokenUpdatedAt());
+        verify(userRepository).save(stored);
+    }
+
+    @Test
+    void updatePushTokenSavesTheFreshRowNotTheStaleRequestPrincipal() {
+        var principal = user();   // snapshot from the start of the request: still FREE
+        var stored = storedVersionOf(principal);
+
+        preferenceService.updatePushToken(principal, new UpdatePushTokenRequest("ExponentPushToken[abc]"));
+
+        verify(userRepository, never()).save(principal);
+        assertEquals(SubscriptionTier.PRO, stored.getSubscriptionTier());
     }
 
     @Test
     void updatePushTokenClearsTokenWhenNull() {
-        var user = user();
-        user.setPushDeviceToken("old-token");
-        var request = new UpdatePushTokenRequest(null);
+        var principal = user();
+        principal.setPushDeviceToken("old-token");
+        var stored = storedVersionOf(principal);
 
-        preferenceService.updatePushToken(user, request);
+        preferenceService.updatePushToken(principal, new UpdatePushTokenRequest(null));
 
-        assertNull(user.getPushDeviceToken());
-        assertNotNull(user.getPushTokenUpdatedAt());
-        verify(userRepository).save(user);
+        assertNull(stored.getPushDeviceToken());
+        assertNotNull(stored.getPushTokenUpdatedAt());
+        verify(userRepository).save(stored);
     }
 
     @Test
     void updateDigestPreferencesPersistsFrequencyAndSendHour() {
-        var user = user();
-        var request = new UpdateDigestPreferencesRequest(DigestFrequency.WEEKLY, 8);
+        var principal = user();
+        var stored = storedVersionOf(principal);
 
-        var result = preferenceService.updateDigestPreferences(user, request);
+        var result = preferenceService.updateDigestPreferences(principal,
+                new UpdateDigestPreferencesRequest(DigestFrequency.WEEKLY, 8));
 
-        assertEquals(DigestFrequency.WEEKLY, user.getDigestFrequency());
-        assertEquals(8, user.getDigestSendHour());
+        assertEquals(DigestFrequency.WEEKLY, stored.getDigestFrequency());
+        assertEquals(8, stored.getDigestSendHour());
         assertEquals(DigestFrequency.WEEKLY, result.frequency());
         assertEquals(8, result.sendHour());
-        verify(userRepository).save(user);
+        verify(userRepository).save(stored);
+        verify(userRepository, never()).save(principal);
     }
 
     @Test
     void updateDigestPreferencesClearsSendHourOverrideWhenNull() {
-        var user = user();
-        user.setDigestSendHour(9);
-        var request = new UpdateDigestPreferencesRequest(DigestFrequency.DAILY, null);
+        var principal = user();
+        principal.setDigestSendHour(9);
+        var stored = storedVersionOf(principal);
 
-        var result = preferenceService.updateDigestPreferences(user, request);
+        var result = preferenceService.updateDigestPreferences(principal,
+                new UpdateDigestPreferencesRequest(DigestFrequency.DAILY, null));
 
-        assertNull(user.getDigestSendHour());
+        assertNull(stored.getDigestSendHour());
         assertNull(result.sendHour());
         assertEquals(DigestFrequency.DAILY, result.frequency());
-        verify(userRepository).save(user);
+        verify(userRepository).save(stored);
     }
 
     @Test
@@ -195,13 +223,13 @@ class NotificationPreferenceServiceTest {
 
     @Test
     void updatePushTokenClearsTokenWhenBlank() {
-        var user = user();
-        user.setPushDeviceToken("old-token");
-        var request = new UpdatePushTokenRequest("   ");
+        var principal = user();
+        principal.setPushDeviceToken("old-token");
+        var stored = storedVersionOf(principal);
 
-        preferenceService.updatePushToken(user, request);
+        preferenceService.updatePushToken(principal, new UpdatePushTokenRequest("   "));
 
-        assertNull(user.getPushDeviceToken());
-        verify(userRepository).save(user);
+        assertNull(stored.getPushDeviceToken());
+        verify(userRepository).save(stored);
     }
 }

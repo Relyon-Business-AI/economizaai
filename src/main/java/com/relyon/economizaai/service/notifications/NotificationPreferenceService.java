@@ -5,6 +5,7 @@ import com.relyon.economizaai.dto.request.UpdateNotificationPreferencesRequest;
 import com.relyon.economizaai.dto.request.UpdatePushTokenRequest;
 import com.relyon.economizaai.dto.response.DigestPreferencesResponse;
 import com.relyon.economizaai.dto.response.NotificationPreferenceResponse;
+import com.relyon.economizaai.exception.UserNotFoundException;
 import com.relyon.economizaai.model.NotificationPreference;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.repository.NotificationPreferenceRepository;
@@ -66,20 +67,30 @@ public class NotificationPreferenceService {
 
     @Transactional
     public DigestPreferencesResponse updateDigestPreferences(User user, UpdateDigestPreferencesRequest request) {
-        user.setDigestFrequency(request.frequency());
-        user.setDigestSendHour(request.sendHour());
-        userRepository.save(user);
+        var managedUser = reload(user);
+        managedUser.setDigestFrequency(request.frequency());
+        managedUser.setDigestSendHour(request.sendHour());
+        userRepository.save(managedUser);
         log.info("digest.preferences.updated user={} frequency={} sendHour={}",
-                LogMasker.email(user.getEmail()), request.frequency(), request.sendHour());
-        return new DigestPreferencesResponse(user.getDigestFrequency(), user.getDigestSendHour());
+                LogMasker.email(managedUser.getEmail()), request.frequency(), request.sendHour());
+        return new DigestPreferencesResponse(managedUser.getDigestFrequency(), managedUser.getDigestSendHour());
     }
 
     @Transactional
     public void updatePushToken(User user, UpdatePushTokenRequest request) {
         var token = request.pushDeviceToken();
-        user.setPushDeviceToken(token == null || token.isBlank() ? null : token);
-        user.setPushTokenUpdatedAt(LocalDateTime.now());
-        userRepository.save(user);
-        log.info("push_token.updated user={} hasToken={}", LogMasker.email(user.getEmail()), user.getPushDeviceToken() != null);
+        var managedUser = reload(user);
+        managedUser.setPushDeviceToken(token == null || token.isBlank() ? null : token);
+        managedUser.setPushTokenUpdatedAt(LocalDateTime.now());
+        userRepository.save(managedUser);
+        log.info("push_token.updated user={} hasToken={}",
+                LogMasker.email(managedUser.getEmail()), managedUser.getPushDeviceToken() != null);
+    }
+
+    // The authenticated User is a detached snapshot taken when the request started: saving it
+    // would write that snapshot back over whatever changed since. Mutate a fresh, managed load.
+    private User reload(User principal) {
+        return userRepository.findById(principal.getId())
+                .orElseThrow(() -> new UserNotFoundException(principal.getId().toString()));
     }
 }

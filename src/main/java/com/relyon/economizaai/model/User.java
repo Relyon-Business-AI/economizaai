@@ -21,6 +21,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import org.hibernate.annotations.BatchSize;
+import org.hibernate.annotations.DynamicUpdate;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -36,6 +37,10 @@ import java.util.List;
 // BatchSize: list endpoints that expose the owning user per row (admin receipts)
 // initialize the lazy proxies in one IN query instead of one query per row.
 @BatchSize(size = 50)
+// Only the columns that actually changed go into the UPDATE: a flow that touches one field
+// (push token, digest hour, review counter) can no longer write back the rest of the row
+// and undo a concurrent change to tier, household or role.
+@DynamicUpdate
 @Getter
 @Setter
 @NoArgsConstructor
