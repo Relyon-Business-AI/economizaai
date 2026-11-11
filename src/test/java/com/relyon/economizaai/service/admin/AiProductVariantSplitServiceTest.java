@@ -130,9 +130,10 @@ class AiProductVariantSplitServiceTest {
         when(aliasRepository.findByProduct(product)).thenReturn(List.of());
         when(priceObservationRepository.findObservationTraceByProduct(product.getId())).thenReturn(List.of());
         stubSave();
-        // AI clusters the three items into three distinct products (ids are item:0/1/2).
+        // AI clusters the three items into three distinct products (ids are item:0/1/2), HIGH
+        // confidence. Names are materially different (Melitta / Bom Jesus / Pimpinela) → applied.
         when(aiGateway.complete(eq(AiActivity.VARIANT_SPLIT), any(), any(), any(), anyInt()))
-                .thenReturn("{\"groups\":[[\"item:0\"],[\"item:1\"],[\"item:2\"]]}");
+                .thenReturn("{\"groups\":[[\"item:0\"],[\"item:1\"],[\"item:2\"]],\"confidence\":\"HIGH\"}");
 
         var response = service.splitVariants(50, false);
 
@@ -172,7 +173,7 @@ class AiProductVariantSplitServiceTest {
         stubSave();
         // AI puts the two same-EAN cokes in DIFFERENT groups (item:0 vs item:1); fanta item:2 alone.
         when(aiGateway.complete(eq(AiActivity.VARIANT_SPLIT), any(), any(), any(), anyInt()))
-                .thenReturn("{\"groups\":[[\"item:0\"],[\"item:1\"],[\"item:2\"]]}");
+                .thenReturn("{\"groups\":[[\"item:0\"],[\"item:1\"],[\"item:2\"]],\"confidence\":\"HIGH\"}");
 
         var response = service.splitVariants(50, false);
 
@@ -209,7 +210,7 @@ class AiProductVariantSplitServiceTest {
         when(receiptItemRepository.findAllLinkedWithReceipt(product.getId())).thenReturn(items);
         when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
         when(aiGateway.complete(eq(AiActivity.VARIANT_SPLIT), any(), any(), any(), anyInt()))
-                .thenReturn("{\"groups\":[[\"item:0\",\"item:1\"]]}");
+                .thenReturn("{\"groups\":[[\"item:0\",\"item:1\"]],\"confidence\":\"HIGH\"}");
 
         var response = service.splitVariants(50, false);
 
@@ -252,7 +253,7 @@ class AiProductVariantSplitServiceTest {
         when(aliasRepository.findByProduct(mixed)).thenReturn(List.of());
         when(priceObservationRepository.findObservationTraceByProduct(mixed.getId())).thenReturn(List.of());
         when(aiGateway.complete(eq(AiActivity.VARIANT_SPLIT), any(), any(), any(), anyInt()))
-                .thenReturn("{\"groups\":[[\"item:0\"],[\"item:1\"]]}");
+                .thenReturn("{\"groups\":[[\"item:0\"],[\"item:1\"]],\"confidence\":\"HIGH\"}");
 
         var response = service.splitVariants(50, true); // dry-run: no mutation, still gated
 
@@ -263,6 +264,80 @@ class AiProductVariantSplitServiceTest {
         verify(aiGateway, org.mockito.Mockito.times(1)).complete(eq(AiActivity.VARIANT_SPLIT), any(), any(), any(), anyInt());
         // dry-run mutates nothing.
         verify(productRepository, never()).save(any(Product.class));
+        // dry-run reports the mixed product's split as SAFE-to-apply (HIGH conf + distinct names).
+        assertEquals(1, response.safety().size());
+        assertTrue(response.safety().get(0).safeToApply());
+        assertEquals("SAFE", response.safety().get(0).reason());
+    }
+
+    @Test
+    void identicalNamedItemsInDifferentAiGroups_nameCohesionMergesThemBack_noSplit() {
+        // Three items with the IDENTICAL raw name but three DIFFERENT real EANs (re-barcode).
+        // The gate opens (>1 distinct real EAN). The AI over-splits them into three groups, but
+        // the identical-name cohesion guard forces them back into one → no split.
+        var product = Product.builder()
+                .id(UUID.randomUUID())
+                .ean(MELITTA_EAN)
+                .normalizedName("SUCO NATURAL ONE 900ML")
+                .genericName("Suco")
+                .genericNameNorm("suco")
+                .category(ProductCategory.BEVERAGES)
+                .build();
+        lenient().when(brandExtractor.find(any())).thenReturn("One");
+        var oneA = item(product, "SUCO NATURAL ONE 900ML", MELITTA_EAN, "9.90");
+        var oneB = item(product, "SUCO NATURAL ONE 900ML", BOM_JESUS_EAN, "9.90");
+        var oneC = item(product, "SUCO NATURAL ONE 900ML", PIMPINELA_EAN, "9.90");
+        var items = List.of(oneA, oneB, oneC);
+
+        when(receiptItemRepository.findProductIdsWithMultipleItemEans(any())).thenReturn(List.of(product.getId()));
+        when(receiptItemRepository.findAllLinkedWithReceipt(product.getId())).thenReturn(items);
+        when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
+        // AI (wrongly) splits the three identical-named items into three groups, HIGH confidence.
+        when(aiGateway.complete(eq(AiActivity.VARIANT_SPLIT), any(), any(), any(), anyInt()))
+                .thenReturn("{\"groups\":[[\"item:0\"],[\"item:1\"],[\"item:2\"]],\"confidence\":\"HIGH\"}");
+
+        var response = service.splitVariants(50, false);
+
+        assertEquals(1, response.candidates());
+        assertEquals(0, response.productsSplit(), "identical normalized names forced into one group → no split");
+        assertEquals(0, response.newProductsCreated());
+        assertTrue(response.splits().isEmpty());
+        verify(productRepository, never()).save(any(Product.class));
+        verify(receiptItemRepository, never()).repointItemsTo(anyList(), any(Product.class));
+    }
+
+    @Test
+    void lowConfidenceSplit_skippedOnApply_butShownInDryRun() {
+        // Two DIFFERENT-named coffees, two real EANs → gate opens. The AI separates them but with
+        // LOW confidence. On apply the safe-apply gate DROPS the split (items stay merged); in
+        // dry-run the verdict is surfaced as SKIPPED / LOW_CONFIDENCE.
+        var product = coffeeProduct();
+        lenient().when(brandExtractor.find(any())).thenReturn(null);
+        var melitta = item(product, "CAFE MELITTA 500G", MELITTA_EAN, "12.90");
+        var bomJesus = item(product, "CAFE BOM JESUS 500G", BOM_JESUS_EAN, "9.90");
+        var items = List.of(melitta, bomJesus);
+
+        when(receiptItemRepository.findProductIdsWithMultipleItemEans(any())).thenReturn(List.of(product.getId()));
+        when(receiptItemRepository.findAllLinkedWithReceipt(product.getId())).thenReturn(items);
+        when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
+        when(aiGateway.complete(eq(AiActivity.VARIANT_SPLIT), any(), any(), any(), anyInt()))
+                .thenReturn("{\"groups\":[[\"item:0\"],[\"item:1\"]],\"confidence\":\"LOW\"}");
+
+        // Apply: the low-confidence split is dropped — nothing mutated, nothing reported as split.
+        var applied = service.splitVariants(50, false);
+        assertEquals(0, applied.productsSplit(), "low-confidence split is dropped on apply");
+        assertEquals(0, applied.newProductsCreated());
+        assertTrue(applied.splits().isEmpty());
+        verify(productRepository, never()).save(any(Product.class));
+
+        // Dry-run: the same split is surfaced as SKIPPED with reason LOW_CONFIDENCE.
+        var preview = service.splitVariants(50, true);
+        assertTrue(preview.splits().isEmpty(), "low-confidence split is not a SAFE split");
+        assertEquals(1, preview.safety().size());
+        assertFalse(preview.safety().get(0).safeToApply());
+        assertEquals("LOW_CONFIDENCE", preview.safety().get(0).reason());
+        assertEquals("LOW", preview.safety().get(0).confidence());
+        assertEquals(2, preview.safety().get(0).proposedGroups());
     }
 
     @Test
