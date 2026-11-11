@@ -237,6 +237,48 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     List<Product> searchAll(@Param("query") String query);
 
     /**
+     * Catalog matches by name / generic name (substring) or exact EAN, capped by {@code limit}.
+     * {@code pattern} is the already-lowercased, '!'-escaped {@code %term%}: comparing
+     * {@code LOWER(column)} against a bound pattern lets Postgres use the trigram indexes (V172).
+     */
+    @Query("""
+        SELECT p FROM Product p
+        WHERE LOWER(p.normalizedName) LIKE :pattern ESCAPE '!'
+           OR LOWER(p.genericName) LIKE :pattern ESCAPE '!'
+           OR p.ean = :query
+        ORDER BY p.normalizedName ASC
+    """)
+    List<Product> searchCatalogByNameOrEan(@Param("query") String query,
+                                           @Param("pattern") String pattern,
+                                           Pageable limit);
+
+    /** Catalog matches through a receipt description absorbed as an alias, capped by {@code limit}. */
+    @Query("""
+        SELECT p FROM Product p
+        WHERE p.id IN (SELECT alias.product.id FROM ProductAlias alias
+                       WHERE LOWER(alias.normalizedDescription) LIKE :pattern ESCAPE '!')
+        ORDER BY p.normalizedName ASC
+    """)
+    List<Product> searchCatalogByAliasDescription(@Param("pattern") String pattern, Pageable limit);
+
+    /** Products this household has bought (confirmed, non-excluded) matching the term, capped by {@code limit}. */
+    @Query("""
+        SELECT p FROM Product p
+        WHERE p.id IN (SELECT item.product.id FROM ReceiptItem item JOIN item.receipt receipt
+                       WHERE receipt.household.id = :householdId
+                         AND receipt.status = 'CONFIRMED'
+                         AND item.excluded = false)
+          AND (LOWER(p.normalizedName) LIKE :pattern ESCAPE '!'
+               OR LOWER(p.genericName) LIKE :pattern ESCAPE '!'
+               OR p.ean = :query)
+        ORDER BY p.normalizedName ASC
+    """)
+    List<Product> searchPurchasedByHousehold(@Param("householdId") UUID householdId,
+                                             @Param("query") String query,
+                                             @Param("pattern") String pattern,
+                                             Pageable limit);
+
+    /**
      * Products matching all four metadata dimensions. Used by
      * {@code CanonicalizationService} to dedup against an existing product
      * when an unknown EAN comes in (small markets sometimes use internal
