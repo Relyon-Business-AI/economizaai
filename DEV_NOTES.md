@@ -10,6 +10,75 @@ mirror entries here.
 
 ---
 
+## Release 2026-11-11 — lacunas conhecidas, enviadas de propósito
+
+### XML de NF-e: verificação de assinatura DESLIGADA até existir o bundle de certificados
+- **Now**: nota vinda de XML enviado pelo usuário só entra no índice ONLINE com autenticidade
+  comprovada (`XmlIndexEligibilityService`). O caminho por assinatura digital do emitente
+  (`NfeXmlSignatureVerifier`) precisa das raízes + intermediárias da ICP-Brasil num arquivo PEM
+  apontado por `NFE_XML_TRUST_BUNDLE_PATH`. A variável vem vazia: sem âncora, **nenhuma
+  assinatura é aceita** e todo XML online é confirmado pela reconsulta paga da chave
+  (Infosimples — mesmo limite por usuário, teto diário e ledger; `NFE_XML_PAID_RECONSULT_ENABLED`).
+  XML de loja física nunca alimenta o índice.
+- **Por que OK por ora**: falha fechada — sem prova, a nota fica só no histórico pessoal.
+- **Antes de escalar XML**: montar o PEM com as cadeias ICP-Brasil vigentes, publicar no host e
+  setar a variável; validar com XMLs reais. Enquanto isso cada XML online custa uma consulta paga.
+
+### Aviso de custo desiste depois de 24 h
+- **Now**: o aviso de teto/saldo (`CostAlertService`) tenta o WhatsApp do admin, manda e-mail
+  depois de `COST_ALERT_EMAIL_FALLBACK_AFTER` falhas e segue tentando; passadas **24 h** sem
+  nenhum canal aceitar, a linha vira `EXPIRED` e só fica o log de erro `cost_alert.expired`.
+- **Revisitar**: se WhatsApp e SMTP estiverem fora ao mesmo tempo por um dia inteiro, o aviso
+  se perde. Um terceiro canal (ou alerta em cima do log) fecha o buraco.
+
+### Tetos de custo viram o dia em UTC (21h de Brasília)
+- **Now**: o gasto "de hoje" de cada serviço e os limites por usuário contam por dia **UTC** —
+  a virada é às 21h de Brasília, não à meia-noite local. Um teto estourado à tarde libera às 21h.
+- **Revisitar**: se a virada no meio da noite brasileira confundir (suporte / leitura do
+  painel), trocar a janela para o dia de Brasília (`BrazilClock`) em guard, monitor e painel juntos.
+
+### `GET /sefaz/state-status`: heurística de "UNSTABLE" sem calibragem
+- **Now**: um estado verificado aparece como `UNSTABLE` quando está na lista de portais
+  pausados, quando o parser falha em rajada, ou quando nas últimas `SEFAZ_STATE_STATUS_WINDOW_HOURS`
+  (24) houve pelo menos `SEFAZ_STATE_STATUS_MIN_FAILURES` (3) falhas de portal e elas superam as
+  notas lidas. Os números são chute inicial, nunca medidos contra tráfego real.
+- **Revisitar**: estado de pouco volume pode piscar `UNSTABLE` com 3 falhas; estado grande pode
+  demorar a aparecer. Ajustar pelas variáveis depois de umas semanas de campanha.
+
+### Lifecycle do R2 para `photo-attempts/` ainda não existe (ação do dono)
+- **Now**: a exclusão de conta apaga a foto de perfil e as fotos de nota do armazenamento
+  (`AccountStorageCleaner`, melhor esforço, depois do commit). A rede de segurança prevista — uma
+  regra de expiração no bucket — **não foi criada**.
+- **Fazer (dono, no painel da Cloudflare)**: regra de lifecycle de **30 dias restrita ao prefixo
+  `photo-attempts/`**. Não aplicar ao bucket inteiro: as fotos de perfil ficam na raiz do mesmo
+  bucket e não podem expirar.
+
+### Mercado Pago: campos de `authorized_payments` não conferidos com payload real
+- **Now**: a renovação mensal lê `preapproval_id`, `payment.id`, `payment.status`,
+  `transaction_amount` e `debit_date` de `GET /authorized_payments/{id}`
+  (`MercadoPagoClient.fetchAuthorizedPayment`), escritos a partir da documentação.
+- **Antes de cobrar na web**: conferir com um evento real de sandbox (junto com a assinatura
+  `x-signature`, ver "Billing" abaixo). Campo com outro nome = renovação não avança o período; a
+  carência de 3 dias dá tempo de notar.
+
+### `reWriteBatchedInserts` fora da URL do JDBC
+- **Now**: o Hibernate manda lotes (`jdbc.batch_size=50`, `order_inserts/updates`), mas a
+  `DATABASE_URL` não tem `reWriteBatchedInserts=true`, então o driver do Postgres ainda envia um
+  comando por linha dentro do lote (menos idas e voltas, não o ganho total).
+- **Quando**: acrescentar `?reWriteBatchedInserts=true` à `DATABASE_URL` no Render (dev primeiro)
+  e medir a confirmação de uma nota grande.
+
+### HTTPS obrigatório nos portais SEFAZ não dá para exigir
+- **Now**: vários estados imprimem QR com URL `http://` (alguns portais só respondem assim), então
+  `SEFAZ_ALLOW_PLAIN_HTTP` fica `true` por padrão. O que protege é a lista de hosts permitidos,
+  conferida de novo a cada redirecionamento (`PortalRedirects`), não o esquema.
+- **Revisitar**: `SEFAZ_ALLOW_PLAIN_HTTP=false` só quando todos os estados atendidos servirem https.
+
+### HTML da nota em tabela separada — etapa 1
+- Etapa 1: o HTML mora em `receipt_raw_html`; a coluna antiga sai numa release seguinte.
+
+---
+
 ## Retenção das fotos de extração em R2 — TEMPORÁRIO (2026-11-08)
 - **Now**: toda tentativa de extração por foto guarda as imagens enviadas em R2
   (`photo-attempts/<receiptId>/<idx>.<ext>` + `manifest.json`), ligado por padrão
@@ -18,11 +87,14 @@ mirror entries here.
   `GET /api/v1/admin/photo-attempts/{receiptId}` (lista) e `/{index}` (bytes).
 - **Por que OK por ora**: volume baixo, só pra debugar o extrator; é best-effort
   (nunca quebra a ingestão) e as imagens são do próprio usuário (não entram no índice).
+- **Atualização (2026-11-11)**: a exclusão de conta já apaga as fotos da conta
+  (`AccountStorageCleaner`). O TTL segue pendente — regra de lifecycle de 30 dias no prefixo
+  `photo-attempts/`, a criar pelo dono (ver "Release 2026-11-11" acima).
 - **Mudar antes de prod "pra valer"**: DECIDIR se mantém. Se não, **desligar**
   (`PHOTO_RETENTION_ENABLED=false` ou toggle admin `POST /photo-attempts/settings`) e
   **apagar o prefixo `photo-attempts/` no R2**. Se mantiver, precisa de: retenção/TTL
   (lifecycle rule no bucket), consentimento/privacidade (LGPD — são fotos de compras),
-  e talvez só guardar em FALHA. Hoje guarda SEMPRE e pra SEMPRE. Toggle admin é
+  e talvez só guardar em FALHA. Hoje guarda SEMPRE e, sem a regra, pra SEMPRE. Toggle admin é
   em-memória (reseta no restart pro default do env) — a env var é a fonte durável.
 - **Esforço**: baixo pra desligar; médio pra tornar permanente com TTL+consentimento.
 
@@ -230,9 +302,11 @@ mirror entries here.
 - **Activation**: the whole LLM stack (enrichment, auditor, photo extraction) is
   dormant until `OPENAI_API_KEY` is set on Render — workers skip silently, the
   photo endpoint returns a localized 503. Set the key to go live.
-- **Sync vision call**: `POST /receipts/items-photo` runs the vision call on the
-  request thread (~5-15s). Fine at current volume; move to the async
-  PROCESSING+poll pattern if it ever strains the pool.
+- ~~**Sync vision call**~~ **Resolved**: `POST /receipts/items-photo` is async
+  (PROCESSING + poll) and since 2026-11-11 runs on its own bounded executor
+  (`ASYNC_PHOTO_EXTRACT_THREADS` 3 / `ASYNC_PHOTO_EXTRACT_QUEUE` 30), separate from the admin
+  AI sweep lane and from the categorization lane (`ASYNC_AI_CATEGORIZATION_*`). A full queue
+  fails the nota with a localized message instead of blocking.
 - **Premium-readiness**: `Feature.PHOTO_EXTRACTION` already gates the endpoint
   (dormant while subscription enforcement is off). Enrichment/auditor are
   global env switches, not per-user.
@@ -287,13 +361,18 @@ mirror entries here.
 
 ## Paid-API cost caps — in place, with two known follow-ups (2026-07-09)
 - **Now**: `PaidApiGuardService` meters every paid external call — per-user daily caps
-  (`economizaai.paid-api.*`: Infosimples 20/day, captcha 60/day), an Infosimples circuit
-  breaker (5 failures/10min → open 5min), and a `paid_api_call` ledger for invoice
-  reconciliation. Enforcement toggles via `PAID_API_GUARD_ENABLED` (logging is always on).
+  (`economizaai.paid-api.*`: Infosimples 10, captcha 30, photo 10, HTML rescue 5, AI
+  categorization 60, Twilio 3), a **daily ceiling per service** (Infosimples R$ 120, captcha
+  R$ 30, vision R$ 30, HTML rescue R$ 15, AI categorization R$ 50, Twilio R$ 15 — the single
+  global ceiling is now optional and off), an Infosimples circuit breaker per state
+  (5 failures/10min → open 5min), and a `paid_api_call` ledger for invoice reconciliation.
+  The admin is warned on WhatsApp at 80% / 100% of each ceiling and of each provider's
+  prepaid balance. Enforcement toggles via `PAID_API_GUARD_ENABLED` (logging is always on).
+  Variables and defaults: `INFRASTRUCTURE.md` → "Environment variables".
 - **Follow-up 1 (accuracy)**: captcha is metered **per scrape**, not per solve. A scrape
   can re-solve up to 3× on retry, so the ledger/cap under-counts captcha cost by up to 3×.
   Fine as a coarse abuse guard; tighten to per-solve (meter inside the solver) if captcha
-  spend becomes material.
+  spend becomes material. (The BA by-chave reconsult already records each solve.)
 - **Follow-up 2 (UX)**: the cap is enforced in the **async** ingest, so hitting it produces
   a `FAILED_PARSE` (reason `receipt.paid_api.quota_exceeded`) instead of a fast 4xx at
   submit. Consider a fail-fast check at `POST /receipts` once we're comfortable predicting
@@ -312,13 +391,13 @@ mirror entries here.
 - **Before prod**: keep the apt install in any new base image; smoke-test the endpoint after image changes (the `ocr.init` log line at first use says whether the native lib loaded). If real-photo accuracy on thermal paper disappoints, consider a preprocessing pass (deskew/contrast) before reaching for a paid vision API.
 
 ## Paid external services — cost + toggles (CapSolver, Infosimples) (2026-07-04)
-- **CapSolver** (captcha): required for MS + SC receipts. `CAPTCHA_PROVIDER=capsolver` + `CAPTCHA_API_KEY`. Without it, MS/SC receipts 503 ("coming soon"). ~US$1-3 / 1000 solves. Key currently in the dev box `.env` and `.claude/settings.local.json` (untracked). **Rotate before prod** and set in the prod env only.
+- **CapSolver** (captcha): required for MS + SC receipts. `CAPTCHA_PROVIDER=capsolver` + `CAPTCHA_API_KEY`. Without it, MS/SC receipts 503 ("coming soon"). ~US$1-3 / 1000 solves. The key lives only in the Render env vars of each service (never in the repo).
 - **Infosimples** (paid SEFAZ fallback, all UFs): `INFOSIMPLES_ENABLED=false` by default; enable with the API key. **~R$0.24 PER QUERY** — a silent cost sink once on. Fires when the primary scraper exhausts retries on a rescuable failure and when a manually-typed bare chave hits a signature-only state (PR/SP). **CE stopped being Infosimples-only on 2026-10-12**: `CearaNfcePortalAdapter` consults the portal's hidden JSON api (`POST nfce.sefaz.ce.gov.br/nfce/api/notasFiscal/qrcodev3/` with `{chave_acesso, versao_qrcode:3, tipo_ambiente:1}` → `{xml: <DANFE html>, erro}` — reverse-engineered from the Angular shell's own `app.js`; the old "Inconsistência no QR Code" recon error was CLIENT-side JS validation, not a server rejection). Free, no captcha, bare-chave works (v3 needs no QR signature — validated live rendering a July nota, so no early purge either). `infosimples-only-states` default is now EMPTY (knob kept for a future state); Infosimples remains CE's fallback like everywhere else. Caveat: validated from a residential IP — if the portal blocks Render's datacenter IP (like PE does), the fallback picks it up and the fix is device-fetch/proxy, watch `ce.fetch` logs after the first organic CE nota.
 - **Account state (verified live 2026-10-01): ACTIVE and enabled in dev AND prod.** Conta pré-paga `xandivieira@outlook.com`, franquia mínima R$100/mês, consumo real ~R$8–11/mês (CE teve 0 notas nos últimos 90 dias em prod — o consumo vem dos fallbacks de outras UFs). The account was dormant Jul–Aug (the 603 "sem saldo" era) and was recharged in September — anything claiming "Infosimples morto/dormant" refers to that window and is outdated.
 - **Sweep model under observation (2026-10-01):** the finance ledger (`InfosimplesFinanceService`) assumes the franquia sweeps unused saldo at month close (~06h do dia 1º) — set/2026 closed with `varrido=92.08`, but the LIVE balance on 01/10 (post-06h) still showed **R$91.84**, i.e. the saldo carried over. Either the sweep lands later or the provider changed policy. Watch the next daily snapshots; if the carryover holds, fix `closePreviousMonth` (varrido math) and correct the 2026-09 row.
 - **CE outage alerting (2026-10-01):** `InfosimplesAlertService` e-mails the admin on any failed paid consult (6h throttle), on saldo < `INFOSIMPLES_LOW_BALANCE_THRESHOLD` (default R$5) at the daily snapshot, and when the account API is unreachable — a dead account can no longer fail CE silently.
 - **Device-fetch genérico (2026-10-12, flag OFF):** `DEVICE_FETCH_GENERIC_ENABLED` (default `false` = comportamento de sempre; só PE device-fetcha, e após o Infosimples). Ligada: (1) qualquer falha de fetch recuperável (IP-block/portal fora) com cliente capaz vira `NEEDS_DEVICE_FETCH` **antes** do Infosimples (`SefazIngestionService.fetch` 3-arg + `PrefetchPolicy.isGenericEnabled`); (2) se o device-fetch falha, `ReceiptIngestionService.ingestPrefetched` continua pro Infosimples (`fetchViaInfosimplesFallback`), menos em nota de contingência (fica CONTINGENCY_PENDING, sem gasto); (3) conteúdo device-fetch de UF fora da allowlist `prefetch-allowed-ufs` grava `receipts.index_eligible=false` → só histórico pessoal, nunca o índice (checado em `PriceIndexService.isContributionBlocked`, mesmo trust-class de PHOTO). `PrefetchPolicy` separa **elegível** (device-fetch, genérico quando ON) de **confiável** (índice, sempre a allowlist). **Correção (Fase 2): o app JÁ é genérico** — `resolveDeviceFetch` (FE) busca a URL do QR on-device pra qualquer estado, sem gate de UF (só o atalho `tryDeviceFetch` upfront é PE-only). O gap real era backend: quando o device-fetch NÃO resolve (portal complexo tipo GO, ou app fechado), o `ProcessingReceiptSweeper` falhava a nota no timeout **sem tentar Infosimples** → com a flag ON, GO regrediria. **Fechado:** `sweepStaleDeviceFetchViaInfosimples` (não-transacional, gated na flag) re-enfileira `NEEDS_DEVICE_FETCH` estagnado → PROCESSING → `ReceiptIngestionService.ingestInfosimplesOnly` (reusa ingestResolved, HTTP untransacted + tx curta). Flag OFF = sweeper falha como sempre; pool rejeitado → markFailed na hora. **Com isso a flag é segura de ligar sem regressão.** Falta só a otimização opcional de generalizar o atalho `tryDeviceFetch` do app. Provado em dev. **Desistência imediata (2026-10-12):** o sweeper (15 min) é só backstop pra app que SUMIU. No caminho normal, quando o device-fetch do app não resolve ele manda `POST /receipts/{id}/device-content {"unavailable": true}` (campo novo; `rawContent` opcional) → `submitDeviceContent` passa `rawContent=null` → `ingestPrefetched(null)` → `fromClientContent` falha no chave ausente → `continueToInfosimples` **na hora** (não espera o sweeper). FE: `resolveDeviceFetch` sempre posta o desfecho e devolve true → `ReceiptsScreen` segue acompanhando (sem falso "falhou"); `DEVICE_FETCH_BUILD='df4'`. Não é flag-gated (desfecho correto da cadeia, vale pro PE também); só o build novo do app dispara.
-- **LLM parse-rescue (2026-10-12):** `HtmlReceiptRescueService` sits between the free parser and Infosimples — PARSE failures on already-fetched HTML go to the AI (`AiGateway`/Anthropic extractor model, the app's LIVE stack — NOT the dormant OpenAiClient; needs `ANTHROPIC_API_KEY`, already set dev+prod) before any R$0.24 Infosimples re-fetch. Cost ~R$0.03-0.13/rescue by note size; ledgered as `LLM_HTML_RESCUE` (cap `LLM_HTML_RESCUE_DAILY_CAP:10`/user/day, toggle `LLM_HTML_RESCUE_ENABLED:true`) + tokens in `ai_usage_log` (`RECEIPT_RESCUE`). Validated against the REAL model on all 10 state fixtures (10/10 exact totals/items — `HtmlReceiptRescueRealLlmTest`, gated on `LLM_RESCUE_REAL_TEST=true`, costs money, never in CI). It does NOT help FETCH failures (IP block, captcha wall, portal down) — those still go straight to Infosimples (CE has its own native scraper since 2026-10-12, `CearaNfcePortalAdapter` — see the Infosimples bullet above).
+- **LLM parse-rescue (2026-10-12):** `HtmlReceiptRescueService` sits between the free parser and Infosimples — PARSE failures on already-fetched HTML go to the AI (`AiGateway`/Anthropic extractor model, the app's LIVE stack — NOT the dormant OpenAiClient; needs `ANTHROPIC_API_KEY`, already set dev+prod) before any R$0.24 Infosimples re-fetch. Cost ~R$0.03-0.13/rescue by note size; ledgered as `LLM_HTML_RESCUE` (cap `LLM_HTML_RESCUE_DAILY_CAP:5`/user/day, toggle `LLM_HTML_RESCUE_ENABLED:true`) + tokens in `ai_usage_log` (`RECEIPT_RESCUE`). Validated against the REAL model on all 10 state fixtures (10/10 exact totals/items — `HtmlReceiptRescueRealLlmTest`, gated on `LLM_RESCUE_REAL_TEST=true`, costs money, never in CI). It does NOT help FETCH failures (IP block, captcha wall, portal down) — those still go straight to Infosimples (CE has its own native scraper since 2026-10-12, `CearaNfcePortalAdapter` — see the Infosimples bullet above).
 - CapSolver and Infosimples are both listed in `application-prod.yaml`'s header checklist.
 
 ---
@@ -355,9 +434,8 @@ mirror entries here.
 
 ## SMTP wired to GoDaddy/Titan — deliverability not hardened
 - **Now**: auth emails (password-reset code, email verification) send via GoDaddy/Titan
-  SMTP (`smtpout.secureserver.net:587`, user `contato@relyonai.com.br`). Creds live in
-  the gitignored `.env` on the dev box and are passed through to the app container in
-  `docker-compose.yml`. Verified end-to-end (code arrives, reset works).
+  SMTP (`smtpout.secureserver.net:587`). Creds live in the Render env vars of each service
+  (`SMTP_*`). Verified end-to-end (code arrives, reset works).
 - **Why OK for dev**: real send works; the FE flow is fully testable.
 - **Before prod**:
   - **Deliverability**: test emails landed in **spam (Lixo Eletrônico)**. Add **SPF**,
@@ -370,8 +448,8 @@ mirror entries here.
 ---
 
 ## Billing: apps ready (RevenueCat), web built (Mercado Pago) — both inert on env vars
-- **Now**: three webhook paths feed the same entitlement engine. **RevenueCat** (`POST /webhooks/revenuecat`, Authorization header == `REVENUECAT_WEBHOOK_AUTH`) covers iOS/Android IAP; **Mercado Pago** (`POST /webhooks/mercadopago`, `x-signature` HMAC == `MP_WEBHOOK_SECRET`) covers the web assinatura created by `POST /subscriptions/checkout` (2026-09-29, provider decision: MP); the generic `POST /webhooks/subscription` (`BILLING_WEBHOOK_SECRET`) stays as a spare seam. All **fail closed** when their secret is blank (constant-time compare). A scheduled `SubscriptionExpiryService` downgrades lapsed PRO hourly.
-- **Why OK for dev**: dev grants PRO via the admin set-tier endpoint; checkout returns a localized 503 until credentialed.
+- **Now**: two webhook paths feed the same entitlement engine. **RevenueCat** (`POST /webhooks/revenuecat`, Authorization header == `REVENUECAT_WEBHOOK_AUTH`) covers iOS/Android IAP; **Mercado Pago** (`POST /webhooks/mercadopago`, `x-signature` HMAC == `MP_WEBHOOK_SECRET`) covers the web assinatura created by `POST /subscriptions/checkout` (2026-09-29, provider decision: MP). Both **fail closed** when their secret is blank (constant-time compare). The generic `POST /webhooks/subscription` seam and its `BILLING_WEBHOOK_SECRET` were removed on 2026-11-11 (unused). A scheduled `SubscriptionExpiryService` downgrades lapsed PRO hourly (3-day grace for a paid, still-renewing subscription); a provider cancellation keeps access until the period end; Mercado Pago monthly charges advance the period — see MONETIZATION.md "Implementation status".
+- **Why OK for dev**: dev grants PRO via the admin set-tier endpoint (`PUT /api/v1/admin/users/{id}/subscription-tier`); checkout returns a localized 503 until credentialed. No payment is collected until the env vars below land.
 - **Before charging (owner setup, all env-var only):**
   - **Apps:** RevenueCat account + store products, then fill `REVENUECAT_WEBHOOK_AUTH` (created on both services as `CHANGEME`, treated as unset) and the FE build env keys `EXPO_PUBLIC_RC_IOS_KEY` / `EXPO_PUBLIC_RC_ANDROID_KEY`. The FE paywall is PRE-WIRED and invisible (2026-09-29): `src/services/iap.ts` lazy-loads `react-native-purchases` (guarded — no crash on Expo Go/web), configures `app_user_id` = user UUID, and PremiumScreen shows the native buy/restore buttons only when the platform key is present. Native module → needs a store build, not OTA. Owner can gather NOW from existing accounts: App Store Connect Paid Apps agreement + subscription product + In-App Purchase Key (.p8 + Issuer/Key ID); Play Console subscription product + service-account JSON (Setup → API access); RevenueCat project wiring both → the two SDK keys + webhook Authorization value.
   - **Web:** MP account → `MP_ACCESS_TOKEN` + `MP_WEBHOOK_SECRET` (+ optionally `MP_PLAN_AMOUNT`, default 9.90) and point the MP webhook at `/api/v1/webhooks/mercadopago`. **Verify the x-signature manifest against a real sandbox event before trusting it** (implemented from docs: `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`, id lowercased). FE needs a "Assinar Premium" screen opening `checkoutUrl`.
@@ -409,13 +487,14 @@ The report works identically in SHADOW and ON (computed purely from
 - **Telemetry loop status: COMPLETE (producer side).** Phase A (events + state tables) → B (deals screen) → C (digest emits SENT + upserts surface state) → D (savings attribution emits CONVERTED + realized R$). The north-star — **R$ saved attributable to notifications** — is now produced end-to-end and readable at `GET /users/me/savings`. Remaining: the ranking/learning consumer.
 
 ## Deals screen ("Ofertas pra você") — Phase B of the notifications overhaul (2026-06-09)
+- **Update (2026-11-11)**: a deal's price is now the chain's MOST RECENT observed price (at most `DEALS_MAX_PRICE_AGE_DAYS`, 60) instead of the chain median; the chain of the household's last purchase is never suggested; `priceSource` labels own-purchase vs community evidence. The text below predates that.
 - **Now**: `GET /api/v1/deals` + `DealsService` compute the household's currently-relevant discounts on demand. For each product the household bought, it calls `PriceIndexService.bestMarkets` (k-anon + radius + watched logic reused as-is) and keeps the cheapest market that beats last-paid by the progressive `RelevanceThreshold.requiredDropFraction` bar (extracted out of `NotificationRuleEngine` so the engine and the deals screen share one definition). Ranked by savings desc, tie-broken by purchase frequency.
 - **Query cost**: one history query for the household, then one `bestMarkets` lookup per distinct product bought (each a couple of small queries). On-demand single-user, so acceptable — but it's an **N-product fan-out** that will want batching once a household buys hundreds of distinct products or once the digest (Phase C) computes this for many users at once.
 - **Phase C (digest) reuses this**: the same deal computation feeds the future digest push, which will dedup against `deal_surface_state` (created in Phase A, still unread) so it only re-pushes a deal when the discount/price meaningfully changes. Savings **attribution** (did the user actually buy it cheaper after we surfaced it?) is also a later phase.
 - **Telemetry**: this endpoint emits none by design — the app self-reports `SCREEN_OPENED` / `DEAL_VIEWED` / `DEAL_TAPPED` via the Phase A events API.
 
 ## Daily deals digest — Phase C of the notifications overhaul (2026-06-09)
-- **Now**: `DealsDigestScheduler` runs hourly (cron `0 0 * * * *`, America/Sao_Paulo). Per due user it calls `DealsService`, filters to **newsworthy** deals via `deal_surface_state` (created in Phase A, now read+written), and — if ≥1 — sends ONE `DEALS_DIGEST` push, upserts the state rows, and records a `SENT` `notification_events` row per surfaced deal. The hour each user is "due" comes from `DigestScheduleService` (override → modal shopping-hour−1h with ≥5 issued-at receipts → default 16). Preferences live on `users` (`digest_frequency`, `digest_send_hour`) and are edited via `GET/PUT /api/v1/users/me/digest-preferences`.
+- **Now**: `DealsDigestScheduler` runs hourly (cron `0 0 * * * *`, America/Sao_Paulo). Per due user it calls `DealsService`, filters to **newsworthy** deals via `deal_surface_state` (created in Phase A, now read+written), and — if ≥1 — sends ONE `DEALS_DIGEST` push, upserts the state rows, and records a `SENT` `notification_events` row per surfaced deal. The hour each user is "due" comes from `DigestScheduleService` (override → modal shopping-hour−1h with ≥5 issued-at receipts → a per-user default spread over 11:00–19:00) and, since 2026-11-11, is STORED on the user (`digest_effective_send_hour`, V160): due users are selected in SQL, in pages, with "hour reached" instead of "hour equal" (a late run still delivers), and a run with nothing newsworthy does not use up the day's slot. Preferences live on `users` (`digest_frequency`, `digest_send_hour`) and are edited via `GET/PUT /api/v1/users/me/digest-preferences`.
 - **Newsworthy rule**: no prior state row (new) OR discount improved by ≥ +0.05 (5 p.p.) / crossed a stricter `RelevanceThreshold` step OR last surfaced before the collaborative lookback window. Standing unchanged deals are skipped.
 - **1/day cap mechanism**: a `last_digest_sent_at TIMESTAMPTZ` column on `users` (chosen over scanning `notification_events`) — same-calendar-day (Sao Paulo) ⇒ skip. Hard cap, checked before computing deals.
 - **Timezone assumption (v1)**: everything ("now", the due-hour math, the 1/day day boundary) is **America/Sao_Paulo** for all users. **Per-user timezone is a later refinement** — store the user's TZ and resolve "now"/send-hour per user. ~half a day once we capture TZ.
@@ -434,8 +513,8 @@ The report works identically in SHADOW and ON (computed purely from
 
 ## Write-path is now explicit-alerts-only; PROMO_*/CHEAPER_MARKET toggles are vestigial (2026-06-09)
 - **Now**: `NotificationRuleEngine.evaluate` (on receipt confirm) fires **only** the user's explicit `PRICE_DROP` alerts. The discovery defaults (`PROMO_PERSONAL` / `PROMO_COMMUNITY` / `CHEAPER_MARKET`) that used to fire in real time were removed from the write path — that function now lives entirely in the daily deals digest (`DealsService` / `DealsDigestScheduler`). The dead repo methods (`findActiveDefaultRuleOwnersWhoBought` both overloads + `ProductRuleOwner`; `findLastPaidHistoryForProductByHouseholds` + `HouseholdProductPrice`) were deleted with them.
-- **Vestigial toggles**: the `PROMO_PERSONAL` / `PROMO_COMMUNITY` / `CHEAPER_MARKET` `NotificationType` values + their auto-seeded default `NotificationRule` toggles still exist (FE still shows them), but **nothing reads those per-type toggles anymore** — the digest computes discovery from `DealsService` and is governed by `digest_frequency`, not by these rules.
-- **Open refinement**: decide whether the digest should **respect** those per-type toggles (e.g. a user who disabled `CHEAPER_MARKET` shouldn't see cheaper-market deals in the digest), or whether to retire the toggles entirely. Until then they're inert UI.
+- **Resolved for two of the three (2026-11-11)**: `PROMO_COMMUNITY` and `CHEAPER_MARKET` were RETIRED — no longer seeded, listed or accepted as a preference (the enum values stay only so old rows deserialize); the digest frequency is the control.
+- **Still vestigial**: the `PROMO_PERSONAL` default toggle is still seeded and listed, but nothing in the write path reads it. Decide whether the digest should respect it or retire it too.
 
 ---
 
@@ -585,138 +664,19 @@ The report works identically in SHADOW and ON (computed purely from
 
 ---
 
-## Hosting / access — self-hosted (replaced Render)
+## Hosting / access — history
 
-> ⚠️ **HISTORICAL — contradicts `INFRASTRUCTURE.md`:** that doc says the self-hosted
-> Windows box was **retired on 2026-09-22** and the app runs on Render again (dev + prod).
-> The Windows/tunnel/Dozzle details below are kept only as history; the local
-> `docker compose up -d db` + `./mvnw spring-boot:run` flow is still valid for local dev.
-
-> **2026-06-03:** Render's free Postgres was **suspended** (free DBs get reaped),
-> which took the web service down. We moved the dev server **off Render to a
-> self-hosted machine**. The old `https://economiz-ai.onrender.com` URL is dead.
-
-### How to run it
-One file does both jobs via Compose profiles — `docker-compose.yml` at repo root.
-
-- **Backend-dev machine** (iterate fast — Postgres in Docker, app via Maven):
-  ```bash
-  docker compose up -d db          # Postgres only on :5432
-  ./mvnw spring-boot:run           # app on :8080
-  ```
-- **Server machine** (full stack for everyone):
-  ```bash
-  docker compose --profile server up -d --build   # Postgres + app
-  docker compose logs -f app                       # watch boot / Flyway
-  ```
-
-Defaults mirror `application.yaml` localhost fallbacks, so it runs with no `.env`.
-Drop a `.env` (gitignored) beside the compose file to override `DB_USERNAME`,
-`DB_PASSWORD`, `JWT_SECRET` (`openssl rand -hex 64`), `CORS_ORIGINS`.
-`ddl-auto: none` + Flyway → a **fresh empty volume rebuilds the whole schema** on
-first boot. No data to restore (Render data is gone).
-
-### How to access it
-- **Base URL (API):** `http://<server-LAN-IP>:8080/api/v1`
-- **Health:** `http://<server-LAN-IP>:8080/actuator/health` → `{"status":"UP"}`
-- **Swagger:** `http://<server-LAN-IP>:8080/swagger-ui/index.html`
-- Host `:8080` maps to the container's `:10000` (Dockerfile port). Postgres is on `:5432`.
-- The FE machine must be on the same LAN; the server's OS firewall must allow `:8080`.
-  Add the FE origin (and any public URL) to `CORS_ORIGINS`.
-- For off-LAN / public access, front it with a Cloudflare Tunnel or ngrok → add that
-  https URL to `CORS_ORIGINS`.
-
-### Ops
-- Stop / restart / wipe: `docker compose --profile server down` / `restart` /
-  `down -v` (the `-v` drops the `economizai-pgdata` volume → fresh schema next boot).
-- Services use `restart: unless-stopped`; ensure Docker starts on machine boot so the
-  stack returns after a reboot. Data persists in the named volume.
-
-### Windows server machine (2026-06-05) — LIVE
-The self-hosted dev server runs on a **Windows 11** box, **full stack in Docker**,
-never-sleep on AC, LAN-only. Static LAN IP: **`192.168.68.108`**.
-
-- **API base:** `http://192.168.68.108:8080/api/v1`
-- **Health:** `http://192.168.68.108:8080/actuator/health` → `{"status":"UP"}`
-- **Swagger:** `http://192.168.68.108:8080/swagger-ui/index.html`
-
-**Remote access:** a **Cloudflare quick-tunnel** exposes the API over HTTPS from any
-network. The live public URL is always in `current-tunnel-url.txt` at repo root.
-⚠️ The free `trycloudflare` URL **changes on every restart** — `start-tunnel.ps1`
-auto-updates `.env` CORS and restarts the app each time, but the FE must read the new
-URL from `current-tunnel-url.txt`. Upgrade to a **named tunnel** (stable URL) once a
-domain is on Cloudflare.
-
-Helper scripts at repo root (run each in an **Administrator** PowerShell once):
-- `setup-firewall.ps1` — inbound allow rule, TCP 8080, Private profile.
-- `set-static-ip.ps1` — pins the Wi-Fi adapter to `192.168.68.108/24` (gw `192.168.68.1`).
-  Revert to DHCP: `netsh interface ip set address name="Wi-Fi" source=dhcp`.
-- `make-always-on.ps1` — power (never sleep), Docker auto-start, container restart,
-  stack watchdog (startup + every 5 min via `stack-watchdog.ps1`).
-- `enable-autologin.ps1` — auto-login this local account so reboots are unattended
-  (flips Win11 Hello-only flag, sets Winlogon keys). Box is home-only/non-critical so
-  the stored-password tradeoff is accepted; BitLocker skipped.
-- `start-tunnel.ps1` — launches cloudflared, captures URL, syncs CORS, restarts app,
-  publishes URL to `current-tunnel-url.txt`. Runtime files (`*.log`, `current-tunnel-url.txt`)
-  are gitignored.
-- `setup-tunnel-autostart.ps1` — Scheduled Task to keep the tunnel up at logon.
-
-**Logs / debugging:**
-- **Dozzle** (live web UI): `http://192.168.68.108:9999` (LAN) — view/search/follow
-  container logs in the browser, filtered to `economizai-*`. Runs as the compose `logs`
-  service. (Not exposed via the public tunnel — LAN only.)
-- **`logs.ps1`** helper: `.\logs.ps1` (tail+follow app), `-Errors` (WARN/ERROR only),
-  `-Grep rcpt=xxx` (filter by req/rcpt/user/item id), `-Db` (database), `-Save` (snapshot
-  to `C:\economizai-data\logs`), `-Since 30m`. Logs use the MDC pattern
-  `req= user= rcpt= item=` so grep is powerful.
-- **Data dir:** all runtime data (logs, db backups, images) lives in
-  `C:\economizai-data` (override: `ECONOMIZAI_DATA_ROOT`) — OUTSIDE the project tree /
-  runner checkout, so nothing is committed or OneDrive-synced.
-- **File history:** `C:\economizai-data\logs\app-YYYY-MM-DD.log` (+ db), 14-day retention.
-  Written daily 02:55 by the "economizai - daily log save" task (`setup-logsave-schedule.ps1`).
-- **Disk safety:** Docker `json-file` log caps in compose (app 20MBx10, db 10MBx3) so a
-  24/7 box can't fill the disk.
-
-**Gotchas learned setting this up (so we don't relive them):**
-- **`postgres:18` changed its data-dir convention.** Mount the volume at
-  `/var/lib/postgresql` (the parent), NOT `/var/lib/postgresql/data` — PG18 sees the
-  old path as an "unused mount/volume" and `initdb` refuses to run, leaving the
-  healthcheck stuck `unhealthy`. Fixed in `docker-compose.yml`.
-- **Orphaned Docker processes wedge the engine.** Symptom: Docker Desktop dialog
-  "Cannot start server … open `\\.\pipe\dockerExtensionManagerAPI`: Access is denied",
-  and `dockerd` runs but never opens its socket. Cause: a leftover `com.docker.extensions`
-  (or duplicate `com.docker.backend`) from a prior start still holds the pipe. Fix: kill
-  ALL `Docker Desktop` / `com.docker.*` / `docker-ai` processes, `wsl --shutdown`, then
-  start a single clean instance.
-- **`docker context` resets to `default` (dead `npipe:docker_engine`) on each Docker
-  restart.** If `docker` commands hang, run `docker context use desktop-linux`.
-- **WSL re-corrupted itself once** (`REGDB_E_CLASSNOTREG`) and self-repaired via
-  `wsl --update`. If it recurs and a repair doesn't stick → `winget install Microsoft.WSL`.
-- **Docker Desktop didn't auto-start the engine after a reboot (2026-06-06).** The GUI
-  launched at logon but came up as a white/hung window; `com.docker.service` was Stopped
-  (StartType=Manual) and stale `com.docker.backend` processes from boot held the pipe.
-  The old "start Docker engine" task just ran `Docker Desktop.exe` once with no retry — a
-  hung window counts as "running", so it never recovered. **Fixes applied:** (1) service
-  set to **Automatic** start; (2) the logon task now runs **`start-docker-wait.ps1`**, a
-  wait-for-healthy wrapper that polls `docker version` and relaunches a CLEAN instance (kill
-  all docker procs + `wsl --shutdown` + restart service) up to 4 times. Recovery actions are
-  logged to `C:\economizai-data\logs\docker-recovery.log`. Manual recovery if it ever wedges again: just run
-  `start-docker-wait.ps1` (elevated, so it can kill the protected processes).
-
-**Known weak spots (revisit):**
-- **Mesh/extender network**: this box roamed `192.168.0.x` → `192.168.68.x` once. The
-  Windows static IP is tied to the `192.168.68.x` node — if it roams to the other node it
-  goes offline until reverted. Durable fix: **wired ethernet** or a **router DHCP
-  reservation** by MAC `44-AF-28-2B-02-A5`.
-- **Auto-start needs a user session**: Docker Desktop's WSL backend won't run with nobody
-  logged in. `setup-autostart.ps1` triggers at logon, so after an unattended reboot the
-  server is down until someone logs in. For true headless recovery, also enable auto-login
-  (`netplwiz`) — tradeoff: stored password, anyone with physical access gets in.
-
-### Before prod (whenever that comes)
-- A self-hosted box on a home connection isn't a prod target (uptime, dynamic IP, TLS).
-  For real users: managed Postgres that doesn't expire (Neon / Supabase free, or paid)
-  + a proper host (Fly.io / Railway / paid Render / a VPS). Document the chosen path.
+- **Today**: the app runs on Render (dev + prod) — `INFRASTRUCTURE.md` is the source of truth.
+  Local development is still `docker compose up -d db` + `./mvnw spring-boot:run`
+  (Postgres on :5432, app on :8080; defaults mirror `application.yaml`, no `.env` needed;
+  `docker compose down -v` wipes the local volume).
+- **History**: between 2026-06-03 (Render's free Postgres was suspended) and 2026-09-22 the dev
+  server was a self-hosted Windows box (full stack in Docker, Cloudflare quick-tunnel,
+  self-hosted CI runner, PowerShell watchdogs). It was retired on 2026-09-22 and its scripts
+  and tunnel proxy were removed from the repo on 2026-11-11.
+- **Gotcha worth keeping**: `postgres:18` changed its data-dir convention — mount the volume at
+  `/var/lib/postgresql` (the parent), not `/var/lib/postgresql/data`, or `initdb` refuses to run
+  (already right in `docker-compose.yml`).
 
 ---
 
@@ -729,8 +689,12 @@ Helper scripts at repo root (run each in an **Administrator** PowerShell once):
 
 ### User corrections are global (should be per-household) — see HELP.md "Planned"
 - **Now**: `PATCH /products/{id}` mutates the shared canonical product, but it IS
-  **ADMIN-gated** in `SecurityConfig` (the interim fix is in place).
-- **Fix before real multi-user volume**: household-scoped overrides + corrections-as-votes (design in HELP.md) so regular users can correct their own view again.
+  **ADMIN-gated** in `SecurityConfig` (the interim fix is in place). Since 2026-11-11 the
+  user-facing "corrigir item" (`POST /receipts/{id}/items/{itemId}/correction`) is
+  household-scoped too: it writes a friendly name + category override for that household and
+  queues the global change as a `PRODUCT_CORRECTION` finding for the admin.
+- **Fix before real multi-user volume**: corrections-as-votes (design in HELP.md) so repeated
+  household corrections graduate to the global product without an admin click.
 
 ### Cross-household chave dedup breaks if a receipt ever has no chave
 - **Now**: the same-chave double-count guard is solid for the only ingestion path we have (QR scan → 44-digit chave always present). Same household, same chave: CONFIRMED → 409, non-final → replaced. Different households, same chave: the second household keeps its own personal receipt, but `PriceIndexService.recordContributions` skips the community write (`existsContributionForChaveFromOtherHousehold`) and logs `price_index.write.skipped reason=duplicate_chave_other_household`. This is exactly the desired behavior.
@@ -743,25 +707,6 @@ Helper scripts at repo root (run each in an **Administrator** PowerShell once):
 - **No per-bucket discount for CATEGORY/PRODUCT**: a receipt-level discount can't be attributed to one category/product without rateio (out of scope). Those buckets carry `discount=null`; only the period-level `totalDiscount` is provided. Per-item discount attribution is impossible on SVRS anyway (the portal only gives the receipt-level total).
 - **Implementation note**: discount aggregations query `Receipt` directly (no item join) so `discountTotal` is counted once per receipt; `/insights/query` uses a DISTINCT-(receiptId, …) select so the item-join doesn't multiply it.
 - **Why OK for dev**: the price index (what matters most) is honest, spend breakdowns stay internally consistent (gross everywhere), and the FE can show "gastou R$ X · R$ Y em descontos". Still no use of the discount beyond reporting (e.g. a future "markets with the biggest discounts").
-
----
-
-## Billing / subscriptions
-
-### No payment provider wired — PRO is granted manually / via webhook only
-- **⚠️ Partly superseded** by "Billing: apps ready (RevenueCat), web built (Mercado Pago)"
-  above: the provider is chosen (Mercado Pago web + RevenueCat IAP), `POST /subscriptions/checkout`
-  exists (503 until `MP_ACCESS_TOKEN` is set) and step 6's expiry job is built
-  (`SubscriptionExpiryService`). Still true: no payments are collected until the env vars land.
-- **Now**: the PRO tier is fully **enforced** (gates in `SubscriptionGateService`, 402 on block), and a user can be made PRO two ways: (a) admin `PUT /api/v1/admin/users/{id}/subscription-tier {"tier":"PRO"}`, or (b) the provider-agnostic webhook `POST /api/v1/webhooks/subscription`. There is **no actual payment collection** — no Stripe/Mercado Pago/Pix integration, no checkout, no self-serve upgrade page.
-- **Why OK for dev**: lets us test the entire gated experience (and demo PRO) without a payment processor or merchant account. The webhook **fails closed** when its secret is blank (constant-time compare), so an unset `BILLING_WEBHOOK_SECRET` means the route just rejects everything.
-- **Before prod — to enable paid subscriptions**:
-  1. **Pick a provider** (Stripe Brasil, Mercado Pago, or Pagar.me + Pix).
-  2. **Get API keys** (publishable + secret) and create the product/price (R$9.90/mo per MONETIZATION §1).
-  3. **Set `BILLING_WEBHOOK_SECRET`** (env → `economizaai.billing.webhook-secret`) to a strong random value so the webhook rejects unsigned calls (401).
-  4. **Point the provider's webhook** at `POST /api/v1/webhooks/subscription` and map its event payload onto our `{ userEmail, action: ACTIVATE|CANCEL, provider, providerRef, currentPeriodEnd }` shape, sending the shared secret in `X-Webhook-Secret`. (If the provider signs with HMAC instead of a static header, add a small verify step in `SubscriptionWebhookController` for that scheme.)
-  5. **Build the checkout / self-serve upgrade flow** in the app + a `PUT /users/me/subscription` (or hosted-checkout redirect). Currently only admins can flip the tier from inside the app.
-  6. Decide period-end handling: a scheduled job should expire `current_period_end` PRO subs back to FREE if the provider stops sending renewals (not built).
 
 ---
 
@@ -782,11 +727,11 @@ Helper scripts at repo root (run each in an **Administrator** PowerShell once):
 
 ### ~~`/actuator/prometheus` is public (no auth)~~ — RESOLVED (2026-06-11)
 - **Fixed**: `/actuator/prometheus` now sits behind a dedicated HTTP Basic security chain (`SecurityConfig.metricsSecurityFilterChain`, `@Order(1)`), with the credential from `economizaai.metrics.username/password` (`METRICS_USERNAME`/`METRICS_PASSWORD`). **Fail-closed**: blank password ⇒ no user ⇒ every request 401, so it's never exposed unauthenticated. `/actuator/health` stays public on the main chain for UptimeRobot.
-- **Remaining (infra, not code)**: nothing scrapes it yet — stand up Prometheus + Grafana on the box and set `METRICS_PASSWORD`. Steps in INFRASTRUCTURE.md → Monitoring → Metrics.
+- **Remaining (infra, not code)**: nothing scrapes it yet — stand up Prometheus + Grafana (hosted) and set `METRICS_PASSWORD`.
 
-### Logs go to stdout + host file — no central aggregation
-- **Now**: self-hosted box. App logs to a bind-mounted host file (`/var/log/economizai/app.log`, rotated 50MB×10) and Docker json-file; Dozzle gives a live web view. No search/retention across restarts beyond the rotated files.
-- **Fix before serious ops**: ship logs to BetterStack, Loki, or Papertrail. ~1 hr.
+### Logs go to stdout only — no central aggregation
+- **Now**: the app logs to stdout and Render's log stream is the only place to read them (limited retention, no cross-service search).
+- **Fix before serious ops**: ship logs to BetterStack, Loki, or Papertrail (a Render log drain). ~1 hr.
 
 ### Read caches (dashboard / insights) are in-process
 - **Now**: `dashboard` (2 min) + `insightsSpend` (5 min) are cached in-memory via Caffeine (`CachingConfig`), keyed by household with a per-household generation counter (`HouseholdCacheGen`) bumped on receipt mutations. ETags via `ShallowEtagHeaderFilter`.
@@ -796,7 +741,7 @@ Helper scripts at repo root (run each in an **Administrator** PowerShell once):
 
 ---
 
-## Last-checked: 2026-09-22
+## Last-checked: 2026-11-11
 
 When you take care of an item above, **delete it from this file** instead
 of marking it done — keep the file lean so what remains is what's

@@ -72,12 +72,6 @@
 			"type": "string"
 		},
 		{
-			"key": "webhookSecret",
-			"value": "",
-			"type": "string",
-			"description": "economizai.billing.webhook-secret value; empty in dev (check skipped)."
-		},
-		{
 			"key": "revenuecatWebhookAuth",
 			"value": ""
 		},
@@ -372,7 +366,7 @@
 						},
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"Demo User\",\n  \"email\": \"alexandre+demo@economizaai.app\",\n  \"password\": \"password123\",\n  \"acceptedTermsVersion\": \"1.0\",\n  \"acceptedPrivacyVersion\": \"1.0\",\n  \"platform\": \"WEB\",\n  \"attribution\": {\n    \"utmSource\": \"instagram\",\n    \"utmMedium\": \"cpc\",\n    \"utmCampaign\": \"black-friday\",\n    \"utmContent\": \"video-a\",\n    \"utmTerm\": \"mercado barato\",\n    \"clickId\": \"fb.1.fbclid-example\",\n    \"referrer\": \"https://www.instagram.com/\",\n    \"landingPath\": \"/promo\"\n  }\n}"
+							"raw": "{\n  \"name\": \"Demo User\",\n  \"email\": \"alexandre+demo@economizaai.app\",\n  \"password\": \"password123\",\n  \"referralCode\": \"ABC2345\",\n  \"acceptedTermsVersion\": \"1.1\",\n  \"acceptedPrivacyVersion\": \"1.1\",\n  \"platform\": \"WEB\",\n  \"attribution\": {\n    \"utmSource\": \"instagram\",\n    \"utmMedium\": \"cpc\",\n    \"utmCampaign\": \"black-friday\",\n    \"utmContent\": \"video-a\",\n    \"utmTerm\": \"mercado barato\",\n    \"clickId\": \"fb.1.fbclid-example\",\n    \"referrer\": \"https://www.instagram.com/\",\n    \"landingPath\": \"/promo\"\n  }\n}"
 						}
 					},
 					"response": [],
@@ -470,7 +464,7 @@
 						},
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"idToken\": \"<google id_token from the native Google Sign-In SDK>\",\n  \"platform\": \"ANDROID\"\n}"
+							"raw": "{\n  \"idToken\": \"<google id_token from the native Google Sign-In SDK>\",\n  \"platform\": \"ANDROID\",\n  \"referralCode\": \"ABC2345\"\n}"
 						}
 					},
 					"response": []
@@ -506,7 +500,7 @@
 						},
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"identityToken\": \"<apple identity_token>\",\n  \"name\": \"Maria Silva\",\n  \"platform\": \"IOS\"\n}"
+							"raw": "{\n  \"identityToken\": \"<apple identity_token>\",\n  \"name\": \"Maria Silva\",\n  \"platform\": \"IOS\",\n  \"referralCode\": \"ABC2345\"\n}"
 						}
 					},
 					"response": []
@@ -847,6 +841,104 @@
 					"response": []
 				},
 				{
+					"name": "Change e-mail - step 1: request (code goes to the NEW address)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"newEmail\": \"novo-email@economizaai.app\",\n  \"currentPassword\": \"password123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/email-change",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"email-change"
+							]
+						},
+						"description": "Needs the current password. Sends a 6-digit code (valid 30 min) to the NEW address; the account e-mail does not change yet. 204 on success. 409 = social-only account without a password (user.email-change.password-required), address already in use (user.email-change.in-use) or same as the current one (user.email-change.same-email). 400 = wrong current password. 3 requests/hour."
+					},
+					"response": []
+				},
+				{
+					"name": "Change e-mail - step 2: confirm the code",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"code\": \"123456\",\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/email-change/confirm",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"email-change",
+								"confirm"
+							]
+						},
+						"description": "Switches the account to the new (verified) e-mail and returns the UserResponse. The old address is notified and every other session is revoked; send this device's refreshToken (optional) to keep it signed in — without it all sessions are revoked. 400 user.email-change.code-invalid = wrong / expired code, or locked after 5 wrong guesses. 15 attempts/hour."
+					},
+					"response": []
+				},
+				{
+					"name": "Change e-mail - cancel the pending request",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/email-change",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"email-change"
+							]
+						},
+						"description": "Cancels the pending e-mail change. Idempotent: 204 even when nothing is pending. UserResponse.pendingEmail goes back to null."
+					},
+					"response": []
+				},
+				{
 					"name": "Set home location (lat/lng)",
 					"request": {
 						"method": "PATCH",
@@ -1151,7 +1243,7 @@
 						},
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"preferences\": [\n    {\"type\": \"PROMO_PERSONAL\", \"channel\": \"PUSH\"},\n    {\"type\": \"PROMO_COMMUNITY\", \"channel\": \"EMAIL\"},\n    {\"type\": \"STOCKOUT\", \"channel\": \"NONE\"}\n  ]\n}"
+							"raw": "{\n  \"preferences\": [\n    {\"type\": \"PROMO_PERSONAL\", \"channel\": \"PUSH\"},\n    {\"type\": \"DIGEST\", \"channel\": \"EMAIL\"},\n    {\"type\": \"STOCKOUT\", \"channel\": \"NONE\"}\n  ]\n}"
 						}
 					},
 					"response": []
@@ -1623,6 +1715,72 @@
 							"mode": "raw",
 							"raw": "{\n  \"type\": \"subscription_preapproval\",\n  \"data\": { \"id\": \"<preapproval-id>\" }\n}"
 						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Referrals (indique um amigo)",
+			"description": "Referral program. A new account is attached to an inviter at signup (referralCode on register / google / apple) or via redeem while it has no confirmed receipt. The first qualified referral earns the inviter 1 month of Premium (once); from the second on, 1 month per invited friend who subscribes.",
+			"item": [
+				{
+					"name": "My referral status (code + share link + counters)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/referrals/me",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"referrals",
+								"me"
+							]
+						},
+						"description": "Returns { code, shareUrl, invitedCount, qualifiedCount, rewardedMonths, firstRewardUsed, referredBy, canRedeemCode }. The code is created on the first call and never changes."
+					},
+					"response": []
+				},
+				{
+					"name": "Redeem an inviter's code",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"code\": \"ABC2345\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/referrals/redeem",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"referrals",
+								"redeem"
+							]
+						},
+						"description": "204 on success. Allowed only while the account was never referred and has no confirmed receipt. 400 referral.code.invalid / referral.code.own; 409 referral.redeem.already_referred / referral.redeem.too_late. 10 attempts/hour."
 					},
 					"response": []
 				}
@@ -2409,6 +2567,32 @@
 								"supported-states"
 							]
 						}
+					},
+					"response": []
+				},
+				{
+					"name": "State status (in-app FAQ: how each UF is doing)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/sefaz/state-status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"sefaz",
+								"state-status"
+							]
+						},
+						"description": "All 27 UFs ordered by code, each { uf, name, status }. WORKING = verified adapter and healthy; UNSTABLE = verified but the portal is on the paused watch list or its recent notas are mostly failing; VALIDATING = experimental (still collecting notas). Authenticated, not admin; cached server-side for a few minutes."
 					},
 					"response": []
 				},
@@ -6119,7 +6303,7 @@
 		},
 		{
 			"name": "Notification Rules",
-			"description": "Unified notification rules \u2014 create user rules (PRICE_DROP, STOCKOUT/replenishment, BUDGET) and enable/disable any rule including the auto-seeded system defaults (PROMO_PERSONAL, PROMO_COMMUNITY, CHEAPER_MARKET, DIGEST). GET returns user rules + defaults as toggles. PATCH toggles 'active' (and for CHEAPER_MARKET, set radiusKm to also include markets near home in addition to your watched markets). The legacy /api/v1/alerts folder is a thin alias over PRICE_DROP rules.",
+			"description": "Unified notification rules \u2014 create user rules (PRICE_DROP, STOCKOUT/replenishment, BUDGET) and enable/disable any rule including the auto-seeded system defaults (PROMO_PERSONAL, DIGEST). GET returns user rules + defaults as toggles. PATCH toggles 'active'. PROMO_COMMUNITY and CHEAPER_MARKET were retired (their content lives in the deals digest). The legacy /api/v1/alerts folder is a thin alias over PRICE_DROP rules.",
 			"item": [
 				{
 					"name": "List notification rules (user + defaults)",
@@ -7599,7 +7783,7 @@
 						},
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"E2E Test User\",\n  \"email\": \"alexandre+e2e@economizaai.app\",\n  \"password\": \"password123\",\n  \"acceptedTermsVersion\": \"1.0\",\n  \"acceptedPrivacyVersion\": \"1.0\",\n  \"platform\": \"WEB\",\n  \"attribution\": {\n    \"utmSource\": \"instagram\",\n    \"utmMedium\": \"cpc\",\n    \"utmCampaign\": \"black-friday\",\n    \"utmContent\": \"video-a\",\n    \"utmTerm\": \"mercado barato\",\n    \"clickId\": \"fb.1.fbclid-example\",\n    \"referrer\": \"https://www.instagram.com/\",\n    \"landingPath\": \"/promo\"\n  }\n}"
+							"raw": "{\n  \"name\": \"E2E Test User\",\n  \"email\": \"alexandre+e2e@economizaai.app\",\n  \"password\": \"password123\",\n  \"referralCode\": \"ABC2345\",\n  \"acceptedTermsVersion\": \"1.1\",\n  \"acceptedPrivacyVersion\": \"1.1\",\n  \"platform\": \"WEB\",\n  \"attribution\": {\n    \"utmSource\": \"instagram\",\n    \"utmMedium\": \"cpc\",\n    \"utmCampaign\": \"black-friday\",\n    \"utmContent\": \"video-a\",\n    \"utmTerm\": \"mercado barato\",\n    \"clickId\": \"fb.1.fbclid-example\",\n    \"referrer\": \"https://www.instagram.com/\",\n    \"landingPath\": \"/promo\"\n  }\n}"
 						}
 					},
 					"response": [],
@@ -7611,7 +7795,7 @@
 								"exec": [
 									"var mailbox = pm.collectionVariables.get('testMailbox') || 'alexandre@economizaai.app'; var email = mailbox.replace('@', '+e2e-' + Date.now() + '@');",
 									"pm.collectionVariables.set('e2eEmail', email);",
-									"pm.request.body.raw = JSON.stringify({ name: 'E2E Test User', email: email, password: 'password123', acceptedTermsVersion: '1.0', acceptedPrivacyVersion: '1.0' });"
+									"pm.request.body.raw = JSON.stringify({ name: 'E2E Test User', email: email, password: 'password123', acceptedTermsVersion: '1.1', acceptedPrivacyVersion: '1.1' });"
 								]
 							}
 						},
@@ -9923,6 +10107,176 @@
 					"response": []
 				},
 				{
+					"name": "29d. Referral status (code + share link)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/referrals/me",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"referrals",
+								"me"
+							]
+						},
+						"description": "Every user has a stable referral code, created on first read."
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200 + code and shareUrl present', function () {",
+									"    pm.response.to.have.status(200);",
+									"    const body = pm.response.json();",
+									"    pm.expect(body.code).to.be.a('string').and.not.empty;",
+									"    pm.expect(body.shareUrl).to.include(body.code);",
+									"    pm.expect(body.referredBy).to.eql(false);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "29e. Redeem an unknown referral code (400)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"code\": \"0000000\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/referrals/redeem",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"referrals",
+								"redeem"
+							]
+						},
+						"description": "A code that cannot exist (the alphabet has no zero) is rejected with a localized 400."
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Unknown referral code is rejected (400)', function () { pm.response.to.have.status(400); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "29f. Cancel e-mail change with nothing pending (204)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/email-change",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"email-change"
+							]
+						},
+						"description": "Cancel is idempotent: no pending change still answers 204."
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Cancel is idempotent (204)', function () { pm.response.to.have.status(204); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "29g. State status (27 UFs for the FAQ)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/sefaz/state-status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"sefaz",
+								"state-status"
+							]
+						},
+						"description": "Per-state scanning situation; never hardcoded in the app."
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200 + 27 states with a known status', function () {",
+									"    pm.response.to.have.status(200);",
+									"    const states = pm.response.json();",
+									"    pm.expect(states).to.have.lengthOf(27);",
+									"    states.forEach(function (state) {",
+									"        pm.expect(state.status).to.be.oneOf(['WORKING', 'UNSTABLE', 'VALIDATING']);",
+									"    });",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
 					"name": "30. List markets (catalogue)",
 					"request": {
 						"method": "GET",
@@ -10519,51 +10873,6 @@
 					]
 				},
 				{
-					"name": "38b. Billing webhook is fail-closed without a secret (401)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "X-Webhook-Secret",
-								"value": "{{webhookSecret}}"
-							},
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"userEmail\": \"{{e2eEmail}}\",\n  \"action\": \"ACTIVATE\",\n  \"provider\": \"manual\",\n  \"providerRef\": \"e2e\",\n  \"currentPeriodEnd\": \"2099-12-31T00:00:00\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/v1/webhooks/subscription",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"webhooks",
-								"subscription"
-							]
-						},
-						"description": "Security: when economizai.billing.webhook-secret is unset the webhook fails closed and rejects every call (401), so PRO can't be granted unauthenticated. (Premium enforcement is also OFF by default, so basket optimization below works for all users regardless of tier.)"
-					},
-					"response": [],
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"type": "text/javascript",
-								"exec": [
-									"pm.test('Webhook fails closed without secret (401)', function () { pm.response.to.have.status(401); });"
-								]
-							}
-						}
-					]
-				},
-				{
 					"name": "39. Optimize a shopping list (basket grouping by market)",
 					"request": {
 						"method": "POST",
@@ -10608,51 +10917,6 @@
 									"    pm.expect(d.marketPlans).to.be.an('array');",
 									"    pm.expect(d.unpriced).to.be.an('array');",
 									"});"
-								]
-							}
-						}
-					]
-				},
-				{
-					"name": "39b. Billing webhook rejects CANCEL without a secret (401)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "X-Webhook-Secret",
-								"value": "{{webhookSecret}}"
-							},
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"userEmail\": \"{{e2eEmail}}\",\n  \"action\": \"CANCEL\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/v1/webhooks/subscription",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"webhooks",
-								"subscription"
-							]
-						},
-						"description": "Same fail-closed guard for the CANCEL action (401 when no secret is configured)."
-					},
-					"response": [],
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"type": "text/javascript",
-								"exec": [
-									"pm.test('Webhook fails closed without secret (401)', function () { pm.response.to.have.status(401); });"
 								]
 							}
 						}
@@ -11895,7 +12159,7 @@
 						},
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"preferences\": [\n    {\"type\": \"PROMO_PERSONAL\", \"channel\": \"PUSH\"},\n    {\"type\": \"PROMO_COMMUNITY\", \"channel\": \"EMAIL\"},\n    {\"type\": \"STOCKOUT\", \"channel\": \"NONE\"}\n  ]\n}"
+							"raw": "{\n  \"preferences\": [\n    {\"type\": \"PROMO_PERSONAL\", \"channel\": \"PUSH\"},\n    {\"type\": \"DIGEST\", \"channel\": \"EMAIL\"},\n    {\"type\": \"STOCKOUT\", \"channel\": \"NONE\"}\n  ]\n}"
 						}
 					},
 					"response": [],
@@ -16444,7 +16708,7 @@
 								"type": "text/javascript",
 								"exec": [
 									"var mailbox = pm.collectionVariables.get('testMailbox') || 'alexandre@economizaai.app'; var email = mailbox.replace('@', '+merchant-e2e-' + Date.now() + '@');",
-									"pm.request.body.raw = JSON.stringify({ name: 'E2E Merchant', email: email, password: 'password123', acceptedTermsVersion: '1.0', acceptedPrivacyVersion: '1.0' });"
+									"pm.request.body.raw = JSON.stringify({ name: 'E2E Merchant', email: email, password: 'password123', acceptedTermsVersion: '1.1', acceptedPrivacyVersion: '1.1' });"
 								]
 							}
 						},
@@ -17337,74 +17601,6 @@
 			"name": "Webhooks (billing)",
 			"item": [
 				{
-					"name": "Subscription ACTIVATE (provider webhook)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "X-Webhook-Secret",
-								"value": "{{webhookSecret}}"
-							},
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"userEmail\": \"{{e2eEmail}}\",\n  \"action\": \"ACTIVATE\",\n  \"provider\": \"stripe\",\n  \"providerRef\": \"sub_123\",\n  \"currentPeriodEnd\": \"2026-12-31T00:00:00\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/v1/webhooks/subscription",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"webhooks",
-								"subscription"
-							]
-						},
-						"description": "Provider-agnostic billing webhook. Grants PRO. Public route; verified by X-Webhook-Secret against economizai.billing.webhook-secret (empty in dev = check skipped; wrong/missing when set = 401). A real provider (Stripe/Mercado Pago) maps its webhook onto this shape."
-					},
-					"response": []
-				},
-				{
-					"name": "Subscription CANCEL (provider webhook)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "X-Webhook-Secret",
-								"value": "{{webhookSecret}}"
-							},
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"userEmail\": \"{{e2eEmail}}\",\n  \"action\": \"CANCEL\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/v1/webhooks/subscription",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"webhooks",
-								"subscription"
-							]
-						},
-						"description": "Provider-agnostic billing webhook. Cancels the subscription and drops the user to FREE. See ACTIVATE for secret handling."
-					},
-					"response": []
-				},
-				{
 					"name": "RevenueCat webhook (Apple/Google IAP)",
 					"request": {
 						"method": "POST",
@@ -17439,7 +17635,7 @@
 					"response": []
 				}
 			],
-			"description": "Server-to-server billing webhook seam. Not called by the FE \u2014 a payment provider posts here on subscription lifecycle events."
+			"description": "Server-to-server billing webhooks. Not called by the FE \u2014 the payment provider posts here on subscription lifecycle events (RevenueCat here; Mercado Pago under Subscriptions)."
 		},
 		{
 			"name": "Admin",

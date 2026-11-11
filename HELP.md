@@ -588,7 +588,8 @@ from real Brazilian users.
 - pt + en i18n for the new error/success messages.
 - Stub markdown documents under `src/main/resources/legal/` marked as
   v1.0 — must be reviewed by a Brazilian privacy lawyer before any
-  public launch.
+  public launch. (Both documents were rewritten as **v1.1** on 2026-11-11 —
+  see the session log; the legal review is still pending.)
 
 The collaborative price index itself (Phase 4) hasn't shipped yet — when it
 does, it must respect `User.contributionOptIn` and never write rows that
@@ -1109,3 +1110,42 @@ classify OTHER (grey) unless they carry a conveniência CNAE.
   Android: origem só via export GCS do Play (não configurado — precisa service account + bucket).
 - Nota de ambiente: `ReceiptToPriceIndexIntegrationTest` falha no checkout principal mas passa em
   worktree limpo do mesmo commit → é ambiente local (`.env`/`.envrc`/target), não código.
+
+### Session (2026-11-11) — release pré-campanha (auditoria fase 2)
+
+- **Contexto:** auditoria completa antes da campanha de aquisição; o dono aprovou a lista de
+  decisões e sete pacotes foram implementados em paralelo e integrados numa release só
+  (migrations V146–V172; detalhe FE-facing no `CHANGELOG.md` de 2026-11-11).
+- **Custo:** teto diário POR SERVIÇO pago (Infosimples R$ 120, captcha R$ 30, foto R$ 30, resgate
+  de HTML R$ 15, IA de categorização R$ 50, Twilio R$ 15) no lugar do teto global; limites por
+  usuário mais baixos; IA de categorização entrou no guard + ledger; aviso no WhatsApp do admin em
+  80%/100% de cada teto e do saldo pré-pago dos provedores (`cost_alert`, entrega com retry).
+- **Ingestão:** política de gasto explícita (`IngestSpendPolicy`) — contingência só por caminhos
+  grátis; 4xx determinístico não gasta captcha/Infosimples; breaker do Infosimples por UF; portal
+  fora → `PORTAL_PENDING`; reenvio de nota em andamento devolve a mesma linha; "tentar de novo"
+  recusado para falha definitiva; `GET /sefaz/state-status` para o FAQ do app.
+- **Índice:** linha editada/adicionada pelo usuário não alimenta o índice; XML enviado só entra
+  no índice online com autenticidade comprovada; "corrigir item" vale só para a casa e a mudança
+  global vira achado `PRODUCT_CORRECTION`; loja de segmento desconhecido exige K=3.
+- **Ofertas:** preço mais recente da rede (≤ 60 dias) em vez da mediana, com origem
+  (`priceSource`) e sem sugerir a rede da última compra; melhores preços ordena pelo preço exibido.
+- **Conta/segurança:** troca de e-mail com código; e-mail normalizado + índice único em
+  `lower(email)`; `AuthResponse.newAccount`; reset de senha limitado por conta; rate limit em
+  reivindicação de lojista, foto de perfil e indicação; exclusão de conta limpa o R2; logs
+  mascarados; Termos e Política v1.1.
+- **Assinatura:** promoção de lançamento uma única vez, na 1ª nota confirmada, sem sobrescrever
+  entitlement melhor; avisos D-15/7/3/1; cancelamento mantém o acesso até o fim do período +
+  carência de 3 dias; renovações do Mercado Pago contam; programa de indicação
+  (`referrals`, `premium_grants`); webhook genérico de cobrança removido.
+- **Notificações:** horário de silêncio 21h–8h com drenagem às 8h; envio em executor próprio;
+  toggles `PROMO_COMMUNITY`/`CHEAPER_MARKET` aposentados; dinheiro em formato brasileiro, texto
+  sempre em pt; reposição segue a tela de previsão e para após 3 lembretes.
+- **Capacidade:** executores próprios para foto e categorização; Tomcat 50 threads + espera de
+  conexão de 6 s → 503 de sobrecarga com `Retry-After`; batch JDBC; busca de produtos paginada
+  com trigram; jobs com teto por rodada; semáforo de decodificação de imagem.
+- **Limpeza:** scripts `.ps1` e `tunnel-proxy-worker/` do servidor Windows removidos;
+  `render.yaml` e a referência de variáveis de ambiente refletem o que roda hoje.
+- **Pendências conhecidas (DEV_NOTES "Release 2026-11-11"):** bundle ICP-Brasil para a assinatura
+  de XML, regra de lifecycle do R2 em `photo-attempts/`, conferir os campos do Mercado Pago com
+  payload real, calibrar o `UNSTABLE` do state-status. Itens de design (permissões, abas, telas de
+  privacidade) ficam para depois, com mockups.
