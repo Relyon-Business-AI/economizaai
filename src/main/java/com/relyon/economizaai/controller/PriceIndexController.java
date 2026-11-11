@@ -123,7 +123,7 @@ public class PriceIndexController {
     /** Snapshot da consulta pro histórico "produtos escaneados": preço = linha MAIS BARATA servida. */
     private void recordBestMarketsConsult(User user, UUID productId, List<MarketPriceRow> rows) {
         var cheapest = rows.stream()
-                .map(MarketPriceRow::medianPrice)
+                .map(MarketPriceRow::latestPrice)
                 .filter(price -> price != null)
                 .min(BigDecimal::compareTo)
                 .orElse(null);

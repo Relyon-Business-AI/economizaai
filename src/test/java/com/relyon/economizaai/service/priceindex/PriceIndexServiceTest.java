@@ -303,6 +303,71 @@ class PriceIndexServiceTest {
     }
 
     @Test
+    void bestMarkets_ranksAndBadgesByTheDisplayedLatestPriceNotTheMedian() {
+        var productId = UUID.randomUUID();
+        // Chain A: old prices were low (median 4.00) but the latest — the number shown — is 6.00.
+        // Chain B: steady 5.00. The row that SHOWS the lowest number (B) must rank first and
+        // carry the badge.
+        var chainA = List.of(
+                obsOn(productId, "AAAAAAAA000111", "Rede A", "4.00", 40),
+                obsOn(productId, "AAAAAAAA000111", "Rede A", "4.00", 30),
+                obsOn(productId, "AAAAAAAA000111", "Rede A", "6.00", 2));
+        var chainB = List.of(
+                obsOn(productId, "BBBBBBBB000111", "Rede B", "5.00", 35),
+                obsOn(productId, "BBBBBBBB000111", "Rede B", "5.00", 5));
+        var observations = new ArrayList<PriceObservation>(chainA);
+        observations.addAll(chainB);
+        when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(observations);
+        when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
+                .thenReturn(List.of(chainCount("AAAAAAAA", 3L), chainCount("BBBBBBBB", 3L)));
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of(
+                "AAAAAAAA000111", supermarket("AAAAAAAA000111"), "BBBBBBBB000111", supermarket("BBBBBBBB000111")));
+        when(privacyTierResolver.thresholdsFor(false)).thenReturn(new PrivacyTierResolver.Thresholds(1, 1));
+
+        var rows = service.bestMarkets(productId, 10, null, null, null, Set.of());
+
+        assertEquals(List.of("Rede B", "Rede A"), chainNames(rows));
+        assertTrue(rows.get(0).isCheapest());
+        assertFalse(rows.get(1).isCheapest());
+        assertEquals(0, new BigDecimal("5.00").compareTo(rows.get(0).latestPrice()));
+        assertEquals(0, new BigDecimal("6.00").compareTo(rows.get(1).latestPrice()));
+        assertTrue(rows.get(1).medianPrice().compareTo(rows.get(0).medianPrice()) < 0,
+                "chain A still has the lower median — it just must not drive rank or badge");
+        var cheapestShown = rows.stream().map(PriceIndexService.MarketPriceRow::latestPrice)
+                .min(BigDecimal::compareTo).orElseThrow();
+        assertTrue(rows.stream().filter(PriceIndexService.MarketPriceRow::isCheapest)
+                .allMatch(row -> row.latestPrice().compareTo(cheapestShown) == 0),
+                "the badge can only sit on the row showing the lowest number");
+    }
+
+    @Test
+    void bestMarkets_sameDayObservationsPickOnePriceDeterministically() {
+        var productId = UUID.randomUUID();
+        var cheaper = obsOn(productId, "AAAAAAAA000111", "Rede A", "4.50", 3);
+        var dearer = obsOn(productId, "AAAAAAAA000222", "Rede A", "4.90", 3);
+        when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
+                .thenReturn(List.of(chainCount("AAAAAAAA", 2L)));
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of(
+                "AAAAAAAA000111", supermarket("AAAAAAAA000111"), "AAAAAAAA000222", supermarket("AAAAAAAA000222")));
+        when(privacyTierResolver.thresholdsFor(false)).thenReturn(new PrivacyTierResolver.Thresholds(1, 1));
+
+        when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(List.of(cheaper, dearer));
+        var firstOrder = service.bestMarkets(productId, 10, null, null, null, Set.of());
+        when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(List.of(dearer, cheaper));
+        var reversedOrder = service.bestMarkets(productId, 10, null, null, null, Set.of());
+
+        assertEquals(0, new BigDecimal("4.90").compareTo(firstOrder.get(0).latestPrice()));
+        assertEquals(0, firstOrder.get(0).latestPrice().compareTo(reversedOrder.get(0).latestPrice()),
+                "the quoted price must not depend on row order");
+    }
+
+    private PriceObservation obsOn(UUID productId, String cnpj, String marketName, String price, int daysAgo) {
+        var observation = obsAt(productId, cnpj, marketName, new BigDecimal(price));
+        observation.setObservedAt(LocalDateTime.now().minusDays(daysAgo).toLocalDate().atStartOfDay());
+        return observation;
+    }
+
+    @Test
     void bestMarketsForViewer_stateScopePicksTheInStateStoreButPricesTheWholeChain() {
         var productId = UUID.randomUUID();
         var rsStore = obsAt(productId, "DDDDDDDD000111", "Rede RS", new BigDecimal("6.00"));

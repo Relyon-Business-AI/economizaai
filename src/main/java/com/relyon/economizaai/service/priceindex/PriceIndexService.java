@@ -57,7 +57,7 @@ import java.util.stream.Collectors;
  * <ul>
  *   <li>{@link #referencePrice} — median + min + sample size for a
  *       (product, market) pair. K-anonymity enforced.</li>
- *   <li>{@link #bestMarkets} — market CHAINS ranked by median price for a product
+ *   <li>{@link #bestMarkets} — market CHAINS ranked by their latest observed price for a product
  *       (one row per CNPJ root, showing its closest/watched store). Each row
  *       independently k-anon checked at chain level.</li>
  *   <li>{@link #inStoreReferencePrice} — "typical in-store price" across every
@@ -337,7 +337,7 @@ public class PriceIndexService {
     }
 
     /**
-     * Markets ranked by price for a product, ONE ROW PER CHAIN (CNPJ root). Stores of the
+     * Markets ranked by their latest observed price for a product, ONE ROW PER CHAIN (CNPJ root). Stores of the
      * same chain practice the same shelf price, so pooling them keeps the answer ("where is
      * it cheapest") intact while reaching k-anonymity far sooner than per store. Each row
      * surfaces one concrete store of the chain — a watched one if any, else the closest to
@@ -472,15 +472,19 @@ public class PriceIndexService {
     }
 
     /**
-     * Marca os badges (menor preço = menor {@code medianPrice}; mais perto = menor
+     * Marca os badges (menor preço = menor {@code latestPrice}; mais perto = menor
      * {@code distanceKm} não-nulo) sobre a lista inteira e ordena: CHEAPEST mantém o
      * comportamento histórico (seguidos primeiro, depois preço asc); NEAREST por distância
      * asc (nulos por último). Os badges independem da ordenação.
+     *
+     * <p>O preço que ordena e que ganha o badge é o {@code latestPrice} — o MESMO número que a
+     * tela exibe em cada linha. Ordenar pela mediana deixava o badge "Mais barato" numa linha
+     * que mostrava um valor maior que o da vizinha.
      */
     private List<MarketPriceRow> markAndSortChains(List<MarketPriceRow> rows, ComparisonSort sort) {
         var cheapest = rows.stream()
-                .filter(row -> row.medianPrice() != null)
-                .min(Comparator.comparing(MarketPriceRow::medianPrice))
+                .filter(row -> row.latestPrice() != null)
+                .min(Comparator.comparing(MarketPriceRow::latestPrice))
                 .orElse(null);
         var nearest = rows.stream()
                 .filter(row -> row.distanceKm() != null)
@@ -496,11 +500,11 @@ public class PriceIndexService {
         if (sort == ComparisonSort.NEAREST) {
             return Comparator
                     .comparing(MarketPriceRow::distanceKm, Comparator.nullsLast(Comparator.naturalOrder()))
-                    .thenComparing(MarketPriceRow::medianPrice, Comparator.nullsLast(Comparator.naturalOrder()));
+                    .thenComparing(MarketPriceRow::latestPrice, Comparator.nullsLast(Comparator.naturalOrder()));
         }
         return Comparator
                 .comparing(MarketPriceRow::watching, Comparator.reverseOrder())
-                .thenComparing(MarketPriceRow::medianPrice, Comparator.nullsLast(Comparator.naturalOrder()));
+                .thenComparing(MarketPriceRow::latestPrice, Comparator.nullsLast(Comparator.naturalOrder()));
     }
 
     private LocalDateTime bestMarketsSince() {
@@ -584,9 +588,20 @@ public class PriceIndexService {
                 distanceKm, viewer.watched().contains(cnpj));
     }
 
+    /**
+     * The observation a chain/store is priced by. {@code observedAt} has day precision, so
+     * several can share the latest day: the one contributed last wins, and on a full tie the
+     * HIGHER price (never promise a number below what the shopper may find). Deterministic, so
+     * the ranking, the badge and the deals feed always quote the same observation.
+     */
     private static PriceObservation mostRecent(List<PriceObservation> rows) {
-        return rows.stream().max(Comparator.comparing(PriceObservation::getObservedAt)).orElse(rows.get(0));
+        return rows.stream().max(MOST_RECENT_FIRST).orElse(rows.get(0));
     }
+
+    private static final Comparator<PriceObservation> MOST_RECENT_FIRST = Comparator
+            .comparing(PriceObservation::getObservedAt)
+            .thenComparing(PriceObservation::getCreatedAt, Comparator.nullsFirst(Comparator.naturalOrder()))
+            .thenComparing(PriceObservation::getUnitPrice);
 
     private record Viewer(BigDecimal latitude, BigDecimal longitude, Double radiusKm, Set<String> watched) {
         boolean hasCoordinates() { return latitude != null && longitude != null; }
