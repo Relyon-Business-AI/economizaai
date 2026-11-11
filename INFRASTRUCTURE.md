@@ -5,9 +5,8 @@ plus a managed Postgres. Step-by-step setup runbook: [`RENDER_SETUP.md`](./RENDE
 Bird's-eye map of the WHOLE product (mobile, web, admin, landing, e-mail, costs):
 [`docs/INFRA_MAP.md`](./docs/INFRA_MAP.md).
 
-> The old self-hosted Windows box (Cloudflare quick-tunnel, self-hosted CI runner,
-> `.ps1` watchdogs, LAN log UI) has been **RETIRED** — it is documented at the very
-> bottom for history only and is **not** the current deploy path.
+> The old self-hosted Windows box was **RETIRED** on 2026-09-22 and its scripts were removed
+> from the repo on 2026-11-11 — a short history note is at the very bottom.
 
 ## Current reality (Render) — clean dev/prod split (cutover 2026-09-22)
 
@@ -95,16 +94,115 @@ is otherwise never committed to directly.
 
 Full click-by-click runbook is **[`RENDER_SETUP.md`](./RENDER_SETUP.md)** (Postgres first,
 the JDBC-URL gotcha, per-env env vars, persistent-disk gotcha, verify checklist, secrets
-migration). Two repo artifacts it references:
+migration). One repo artifact it references:
 
-- **`render.yaml`** — a Blueprint (Render → New → Blueprint) that provisions the web service
-  + Postgres + the profile-pics persistent disk in one shot. `DATABASE_URL`/creds are still
-  set by hand (the `jdbc:` gotcha above). ⚠️ The file still describes the ORIGINAL dev setup
-  (service `economizai-app`, plan `starter`, a 1 GB profile-pics disk, no R2 vars) — it does
-  not match the live services in the table above; don't re-apply it without updating it.
-- **`migrate-to-render.ps1`** — copied the old box's data (accounts, receipts, the
-  **~910k-row EAN catalog**) into Render via `pg_dump --data-only` with row-count
-  verification. Historical — used during the initial cutover.
+- **`render.yaml`** — a Blueprint describing the two live services (dev on Free, prod on
+  Standard) and their databases, with every secret marked `sync: false` and the cost
+  ceilings spelled out. **The Render dashboard is the source of truth**: the services were
+  created and are changed there (and through the Render API), not by applying the file —
+  keep the file in step when a service changes, and never re-apply it over the live
+  services without diffing first. `DATABASE_URL`/creds are set by hand (the `jdbc:` gotcha
+  above).
+
+---
+
+## Environment variables — added in the 2026-11-11 release
+
+Everything below has a default baked into `application.yaml`, so the app boots without any
+of them. **Set explicitly on Render (owner decision 2026-11-11), on dev AND prod:** the six
+`PAID_API_BUDGET_*_CENTS` ceilings; and on **prod only** `SIGNUP_ALERT_ENABLED=false` (stops
+the admin alert on every signup during the campaign). The rest are tuning knobs — leave
+them unset unless there is a reason. Env vars changed through the Render API do not
+redeploy by themselves (trigger a deploy).
+
+**Paid-API ceilings and per-user caps** (`economizaai.paid-api.*`; cents; `0` = no limit)
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `PAID_API_BUDGET_INFOSIMPLES_CENTS` | `12000` | Daily ceiling for Infosimples (R$ 120). Reached → only that service stops until midnight UTC. **Set on Render.** |
+| `PAID_API_BUDGET_CAPTCHA_CENTS` | `3000` | Daily ceiling for captcha solves (R$ 30). **Set on Render.** |
+| `PAID_API_BUDGET_LLM_VISION_CENTS` | `3000` | Daily ceiling for receipt-by-photo extraction (R$ 30). **Set on Render.** |
+| `PAID_API_BUDGET_LLM_HTML_RESCUE_CENTS` | `1500` | Daily ceiling for the AI HTML parse rescue (R$ 15). **Set on Render.** |
+| `PAID_API_BUDGET_LLM_CATEGORIZATION_CENTS` | `5000` | Daily ceiling for AI categorization (R$ 50). **Set on Render.** |
+| `PAID_API_BUDGET_TWILIO_CENTS` | `1500` | Daily ceiling for SMS / WhatsApp (R$ 15). **Set on Render.** |
+| `PAID_API_DAILY_BUDGET_CENTS` | `0` | Optional overall ceiling across all services. Was `5000` (the old single R$ 50 kill-switch); now off by default. |
+| `INFOSIMPLES_DAILY_CAP` | `10` | Infosimples calls per user per day (was 20). |
+| `CAPTCHA_DAILY_CAP` | `30` | Captcha solves per user per day (was 60). |
+| `LLM_VISION_DAILY_CAP` | `10` | Photos sent to vision per user per day (was 15; counted per photo). |
+| `LLM_HTML_RESCUE_DAILY_CAP` | `5` | AI HTML rescues per user per day (was 10). |
+| `LLM_ENRICH_DAILY_CAP` | `60` | AI categorization calls per user per day (new). |
+| `TWILIO_DAILY_CAP` | `3` | SMS / WhatsApp messages per user per day (was 10). |
+| `ECONOMIZAAI_AI_DAILY_REQUEST_CAP` | `3000` | Secondary fence on the number of AI calls per day (was 300); the R$ ceilings above are the real limit. |
+
+**Cost alerts** (`economizaai.cost-alerts.*` — WhatsApp to the admin at 80% / 100% of each ceiling and of each provider's prepaid balance)
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `COST_ALERTS_ENABLED` | `true` | Master switch for the ceiling and balance alerts. |
+| `COST_ALERT_BUDGET_CHECK_INTERVAL_MS` | `60000` | How often today's spend is compared with the ceilings. |
+| `COST_ALERT_BALANCE_CHECK_CRON` | `0 5 * * * *` | When the providers' balances are read (hourly). |
+| `COST_ALERT_RETRY_INTERVAL_MS` | `120000` | Wait between delivery attempts of an alert not yet accepted. |
+| `COST_ALERT_EMAIL_FALLBACK_AFTER` | `3` | Failed WhatsApp attempts before the alert is also e-mailed. |
+| `COST_ALERT_MAX_WHATSAPP_ATTEMPTS` | `8` | WhatsApp attempts before falling back to the slow retry (delivery is abandoned 24 h after the alert was raised). |
+
+**Ingestion**
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SEFAZ_ALLOW_PLAIN_HTTP` | `true` | Accept `http://` portal URLs (several states print them). `false` = https only. Redirects are always re-checked against the host allowlists. |
+| `INGEST_SHUTDOWN_AWAIT_SECONDS` | `60` | On shutdown (deploy), how long the ingest pool waits for in-flight notas. |
+| `EAN_WARMUP_BUDGET_MS` | `5000` | Wall-clock budget of the per-receipt barcode warm-up. |
+| `EAN_WARMUP_MAX_EANS` | `15` | Unseen barcodes looked up per receipt. |
+| `SEFAZ_STATE_STATUS_WINDOW_HOURS` | `24` | Window of `GET /sefaz/state-status` for "recent failures". |
+| `SEFAZ_STATE_STATUS_MIN_FAILURES` | `3` | Portal failures in the window before a verified state can show as `UNSTABLE`. |
+| `SEFAZ_STATE_STATUS_CACHE_SECONDS` | `300` | Server-side cache of the state-status answer. |
+| `NFE_XML_TRUST_BUNDLE_PATH` | *(empty)* | PEM file with the ICP-Brasil root + intermediate certificates. Empty = no XML signature is accepted as proof of origin (see DEV_NOTES). |
+| `NFE_XML_PAID_RECONSULT_ENABLED` | `true` | Confirm a user-uploaded online XML through the paid by-chave lookup. `false` = it stays out of the index. |
+| `RECEIPTS_AUTO_CONFIRM_ENABLED` | `true` | Auto-confirm notas left pending. |
+| `RECEIPTS_AUTO_CONFIRM_AFTER_HOURS` | `6` | Age at which a pending nota is auto-confirmed. |
+| `RECEIPTS_AUTO_CONFIRM_SWEEPER_DELAY_MS` | `1800000` | Interval of the auto-confirm sweep (30 min). |
+| `RECEIPTS_AUTO_CONFIRM_MAX_PER_RUN` | `50` | Notas auto-confirmed per sweep, oldest first. |
+
+**Capacity**
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `TOMCAT_THREADS_MAX` | `50` | Request threads (was the Tomcat default, 200). |
+| `DB_CONNECTION_TIMEOUT_MS` | `6000` | Wait for a pooled DB connection before answering the overload 503 (was 30 s). |
+| `ASYNC_PHOTO_EXTRACT_THREADS` / `ASYNC_PHOTO_EXTRACT_QUEUE` | `3` / `30` | Receipt-by-photo extraction lane. |
+| `ASYNC_AI_CATEGORIZATION_THREADS` / `ASYNC_AI_CATEGORIZATION_QUEUE` | `2` / `50` | User-triggered AI categorization lane. |
+| `IMAGE_DECODE_MAX_CONCURRENT` | `3` | Simultaneous full-image decodes (QR photo, chave OCR, profile picture). |
+| `IMAGE_DECODE_MAX_WAIT_MS` | `5000` | Wait for a decode permit before the 503 `image.decode.busy`. |
+| `GEOCODE_MAX_PER_RUN` | `25` | Markets geocoded per scheduled scan. |
+| `MERCHANT_CLASSIFY_MAX_PER_RUN` | `25` | Markets classified (CNAE) per scheduled scan. |
+
+**Notifications**
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `NOTIFICATIONS_QUIET_HOURS_ENABLED` | `true` | Quiet hours on/off. |
+| `NOTIFICATIONS_QUIET_HOURS_START` / `NOTIFICATIONS_QUIET_HOURS_END` | `21` / `8` | Window (Brasília hours) in which nothing is pushed or e-mailed. |
+| `NOTIFICATIONS_QUIET_HOURS_MAX_DEFERRED` | `3` | Held-back pushes sent per user when the window ends. |
+| `NOTIFICATIONS_QUIET_HOURS_DRAIN_CRON` | `0 0 * * * *` | Job that sends the held-back pushes (hourly). |
+| `NOTIFICATIONS_REPLENISHMENT_CRON` | `0 0 10 * * *` | "Running low" reminders (replaces `NOTIFICATIONS_REPLENISHMENT_INTERVAL_MS`). |
+| `NOTIFICATIONS_BUDGET_CRON` | `0 0 9,18 * * *` | Monthly budget check (replaces `NOTIFICATIONS_BUDGET_INTERVAL_MS`). |
+| `SIGNUP_ALERT_ENABLED` | `true` | Admin alert on every signup (existing variable). **Set to `false` on prod.** |
+
+**Subscription, referral, deals, merchants**
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SUBSCRIPTION_PAID_GRACE_DAYS` | `3` | Days past the period end before a paid, still-renewing subscription is downgraded. |
+| `SUBSCRIPTION_PROMO_WARNINGS_ENABLED` | `true` | End-of-launch-promo warnings on/off. |
+| `SUBSCRIPTION_PROMO_WARNING_DAYS` | `15,7,3,1` | Days before the promo end on which holders are warned. |
+| `SUBSCRIPTION_PROMO_WARNING_CRON` | `0 0 10 * * *` | Daily job that sends those warnings (Brasília). |
+| `SUBSCRIPTION_FREE_OPEN_FEATURES` | *(empty)* | PRO features left open to FREE while enforcement is on (comma-separated `Feature` names). |
+| `REFERRAL_SHARE_BASE_URL` | `https://economizaai.app/?ref=` | Prefix of the invite link (the personal code is appended). |
+| `DEALS_MAX_PRICE_AGE_DAYS` | `60` | Maximum age of a chain's latest price for it to become a deal. |
+| `MERCHANT_CLAIM_COOLDOWN_HOURS` | `24` | Wait before re-claiming a chain after a closed claim. |
+
+**Removed:** `BILLING_WEBHOOK_SECRET` (the generic billing webhook is gone — delete it from
+the services), `NOTIFICATIONS_REPLENISHMENT_INTERVAL_MS`, `NOTIFICATIONS_BUDGET_INTERVAL_MS`.
 
 ---
 
@@ -141,53 +239,16 @@ Checklist for the real prod cutover (repointing `api.economizaai.app` at
 
 ---
 
-## Legacy — self-hosted Windows box (RETIRED 2026-09-22)
+## History — self-hosted Windows box (retired 2026-09-22)
 
-> **None of the below is the current deploy path.** Kept for historical reference only.
-> Before Render, the dev backend ran on a home Windows 11 box (user `Xandi`, computer
-> `DESKTOP-PLT5POI`, static LAN IP `192.168.68.108`, repo clone under OneDrive). Migrated
-> to Render on the decision recorded 2026-07-12; box retired 2026-09-22.
-
-**Stack (Docker, `docker-compose.yml --profile server`):** `economizai-app` (8080→10000,
-Spring Boot), `economizai-db` (PostgreSQL 18), `economizai-logs` (Dozzle log UI, 9999→8080).
-Data in named volumes (`economizai-pgdata`, `economizai-profilepics`).
-
-**Public path (the "from anywhere" URL):** FE → `https://economizaai.economizaai.workers.dev`
-(a permanent **Cloudflare Worker** front door, `tunnel-proxy-worker/`) → reads the live tunnel
-URL from a Worker KV namespace → `https://<random>.trycloudflare.com` (a **cloudflared
-quick-tunnel**, dials out, no open ports, URL changes per restart) → `localhost:8080`.
-`start-tunnel.ps1` captured each new tunnel URL and wrote it back into KV. LAN path:
-`http://192.168.68.108:8080` (needed same Wi-Fi + firewall TCP 8080).
-
-**Auto-deploy:** push to `development` → `.github/workflows/deploy-dev-server.yml` → ran on a
-**self-hosted GitHub Actions runner** (`C:\actions-runner`, Windows service, label
-`economizai-dev`) → `ci-deploy.ps1` (`compose up -d --build`, health verify, tunnel self-heal).
-
-**Always-on / self-recovery (Scheduled Tasks + `.ps1`):** never-sleep (`make-always-on.ps1`),
-auto-login (`enable-autologin.ps1`), Docker autostart, `stack-watchdog.ps1` (every 5 min,
-re-runs `compose up` if unhealthy), tunnel keep-alive (`start-tunnel.ps1`). The autonomous
-bug-fix watchdog ran git `reset --hard`/`clean -fd` on the checkout every ~20s — control
-scripts (`pause-watchdogs.bat` / `resume-watchdogs.bat`) lived outside the repo at
-`C:\economizai-data\` so they wouldn't be wiped.
-
-**Data / backups:** runtime data under `C:\economizai-data` (`ECONOMIZAI_DATA_ROOT`), outside
-the tree. `backup-db.ps1` → compressed `pg_dump` to `db-backups\` (14-day retention, daily
-03:00). Logs saved daily 02:55 via `logs.ps1 -Save`.
-
-**Logging / monitoring:** Dozzle at `http://192.168.68.108:9999` (LAN only). `logs.ps1`
-(`-Errors -Grep -Db -Save -Since`). UptimeRobot pinged `/actuator/health` every 5 min.
-`/actuator/prometheus` fail-closed behind `METRICS_PASSWORD` (Prometheus/Grafana never stood
-up on the box).
-
-**Scheduled tasks:** `start Docker engine` (logon), `stack watchdog` (startup + 5 min),
-`cloudflare tunnel` (logon), `daily db backup` (03:00), `daily log save` (02:55), plus the
-GitHub runner Windows service.
-
-**Setup scripts (repo root, admin PowerShell):** `make-always-on.ps1`, `enable-autologin.ps1`,
-`set-static-ip.ps1`, `setup-firewall.ps1`, `start-tunnel.ps1` / `setup-tunnel-autostart.ps1`,
-`setup-github-runner.ps1` / `install-runner-service.ps1`, `ci-deploy.ps1`, `update-server.ps1`,
-`backup-db.ps1`, `logs.ps1`, `tunnel-proxy-worker/` (Cloudflare Worker, `wrangler deploy`).
+Between 2026-06 and 2026-09 the dev backend ran on a home Windows box: the full stack in
+Docker, reached through a Cloudflare quick-tunnel, deployed by a self-hosted GitHub Actions
+runner and kept alive by PowerShell scheduled tasks. It was migrated to Render (decision
+recorded 2026-07-12) and retired on 2026-09-22. Its setup/ops scripts and the tunnel proxy
+Worker were deleted from the repo on 2026-11-11; nothing in the current deploy path depends
+on them. The only PowerShell file left is `scripts/flyway-dedupe.ps1`, used by the pre-push
+hook to catch duplicate Flyway version numbers.
 
 ---
 
-_Last updated: 2026-11-10. Keep this in sync when infra changes._
+_Last updated: 2026-11-11. Keep this in sync when infra changes._
