@@ -296,6 +296,25 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
     """)
     List<Object[]> findItemEanAndDescriptionByProductIds(@Param("productIds") Collection<UUID> productIds);
 
+    /**
+     * All linked items (any status/excluded flag) of a product, receipt fetched, so the
+     * variant-split can group EVERY row that references the product by signature and
+     * reassign per-item. Unlike the audit queries this is NOT confined to confirmed rows —
+     * a split must move every receipt_items.product_id, or the FK is left pointing at the
+     * wrong canonical product.
+     */
+    @Query("""
+        SELECT ri FROM ReceiptItem ri
+        JOIN FETCH ri.receipt r
+        WHERE ri.product.id = :productId
+    """)
+    List<ReceiptItem> findAllLinkedWithReceipt(@Param("productId") UUID productId);
+
+    /** Reassigns a specific set of items to a target product — the per-signature leg of a split. */
+    @Modifying
+    @Query("UPDATE ReceiptItem ri SET ri.product = :target WHERE ri.id IN :itemIds")
+    int repointItemsTo(@Param("itemIds") Collection<UUID> itemIds, @Param("target") Product target);
+
     /** Loads an item with its receipt + household initialized up front, so the
      *  item-correction ownership check (receipt id + household id) can run without
      *  an open session. Accessing the lazy Receipt proxy's household otherwise throws
