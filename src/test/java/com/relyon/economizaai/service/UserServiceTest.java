@@ -667,7 +667,7 @@ class UserServiceTest {
 
     @Test
     void register_attachesTheReferralCodeToTheNewAccount() {
-        var request = new RegisterRequest("John", "john@test.com", "password123", "1.0", "1.0", null, null, "ABC2345");
+        var request = new RegisterRequest("John", "john@test.com", "password123", "1.1", "1.1", null, null, "ABC2345");
         var household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
         when(userRepository.existsByEmail("john@test.com")).thenReturn(false);
         when(householdService.createSoloHousehold()).thenReturn(household);
@@ -694,7 +694,7 @@ class UserServiceTest {
 
     @Test
     void register_storesEmailTrimmedAndLowerCased() {
-        var request = new RegisterRequest("Maria", "  Maria.Silva@Test.COM ", "password123", "1.0", "1.0", null);
+        var request = new RegisterRequest("Maria", "  Maria.Silva@Test.COM ", "password123", "1.1", "1.1", null);
         var household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
         when(userRepository.existsByEmail("maria.silva@test.com")).thenReturn(false);
         when(householdService.createSoloHousehold()).thenReturn(household);
@@ -709,7 +709,7 @@ class UserServiceTest {
 
     @Test
     void register_rejectsEmailAlreadyRegisteredWithOtherCasing() {
-        var request = new RegisterRequest("Maria", "MARIA@test.com", "password123", "1.0", "1.0", null);
+        var request = new RegisterRequest("Maria", "MARIA@test.com", "password123", "1.1", "1.1", null);
         when(userRepository.existsByEmail("maria@test.com")).thenReturn(true);
 
         assertThrows(EmailAlreadyExistsException.class, () -> userService.register(request));
@@ -717,7 +717,7 @@ class UserServiceTest {
 
     @Test
     void register_flagsNewAccount() {
-        var request = new RegisterRequest("John", "john@test.com", "password123", "1.0", "1.0", null);
+        var request = new RegisterRequest("John", "john@test.com", "password123", "1.1", "1.1", null);
         var household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
         when(householdService.createSoloHousehold()).thenReturn(household);
         when(passwordEncoder.encode("password123")).thenReturn("encoded");

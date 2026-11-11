@@ -17,6 +17,10 @@ economizaai:
   startup-backfills:
     # Same-thread run at startup so no background writer races the tests' own data.
     background: false
+  notifications:
+    quiet-hours:
+      # Tests run at any hour — dispatch must not depend on the wall clock.
+      enabled: false
 
 jwt:
   secret: test-secret-key-must-be-at-least-256-bits-long-for-hs256-signing-algorithm
@@ -27,10 +31,4 @@ management:
     # Mail health indicator tries to ping the SMTP server on every /health
     # call — fine in prod (real SMTP), but flaky in tests (no SMTP server).
     mail:
-      enabled: false
-
-economizaai:
-  notifications:
-    quiet-hours:
-      # Tests run at any hour — dispatch must not depend on the wall clock.
       enabled: false
