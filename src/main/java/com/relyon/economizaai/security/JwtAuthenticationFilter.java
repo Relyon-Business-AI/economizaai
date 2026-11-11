@@ -13,7 +13,6 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.dao.DataAccessResourceFailureException;
-import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -84,8 +83,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     log.debug("Authenticated user: {}", LogMasker.email(username));
                 }
             }
-        } catch (CannotCreateTransactionException | CannotGetJdbcConnectionException
-                 | DataAccessResourceFailureException databaseUnavailable) {
+        } catch (CannotCreateTransactionException | DataAccessResourceFailureException databaseUnavailable) {
             // The user lookup could not get a DB connection. Treating that as "not authenticated"
             // answered 401 (the app signs the user out); answer the overload 503 instead.
             handlerExceptionResolver.resolveException(request, response, null, databaseUnavailable);
