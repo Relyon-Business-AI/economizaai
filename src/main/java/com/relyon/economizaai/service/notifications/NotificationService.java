@@ -274,7 +274,7 @@ public class NotificationService {
             notificationRepository.save(heldBack);
             return;
         }
-        if (!subscriptionGate.allows(heldBack.getUser(), Feature.PUSH_AND_EMAIL_DELIVERY)) {
+        if (!subscriptionGate.allowsDelivery(heldBack.getUser(), heldBack.getType(), heldBack.getCampaignId() != null)) {
             keepInboxOnly(heldBack, REASON_FREE_TIER);
             return;
         }
