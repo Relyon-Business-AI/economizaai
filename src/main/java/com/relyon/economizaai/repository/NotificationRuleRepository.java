@@ -67,8 +67,8 @@ public interface NotificationRuleRepository extends JpaRepository<NotificationRu
 
     @Modifying
     @Query(nativeQuery = true, value = """
-        INSERT INTO notification_rules (id, user_id, type, is_default, active, created_at, updated_at)
-        SELECT gen_random_uuid(), u.id, :type, true, true, now(), now()
+        INSERT INTO notification_rules (id, user_id, type, is_default, active, reminder_count, created_at, updated_at)
+        SELECT gen_random_uuid(), u.id, :type, true, true, 0, now(), now()
         FROM users u
         WHERE NOT EXISTS (
             SELECT 1 FROM notification_rules nr

@@ -204,8 +204,7 @@ public class NotificationService {
      * row) for seconds.
      */
     public void notifyAfterCommit(NotificationPayload payload) {
-        // The worker thread outlives this session — a lazy User proxy must be loaded now.
-        Hibernate.initialize(payload.user());
+        loadRecipientForWorkerThread(payload);
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
@@ -215,6 +214,15 @@ public class NotificationService {
             });
         } else {
             handOffToDispatchExecutor(payload);
+        }
+    }
+
+    /** The worker thread outlives the caller's session, so a lazy User proxy is loaded here, while it is open. */
+    private void loadRecipientForWorkerThread(NotificationPayload payload) {
+        try {
+            Hibernate.initialize(payload.user());
+        } catch (RuntimeException ex) {
+            log.warn("notification.recipient_not_loaded type={} reason={}", payload.type(), ex.getMessage());
         }
     }
 
