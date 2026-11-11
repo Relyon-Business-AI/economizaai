@@ -124,6 +124,22 @@ class PriceObservationChannelRepositoryTest {
     }
 
     @Test
+    void promoConfirmation_countsDistinctInStoreHouseholdsAtOrUnderThePriceInsideTheWindow() {
+        var windowStart = OBSERVED.toLocalDate().atStartOfDay();
+        var windowEnd = windowStart.plusDays(1);
+
+        // IN_STORE prices are 10 / 11 / 12 from three households; ONLINE rows never count.
+        assertThat(auditRepository.countDistinctHouseholdsConfirmingPromo(
+                product.getId(), "12345678", windowStart, windowEnd, new BigDecimal("12.00"))).isEqualTo(3);
+        assertThat(auditRepository.countDistinctHouseholdsConfirmingPromo(
+                product.getId(), "12345678", windowStart, windowEnd, new BigDecimal("10.50"))).isEqualTo(1);
+        assertThat(auditRepository.countDistinctHouseholdsConfirmingPromo(
+                product.getId(), "12345678", windowEnd, windowEnd.plusDays(7), new BigDecimal("12.00"))).isZero();
+        assertThat(auditRepository.countDistinctHouseholdsConfirmingPromo(
+                product.getId(), "99999999", windowStart, windowEnd, new BigDecimal("12.00"))).isZero();
+    }
+
+    @Test
     void inStoreHouseholdCount_acrossAllMarketsCountsOnlyInStore() {
         assertThat(auditRepository.countDistinctInStoreHouseholdsForProduct(product.getId(), SINCE)).isEqualTo(3);
     }

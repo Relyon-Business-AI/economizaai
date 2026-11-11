@@ -236,6 +236,7 @@ public class ProductService {
             var itemNormalized = DescriptionNormalizer.normalize(item.getRawDescription());
             if (itemNormalized.equals(normalized)) {
                 item.setProduct(product);
+                item.setUserModified(true); // user-chosen product link → personal history only
                 receiptItemRepository.save(item);
                 linked++;
             }

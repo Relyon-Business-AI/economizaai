@@ -1,120 +1,257 @@
 package com.relyon.economizaai.service.ai;
 
-import com.relyon.economizaai.exception.PaidApiBudgetExceededException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.relyon.economizaai.exception.ItemCorrectionFailedException;
+import com.relyon.economizaai.exception.ItemCorrectionUnavailableException;
 import com.relyon.economizaai.exception.PaidApiQuotaExceededException;
+import com.relyon.economizaai.exception.ReceiptItemNotFoundException;
+import com.relyon.economizaai.model.AiFinding;
 import com.relyon.economizaai.model.Household;
+import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.enums.AiActivity;
+import com.relyon.economizaai.model.enums.AiFindingStatus;
+import com.relyon.economizaai.model.enums.AiFindingType;
 import com.relyon.economizaai.model.enums.PaidApiService;
+import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.AiFindingRepository;
-import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
-import com.relyon.economizaai.service.CategoryResolver;
+import com.relyon.economizaai.service.HouseholdProductAliasService;
+import com.relyon.economizaai.service.HouseholdProductCategoryOverrideService;
+import com.relyon.economizaai.service.ai.AiGateway.AiUnavailableException;
+import com.relyon.economizaai.service.canonicalization.CanonicalizationService;
 import com.relyon.economizaai.service.paidapi.PaidApiGuardService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.TransactionStatus;
-import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class AiItemCorrectionServiceTest {
 
+    private static final String AI_ANSWER =
+            "{\"genericName\":\"Queijo Minas\",\"brand\":\"Tirolez\",\"category\":\"MEAT_DAIRY\",\"confidence\":0.9}";
+
     @Mock private AiGateway aiGateway;
-    @Mock private ProductRepository productRepository;
-    @Mock private CategoryResolver categoryResolver;
     @Mock private ReceiptItemRepository receiptItemRepository;
     @Mock private AiFindingRepository findingRepository;
     @Mock private TransactionTemplate transactionTemplate;
+    @Mock private CanonicalizationService canonicalizationService;
+    @Mock private HouseholdProductAliasService householdProductAliasService;
+    @Mock private HouseholdProductCategoryOverrideService categoryOverrideService;
     @Mock private PaidApiGuardService paidApiGuard;
+
+    private final UUID userId = UUID.randomUUID();
 
     private AiItemCorrectionService service;
 
-    private final UUID receiptId = UUID.randomUUID();
-    private final UUID itemId = UUID.randomUUID();
-    private final UUID householdId = UUID.randomUUID();
-    private final UUID userId = UUID.randomUUID();
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private Household household;
+    private Receipt receipt;
+    private Product sharedProduct;
     private ReceiptItem item;
 
     @BeforeEach
     void setUp() {
-        service = new AiItemCorrectionService(aiGateway, productRepository, categoryResolver, receiptItemRepository,
-                findingRepository, transactionTemplate, paidApiGuard);
-        var receipt = Receipt.builder().id(receiptId).household(Household.builder().id(householdId).build()).build();
-        item = ReceiptItem.builder().id(itemId).receipt(receipt).rawDescription("ARROZ CAMIL 5KG").build();
+        service = new AiItemCorrectionService(aiGateway, receiptItemRepository, findingRepository,
+                transactionTemplate, canonicalizationService, householdProductAliasService, categoryOverrideService, paidApiGuard);
+        lenient().doAnswer(invocation -> {
+            Consumer<TransactionStatus> callback = invocation.getArgument(0);
+            callback.accept(mock(TransactionStatus.class));
+            return null;
+        }).when(transactionTemplate).executeWithoutResult(any());
+
+        household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
+        receipt = Receipt.builder().id(UUID.randomUUID()).household(household).build();
+        sharedProduct = Product.builder().id(UUID.randomUUID())
+                .normalizedName("QJ MIN FRESCAL KG").genericName("Requeijão").brand("Outra")
+                .category(ProductCategory.GROCERIES).build();
+        item = ReceiptItem.builder().id(UUID.randomUUID()).receipt(receipt).product(sharedProduct)
+                .rawDescription("QJ MIN FRESCAL KG").quantity(BigDecimal.ONE).totalPrice(new BigDecimal("30.00")).build();
+
         lenient().when(aiGateway.isEnabled()).thenReturn(true);
-        lenient().when(aiGateway.extractorModel()).thenReturn("model");
-        lenient().when(receiptItemRepository.findByIdWithReceiptAndHousehold(itemId)).thenReturn(Optional.of(item));
-        lenient().when(receiptItemRepository.findById(itemId)).thenReturn(Optional.of(item));
-        lenient().when(findingRepository.findByStatus(any())).thenReturn(List.of());
-        lenient().when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
-            TransactionCallback<?> callback = invocation.getArgument(0);
-            return callback.doInTransaction(mock(TransactionStatus.class));
-        });
+        lenient().when(aiGateway.extractorModel()).thenReturn("extractor-model");
+        lenient().when(receiptItemRepository.findByIdWithReceiptAndHousehold(item.getId())).thenReturn(Optional.of(item));
+        lenient().when(canonicalizationService.linkOrCreateProduct(receipt, item)).thenReturn(sharedProduct);
+        lenient().when(findingRepository.findByStatus(AiFindingStatus.PENDING)).thenReturn(List.of());
+    }
+
+    private void aiAnswers(String answer) {
+        when(aiGateway.complete(eq(AiActivity.ITEM_CORRECTION), any(), any(), any(), anyInt(), any())).thenReturn(answer);
+    }
+
+    private void correct() {
+        service.correct(receipt.getId(), item.getId(), household.getId(), userId, "é queijo minas da Tirolez");
     }
 
     @Test
-    void correction_isGuardedAttributedAndLedgeredAsCategorizationSpend() {
-        when(aiGateway.complete(eq(AiActivity.ITEM_CORRECTION), eq("model"), anyString(), anyString(), anyInt(), eq(userId)))
-                .thenReturn("{\"genericName\":\"Arroz Branco\",\"brand\":\"Camil\",\"category\":\"GROCERIES\",\"confidence\":0.9}");
+    void correctionIsAppliedToTheHouseholdAndNeverToTheSharedProduct() {
+        aiAnswers(AI_ANSWER);
 
-        service.correct(receiptId, itemId, householdId, userId, "é arroz");
+        correct();
 
-        verify(paidApiGuard).assertUnderDailyBudget(PaidApiService.LLM_ENRICH);
-        verify(paidApiGuard).assertWithinDailyCap(userId, PaidApiService.LLM_ENRICH);
-        verify(paidApiGuard).recordSuccess(userId, PaidApiService.LLM_ENRICH, null, "ai");
-        assertThat(item.getProduct().getGenericName()).isEqualTo("Arroz Branco");
+        assertEquals("Queijo Minas Tirolez", item.getFriendlyDescription());
+        verify(householdProductAliasService).rememberFromItem(household, item);
+        verify(categoryOverrideService).setHouseholdOverride(household, sharedProduct, ProductCategory.MEAT_DAIRY);
+        // The row every household shares is exactly as it was.
+        assertEquals("Requeijão", sharedProduct.getGenericName());
+        assertEquals("Outra", sharedProduct.getBrand());
+        assertEquals(ProductCategory.GROCERIES, sharedProduct.getCategory());
+        assertEquals("QJ MIN FRESCAL KG", sharedProduct.getNormalizedName());
+    }
+
+    @Test
+    void globalChangeIsQueuedAsAPendingFindingForTheAdmin() throws Exception {
+        aiAnswers(AI_ANSWER);
+
+        correct();
+
+        var saved = ArgumentCaptor.forClass(AiFinding.class);
+        verify(findingRepository, times(2)).save(saved.capture());
+        var productCorrection = saved.getAllValues().stream()
+                .filter(finding -> finding.getType() == AiFindingType.PRODUCT_CORRECTION).findFirst().orElseThrow();
+        assertEquals(AiFindingStatus.PENDING, productCorrection.getStatus());
+        var payload = objectMapper.readTree(productCorrection.getPayload());
+        assertEquals(sharedProduct.getId().toString(), payload.path("productId").asText());
+        assertEquals("Queijo Minas", payload.path("genericName").asText());
+        assertEquals("Tirolez", payload.path("brand").asText());
+        assertEquals("MEAT_DAIRY", payload.path("category").asText());
+        assertEquals("GROCERIES", payload.path("productCategory").asText());
+        assertEquals("é queijo minas da Tirolez", payload.path("userHint").asText());
+        assertTrue(saved.getAllValues().stream().anyMatch(finding -> finding.getType() == AiFindingType.MISSING_RULE),
+                "the dictionary-rule proposal is still filed");
+    }
+
+    @Test
+    void secondCorrectionOfTheSameProductDoesNotStackAnotherGlobalProposal() {
+        aiAnswers(AI_ANSWER);
+        when(findingRepository.existsByTypeAndStatusAndPayloadContaining(
+                eq(AiFindingType.PRODUCT_CORRECTION), eq(AiFindingStatus.PENDING), any())).thenReturn(true);
+
+        correct();
+
+        var saved = ArgumentCaptor.forClass(AiFinding.class);
+        verify(findingRepository).save(saved.capture());
+        assertEquals(AiFindingType.MISSING_RULE, saved.getValue().getType());
+        verify(categoryOverrideService).setHouseholdOverride(household, sharedProduct, ProductCategory.MEAT_DAIRY);
+    }
+
+    @Test
+    void unlinkedItemIsAnchoredByTheDeterministicLinkNotByTheAiText() {
+        item.setProduct(null);
+        var createdFromDescription = Product.builder().id(UUID.randomUUID()).normalizedName("QJ MIN FRESCAL KG").build();
+        when(canonicalizationService.linkOrCreateProduct(receipt, item)).thenReturn(createdFromDescription);
+        aiAnswers("{\"genericName\":\"Queijo Minas\",\"brand\":null,\"category\":\"MEAT_DAIRY\"}");
+
+        correct();
+
+        assertEquals("Queijo Minas", item.getFriendlyDescription());
+        verify(categoryOverrideService).setHouseholdOverride(household, createdFromDescription, ProductCategory.MEAT_DAIRY);
+        assertNull(createdFromDescription.getGenericName(), "the AI/user text must not land on the shared product");
+    }
+
+    @Test
+    void aiDisabledIsALocalizedUnavailableError() {
+        when(aiGateway.isEnabled()).thenReturn(false);
+
+        var thrown = assertThrows(ItemCorrectionUnavailableException.class, this::correct);
+
+        assertEquals("item.correction.unavailable", thrown.getMessageKey());
+        verifyNoInteractions(receiptItemRepository);
+    }
+
+    @Test
+    void aiBudgetOrProviderFailureIsALocalizedUnavailableError() {
+        when(aiGateway.complete(any(), any(), any(), any(), anyInt(), any()))
+                .thenThrow(new AiUnavailableException("cap diário atingido"));
+
+        assertThrows(ItemCorrectionUnavailableException.class, this::correct);
+        verify(transactionTemplate, never()).executeWithoutResult(any());
+    }
+
+    @Test
+    void itemFromAnotherHouseholdIsNotFound() {
+        var thrown = assertThrows(ReceiptItemNotFoundException.class,
+                () -> service.correct(receipt.getId(), item.getId(), UUID.randomUUID(), userId, "dica"));
+
+        assertEquals("receipt.item.not.found", thrown.getMessageKey());
+        verify(aiGateway, never()).complete(any(), any(), any(), any(), anyInt(), any());
+    }
+
+    @Test
+    void itemOfAnotherReceiptIsNotFound() {
+        assertThrows(ReceiptItemNotFoundException.class,
+                () -> service.correct(UUID.randomUUID(), item.getId(), household.getId(), userId, "dica"));
+    }
+
+    @Test
+    void unparseableAnswerIsALocalizedFailure() {
+        aiAnswers("desculpe, não sei");
+
+        var thrown = assertThrows(ItemCorrectionFailedException.class, this::correct);
+
+        assertEquals("item.correction.failed", thrown.getMessageKey());
+        verify(transactionTemplate, never()).executeWithoutResult(any());
+    }
+
+    @Test
+    void answerWithoutAProductNameIsALocalizedFailure() {
+        aiAnswers("{\"genericName\":\"  \",\"brand\":null,\"category\":\"OTHER\"}");
+
+        assertThrows(ItemCorrectionFailedException.class, this::correct);
+        verifyNoInteractions(categoryOverrideService, householdProductAliasService);
+    }
+
+    @Test
+    void unknownCategoryFallsBackToOther() {
+        aiAnswers("{\"genericName\":\"Vela\",\"brand\":null,\"category\":\"CANDLES\"}");
+
+        correct();
+
+        verify(categoryOverrideService).setHouseholdOverride(household, sharedProduct, ProductCategory.OTHER);
     }
 
     @Test
     void userCapReached_failsWithLocalized429_beforeSpending() {
-        doThrow(new PaidApiQuotaExceededException("LLM_ENRICH"))
+        var household = Household.builder().id(UUID.randomUUID()).inviteCode("X").build();
+        var receipt = Receipt.builder().id(UUID.randomUUID()).household(household).build();
+        var item = ReceiptItem.builder().id(UUID.randomUUID()).receipt(receipt).rawDescription("QJO MINAS").build();
+        when(aiGateway.isEnabled()).thenReturn(true);
+        when(receiptItemRepository.findByIdWithReceiptAndHousehold(item.getId())).thenReturn(Optional.of(item));
+        doThrow(new PaidApiQuotaExceededException(PaidApiService.LLM_ENRICH.name()))
                 .when(paidApiGuard).assertWithinDailyCap(userId, PaidApiService.LLM_ENRICH);
 
-        assertThatThrownBy(() -> service.correct(receiptId, itemId, householdId, userId, "é arroz"))
-                .isInstanceOf(PaidApiQuotaExceededException.class)
-                .hasFieldOrPropertyWithValue("messageKey", "ai.correction.limit_reached");
+        assertThrows(PaidApiQuotaExceededException.class,
+                () -> service.correct(receipt.getId(), item.getId(), household.getId(), userId, "dica"));
 
-        verify(aiGateway, never()).complete(any(), anyString(), anyString(), anyString(), anyInt(), any());
+        verify(aiGateway, never()).complete(any(), any(), any(), any(), anyInt(), any());
         verify(paidApiGuard, never()).recordSuccess(any(), any(), any(), any());
-    }
-
-    @Test
-    void dailyBudgetSpent_failsWithTheSameLocalized429() {
-        doThrow(new PaidApiBudgetExceededException())
-                .when(paidApiGuard).assertUnderDailyBudget(PaidApiService.LLM_ENRICH);
-
-        assertThatThrownBy(() -> service.correct(receiptId, itemId, householdId, userId, "é arroz"))
-                .isInstanceOf(PaidApiQuotaExceededException.class)
-                .hasFieldOrPropertyWithValue("messageKey", "ai.correction.limit_reached");
-    }
-
-    @Test
-    void foreignItem_isRejectedBeforeAnyGuardOrSpend() {
-        assertThatThrownBy(() -> service.correct(receiptId, itemId, UUID.randomUUID(), userId, "é arroz"))
-                .isInstanceOf(IllegalArgumentException.class);
-
-        verify(paidApiGuard, never()).assertWithinDailyCap(any(), any());
     }
 }

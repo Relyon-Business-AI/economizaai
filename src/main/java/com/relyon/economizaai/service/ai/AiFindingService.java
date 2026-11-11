@@ -177,6 +177,7 @@ public class AiFindingService {
             case SUSPECT_CATEGORY -> applyCategory(payload);
             case DUPLICATE -> applyMerge(payload);
             case FRIENDLY_NAME -> applyFriendlyName(payload);
+            case PRODUCT_CORRECTION -> applyProductCorrection(payload);
             // Informational — approval = acknowledged; resolution is manual/elsewhere.
             case CONSENSUS_REVIEW, MERCHANT_REVIEW, ANOMALY -> { }
         }
@@ -246,6 +247,22 @@ public class AiFindingService {
         product.setGenericName(name);
         product.setGenericNameNorm(DescriptionNormalizer.normalizeOrNull(name));
         productRepository.save(product);
+    }
+
+    /**
+     * A user's item correction, approved for everyone: the proposed name, brand and category
+     * are written onto the GLOBAL product through the same levers as the single-purpose
+     * findings (friendly name, brand patch, category + node).
+     */
+    private void applyProductCorrection(JsonNode payload) {
+        applyFriendlyName(payload);
+        var brand = blankToNull(payload.path("brand").asText(null));
+        if (brand != null) {
+            adminProductService.setBrand(UUID.fromString(payload.path("productId").asText()),
+                    new SetProductBrandRequest(brand));
+        }
+        applyCategory(payload);
+        log.info("ai.apply.product_correction product={}", payload.path("productId").asText());
     }
 
     @Transactional

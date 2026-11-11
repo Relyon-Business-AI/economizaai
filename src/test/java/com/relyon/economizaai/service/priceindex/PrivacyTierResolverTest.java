@@ -13,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -87,15 +88,43 @@ class PrivacyTierResolverTest {
     }
 
     @Test
-    void pharmacyStoresAreSensitiveMarkets() {
+    void onlyClassifiedGroceryStoresGetTheRelaxedTier() {
         var pharmacy = MarketLocation.builder().cnpj("1").segment(MerchantSegment.PHARMACY).build();
         var supermarket = MarketLocation.builder().cnpj("2").segment(MerchantSegment.SUPERMARKET).build();
+        var foodRetail = MarketLocation.builder().cnpj("3").segment(MerchantSegment.FOOD_RETAIL).build();
 
         assertTrue(PrivacyTierResolver.isSensitiveMarket(pharmacy));
         assertFalse(PrivacyTierResolver.isSensitiveMarket(supermarket));
-        assertFalse(PrivacyTierResolver.isSensitiveMarket(null));
+        assertFalse(PrivacyTierResolver.isSensitiveMarket(foodRetail));
         assertTrue(PrivacyTierResolver.anySensitiveMarket(List.of(supermarket, pharmacy)));
-        assertFalse(PrivacyTierResolver.anySensitiveMarket(List.of(supermarket)));
+        assertFalse(PrivacyTierResolver.anySensitiveMarket(List.of(supermarket, foodRetail)));
+    }
+
+    @Test
+    void unknownOrUnclassifiedStoreSegmentIsSensitive() {
+        var unclassified = MarketLocation.builder().cnpj("4").segment(MerchantSegment.UNKNOWN).build();
+        var other = MarketLocation.builder().cnpj("5").segment(MerchantSegment.OTHER).build();
+        var withoutSegment = MarketLocation.builder().cnpj("6").build();
+        withoutSegment.setSegment(null);
+        var supermarket = MarketLocation.builder().cnpj("2").segment(MerchantSegment.SUPERMARKET).build();
+        var storesWithOneUnregistered = new ArrayList<MarketLocation>();
+        storesWithOneUnregistered.add(supermarket);
+        storesWithOneUnregistered.add(null);
+
+        assertTrue(PrivacyTierResolver.isSensitiveMarket(null), "a store with no location row is unclassified");
+        assertTrue(PrivacyTierResolver.isSensitiveMarket(unclassified));
+        assertTrue(PrivacyTierResolver.isSensitiveMarket(other));
+        assertTrue(PrivacyTierResolver.isSensitiveMarket(withoutSegment));
+        assertTrue(PrivacyTierResolver.anySensitiveMarket(storesWithOneUnregistered));
+    }
+
+    @Test
+    void productWithoutAnyCategoryStaysGrocery() {
+        var uncategorizedId = UUID.randomUUID();
+        when(productRepository.findById(uncategorizedId))
+                .thenReturn(Optional.of(Product.builder().id(uncategorizedId).build()));
+
+        assertFalse(resolver.isSensitiveProduct(uncategorizedId));
     }
 
     @Test

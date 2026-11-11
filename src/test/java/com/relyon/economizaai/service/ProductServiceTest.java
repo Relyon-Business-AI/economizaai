@@ -35,8 +35,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
@@ -176,6 +178,8 @@ class ProductServiceTest {
         verify(receiptItemRepository, times(1)).save(matching);
         verify(receiptItemRepository, never()).save(nonMatching);
         assertEquals(product, matching.getProduct());
+        assertTrue(matching.isUserModified(), "a user-chosen product link keeps the line out of the index");
+        assertFalse(nonMatching.isUserModified());
     }
 
     @Test

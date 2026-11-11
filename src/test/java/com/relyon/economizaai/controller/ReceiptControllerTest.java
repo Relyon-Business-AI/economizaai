@@ -11,8 +11,11 @@ import com.relyon.economizaai.dto.response.ReceiptItemResponse;
 import com.relyon.economizaai.dto.response.ReceiptResponse;
 import com.relyon.economizaai.dto.response.ReceiptSummaryResponse;
 import com.relyon.economizaai.exception.InvalidReceiptPhotoException;
+import com.relyon.economizaai.exception.ItemCorrectionFailedException;
+import com.relyon.economizaai.exception.ItemCorrectionUnavailableException;
 import com.relyon.economizaai.exception.OcrUnavailableException;
 import com.relyon.economizaai.exception.ReceiptAlreadyIngestedException;
+import com.relyon.economizaai.exception.ReceiptItemNotFoundException;
 import com.relyon.economizaai.exception.ReceiptNotEditableException;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
 import com.relyon.economizaai.model.Household;
@@ -62,6 +65,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -565,6 +569,51 @@ class ReceiptControllerTest {
 
         mockMvc.perform(get("/api/v1/receipts/" + id)
                         .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void correctItem_aiUnavailable_returns503() throws Exception {
+        var user = buildUser();
+        var id = UUID.randomUUID();
+        var itemId = UUID.randomUUID();
+        doThrow(new ItemCorrectionUnavailableException())
+                .when(aiItemCorrectionService).correct(eq(id), eq(itemId), any(), any());
+
+        mockMvc.perform(post("/api/v1/receipts/" + id + "/items/" + itemId + "/correction")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"hint\":\"é queijo minas\"}"))
+                .andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
+    void correctItem_productNotIdentified_returns422() throws Exception {
+        var user = buildUser();
+        var id = UUID.randomUUID();
+        var itemId = UUID.randomUUID();
+        doThrow(new ItemCorrectionFailedException())
+                .when(aiItemCorrectionService).correct(eq(id), eq(itemId), any(), any());
+
+        mockMvc.perform(post("/api/v1/receipts/" + id + "/items/" + itemId + "/correction")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"hint\":\"é queijo minas\"}"))
+                .andExpect(status().is(422));
+    }
+
+    @Test
+    void correctItem_itemNotOnReceipt_returns404() throws Exception {
+        var user = buildUser();
+        var id = UUID.randomUUID();
+        var itemId = UUID.randomUUID();
+        doThrow(new ReceiptItemNotFoundException())
+                .when(aiItemCorrectionService).correct(eq(id), eq(itemId), any(), any());
+
+        mockMvc.perform(post("/api/v1/receipts/" + id + "/items/" + itemId + "/correction")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"hint\":\"é queijo minas\"}"))
                 .andExpect(status().isNotFound());
     }
 

@@ -57,7 +57,7 @@ import java.util.stream.Collectors;
  * <ul>
  *   <li>{@link #referencePrice} — median + min + sample size for a
  *       (product, market) pair. K-anonymity enforced.</li>
- *   <li>{@link #bestMarkets} — market CHAINS ranked by median price for a product
+ *   <li>{@link #bestMarkets} — market CHAINS ranked by their latest observed price for a product
  *       (one row per CNPJ root, showing its closest/watched store). Each row
  *       independently k-anon checked at chain level.</li>
  *   <li>{@link #inStoreReferencePrice} — "typical in-store price" across every
@@ -92,8 +92,9 @@ public class PriceIndexService {
             if (!isContributable(item, channel)) continue;
             contributed.add(recordItemObservation(receipt, item, location));
         }
-        log.info("price_index.write.done receipt={} channel={} contributed={} marketCnpj={}",
-                receipt.getId(), channel, contributed.size(), receipt.getCnpjEmitente());
+        var userModifiedSkipped = receipt.getItems().stream().filter(ReceiptItem::isUserModified).count();
+        log.info("price_index.write.done receipt={} channel={} contributed={} userModifiedSkipped={} marketCnpj={}",
+                receipt.getId(), channel, contributed.size(), userModifiedSkipped, receipt.getCnpjEmitente());
 
         // Community retention loop: this household's prices may satisfy other households'
         // "avise-me quando" rules. Those rules are location-based (physical), so only feed
@@ -129,6 +130,8 @@ public class PriceIndexService {
             // On-device fetch from a non-trusted state: client-authored content whose only
             // tie to SEFAZ is the embedded chave (forgeable), so personal history only —
             // same trust class as PHOTO. Server-fetched and trusted device-fetch are eligible.
+            // Same for a user-uploaded XML whose authenticity was not established (in-store XML
+            // never is; online XML needs the issuer signature or a matching reconsult).
             log.info("price_index.write.skipped reason=not_index_eligible receipt={}", receipt.getId());
             return true;
         }
@@ -165,9 +168,15 @@ public class PriceIndexService {
      * Physical: any linked, non-excluded, priced item contributes (the merchant gate already
      * vouched for the store). Online: additionally require a real EAN — the item's identity
      * comes from its GTIN (matched to a canonical product), not from the seller's segment.
+     * A line the user edited or added ({@link ReceiptItem#isUserModified()}) never contributes:
+     * its numbers are the user's, not the issued document's. Untouched lines of the same
+     * receipt still do.
      */
     private boolean isContributable(ReceiptItem item, ReceiptChannel channel) {
         if (item.isExcluded() || item.getProduct() == null || item.getUnitPrice() == null) {
+            return false;
+        }
+        if (item.isUserModified()) {
             return false;
         }
         if (channel == ReceiptChannel.ONLINE) {
@@ -251,14 +260,15 @@ public class PriceIndexService {
      */
     private PrivacyTierResolver.Thresholds thresholdsFor(UUID productId, List<PriceObservation> observations) {
         if (observations.isEmpty()) return privacyTierResolver.thresholdsFor(true);
-        var sensitive = privacyTierResolver.isSensitiveProduct(productId)
-                || PrivacyTierResolver.anySensitiveMarket(locationsOf(observations).values());
+        var sensitive = privacyTierResolver.isSensitiveProduct(productId) || anySensitiveStore(observations);
         return privacyTierResolver.thresholdsFor(sensitive);
     }
 
-    private Map<String, MarketLocation> locationsOf(List<PriceObservation> observations) {
+    /** A store with no location row counts as sensitive (unknown segment), so look each CNPJ up. */
+    private boolean anySensitiveStore(List<PriceObservation> observations) {
         var cnpjs = observations.stream().map(PriceObservation::getMarketCnpj).distinct().toList();
-        return marketLocationService.findByCnpjs(new ArrayList<>(cnpjs));
+        var locations = marketLocationService.findByCnpjs(new ArrayList<>(cnpjs));
+        return cnpjs.stream().map(locations::get).anyMatch(PrivacyTierResolver::isSensitiveMarket);
     }
 
     /**
@@ -329,7 +339,7 @@ public class PriceIndexService {
     }
 
     /**
-     * Markets ranked by price for a product, ONE ROW PER CHAIN (CNPJ root). Stores of the
+     * Markets ranked by their latest observed price for a product, ONE ROW PER CHAIN (CNPJ root). Stores of the
      * same chain practice the same shelf price, so pooling them keeps the answer ("where is
      * it cheapest") intact while reaching k-anonymity far sooner than per store. Each row
      * surfaces one concrete store of the chain — a watched one if any, else the closest to
@@ -464,15 +474,19 @@ public class PriceIndexService {
     }
 
     /**
-     * Marca os badges (menor preço = menor {@code medianPrice}; mais perto = menor
+     * Marca os badges (menor preço = menor {@code latestPrice}; mais perto = menor
      * {@code distanceKm} não-nulo) sobre a lista inteira e ordena: CHEAPEST mantém o
      * comportamento histórico (seguidos primeiro, depois preço asc); NEAREST por distância
      * asc (nulos por último). Os badges independem da ordenação.
+     *
+     * <p>O preço que ordena e que ganha o badge é o {@code latestPrice} — o MESMO número que a
+     * tela exibe em cada linha. Ordenar pela mediana deixava o badge "Mais barato" numa linha
+     * que mostrava um valor maior que o da vizinha.
      */
     private List<MarketPriceRow> markAndSortChains(List<MarketPriceRow> rows, ComparisonSort sort) {
         var cheapest = rows.stream()
-                .filter(row -> row.medianPrice() != null)
-                .min(Comparator.comparing(MarketPriceRow::medianPrice))
+                .filter(row -> row.latestPrice() != null)
+                .min(Comparator.comparing(MarketPriceRow::latestPrice))
                 .orElse(null);
         var nearest = rows.stream()
                 .filter(row -> row.distanceKm() != null)
@@ -488,11 +502,11 @@ public class PriceIndexService {
         if (sort == ComparisonSort.NEAREST) {
             return Comparator
                     .comparing(MarketPriceRow::distanceKm, Comparator.nullsLast(Comparator.naturalOrder()))
-                    .thenComparing(MarketPriceRow::medianPrice, Comparator.nullsLast(Comparator.naturalOrder()));
+                    .thenComparing(MarketPriceRow::latestPrice, Comparator.nullsLast(Comparator.naturalOrder()));
         }
         return Comparator
                 .comparing(MarketPriceRow::watching, Comparator.reverseOrder())
-                .thenComparing(MarketPriceRow::medianPrice, Comparator.nullsLast(Comparator.naturalOrder()));
+                .thenComparing(MarketPriceRow::latestPrice, Comparator.nullsLast(Comparator.naturalOrder()));
     }
 
     private LocalDateTime bestMarketsSince() {
@@ -576,9 +590,20 @@ public class PriceIndexService {
                 distanceKm, viewer.watched().contains(cnpj));
     }
 
+    /**
+     * The observation a chain/store is priced by. {@code observedAt} has day precision, so
+     * several can share the latest day: the one contributed last wins, and on a full tie the
+     * HIGHER price (never promise a number below what the shopper may find). Deterministic, so
+     * the ranking, the badge and the deals feed always quote the same observation.
+     */
     private static PriceObservation mostRecent(List<PriceObservation> rows) {
-        return rows.stream().max(Comparator.comparing(PriceObservation::getObservedAt)).orElse(rows.get(0));
+        return rows.stream().max(MOST_RECENT_FIRST).orElse(rows.get(0));
     }
+
+    private static final Comparator<PriceObservation> MOST_RECENT_FIRST = Comparator
+            .comparing(PriceObservation::getObservedAt)
+            .thenComparing(PriceObservation::getCreatedAt, Comparator.nullsFirst(Comparator.naturalOrder()))
+            .thenComparing(PriceObservation::getUnitPrice);
 
     private record Viewer(BigDecimal latitude, BigDecimal longitude, Double radiusKm, Set<String> watched) {
         boolean hasCoordinates() { return latitude != null && longitude != null; }

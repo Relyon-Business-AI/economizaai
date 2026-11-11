@@ -229,6 +229,12 @@ public class CollaborativeProperties {
         private double bestMarketsNearbyRadiusKm = 20;
         private int communityPromoRecentWindowDays = 7;
         /**
+         * "Ofertas pra você": a chain's price only becomes a deal when its most recent
+         * observation is at most this many days old. Older prices still appear (dated) on the
+         * best-markets screen, but are too stale to tell someone "go buy it there".
+         */
+        private int dealsMaxPriceAgeDays = 60;
+        /**
          * TTL of the SHARED community-promo cache (seconds). Detection scans every
          * recent observation, so it runs at most once per TTL for the whole user
          * base — per-viewer geo/watched filtering is applied on top of the cached
@@ -262,6 +268,8 @@ public class CollaborativeProperties {
         public void setBestMarketsNearbyRadiusKm(double v) { this.bestMarketsNearbyRadiusKm = v; }
         public int getCommunityPromoRecentWindowDays() { return communityPromoRecentWindowDays; }
         public void setCommunityPromoRecentWindowDays(int v) { this.communityPromoRecentWindowDays = v; }
+        public int getDealsMaxPriceAgeDays() { return dealsMaxPriceAgeDays; }
+        public void setDealsMaxPriceAgeDays(int v) { this.dealsMaxPriceAgeDays = v; }
         public int getCommunityPromoCacheSeconds() { return communityPromoCacheSeconds; }
         public void setCommunityPromoCacheSeconds(int v) { this.communityPromoCacheSeconds = v; }
     }

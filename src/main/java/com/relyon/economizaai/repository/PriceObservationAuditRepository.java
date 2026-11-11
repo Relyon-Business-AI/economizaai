@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -230,6 +231,26 @@ public interface PriceObservationAuditRepository extends JpaRepository<PriceObse
     """)
     boolean existsContributionForChaveFromOtherHousehold(@Param("chaveAcesso") String chaveAcesso,
                                                          @Param("currentHouseholdId") UUID currentHouseholdId);
+
+    /** Merchant-promo verification: distinct households whose scanned receipts at the chain,
+     *  inside the promo window, show the product at (or under) the announced price. The caller
+     *  applies K — a single household's purchase must never flip a public "verified" badge. */
+    @Query("""
+        SELECT COUNT(DISTINCT a.householdId)
+        FROM PriceObservationAudit a
+        WHERE a.observation.product.id = :productId
+          AND a.observation.marketCnpjRoot = :cnpjRoot
+          AND a.observation.channel = 'IN_STORE'
+          AND a.observation.outlier = false
+          AND a.observation.observedAt >= :from
+          AND a.observation.observedAt < :to
+          AND a.observation.unitPrice <= :maxPrice
+    """)
+    long countDistinctHouseholdsConfirmingPromo(@Param("productId") UUID productId,
+                                                @Param("cnpjRoot") String cnpjRoot,
+                                                @Param("from") LocalDateTime from,
+                                                @Param("to") LocalDateTime to,
+                                                @Param("maxPrice") BigDecimal maxPrice);
 
     /** Promotion backfill guard: has this receipt already contributed observations? */
     boolean existsByReceiptId(UUID receiptId);

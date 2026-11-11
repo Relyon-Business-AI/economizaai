@@ -39,6 +39,7 @@ import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.BiPredicate;
 import java.util.function.Function;
 
 /**
@@ -78,6 +79,7 @@ public class ReceiptIngestionService {
     private final LocalizedMessageService messageService;
     private final PrefetchPolicy prefetchPolicy;
     private final ReceiptAiCategorySuggestionService aiCategorySuggestionService;
+    private final XmlIndexEligibilityService xmlIndexEligibilityService;
 
     /**
      * Only ping the owner about a note's outcome when the scan took at least this long —
@@ -234,11 +236,25 @@ public class ReceiptIngestionService {
      * Ingest a user-uploaded NFe XML (e-commerce import). The XML is self-contained, so this
      * parses the provided content directly ({@link SefazIngestionService#fromXml}) — no fetch —
      * through the same persist pipeline (EAN warm-up, merchant gate, parse-failure handling).
+     *
+     * <p>Unlike a server fetch, the file is client-authored: it is index-eligible only when
+     * {@link XmlIndexEligibilityService} establishes its authenticity (never for in-store notas).
+     * That check may reconsult the chave over HTTP, so it runs here, untransacted, before the
+     * persist block. Otherwise the nota is kept as personal history only.
      */
     @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
     public void ingestXml(UUID receiptId, String xmlContent) {
         ingestResolved(receiptId, receipt -> sefazIngestionService.fromXml(xmlContent, receipt.getChaveAcesso(), null),
-                false, null);
+                false, null,
+                (parsed, userId) -> xmlIndexEligibilityService.isIndexEligible(xmlContent, parsed, userId));
+    }
+
+    /** Server-fetched content (QR, by-chave reconsult, paid fallback) is self-verified → index-eligible. */
+    private void ingestResolved(UUID receiptId,
+                                Function<Receipt, SefazIngestionService.FetchedDocument> resolver,
+                                boolean canDeviceRetry,
+                                String blockedStateReasonKey) {
+        ingestResolved(receiptId, resolver, canDeviceRetry, blockedStateReasonKey, (parsed, userId) -> true);
     }
 
     /**
@@ -250,7 +266,8 @@ public class ReceiptIngestionService {
     private void ingestResolved(UUID receiptId,
                                 Function<Receipt, SefazIngestionService.FetchedDocument> resolver,
                                 boolean canDeviceRetry,
-                                String blockedStateReasonKey) {
+                                String blockedStateReasonKey,
+                                BiPredicate<ParsedReceipt, UUID> indexEligibility) {
         MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
         try {
             var receipt = receiptRepository.findById(receiptId).orElse(null);
@@ -272,8 +289,7 @@ public class ReceiptIngestionService {
                     return;
                 }
                 warmEanCatalog(parsed);
-                // Server-fetched (or import/XML) content is self-verified by our fetch → index-eligible.
-                persistParsed(receiptId, parsed, true);
+                persistParsed(receiptId, parsed, indexEligibility.test(parsed, userId));
             } catch (ExperimentalStateFailedException ex) {
                 routeExperimentalFailure(receiptId, ex, canDeviceRetry, blockedStateReasonKey);
             } catch (ReceiptParseException ex) {
