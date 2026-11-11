@@ -61,6 +61,8 @@ public class InfosimplesService {
     private static final ParameterizedTypeReference<InfosimplesSaldoResponse> SALDO_RESPONSE_TYPE =
             new ParameterizedTypeReference<>() {};
 
+    static final String MISSING_DESCRIPTION = "ITEM SEM DESCRICAO";
+
     // Respostas determinísticas por nota (não são saúde do provedor): 602 serviço errado na URL,
     // 607 parâmetro inválido (chave corrompida), 612 consulta não retornou dados (nota fora da
     // retenção do portal / nunca transmitida). Não contam pro circuit breaker.
@@ -248,6 +250,13 @@ public class InfosimplesService {
                 data.normalizadoValorDesconto(),
                 totais == null ? null : totais.normalizadoValorDescontos());
         var items = toItems(firstNonNull(data.produtos(), data.produtosServicos()));
+        if (items.isEmpty()) {
+            // A "success" without a single product is not a usable nota (production has no
+            // legitimate zero-item receipt) — fail it like every parser does instead of
+            // handing the user an empty nota to confirm.
+            log.warn("infosimples.fetch.no_items chave={}", abbrev(chave));
+            throw new ReceiptParseException("no-items-found");
+        }
 
         return ParsedReceipt.builder()
                 .chaveAcesso(chave)
@@ -322,7 +331,7 @@ public class InfosimplesService {
             }
             return ParsedReceiptItem.builder()
                     .lineNumber(lineNumber[0]++)
-                    .rawDescription(firstNonBlank(produto.nome(), produto.descricao()))
+                    .rawDescription(descriptionOrDefault(produto))
                     // Persist the barcode the merchant declared (packaged items carry it;
                     // loose produce/meat sold by weight report "SEM GTIN"). It drives the
                     // EAN-catalog category lookup + cross-receipt product dedup, so we keep
@@ -335,6 +344,12 @@ public class InfosimplesService {
                     .nfcePromoFlag(false)
                     .build();
         }).toList();
+    }
+
+    /** The description maps to a NOT NULL column — a product without one still has to be storable. */
+    private static String descriptionOrDefault(InfosimplesProduto produto) {
+        var description = firstNonBlank(produto.nome(), produto.descricao());
+        return description != null ? description.trim() : MISSING_DESCRIPTION;
     }
 
     private static String abbrev(String chave) {

@@ -455,6 +455,12 @@ public class SefazIngestionService {
             paidApiGuard.recordFailure(userId, PaidApiService.INFOSIMPLES, uf.name(), "infosimples", ex.getCode());
             throw ex;
         } catch (RuntimeException ex) {
+            if (isDeterministicInfosimplesAnswer(ex)) {
+                // The provider answered fine, the nota just carries no products — a per-nota
+                // verdict like "no data": ledgered (the call was billed), not a breaker failure.
+                paidApiGuard.recordDeterministicFailure(userId, PaidApiService.INFOSIMPLES, uf.name(), "infosimples", 200);
+                throw ex;
+            }
             // No provider code (I/O error, timeout) — record null.
             paidApiGuard.recordFailure(userId, PaidApiService.INFOSIMPLES, uf.name(), "infosimples", null);
             throw ex;
@@ -609,7 +615,13 @@ public class SefazIngestionService {
      * worth parking as PORTAL_PENDING and retrying — a not-found never changes.
      */
     private static boolean isPortalUnavailable(RuntimeException fallbackEx) {
-        return !(fallbackEx instanceof InfosimplesNoDataException);
+        return !isDeterministicInfosimplesAnswer(fallbackEx);
+    }
+
+    /** The provider answered and the answer is final for this nota: no data, or a nota without products. */
+    private static boolean isDeterministicInfosimplesAnswer(RuntimeException fallbackEx) {
+        return fallbackEx instanceof InfosimplesNoDataException
+                || (fallbackEx instanceof ReceiptParseException parseEx && parseEx.isNoItemsFound());
     }
 
     private static String describe(RuntimeException ex) {

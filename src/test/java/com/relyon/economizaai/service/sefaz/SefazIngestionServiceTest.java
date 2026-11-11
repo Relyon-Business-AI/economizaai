@@ -1261,6 +1261,22 @@ class SefazIngestionServiceTest {
     }
 
     @Test
+    void fetchViaInfosimplesFallback_zeroItems_isLedgeredAsDeterministicNotBreakerFailure() {
+        var infosimples = mock(InfosimplesService.class);
+        when(infosimples.fetchParsed(eq(CHAVE_SP), eq(UnidadeFederativa.SP)))
+                .thenThrow(new ReceiptParseException("no-items-found"));
+        var service = new SefazIngestionService(List.of(mockAdapterFor(UnidadeFederativa.SP)), Optional.of(infosimples),
+                paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+
+        var thrown = assertThrows(ReceiptParseException.class,
+                () -> service.fetchViaInfosimplesFallback(CHAVE_SP, UnidadeFederativa.SP, null));
+
+        assertTrue(thrown.isNoItemsFound());
+        verify(paidApiGuard).recordDeterministicFailure(null, PaidApiService.INFOSIMPLES, "SP", "infosimples", 200);
+        verify(paidApiGuard, never()).recordFailure(any(), any(), any(), any(), any());
+    }
+
+    @Test
     void fetchViaInfosimplesFallback_noProvider_throwsRescuable() {
         var service = new SefazIngestionService(List.of(mockAdapterFor(UnidadeFederativa.RS)), Optional.empty(),
                 paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
