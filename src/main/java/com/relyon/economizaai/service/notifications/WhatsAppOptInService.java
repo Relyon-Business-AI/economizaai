@@ -1,11 +1,15 @@
 package com.relyon.economizaai.service.notifications;
 
 import com.relyon.economizaai.dto.response.WhatsAppStatusResponse;
+import com.relyon.economizaai.exception.PaidApiBudgetExceededException;
+import com.relyon.economizaai.exception.PaidApiQuotaExceededException;
 import com.relyon.economizaai.exception.WhatsAppOptInRequiredException;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.PaidApiService;
 import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.notifications.twilio.TwilioMessageClient;
+import com.relyon.economizaai.service.paidapi.PaidApiGuardService;
 import com.relyon.economizaai.time.BrazilClock;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -41,6 +45,7 @@ public class WhatsAppOptInService {
     private final ReportChartTokenService chartTokenService;
     private final LocalizedMessageService messageService;
     private final TransactionTemplate transactionTemplate;
+    private final PaidApiGuardService paidApiGuardService;
     private final String fromWhatsAppDigits;
     private final String publicBaseUrl;
 
@@ -50,6 +55,7 @@ public class WhatsAppOptInService {
                                 ReportChartTokenService chartTokenService,
                                 LocalizedMessageService messageService,
                                 TransactionTemplate transactionTemplate,
+                                PaidApiGuardService paidApiGuardService,
                                 @Value("${economizaai.notifications.twilio.from-whatsapp:}") String fromWhatsApp,
                                 @Value("${economizaai.public-base-url:https://api.economizaai.app}") String publicBaseUrl) {
         this.userRepository = userRepository;
@@ -58,6 +64,7 @@ public class WhatsAppOptInService {
         this.chartTokenService = chartTokenService;
         this.messageService = messageService;
         this.transactionTemplate = transactionTemplate;
+        this.paidApiGuardService = paidApiGuardService;
         this.fromWhatsAppDigits = fromWhatsApp == null ? "" : fromWhatsApp.replaceAll("\\D", "");
         this.publicBaseUrl = publicBaseUrl == null ? "" : publicBaseUrl.replaceAll("/+$", "");
     }
@@ -97,7 +104,9 @@ public class WhatsAppOptInService {
 
     /** Twilio inbound webhook entry: parse "CONFIRMAR|RELATORIO-<token>", link + reply (never throws).
      *  The DB work (resolve + opt-in + build report text) runs in a short tx; the Twilio reply (HTTP)
-     *  happens OUTSIDE it — we never hold a connection across the outbound call (CLAUDE.md). */
+     *  happens OUTSIDE it — we never hold a connection across the outbound call (CLAUDE.md).
+     *  The reply is a Twilio send like any other: it respects the user's daily Twilio cap and the
+     *  Twilio daily budget (a blocked reply is skipped; the opt-in itself is already saved). */
     public void handleInbound(String fromE164, String body) {
         if (body == null) return;
         var matcher = INBOUND.matcher(body.trim());
@@ -108,13 +117,25 @@ public class WhatsAppOptInService {
         var action = matcher.group(1).toUpperCase();
         var token = matcher.group(2);
         var reply = transactionTemplate.execute(txStatus -> prepareReply(action, token, fromE164));
-        if (reply != null) {
+        if (reply != null && isReplyWithinTwilioLimits(reply.userId(), fromE164)) {
             reply(fromE164, reply);
         }
     }
 
-    /** The reply body plus the user whose chart to attach (null = no chart, text-only). */
-    private record PreparedReply(String body, UUID chartUserId) {}
+    private boolean isReplyWithinTwilioLimits(UUID userId, String fromE164) {
+        try {
+            paidApiGuardService.assertWithinDailyCap(userId, PaidApiService.TWILIO_MESSAGE);
+            paidApiGuardService.assertUnderDailyBudget(PaidApiService.TWILIO_MESSAGE);
+            return true;
+        } catch (PaidApiQuotaExceededException | PaidApiBudgetExceededException guardEx) {
+            log.info("whatsapp.inbound.reply_skipped from={} reason={}",
+                    maskNumber(fromE164), guardEx.getClass().getSimpleName());
+            return false;
+        }
+    }
+
+    /** The reply body, the user it is billed to, and whether to attach that user's chart. */
+    private record PreparedReply(String body, UUID userId, boolean withChart) {}
 
     /** Runs inside the tx: resolves the user by token, applies opt-in state, and builds the reply
      *  (DB reads). Returns the prepared reply, or null when no user matches the token. */
@@ -133,7 +154,7 @@ public class WhatsAppOptInService {
             log.info("whatsapp.optin.confirmed user={} from={}", abbrev(user), maskNumber(fromE164));
             var report = reportService.buildWeeklyReport(user);
             var body = messageService.translate("whatsapp.optin.confirmed", localeOf(user)) + "\n\n" + report.text();
-            return new PreparedReply(body, report.hasCategoryData() ? user.getId() : null);
+            return new PreparedReply(body, user.getId(), report.hasCategoryData());
         }
         if (user.getWhatsAppNumber() == null) {
             user.setWhatsAppNumber(fromE164);
@@ -141,7 +162,7 @@ public class WhatsAppOptInService {
         }
         log.info("whatsapp.report.pull user={} from={}", abbrev(user), maskNumber(fromE164));
         var report = reportService.buildWeeklyReport(user);
-        return new PreparedReply(report.text(), report.hasCategoryData() ? user.getId() : null);
+        return new PreparedReply(report.text(), user.getId(), report.hasCategoryData());
     }
 
     private Locale localeOf(User user) {
@@ -159,23 +180,27 @@ public class WhatsAppOptInService {
      *  If the media send fails (e.g. Twilio can't fetch the image), falls back to text-only so a
      *  chart hiccup never costs the user their report. */
     private void reply(String toE164, PreparedReply prepared) {
-        var mediaUrl = prepared.chartUserId() == null ? null : chartUrl(prepared.chartUserId());
+        var mediaUrl = prepared.withChart() ? chartUrl(prepared.userId()) : null;
         try {
             twilioClient.sendWhatsApp(toE164, prepared.body(), mediaUrl);
+            paidApiGuardService.recordSuccess(prepared.userId(), PaidApiService.TWILIO_MESSAGE, null, "twilio");
         } catch (RuntimeException sendFailure) {
+            paidApiGuardService.recordFailure(prepared.userId(), PaidApiService.TWILIO_MESSAGE, null, "twilio");
             log.warn("whatsapp.inbound.reply_failed to={} withMedia={} reason={}",
                     maskNumber(toE164), mediaUrl != null, sendFailure.getClass().getSimpleName());
             if (mediaUrl != null) {
-                sendTextFallback(toE164, prepared.body());
+                sendTextFallback(toE164, prepared);
             }
         }
     }
 
-    private void sendTextFallback(String toE164, String body) {
+    private void sendTextFallback(String toE164, PreparedReply prepared) {
         try {
-            twilioClient.sendWhatsApp(toE164, body);
+            twilioClient.sendWhatsApp(toE164, prepared.body());
+            paidApiGuardService.recordSuccess(prepared.userId(), PaidApiService.TWILIO_MESSAGE, null, "twilio");
             log.info("whatsapp.inbound.reply_textfallback to={}", maskNumber(toE164));
         } catch (RuntimeException textFailure) {
+            paidApiGuardService.recordFailure(prepared.userId(), PaidApiService.TWILIO_MESSAGE, null, "twilio");
             log.warn("whatsapp.inbound.reply_textfallback_failed to={} reason={}",
                     maskNumber(toE164), textFailure.getClass().getSimpleName());
         }
