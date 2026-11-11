@@ -18,6 +18,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -105,6 +106,10 @@ public class MgNfcePortalAdapter implements SefazAdapter {
         for (var attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
                 return fetchOnce(url, attempt);
+            } catch (HttpClientErrorException ex) {
+                // 4xx — re-solving won't change the answer; 403/429 stay rescuable, the rest is deterministic.
+                log.warn("mg.fetch.client_error status={} attempt={}/{}", ex.getStatusCode(), attempt, maxAttempts);
+                throw PortalClientErrorClassifier.classify(ex, UnidadeFederativa.MG.name());
             } catch (CaptchaSolveFailedException | RestClientException ex) {
                 // Turnstile token rejected or transient network/5xx — re-solve and retry.
                 if (attempt >= maxAttempts || System.nanoTime() >= deadlineNanos) break;

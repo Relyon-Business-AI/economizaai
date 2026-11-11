@@ -91,9 +91,9 @@ public class GoiasNfcePortalAdapter implements SefazAdapter {
             try {
                 return fetchOnce(shellUrl, chave);
             } catch (HttpClientErrorException ex) {
-                // 4xx — deterministic (bad/unknown chave): retrying won't help.
+                // 4xx — retrying won't help; 403/429 stay rescuable, the rest is deterministic.
                 log.warn("go.fetch.client_error status={} chave={}", ex.getStatusCode(), LogMasker.chave(chave));
-                throw new SefazFetchException(UnidadeFederativa.GO.name());
+                throw PortalClientErrorClassifier.classify(ex, UnidadeFederativa.GO.name());
             } catch (SefazFetchException | RestClientException ex) {
                 lastTransient = ex;
                 log.warn("go.fetch transient attempt={}/{} chave={} reason={}: {}",
