@@ -99,14 +99,26 @@ public class PaidApiGuardService {
     }
 
     public void assertUnderGlobalBudget() {
-        if (!properties.isEnabled()) return;
+        if (isGlobalBudgetExhausted()) {
+            throw new PaidApiBudgetExceededException();
+        }
+    }
+
+    /**
+     * Whether today's estimated spend already reached the global ceiling. For callers that
+     * must keep their FREE path working when the budget is gone (a captcha-free scrape costs
+     * nothing) and only refuse the paid step.
+     */
+    public boolean isGlobalBudgetExhausted() {
+        if (!properties.isEnabled()) return false;
         var budget = properties.getDailyGlobalBudgetCents();
-        if (budget <= 0) return;
+        if (budget <= 0) return false;
         var spent = repository.sumCostCentsSince(startOfTodayUtc());
         if (spent >= budget) {
             log.warn("paid_api.budget_exhausted spentCents={} budgetCents={}", spent, budget);
-            throw new PaidApiBudgetExceededException();
+            return true;
         }
+        return false;
     }
 
     /**

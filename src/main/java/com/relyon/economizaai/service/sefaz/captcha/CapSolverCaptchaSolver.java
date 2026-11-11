@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -34,6 +35,8 @@ public class CapSolverCaptchaSolver implements CaptchaSolver {
     private static final int POLL_INTERVAL_MS = 3_000;
     private static final int MAX_POLL_ATTEMPTS = 40; // 40 × 3 s = 2 min max per attempt
     private static final int MAX_RETRIES = 3;
+    private static final int CONNECT_TIMEOUT_MS = 10_000;
+    private static final int READ_TIMEOUT_MS = 30_000;
 
     private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE =
             new ParameterizedTypeReference<>() {};
@@ -45,7 +48,11 @@ public class CapSolverCaptchaSolver implements CaptchaSolver {
             RestClient.Builder builder,
             @Value("${economizaai.captcha.api-key}") String apiKey) {
         this.apiKey = apiKey;
-        this.restClient = builder.baseUrl(API_BASE).build();
+        // Without explicit timeouts a CapSolver brownout hangs the ingest thread forever.
+        var requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(CONNECT_TIMEOUT_MS);
+        requestFactory.setReadTimeout(READ_TIMEOUT_MS);
+        this.restClient = builder.baseUrl(API_BASE).requestFactory(requestFactory).build();
         log.info("captcha.solver provider=capsolver configured=true");
     }
 
@@ -66,6 +73,7 @@ public class CapSolverCaptchaSolver implements CaptchaSolver {
 
     @Override
     public String solveImageToText(byte[] imageBytes) {
+        CaptchaSolveTracker.assertSpendAllowed();
         var encoded = Base64.getEncoder().encodeToString(imageBytes);
         for (var attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
@@ -92,6 +100,7 @@ public class CapSolverCaptchaSolver implements CaptchaSolver {
     }
 
     private String solve(String taskType, String solutionField, String siteKey, String pageUrl) {
+        CaptchaSolveTracker.assertSpendAllowed();
         for (var attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
                 var taskId = createTask(taskType, siteKey, pageUrl);
@@ -155,8 +164,10 @@ public class CapSolverCaptchaSolver implements CaptchaSolver {
     }
 
     private void assertNoError(Map<String, Object> response, String context) {
-        var errorId = ((Number) response.get("errorId")).intValue();
-        if (errorId != 0) {
+        if (response == null || !(response.get("errorId") instanceof Number errorId)) {
+            throw new CaptchaSolveFailedException(context + ":malformed-response");
+        }
+        if (errorId.intValue() != 0) {
             var errorCode = response.getOrDefault("errorCode", "unknown").toString();
             throw new CaptchaSolveFailedException(context + ":" + errorCode);
         }
