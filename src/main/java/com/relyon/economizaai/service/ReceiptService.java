@@ -136,6 +136,7 @@ public class ReceiptService {
     private final ReferralService referralService;
     private final SavingsAttributionService savingsAttributionService;
     private final ReceiptIngestionService receiptIngestionService;
+    private final ReceiptRawHtmlService receiptRawHtmlService;
     private final TransactionTemplate transactionTemplate;
 
     /**
@@ -374,7 +375,7 @@ public class ReceiptService {
         if (receipt.getStatus() != ReceiptStatus.FAILED_PARSE) {
             return false;
         }
-        var storedXml = receipt.getRawHtml();
+        var storedXml = receiptRawHtmlService.find(receiptId).orElse(null);
         if (storedXml == null || !NfceXmlParser.looksLikeNfeXml(storedXml)) {
             return false;
         }
@@ -1255,14 +1256,14 @@ public class ReceiptService {
         // must never be held across an outbound call. Plain read → untransacted
         // parse → short TransactionTemplate persist, same as ReceiptIngestionService.
         var receipt = receiptRepository.findById(receiptId).orElseThrow(ReceiptNotFoundException::new);
-        if (receipt.getRawHtml() == null || receipt.getRawHtml().isBlank()) {
-            throw new ReceiptNotEditableException("RAW_HTML_MISSING");
-        }
+        var storedHtml = receiptRawHtmlService.find(receiptId)
+                .filter(html -> !html.isBlank())
+                .orElseThrow(() -> new ReceiptNotEditableException("RAW_HTML_MISSING"));
         log.info("reparse start status_was={} chave={}",
                 receipt.getStatus(), LogMasker.chave(receipt.getChaveAcesso()));
 
         var parsed = sefazIngestionService.reparseStored(
-                receipt.getUf(), receipt.getRawHtml(), receipt.getChaveAcesso(), receipt.getSourceUrl());
+                receipt.getUf(), storedHtml, receipt.getChaveAcesso(), receipt.getSourceUrl());
 
         return transactionTemplate.execute(txStatus -> {
             var managed = receiptRepository.findById(receiptId).orElseThrow(ReceiptNotFoundException::new);
@@ -1280,7 +1281,7 @@ public class ReceiptService {
             // DANFE, not the stored rejection page — persist the HTML that
             // actually produced them so a future reparse is deterministic.
             if (parsed.rawHtml() != null && !parsed.rawHtml().isBlank()) {
-                managed.setRawHtml(parsed.rawHtml());
+                receiptRawHtmlService.replace(managed, parsed.rawHtml());
             }
             if (parsed.sourceUrl() != null) {
                 managed.setSourceUrl(parsed.sourceUrl());

@@ -99,6 +99,7 @@ class ReceiptServiceCoverageTest {
     @Mock private ReceiptItemRepository receiptItemRepository;
     @Mock private SefazIngestionService sefazIngestionService;
     @Mock private ReceiptIngestionService receiptIngestionService;
+    @Mock private ReceiptRawHtmlService receiptRawHtmlService;
     @Mock private CanonicalizationService canonicalizationService;
     @Mock private PriceIndexService priceIndexService;
     @Mock private PromoDetector promoDetector;

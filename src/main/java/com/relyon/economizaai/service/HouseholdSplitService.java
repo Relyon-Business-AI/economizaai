@@ -36,6 +36,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -83,6 +84,7 @@ public class HouseholdSplitService {
     private final ManualBrandPreferenceRepository brandPreferenceRepository;
     private final PriceObservationAuditRepository priceObservationAuditRepository;
     private final ProductScanRepository productScanRepository;
+    private final ReceiptRawHtmlService receiptRawHtmlService;
 
     /** Rows copied, for logging. */
     public record CopyResult(int receipts, int shoppingLists, int otherRows) {
@@ -160,14 +162,16 @@ public class HouseholdSplitService {
 
     private int copyReceipts(Household source, Household destination, LocalDateTime since) {
         var destinationKeys = keysOf(receiptRepository.findAllByHouseholdId(destination.getId()));
-        var copies = receiptRepository.findAllByHouseholdId(source.getId()).stream()
+        var copyByOriginalId = new LinkedHashMap<UUID, Receipt>();
+        receiptRepository.findAllByHouseholdId(source.getId()).stream()
                 .filter(receipt -> COPYABLE_RECEIPT_STATUSES.contains(receipt.getStatus()))
                 .filter(receipt -> createdSince(receipt, since))
                 .filter(receipt -> destinationKeys.add(receipt.collisionKey()))
-                .map(receipt -> copyReceipt(receipt, destination))
-                .toList();
-        receiptRepository.saveAll(copies);
-        return copies.size();
+                .forEach(receipt -> copyByOriginalId.put(receipt.getId(), copyReceipt(receipt, destination)));
+        receiptRepository.saveAll(copyByOriginalId.values());
+        // The stored portal document goes along with each copy (its own table, keyed by receipt).
+        copyByOriginalId.forEach(receiptRawHtmlService::copy);
+        return copyByOriginalId.size();
     }
 
     private Receipt copyReceipt(Receipt original, Household destination) {
@@ -190,7 +194,6 @@ public class HouseholdSplitService {
                 .approxTaxEstadual(original.getApproxTaxEstadual())
                 .qrPayload(original.getQrPayload())
                 .sourceUrl(original.getSourceUrl())
-                .rawHtml(original.getRawHtml())
                 .status(original.getStatus())
                 .confirmedAt(original.getConfirmedAt())
                 .indexEligible(false)

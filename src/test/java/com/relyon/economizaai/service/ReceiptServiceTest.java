@@ -115,6 +115,7 @@ class ReceiptServiceTest {
     @Mock private SefazIngestionService sefazIngestionService;
     @Mock private StateCoverageService stateCoverageService;
     @Mock private ReceiptIngestionService receiptIngestionService;
+    @Mock private ReceiptRawHtmlService receiptRawHtmlService;
     @Mock private CanonicalizationService canonicalizationService;
     @Mock private PriceIndexService priceIndexService;
     @Mock private PromoDetector promoDetector;
@@ -438,7 +439,7 @@ class ReceiptServiceTest {
         receipt.setOrigin(ReceiptOrigin.IMPORT);
         receipt.setParseErrorReason("no-items-found:");
         var storedXml = "<?xml version=\"1.0\"?><nfeProc><NFe><infNFe Id=\"NFe" + CHAVE_RS + "\"/></NFe></nfeProc>";
-        receipt.setRawHtml(storedXml);
+        when(receiptRawHtmlService.find(receipt.getId())).thenReturn(Optional.of(storedXml));
         when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
 
         var retried = receiptService.retryFromStoredXml(user, receipt.getId());
@@ -455,7 +456,8 @@ class ReceiptServiceTest {
         var user = buildUser();
         var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
         receipt.setOrigin(ReceiptOrigin.IMPORT);
-        receipt.setRawHtml("<html>a portal error page, not a nota</html>");
+        when(receiptRawHtmlService.find(receipt.getId()))
+                .thenReturn(Optional.of("<html>a portal error page, not a nota</html>"));
         when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
 
         assertFalse(receiptService.retryFromStoredXml(user, receipt.getId()));
@@ -468,7 +470,7 @@ class ReceiptServiceTest {
     void reparse_appliesParsedDataAndSwapsEvidenceWhenRescued() {
         var user = buildUser();
         var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
-        receipt.setRawHtml("<html>rejection page</html>");
+        when(receiptRawHtmlService.find(receipt.getId())).thenReturn(Optional.of("<html>rejection page</html>"));
         receipt.setParseErrorReason("receipt.contingency.pending:227");
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         // The rescue produced items from the reconsulted SAT-WEB DANFE, not the stored page.
@@ -492,11 +494,23 @@ class ReceiptServiceTest {
 
         assertEquals(ReceiptStatus.PENDING_CONFIRMATION, receipt.getStatus());
         assertNull(receipt.getParseErrorReason());
-        assertEquals("<html>satweb danfe</html>", receipt.getRawHtml(),
-                "stored evidence must be the HTML that produced the items");
+        // stored evidence must be the HTML that produced the items
+        verify(receiptRawHtmlService).replace(receipt, "<html>satweb danfe</html>");
         assertEquals("https://www.sefaz.rs.gov.br/NFCE (reconsulta chave 65)", receipt.getSourceUrl());
         assertEquals(1, response.items().size());
         verify(transactionTemplate).execute(any());
+    }
+
+    @Test
+    void reparse_withoutStoredHtml_isRefused() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receiptRawHtmlService.find(receipt.getId())).thenReturn(Optional.empty());
+
+        assertThrows(ReceiptNotEditableException.class, () -> receiptService.reparse(receipt.getId()));
+
+        verify(sefazIngestionService, never()).reparseStored(any(), any(), any(), any());
     }
 
     private User buildUser() {
