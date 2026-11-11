@@ -1299,6 +1299,7 @@ public class ReceiptService {
                 .unit(request.unit())
                 .unitPrice(request.unitPrice())
                 .totalPrice(request.totalPrice())
+                .userModified(true)
                 .build();
         receipt.addItem(item);
         receiptItemRepository.save(item);
@@ -1412,6 +1413,7 @@ public class ReceiptService {
     private void applyUpdate(ReceiptItem item, UpdateReceiptItemRequest request) {
         // rawDescription stays immutable — it's the SEFAZ-issued audit text.
         // Display overrides go on friendlyDescription.
+        if (changesPriceData(item, request)) item.setUserModified(true);
         item.setEan(request.ean());
         item.setQuantity(request.quantity());
         item.setUnit(request.unit());
@@ -1423,6 +1425,33 @@ public class ReceiptService {
                     ? null : request.friendlyDescription());
         }
         applyPaidPrice(item, request.paidTotalPrice(), request.paidUnitPrice());
+    }
+
+    /**
+     * Whether the edit touches what the price index would publish (EAN, quantity, unit, prices).
+     * Renames, exclusions and the manual paid price are personal-layer edits and don't count.
+     * Unit price is compared at cent precision: clients round the stored 4-decimal value when
+     * they echo it back, and that echo must not be mistaken for an edit.
+     */
+    private static boolean changesPriceData(ReceiptItem item, UpdateReceiptItemRequest request) {
+        return !sameText(item.getEan(), request.ean())
+                || !sameText(item.getUnit(), request.unit())
+                || !sameAmount(item.getQuantity(), request.quantity(), BigDecimal.ZERO)
+                || !sameAmount(item.getTotalPrice(), request.totalPrice(), BigDecimal.ZERO)
+                || !sameAmount(item.getUnitPrice(), request.unitPrice(), UNIT_PRICE_ECHO_TOLERANCE);
+    }
+
+    private static final BigDecimal UNIT_PRICE_ECHO_TOLERANCE = new BigDecimal("0.005");
+
+    private static boolean sameText(String stored, String requested) {
+        var storedText = stored == null ? "" : stored.trim();
+        var requestedText = requested == null ? "" : requested.trim();
+        return storedText.equalsIgnoreCase(requestedText);
+    }
+
+    private static boolean sameAmount(BigDecimal stored, BigDecimal requested, BigDecimal tolerance) {
+        if (stored == null || requested == null) return stored == requested;
+        return stored.subtract(requested).abs().compareTo(tolerance) <= 0;
     }
 
     /**

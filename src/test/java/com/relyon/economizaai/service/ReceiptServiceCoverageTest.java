@@ -384,6 +384,7 @@ class ReceiptServiceCoverageTest {
         assertEquals(2, added.getLineNumber(), "line number appended after existing max");
         assertEquals("FEIJAO PRETO 1KG", added.getRawDescription());
         assertEquals("Feijão Preto 1kg", added.getFriendlyDescription());
+        assertTrue(added.isUserModified(), "a line the user typed never feeds the price index");
         verify(householdCacheGen).bump(receipt.getHousehold().getId());
     }
 
@@ -452,6 +453,56 @@ class ReceiptServiceCoverageTest {
         verify(receiptItemRepository).save(item);
         verify(householdProductAliasService).rememberFromItem(receipt.getHousehold(), item);
         verify(householdCacheGen).bump(receipt.getHousehold().getId());
+    }
+
+    @Test
+    void updateItem_changedPriceFlagsLineAsUserModified() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        var item = receipt.getItems().get(0);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId()))
+                .thenReturn(Optional.of(receipt));
+        var cheaperPrice = new UpdateReceiptItemRequest(
+                "ignored", null, new BigDecimal("2"), "UN",
+                new BigDecimal("1.00"), new BigDecimal("2.00"), null, null, null, null);
+
+        receiptService.updateItem(user, receipt.getId(), item.getId(), cheaperPrice);
+
+        assertTrue(item.isUserModified());
+    }
+
+    @Test
+    void updateItem_changedQuantityOrEanFlagsLineAsUserModified() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        var item = receipt.getItems().get(0);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId()))
+                .thenReturn(Optional.of(receipt));
+        var newEan = new UpdateReceiptItemRequest(
+                "ignored", "7890000000001", new BigDecimal("2"), "UN",
+                new BigDecimal("28.90"), new BigDecimal("57.80"), null, null, null, null);
+
+        receiptService.updateItem(user, receipt.getId(), item.getId(), newEan);
+
+        assertTrue(item.isUserModified());
+    }
+
+    @Test
+    void updateItem_renameOrExclusionKeepsLineUntouchedForTheIndex() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        var item = receipt.getItems().get(0);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId()))
+                .thenReturn(Optional.of(receipt));
+        // Same numbers echoed back with client formatting (scale, case, 2-decimal unit price).
+        var renameOnly = new UpdateReceiptItemRequest(
+                "ignored", "", new BigDecimal("2.000"), "un",
+                new BigDecimal("28.9"), new BigDecimal("57.8"), Boolean.TRUE, "Arroz da casa", null, null);
+
+        receiptService.updateItem(user, receipt.getId(), item.getId(), renameOnly);
+
+        assertFalse(item.isUserModified());
+        assertEquals("Arroz da casa", item.getFriendlyDescription());
     }
 
     @Test

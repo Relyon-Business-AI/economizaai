@@ -92,8 +92,9 @@ public class PriceIndexService {
             if (!isContributable(item, channel)) continue;
             contributed.add(recordItemObservation(receipt, item, location));
         }
-        log.info("price_index.write.done receipt={} channel={} contributed={} marketCnpj={}",
-                receipt.getId(), channel, contributed.size(), receipt.getCnpjEmitente());
+        var userModifiedSkipped = receipt.getItems().stream().filter(ReceiptItem::isUserModified).count();
+        log.info("price_index.write.done receipt={} channel={} contributed={} userModifiedSkipped={} marketCnpj={}",
+                receipt.getId(), channel, contributed.size(), userModifiedSkipped, receipt.getCnpjEmitente());
 
         // Community retention loop: this household's prices may satisfy other households'
         // "avise-me quando" rules. Those rules are location-based (physical), so only feed
@@ -165,9 +166,15 @@ public class PriceIndexService {
      * Physical: any linked, non-excluded, priced item contributes (the merchant gate already
      * vouched for the store). Online: additionally require a real EAN — the item's identity
      * comes from its GTIN (matched to a canonical product), not from the seller's segment.
+     * A line the user edited or added ({@link ReceiptItem#isUserModified()}) never contributes:
+     * its numbers are the user's, not the issued document's. Untouched lines of the same
+     * receipt still do.
      */
     private boolean isContributable(ReceiptItem item, ReceiptChannel channel) {
         if (item.isExcluded() || item.getProduct() == null || item.getUnitPrice() == null) {
+            return false;
+        }
+        if (item.isUserModified()) {
             return false;
         }
         if (channel == ReceiptChannel.ONLINE) {

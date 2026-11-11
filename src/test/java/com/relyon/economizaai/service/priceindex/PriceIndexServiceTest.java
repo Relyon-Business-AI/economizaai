@@ -390,6 +390,33 @@ class PriceIndexServiceTest {
     }
 
     @Test
+    void recordContributions_skipsUserModifiedLinesButKeepsUntouchedOnes() {
+        var untouched = itemWithProduct(product(), new BigDecimal("10"));
+        var edited = itemWithProduct(product(), new BigDecimal("0.01"));
+        edited.setUserModified(true);
+        var receipt = buildConfirmedReceipt(true, untouched, edited);
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
+        stubObservationSaveEchoing();
+
+        var written = service.recordContributions(receipt);
+
+        assertEquals(1, written, "only the line still matching the issued document contributes");
+        verify(observationRepository, times(1)).save(argThat(
+                observation -> new BigDecimal("10").compareTo(observation.getUnitPrice()) == 0));
+    }
+
+    @Test
+    void recordContributions_receiptWithOnlyUserModifiedLinesWritesNothing() {
+        var added = itemWithProduct(product(), new BigDecimal("3"));
+        added.setUserModified(true);
+        var receipt = buildConfirmedReceipt(true, added);
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
+
+        assertEquals(0, service.recordContributions(receipt));
+        verify(observationRepository, never()).save(any(PriceObservation.class));
+    }
+
+    @Test
     void recordContributions_onlineReceiptContributesEanItemsIgnoringMerchantSupport() {
         // Amazon (marketplace, segment OTHER) selling a real grocery EAN → still contributes.
         // The online path never consults merchantSupportGate (the lenient default stub is unused).
