@@ -240,6 +240,21 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
     List<ReceiptItem> findHouseholdHistoryForProduct(@Param("productId") UUID productId,
                                                      @Param("householdId") UUID householdId);
 
+    /** {@link #findHouseholdHistoryForProduct} for several products in ONE query (confirm-time promo check). */
+    @Query("""
+        SELECT ri FROM ReceiptItem ri
+        JOIN FETCH ri.receipt r
+        JOIN FETCH r.household
+        WHERE ri.product.id IN :productIds
+          AND r.household.id = :householdId
+          AND r.status = 'CONFIRMED'
+          AND ri.excluded = false
+          AND r.origin <> 'PHOTO'
+        ORDER BY r.issuedAt ASC NULLS FIRST
+    """)
+    List<ReceiptItem> findHouseholdHistoryForProducts(@Param("productIds") Collection<UUID> productIds,
+                                                      @Param("householdId") UUID householdId);
+
     /** Which of the given product IDs have at least one confirmed, non-excluded purchase
      *  by the specified household — used to compute hasPriceHistory in batch. */
     @Query("""
