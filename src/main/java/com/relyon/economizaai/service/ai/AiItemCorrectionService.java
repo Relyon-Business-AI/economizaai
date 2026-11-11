@@ -2,6 +2,8 @@ package com.relyon.economizaai.service.ai;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.relyon.economizaai.exception.PaidApiBudgetExceededException;
+import com.relyon.economizaai.exception.PaidApiQuotaExceededException;
 import com.relyon.economizaai.model.AiFinding;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.ReceiptItem;
@@ -9,12 +11,14 @@ import com.relyon.economizaai.model.enums.AiActivity;
 import com.relyon.economizaai.model.enums.AiFindingStatus;
 import com.relyon.economizaai.model.enums.AiFindingType;
 import com.relyon.economizaai.model.enums.CategorizationSource;
+import com.relyon.economizaai.model.enums.PaidApiService;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.AiFindingRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
+import com.relyon.economizaai.service.paidapi.PaidApiGuardService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -52,6 +56,7 @@ public class AiItemCorrectionService {
     private final ReceiptItemRepository receiptItemRepository;
     private final AiFindingRepository findingRepository;
     private final TransactionTemplate transactionTemplate;
+    private final PaidApiGuardService paidApiGuard;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -60,10 +65,13 @@ public class AiItemCorrectionService {
      * Validates that the item belongs to the given receipt and that the receipt belongs to
      * the given household before touching anything.
      *
-     * @throws IllegalStateException    when the AI layer is disabled
-     * @throws IllegalArgumentException when the item/receipt ownership check fails
+     * The AI call counts against {@code userId}'s daily cap and the categorization budget.
+     *
+     * @throws IllegalStateException         when the AI layer is disabled
+     * @throws IllegalArgumentException      when the item/receipt ownership check fails
+     * @throws PaidApiQuotaExceededException when today's AI-correction limit is reached (429)
      */
-    public void correct(UUID receiptId, UUID itemId, UUID householdId, String hint) {
+    public void correct(UUID receiptId, UUID itemId, UUID householdId, UUID userId, String hint) {
         if (!aiGateway.isEnabled()) {
             throw new IllegalStateException("IA não disponível no momento");
         }
@@ -78,13 +86,15 @@ public class AiItemCorrectionService {
             throw new IllegalArgumentException("Item não encontrado na nota");
         }
         var rawDescription = item.getRawDescription();
+        assertCorrectionSpendAllowed(userId);
 
         log.info("ai.item_correction.start rcpt={} item={}", abbrev(receiptId), abbrev(itemId));
 
         // AI call — untransacted, must not hold a DB connection.
         var userMessage = "Item na nota: \"" + rawDescription + "\"\nDica do usuário: \"" + hint + "\"";
         var raw = aiGateway.complete(AiActivity.ITEM_CORRECTION, aiGateway.extractorModel(),
-                SYSTEM_PROMPT, userMessage, 200);
+                SYSTEM_PROMPT, userMessage, 200, userId);
+        paidApiGuard.recordSuccess(userId, PaidApiService.LLM_ENRICH, null, "ai");
 
         JsonNode result;
         try {
@@ -154,6 +164,17 @@ public class AiItemCorrectionService {
                     resolvedCategoryFinal, resolvedConfidence);
             return null;
         });
+    }
+
+    /** Synchronous endpoint: a spent budget / per-user cap becomes a localized 429, before any spend. */
+    private void assertCorrectionSpendAllowed(UUID userId) {
+        try {
+            paidApiGuard.assertUnderDailyBudget(PaidApiService.LLM_ENRICH);
+            paidApiGuard.assertWithinDailyCap(userId, PaidApiService.LLM_ENRICH);
+        } catch (PaidApiBudgetExceededException | PaidApiQuotaExceededException guardEx) {
+            log.info("ai.item_correction.blocked reason={}", guardEx.getClass().getSimpleName());
+            throw new PaidApiQuotaExceededException("ai.correction.limit_reached", PaidApiService.LLM_ENRICH.name());
+        }
     }
 
     private void createOrUpdateFinding(String description, String userHint, String genericName,

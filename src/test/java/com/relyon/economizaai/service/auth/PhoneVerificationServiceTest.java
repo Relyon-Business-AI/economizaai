@@ -2,6 +2,7 @@ package com.relyon.economizaai.service.auth;
 
 import com.relyon.economizaai.exception.InvalidPhoneNumberException;
 import com.relyon.economizaai.exception.InvalidPhoneVerificationException;
+import com.relyon.economizaai.exception.PaidApiBudgetExceededException;
 import com.relyon.economizaai.exception.PaidApiQuotaExceededException;
 import com.relyon.economizaai.model.PhoneVerificationToken;
 import com.relyon.economizaai.model.User;
@@ -106,6 +107,20 @@ class PhoneVerificationServiceTest {
         assertEquals("phone.otp.quota_exceeded", thrown.getMessageKey());
         verify(userRepository, never()).save(any());
         verify(tokenRepository, never()).save(any());
+        verify(twilioMessageClient, never()).sendSms(anyString(), anyString());
+    }
+
+    @Test
+    void setPhone_twilioDailyBudgetSpent_rejectsWithTheSameLocalizedSmsLimitMessage() {
+        var user = user();
+        when(twilioMessageClient.isConfigured(false)).thenReturn(true);
+        doThrow(new PaidApiBudgetExceededException())
+                .when(paidApiGuardService).assertUnderDailyBudget(PaidApiService.TWILIO_MESSAGE);
+
+        var thrown = assertThrows(PaidApiQuotaExceededException.class,
+                () -> service.setPhoneAndSendOtp(user, "+5551999999999"));
+
+        assertEquals("phone.otp.quota_exceeded", thrown.getMessageKey());
         verify(twilioMessageClient, never()).sendSms(anyString(), anyString());
     }
 

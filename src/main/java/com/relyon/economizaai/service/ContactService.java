@@ -79,13 +79,23 @@ public class ContactService {
         deliver("[Economiza AI admin] " + subject, body, from, recipient);
     }
 
-    private void deliver(String subject, String body, String replyTo, String recipient) {
+    /**
+     * Same admin alert as {@link #notifyAdmin}, but tells the caller whether the SMTP
+     * server ACCEPTED the message — for alerts that must be retried until delivered.
+     * False when SMTP/recipient is not configured or the send failed. Never throws.
+     */
+    public boolean notifyAdminConfirmed(String subject, String body) {
+        return deliver("[Economiza AI admin] " + subject, body, from, recipient);
+    }
+
+    /** @return true only when the mail server accepted the message. */
+    private boolean deliver(String subject, String body, String replyTo, String recipient) {
         if (!smtpConfigured || recipient == null || recipient.isBlank()) {
             // No SMTP or no recipient configured — log the whole message so support
             // can still recover it from the logs (dev, or a misconfigured prod).
             log.warn("[DEV-MODE] contact message NOT emailed (smtp={}, recipient set={}). from={} subject='{}'\n{}",
                     smtpConfigured, recipient != null && !recipient.isBlank(), LogMasker.email(replyTo), subject, body);
-            return;
+            return false;
         }
         try {
             var sender = mailSender.get();
@@ -98,11 +108,13 @@ public class ContactService {
             helper.setText(body, false);
             sender.send(message);
             log.info("contact.sent from={} recipient={}", LogMasker.email(replyTo), LogMasker.email(recipient));
+            return true;
         } catch (Exception ex) {
             // Don't fail the request over an SMTP hiccup — log the full message so
             // it's recoverable, and let the user see a success.
             log.error("contact.failed from={} {}: {} — message was:\n{}",
                     LogMasker.email(replyTo), ex.getClass().getSimpleName(), ex.getMessage(), body);
+            return false;
         }
     }
 

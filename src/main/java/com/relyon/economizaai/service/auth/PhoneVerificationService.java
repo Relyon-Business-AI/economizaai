@@ -2,6 +2,7 @@ package com.relyon.economizaai.service.auth;
 
 import com.relyon.economizaai.exception.InvalidPhoneNumberException;
 import com.relyon.economizaai.exception.InvalidPhoneVerificationException;
+import com.relyon.economizaai.exception.PaidApiBudgetExceededException;
 import com.relyon.economizaai.exception.PaidApiQuotaExceededException;
 import com.relyon.economizaai.exception.PhoneVerificationUnavailableException;
 import com.relyon.economizaai.model.PhoneVerificationToken;
@@ -143,8 +144,8 @@ public class PhoneVerificationService {
         if (!twilioMessageClient.isConfigured(false)) return;
         try {
             paidApiGuardService.assertWithinDailyCap(user.getId(), PaidApiService.TWILIO_MESSAGE);
-            paidApiGuardService.assertUnderGlobalBudget();
-        } catch (PaidApiQuotaExceededException ex) {
+            paidApiGuardService.assertUnderDailyBudget(PaidApiService.TWILIO_MESSAGE);
+        } catch (PaidApiQuotaExceededException | PaidApiBudgetExceededException ex) {
             throw new PaidApiQuotaExceededException("phone.otp.quota_exceeded", PaidApiService.TWILIO_MESSAGE.name());
         }
     }

@@ -52,7 +52,7 @@ class PaidApiGuardServiceTest {
         properties.setInfosimplesFailureThreshold(3);
         properties.setBreakerWindowSeconds(600);
         properties.setBreakerCooldownSeconds(300);
-        properties.setDailyGlobalBudgetCents(1000);
+        properties.setInfosimplesDailyBudgetCents(500);
         service = new PaidApiGuardService(properties, repository);
         service.useClock(Clock.fixed(T0, ZoneOffset.UTC));
     }
@@ -101,29 +101,73 @@ class PaidApiGuardServiceTest {
     }
 
     @Test
-    void assertUnderGlobalBudget_belowCeiling_passes() {
-        when(repository.sumCostCentsSince(any())).thenReturn(999L);
-        assertDoesNotThrow(() -> service.assertUnderGlobalBudget());
+    void assertUnderDailyBudget_belowServiceCeiling_passes() {
+        when(repository.sumCostCentsByServiceSince(eq(PaidApiService.INFOSIMPLES), any())).thenReturn(499L);
+        assertDoesNotThrow(() -> service.assertUnderDailyBudget(PaidApiService.INFOSIMPLES));
     }
 
     @Test
-    void assertUnderGlobalBudget_atCeiling_throws() {
-        when(repository.sumCostCentsSince(any())).thenReturn(1000L);
-        assertThrows(PaidApiBudgetExceededException.class, () -> service.assertUnderGlobalBudget());
+    void assertUnderDailyBudget_atServiceCeiling_throws() {
+        when(repository.sumCostCentsByServiceSince(eq(PaidApiService.INFOSIMPLES), any())).thenReturn(500L);
+        assertThrows(PaidApiBudgetExceededException.class,
+                () -> service.assertUnderDailyBudget(PaidApiService.INFOSIMPLES));
     }
 
     @Test
-    void assertUnderGlobalBudget_unlimitedBudget_skipsSum() {
-        properties.setDailyGlobalBudgetCents(0);
-        assertDoesNotThrow(() -> service.assertUnderGlobalBudget());
+    void assertUnderDailyBudget_oneServiceExhausted_othersKeepWorking() {
+        when(repository.sumCostCentsByServiceSince(eq(PaidApiService.INFOSIMPLES), any())).thenReturn(9_999L);
+        when(repository.sumCostCentsByServiceSince(eq(PaidApiService.CAPTCHA_SOLVE), any())).thenReturn(10L);
+
+        assertTrue(service.isDailyBudgetExhausted(PaidApiService.INFOSIMPLES));
+        assertFalse(service.isDailyBudgetExhausted(PaidApiService.CAPTCHA_SOLVE));
+        assertDoesNotThrow(() -> service.assertUnderDailyBudget(PaidApiService.CAPTCHA_SOLVE));
+    }
+
+    @Test
+    void assertUnderDailyBudget_unlimitedServiceBudget_skipsSum() {
+        properties.setInfosimplesDailyBudgetCents(0);
+        assertDoesNotThrow(() -> service.assertUnderDailyBudget(PaidApiService.INFOSIMPLES));
+        verify(repository, never()).sumCostCentsByServiceSince(any(), any());
         verify(repository, never()).sumCostCentsSince(any());
     }
 
     @Test
-    void assertUnderGlobalBudget_enforcementDisabled_skipsSum() {
+    void assertUnderDailyBudget_enforcementDisabled_skipsSum() {
         properties.setEnabled(false);
-        assertDoesNotThrow(() -> service.assertUnderGlobalBudget());
+        assertDoesNotThrow(() -> service.assertUnderDailyBudget(PaidApiService.INFOSIMPLES));
+        verify(repository, never()).sumCostCentsByServiceSince(any(), any());
+    }
+
+    @Test
+    void assertUnderDailyBudget_overallCeilingOffByDefault_neverSumsAllServices() {
+        assertEquals(0, new PaidApiGuardProperties().getDailyGlobalBudgetCents());
+        assertDoesNotThrow(() -> service.assertUnderDailyBudget(PaidApiService.CAPTCHA_SOLVE));
         verify(repository, never()).sumCostCentsSince(any());
+    }
+
+    @Test
+    void assertUnderDailyBudget_optionalOverallCeilingReached_throwsForEveryService() {
+        properties.setDailyGlobalBudgetCents(1000);
+        when(repository.sumCostCentsSince(any())).thenReturn(1000L);
+        assertThrows(PaidApiBudgetExceededException.class,
+                () -> service.assertUnderDailyBudget(PaidApiService.CAPTCHA_SOLVE));
+    }
+
+    @Test
+    void defaults_matchTheApprovedCapsAndBudgets() {
+        var defaults = new PaidApiGuardProperties();
+        assertEquals(12000, defaults.dailyBudgetCents(PaidApiService.INFOSIMPLES));
+        assertEquals(3000, defaults.dailyBudgetCents(PaidApiService.CAPTCHA_SOLVE));
+        assertEquals(3000, defaults.dailyBudgetCents(PaidApiService.LLM_VISION));
+        assertEquals(1500, defaults.dailyBudgetCents(PaidApiService.LLM_HTML_RESCUE));
+        assertEquals(5000, defaults.dailyBudgetCents(PaidApiService.LLM_ENRICH));
+        assertEquals(1500, defaults.dailyBudgetCents(PaidApiService.TWILIO_MESSAGE));
+        assertEquals(10, defaults.getInfosimplesDailyCapPerUser());
+        assertEquals(30, defaults.getCaptchaDailyCapPerUser());
+        assertEquals(10, defaults.getLlmVisionDailyCapPerUser());
+        assertEquals(5, defaults.getLlmHtmlRescueDailyCapPerUser());
+        assertEquals(3, defaults.getTwilioDailyCapPerUser());
+        assertEquals(60, defaults.getLlmEnrichDailyCapPerUser());
     }
 
     @Test

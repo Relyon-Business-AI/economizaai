@@ -15,6 +15,11 @@ import com.relyon.economizaai.service.extraction.AiFineCategoryClassifier.Classi
 import com.relyon.economizaai.service.extraction.AiFineCategoryClassifier.FineSuggestion;
 import com.relyon.economizaai.service.extraction.ProductExtraction;
 import com.relyon.economizaai.service.extraction.ProductExtractor;
+import com.relyon.economizaai.service.paidapi.PaidApiGuardService;
+import com.relyon.economizaai.exception.PaidApiBudgetExceededException;
+import com.relyon.economizaai.exception.PaidApiQuotaExceededException;
+import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.PaidApiService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -49,6 +55,7 @@ class ReceiptAiCategorySuggestionServiceTest {
     @Mock private ProductExtractor productExtractor;
     @Mock private AiFineCategoryClassifier classifier;
     @Mock private CategoryResolver categoryResolver;
+    @Mock private PaidApiGuardService paidApiGuard;
 
     @InjectMocks private ReceiptAiCategorySuggestionService service;
 
@@ -86,7 +93,7 @@ class ReceiptAiCategorySuggestionServiceTest {
         service.suggestForReceipt(receiptId);
 
         verify(receiptRepository, never()).findById(any());
-        verify(classifier, never()).suggest(anyList());
+        verify(classifier, never()).suggest(anyList(), any());
     }
 
     @Test
@@ -95,7 +102,7 @@ class ReceiptAiCategorySuggestionServiceTest {
 
         service.suggestForReceipt(receiptId);
 
-        verify(classifier, never()).suggest(anyList());
+        verify(classifier, never()).suggest(anyList(), any());
     }
 
     @Test
@@ -114,12 +121,12 @@ class ReceiptAiCategorySuggestionServiceTest {
                 new ProductExtraction(null, null, null, null, ProductCategory.GROCERIES, resolvedLeaf, CategorizationSource.DICTIONARY));
         when(categoryResolver.isLeafNode(resolvedLeaf)).thenReturn(true);
         when(productExtractor.extract(unresolved.getRawDescription())).thenReturn(NO_SIGNAL);
-        when(classifier.suggest(anyList())).thenReturn(List.of());
+        when(classifier.suggest(anyList(), any())).thenReturn(List.of());
 
         service.suggestForReceipt(receiptId);
 
         var captor = ArgumentCaptor.forClass(List.class);
-        verify(classifier).suggest(captor.capture());
+        verify(classifier).suggest(captor.capture(), any());
         @SuppressWarnings("unchecked")
         var inputs = (List<ClassificationInput>) captor.getValue();
         assertEquals(1, inputs.size());
@@ -133,7 +140,7 @@ class ReceiptAiCategorySuggestionServiceTest {
         var unresolved = item("TORRONE FLORESTA 50G", null);
         when(receiptItemRepository.findByReceiptId(receiptId)).thenReturn(List.of(unresolved));
         when(productExtractor.extract(any())).thenReturn(NO_SIGNAL);
-        when(classifier.suggest(anyList()))
+        when(classifier.suggest(anyList(), any()))
                 .thenReturn(List.of(new FineSuggestion(unresolved.getId(), leaf, "doces", 0.86)));
 
         service.suggestForReceipt(receiptId);
@@ -151,7 +158,7 @@ class ReceiptAiCategorySuggestionServiceTest {
         var sache = item("SACHE CAO BALANCE AD", null);
         when(receiptItemRepository.findByReceiptId(receiptId)).thenReturn(List.of(sache));
         when(productExtractor.extract(any())).thenReturn(NO_SIGNAL);
-        when(classifier.suggest(anyList()))
+        when(classifier.suggest(anyList(), any()))
                 .thenReturn(List.of(new FineSuggestion(sache.getId(), petGroup, "pet", 0.95)));
 
         service.suggestForReceipt(receiptId);
@@ -164,7 +171,7 @@ class ReceiptAiCategorySuggestionServiceTest {
         var unresolved = item("PRODUTO XPTO", null);
         when(receiptItemRepository.findByReceiptId(receiptId)).thenReturn(List.of(unresolved));
         when(productExtractor.extract(any())).thenReturn(NO_SIGNAL);
-        when(classifier.suggest(anyList()))
+        when(classifier.suggest(anyList(), any()))
                 .thenReturn(List.of(new FineSuggestion(unresolved.getId(), UUID.randomUUID(), "doces", 0.40)));
 
         service.suggestForReceipt(receiptId);
@@ -186,7 +193,7 @@ class ReceiptAiCategorySuggestionServiceTest {
         when(categoryResolver.idForLegacyEnum(ProductCategory.GROCERIES)).thenReturn(merceariaGroup);
         when(categoryResolver.labelFor(eq(merceariaGroup), any(Locale.class))).thenReturn("Mercearia");
         when(categoryResolver.groupIdOf(frutasLeaf)).thenReturn(UUID.randomUUID()); // outra categoria
-        when(classifier.suggest(anyList()))
+        when(classifier.suggest(anyList(), any()))
                 .thenReturn(List.of(new FineSuggestion(itemWithCoarse.getId(), frutasLeaf, "frutas", 0.95)));
 
         service.suggestForReceipt(receiptId);
@@ -203,12 +210,12 @@ class ReceiptAiCategorySuggestionServiceTest {
                 new ProductExtraction("Azeite", "Gallo", null, null, ProductCategory.GROCERIES, null, CategorizationSource.DICTIONARY));
         when(categoryResolver.idForLegacyEnum(ProductCategory.GROCERIES)).thenReturn(merceariaGroup);
         when(categoryResolver.labelFor(eq(merceariaGroup), any(Locale.class))).thenReturn("Mercearia");
-        when(classifier.suggest(anyList())).thenReturn(List.of());
+        when(classifier.suggest(anyList(), any())).thenReturn(List.of());
 
         service.suggestForReceipt(receiptId);
 
         var captor = ArgumentCaptor.forClass(List.class);
-        verify(classifier).suggest(captor.capture());
+        verify(classifier).suggest(captor.capture(), any());
         @SuppressWarnings("unchecked")
         var inputs = (List<ClassificationInput>) captor.getValue();
         assertEquals("Mercearia", inputs.get(0).currentCategory());
@@ -220,7 +227,7 @@ class ReceiptAiCategorySuggestionServiceTest {
         var unresolved = item("PRODUTO XPTO", null);
         when(receiptItemRepository.findByReceiptId(receiptId)).thenReturn(List.of(unresolved));
         when(productExtractor.extract(any())).thenReturn(NO_SIGNAL);
-        when(classifier.suggest(anyList())).thenThrow(new AiGateway.AiUnavailableException("cap"));
+        when(classifier.suggest(anyList(), any())).thenThrow(new AiGateway.AiUnavailableException("cap"));
 
         service.suggestForReceipt(receiptId);
 
@@ -235,7 +242,7 @@ class ReceiptAiCategorySuggestionServiceTest {
                 .thenReturn(Optional.of(receipt(ReceiptStatus.CONFIRMED)));
         when(receiptItemRepository.findByReceiptId(receiptId)).thenReturn(List.of(unresolved));
         when(productExtractor.extract(any())).thenReturn(NO_SIGNAL);
-        when(classifier.suggest(anyList()))
+        when(classifier.suggest(anyList(), any()))
                 .thenReturn(List.of(new FineSuggestion(unresolved.getId(), UUID.randomUUID(), "doces", 0.9)));
 
         service.suggestForReceipt(receiptId);
@@ -254,6 +261,52 @@ class ReceiptAiCategorySuggestionServiceTest {
 
         service.suggestForReceipt(receiptId);
 
-        verify(classifier, never()).suggest(anyList());
+        verify(classifier, never()).suggest(anyList(), any());
+    }
+
+    @Test
+    void aiCall_isAttributedToTheReceiptOwner_guardedAndLedgered() {
+        var ownerId = UUID.randomUUID();
+        var owned = receipt(ReceiptStatus.PENDING_CONFIRMATION);
+        owned.setUser(User.builder().id(ownerId).build());
+        when(receiptRepository.findById(receiptId)).thenReturn(Optional.of(owned));
+        var unresolved = item("PRODUTO XPTO", null);
+        when(receiptItemRepository.findByReceiptId(receiptId)).thenReturn(List.of(unresolved));
+        when(productExtractor.extract(any())).thenReturn(NO_SIGNAL);
+        when(classifier.suggest(anyList(), eq(ownerId))).thenReturn(List.of());
+
+        service.suggestForReceipt(receiptId);
+
+        verify(paidApiGuard).assertUnderDailyBudget(PaidApiService.LLM_ENRICH);
+        verify(paidApiGuard).assertWithinDailyCap(ownerId, PaidApiService.LLM_ENRICH);
+        verify(classifier).suggest(anyList(), eq(ownerId));
+        verify(paidApiGuard).recordSuccess(ownerId, PaidApiService.LLM_ENRICH, null, "ai");
+    }
+
+    @Test
+    void userCapReached_skipsSilently_noAiCallNoLedger() {
+        var unresolved = item("PRODUTO XPTO", null);
+        when(receiptItemRepository.findByReceiptId(receiptId)).thenReturn(List.of(unresolved));
+        when(productExtractor.extract(any())).thenReturn(NO_SIGNAL);
+        doThrow(new PaidApiQuotaExceededException("LLM_ENRICH"))
+                .when(paidApiGuard).assertWithinDailyCap(any(), eq(PaidApiService.LLM_ENRICH));
+
+        service.suggestForReceipt(receiptId);
+
+        verify(classifier, never()).suggest(anyList(), any());
+        verify(paidApiGuard, never()).recordSuccess(any(), any(), any(), any());
+    }
+
+    @Test
+    void dailyBudgetSpent_skipsSilently_noAiCall() {
+        var unresolved = item("PRODUTO XPTO", null);
+        when(receiptItemRepository.findByReceiptId(receiptId)).thenReturn(List.of(unresolved));
+        when(productExtractor.extract(any())).thenReturn(NO_SIGNAL);
+        doThrow(new PaidApiBudgetExceededException())
+                .when(paidApiGuard).assertUnderDailyBudget(PaidApiService.LLM_ENRICH);
+
+        service.suggestForReceipt(receiptId);
+
+        verify(classifier, never()).suggest(anyList(), any());
     }
 }

@@ -22,9 +22,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Single gating point for money-spending external calls (Infosimples, captcha
- * solvers). Three responsibilities, matching the cost-control plan:
+ * solvers, Twilio, LLM). Responsibilities, matching the cost-control plan:
  *
  * <ul>
+ *   <li><b>Budget:</b> {@link #assertUnderDailyBudget} stops ONE service once its
+ *       daily R$ ceiling is spent, leaving the others (and free scraping) alone.</li>
  *   <li><b>Cap (A):</b> {@link #assertWithinDailyCap} throws before a user
  *       exceeds their per-day allowance for a service — a hard cost/abuse guard
  *       independent of subscription tier.</li>
@@ -79,11 +81,6 @@ public class PaidApiGuardService {
     }
 
     /**
-     * Throws {@link PaidApiBudgetExceededException} once today's total estimated
-     * spend across ALL users reaches the global ceiling — the kill-switch against
-     * a viral spike. No-op when enforcement is off or the budget is unlimited.
-     */
-    /**
      * Daily cap for a SYSTEM worker (no user attribution) — counts all of today's
      * calls for the service. Used by the LLM enrichment/auditor batch jobs.
      */
@@ -98,24 +95,45 @@ public class PaidApiGuardService {
         }
     }
 
-    public void assertUnderGlobalBudget() {
-        if (isGlobalBudgetExhausted()) {
+    /**
+     * Throws {@link PaidApiBudgetExceededException} once today's estimated spend for
+     * THIS service reached its daily ceiling (or the optional overall ceiling is gone).
+     * Only this service stops — the others keep working. No-op when enforcement is off
+     * or the budget is unlimited.
+     */
+    public void assertUnderDailyBudget(PaidApiService service) {
+        if (isDailyBudgetExhausted(service)) {
             throw new PaidApiBudgetExceededException();
         }
     }
 
     /**
-     * Whether today's estimated spend already reached the global ceiling. For callers that
-     * must keep their FREE path working when the budget is gone (a captcha-free scrape costs
-     * nothing) and only refuse the paid step.
+     * Whether today's estimated spend for this service already reached its ceiling. For
+     * callers that must keep their FREE path working when the budget is gone (a
+     * captcha-free scrape costs nothing) and only refuse the paid step.
      */
-    public boolean isGlobalBudgetExhausted() {
+    public boolean isDailyBudgetExhausted(PaidApiService service) {
         if (!properties.isEnabled()) return false;
+        return isServiceBudgetExhausted(service) || isOverallBudgetExhausted();
+    }
+
+    private boolean isServiceBudgetExhausted(PaidApiService service) {
+        var budget = properties.dailyBudgetCents(service);
+        if (budget <= 0) return false;
+        var spent = repository.sumCostCentsByServiceSince(service, startOfTodayUtc());
+        if (spent >= budget) {
+            log.warn("paid_api.budget_exhausted service={} spentCents={} budgetCents={}", service, spent, budget);
+            return true;
+        }
+        return false;
+    }
+
+    private boolean isOverallBudgetExhausted() {
         var budget = properties.getDailyGlobalBudgetCents();
         if (budget <= 0) return false;
         var spent = repository.sumCostCentsSince(startOfTodayUtc());
         if (spent >= budget) {
-            log.warn("paid_api.budget_exhausted spentCents={} budgetCents={}", spent, budget);
+            log.warn("paid_api.budget_exhausted service=ALL spentCents={} budgetCents={}", spent, budget);
             return true;
         }
         return false;

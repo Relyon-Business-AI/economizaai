@@ -429,7 +429,7 @@ public class ReceiptController {
                                                        @PathVariable UUID id,
                                                        @PathVariable UUID itemId,
                                                        @Valid @RequestBody ItemCorrectionRequest request) {
-        aiItemCorrectionService.correct(id, itemId, user.getHousehold().getId(), request.hint());
+        aiItemCorrectionService.correct(id, itemId, user.getHousehold().getId(), user.getId(), request.hint());
         return ResponseEntity.ok(receiptService.get(user, id));
     }
 
@@ -442,7 +442,7 @@ public class ReceiptController {
         // connection across the outbound HTTP call (see CLAUDE.md transaction rules).
         // The confirm is already committed: a full AI lane must not turn it into a 500.
         try {
-            aiItemFallbackService.applyFallback(id);
+            aiItemFallbackService.applyFallback(id, user.getId());
         } catch (TaskRejectedException aiLaneFull) {
             log.warn("confirm.ai_fallback_skipped reason=ai_lane_full");
         }

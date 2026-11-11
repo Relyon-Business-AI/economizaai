@@ -1,5 +1,6 @@
 package com.relyon.economizaai.config;
 
+import com.relyon.economizaai.model.enums.PaidApiService;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
@@ -17,30 +18,41 @@ public class PaidApiGuardProperties {
     private boolean enabled = true;
 
     /** Max Infosimples queries per user per day. 0 or negative = unlimited. */
-    private int infosimplesDailyCapPerUser = 20;
+    private int infosimplesDailyCapPerUser = 10;
 
     /** Max captcha solves per user per day. 0 or negative = unlimited. */
-    private int captchaDailyCapPerUser = 60;
+    private int captchaDailyCapPerUser = 30;
 
     /** Max Twilio SMS/WhatsApp messages per user per day. 0 or negative = unlimited. */
-    private int twilioDailyCapPerUser = 10;
+    private int twilioDailyCapPerUser = 3;
 
-    /** Max LLM enrichment batch calls per day (global worker, keyed on the system user row = null). */
-    private int llmEnrichDailyCapPerUser = 200;
+    /** Max AI categorization calls (suggestion, item fallback, correction) per user per day. 0 or negative = unlimited. */
+    private int llmEnrichDailyCapPerUser = 60;
 
     /** Max LLM vision photo-extractions per user per day (counted PER PHOTO — a
      *  multi-photo nota of 5 fotos consome 5 do cap). 0 or negative = unlimited. */
-    private int llmVisionDailyCapPerUser = 15;
+    private int llmVisionDailyCapPerUser = 10;
 
     /** Max LLM HTML parse-rescues per user per day. 0 or negative = unlimited. */
-    private int llmHtmlRescueDailyCapPerUser = 10;
+    private int llmHtmlRescueDailyCapPerUser = 5;
 
     /**
-     * Global spend ceiling across ALL users per day, in cents (R$). The kill-switch
-     * against a viral spike: once today's ledger total reaches this, every paid call
-     * fails fast until midnight (UTC). 0 or negative = unlimited. Default R$50/day.
+     * Daily spend ceiling PER SERVICE across all users, in cents (R$). Once today's
+     * ledger total for a service reaches its ceiling only THAT service fails fast
+     * until midnight (UTC); the others keep working. 0 or negative = unlimited.
      */
-    private int dailyGlobalBudgetCents = 5000;
+    private int infosimplesDailyBudgetCents = 12000;
+    private int captchaDailyBudgetCents = 3000;
+    private int llmVisionDailyBudgetCents = 3000;
+    private int llmHtmlRescueDailyBudgetCents = 1500;
+    private int llmEnrichDailyBudgetCents = 5000;
+    private int twilioDailyBudgetCents = 1500;
+
+    /**
+     * Optional overall ceiling across ALL services per day, in cents (R$), on top of
+     * the per-service ones. 0 or negative = off (the default).
+     */
+    private int dailyGlobalBudgetCents = 0;
 
     /** Consecutive/within-window Infosimples failures that trip the breaker. */
     private int infosimplesFailureThreshold = 5;
@@ -71,6 +83,36 @@ public class PaidApiGuardProperties {
 
     public int getLlmHtmlRescueDailyCapPerUser() { return llmHtmlRescueDailyCapPerUser; }
     public void setLlmHtmlRescueDailyCapPerUser(int llmHtmlRescueDailyCapPerUser) { this.llmHtmlRescueDailyCapPerUser = llmHtmlRescueDailyCapPerUser; }
+
+    /** The daily ceiling (cents) configured for one service; 0 or negative = unlimited. */
+    public int dailyBudgetCents(PaidApiService service) {
+        return switch (service) {
+            case INFOSIMPLES -> infosimplesDailyBudgetCents;
+            case CAPTCHA_SOLVE -> captchaDailyBudgetCents;
+            case TWILIO_MESSAGE -> twilioDailyBudgetCents;
+            case LLM_ENRICH -> llmEnrichDailyBudgetCents;
+            case LLM_VISION -> llmVisionDailyBudgetCents;
+            case LLM_HTML_RESCUE -> llmHtmlRescueDailyBudgetCents;
+        };
+    }
+
+    public int getInfosimplesDailyBudgetCents() { return infosimplesDailyBudgetCents; }
+    public void setInfosimplesDailyBudgetCents(int infosimplesDailyBudgetCents) { this.infosimplesDailyBudgetCents = infosimplesDailyBudgetCents; }
+
+    public int getCaptchaDailyBudgetCents() { return captchaDailyBudgetCents; }
+    public void setCaptchaDailyBudgetCents(int captchaDailyBudgetCents) { this.captchaDailyBudgetCents = captchaDailyBudgetCents; }
+
+    public int getLlmVisionDailyBudgetCents() { return llmVisionDailyBudgetCents; }
+    public void setLlmVisionDailyBudgetCents(int llmVisionDailyBudgetCents) { this.llmVisionDailyBudgetCents = llmVisionDailyBudgetCents; }
+
+    public int getLlmHtmlRescueDailyBudgetCents() { return llmHtmlRescueDailyBudgetCents; }
+    public void setLlmHtmlRescueDailyBudgetCents(int llmHtmlRescueDailyBudgetCents) { this.llmHtmlRescueDailyBudgetCents = llmHtmlRescueDailyBudgetCents; }
+
+    public int getLlmEnrichDailyBudgetCents() { return llmEnrichDailyBudgetCents; }
+    public void setLlmEnrichDailyBudgetCents(int llmEnrichDailyBudgetCents) { this.llmEnrichDailyBudgetCents = llmEnrichDailyBudgetCents; }
+
+    public int getTwilioDailyBudgetCents() { return twilioDailyBudgetCents; }
+    public void setTwilioDailyBudgetCents(int twilioDailyBudgetCents) { this.twilioDailyBudgetCents = twilioDailyBudgetCents; }
 
     public int getDailyGlobalBudgetCents() { return dailyGlobalBudgetCents; }
     public void setDailyGlobalBudgetCents(int dailyGlobalBudgetCents) { this.dailyGlobalBudgetCents = dailyGlobalBudgetCents; }

@@ -207,7 +207,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(PaidApiBudgetExceededException.class)
     public ResponseEntity<ErrorResponse> handlePaidApiBudget(PaidApiBudgetExceededException ex) {
-        return respond(ex, HttpStatus.SERVICE_UNAVAILABLE, "Paid-API global daily budget exhausted");
+        return respond(ex, HttpStatus.SERVICE_UNAVAILABLE, "Paid-API daily budget exhausted");
     }
 
     @ExceptionHandler(MerchantAccessNotFoundException.class)
