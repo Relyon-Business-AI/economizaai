@@ -36,15 +36,19 @@ import java.util.UUID;
  * items are DIFFERENT variants/brands/flavours (the EAN-authority rule that now
  * prevents this was added after the fact; this repairs the backlog).
  *
- * <p><b>Signature.</b> Each linked item's VARIANT SIGNATURE reuses the existing
- * {@link VariantDiscriminator} (strong tokens like {@code %}/zero/diet/sem glúten
- * + weak flavour tokens) PLUS the item's brand (extracted via {@link
- * BrandExtractor} — the discriminator itself is brand-blind). Items that share a
- * signature stay together, so legitimate "same product, multiple EANs" cases
- * (e.g. "Água Crystal sem gás 500ml" under two GTINs) remain ONE product: same
- * brand, no distinguishing token ⇒ one signature ⇒ not split. Different brand
- * (Nestlé vs Dália) or different flavour (12 Tang flavours) ⇒ many signatures ⇒
- * split.
+ * <p><b>Grouping (EAN-cohesion first).</b> EAN is ground truth: items sharing the
+ * SAME real GTIN are ONE indivisible atom and can NEVER split, regardless of how
+ * their raw name tokens differ — a "zero"/"40%"/flavour token on one side does not
+ * override a shared real EAN (this fixes the over-SPLIT where "COCA COLA S/AC 600ML"
+ * and "REFRIGERANTE COCA COLA 600ml ZERO", both EAN 7894900701609, became two
+ * products for ONE item). Placeholder/no-EAN items carry no ground truth, so each is
+ * grouped by its name signature. Then atoms and name-grouped items that share the same
+ * VARIANT SIGNATURE merge together — the signature reuses {@link VariantDiscriminator}
+ * (strong tokens like {@code %}/zero/diet/sem glúten + weak flavour tokens) PLUS the
+ * item's brand (via {@link BrandExtractor} — the discriminator is brand-blind). So:
+ * same real EAN ⇒ never split; same signature ⇒ stay together (legit "same product,
+ * multiple EANs" like "Água Crystal sem gás 500ml" under two GTINs); different
+ * signature AND different EAN ⇒ split (Nestlé vs Dália, 12 Tang flavours).
  *
  * <p><b>What a split touches</b>, all keyed by {@code product_id} so the fix is
  * global, not one-screen: {@code receipt_items} (reassigned per signature),
@@ -106,7 +110,7 @@ public class ProductVariantSplitService {
         return new ProductVariantSplitResponse(dryRun, candidateIds.size(), plans.size(), newProductsCreated, plans);
     }
 
-    /** Groups a product's items by signature. Returns null when there's a single signature. */
+    /** Groups a product's items into real variants. Returns null when there's a single variant. */
     private ProductSplitPlan planFor(UUID productId) {
         var product = productRepository.findById(productId).orElse(null);
         if (product == null) return null;
@@ -114,11 +118,7 @@ public class ProductVariantSplitService {
         var items = receiptItemRepository.findAllLinkedWithReceipt(productId);
         if (items.isEmpty()) return null;
 
-        // Signature -> items, insertion-ordered for a stable report.
-        var itemsBySignature = new LinkedHashMap<String, List<ReceiptItem>>();
-        for (var item : items) {
-            itemsBySignature.computeIfAbsent(signatureOf(item.getRawDescription()), key -> new ArrayList<>()).add(item);
-        }
+        var itemsBySignature = groupItemsByVariant(items);
         if (itemsBySignature.size() < 2) return null; // consistent — idempotent skip
 
         var anchorSignature = pickAnchorSignature(product, itemsBySignature);
@@ -176,10 +176,7 @@ public class ProductVariantSplitService {
     private int applySplit(UUID productId, ProductSplitPlan plan) {
         var original = productRepository.findById(productId).orElseThrow();
         var items = receiptItemRepository.findAllLinkedWithReceipt(productId);
-        var itemsBySignature = new LinkedHashMap<String, List<ReceiptItem>>();
-        for (var item : items) {
-            itemsBySignature.computeIfAbsent(signatureOf(item.getRawDescription()), key -> new ArrayList<>()).add(item);
-        }
+        var itemsBySignature = groupItemsByVariant(items);
 
         var aliases = aliasRepository.findByProduct(original);
         var created = 0;
@@ -251,6 +248,68 @@ public class ProductVariantSplitService {
                 .map(ProductAlias::getId)
                 .toList();
         if (!ids.isEmpty()) aliasRepository.repointAliasesTo(ids, target);
+    }
+
+    // ── grouping (EAN-atom → signature-merge) ──
+
+    /**
+     * Groups a product's items into REAL variants, EAN-cohesion first:
+     * <ol>
+     *   <li><b>EAN-atoms.</b> All items sharing the SAME real GTIN are ONE indivisible
+     *       atom — they can never land in different resulting groups no matter how their
+     *       raw tokens differ (the shared EAN is ground truth; a "40%"/"zero"/flavour
+     *       token on one side does NOT override it). Placeholder-EAN / no-EAN items carry
+     *       no ground truth, so each is its own singleton grouped by its name signature.</li>
+     *   <li><b>Signature merge.</b> Atoms and singletons sharing the SAME variant
+     *       signature (brand ∪ {@link VariantDiscriminator} tokens) merge into one
+     *       resulting group — keeps the legit "same product, multiple EANs" case together
+     *       (e.g. Água Crystal under two GTINs). An atom's signature is the most common
+     *       signature among its items (ties broken deterministically).</li>
+     * </ol>
+     * Result: same real EAN ⇒ never split; same signature ⇒ stay together; different
+     * signature AND different EAN ⇒ split (Nestlé vs Dália, Tang flavours). Insertion
+     * order is kept for a stable report.
+     */
+    private Map<String, List<ReceiptItem>> groupItemsByVariant(List<ReceiptItem> items) {
+        var atomsByEan = new LinkedHashMap<String, List<ReceiptItem>>();
+        var singletons = new ArrayList<List<ReceiptItem>>();
+        for (var item : items) {
+            if (EanAuthority.isReal(item.getEan())) {
+                atomsByEan.computeIfAbsent(item.getEan().trim(), key -> new ArrayList<>()).add(item);
+            } else {
+                singletons.add(new ArrayList<>(List.of(item)));
+            }
+        }
+
+        var groupsBySignature = new LinkedHashMap<String, List<ReceiptItem>>();
+        for (var atom : atomsByEan.values()) {
+            mergeInto(groupsBySignature, atomSignature(atom), atom);
+        }
+        for (var singleton : singletons) {
+            mergeInto(groupsBySignature, signatureOf(singleton.get(0).getRawDescription()), singleton);
+        }
+        return groupsBySignature;
+    }
+
+    private static void mergeInto(Map<String, List<ReceiptItem>> groupsBySignature, String signature, List<ReceiptItem> members) {
+        groupsBySignature.computeIfAbsent(signature, key -> new ArrayList<>()).addAll(members);
+    }
+
+    /**
+     * One signature for an EAN-atom: the most common signature among the atom's items —
+     * the EAN keeps them together, this only decides which group they merge WITH. Ties
+     * broken by signature string for determinism.
+     */
+    private String atomSignature(List<ReceiptItem> atom) {
+        var counts = new LinkedHashMap<String, Long>();
+        for (var item : atom) {
+            counts.merge(signatureOf(item.getRawDescription()), 1L, Long::sum);
+        }
+        return counts.entrySet().stream()
+                .max(Comparator.<Map.Entry<String, Long>>comparingLong(Map.Entry::getValue)
+                        .thenComparing(Map.Entry::getKey, Comparator.reverseOrder()))
+                .map(Map.Entry::getKey)
+                .orElseThrow();
     }
 
     // ── signature + tracing helpers ──

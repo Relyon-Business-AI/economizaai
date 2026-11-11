@@ -20,6 +20,20 @@
   urgência (mais perto de acabar primeiro) + `counts` por status pros chips de filtro. O endpoint antigo
   `/predictions` continua igual (versões antigas do app).
 
+## 2026-11-10 — Split de variantes: coesão por EAN (corrige over-split)
+
+- **Correção no `POST /api/v1/admin/products/split-variants`:** o split agrupava os itens só pela
+  ASSINATURA de nome (tokens do `VariantDiscriminator` + marca), o que **separava demais** itens que são
+  o MESMO item físico — dois itens com o MESMO EAN real caíam em grupos diferentes só porque os tokens da
+  `raw_description` divergiam (prod: COCA-COLA S/AÇÚCAR 600ML virava "COCA COLA S/AC 600ML" e
+  "REFRIGERANTE COCA COLA 600ml ZERO", ambos EAN 7894900701609 → dois produtos para UM item).
+- **Agora o agrupamento é coesão-por-EAN primeiro:** itens que compartilham um GTIN real formam UM átomo
+  indivisível e nunca se separam (um token "zero"/"40%"/sabor de um lado não vence um EAN real
+  compartilhado); itens com EAN placeholder/sem EAN agrupam pela assinatura de nome; então átomos e
+  grupos de nome com a MESMA assinatura se fundem (mantém o caso legítimo "mesmo produto, vários EANs",
+  ex. Água Crystal). EANs reais diferentes COM assinaturas diferentes ainda dividem (Nestlé vs Dália,
+  sabores de Tang). Nada mais muda (re-apontamento, `generic_name_norm`, dry-run, idempotência).
+
 ## 2026-11-10 — Split de produtos mal-mesclados por variante (admin)
 
 - **Novo endpoint ADMIN `POST /api/v1/admin/products/split-variants?dryRun=true|false&max=500`.**
