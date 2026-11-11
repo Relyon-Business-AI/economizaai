@@ -55,6 +55,7 @@ import com.relyon.economizaai.service.sefaz.PrefetchPolicy;
 import com.relyon.economizaai.service.sefaz.ReceiptIngestionService;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
 import com.relyon.economizaai.service.sefaz.StateCoverageService;
+import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
 import org.junit.jupiter.api.BeforeEach;
@@ -862,8 +863,11 @@ class ReceiptServiceTest {
     void submit_throwsPaywallWhenFreeUserAtMonthlyCap() {
         var user = buildUser();
         when(subscriptionGate.monthlyReceiptLimit(any())).thenReturn(5);
-        when(receiptRepository.countByUserIdAndCreatedAtGreaterThanEqual(eq(user.getId()), any()))
+        // Only receipts the user SUBMITTED count — household-split copies are excluded by the query.
+        when(receiptRepository.countByUserIdAndSplitCopyFalseAndCreatedAtGreaterThanEqual(eq(user.getId()), any()))
                 .thenReturn(5L);
+        doThrow(new PaywallException(Feature.RECEIPT_UPLOAD_UNLIMITED.name()))
+                .when(subscriptionGate).requireWithinLimit(user, Feature.RECEIPT_UPLOAD_UNLIMITED, 5L);
 
         var request = new SubmitReceiptRequest(QR_RS);
         assertThrows(PaywallException.class,
@@ -877,7 +881,7 @@ class ReceiptServiceTest {
     void submit_allowsWhenFreeUserUnderMonthlyCap() {
         var user = buildUser();
         when(subscriptionGate.monthlyReceiptLimit(any())).thenReturn(5);
-        when(receiptRepository.countByUserIdAndCreatedAtGreaterThanEqual(eq(user.getId()), any()))
+        when(receiptRepository.countByUserIdAndSplitCopyFalseAndCreatedAtGreaterThanEqual(eq(user.getId()), any()))
                 .thenReturn(2L);
         when(receiptRepository.findByHouseholdIdAndChaveAcesso(any(), eq(CHAVE_RS))).thenReturn(Optional.empty());
         when(receiptRepository.save(any(Receipt.class))).thenAnswer(inv -> {

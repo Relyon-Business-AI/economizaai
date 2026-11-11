@@ -549,22 +549,19 @@ public class ReceiptService {
     }
 
     /**
-     * FREE plan caps receipts per calendar month. Counts ALL statuses this month
-     * so reject/delete-and-resubmit can't game the limit; PRO (limit MAX_VALUE)
+     * FREE plan caps receipts per calendar month. Counts every receipt the user SUBMITTED this
+     * month, in any status, so reject/delete-and-resubmit can't game the limit; the copies a
+     * household split creates are not submissions and don't count. PRO (limit MAX_VALUE)
      * bypasses entirely.
      */
     public void enforceMonthlyReceiptCap(User user) {
-        var monthlyLimit = subscriptionGate.monthlyReceiptLimit(user);
-        if (monthlyLimit == Integer.MAX_VALUE) {
+        if (subscriptionGate.monthlyReceiptLimit(user) == Integer.MAX_VALUE) {
             return;
         }
         var startOfMonth = BrazilClock.currentYearMonth().atDay(1).atStartOfDay();
-        var thisMonth = receiptRepository.countByUserIdAndCreatedAtGreaterThanEqual(user.getId(), startOfMonth);
-        if (thisMonth >= monthlyLimit) {
-            log.info("paywall.blocked user={} feature={} thisMonth={} limit={}",
-                    LogMasker.email(user.getEmail()), Feature.RECEIPT_UPLOAD_UNLIMITED, thisMonth, monthlyLimit);
-            throw new PaywallException(Feature.RECEIPT_UPLOAD_UNLIMITED.name());
-        }
+        var submittedThisMonth = receiptRepository
+                .countByUserIdAndSplitCopyFalseAndCreatedAtGreaterThanEqual(user.getId(), startOfMonth);
+        subscriptionGate.requireWithinLimit(user, Feature.RECEIPT_UPLOAD_UNLIMITED, submittedThisMonth);
     }
 
     /**

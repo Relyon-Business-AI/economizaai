@@ -139,6 +139,12 @@ public class Receipt extends BaseEntity implements HouseholdScoped {
     @Builder.Default
     private boolean indexEligible = true;
 
+    // True for the COPY a household split leaves behind (HouseholdSplitService). A copy is not a
+    // submission, so it does not count toward the FREE monthly receipt cap.
+    @Column(name = "split_copy", nullable = false)
+    @Builder.Default
+    private boolean splitCopy = false;
+
     // BatchSize: list endpoints (GET /receipts, dashboard) read items per row —
     // batching turns that page-sized N+1 into one IN query.
     @OneToMany(mappedBy = "receipt", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)

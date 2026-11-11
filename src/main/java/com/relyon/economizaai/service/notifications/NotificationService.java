@@ -7,7 +7,6 @@ import com.relyon.economizaai.model.enums.NotificationChannel;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.repository.NotificationPreferenceRepository;
 import com.relyon.economizaai.repository.NotificationRepository;
-import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -113,11 +112,12 @@ public class NotificationService {
                 .delivered(false)
                 .build();
 
-        // Inbox is the always-on baseline (free). FREE tier gets the inbox row but no
-        // outbound dispatch; only push/email delivery is PRO. Inbox-only by choice
+        // Inbox is the always-on baseline (free). With enforcement on, FREE gets the inbox row
+        // but no outbound dispatch for PROMOTIONAL types; transactional ones (receipt, household,
+        // account notices) are always delivered. Inbox-only by choice
         // (no outbound channels selected) likewise just persists the row.
         if (outbound.isEmpty()
-                || !subscriptionGate.allows(payload.user(), Feature.PUSH_AND_EMAIL_DELIVERY)) {
+                || !subscriptionGate.allowsDelivery(payload.user(), payload.type(), payload.campaignId() != null)) {
             if (outbound.isEmpty()) {
                 log.debug("notification.inbox_only user={} type={} reason=no_outbound_selected",
                         payload.user().getEmail(), payload.type());
