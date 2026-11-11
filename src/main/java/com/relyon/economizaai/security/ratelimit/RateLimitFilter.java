@@ -176,6 +176,23 @@ public class RateLimitFilter extends OncePerRequestFilter {
             new RateLimitPolicy("email-change-confirm", 15, Duration.ofHours(1));
 
     /**
+     * Merchant claims, per user AND per IP: every submit looks a CNPJ up and may e-mail a
+     * third party (the company address), and verify is a code-guessing surface. Both keys
+     * are charged, so neither many accounts behind one address nor one account hopping
+     * addresses gets a larger budget.
+     */
+    private static final RateLimitPolicy MERCHANT_CLAIM_SUBMIT_POLICY =
+            new RateLimitPolicy("merchant-claim-submit", 3, Duration.ofHours(1));
+    private static final RateLimitPolicy MERCHANT_CLAIM_VERIFY_POLICY =
+            new RateLimitPolicy("merchant-claim-verify", 10, Duration.ofHours(1));
+    private static final String MERCHANT_CLAIMS_PATH = "/api/v1/merchant-claims";
+
+    /** POST /api/v1/merchant-claims/{id}/verify. */
+    private static boolean isMerchantClaimVerifyPath(String uri) {
+        return uri.startsWith(MERCHANT_CLAIMS_PATH + "/") && uri.endsWith("/verify");
+    }
+
+    /**
      * 10 exports per hour per user. Each export builds the full purchase
      * history in memory (XLSX/PDF) and delivery=email adds an SMTP send —
      * CPU/heap heavy on a single instance, so it can't stay unmetered just
@@ -264,6 +281,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
                             && "/api/v1/users/me/email-verification/resend".equals(req.getRequestURI()),
                     KeyStrategy.USER_OR_IP),
             new Rule(
+                    MERCHANT_CLAIM_SUBMIT_POLICY,
+                    req -> "POST".equals(req.getMethod()) && MERCHANT_CLAIMS_PATH.equals(req.getRequestURI()),
+                    List.of(KeyStrategy.USER_OR_IP, KeyStrategy.IP)),
+            new Rule(
+                    MERCHANT_CLAIM_VERIFY_POLICY,
+                    req -> "POST".equals(req.getMethod()) && isMerchantClaimVerifyPath(req.getRequestURI()),
+                    List.of(KeyStrategy.USER_OR_IP, KeyStrategy.IP)),
+            new Rule(
                     EMAIL_CHANGE_POLICY,
                     req -> "POST".equals(req.getMethod())
                             && "/api/v1/users/me/email-change".equals(req.getRequestURI()),
@@ -313,19 +338,23 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
-        var key = rule.keyStrategy.keyFor(request);
-        var bucket = registry.bucketFor(rule.policy, key);
-        var probe = bucket.tryConsumeAndReturnRemaining(1);
-        if (probe.isConsumed()) {
-            response.setHeader("X-RateLimit-Remaining", String.valueOf(probe.getRemainingTokens()));
-            filterChain.doFilter(request, response);
-            return;
+        // A rule may charge several keys (e.g. user AND IP): the request passes only when
+        // every bucket still has a token.
+        var keys = rule.keyStrategies.stream().map(strategy -> strategy.keyFor(request)).distinct().toList();
+        var remainingTokens = Long.MAX_VALUE;
+        for (var key : keys) {
+            var probe = registry.bucketFor(rule.policy, key).tryConsumeAndReturnRemaining(1);
+            if (!probe.isConsumed()) {
+                var retryAfterSeconds = Math.max(1, probe.getNanosToWaitForRefill() / 1_000_000_000L);
+                log.warn("rate_limit.blocked policy={} key={} path={} retry_after_s={}",
+                        rule.policy.name(), key, request.getRequestURI(), retryAfterSeconds);
+                writeTooManyRequestsResponse(response, retryAfterSeconds);
+                return;
+            }
+            remainingTokens = Math.min(remainingTokens, probe.getRemainingTokens());
         }
-
-        var retryAfterSeconds = Math.max(1, probe.getNanosToWaitForRefill() / 1_000_000_000L);
-        log.warn("rate_limit.blocked policy={} key={} path={} retry_after_s={}",
-                rule.policy.name(), key, request.getRequestURI(), retryAfterSeconds);
-        writeTooManyRequestsResponse(response, retryAfterSeconds);
+        response.setHeader("X-RateLimit-Remaining", String.valueOf(remainingTokens));
+        filterChain.doFilter(request, response);
     }
 
     /** Exposes the decoded, application-relative path as the request URI for rule matching. */
@@ -353,7 +382,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
         response.getWriter().write(objectMapper.writeValueAsString(body));
     }
 
-    private record Rule(RateLimitPolicy policy, Predicate<HttpServletRequest> matcher, KeyStrategy keyStrategy) {}
+    private record Rule(RateLimitPolicy policy, Predicate<HttpServletRequest> matcher,
+                        List<KeyStrategy> keyStrategies) {
+        private Rule(RateLimitPolicy policy, Predicate<HttpServletRequest> matcher, KeyStrategy keyStrategy) {
+            this(policy, matcher, List.of(keyStrategy));
+        }
+    }
 
     private enum KeyStrategy {
         IP {

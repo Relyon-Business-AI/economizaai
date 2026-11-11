@@ -245,6 +245,11 @@ public class GlobalExceptionHandler {
         return respond(ex, HttpStatus.CONFLICT, "Merchant claim already open for this chain");
     }
 
+    @ExceptionHandler(MerchantClaimCooldownException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantClaimCooldown(MerchantClaimCooldownException ex) {
+        return respond(ex, HttpStatus.TOO_MANY_REQUESTS, "Merchant claim refused: cool-down after a closed claim");
+    }
+
     @ExceptionHandler(MerchantChainAlreadyGrantedException.class)
     public ResponseEntity<ErrorResponse> handleMerchantChainAlreadyGranted(MerchantChainAlreadyGrantedException ex) {
         return respond(ex, HttpStatus.CONFLICT, "Chain already granted to this user");

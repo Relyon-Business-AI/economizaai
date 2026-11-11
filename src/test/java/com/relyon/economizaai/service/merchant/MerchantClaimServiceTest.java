@@ -22,6 +22,7 @@ import com.relyon.economizaai.service.auth.AuthEmailSender;
 import com.relyon.economizaai.service.auth.CodeHasher;
 import com.relyon.economizaai.service.geo.CnpjActivityClient;
 import com.relyon.economizaai.service.geo.CnpjActivityClient.CnpjLookup;
+import com.relyon.economizaai.exception.MerchantClaimCooldownException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -125,6 +126,35 @@ class MerchantClaimServiceTest {
                 .thenReturn(true);
 
         assertThrows(MerchantClaimAlreadyOpenException.class, () -> service.submit(claimant, request()));
+    }
+
+    @Test
+    void submit_recentlyClosedClaimForSameChain_refusedDuringCooldown() {
+        var closedClaim = MerchantClaim.builder()
+                .id(UUID.randomUUID()).user(claimant).cnpj(CNPJ).cnpjRoot(CHAIN_ROOT)
+                .status(MerchantClaimStatus.REJECTED)
+                .resolvedAt(BrazilClock.nowDateTime().minusHours(2))
+                .build();
+        when(claimRepository.findFirstByUserIdAndCnpjRootAndStatusAndResolvedAtAfterOrderByResolvedAtDesc(
+                eq(claimant.getId()), eq(CHAIN_ROOT), eq(MerchantClaimStatus.REJECTED), any(LocalDateTime.class)))
+                .thenReturn(Optional.of(closedClaim));
+
+        var refusal = assertThrows(MerchantClaimCooldownException.class, () -> service.submit(claimant, request()));
+
+        assertThat(refusal.getArguments()).containsExactly("22");
+        verify(claimRepository, never()).save(any());
+        verify(cnpjActivityClient, never()).lookup(any());
+        verify(authEmailSender, never()).sendMerchantClaimCode(any(), any(), any(), anyInt());
+    }
+
+    @Test
+    void submit_noRecentClosedClaim_goesAhead() {
+        when(claimRepository.findFirstByUserIdAndCnpjRootAndStatusAndResolvedAtAfterOrderByResolvedAtDesc(
+                eq(claimant.getId()), eq(CHAIN_ROOT), eq(MerchantClaimStatus.REJECTED), any(LocalDateTime.class)))
+                .thenReturn(Optional.empty());
+        when(cnpjActivityClient.lookup(CNPJ)).thenReturn(lookupWithEmail());
+
+        assertThat(service.submit(claimant, request()).status()).isEqualTo(MerchantClaimStatus.AWAITING_CODE);
     }
 
     private MerchantClaim awaitingClaim(String code) {

@@ -499,6 +499,7 @@ economizaai:
     free-until: ${MERCHANT_FREE_UNTIL:2026-12-31}   # launch promo: marketing account free until this date
     claim-code-ttl-hours: 24
     claim-code-max-attempts: 5
+    claim-cooldown-hours: ${MERCHANT_CLAIM_COOLDOWN_HOURS:24}   # wait before re-claiming a chain after a closed claim
     import-max-rows: 500
     classify:
       enabled: ${MERCHANT_CLASSIFY_ENABLED:true}   # CNAE-based supermarket/pharmacy verification (best-effort)
