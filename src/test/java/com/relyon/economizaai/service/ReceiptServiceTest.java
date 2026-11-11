@@ -256,6 +256,53 @@ class ReceiptServiceTest {
     }
 
     @Test
+    void submit_sameChaveStillProcessing_returnsTheInFlightRowWithoutASecondIngest() {
+        var user = buildUser();
+        var inFlight = persistedReceipt(user, ReceiptStatus.PROCESSING);
+        when(receiptRepository.findByHouseholdIdAndChaveAcesso(any(), eq(CHAVE_RS))).thenReturn(Optional.of(inFlight));
+        when(receiptRepository.findByIdWithItemsAndProducts(inFlight.getId())).thenReturn(Optional.of(inFlight));
+
+        var response = receiptService.submit(user, new SubmitReceiptRequest(QR_RS), true);
+
+        assertEquals(inFlight.getId(), response.id());
+        assertEquals(ReceiptStatus.PROCESSING, response.status());
+        verify(receiptRepository, never()).delete(any(Receipt.class));
+        verify(receiptRepository, never()).save(any(Receipt.class));
+        verify(receiptIngestionService, never()).ingest(any(), any(), anyBoolean());
+    }
+
+    @Test
+    void submit_sameChaveQueuedForReattempt_returnsTheQueuedRowWithoutASecondIngest() {
+        var user = buildUser();
+        var queued = persistedReceipt(user, ReceiptStatus.IMPORT_QUEUED);
+        when(receiptRepository.findByHouseholdIdAndChaveAcesso(any(), eq(CHAVE_RS))).thenReturn(Optional.of(queued));
+        when(receiptRepository.findByIdWithItemsAndProducts(queued.getId())).thenReturn(Optional.of(queued));
+
+        var response = receiptService.submit(user, new SubmitReceiptRequest(QR_RS));
+
+        assertEquals(queued.getId(), response.id());
+        verify(receiptRepository, never()).delete(any(Receipt.class));
+        verify(receiptIngestionService, never()).ingest(any(), any());
+    }
+
+    @Test
+    void submit_sameChaveFailedBefore_stillReplacesTheStaleRowAndIngests() {
+        var user = buildUser();
+        var failed = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        when(receiptRepository.findByHouseholdIdAndChaveAcesso(any(), eq(CHAVE_RS))).thenReturn(Optional.of(failed));
+        when(receiptRepository.save(any(Receipt.class))).thenAnswer(invocation -> {
+            var saved = invocation.<Receipt>getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        var response = receiptService.submit(user, new SubmitReceiptRequest(QR_RS));
+
+        verify(receiptRepository).delete(failed);
+        verify(receiptIngestionService).ingest(eq(response.id()), eq(QR_RS));
+    }
+
+    @Test
     void retryFailedScan_flipsToProcessingAndReingestsStoredQr() {
         var user = buildUser();
         var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
