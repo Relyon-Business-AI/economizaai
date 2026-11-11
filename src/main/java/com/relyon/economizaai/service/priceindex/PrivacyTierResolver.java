@@ -11,15 +11,17 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.Collection;
-import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
  * Decides which k-anonymity thresholds an aggregate read must honor.
  *
  * <p>Two tiers. SENSITIVE keeps the full K (3 households): products in a sensitive
- * category group (health) and anything observed at a PHARMACY — a disclosed price there
- * says what a person is treating. GROCERY uses the relaxed thresholds (K=1): "cenoura at
+ * category group (health) and anything observed at a store that is NOT classified as grocery
+ * retail — a PHARMACY (a disclosed price there says what a person is treating) and, fail-closed,
+ * any store whose segment is unknown/unclassified. A product without a category stays grocery
+ * (owner decision 2026-11-11). GROCERY uses the relaxed thresholds (K=1): "cenoura at
  * Zaffari on 30/10 for R$ 4,99" is the same public fact the state "menor preço" portals
  * publish straight from NFC-e, and with {@code observedAt} truncated to the day nothing
  * lets a reader stitch observations back into one receipt.
@@ -30,6 +32,9 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class PrivacyTierResolver {
+
+    private static final Set<MerchantSegment> GROCERY_SEGMENTS =
+            Set.of(MerchantSegment.SUPERMARKET, MerchantSegment.FOOD_RETAIL);
 
     private final ProductRepository productRepository;
     private final CategoryResolver categoryResolver;
@@ -56,12 +61,19 @@ public class PrivacyTierResolver {
         return product.getCategory() == ProductCategory.HEALTH;
     }
 
+    /**
+     * Fail-closed: only a store CLASSIFIED as grocery retail gets the relaxed tier. A pharmacy,
+     * an unregistered store (no location row) and an unclassified/other segment all keep the
+     * full K — we can't tell what a disclosed price there would reveal.
+     */
     public static boolean isSensitiveMarket(MarketLocation location) {
-        return location != null && location.getSegment() == MerchantSegment.PHARMACY;
+        return location == null || location.getSegment() == null
+                || !GROCERY_SEGMENTS.contains(location.getSegment());
     }
 
+    /** {@code locations} must hold one entry per store, with null for a store that has no location row. */
     public static boolean anySensitiveMarket(Collection<MarketLocation> locations) {
-        return locations.stream().filter(Objects::nonNull).anyMatch(PrivacyTierResolver::isSensitiveMarket);
+        return locations.stream().anyMatch(PrivacyTierResolver::isSensitiveMarket);
     }
 
     public Thresholds thresholdsFor(boolean sensitive) {

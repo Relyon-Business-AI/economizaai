@@ -251,14 +251,15 @@ public class PriceIndexService {
      */
     private PrivacyTierResolver.Thresholds thresholdsFor(UUID productId, List<PriceObservation> observations) {
         if (observations.isEmpty()) return privacyTierResolver.thresholdsFor(true);
-        var sensitive = privacyTierResolver.isSensitiveProduct(productId)
-                || PrivacyTierResolver.anySensitiveMarket(locationsOf(observations).values());
+        var sensitive = privacyTierResolver.isSensitiveProduct(productId) || anySensitiveStore(observations);
         return privacyTierResolver.thresholdsFor(sensitive);
     }
 
-    private Map<String, MarketLocation> locationsOf(List<PriceObservation> observations) {
+    /** A store with no location row counts as sensitive (unknown segment), so look each CNPJ up. */
+    private boolean anySensitiveStore(List<PriceObservation> observations) {
         var cnpjs = observations.stream().map(PriceObservation::getMarketCnpj).distinct().toList();
-        return marketLocationService.findByCnpjs(new ArrayList<>(cnpjs));
+        var locations = marketLocationService.findByCnpjs(new ArrayList<>(cnpjs));
+        return cnpjs.stream().map(locations::get).anyMatch(PrivacyTierResolver::isSensitiveMarket);
     }
 
     /**

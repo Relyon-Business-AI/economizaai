@@ -100,7 +100,8 @@ class PriceIndexServiceTest {
         when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(observations);
         when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
                 .thenReturn(List.of(chainCount("AAAAAAAA", 1L)));
-        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
+        when(marketLocationService.findByCnpjs(any()))
+                .thenReturn(Map.of("AAAAAAAA000111", supermarket("AAAAAAAA000111")));
         when(privacyTierResolver.isSensitiveProduct(productId)).thenReturn(false);
         when(privacyTierResolver.thresholdsFor(false)).thenReturn(new PrivacyTierResolver.Thresholds(1, 1));
 
@@ -109,6 +110,41 @@ class PriceIndexServiceTest {
         assertEquals(1, rows.size(), "grocery tier: n=1 is disclosable");
         assertEquals(1L, rows.get(0).distinctHouseholds());
         assertEquals(0, new BigDecimal("4.99").compareTo(rows.get(0).latestPrice()));
+    }
+
+    @Test
+    void bestMarkets_chainWithAnUnclassifiedStoreKeepsTheFullK() {
+        var productId = UUID.randomUUID();
+        var observations = List.of(obsAt(productId, "UUUUUUUU000111", "Loja nova", new BigDecimal("4.99")));
+        when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(observations);
+        when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
+                .thenReturn(List.of(chainCount("UUUUUUUU", 2L)));
+        // No location row for the store: its segment is unknown.
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
+        when(privacyTierResolver.isSensitiveProduct(productId)).thenReturn(false);
+
+        var rows = service.bestMarkets(productId, 10, null, null, null, Set.of());
+
+        assertTrue(rows.isEmpty(), "an unclassified store must stay under the full K (2 households < 3)");
+        verify(privacyTierResolver).thresholdsFor(true);
+        verify(privacyTierResolver, never()).thresholdsFor(false);
+    }
+
+    @Test
+    void referencePrice_unclassifiedStoreUsesTheFullK() {
+        var productId = UUID.randomUUID();
+        var cnpj = "UUUUUUUU000111";
+        when(observationRepository.findRecentByProductAndMarket(eq(productId), eq(cnpj), any()))
+                .thenReturn(List.of(obsAt(productId, cnpj, "Loja nova", new BigDecimal("4.99"))));
+        when(auditRepository.countDistinctHouseholdsForProductMarket(eq(productId), eq(cnpj), any())).thenReturn(1L);
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
+        when(privacyTierResolver.isSensitiveProduct(productId)).thenReturn(false);
+
+        var reference = service.referencePrice(productId, cnpj);
+
+        assertTrue(reference.kAnonBlocked());
+        assertNull(reference.medianPrice());
+        verify(privacyTierResolver).thresholdsFor(true);
     }
 
     @Test
@@ -154,7 +190,13 @@ class PriceIndexServiceTest {
 
     private MarketLocation located(String cnpj, String latitude, String longitude) {
         return MarketLocation.builder().cnpj(cnpj).cnpjRoot(cnpj.substring(0, 8))
-                .latitude(new BigDecimal(latitude)).longitude(new BigDecimal(longitude)).build();
+                .latitude(new BigDecimal(latitude)).longitude(new BigDecimal(longitude))
+                .segment(MerchantSegment.SUPERMARKET).build();
+    }
+
+    private MarketLocation supermarket(String cnpj) {
+        return MarketLocation.builder().cnpj(cnpj).cnpjRoot(cnpj.substring(0, 8))
+                .segment(MerchantSegment.SUPERMARKET).build();
     }
 
     private static List<String> chainNames(List<PriceIndexService.MarketPriceRow> rows) {
@@ -270,7 +312,8 @@ class PriceIndexServiceTest {
         when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(List.of(rsStore, scStore));
         when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
                 .thenReturn(List.of(chainCount("DDDDDDDD", 2L)));
-        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of(
+                "DDDDDDDD000111", supermarket("DDDDDDDD000111"), "DDDDDDDD000222", supermarket("DDDDDDDD000222")));
         when(privacyTierResolver.thresholdsFor(false)).thenReturn(new PrivacyTierResolver.Thresholds(1, 1));
         var location = new ViewerLocation(null, null, ViewerLocationService.Source.NONE, "RS");
 

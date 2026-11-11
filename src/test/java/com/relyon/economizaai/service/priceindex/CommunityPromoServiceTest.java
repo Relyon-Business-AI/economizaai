@@ -102,6 +102,8 @@ class CommunityPromoServiceTest {
                 .thenReturn(List.of(groupCount(productId, marketCnpj, 1L)));
         when(productRepository.findById(productId))
                 .thenReturn(Optional.of(Product.builder().id(productId).category(ProductCategory.GROCERIES).build()));
+        when(marketLocationService.findByCnpjs(List.of(marketCnpj)))
+                .thenReturn(Map.of(marketCnpj, MarketLocation.builder().cnpj(marketCnpj).segment(MerchantSegment.SUPERMARKET).build()));
 
         var promos = service.detectAll();
 
@@ -121,12 +123,25 @@ class CommunityPromoServiceTest {
     }
 
     @Test
+    void promoAtAnUnclassifiedStoreBelowFullKIsHidden() {
+        when(observationRepository.findRecent(any())).thenReturn(droppedPriceSeries());
+        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(1L)))
+                .thenReturn(List.of(groupCount(productId, marketCnpj, 2L)));
+        when(marketLocationService.findByCnpjs(List.of(marketCnpj)))
+                .thenReturn(Map.of(marketCnpj, MarketLocation.builder().cnpj(marketCnpj).segment(MerchantSegment.UNKNOWN).build()));
+
+        assertTrue(service.detectAll().isEmpty());
+    }
+
+    @Test
     void healthProductPromoBelowFullKIsHidden() {
         when(observationRepository.findRecent(any())).thenReturn(droppedPriceSeries());
         when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(1L)))
                 .thenReturn(List.of(groupCount(productId, marketCnpj, 1L)));
         when(productRepository.findById(productId))
                 .thenReturn(Optional.of(Product.builder().id(productId).category(ProductCategory.HEALTH).build()));
+        when(marketLocationService.findByCnpjs(List.of(marketCnpj)))
+                .thenReturn(Map.of(marketCnpj, MarketLocation.builder().cnpj(marketCnpj).segment(MerchantSegment.SUPERMARKET).build()));
 
         assertTrue(service.detectAll().isEmpty());
     }
