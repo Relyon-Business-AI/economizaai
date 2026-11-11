@@ -642,4 +642,41 @@ class UserServiceTest {
         verify(userRepository).delete(user);
         verify(householdRepository, never()).deleteById(any());
     }
+
+    @Test
+    void register_storesEmailTrimmedAndLowerCased() {
+        var request = new RegisterRequest("Maria", "  Maria.Silva@Test.COM ", "password123", "1.0", "1.0", null);
+        var household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
+        when(userRepository.existsByEmail("maria.silva@test.com")).thenReturn(false);
+        when(householdService.createSoloHousehold()).thenReturn(household);
+        when(passwordEncoder.encode("password123")).thenReturn("encoded");
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(jwtService.generateToken(any(User.class))).thenReturn("jwt-token");
+
+        var response = userService.register(request);
+
+        assertEquals("maria.silva@test.com", response.user().email());
+    }
+
+    @Test
+    void register_rejectsEmailAlreadyRegisteredWithOtherCasing() {
+        var request = new RegisterRequest("Maria", "MARIA@test.com", "password123", "1.0", "1.0", null);
+        when(userRepository.existsByEmail("maria@test.com")).thenReturn(true);
+
+        assertThrows(EmailAlreadyExistsException.class, () -> userService.register(request));
+    }
+
+    @Test
+    void login_looksUpNormalizedEmail() {
+        var request = new LoginRequest(" John@Test.com", "password123", null);
+        var user = buildUser();
+        when(userRepository.findByEmail("john@test.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password123", "encoded")).thenReturn(true);
+        when(jwtService.generateToken(user)).thenReturn("jwt-token");
+
+        var response = userService.login(request);
+
+        assertNotNull(response);
+        verify(loginAttemptGuard).recordSuccess("john@test.com");
+    }
 }

@@ -69,6 +69,7 @@ import com.relyon.economizaai.repository.DataShareConsentRepository;
 import com.relyon.economizaai.model.UserWatchedMarket;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.security.ratelimit.LoginAttemptGuard;
+import com.relyon.economizaai.service.auth.EmailNormalizer;
 import com.relyon.economizaai.service.auth.EmailVerificationService;
 import com.relyon.economizaai.service.auth.LoginActivityRecorder;
 import com.relyon.economizaai.service.auth.SignupAlertService;
@@ -132,8 +133,9 @@ public class UserService {
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        if (userRepository.existsByEmail(request.email())) {
-            throw new EmailAlreadyExistsException(request.email());
+        var email = EmailNormalizer.normalize(request.email());
+        if (userRepository.existsByEmail(email)) {
+            throw new EmailAlreadyExistsException(email);
         }
         if (!LegalDocuments.CURRENT_TERMS_VERSION.equals(request.acceptedTermsVersion())) {
             throw new InvalidLegalVersionException("terms",
@@ -147,7 +149,7 @@ public class UserService {
         var household = householdService.createSoloHousehold();
         var user = User.builder()
                 .name(request.name())
-                .email(request.email())
+                .email(email)
                 .password(passwordEncoder.encode(request.password()))
                 .locale(LocalizedMessageService.requestLocaleTag())
                 .household(household)
@@ -176,8 +178,9 @@ public class UserService {
         // Every failure path logs the masked email + reason + platform (ip= comes
         // from MDC) so a login that never succeeds — e.g. an App Review attempt —
         // is traceable end-to-end instead of a silent generic "invalid credentials".
-        var maskedEmail = LogMasker.email(request.email());
-        var found = userRepository.findByEmail(request.email());
+        var email = EmailNormalizer.normalize(request.email());
+        var maskedEmail = LogMasker.email(email);
+        var found = userRepository.findByEmail(email);
         // A social-login account (Google/Apple) has no local password, so a password
         // attempt would only ever yield a generic "invalid credentials". Detect it and
         // point the user at the right provider button instead.
@@ -196,15 +199,15 @@ public class UserService {
         // Per-account lockout (independent of IP): stops an attacker who rotates
         // IPs from grinding one account's password. Checked before the password
         // compare, so a locked account is rejected even with the right password.
-        loginAttemptGuard.assertNotLocked(request.email());
+        loginAttemptGuard.assertNotLocked(email);
 
         var user = found.get();
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
-            loginAttemptGuard.recordFailure(request.email());
+            loginAttemptGuard.recordFailure(email);
             log.warn("login.failed reason=bad_password email={} platform={}", maskedEmail, request.platform());
             throw new InvalidCredentialsException();
         }
-        loginAttemptGuard.recordSuccess(request.email());
+        loginAttemptGuard.recordSuccess(email);
 
         loginActivityRecorder.recordLogin(user, request.platform());
         var token = jwtService.generateToken(user);

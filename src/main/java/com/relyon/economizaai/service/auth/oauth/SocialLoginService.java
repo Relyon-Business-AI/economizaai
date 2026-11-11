@@ -17,6 +17,7 @@ import com.relyon.economizaai.service.HouseholdService;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.analytics.meta.MetaConversionsService;
 import com.relyon.economizaai.service.attribution.AttributionResolver;
+import com.relyon.economizaai.service.auth.EmailNormalizer;
 import com.relyon.economizaai.service.auth.LoginActivityRecorder;
 import com.relyon.economizaai.service.auth.RefreshTokenService;
 import com.relyon.economizaai.service.auth.SignupAlertService;
@@ -68,7 +69,8 @@ public class SocialLoginService {
         if (claims.subject() == null || claims.subject().isBlank()) {
             throw new InvalidOAuthTokenException();
         }
-        var resolved = resolveOrCreateUser(AuthProvider.GOOGLE, claims.subject(), claims.email(),
+        var resolved = resolveOrCreateUser(AuthProvider.GOOGLE, claims.subject(),
+                EmailNormalizer.normalize(claims.email()),
                 claims.emailVerified(), claims.name(), request.platform(), request.attribution());
         return issueAuth(resolved.user(), resolved.signupPromoValidUntil());
     }
@@ -79,7 +81,8 @@ public class SocialLoginService {
         if (claims.subject() == null || claims.subject().isBlank()) {
             throw new InvalidOAuthTokenException();
         }
-        var resolved = resolveOrCreateUser(AuthProvider.APPLE, claims.subject(), claims.email(),
+        var resolved = resolveOrCreateUser(AuthProvider.APPLE, claims.subject(),
+                EmailNormalizer.normalize(claims.email()),
                 claims.emailVerified(), claims.name(), request.platform(), request.attribution());
         return issueAuth(resolved.user(), resolved.signupPromoValidUntil());
     }

@@ -408,4 +408,21 @@ class SocialLoginServiceTest {
 
         verify(loginActivityRecorder).recordRegistration(any(User.class), eq(Platform.IOS));
     }
+
+    @Test
+    void loginWithGoogle_newUser_storesProviderEmailNormalized() {
+        when(googleTokenVerifier.verify("id-token"))
+                .thenReturn(new GoogleTokenVerifier.GoogleClaims("sub-9", " Maria@Example.COM", true, "Maria"));
+        when(userRepository.findByAuthProviderAndProviderSubject(AuthProvider.GOOGLE, "sub-9"))
+                .thenReturn(Optional.empty());
+        when(userRepository.findByEmail("maria@example.com")).thenReturn(Optional.empty());
+        when(householdService.createSoloHousehold())
+                .thenReturn(Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build());
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        stubTokenIssue();
+
+        var response = socialLoginService.loginWithGoogle(new GoogleLoginRequest("id-token", null));
+
+        assertEquals("maria@example.com", response.user().email());
+    }
 }

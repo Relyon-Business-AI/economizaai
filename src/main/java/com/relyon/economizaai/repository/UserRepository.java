@@ -3,6 +3,7 @@ package com.relyon.economizaai.repository;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.AuthProvider;
 import com.relyon.economizaai.model.enums.DigestFrequency;
+import com.relyon.economizaai.service.auth.EmailNormalizer;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
@@ -18,11 +19,27 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     List<User> findByPushDeviceTokenIsNull();
 
 
-    Optional<User> findByEmail(String email);
+    /**
+     * Account lookup by e-mail. E-mails are stored normalized (trim + lower case), so the
+     * argument is normalized here — every caller (login, reset, social, admin, webhooks)
+     * matches the same account whatever casing was typed.
+     */
+    default Optional<User> findByEmail(String email) {
+        return findByStoredEmail(EmailNormalizer.normalize(email));
+    }
+
+    default boolean existsByEmail(String email) {
+        return existsByStoredEmail(EmailNormalizer.normalize(email));
+    }
+
+    /** Exact match against the stored (already normalized) value — use {@link #findByEmail}. */
+    @Query("SELECT user FROM User user WHERE user.email = :email")
+    Optional<User> findByStoredEmail(String email);
+
+    @Query("SELECT count(user) > 0 FROM User user WHERE user.email = :email")
+    boolean existsByStoredEmail(String email);
 
     Optional<User> findByAuthProviderAndProviderSubject(AuthProvider authProvider, String providerSubject);
-
-    boolean existsByEmail(String email);
 
     List<User> findAllByHouseholdId(UUID householdId);
 
