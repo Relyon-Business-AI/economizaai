@@ -198,6 +198,11 @@ economizaai:
       # (this is what the dev server runs); set EAN_LIVE_FALLBACK_ENABLED=false to
       # disable, and revisit for prod (OFF-API rate limits at scale).
       live-fallback-enabled: ${EAN_LIVE_FALLBACK_ENABLED:true}
+      # The warm-up runs on the ingest thread, so it is bounded per receipt: a wall-clock
+      # budget for the whole warm-up and a cap on unseen barcodes looked up. Whatever
+      # doesn't fit stays unchecked and is picked up by a later receipt.
+      warmup-budget-ms: ${EAN_WARMUP_BUDGET_MS:5000}
+      warmup-max-eans: ${EAN_WARMUP_MAX_EANS:15}
       live-fallback-timeout-ms: ${EAN_LIVE_FALLBACK_TIMEOUT_MS:2500}
     sefaz:
       timeout-ms: 30000

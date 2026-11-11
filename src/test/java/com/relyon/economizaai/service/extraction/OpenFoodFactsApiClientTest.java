@@ -1,6 +1,12 @@
 package com.relyon.economizaai.service.extraction;
 
+import com.relyon.economizaai.service.extraction.OpenFoodFactsApiClient.LookupStatus;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 import java.util.List;
@@ -70,5 +76,66 @@ class OpenFoodFactsApiClientTest {
         var client = new StubClient(false, Map.of("off", found("X", "Y", List.of("en:cereals"))));
         assertFalse(client.isEnabled());
         assertTrue(client.fetch("7891000098950").isEmpty());
+    }
+
+    /** Client whose HTTP seam fails for the hosts listed in {@code failing}. */
+    private static class FailingClient extends OpenFoodFactsApiClient {
+        private final Map<String, RuntimeException> failing;
+        FailingClient(Map<String, RuntimeException> failing) {
+            super(RestClient.builder(), true, 2000, HOSTS, "test-ua");
+            this.failing = failing;
+        }
+        @Override
+        protected Map<String, Object> get(String url) {
+            for (var entry : failing.entrySet()) {
+                if (url.contains(entry.getKey())) throw entry.getValue();
+            }
+            return NOT_FOUND;
+        }
+    }
+
+    @Test
+    void lookup_notFound_onlyWhenEveryDatabaseAnswered() {
+        var client = new StubClient(true, Map.of("off", NOT_FOUND, "obf", NOT_FOUND, "opf", NOT_FOUND));
+
+        assertEquals(LookupStatus.NOT_FOUND, client.lookup("0000000000000").status());
+    }
+
+    @Test
+    void lookup_http404_countsAsARealNotFoundAnswer() {
+        var client = new FailingClient(Map.of(
+                "off", HttpClientErrorException.create(HttpStatus.NOT_FOUND, "Not Found", HttpHeaders.EMPTY, null, null)));
+
+        assertEquals(LookupStatus.NOT_FOUND, client.lookup("0000000000000").status());
+    }
+
+    @Test
+    void lookup_timeoutOrThrottleOrServerError_isUnavailableNotAMiss() {
+        var timeout = new FailingClient(Map.of("obf", new ResourceAccessException("read timed out")));
+        var throttled = new FailingClient(Map.of(
+                "off", HttpClientErrorException.create(HttpStatus.TOO_MANY_REQUESTS, "Too Many", HttpHeaders.EMPTY, null, null)));
+        var serverError = new FailingClient(Map.of(
+                "opf", HttpServerErrorException.create(HttpStatus.BAD_GATEWAY, "Bad Gateway", HttpHeaders.EMPTY, null, null)));
+
+        assertEquals(LookupStatus.UNAVAILABLE, timeout.lookup("0000000000000").status());
+        assertEquals(LookupStatus.UNAVAILABLE, throttled.lookup("0000000000000").status());
+        assertEquals(LookupStatus.UNAVAILABLE, serverError.lookup("0000000000000").status());
+    }
+
+    @Test
+    void lookup_hitInALaterDatabase_winsEvenIfAnEarlierOneFailed() {
+        var client = new StubClient(true, Map.of("obf", found("Listerine", "J&J", List.of("en:mouthwashes"))));
+
+        var result = client.lookup("7891010256043"); // "off" gives no body, "obf" knows it
+
+        assertEquals(LookupStatus.FOUND, result.status());
+        assertEquals("Listerine", result.row().productName());
+    }
+
+    @Test
+    void lookup_budgetAlreadyExpired_asksNoDatabaseAndIsUnavailable() {
+        var client = new FailingClient(Map.of("off", new IllegalStateException("must not be called")));
+
+        assertEquals(LookupStatus.UNAVAILABLE, client.lookup("0000000000000", () -> true).status());
     }
 }
