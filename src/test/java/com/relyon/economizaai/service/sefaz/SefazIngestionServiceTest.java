@@ -63,6 +63,9 @@ class SefazIngestionServiceTest {
 
     // UF code 43 → RS.
     private static final String CHAVE_RS = "43260412345678000190650010000123451123456782";
+    /** The nota's own page (prints its chave, grouped in fours) in a layout the parser can't read. */
+    private static final String CHANGED_LAYOUT_RS = "<html><body><div class=\"novo-layout\">Chave de acesso: "
+            + "4326 0412 3456 7800 0190 6500 1000 0123 4511 2345 6782</div></body></html>";
     // UF code 42 → SC.
     private static final String CHAVE_SC = "42260650552333000100650080001188891101255904";
     // UF code 35 → SP.
@@ -663,14 +666,31 @@ class SefazIngestionServiceTest {
         var parseEx = new ReceiptParseException("no-items-found");
         when(rsAdapter.parseHtml(anyString(), anyString(), any())).thenThrow(parseEx);
         var service = new SefazIngestionService(List.of(rsAdapter), Optional.empty(), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
-        var fetched = new FetchedDocument(rsAdapter, "<html>changed layout</html>", CHAVE_RS,
+        var fetched = new FetchedDocument(rsAdapter, CHANGED_LAYOUT_RS, CHAVE_RS,
                 UnidadeFederativa.RS, "https://sefaz.rs.gov.br/x");
 
         var thrown = assertThrows(ReceiptParseException.class, () -> service.parse(fetched, null));
 
         assertSame(parseEx, thrown);
         verify(stateCoverage).recordVerifiedParseFailure(eq(UnidadeFederativa.RS), eq(CHAVE_RS),
-                eq("https://sefaz.rs.gov.br/x"), anyString(), eq("<html>changed layout</html>"));
+                eq("https://sefaz.rs.gov.br/x"), anyString(), eq(CHANGED_LAYOUT_RS));
+    }
+
+    @Test
+    void parse_verifiedStateOutagePage_isNotAParserRegression() {
+        var rsAdapter = mockAdapterFor(UnidadeFederativa.RS);
+        var parseEx = new ReceiptParseException("no-items-found");
+        when(rsAdapter.parseHtml(anyString(), anyString(), any())).thenThrow(parseEx);
+        var service = new SefazIngestionService(List.of(rsAdapter), Optional.empty(), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+        var fetched = new FetchedDocument(rsAdapter, "<html><body>Portal em manutenção</body></html>", CHAVE_RS,
+                UnidadeFederativa.RS, "https://sefaz.rs.gov.br/x");
+
+        var thrown = assertThrows(ReceiptParseException.class, () -> service.parse(fetched, null));
+
+        assertSame(parseEx, thrown);
+        verify(stateCoverage, never()).recordVerifiedParseFailure(any(), any(), any(), any(), any());
+        verify(stateCoverage).recordFailure(eq(UnidadeFederativa.RS), eq(StateIngestionStrategy.VERIFIED_ADAPTER),
+                eq(StateIngestionOutcome.FETCH_FAILED), anyString(), contains("not-the-nota-page"));
     }
 
     @Test
@@ -707,8 +727,10 @@ class SefazIngestionServiceTest {
         var thrown = assertThrows(ReceiptParseException.class, () -> service.parse(fetched, null));
 
         assertSame(rejection, thrown);
-        verify(stateCoverage).recordVerifiedParseFailure(eq(UnidadeFederativa.RS), eq(CHAVE_RS),
-                eq("https://sefaz.rs.gov.br/x"), anyString(), anyString());
+        // The parser understood the page (a cStat rejection) — not a layout regression.
+        verify(stateCoverage, never()).recordVerifiedParseFailure(any(), any(), any(), any(), any());
+        verify(stateCoverage).recordFailure(eq(UnidadeFederativa.RS), eq(StateIngestionStrategy.VERIFIED_ADAPTER),
+                eq(StateIngestionOutcome.FETCH_FAILED), anyString(), anyString());
     }
 
     @Test
@@ -1154,10 +1176,10 @@ class SefazIngestionServiceTest {
         when(rsAdapter.parseHtml(anyString(), anyString(), any()))
                 .thenThrow(new ReceiptParseException("no-items-found"));
         var rescued = sampleParsed();
-        when(htmlReceiptRescue.rescue(eq("<html>changed layout</html>"), eq(CHAVE_RS),
+        when(htmlReceiptRescue.rescue(eq(CHANGED_LAYOUT_RS), eq(CHAVE_RS),
                 eq(UnidadeFederativa.RS), any(), any())).thenReturn(rescued);
         var service = new SefazIngestionService(List.of(rsAdapter), Optional.empty(), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
-        var fetched = new FetchedDocument(rsAdapter, "<html>changed layout</html>", CHAVE_RS,
+        var fetched = new FetchedDocument(rsAdapter, CHANGED_LAYOUT_RS, CHAVE_RS,
                 UnidadeFederativa.RS, "https://sefaz.rs.gov.br/x");
 
         var parsed = service.parse(fetched, null);
@@ -1165,7 +1187,7 @@ class SefazIngestionServiceTest {
         assertSame(rescued, parsed);
         // The rescue saves the user's receipt, but the parser regression signal must still fire.
         verify(stateCoverage).recordVerifiedParseFailure(eq(UnidadeFederativa.RS), eq(CHAVE_RS),
-                eq("https://sefaz.rs.gov.br/x"), anyString(), eq("<html>changed layout</html>"));
+                eq("https://sefaz.rs.gov.br/x"), anyString(), eq(CHANGED_LAYOUT_RS));
     }
 
     @Test
