@@ -27,6 +27,7 @@ import com.relyon.economizaai.exception.ReceiptPhotoIncompleteException;
 import com.relyon.economizaai.exception.InvalidIssuedAtException;
 import com.relyon.economizaai.exception.ReceiptNotEditableException;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
+import com.relyon.economizaai.exception.ReceiptRetryUnavailableException;
 import com.relyon.economizaai.exception.UnsupportedMerchantException;
 import com.relyon.economizaai.config.MdcContextFilter;
 import com.relyon.economizaai.model.Receipt;
@@ -63,6 +64,7 @@ import com.relyon.economizaai.service.sefaz.ParsedReceipt;
 import com.relyon.economizaai.service.sefaz.ParsedReceiptItem;
 import com.relyon.economizaai.service.sefaz.PrefetchPolicy;
 import com.relyon.economizaai.service.sefaz.ReceiptIngestionService;
+import com.relyon.economizaai.service.sefaz.ReceiptRetryPolicy;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
 import com.relyon.economizaai.service.sefaz.StateCoverageService;
 import com.relyon.economizaai.service.subscription.Feature;
@@ -321,6 +323,7 @@ public class ReceiptService {
     @Transactional
     public boolean retryFailedScan(User user, UUID receiptId, boolean deviceCapable) {
         var receipt = loadOwned(user, receiptId);
+        refuseRetryThatCannotHelp(receipt);
         if (receipt.getOrigin() != ReceiptOrigin.SCAN) {
             return false;
         }
@@ -338,6 +341,20 @@ public class ReceiptService {
         log.info("retry ok origin=SCAN status=PROCESSING (re-ingestion dispatched)");
         dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload, deviceCapable));
         return true;
+    }
+
+    /**
+     * A failure that is a final verdict about the nota itself (corrupted chave, the portal has
+     * no such nota, unsupported merchant…) fails the exact same way on every retry — and a retry
+     * may pay for the fetch again. Refuse it with a localized message that says what to do
+     * instead. Applies to every origin, so it runs before the origin-specific retry paths.
+     */
+    private static void refuseRetryThatCannotHelp(Receipt receipt) {
+        if (receipt.getStatus() != ReceiptStatus.FAILED_PARSE) return;
+        ReceiptRetryPolicy.refusalMessageKey(receipt.getParseErrorReason()).ifPresent(refusalKey -> {
+            log.info("retry.refused reason={} message={}", receipt.getParseErrorReason(), refusalKey);
+            throw new ReceiptRetryUnavailableException(refusalKey);
+        });
     }
 
     /**

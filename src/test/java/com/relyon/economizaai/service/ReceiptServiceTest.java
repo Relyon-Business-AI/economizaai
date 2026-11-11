@@ -20,6 +20,7 @@ import com.relyon.economizaai.exception.InvalidIssuedAtException;
 import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.exception.ReceiptNotEditableException;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
+import com.relyon.economizaai.exception.ReceiptRetryUnavailableException;
 import com.relyon.economizaai.exception.UnsupportedMerchantException;
 import com.relyon.economizaai.exception.UnsupportedStateException;
 import com.relyon.economizaai.model.Category;
@@ -315,6 +316,35 @@ class ReceiptServiceTest {
         assertEquals(ReceiptStatus.PROCESSING, receipt.getStatus());
         assertNull(receipt.getParseErrorReason());
         verify(receiptIngestionService).ingest(receipt.getId(), CHAVE_RS, true);
+    }
+
+    @Test
+    void retryFailedScan_deterministicFailure_isRefusedWithAMessageSayingWhatToDo() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        receipt.setParseErrorReason("receipt.parse.failed:infosimples.not-found");
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        var thrown = assertThrows(ReceiptRetryUnavailableException.class,
+                () -> receiptService.retryFailedScan(user, receipt.getId(), true));
+
+        assertEquals("receipt.retry.refused.not_found", thrown.getMessageKey());
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+        verify(receiptIngestionService, never()).ingest(any(), any(), anyBoolean());
+    }
+
+    @Test
+    void retryFailedScan_deterministicFailure_isRefusedForNonScanOriginsToo() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        receipt.setOrigin(ReceiptOrigin.IMPORT);
+        receipt.setParseErrorReason("receipt.merchant.unsupported:");
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        var thrown = assertThrows(ReceiptRetryUnavailableException.class,
+                () -> receiptService.retryFailedScan(user, receipt.getId(), false));
+
+        assertEquals("receipt.retry.refused.merchant", thrown.getMessageKey());
     }
 
     @Test
