@@ -357,16 +357,24 @@ economizaai:
     # Safety-net sweep: downgrades a PRO whose paid period elapsed without a renewal.
     expiry-interval-ms: ${SUBSCRIPTION_EXPIRY_INTERVAL_MS:3600000}   # hourly
     expiry-initial-delay-ms: 120000
-    # Launch promo (2026-09-29): every registration is granted PRO until the FIXED date
-    # `until` — one synchronized cutover for the whole base instead of per-user rolling
-    # expiries (see V85, which extended existing grants to the same date). When `until`
-    # is unset, falls back to `months` from the signup date (pre-2026-09-29 behavior).
-    # After `until` passes, signups stop being granted. SUBSCRIPTION_PROMO_ENABLED=false ends it earlier.
+    # Days the sweep waits past the period end before downgrading a PAID, still-renewing
+    # subscription (a renewal webhook can be late). Promo / non-renewing rows get no grace.
+    paid-grace-days: ${SUBSCRIPTION_PAID_GRACE_DAYS:3}
+    # Launch promo: PRO is granted when the user confirms their FIRST receipt (not at
+    # registration), once per user, until the FIXED date `until` (end of that day in Brasília) —
+    # one synchronized cutover for the whole base (see V85, which extended existing grants to the
+    # same date). When `until` is unset, falls back to `months` from the grant date. After `until`
+    # passes nobody else is granted. SUBSCRIPTION_PROMO_ENABLED=false ends it earlier.
     # (Existing accounts got a separate one-off 6-month grant via V68__grant_premium_promo.sql.)
+    # End-of-promo warnings: promo holders without a paid subscription are notified (inbox + push)
+    # at each `warning-days` milestone before `until`, by a daily job at `warning-cron` (Brasília).
     promo:
       enabled: ${SUBSCRIPTION_PROMO_ENABLED:true}
       months: ${SUBSCRIPTION_PROMO_MONTHS:3}
       until: ${SUBSCRIPTION_PROMO_UNTIL:2026-12-31}
+      warnings-enabled: ${SUBSCRIPTION_PROMO_WARNINGS_ENABLED:true}
+      warning-days: ${SUBSCRIPTION_PROMO_WARNING_DAYS:15,7,3,1}
+      warning-cron: ${SUBSCRIPTION_PROMO_WARNING_CRON:0 0 10 * * *}
     # Absolute household size (the PRO / family ceiling). Applies even with enforcement off.
     household-members-max: ${HOUSEHOLD_MEMBERS_MAX:6}
     free:
@@ -374,6 +382,12 @@ economizaai:
       history-days: 90                         # FREE: rolling analytics/history window (PRO unlimited)
       monthly-receipts: 5                      # FREE: max receipt submissions per calendar month (PRO unlimited)
       household-members: 2                     # FREE: household size when no member is PRO (any PRO member lifts it to the max)
+      # PRO features left OPEN to FREE while enforcement is on (comma-separated Feature names,
+      # e.g. PUSH_AND_EMAIL_DELIVERY,PHOTO_EXTRACTION) — switch paywalls on one at a time.
+      open-features: ${SUBSCRIPTION_FREE_OPEN_FEATURES:}
+  referral:
+    # Link people share to invite friends; the personal code is appended.
+    share-base-url: ${REFERRAL_SHARE_BASE_URL:https://economizaai.app/?ref=}
   monetization:
     # PRO plan price used to MODEL revenue/LTV/ROAS in the admin acquisition
     # dashboard while real payment data is still sparse (RevenueCat captures real
@@ -413,10 +427,6 @@ economizaai:
     webhook-url: ${GARIMPO_WEBHOOK_URL:}
     search-max-limit: 50
   billing:
-    # Shared secret the provider-agnostic webhook (/api/v1/webhooks/subscription)
-    # verifies via the X-Webhook-Secret header. EMPTY in dev = check skipped.
-    # In prod set this AND configure the provider (Stripe/Mercado Pago) to send it.
-    webhook-secret: ${BILLING_WEBHOOK_SECRET:}
     revenuecat:
       # The fixed string RevenueCat sends in the Authorization header of its webhook
       # (RevenueCat → Integrations → Webhooks → "Authorization header value").

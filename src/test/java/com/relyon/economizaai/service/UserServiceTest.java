@@ -91,6 +91,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -641,5 +642,17 @@ class UserServiceTest {
 
         verify(userRepository).delete(user);
         verify(householdRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void deleteAccount_flagsAnActivePaidSubscriptionBeforeDeleting() {
+        var user = buildUser();
+        when(userRepository.countByHouseholdId(user.getHousehold().getId())).thenReturn(1L);
+
+        userService.deleteAccount(user);
+
+        var order = inOrder(subscriptionService, userRepository);
+        order.verify(subscriptionService).warnIfDeletingPaidSubscriber(user);
+        order.verify(userRepository).delete(user);
     }
 }

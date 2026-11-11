@@ -483,6 +483,7 @@ public class UserService {
     @Transactional
     public void deleteAccount(User user, DeleteAccountRequest request) {
         recordDeletionFeedback(user, request);
+        subscriptionService.warnIfDeletingPaidSubscriber(user);
         var householdId = user.getHousehold().getId();
         userRepository.delete(user);
         log.info("User account deleted: {}", LogMasker.email(user.getEmail()));
