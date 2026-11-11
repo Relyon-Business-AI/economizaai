@@ -1411,6 +1411,11 @@ so prefer it for display; `city`/`state` are new (2026-11-10, null until geocode
 has bought here, `watching` = pinned. Watched markets bypass the radius filter — useful
 for "the market on my commute is far from home but I want its promos anyway".
 
+**Display-name cascade (2026-11-11):** every `friendlyName` / `marketFriendlyName` /
+`lastMarketFriendlyName` resolves as household rename → **nome fantasia** from the public CNPJ registry
+(title-cased) → razão social with the corporate boilerplate stripped. Endpoints that already used the
+chain name keep it between the nome fantasia and the cleaned razão social. `name` / `marketName` stay raw.
+
 **Custom market name (household-only):** `PUT /markets/{cnpj}/name` saves a rename for your household. It does **not** overwrite the global name — instead every market-bearing response carries a separate **`friendlyName`** field (alongside the original `name`/`marketName`) that defaults to the original and is replaced by your rename when set. The FE should **display `friendlyName`**. It applies everywhere a market appears for your household (markets list, product-markets, receipts, items, insights, price history, notifications); the global name and other households are never affected. `DELETE` clears it (so `friendlyName` falls back to the original).
 
 ---
