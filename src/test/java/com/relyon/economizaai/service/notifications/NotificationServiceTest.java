@@ -334,7 +334,7 @@ class NotificationServiceTest {
         when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
         lenient().when(quietHours.holdsBackNow(any())).thenReturn(true);
         var svc = service(true, true);
-        when(subscriptionGate.allows(any(), eq(Feature.PUSH_AND_EMAIL_DELIVERY))).thenReturn(false);
+        when(subscriptionGate.allowsDelivery(any(), any(), anyBoolean())).thenReturn(false);
 
         var saved = svc.notify(payload(user, NotificationType.PRICE_DROP));
 

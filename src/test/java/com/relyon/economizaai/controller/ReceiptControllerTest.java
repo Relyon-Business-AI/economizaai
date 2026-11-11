@@ -578,7 +578,7 @@ class ReceiptControllerTest {
         var id = UUID.randomUUID();
         var itemId = UUID.randomUUID();
         doThrow(new ItemCorrectionUnavailableException())
-                .when(aiItemCorrectionService).correct(eq(id), eq(itemId), any(), any());
+                .when(aiItemCorrectionService).correct(eq(id), eq(itemId), any(), any(), any());
 
         mockMvc.perform(post("/api/v1/receipts/" + id + "/items/" + itemId + "/correction")
                         .with(SecurityMockMvcRequestPostProcessors.user(user))
@@ -593,7 +593,7 @@ class ReceiptControllerTest {
         var id = UUID.randomUUID();
         var itemId = UUID.randomUUID();
         doThrow(new ItemCorrectionFailedException())
-                .when(aiItemCorrectionService).correct(eq(id), eq(itemId), any(), any());
+                .when(aiItemCorrectionService).correct(eq(id), eq(itemId), any(), any(), any());
 
         mockMvc.perform(post("/api/v1/receipts/" + id + "/items/" + itemId + "/correction")
                         .with(SecurityMockMvcRequestPostProcessors.user(user))
@@ -608,7 +608,7 @@ class ReceiptControllerTest {
         var id = UUID.randomUUID();
         var itemId = UUID.randomUUID();
         doThrow(new ReceiptItemNotFoundException())
-                .when(aiItemCorrectionService).correct(eq(id), eq(itemId), any(), any());
+                .when(aiItemCorrectionService).correct(eq(id), eq(itemId), any(), any(), any());
 
         mockMvc.perform(post("/api/v1/receipts/" + id + "/items/" + itemId + "/correction")
                         .with(SecurityMockMvcRequestPostProcessors.user(user))
