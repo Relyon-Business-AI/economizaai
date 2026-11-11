@@ -23,7 +23,10 @@ import static java.util.Map.entry;
  *   <li><b>STRONG</b> — sugar/intensity ({@code \d+%}, "zero", "diet", "light",
  *       "sem acucar"/"s/acucar"/"zero acucar") and dietary claims ("sem gluten"/
  *       "sglut", "sem lactose"/"zero lactose"). These are rarely dropped from a
- *       receipt name, so STRONG present-on-one-side-only IS a real difference.</li>
+ *       receipt name, so STRONG present-on-one-side-only IS a real difference.
+ *       Also covers variant/type/line markers that behave the same way — sugar
+ *       type ("demerara" vs refined), detergent lines ("platinum", "titanium"),
+ *       pasta shapes ("parafuso", "espaguete", …).</li>
  *   <li><b>WEAK</b> — flavor words (chocolate, morango, baunilha, …) and soft
  *       descriptors ("integral", "desnatado", "tradicional"). A receipt often
  *       abbreviates these away ("LEITE ITAMBE INT" vs "…INTEGRAL"), so WEAK is a
@@ -49,6 +52,25 @@ public final class VariantDiscriminator {
     /** STRONG single-token sugar/intensity markers — presence vs absence is always distinguishing. */
     private static final Set<String> STRONG_SINGLE_TOKENS = Set.of(
             "zero", "diet", "light", "sglut", "slac");
+
+    /**
+     * STRONG variant/type/line markers — a distinct sub-line of the same brand that is
+     * (almost) never dropped from a receipt name, so presence-on-one-side-only IS a real
+     * difference (treated like a STRONG token, not a WEAK flavor). Covers:
+     * <ul>
+     *   <li>sugar TYPE — "demerara" vs the implicit "refinado" (a demerara item must never
+     *       merge into a refined-sugar product);</li>
+     *   <li>detergent/soap PERFORMANCE LINES — "platinum", "titanium" (Ypê/ODD premium
+     *       lines sit alongside the regular bottles under the same brand);</li>
+     *   <li>pasta SHAPES — different cuts are different products (owner-approved split):
+     *       "parafuso", "pena", "espaguete"/"spaghetti", "tricolor", "lasanha".</li>
+     * </ul>
+     * Normalized form (accent-stripped, lowercase).
+     */
+    private static final Set<String> VARIANT_LINE_TOKENS = Set.of(
+            "demerara",
+            "platinum", "titanium",
+            "parafuso", "pena", "espaguete", "spaghetti", "tricolor", "lasanha");
 
     /**
      * STRONG multi-word markers normalized to a canonical tag so "s/acucar",
@@ -82,7 +104,14 @@ public final class VariantDiscriminator {
             "avela", "amendoim", "doce de leite", "leite condensado",
             "frutas vermelhas", "chocolate branco", "meio amargo",
             "tradicional", "original", "natural",
-            "integral", "desnatado", "semidesnatado", "organico", "defumado");
+            "integral", "desnatado", "semidesnatado", "organico", "defumado",
+            // powdered-juice (Tang) + biscuit/dairy flavours seen mis-merged in prod
+            "guarana", "tangerina", "framboesa", "cacau", "maca",
+            "proteina", "lavanda", "orquidea",
+            // tomato-sauce lines ("molho … manjericao" / "… pizza")
+            "manjericao", "pizza",
+            // savoury biscuit flavours
+            "tomate", "queijo", "bacon", "provolone", "crostini");
 
     /**
      * True when the two raw descriptions may safely merge into one canonical
@@ -119,6 +148,7 @@ public final class VariantDiscriminator {
         var normalized = DescriptionNormalizer.normalize(rawDescription);
         addStrongPhrases(normalized, tokens);
         addStrongSingleTokens(normalized, tokens);
+        addVariantLineTokens(normalized, tokens);
         return tokens;
     }
 
@@ -165,6 +195,17 @@ public final class VariantDiscriminator {
             if (STRONG_SINGLE_TOKENS.contains(word)) {
                 tokens.add(word);
             }
+        }
+    }
+
+    /**
+     * Emits the STRONG variant/line markers (sugar type, detergent line, pasta shape).
+     * Tagged {@code line_} so they share the STRONG "present-on-one-side-is-a-difference"
+     * semantics and never collide with a same-spelling weak flavour.
+     */
+    private static void addVariantLineTokens(String normalized, Set<String> tokens) {
+        for (var word : normalized.split(" ")) {
+            if (VARIANT_LINE_TOKENS.contains(word)) tokens.add("line_" + word);
         }
     }
 }
