@@ -1,8 +1,10 @@
 package com.relyon.economizaai.controller;
 
+import com.relyon.economizaai.dto.response.StateStatusResponse;
 import com.relyon.economizaai.dto.response.SupportedStatesResponse;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
+import com.relyon.economizaai.service.sefaz.StateStatusService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -27,12 +29,23 @@ import java.util.Set;
 public class SupportedStatesController {
 
     private final SefazIngestionService sefazIngestionService;
+    private final StateStatusService stateStatusService;
 
     @GetMapping("/supported-states")
     public ResponseEntity<SupportedStatesResponse> supportedStates() {
         return ResponseEntity.ok(new SupportedStatesResponse(
                 sorted(sefazIngestionService.getVerifiedStates()),
                 sorted(sefazIngestionService.experimentalStates())));
+    }
+
+    /**
+     * How scanning is going in each of the 27 states right now (WORKING / UNSTABLE /
+     * VALIDATING) — the source of the in-app FAQ's "situação dos estados", so the app never
+     * hardcodes it. Authenticated like {@code /supported-states}; cached server-side.
+     */
+    @GetMapping("/state-status")
+    public ResponseEntity<List<StateStatusResponse>> stateStatus() {
+        return ResponseEntity.ok(stateStatusService.currentStatus());
     }
 
     private static List<String> sorted(Set<UnidadeFederativa> states) {

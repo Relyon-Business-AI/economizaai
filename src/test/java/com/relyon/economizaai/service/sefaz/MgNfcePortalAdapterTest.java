@@ -2,11 +2,15 @@ package com.relyon.economizaai.service.sefaz;
 
 import com.relyon.economizaai.exception.CaptchaUnavailableException;
 import com.relyon.economizaai.exception.InvalidQrPayloadException;
+import com.relyon.economizaai.exception.ReceiptParseException;
+import com.relyon.economizaai.exception.SefazDeterministicFetchException;
 import com.relyon.economizaai.exception.SefazFetchException;
 import com.relyon.economizaai.service.sefaz.captcha.CaptchaSolver;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.http.HttpStatus;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.math.BigDecimal;
@@ -16,6 +20,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -150,6 +155,36 @@ class MgNfcePortalAdapterTest {
 
         assertThrows(SefazFetchException.class, () -> adapter.fetchHtml(QR_URL));
         assertEquals(1, postCount.get(), "time budget must stop retries well before maxAttempts");
+    }
+
+    @Test
+    void fetchHtml_deterministicClientError_stopsAfterOneSolveAndIsNotRescuable() {
+        var postCount = new AtomicReference<>(0);
+        var adapter = adapter(TOKEN_SOLVER, url -> fixture("challenge.html"),
+                url -> { throw new HttpClientErrorException(HttpStatus.NOT_FOUND); }, null, 60000L, postCount);
+
+        assertThrows(SefazDeterministicFetchException.class, () -> adapter.fetchHtml(QR_URL));
+        assertEquals(1, postCount.get(), "a 404 must not buy a second captcha solve");
+    }
+
+    @Test
+    void fetchHtml_throttledClientError_staysRescuableWithoutRetrying() {
+        var postCount = new AtomicReference<>(0);
+        var adapter = adapter(TOKEN_SOLVER, url -> fixture("challenge.html"),
+                url -> { throw new HttpClientErrorException(HttpStatus.TOO_MANY_REQUESTS); }, null, 60000L, postCount);
+
+        var thrown = assertThrows(SefazFetchException.class, () -> adapter.fetchHtml(QR_URL));
+        assertFalse(thrown instanceof SefazDeterministicFetchException);
+        assertEquals(1, postCount.get());
+    }
+
+    @Test
+    void parseHtml_danfeWithoutItems_usesTheSharedNoItemsKey() {
+        var adapter = adapter(TOKEN_SOLVER, url -> "", url -> "", null);
+
+        var thrown = assertThrows(ReceiptParseException.class,
+                () -> adapter.parseHtml("<html><body>sem itens</body></html>", CHAVE, QR_URL));
+        assertTrue(thrown.isNoItemsFound());
     }
 
     @Test

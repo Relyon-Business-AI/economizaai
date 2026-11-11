@@ -1,10 +1,12 @@
 package com.relyon.economizaai.service.sefaz;
 
 import com.relyon.economizaai.exception.ExperimentalStateFailedException;
+import com.relyon.economizaai.exception.PaidApiUnavailableException;
 import com.relyon.economizaai.exception.ReceiptParseException;
 import com.relyon.economizaai.exception.SefazFetchException;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.MarketLocation;
+import com.relyon.economizaai.model.enums.InfosimplesOutcome;
 import com.relyon.economizaai.model.enums.MerchantSegment;
 import com.relyon.economizaai.service.extraction.EanCatalogEnrichmentService;
 import com.relyon.economizaai.model.Receipt;
@@ -133,7 +135,7 @@ class ReceiptIngestionServiceTest {
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(sampleParsed());
+        when(sefazIngestionService.parse(eq(fetched), any(), any())).thenReturn(sampleParsed());
 
         service.ingest(receipt.getId(), QR);
 
@@ -150,7 +152,7 @@ class ReceiptIngestionServiceTest {
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fetch(CHAVE_RS, receipt.getUser().getId())).thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(sampleParsed());
+        when(sefazIngestionService.parse(eq(fetched), any(), any())).thenReturn(sampleParsed());
 
         service.ingestReconsult(receipt.getId(), CHAVE_RS);
 
@@ -164,7 +166,7 @@ class ReceiptIngestionServiceTest {
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(sampleParsed());
+        when(sefazIngestionService.parse(eq(fetched), any(), any())).thenReturn(sampleParsed());
         when(aiCategorySuggestionService.isEnabled()).thenReturn(true);
 
         service.ingest(receipt.getId(), QR);
@@ -179,7 +181,7 @@ class ReceiptIngestionServiceTest {
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(sampleParsed());
+        when(sefazIngestionService.parse(eq(fetched), any(), any())).thenReturn(sampleParsed());
         when(aiCategorySuggestionService.isEnabled()).thenReturn(false);
 
         service.ingest(receipt.getId(), QR);
@@ -193,7 +195,7 @@ class ReceiptIngestionServiceTest {
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenThrow(new ReceiptParseException("no items found"));
+        when(sefazIngestionService.parse(eq(fetched), any(), any())).thenThrow(new ReceiptParseException("no items found"));
 
         service.ingest(receipt.getId(), QR);
 
@@ -209,7 +211,7 @@ class ReceiptIngestionServiceTest {
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fetch(eq(QR), any(), anyBoolean())).thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenThrow(new ExperimentalStateFailedException("PE"));
+        when(sefazIngestionService.parse(eq(fetched), any(), any())).thenThrow(new ExperimentalStateFailedException("PE"));
 
         service.ingest(receipt.getId(), QR, true);
 
@@ -226,7 +228,7 @@ class ReceiptIngestionServiceTest {
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fetch(eq(QR), any(), anyBoolean())).thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any()))
+        when(sefazIngestionService.parse(eq(fetched), any(), any()))
                 .thenThrow(new ExperimentalStateFailedException("BA", true));
 
         service.ingest(receipt.getId(), QR, true); // device-capable, but captcha is hopeless on-device
@@ -244,7 +246,7 @@ class ReceiptIngestionServiceTest {
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fetch(eq(QR), any(), anyBoolean())).thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenThrow(new ExperimentalStateFailedException("PE"));
+        when(sefazIngestionService.parse(eq(fetched), any(), any())).thenThrow(new ExperimentalStateFailedException("PE"));
 
         service.ingest(receipt.getId(), QR, false); // mobile, not device-capable
 
@@ -261,7 +263,7 @@ class ReceiptIngestionServiceTest {
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenThrow(new ExperimentalStateFailedException("PE"));
+        when(sefazIngestionService.parse(eq(fetched), any(), any())).thenThrow(new ExperimentalStateFailedException("PE"));
 
         service.ingest(receipt.getId(), QR); // 2-arg = web/photo
 
@@ -279,13 +281,135 @@ class ReceiptIngestionServiceTest {
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fromClientContent(any(), eq(CHAVE_RS), eq(UnidadeFederativa.RS), any()))
                 .thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenThrow(new ReceiptParseException("no items found"));
+        when(sefazIngestionService.parse(eq(fetched), any(), any())).thenThrow(new ReceiptParseException("no items found"));
         when(sefazIngestionService.fetchViaInfosimplesFallback(eq(CHAVE_RS), eq(UnidadeFederativa.RS), any()))
                 .thenThrow(new SefazFetchException("RS"));
 
         service.ingestPrefetched(receipt.getId(), QR, "<xml/>");
 
         assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+    }
+
+    @Test
+    void ingest_portalUnavailable_deviceCapableClient_parksPortalPendingInsteadOfDeviceHandoff() {
+        var receipt = processingReceipt();
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fetch(eq(QR), any(), anyBoolean())).thenThrow(
+                new ExperimentalStateFailedException("SE", false, true, InfosimplesOutcome.FAILED));
+
+        service.ingest(receipt.getId(), QR, true);
+
+        assertEquals(ReceiptStatus.PORTAL_PENDING, receipt.getStatus());
+        assertTrue(receipt.getParseErrorReason().startsWith("receipt.portal.unavailable"));
+        assertTrue(receipt.isResyncingFromContingency(), "the recovery sweeper pings the owner when it comes back");
+    }
+
+    @Test
+    void ingest_portalUnavailable_olderApp_parksPortalPendingInsteadOfAppUpdateFailure() {
+        var receipt = processingReceipt();
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fetch(eq(QR), any(), anyBoolean())).thenThrow(
+                new ExperimentalStateFailedException("SE", false, true, InfosimplesOutcome.FAILED));
+
+        service.ingest(receipt.getId(), QR, false);
+
+        assertEquals(ReceiptStatus.PORTAL_PENDING, receipt.getStatus());
+    }
+
+    @Test
+    void ingest_portalUnavailableBehindACaptchaWall_stillParksPortalPending() {
+        var receipt = processingReceipt();
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fetch(eq(QR), any(), anyBoolean())).thenThrow(
+                new ExperimentalStateFailedException("BA", true, true, InfosimplesOutcome.FAILED));
+
+        service.ingest(receipt.getId(), QR, true);
+
+        assertEquals(ReceiptStatus.PORTAL_PENDING, receipt.getStatus());
+    }
+
+    @Test
+    void markFailed_parkedNotaStoppedByTheOpenBreaker_staysPortalPending() {
+        var receipt = processingReceipt();
+        receipt.setParseErrorReason("receipt.portal.unavailable:");
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        service.markFailed(receipt.getId(), new PaidApiUnavailableException("INFOSIMPLES"));
+
+        assertEquals(ReceiptStatus.PORTAL_PENDING, receipt.getStatus());
+        assertEquals("receipt.portal.unavailable:", receipt.getParseErrorReason());
+    }
+
+    @Test
+    void markFailed_freshNotaStoppedByTheOpenBreaker_failsWithTheBreakerReason() {
+        var receipt = processingReceipt();
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        service.markFailed(receipt.getId(), new PaidApiUnavailableException("INFOSIMPLES"));
+
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+        assertEquals("receipt.paid_api.circuit_open:INFOSIMPLES", receipt.getParseErrorReason());
+    }
+
+    @Test
+    void ingest_deviceHandoff_remembersTheInfosimplesAnswerOnTheReceipt() {
+        var receipt = processingReceipt();
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fetch(eq(QR), any(), anyBoolean())).thenThrow(
+                new ExperimentalStateFailedException("PE", false, false, InfosimplesOutcome.NO_DATA));
+
+        service.ingest(receipt.getId(), QR, true);
+
+        assertEquals(ReceiptStatus.NEEDS_DEVICE_FETCH, receipt.getStatus());
+        assertEquals(InfosimplesOutcome.NO_DATA, receipt.getInfosimplesOutcome());
+    }
+
+    @Test
+    void ingestPrefetched_serverAlreadyGotNoData_neverAsksInfosimplesAgain() {
+        var receipt = processingReceipt();
+        receipt.setInfosimplesOutcome(InfosimplesOutcome.NO_DATA);
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<xml/>", CHAVE_RS, UnidadeFederativa.RS, null);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fromClientContent(any(), eq(CHAVE_RS), eq(UnidadeFederativa.RS), any()))
+                .thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any(), eq(IngestSpendPolicy.FULL.withoutInfosimples())))
+                .thenThrow(new ReceiptParseException("no items found"));
+
+        service.ingestPrefetched(receipt.getId(), QR, "<xml/>");
+
+        verify(sefazIngestionService, never()).fetchViaInfosimplesFallback(any(), any(), any());
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+        assertEquals("receipt.parse.failed:infosimples.not-found", receipt.getParseErrorReason());
+    }
+
+    @Test
+    void ingestPrefetched_parseAlreadyTriedInfosimples_doesNotCallItASecondTime() {
+        var receipt = processingReceipt();
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<xml/>", CHAVE_RS, UnidadeFederativa.RS, null);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fromClientContent(any(), eq(CHAVE_RS), eq(UnidadeFederativa.RS), any()))
+                .thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any(), eq(IngestSpendPolicy.FULL)))
+                .thenThrow(new ExperimentalStateFailedException("RS", false, true, InfosimplesOutcome.FAILED));
+
+        service.ingestPrefetched(receipt.getId(), QR, "<xml/>");
+
+        verify(sefazIngestionService, never()).fetchViaInfosimplesFallback(any(), any(), any());
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+        assertEquals("receipt.state.experimental_failed:RS", receipt.getParseErrorReason());
+    }
+
+    @Test
+    void ingestInfosimplesOnly_serverAlreadyGotNoData_failsWithoutASecondPaidCall() {
+        var receipt = processingReceipt();
+        receipt.setInfosimplesOutcome(InfosimplesOutcome.NO_DATA);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        service.ingestInfosimplesOnly(receipt.getId(), CHAVE_RS);
+
+        verify(sefazIngestionService, never()).fetchViaInfosimplesFallback(any(), any(), any());
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+        assertEquals("receipt.parse.failed:infosimples.not-found", receipt.getParseErrorReason());
     }
 
     @Test
@@ -300,7 +424,7 @@ class ReceiptIngestionServiceTest {
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fromClientContent(any(), eq(contingencyChave), eq(UnidadeFederativa.RS), any()))
                 .thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any()))
+        when(sefazIngestionService.parse(eq(fetched), any(), any()))
                 .thenThrow(new ReceiptParseException("client-content-chave-mismatch"));
         when(sefazIngestionService.fetchViaInfosimplesFallback(eq(contingencyChave), eq(UnidadeFederativa.RS), any()))
                 .thenThrow(new SefazFetchException("RS"));
@@ -323,7 +447,7 @@ class ReceiptIngestionServiceTest {
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fromClientContent(any(), eq(contingencyChave), eq(UnidadeFederativa.RS), any()))
                 .thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenThrow(new ReceiptParseException("no-items-found"));
+        when(sefazIngestionService.parse(eq(fetched), any(), any())).thenThrow(new ReceiptParseException("no-items-found"));
 
         service.ingestPrefetched(receipt.getId(), contingencyChave, "<xml/>");
 
@@ -425,7 +549,7 @@ class ReceiptIngestionServiceTest {
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fromClientContent(any(), eq(CHAVE_RS), eq(UnidadeFederativa.PE), any()))
                 .thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(sampleParsed());
+        when(sefazIngestionService.parse(eq(fetched), any(), any())).thenReturn(sampleParsed());
         when(prefetchPolicy.isTrustedForIndex(UnidadeFederativa.PE)).thenReturn(true);
 
         service.ingestPrefetched(receipt.getId(), QR, "<xml/>");
@@ -444,7 +568,7 @@ class ReceiptIngestionServiceTest {
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fromClientContent(any(), eq(CHAVE_RS), eq(UnidadeFederativa.GO), any()))
                 .thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(sampleParsed());
+        when(sefazIngestionService.parse(eq(fetched), any(), any())).thenReturn(sampleParsed());
         when(prefetchPolicy.isTrustedForIndex(UnidadeFederativa.GO)).thenReturn(false);
 
         service.ingestPrefetched(receipt.getId(), QR, "<html/>");
@@ -463,7 +587,7 @@ class ReceiptIngestionServiceTest {
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fromClientContent(any(), eq(CHAVE_RS), eq(UnidadeFederativa.GO), any()))
                 .thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenThrow(new ReceiptParseException("no items found"));
+        when(sefazIngestionService.parse(eq(fetched), any(), any())).thenThrow(new ReceiptParseException("no items found"));
         when(sefazIngestionService.fetchViaInfosimplesFallback(eq(CHAVE_RS), eq(UnidadeFederativa.GO), any()))
                 .thenReturn(infosimplesDoc);
 
@@ -482,7 +606,7 @@ class ReceiptIngestionServiceTest {
                 .segment(MerchantSegment.FOOD_SERVICE).build();
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(sampleParsed());
+        when(sefazIngestionService.parse(eq(fetched), any(), any())).thenReturn(sampleParsed());
         when(marketLocationService.resolveForIngest("12345678000190", "Mercado X", "Rua Y, 123"))
                 .thenReturn(barMarket);
         when(merchantSupportGate.isBlocked(barMarket)).thenReturn(true);
@@ -508,7 +632,7 @@ class ReceiptIngestionServiceTest {
                 .segment(MerchantSegment.SUPERMARKET).build();
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(sampleParsed());
+        when(sefazIngestionService.parse(eq(fetched), any(), any())).thenReturn(sampleParsed());
         when(marketLocationService.resolveForIngest(any(), any(), any())).thenReturn(market);
         when(merchantSupportGate.isBlocked(market)).thenReturn(false);
 
@@ -578,7 +702,7 @@ class ReceiptIngestionServiceTest {
                 .thenReturn(Optional.of(receipt))
                 .thenReturn(Optional.of(confirmed));
         when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(sampleParsed());
+        when(sefazIngestionService.parse(eq(fetched), any(), any())).thenReturn(sampleParsed());
 
         service.ingest(receipt.getId(), QR);
 
@@ -698,7 +822,7 @@ class ReceiptIngestionServiceTest {
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(sampleParsed());
+        when(sefazIngestionService.parse(eq(fetched), any(), any())).thenReturn(sampleParsed());
 
         service.ingest(receipt.getId(), QR);
 
@@ -716,7 +840,7 @@ class ReceiptIngestionServiceTest {
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(sampleParsed());
+        when(sefazIngestionService.parse(eq(fetched), any(), any())).thenReturn(sampleParsed());
 
         service.ingest(receipt.getId(), QR);
 
@@ -731,7 +855,7 @@ class ReceiptIngestionServiceTest {
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", CHAVE_RS, UnidadeFederativa.RS, null);
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fetch(eq(QR), any())).thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenThrow(new ReceiptParseException("no items found"));
+        when(sefazIngestionService.parse(eq(fetched), any(), any())).thenThrow(new ReceiptParseException("no items found"));
 
         service.ingest(receipt.getId(), QR);
 

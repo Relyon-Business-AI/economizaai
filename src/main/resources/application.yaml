@@ -206,6 +206,9 @@ economizaai:
     # legitimate ingest (MS captcha wall-clock cap 3 min + fallback).
     processing-timeout-minutes: ${INGEST_PROCESSING_TIMEOUT_MINUTES:10}
     sweeper-delay-ms: ${INGEST_SWEEPER_DELAY_MS:60000}
+    # On shutdown (deploy) the ingest pool waits up to this long for in-flight and queued
+    # ingests to finish instead of dropping them.
+    shutdown-await-seconds: ${INGEST_SHUTDOWN_AWAIT_SECONDS:60}
     # Probe de estados "pausados" no Infosimples (portal da SEFAZ fora): sonda a cada 6h
     # e alerta o dono UMA vez quando a rota volta a responder 200, pra onboardar o estado.
     # Estados com portal caído (615) sob vigilância: SE (caiu ~22/10) e TO (caiu ~09/11), ambos
@@ -213,6 +216,13 @@ economizaai:
     # pra não depender de Infosimples/portal instável (ver docs/MULTI_STATE_RECON.md). Vazio = desliga.
     paused-state-probe:
       ufs: ${SEFAZ_PAUSED_STATE_PROBE_UFS:SE,TO}
+    # In-app FAQ "situação dos estados" (GET /sefaz/state-status): a verified state shows as
+    # UNSTABLE when, in the last window-hours, at least min-failures notas failed for portal
+    # reasons and they outnumber the ingested ones. The answer is cached for cache-seconds.
+    state-status:
+      window-hours: ${SEFAZ_STATE_STATUS_WINDOW_HOURS:24}
+      min-failures: ${SEFAZ_STATE_STATUS_MIN_FAILURES:3}
+      cache-seconds: ${SEFAZ_STATE_STATUS_CACHE_SECONDS:300}
     paused-state-probe-delay-ms: ${SEFAZ_PAUSED_STATE_PROBE_DELAY_MS:21600000}
     paused-state-probe-initial-delay-ms: ${SEFAZ_PAUSED_STATE_PROBE_INITIAL_DELAY_MS:60000}
     device-fetch:
@@ -234,6 +244,11 @@ economizaai:
       # (this is what the dev server runs); set EAN_LIVE_FALLBACK_ENABLED=false to
       # disable, and revisit for prod (OFF-API rate limits at scale).
       live-fallback-enabled: ${EAN_LIVE_FALLBACK_ENABLED:true}
+      # The warm-up runs on the ingest thread, so it is bounded per receipt: a wall-clock
+      # budget for the whole warm-up and a cap on unseen barcodes looked up. Whatever
+      # doesn't fit stays unchecked and is picked up by a later receipt.
+      warmup-budget-ms: ${EAN_WARMUP_BUDGET_MS:5000}
+      warmup-max-eans: ${EAN_WARMUP_MAX_EANS:15}
       live-fallback-timeout-ms: ${EAN_LIVE_FALLBACK_TIMEOUT_MS:2500}
     sefaz:
       timeout-ms: 30000

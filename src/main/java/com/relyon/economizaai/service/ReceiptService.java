@@ -27,6 +27,7 @@ import com.relyon.economizaai.exception.ReceiptPhotoIncompleteException;
 import com.relyon.economizaai.exception.InvalidIssuedAtException;
 import com.relyon.economizaai.exception.ReceiptNotEditableException;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
+import com.relyon.economizaai.exception.ReceiptRetryUnavailableException;
 import com.relyon.economizaai.exception.UnsupportedMerchantException;
 import com.relyon.economizaai.config.MdcContextFilter;
 import com.relyon.economizaai.model.Receipt;
@@ -64,6 +65,7 @@ import com.relyon.economizaai.service.sefaz.ParsedReceipt;
 import com.relyon.economizaai.service.sefaz.ParsedReceiptItem;
 import com.relyon.economizaai.service.sefaz.PrefetchPolicy;
 import com.relyon.economizaai.service.sefaz.ReceiptIngestionService;
+import com.relyon.economizaai.service.sefaz.ReceiptRetryPolicy;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
 import com.relyon.economizaai.service.sefaz.StateCoverageService;
 import com.relyon.economizaai.service.referral.ReferralService;
@@ -90,6 +92,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -155,9 +158,12 @@ public class ReceiptService {
     public ReceiptResponse submit(User user, SubmitReceiptRequest request) {
         var qrPayload = request.qrPayload();
         var chave = sefazIngestionService.resolveChave(qrPayload);
-        var receipt = validateAndPersistProcessing(user, qrPayload, chave, request.entryMethod());
+        var submission = validateAndPersistProcessing(user, qrPayload, chave, request.entryMethod());
+        var receipt = submission.receipt();
         var receiptId = receipt.getId();
-        dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload));
+        if (submission.needsIngestDispatch()) {
+            dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload));
+        }
         return withFriendlyName(user.getHousehold().getId(), receipt, ReceiptResponse.from(receipt));
     }
 
@@ -172,9 +178,12 @@ public class ReceiptService {
     public ReceiptResponse submit(User user, SubmitReceiptRequest request, boolean deviceCapable) {
         var qrPayload = request.qrPayload();
         var chave = sefazIngestionService.resolveChave(qrPayload);
-        var receipt = validateAndPersistProcessing(user, qrPayload, chave, request.entryMethod());
+        var submission = validateAndPersistProcessing(user, qrPayload, chave, request.entryMethod());
+        var receipt = submission.receipt();
         var receiptId = receipt.getId();
-        dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload, deviceCapable));
+        if (submission.needsIngestDispatch()) {
+            dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload, deviceCapable));
+        }
         return withFriendlyName(user.getHousehold().getId(), receipt, ReceiptResponse.from(receipt));
     }
 
@@ -193,9 +202,12 @@ public class ReceiptService {
         prefetchPolicy.requireAllowed(ChaveAcessoParser.extractUf(chave));
         // A prefetched receipt started as a QR scan (the app scanned the QR, then fetched the
         // page on-device) — let the derivation read QR_SCAN from the URL payload.
-        var receipt = validateAndPersistProcessing(user, qrPayload, chave, null);
+        var submission = validateAndPersistProcessing(user, qrPayload, chave, null);
+        var receipt = submission.receipt();
         var receiptId = receipt.getId();
-        dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingestPrefetched(receiptId, qrPayload, rawContent));
+        if (submission.needsIngestDispatch()) {
+            dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingestPrefetched(receiptId, qrPayload, rawContent));
+        }
         return withFriendlyName(user.getHousehold().getId(), receipt, ReceiptResponse.from(receipt));
     }
 
@@ -315,6 +327,7 @@ public class ReceiptService {
     @Transactional
     public boolean retryFailedScan(User user, UUID receiptId, boolean deviceCapable) {
         var receipt = loadOwned(user, receiptId);
+        refuseRetryThatCannotHelp(receipt);
         if (receipt.getOrigin() != ReceiptOrigin.SCAN) {
             return false;
         }
@@ -332,6 +345,20 @@ public class ReceiptService {
         log.info("retry ok origin=SCAN status=PROCESSING (re-ingestion dispatched)");
         dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload, deviceCapable));
         return true;
+    }
+
+    /**
+     * A failure that is a final verdict about the nota itself (corrupted chave, the portal has
+     * no such nota, unsupported merchant…) fails the exact same way on every retry — and a retry
+     * may pay for the fetch again. Refuse it with a localized message that says what to do
+     * instead. Applies to every origin, so it runs before the origin-specific retry paths.
+     */
+    private static void refuseRetryThatCannotHelp(Receipt receipt) {
+        if (receipt.getStatus() != ReceiptStatus.FAILED_PARSE) return;
+        ReceiptRetryPolicy.refusalMessageKey(receipt.getParseErrorReason()).ifPresent(refusalKey -> {
+            log.info("retry.refused reason={} message={}", receipt.getParseErrorReason(), refusalKey);
+            throw new ReceiptRetryUnavailableException(refusalKey);
+        });
     }
 
     /**
@@ -414,9 +441,13 @@ public class ReceiptService {
      * PROCESSING for the async ingestion to fill in. The chave must arrive
      * already resolved (see {@link #submit}) — resolution can hit HTTP and never
      * belongs anywhere near a transaction.
+     *
+     * <p>A chave this household already has IN FLIGHT (the user tapped twice, or the app
+     * re-sent while the first ingest is still running) returns that row and asks for no new
+     * dispatch — starting over would run, and pay for, the same fetch twice.
      */
-    private Receipt validateAndPersistProcessing(User user, String qrPayload, String chave,
-                                                 ReceiptEntryMethod entryMethod) {
+    private Submission validateAndPersistProcessing(User user, String qrPayload, String chave,
+                                                    ReceiptEntryMethod entryMethod) {
         log.info("submit chave={}", LogMasker.chave(chave));
 
         // Fail unsupported UFs up front with a localized 400 — the async path
@@ -473,13 +504,39 @@ public class ReceiptService {
             log.info("submit rejected reason=merchant_unsupported cnpj={}", ChaveAcessoParser.extractCnpj(chave));
             throw new UnsupportedMerchantException();
         }
+        var inFlight = findInFlightSubmission(user, chave);
+        if (inFlight.isPresent()) {
+            return new Submission(inFlight.get(), false);
+        }
         enforceMonthlyReceiptCap(user);
         replaceStalePriorOrRejectConfirmedDuplicate(user, chave);
 
         var receipt = persistProcessing(user, qrPayload, chave, ReceiptOrigin.SCAN, entryMethod);
         MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receipt.getId()));
         log.info("submit ok status=PROCESSING (ingestion dispatched)");
-        return receipt;
+        return new Submission(receipt, true);
+    }
+
+    /** The receipt a submit resolved to, and whether a new ingest has to be dispatched for it. */
+    private record Submission(Receipt receipt, boolean needsIngestDispatch) {}
+
+    private static final Set<ReceiptStatus> IN_FLIGHT_STATUSES =
+            EnumSet.of(ReceiptStatus.PROCESSING, ReceiptStatus.IMPORT_QUEUED);
+
+    /**
+     * The household's row for this chave when its ingest is still running or queued. Reloaded
+     * with its items so the response can be built outside a transaction.
+     */
+    private Optional<Receipt> findInFlightSubmission(User user, String chave) {
+        var householdId = user.getHousehold().getId();
+        return receiptRepository.findByHouseholdIdAndChaveAcesso(householdId, chave)
+                .filter(existing -> IN_FLIGHT_STATUSES.contains(existing.getStatus()))
+                .map(existing -> {
+                    MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(existing.getId()));
+                    log.info("submit.already_in_flight chave={} status={} household={}",
+                            LogMasker.chave(chave), existing.getStatus(), householdId);
+                    return receiptRepository.findByIdWithItemsAndProducts(existing.getId()).orElse(existing);
+                });
     }
 
     /**

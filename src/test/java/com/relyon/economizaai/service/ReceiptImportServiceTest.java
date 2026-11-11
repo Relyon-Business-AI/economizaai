@@ -196,6 +196,25 @@ class ReceiptImportServiceTest {
     }
 
     @Test
+    void retrySkipsReceiptWhoseFailureARetryCannotChange() {
+        var receiptId = UUID.randomUUID();
+        var notFoundAtPortal = Receipt.builder()
+                .id(receiptId)
+                .household(user.getHousehold())
+                .chaveAcesso(RS_CHAVE)
+                .status(ReceiptStatus.FAILED_PARSE)
+                .parseErrorReason("receipt.parse.failed:infosimples.not-found")
+                .build();
+        when(receiptRepository.findById(receiptId)).thenReturn(Optional.of(notFoundAtPortal));
+
+        var requeued = service.retry(user, List.of(receiptId));
+
+        assertThat(requeued).isZero();
+        assertThat(notFoundAtPortal.getStatus()).isEqualTo(ReceiptStatus.FAILED_PARSE);
+        verify(receiptRepository, never()).save(any(Receipt.class));
+    }
+
+    @Test
     void retrySkipsPendingConfirmationReceipt() {
         // A row that already parsed has items — a reconsult would parse them AGAIN
         // and duplicate every line, so retry must be restricted to FAILED_PARSE.

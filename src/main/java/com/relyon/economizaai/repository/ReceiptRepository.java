@@ -10,6 +10,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -84,6 +85,37 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
         ORDER BY receipt.updatedAt ASC
     """)
     List<UUID> findAutoConfirmableIds(@Param("cutoff") LocalDateTime cutoff, Pageable pageable);
+    // Sweeper timeout as ONE conditional statement: the row is failed only if it is STILL in the
+    // stale status and still older than the cutoff when the UPDATE runs, so an ingest that
+    // finished in the meantime is never overwritten. Returns 1 when this call failed the row.
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE Receipt r
+        SET r.status = :failedStatus, r.parseErrorReason = :reason, r.updatedAt = :now
+        WHERE r.id = :id AND r.status = :staleStatus AND r.updatedAt < :cutoff
+    """)
+    int failIfStillStale(@Param("id") UUID id,
+                         @Param("staleStatus") ReceiptStatus staleStatus,
+                         @Param("cutoff") LocalDateTime cutoff,
+                         @Param("failedStatus") ReceiptStatus failedStatus,
+                         @Param("reason") String reason,
+                         @Param("now") LocalDateTime now);
+
+    // Sweeper second chance for a stranded scan: moved back to the paced queue only if it is
+    // still stale AND was never re-queued before (strandedRequeued is the "once" guard).
+    // Returns 1 when this call re-queued the row.
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE Receipt r
+        SET r.status = :queuedStatus, r.strandedRequeued = true, r.resyncFreeOnly = :freeOnly, r.updatedAt = :now
+        WHERE r.id = :id AND r.status = :staleStatus AND r.updatedAt < :cutoff AND r.strandedRequeued = false
+    """)
+    int requeueStrandedOnce(@Param("id") UUID id,
+                            @Param("staleStatus") ReceiptStatus staleStatus,
+                            @Param("cutoff") LocalDateTime cutoff,
+                            @Param("queuedStatus") ReceiptStatus queuedStatus,
+                            @Param("freeOnly") boolean freeOnly,
+                            @Param("now") LocalDateTime now);
 
     // Paced import worker: oldest IMPORT_QUEUED first, a small page at a time, and a
     // live count of in-flight PROCESSING rows so the worker yields to real scans.

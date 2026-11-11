@@ -211,21 +211,21 @@ class PaidApiGuardServiceTest {
         // Below threshold: circuit stays closed.
         service.recordFailure(USER, PaidApiService.INFOSIMPLES, "CE", "infosimples");
         service.recordFailure(USER, PaidApiService.INFOSIMPLES, "CE", "infosimples");
-        assertDoesNotThrow(() -> service.assertCircuitClosed(PaidApiService.INFOSIMPLES));
+        assertDoesNotThrow(() -> service.assertCircuitClosed(PaidApiService.INFOSIMPLES, "CE"));
 
         // Third failure trips it.
         service.recordFailure(USER, PaidApiService.INFOSIMPLES, "CE", "infosimples");
         assertThrows(PaidApiUnavailableException.class,
-                () -> service.assertCircuitClosed(PaidApiService.INFOSIMPLES));
+                () -> service.assertCircuitClosed(PaidApiService.INFOSIMPLES, "CE"));
 
         // Still open just before cooldown elapses.
         service.useClock(Clock.fixed(T0.plus(Duration.ofSeconds(299)), ZoneOffset.UTC));
         assertThrows(PaidApiUnavailableException.class,
-                () -> service.assertCircuitClosed(PaidApiService.INFOSIMPLES));
+                () -> service.assertCircuitClosed(PaidApiService.INFOSIMPLES, "CE"));
 
         // Reopens (closes) once the cooldown passes.
         service.useClock(Clock.fixed(T0.plus(Duration.ofSeconds(301)), ZoneOffset.UTC));
-        assertDoesNotThrow(() -> service.assertCircuitClosed(PaidApiService.INFOSIMPLES));
+        assertDoesNotThrow(() -> service.assertCircuitClosed(PaidApiService.INFOSIMPLES, "CE"));
     }
 
     @Test
@@ -237,7 +237,33 @@ class PaidApiGuardServiceTest {
         // Two more failures — only 2 in the window now, breaker stays closed.
         service.recordFailure(USER, PaidApiService.INFOSIMPLES, "CE", "infosimples");
         service.recordFailure(USER, PaidApiService.INFOSIMPLES, "CE", "infosimples");
-        assertDoesNotThrow(() -> service.assertCircuitClosed(PaidApiService.INFOSIMPLES));
+        assertDoesNotThrow(() -> service.assertCircuitClosed(PaidApiService.INFOSIMPLES, "CE"));
+    }
+
+    @Test
+    void circuitBreaker_infosimplesIsScopedPerUf() {
+        // SE's portal is down: three failures open the breaker for SE only.
+        for (var attempt = 0; attempt < 3; attempt++) {
+            service.recordFailure(USER, PaidApiService.INFOSIMPLES, "SE", "infosimples");
+        }
+        assertThrows(PaidApiUnavailableException.class,
+                () -> service.assertCircuitClosed(PaidApiService.INFOSIMPLES, "SE"));
+        assertDoesNotThrow(() -> service.assertCircuitClosed(PaidApiService.INFOSIMPLES, "RJ"));
+
+        // A success in another UF must not close SE's breaker.
+        service.recordSuccess(USER, PaidApiService.INFOSIMPLES, "RJ", "infosimples");
+        assertThrows(PaidApiUnavailableException.class,
+                () -> service.assertCircuitClosed(PaidApiService.INFOSIMPLES, "SE"));
+    }
+
+    @Test
+    void circuitBreaker_otherServicesKeepASingleBreakerAcrossUfs() {
+        service.recordFailure(USER, PaidApiService.CAPTCHA_SOLVE, "MS", null);
+        service.recordFailure(USER, PaidApiService.CAPTCHA_SOLVE, "SC", null);
+        service.recordFailure(USER, PaidApiService.CAPTCHA_SOLVE, "MG", null);
+
+        assertThrows(PaidApiUnavailableException.class,
+                () -> service.assertCircuitClosed(PaidApiService.CAPTCHA_SOLVE));
     }
 
     @Test

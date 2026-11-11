@@ -1,14 +1,17 @@
 package com.relyon.economizaai.service.sefaz;
 
 import com.relyon.economizaai.exception.CaptchaUnavailableException;
+import com.relyon.economizaai.exception.SefazDeterministicFetchException;
 import com.relyon.economizaai.exception.SefazFetchException;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.sefaz.captcha.CaptchaSolver;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Element;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.math.BigDecimal;
@@ -20,6 +23,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -147,6 +151,27 @@ class SantaCatarinaNfcePortalAdapterTest {
 
         assertThrows(SefazFetchException.class, () -> adapter.fetchHtml(SECURITY_URL));
         assertEquals(3, adapter.postCount, "should re-solve and retry up to maxAttempts");
+    }
+
+    @Test
+    void fetchHtml_deterministicClientError_stopsAfterOneSolveAndIsNotRescuable() {
+        var adapter = new TestScAdapter(solver(true), 3);
+        adapter.getResponses.put(SECURITY_URL, ResponseEntity.ok(securityHtml()));
+        adapter.postFailure = new HttpClientErrorException(HttpStatus.NOT_FOUND);
+
+        assertThrows(SefazDeterministicFetchException.class, () -> adapter.fetchHtml(SECURITY_URL));
+        assertEquals(1, adapter.postCount, "a 404 must not buy a second captcha solve");
+    }
+
+    @Test
+    void fetchHtml_throttledClientError_staysRescuableWithoutRetrying() {
+        var adapter = new TestScAdapter(solver(true), 3);
+        adapter.getResponses.put(SECURITY_URL, ResponseEntity.ok(securityHtml()));
+        adapter.postFailure = new HttpClientErrorException(HttpStatus.TOO_MANY_REQUESTS);
+
+        var thrown = assertThrows(SefazFetchException.class, () -> adapter.fetchHtml(SECURITY_URL));
+        assertFalse(thrown instanceof SefazDeterministicFetchException);
+        assertEquals(1, adapter.postCount);
     }
 
     @Test
@@ -419,6 +444,7 @@ class SantaCatarinaNfcePortalAdapterTest {
         // rejected-then-accepted Turnstile sequence across retries.
         private final java.util.ArrayDeque<ResponseEntity<String>> postResponses = new java.util.ArrayDeque<>();
         private int postCount;
+        private RuntimeException postFailure;
         private String postedUrl;
         private String postedCookie;
         private String redirectCookie;
@@ -455,6 +481,7 @@ class SantaCatarinaNfcePortalAdapterTest {
             this.postedBody = body;
             this.postedCookie = cookieHeader;
             this.postCount++;
+            if (postFailure != null) throw postFailure;
             return postResponses.isEmpty() ? postResponse : postResponses.poll();
         }
     }
