@@ -2,6 +2,7 @@ package com.relyon.economizaai.repository;
 
 import com.relyon.economizaai.model.NotificationRule;
 import com.relyon.economizaai.model.enums.NotificationType;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -48,6 +49,21 @@ public interface NotificationRuleRepository extends JpaRepository<NotificationRu
         WHERE r.type = :type AND r.active = true
     """)
     List<NotificationRule> findActiveByTypeFetchUserAndProduct(@Param("type") NotificationType type);
+
+    /**
+     * One page of active rules of a type, in id order, starting after {@code afterId}
+     * (keyset pagination — pass the last id of the previous page; a batch job never
+     * loads every rule at once).
+     */
+    @Query("""
+        SELECT r FROM NotificationRule r
+        JOIN FETCH r.user u
+        WHERE r.type = :type AND r.active = true AND r.id > :afterId
+        ORDER BY r.id ASC
+    """)
+    List<NotificationRule> findActivePageByTypeFetchUser(@Param("type") NotificationType type,
+                                                         @Param("afterId") UUID afterId,
+                                                         Pageable pageable);
 
     @Modifying
     @Query(nativeQuery = true, value = """

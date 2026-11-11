@@ -576,8 +576,7 @@ economizaai:
       interval-ms: ${NOTIFICATIONS_REPLENISHMENT_INTERVAL_MS:21600000}   # every 6h: predict product runout
       initial-delay-ms: 60000
     budget:
-      interval-ms: ${NOTIFICATIONS_BUDGET_INTERVAL_MS:21600000}          # every 6h: monthly spend cap check
-      initial-delay-ms: 90000
+      cron: ${NOTIFICATIONS_BUDGET_CRON:0 0 9,18 * * *}                  # 09:00 and 18:00 (America/Sao_Paulo): monthly spend cap check
     digest:
       cron: ${NOTIFICATIONS_DIGEST_CRON:0 0 8 * * MON}                   # weekly Monday 08:00
       zone: ${NOTIFICATIONS_DIGEST_ZONE:America/Sao_Paulo}

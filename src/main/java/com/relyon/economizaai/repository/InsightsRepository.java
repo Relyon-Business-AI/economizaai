@@ -181,6 +181,15 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
                                    @Param("scope") String scope,
                                    @Param("supportedCnpjs") Collection<String> supportedCnpjs);
 
+    /**
+     * The household's spend in a period as the dashboard defines it, over every segment:
+     * item totals (without excluded / "not mine" lines) of confirmed receipts, by PURCHASE
+     * date. Anything that tells the user how much they spent must use this.
+     */
+    default BigDecimal totalSpendAllSegments(UUID householdId, LocalDateTime from, LocalDateTime to) {
+        return totalSpend(householdId, from, to, "ALL", List.of("__none__"));
+    }
+
     @Query("""
         SELECT """ + ISO_WEEK_YEAR + """
                 AS year,
