@@ -23,6 +23,9 @@ spring:
       # scheduled jobs. Ingest holds NO connection during the slow SEFAZ fetch
       # (see ReceiptIngestionService), so 20 is headroom, not a requirement.
       maximum-pool-size: ${DB_POOL_MAX_SIZE:20}
+      # Fail fast under overload: a request that cannot get a connection within this
+      # window gets a localized 503 (GlobalExceptionHandler) instead of hanging 30s (default).
+      connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:6000}
       # Log a leak trace if a connection is held >60s — nothing legitimate should.
       leak-detection-threshold: ${DB_LEAK_DETECTION_MS:60000}
   jpa:
@@ -77,6 +80,13 @@ spring:
       mail.smtp.connectiontimeout: 10000
       mail.smtp.timeout: 10000
       mail.smtp.writetimeout: 10000
+
+server:
+  tomcat:
+    threads:
+      # 1 CPU / 20 DB connections: 200 request threads (default) only pile requests up
+      # behind the pool. Beyond this, requests wait in the accept queue instead.
+      max: ${TOMCAT_THREADS_MAX:50}
 
 jwt:
   secret: ${JWT_SECRET:economizai-dev-secret-key-must-be-at-least-256-bits-long-for-hs256}

@@ -5,10 +5,14 @@ import io.sentry.Sentry;
 import jakarta.validation.ConstraintViolation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -19,6 +23,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.sql.SQLTransientConnectionException;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
@@ -32,6 +37,8 @@ public class GlobalExceptionHandler {
 
     private static final String VALIDATION_FAILED_KEY = "validation.failed";
     /** A constraint whose message is one of our own bundle keys, e.g. {@code message = "{validation.color.hex}"}. */
+    private static final String OVERLOAD_RETRY_AFTER_SECONDS = "5";
+    private static final int MAX_CAUSE_DEPTH = 10;
     private static final Pattern CUSTOM_VALIDATION_MESSAGE = Pattern.compile("\\{(validation\\.[\\w.-]+)}");
 
     private final LocalizedMessageService messageService;
@@ -368,6 +375,34 @@ public class GlobalExceptionHandler {
         log.warn("Upload rejected — request exceeds multipart cap: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
                 .body(new ErrorResponse(HttpStatus.PAYLOAD_TOO_LARGE.value(), message, LocalDateTime.now()));
+    }
+
+    /**
+     * The connection pool had no free connection within {@code hikari.connection-timeout}:
+     * the app is overloaded, not broken. Answer fast with a 503 the client can retry,
+     * instead of the generic 500. Any other data-access failure stays a 500.
+     */
+    @ExceptionHandler({CannotCreateTransactionException.class, CannotGetJdbcConnectionException.class,
+            DataAccessResourceFailureException.class})
+    public ResponseEntity<ErrorResponse> handleDatabaseUnavailable(Exception ex) {
+        if (!isConnectionPoolTimeout(ex)) {
+            return handleGeneric(ex);
+        }
+        log.warn("db.pool_exhausted reason={}", ex.getClass().getSimpleName());
+        var message = messageService.translate("error.overloaded");
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, OVERLOAD_RETRY_AFTER_SECONDS)
+                .body(new ErrorResponse(HttpStatus.SERVICE_UNAVAILABLE.value(), message, LocalDateTime.now()));
+    }
+
+    private static boolean isConnectionPoolTimeout(Throwable failure) {
+        var depth = 0;
+        for (var cause = failure; cause != null && depth < MAX_CAUSE_DEPTH; cause = cause.getCause(), depth++) {
+            if (cause instanceof SQLTransientConnectionException) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @ExceptionHandler(Exception.class)
