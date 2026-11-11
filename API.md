@@ -1755,6 +1755,7 @@ GET    /api/v1/admin/products/taxonomy-coverage → { total, withLeaf, withoutLe
 GET    /api/v1/admin/products/duplicates       → List<DuplicateProductGroupResponse>
 GET    /api/v1/admin/products/variant-conflicts?max=200 → VariantConflictResponse — READ-ONLY audit of likely MIS-MERGED products (a single product whose linked items carry >1 distinct REAL EAN, or inconsistent distinguishing-token signatures e.g. "AO LEITE SGLUT" + "50% ZERO" under one product). Reports productId + conflicting item names/EANs for MANUAL review; mutates nothing.
 POST   /api/v1/admin/products/{id}/merge       → 200 ProductMergeResultResponse
+POST   /api/v1/admin/products/split-variants?dryRun=true&max=500 → 200 ProductVariantSplitResponse — one-time cleanup that SPLITS mis-merged products (one product holding items of DIFFERENT variants/brands/flavours). Groups items by variant signature (brand + VariantDiscriminator tokens); a product spanning >1 signature is split into one product per signature, reassigning receipt_items + price_observations + product_aliases; generic_name_norm preserved. dryRun=true (default) returns the PLAN, mutates nothing; dryRun=false applies. Idempotent (single-signature products skipped).
 POST   /api/v1/admin/products/refresh-brands       → BrandBackfillResponse (fill missing brands)
 POST   /api/v1/admin/markets/classify-segments     → SegmentClassificationSummary (CNAE-classify pending markets)
 GET    /api/v1/admin/merchants/grey                → List<GreyMerchantResponse> (grey-zone review queue, ranked by scan volume)

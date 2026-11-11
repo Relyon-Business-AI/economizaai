@@ -1631,7 +1631,7 @@
 					"response": []
 				},
 				{
-					"name": "Preview an invite code (name, host, member count — before joining)",
+					"name": "Preview an invite code (name, host, member count \u2014 before joining)",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -14318,6 +14318,66 @@
 							]
 						},
 						"description": "READ-ONLY audit of likely mis-merged products (a single product whose linked items carry >1 distinct REAL EAN, or inconsistent distinguishing-token signatures). Mutates nothing.",
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(pm.info.requestName + ' no server error (<500)', function () {",
+									"    pm.expect(pm.response.code).to.be.below(500);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV admin: Split mis-merged products by variant (admin, dry-run)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/products/split-variants?dryRun=true&max=500",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"products",
+								"split-variants"
+							],
+							"query": [
+								{
+									"key": "dryRun",
+									"value": "true"
+								},
+								{
+									"key": "max",
+									"value": "500"
+								}
+							]
+						},
+						"description": "One-time cleanup that SPLITS mis-merged products (one product holding items of DIFFERENT variants/brands/flavours). Groups items by variant signature (brand + VariantDiscriminator tokens); a product spanning >1 signature is split into one product per signature, reassigning receipt_items + price_observations + product_aliases; generic_name_norm preserved. dryRun=true (default) returns the PLAN and mutates nothing; set dryRun=false to apply. Idempotent.",
 						"auth": {
 							"type": "bearer",
 							"bearer": [
