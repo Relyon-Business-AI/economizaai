@@ -95,7 +95,7 @@ class AuthControllerTest {
 
     @Test
     void register_shouldReturn201WithToken() throws Exception {
-        var request = new RegisterRequest("John", "john@test.com", "password123", "1.0", "1.0", null);
+        var request = new RegisterRequest("John", "john@test.com", "password123", "1.1", "1.1", null);
         var promoValidUntil = LocalDateTime.now().plusMonths(3);
         var response = new AuthResponse("jwt-token", "refresh-token", sampleUserResponse(), true, promoValidUntil, true);
         when(userService.register(any(RegisterRequest.class))).thenReturn(response);
@@ -114,7 +114,7 @@ class AuthControllerTest {
 
     @Test
     void register_shouldReturn409WhenEmailExists() throws Exception {
-        var request = new RegisterRequest("John", "john@test.com", "password123", "1.0", "1.0", null);
+        var request = new RegisterRequest("John", "john@test.com", "password123", "1.1", "1.1", null);
         when(userService.register(any(RegisterRequest.class)))
                 .thenThrow(new EmailAlreadyExistsException("john@test.com"));
 
