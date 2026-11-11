@@ -51,6 +51,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -111,11 +113,15 @@ class ReceiptServiceCoverageTest {
     @Mock private SavingsAttributionService savingsAttributionService;
     @Mock private MerchantSupportGate merchantSupportGate;
     @Mock private LocalizedMessageService localizedMessageService;
+    @Mock private TransactionTemplate transactionTemplate;
 
     @InjectMocks private ReceiptService receiptService;
 
     @BeforeEach
     void stubMarketNames() {
+        // confirm runs inside a TransactionTemplate — execute the callback inline.
+        lenient().when(transactionTemplate.execute(any()))
+                .thenAnswer(invocation -> invocation.<TransactionCallback<Object>>getArgument(0).doInTransaction(null));
         lenient().when(canonicalizationService.previewCategory(any())).thenReturn(Optional.empty());
         lenient().when(marketNameService.resolve(any(), any(), any()))
                 .thenAnswer(invocation -> invocation.getArgument(2));
