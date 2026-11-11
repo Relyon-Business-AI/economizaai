@@ -268,6 +268,11 @@ public class SefazIngestionService {
                     log.info("sefaz.fetch.bare_chave.infosimples_no_data uf={} chave={}", uf, abbrev(chave));
                     throw noDataEx;
                 } catch (RuntimeException infosimplesEx) {
+                    if (isDeterministicInfosimplesAnswer(infosimplesEx)) {
+                        // A nota without products is a verdict about the nota too — no path alert.
+                        log.info("sefaz.fetch.bare_chave.infosimples_no_items uf={} chave={}", uf, abbrev(chave));
+                        throw infosimplesEx;
+                    }
                     log.warn("sefaz.fetch.bare_chave.infosimples_failed uf={} chave={} reason={}",
                             uf, abbrev(chave), describe(infosimplesEx));
                     alertManualChaveNoPath(uf, chave, describe(infosimplesEx));

@@ -16,6 +16,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -128,7 +129,8 @@ public class StateStatusService {
     }
 
     private Set<UnidadeFederativa> statesWithMostlyFailingNotas() {
-        var since = LocalDateTime.now(clock).minusHours(windowHours);
+        // Receipt timestamps are written in the server's zone (BaseEntity), so the window is too.
+        var since = LocalDateTime.now(clock.withZone(ZoneId.systemDefault())).minusHours(windowHours);
         var ingested = new EnumMap<UnidadeFederativa, Long>(UnidadeFederativa.class);
         var failed = new EnumMap<UnidadeFederativa, Long>(UnidadeFederativa.class);
         for (var outcome : receiptRepository.summarizeByUfAndStatusSince(since)) {

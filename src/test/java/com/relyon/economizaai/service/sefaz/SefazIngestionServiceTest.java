@@ -1013,6 +1013,21 @@ class SefazIngestionServiceTest {
     }
 
     @Test
+    void fetch_bareChaveInfosimplesZeroItems_failsWithoutTheNoPathAlert() {
+        var spAdapter = mockAdapterFor(UnidadeFederativa.SP);
+        when(spAdapter.requiresQrSignature()).thenReturn(true);
+        var infosimples = mock(InfosimplesService.class);
+        when(infosimples.fetchParsed(eq(CHAVE_SP), eq(UnidadeFederativa.SP)))
+                .thenThrow(new ReceiptParseException("no-items-found"));
+        var service = new SefazIngestionService(List.of(spAdapter), Optional.of(infosimples), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+
+        var thrown = assertThrows(ReceiptParseException.class, () -> service.fetch(CHAVE_SP, null));
+
+        assertTrue(thrown.isNoItemsFound());
+        verifyNoInteractions(operationalAlert);
+    }
+
+    @Test
     void fetch_bareChaveNoPath_alertsAdminAndFails() {
         // SP: QR-only, não reconsultável, Infosimples desabilitado → alerta admin + falha.
         var spAdapter = mockAdapterFor(UnidadeFederativa.SP);
