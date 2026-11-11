@@ -49,6 +49,7 @@ import com.relyon.economizaai.service.admin.AdminNotificationService;
 import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.notifications.OperationalAlertService;
 import com.relyon.economizaai.service.admin.AdminProductService;
+import com.relyon.economizaai.service.admin.ProductVariantSplitService;
 import com.relyon.economizaai.service.admin.AdminDevService;
 import com.relyon.economizaai.service.admin.AdminMarketChainService;
 import com.relyon.economizaai.service.admin.AdminReceiptService;
@@ -131,6 +132,7 @@ class AdminControllerTest {
     @MockitoBean private AdminMerchantService adminMerchantService;
     @MockitoBean private AdminLlmService adminLlmService;
     @MockitoBean private AdminProductService adminProductService;
+    @MockitoBean private ProductVariantSplitService productVariantSplitService;
     @MockitoBean private MarketLocationService marketLocationService;
     @MockitoBean private RelevanceReportService relevanceReportService;
     @MockitoBean private CostReportService costReportService;

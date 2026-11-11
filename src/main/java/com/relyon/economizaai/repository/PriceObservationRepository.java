@@ -41,6 +41,28 @@ public interface PriceObservationRepository extends JpaRepository<PriceObservati
     @Query("UPDATE PriceObservation po SET po.product = :survivor WHERE po.product = :absorbed")
     int repointProduct(@Param("absorbed") Product absorbed, @Param("survivor") Product survivor);
 
+    /** Reassigns a specific set of observations to a target product — the per-signature leg of a split. */
+    @Modifying
+    @Query("UPDATE PriceObservation po SET po.product = :target WHERE po.id IN :observationIds")
+    int repointObservationsTo(@Param("observationIds") Collection<UUID> observationIds,
+                              @Param("target") Product target);
+
+    /**
+     * Every observation of a product paired with the source receipt it was contributed from
+     * (via the internal audit join). Row = [observationId, receiptId, unitPrice, quantity].
+     * The variant-split uses (receiptId, unitPrice, quantity) to trace an observation back to
+     * the receipt_item whose signature decides which split product it belongs to — observations
+     * carry no direct item FK. {@code receiptId} is null when the audit row was cascaded away
+     * (deleted account); those stay on the original product.
+     */
+    @Query("""
+        SELECT po.id, audit.receiptId, po.unitPrice, po.quantity
+        FROM PriceObservation po
+        LEFT JOIN PriceObservationAudit audit ON audit.observation = po
+        WHERE po.product.id = :productId
+    """)
+    List<Object[]> findObservationTraceByProduct(@Param("productId") UUID productId);
+
     /**
      * Fills city/state on a market's observations that were written before the
      * market was geocoded (city/state are snapshotted at write time and never

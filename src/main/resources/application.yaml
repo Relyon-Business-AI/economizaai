@@ -465,7 +465,8 @@ economizaai:
     window-days: 14                            # a surfaced deal is attributable if surfaced within this many days before the purchase
   consumption:
     enabled: true                              # master switch for Phase 3 consumption-intelligence endpoints
-    min-purchases-for-prediction: 2            # below this, a product is silently skipped from /predictions
+    min-purchases-for-prediction: 3            # distinct purchase days a product needs to get a prediction
+    fallback-min-purchases-for-prediction: 2   # used only when NO product reaches the minimum (screen never empty)
     history-lookback-days: 365                 # window for computing inter-purchase intervals
     running-low-threshold-days: 7              # days-until-runout that flips status to RUNNING_LOW
     ran-out-grace-days: 0                      # tolerance before flipping to RAN_OUT

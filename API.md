@@ -1553,8 +1553,23 @@ Each prediction carries `productName` **and `friendlyDescription`** (the
 household's rename, null when never renamed — prefer it for display), plus
 `status` (`OK` / `RUNNING_LOW` / `RAN_OUT`),
 `daysUntilNextPurchase` (negative when overdue), `confidence` (LOW/MEDIUM/HIGH),
-`averageQuantityPerPurchase`. **Volume gate**: products with fewer than 2 prior
-purchases are silently skipped. Returns empty array, never an error.
+`averageQuantityPerPurchase`, `typeLabel` (generic type, e.g. "biscoito") and
+`categorySlug` (taxonomy leaf, nullable) — use both to pick the product icon.
+**Volume gate**: a product needs purchases on **3 distinct days**; only when NO
+product of the household reaches 3 does the gate fall back to 2 (so a new
+household never sees an empty screen). Returns empty array, never an error.
+
+```
+GET /api/v1/consumption/predictions/page[?status=RAN_OUT|RUNNING_LOW|OK&page=0&size=30]
+→ { "items": [ ... ], "counts": { "ranOut", "runningLow", "ok", "total" },
+    "page", "size", "hasMore" }
+```
+
+Paged + filterable version for the forecast screen. Items are ordered by
+**urgency** — closest to the run-out date first (ran out yesterday / runs out
+tomorrow before one overdue for months; ties put the already-run-out first).
+`counts` always cover ALL statuses (ignore the filter) so the filter chips show
+totals. `size` is capped at 100.
 
 ```
 GET /api/v1/consumption/suggested-list[?includeUpcoming=true&upcomingLimit=5]
@@ -1755,6 +1770,7 @@ GET    /api/v1/admin/products/taxonomy-coverage → { total, withLeaf, withoutLe
 GET    /api/v1/admin/products/duplicates       → List<DuplicateProductGroupResponse>
 GET    /api/v1/admin/products/variant-conflicts?max=200 → VariantConflictResponse — READ-ONLY audit of likely MIS-MERGED products (a single product whose linked items carry >1 distinct REAL EAN, or inconsistent distinguishing-token signatures e.g. "AO LEITE SGLUT" + "50% ZERO" under one product). Reports productId + conflicting item names/EANs for MANUAL review; mutates nothing.
 POST   /api/v1/admin/products/{id}/merge       → 200 ProductMergeResultResponse
+POST   /api/v1/admin/products/split-variants?dryRun=true&max=500 → 200 ProductVariantSplitResponse — one-time cleanup that SPLITS mis-merged products (one product holding items of DIFFERENT variants/brands/flavours). Groups items by variant signature (brand + VariantDiscriminator tokens); a product spanning >1 signature is split into one product per signature, reassigning receipt_items + price_observations + product_aliases; generic_name_norm preserved. dryRun=true (default) returns the PLAN, mutates nothing; dryRun=false applies. Idempotent (single-signature products skipped).
 POST   /api/v1/admin/products/refresh-brands       → BrandBackfillResponse (fill missing brands)
 POST   /api/v1/admin/markets/classify-segments     → SegmentClassificationSummary (CNAE-classify pending markets)
 GET    /api/v1/admin/merchants/grey                → List<GreyMerchantResponse> (grey-zone review queue, ranked by scan volume)

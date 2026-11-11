@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -53,4 +54,12 @@ public interface ProductAliasRepository extends JpaRepository<ProductAlias, UUID
     @Modifying
     @Query("UPDATE ProductAlias a SET a.product = :survivor WHERE a.product = :absorbed")
     int repointProduct(@Param("absorbed") Product absorbed, @Param("survivor") Product survivor);
+
+    /** All aliases of a product — the variant-split groups them by signature to reassign per-signature. */
+    List<ProductAlias> findByProduct(Product product);
+
+    /** Reassigns a specific set of aliases to a target product — the per-signature leg of a split. */
+    @Modifying
+    @Query("UPDATE ProductAlias a SET a.product = :target WHERE a.id IN :aliasIds")
+    int repointAliasesTo(@Param("aliasIds") Collection<UUID> aliasIds, @Param("target") Product target);
 }

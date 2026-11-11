@@ -7,6 +7,7 @@ import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.repository.CategoryRepository;
 import com.relyon.economizaai.repository.ConsumptionSnoozeRepository;
 import com.relyon.economizaai.repository.ManualPurchaseRepository;
 import com.relyon.economizaai.repository.ProductRepository;
@@ -40,6 +41,7 @@ class ConsumptionIntelligenceServiceTest {
     @Mock private ConsumptionSnoozeRepository snoozeRepository;
     @Mock private ProductRepository productRepository;
     @Mock private HouseholdProductAliasService householdProductAliasService;
+    @Mock private CategoryRepository categoryRepository;
 
     private CollaborativeProperties properties;
     private ConsumptionIntelligenceService service;
@@ -52,8 +54,9 @@ class ConsumptionIntelligenceServiceTest {
         // existing test data (designed around N=3) still represents
         // medium-history behavior. Default is now 2 per PRO-50.
         properties.getConsumption().setMinPurchasesForPrediction(3);
+        properties.getConsumption().setFallbackMinPurchasesForPrediction(3);
         service = new ConsumptionIntelligenceService(receiptItemRepository, manualPurchaseRepository,
-                snoozeRepository, productRepository, properties, householdProductAliasService);
+                snoozeRepository, productRepository, properties, householdProductAliasService, categoryRepository);
         var household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
         user = User.builder().id(UUID.randomUUID()).email("u@e").household(household).build();
         lenient().when(manualPurchaseRepository.findAllByHouseholdId(any())).thenReturn(List.of());

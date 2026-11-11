@@ -4,13 +4,16 @@ import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.dto.request.LogManualPurchaseRequest;
 import com.relyon.economizaai.dto.request.SnoozeProductRequest;
+import com.relyon.economizaai.dto.response.ConsumptionPredictionPageResponse;
 import com.relyon.economizaai.dto.response.ConsumptionPredictionResponse;
 import com.relyon.economizaai.dto.response.SuggestedShoppingListResponse;
 import com.relyon.economizaai.exception.ProductNotFoundException;
+import com.relyon.economizaai.model.Category;
 import com.relyon.economizaai.model.ConsumptionSnooze;
 import com.relyon.economizaai.model.ManualPurchase;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.repository.CategoryRepository;
 import com.relyon.economizaai.repository.ConsumptionSnoozeRepository;
 import com.relyon.economizaai.repository.ManualPurchaseRepository;
 import com.relyon.economizaai.repository.ProductRepository;
@@ -31,6 +34,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -66,12 +70,23 @@ public class ConsumptionIntelligenceService {
     private static final int HIGH_CONFIDENCE_MIN_SAMPLES = 8;
     private static final int MEDIUM_CONFIDENCE_MIN_SAMPLES = 5;
 
+    private static final int MAX_PAGE_SIZE = 100;
+
+    /**
+     * Closest to the run-out date first: an item that ran out yesterday or runs out tomorrow
+     * outranks one overdue for months. On a tie, the one that already ran out comes first.
+     */
+    private static final Comparator<ConsumptionPredictionResponse> URGENCY_ORDER = Comparator
+            .comparingLong((ConsumptionPredictionResponse prediction) -> Math.abs(prediction.daysUntilNextPurchase()))
+            .thenComparingLong(ConsumptionPredictionResponse::daysUntilNextPurchase);
+
     private final ReceiptItemRepository receiptItemRepository;
     private final ManualPurchaseRepository manualPurchaseRepository;
     private final ConsumptionSnoozeRepository snoozeRepository;
     private final ProductRepository productRepository;
     private final CollaborativeProperties properties;
     private final HouseholdProductAliasService householdProductAliasService;
+    private final CategoryRepository categoryRepository;
 
     @Transactional(readOnly = true)
     public List<ConsumptionPredictionResponse> predict(User user) {
@@ -86,20 +101,84 @@ public class ConsumptionIntelligenceService {
             return List.of();
         }
 
+        var minPurchases = effectiveMinPurchases(byProduct, consumption);
         var snoozedProductIds = activeSnoozes(householdId);
         var friendlyNames = householdProductAliasService.friendlyNamesFor(householdId,
                 List.copyOf(byProduct.keySet()));
+        var categorySlugs = categorySlugsFor(byProduct);
         var predictions = new ArrayList<ConsumptionPredictionResponse>();
         for (var entry : byProduct.entrySet()) {
             if (snoozedProductIds.contains(entry.getKey())) continue;
-            var prediction = predictForProduct(entry.getValue(), consumption, friendlyNames.get(entry.getKey()));
+            var prediction = predictForProduct(entry.getValue(), consumption, minPurchases,
+                    friendlyNames.get(entry.getKey()), categorySlugs);
             if (prediction != null) predictions.add(prediction);
         }
 
         predictions.sort(Comparator.comparing(ConsumptionPredictionResponse::daysUntilNextPurchase));
-        log.info("consumption.predict.done household={} products={} snoozed={}",
-                householdId, predictions.size(), snoozedProductIds.size());
+        log.info("consumption.predict.done household={} products={} snoozed={} minPurchases={}",
+                householdId, predictions.size(), snoozedProductIds.size(), minPurchases);
         return predictions;
+    }
+
+    /**
+     * One page of predictions ordered by urgency — the ones closest to running out (or that ran
+     * out most recently) first — optionally narrowed to one status, plus per-status counts.
+     */
+    @Transactional(readOnly = true)
+    public ConsumptionPredictionPageResponse predictPage(User user, ConsumptionPredictionResponse.Status status,
+                                                         int page, int size) {
+        var predictions = predict(user);
+        var counts = countByStatus(predictions);
+        var filtered = predictions.stream()
+                .filter(prediction -> status == null || prediction.status() == status)
+                .sorted(URGENCY_ORDER)
+                .toList();
+        var safePage = Math.max(0, page);
+        var safeSize = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
+        var from = Math.min(filtered.size(), safePage * safeSize);
+        var to = Math.min(filtered.size(), from + safeSize);
+        return new ConsumptionPredictionPageResponse(filtered.subList(from, to), counts, safePage, safeSize,
+                to < filtered.size());
+    }
+
+    private ConsumptionPredictionPageResponse.StatusCounts countByStatus(List<ConsumptionPredictionResponse> predictions) {
+        var byStatus = predictions.stream()
+                .collect(Collectors.groupingBy(ConsumptionPredictionResponse::status, Collectors.counting()));
+        return new ConsumptionPredictionPageResponse.StatusCounts(
+                byStatus.getOrDefault(ConsumptionPredictionResponse.Status.RAN_OUT, 0L),
+                byStatus.getOrDefault(ConsumptionPredictionResponse.Status.RUNNING_LOW, 0L),
+                byStatus.getOrDefault(ConsumptionPredictionResponse.Status.OK, 0L),
+                predictions.size());
+    }
+
+    /**
+     * The configured minimum of distinct purchase days, unless NO product reaches it — then the
+     * fallback minimum, so a household with a short history still sees something.
+     */
+    private int effectiveMinPurchases(Map<UUID, List<PurchaseEvent>> byProduct, CollaborativeProperties.Consumption cfg) {
+        var minimum = cfg.getMinPurchasesForPrediction();
+        var anyReachesMinimum = byProduct.values().stream()
+                .anyMatch(events -> distinctPurchaseDays(events) >= minimum);
+        return anyReachesMinimum ? minimum : Math.min(minimum, cfg.getFallbackMinPurchasesForPrediction());
+    }
+
+    private long distinctPurchaseDays(List<PurchaseEvent> events) {
+        return events.stream().map(PurchaseEvent::date).distinct().count();
+    }
+
+    private String categorySlugFor(Product product, Map<UUID, String> categorySlugs) {
+        return product.getCategoryId() == null ? null : categorySlugs.get(product.getCategoryId());
+    }
+
+    private Map<UUID, String> categorySlugsFor(Map<UUID, List<PurchaseEvent>> byProduct) {
+        var categoryIds = byProduct.values().stream()
+                .map(events -> events.get(0).product().getCategoryId())
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (categoryIds.isEmpty()) return Map.of();
+        return categoryRepository.findAllById(categoryIds).stream()
+                .collect(Collectors.toMap(Category::getId, Category::getSlug, (first, second) -> first));
     }
 
     @Transactional(readOnly = true)
@@ -196,12 +275,14 @@ public class ConsumptionIntelligenceService {
      */
     private ConsumptionPredictionResponse predictForProduct(List<PurchaseEvent> events,
                                                             CollaborativeProperties.Consumption cfg,
-                                                            String friendlyDescription) {
-        if (!hasEnoughPurchases(events, cfg)) return null;
+                                                            int minPurchases,
+                                                            String friendlyDescription,
+                                                            Map<UUID, String> categorySlugs) {
+        if (events.size() < minPurchases) return null;
 
         events.sort(Comparator.comparing(PurchaseEvent::date));
         var distinctPurchaseDates = events.stream().map(PurchaseEvent::date).distinct().toList();
-        if (distinctPurchaseDates.size() < cfg.getMinPurchasesForPrediction()) return null;
+        if (distinctPurchaseDates.size() < minPurchases) return null;
 
         var avgIntervalDays = averageIntervalDays(distinctPurchaseDates);
         if (avgIntervalDays <= 0) return null;
@@ -225,12 +306,10 @@ public class ConsumptionIntelligenceService {
                 avgQty,
                 events.size(),
                 confidenceFor(events.size()),
-                classifyStatus(daysUntilNextPurchase, cfg)
+                classifyStatus(daysUntilNextPurchase, cfg),
+                lastEvent.product().getGenericName(),
+                categorySlugFor(lastEvent.product(), categorySlugs)
         );
-    }
-
-    private boolean hasEnoughPurchases(List<PurchaseEvent> events, CollaborativeProperties.Consumption cfg) {
-        return events.size() >= cfg.getMinPurchasesForPrediction();
     }
 
     /**

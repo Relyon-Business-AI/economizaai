@@ -41,9 +41,9 @@ public class HomeAvailabilityService {
         var communityNeed = properties.getCollaborative().getMinHouseholdsForPublic();
         var features = List.of(
                 personal(HomeFeature.CONSUMPTION_PREDICTIONS, confirmedReceipts,
-                        properties.getConsumption().getMinPurchasesForPrediction()),
+                        properties.getConsumption().getFallbackMinPurchasesForPrediction()),
                 personal(HomeFeature.SUGGESTED_LIST, confirmedReceipts,
-                        properties.getConsumption().getMinPurchasesForPrediction()),
+                        properties.getConsumption().getFallbackMinPurchasesForPrediction()),
                 personal(HomeFeature.PERSONAL_PROMOS, confirmedReceipts,
                         properties.getPersonalPromo().getMinPurchasesForBaseline()),
                 personal(HomeFeature.PREFERENCES, confirmedReceipts,
