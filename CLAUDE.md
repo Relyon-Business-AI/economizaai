@@ -44,9 +44,14 @@ GitHub repo: `economizaai` (https://github.com/Relyon-Business-AI/economizaai.gi
 - `TransactionTemplate` commits inside the calling method, so commit-time failures (constraint violations at flush) land in your catch block instead of escaping the `@Transactional` proxy — prefer it over `@Transactional` whenever you need to react to persistence failures.
 - **Async state machines need a sweeper.** Any row a background job is supposed to transition (e.g. PROCESSING receipts) must have a scheduled sweeper that force-fails rows older than a timeout — restarts, pool rejections, and unrecordable failures WILL strand rows otherwise (see `ProcessingReceiptSweeper`).
 - **Async dispatch after commit must handle pool rejection** — the row is already committed; catch the rejection and mark the row failed, or the client polls forever.
+- **Outbound notification dispatch goes through `NotificationService`** — it persists the inbox row, applies the quiet-hours gate (`QuietHoursPolicy`) and hands the push/e-mail to the dispatch executor (`AsyncConfig.NOTIFICATION_DISPATCH_EXECUTOR`). Never call a channel dispatcher directly.
+- **Full-image decodes go through `ImageDecodeGate`** (QR photo, chave OCR, profile picture — usually via `PhotoUploadValidator`): a bounded number run at once, the rest get a localized 503.
+- **The `@AuthenticationPrincipal User` is a detached snapshot** — reload it by id before mutating/saving, or the save writes the stale snapshot back over newer changes.
 
 ### Fallbacks to Paid APIs
 - Gate paid fallbacks (Infosimples, captcha solvers) on failure types they can plausibly rescue (portal down, solver unavailable). Deterministic failures (bad input, missing markup) must propagate WITHOUT spending money. Catch specific exception types, never a blanket `RuntimeException`.
+- **Every paid call goes through `PaidApiGuardService`**: per-user daily cap + per-service daily budget + circuit breaker, and the attempt is recorded in the ledger (`paid_api_call`). A new paid service = a new `PaidApiService` value with its own cap and `*-daily-budget-cents`.
+- **Spend policy is passed explicitly** (`IngestSpendPolicy`) down the fetch/parse chain — background re-tries of the same nota (e.g. the contingency resync) use `FREE_ONLY`; never let a retry loop buy a captcha / Infosimples / LLM call by default.
 
 ### SEFAZ Portal Adapters (captcha & scraping)
 - **Captcha is never 100% on the first try.** Any captcha-gated adapter (MS reCAPTCHA, SC Turnstile) MUST wrap its fetch in a retry loop that RE-SOLVES a fresh token on rejection — a solved token is occasionally rejected by the portal, and without retry a valid receipt fails and forces a needless rescan. Bound it (`*-max-attempts`, default 3) so a hostile portal can't grind forever (each attempt costs a paid solve). See `MsDfePortalAdapter` / `SantaCatarinaNfcePortalAdapter` for the shape. When adding a 5th captcha state, copy this pattern.
@@ -58,6 +63,7 @@ GitHub repo: `economizaai` (https://github.com/Relyon-Business-AI/economizaai.gi
 ### Security Patterns
 - **Client IP**: always via `ClientIpResolver` — it trusts `CF-Connecting-IP` / the LAST `X-Forwarded-For` hop. Never read the first XFF hop (client-spoofable).
 - **Short verification codes** (password reset, OTP): store only a hash, compare constant-time (`MessageDigest.isEqual`), count failed attempts against the active code and lock after a small budget. Never rely on the code space alone.
+- **User e-mails are normalized via `EmailNormalizer`** (trim + lower-case) at every entry point that stores or looks one up; the DB enforces uniqueness on `lower(email)`.
 - **Endpoints that mutate GLOBAL state** (canonical products, categorizer catalogs/dictionaries) are ADMIN-only in `SecurityConfig` from day one — "any authenticated user" is only acceptable for household-scoped data.
 
 ### Fail-Fast Validation
@@ -68,7 +74,7 @@ GitHub repo: `economizaai` (https://github.com/Relyon-Business-AI/economizaai.gi
 - Use SLF4J (`org.slf4j.Logger` / `org.slf4j.LoggerFactory`) via `@Slf4j` Lombok annotation
 - Every feature must have relevant log entries (info for business events, debug for flow, warn/error for failures)
 - Use parameterized messages: `log.info("Receipt {} parsed for user {} with {} items", receiptId, userId, itemCount)`
-- Never log raw CPF, full receipt access keys, or JWTs — mask if needed
+- Never log raw CPF, full receipt access keys, e-mails, QR URLs or JWTs — mask with `LogMasker` (`LogMasker.email`, `LogMasker.chave`, `LogMasker.portalUrl`)
 - **MDC correlation:** every request log line carries `req=<8-char>`, `user=<email>`, plus `rcpt=<8-char>` and `item=<8-char>` when the flow touches a receipt or item. To trace one receipt end-to-end, grep by `rcpt=<id>`. Set MDC via `MDC.put(MdcContextFilter.RECEIPT_ID, ...)` etc. — `MdcContextFilter` clears it at request end.
 - **One INFO line per decision, not per loop iteration.** Use the format `<event>.<outcome> key1=value1 key2=value2`. Examples: `item.created_from_ean`, `item.matched_by_alias`, `item.unmatched`, `submit ok`, `confirm ok`. Aggregates (`canonicalize done matched=X created=Y`) come at the end as a separate INFO.
 
@@ -110,7 +116,7 @@ GitHub repo: `economizaai` (https://github.com/Relyon-Business-AI/economizaai.gi
 ### Privacy & Anonymization (LGPD)
 - `PriceObservation` (the collaborative index atom) **must never carry user_id** in its primary table
 - Audit trail (which receipt produced which observation) lives in a separate, internal-only join table
-- Aggregate queries exposed publicly or to B2B clients enforce **k-anonymity at the query layer, by TIER** (owner decision 2026-11-03): grocery aggregates may disclose at n=1 household (same public fact the state menor-preço portals publish; `observedAt` is day-truncated so observations can't be regrouped into one receipt), while **health-group products and PHARMACY stores keep K=3** (fail-closed: unknown product/segment counts as sensitive). LIST-shaped reads (admin, exports, merchant panel, B2B) stay K=3.
+- Aggregate queries exposed publicly or to B2B clients enforce **k-anonymity at the query layer, by TIER** (owner decision 2026-11-03): grocery aggregates may disclose at n=1 household (same public fact the state menor-preço portals publish; `observedAt` is day-truncated so observations can't be regrouped into one receipt), while **health-group products and stores not classified as grocery retail keep K=3** (fail-closed: a PHARMACY, an unclassified/unknown-segment store or a store with no location row counts as sensitive; a product without a category stays grocery — owner decision 2026-11-11). LIST-shaped reads (admin, exports, merchant panel, B2B) stay K=3.
 - CPF, when present on receipts, is stripped before raw HTML is persisted (regex sweep on the snapshot)
 - Any new endpoint that exposes aggregated data must have a test asserting k-anonymity holds
 
@@ -162,7 +168,7 @@ Two environments, no staging. Pushing a branch deploys it:
 - `API.md` is the FE-facing endpoint walk-through. Update when endpoints/payloads change.
 - `CHANGELOG.md` is the FE-facing **diary** of meaningful changes — new endpoints, response-shape changes, behavior changes the FE needs to know about. **Newest entry always at the top.** Add an entry on every meaningful change (a feature shipped, a contract change, a bug the FE was likely tripping on). NOT every commit — only the user-visible / FE-visible deltas. Date stamp every entry. This is read by the FE's tooling to understand "what changed since I last looked."
 - `DEV_NOTES.md` lists shortcuts/hacks that are fine for dev but must be revisited before prod (local-disk storage, stub services, weak secrets, etc). Add an entry whenever you ship a "good enough for dev" choice with a known prod gap.
-- `INFRASTRUCTURE.md` is the single source of truth for the **backend infra on Render** (prod + dev services, DBs, deploy semantics, gotchas, Quick Links to API/Swagger/health; the retired self-hosted Windows box is kept at the bottom for history only). Update when infra changes.
+- `INFRASTRUCTURE.md` is the single source of truth for the **backend infra on Render** (prod + dev services, DBs, deploy semantics, gotchas, Quick Links to API/Swagger/health, the environment-variable reference). Update when infra or env vars change.
 
 ## Build & Run
 ```bash
