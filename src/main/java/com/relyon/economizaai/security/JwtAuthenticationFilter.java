@@ -12,13 +12,17 @@ import org.slf4j.MDC;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.servlet.HandlerExceptionResolver;
 
 import java.io.IOException;
 
@@ -50,6 +54,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UserDetailsService userDetailsService;
+    // Resolved by bean NAME (several HandlerExceptionResolver beans exist): the MVC one that
+    // routes to GlobalExceptionHandler.
+    private final HandlerExceptionResolver handlerExceptionResolver;
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
@@ -77,6 +84,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     log.debug("Authenticated user: {}", LogMasker.email(username));
                 }
             }
+        } catch (CannotCreateTransactionException | CannotGetJdbcConnectionException
+                 | DataAccessResourceFailureException databaseUnavailable) {
+            // The user lookup could not get a DB connection. Treating that as "not authenticated"
+            // answered 401 (the app signs the user out); answer the overload 503 instead.
+            handlerExceptionResolver.resolveException(request, response, null, databaseUnavailable);
+            return;
         } catch (Exception ex) {
             log.debug("JWT authentication failed: {}", ex.getMessage());
         }

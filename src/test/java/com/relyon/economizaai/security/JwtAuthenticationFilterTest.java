@@ -13,12 +13,15 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.transaction.CannotCreateTransactionException;
+import org.springframework.web.servlet.HandlerExceptionResolver;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -27,6 +30,7 @@ class JwtAuthenticationFilterTest {
 
     private JwtService jwtService;
     private UserDetailsService userDetailsService;
+    private HandlerExceptionResolver handlerExceptionResolver;
     private JwtAuthenticationFilter filter;
     private FilterChain chain;
 
@@ -34,7 +38,8 @@ class JwtAuthenticationFilterTest {
     void setUp() {
         jwtService = mock(JwtService.class);
         userDetailsService = mock(UserDetailsService.class);
-        filter = new JwtAuthenticationFilter(jwtService, userDetailsService);
+        handlerExceptionResolver = mock(HandlerExceptionResolver.class);
+        filter = new JwtAuthenticationFilter(jwtService, userDetailsService, handlerExceptionResolver);
         chain = mock(FilterChain.class);
         SecurityContextHolder.clearContext();
     }
@@ -157,5 +162,19 @@ class JwtAuthenticationFilterTest {
         var request = new MockHttpServletRequest("GET", "/api/v1/receipts");
         request.addHeader("Authorization", headerValue);
         return request;
+    }
+
+    @Test
+    void databaseUnavailableDuringUserLookup_answersThroughTheExceptionHandlerInsteadOfGoingOnAnonymous() throws Exception {
+        var poolExhausted = new CannotCreateTransactionException("pool exhausted");
+        when(jwtService.extractUsername("valid-token")).thenReturn("test@test.com");
+        when(userDetailsService.loadUserByUsername("test@test.com")).thenThrow(poolExhausted);
+
+        var request = requestWithAuthorization("Bearer valid-token");
+        var response = new MockHttpServletResponse();
+        filter.doFilterInternal(request, response, chain);
+
+        verify(handlerExceptionResolver).resolveException(request, response, null, poolExhausted);
+        verify(chain, never()).doFilter(request, response);
     }
 }
