@@ -223,7 +223,7 @@ class UserServiceTest {
 
     @Test
     void register_shouldCreateUserAndReturnToken() {
-        var request = new RegisterRequest("John", "john@test.com", "password123", "1.0", "1.0", null);
+        var request = new RegisterRequest("John", "john@test.com", "password123", "1.1", "1.1", null);
         var household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
         when(userRepository.existsByEmail("john@test.com")).thenReturn(false);
         when(householdService.createSoloHousehold()).thenReturn(household);
@@ -252,7 +252,7 @@ class UserServiceTest {
 
     @Test
     void register_shouldThrowWhenEmailExists() {
-        var request = new RegisterRequest("John", "john@test.com", "password123", "1.0", "1.0", null);
+        var request = new RegisterRequest("John", "john@test.com", "password123", "1.1", "1.1", null);
         when(userRepository.existsByEmail("john@test.com")).thenReturn(true);
 
         assertThrows(EmailAlreadyExistsException.class, () -> userService.register(request));
@@ -289,7 +289,7 @@ class UserServiceTest {
 
     @Test
     void register_recordsRegistrationPlatform() {
-        var request = new RegisterRequest("John", "john@test.com", "password123", "1.0", "1.0", Platform.IOS);
+        var request = new RegisterRequest("John", "john@test.com", "password123", "1.1", "1.1", Platform.IOS);
         var household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
         when(userRepository.existsByEmail("john@test.com")).thenReturn(false);
         when(householdService.createSoloHousehold()).thenReturn(household);
@@ -454,7 +454,7 @@ class UserServiceTest {
 
     @Test
     void register_shouldRejectStaleTermsVersion() {
-        var request = new RegisterRequest("John", "john@test.com", "password123", "0.9", "1.0", null);
+        var request = new RegisterRequest("John", "john@test.com", "password123", "0.9", "1.1", null);
         when(userRepository.existsByEmail("john@test.com")).thenReturn(false);
 
         assertThrows(InvalidLegalVersionException.class,
@@ -464,7 +464,7 @@ class UserServiceTest {
 
     @Test
     void register_shouldRejectStalePrivacyVersion() {
-        var request = new RegisterRequest("John", "john@test.com", "password123", "1.0", "0.9", null);
+        var request = new RegisterRequest("John", "john@test.com", "password123", "1.1", "0.9", null);
         when(userRepository.existsByEmail("john@test.com")).thenReturn(false);
 
         assertThrows(InvalidLegalVersionException.class,

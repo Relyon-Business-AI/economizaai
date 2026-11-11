@@ -36,7 +36,7 @@ class CategorizerClassifyMissingParamTest {
 
     private String registerAndGetToken() throws Exception {
         var body = "{\"name\":\"Param Tester\",\"email\":\"param@test.com\",\"password\":\"password123\","
-                + "\"acceptedTermsVersion\":\"1.0\",\"acceptedPrivacyVersion\":\"1.0\"}";
+                + "\"acceptedTermsVersion\":\"1.1\",\"acceptedPrivacyVersion\":\"1.1\"}";
         var req = HttpRequest.newBuilder(URI.create(url("/api/v1/auth/register")))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body))

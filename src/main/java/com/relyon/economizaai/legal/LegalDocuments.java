@@ -12,8 +12,8 @@ import java.nio.charset.StandardCharsets;
 @Getter
 public class LegalDocuments {
 
-    public static final String CURRENT_TERMS_VERSION = "1.0";
-    public static final String CURRENT_PRIVACY_VERSION = "1.0";
+    public static final String CURRENT_TERMS_VERSION = "1.1";
+    public static final String CURRENT_PRIVACY_VERSION = "1.1";
 
     private String termsContent;
     private String privacyContent;

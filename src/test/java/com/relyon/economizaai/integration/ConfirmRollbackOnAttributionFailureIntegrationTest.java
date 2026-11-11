@@ -112,7 +112,7 @@ class ConfirmRollbackOnAttributionFailureIntegrationTest {
     private String registerAndLogin(String email) throws Exception {
         var body = """
                 { "name": "%s", "email": "%s", "password": "password123",
-                  "acceptedTermsVersion": "1.0", "acceptedPrivacyVersion": "1.0" }
+                  "acceptedTermsVersion": "1.1", "acceptedPrivacyVersion": "1.1" }
                 """.formatted(email, email);
         var result = mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON).content(body))
