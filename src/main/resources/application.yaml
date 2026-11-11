@@ -164,6 +164,15 @@ economizaai:
       set-min-confidence: ${AI_SUBCAT_SET_MIN:0.55}
       change-subcategory-min-confidence: ${AI_SUBCAT_CHANGE_SUB_MIN:0.80}
       change-category-min-confidence: ${AI_SUBCAT_CHANGE_CAT_MIN:0.90}
+  async:
+    # Background AI lanes (AsyncConfig). Fixed-size pools with a bounded queue: a full
+    # queue rejects, and each dispatch site fails the nota / skips the best-effort work.
+    photo-extract:
+      threads: ${ASYNC_PHOTO_EXTRACT_THREADS:3}
+      queue-capacity: ${ASYNC_PHOTO_EXTRACT_QUEUE:30}
+    ai-categorization:
+      threads: ${ASYNC_AI_CATEGORIZATION_THREADS:2}
+      queue-capacity: ${ASYNC_AI_CATEGORIZATION_QUEUE:50}
   ingestion:
     # Async-ingest safety net: PROCESSING receipts older than this are failed by
     # the sweeper so the FE never polls forever. Must exceed the worst-case

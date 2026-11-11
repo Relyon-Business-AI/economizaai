@@ -21,7 +21,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import static com.relyon.economizaai.config.AsyncConfig.AI_SWEEP_EXECUTOR;
+import static com.relyon.economizaai.config.AsyncConfig.AI_CATEGORIZATION_EXECUTOR;
 
 import java.math.BigDecimal;
 import java.util.EnumMap;
@@ -59,7 +59,7 @@ public class AiItemFallbackService {
      * deterministic categorizer. Called from the controller AFTER confirm() commits.
      * No-op when AI is disabled.
      */
-    @Async(AI_SWEEP_EXECUTOR)
+    @Async(AI_CATEGORIZATION_EXECUTOR)
     public void applyFallback(UUID receiptId) {
         if (!aiGateway.isEnabled()) return;
         runReceiptFallback(receiptId);

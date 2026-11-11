@@ -178,11 +178,18 @@ public class PhotoReceiptExtractionService {
      * Sem sucesso nenhum / nenhuma é cupom → FAILED_PARSE. Roda num bean-boundary (via {@code self})
      * pra o {@code @Async} valer; exceções NÃO propagam (nada útil sai de thread async).
      */
-    @Async(AsyncConfig.AI_SWEEP_EXECUTOR)
+    @Async(AsyncConfig.PHOTO_EXTRACT_EXECUTOR)
     public void processPhotosAsync(UUID receiptId, User user, List<PhotoData> photos) {
         var extractions = new ArrayList<JsonNode>();
         var anyVisionCallSucceeded = false;
         for (var photo : photos) {
+            // A job that sat in the queue past the sweeper timeout (or whose nota was deleted)
+            // must not pay for vision calls whose result would be discarded.
+            if (!isStillProcessing(receiptId)) {
+                log.info("photo_extract.abandoned receipt={} reason=no_longer_processing extracted={}",
+                        receiptId, extractions.size());
+                return;
+            }
             try {
                 paidApiGuard.assertUnderGlobalBudget();
                 paidApiGuard.assertWithinDailyCap(user.getId(), PaidApiService.LLM_VISION);
@@ -228,6 +235,10 @@ public class PhotoReceiptExtractionService {
             return;
         }
         log.info("photo_extract.ok user={} receipt={} photos={}", user.getId(), receiptId, photos.size());
+    }
+
+    private boolean isStillProcessing(UUID receiptId) {
+        return receiptRepository.existsByIdAndStatus(receiptId, ReceiptStatus.PROCESSING);
     }
 
     private Receipt markFailed(UUID receiptId, String reasonKey) {

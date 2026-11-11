@@ -49,6 +49,8 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
     // old by creation but fresh by the status flip.
     List<Receipt> findByStatusAndUpdatedAtBefore(ReceiptStatus status, LocalDateTime cutoff);
 
+    boolean existsByIdAndStatus(UUID id, ReceiptStatus status);
+
     // Paced import worker: oldest IMPORT_QUEUED first, a small page at a time, and a
     // live count of in-flight PROCESSING rows so the worker yields to real scans.
     List<Receipt> findByStatusOrderByCreatedAtAsc(ReceiptStatus status, Pageable pageable);

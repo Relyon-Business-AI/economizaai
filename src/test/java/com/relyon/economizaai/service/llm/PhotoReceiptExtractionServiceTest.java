@@ -21,7 +21,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
@@ -37,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
@@ -86,6 +89,36 @@ class PhotoReceiptExtractionServiceTest {
             return receipt;
         });
         lenient().when(receiptRepository.findById(any())).thenAnswer(invocation -> Optional.ofNullable(savedReceipt));
+        lenient().when(receiptRepository.existsByIdAndStatus(any(), eq(ReceiptStatus.PROCESSING)))
+                .thenAnswer(invocation -> savedReceipt != null && savedReceipt.getStatus() == ReceiptStatus.PROCESSING);
+    }
+
+    @Test
+    void extract_poolRejectsTheJob_marksTheCommittedReceiptFailed() {
+        when(aiGateway.isEnabled()).thenReturn(true);
+        var rejectingSelf = mock(PhotoReceiptExtractionService.class);
+        doThrow(new TaskRejectedException("queue full")).when(rejectingSelf).processPhotosAsync(any(), any(), any());
+        ReflectionTestUtils.setField(service, "self", rejectingSelf);
+
+        var receiptId = service.extract(user, photo());
+
+        assertThat(receiptId).isNotNull();
+        assertThat(savedReceipt.getStatus()).isEqualTo(ReceiptStatus.FAILED_PARSE);
+        assertThat(savedReceipt.getParseErrorReason()).isEqualTo("receipt.photo.extraction-failed");
+        verify(aiGateway, never()).completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt(), any());
+    }
+
+    @Test
+    void processPhotos_receiptNoLongerProcessing_paysForNoVisionCall() {
+        when(aiGateway.isEnabled()).thenReturn(true);
+        // The sweeper (or a delete) moved the nota on while the job waited in the queue.
+        when(receiptRepository.existsByIdAndStatus(any(), eq(ReceiptStatus.PROCESSING))).thenReturn(false);
+
+        service.extract(user, List.of(photo(), photo()));
+
+        verify(aiGateway, never()).completeWithImage(any(), anyString(), anyString(), anyString(), any(), anyString(), anyInt(), any());
+        verify(paidApiGuard, never()).recordSuccess(any(), any(), any(), any());
+        assertThat(savedReceipt.getParseErrorReason()).isNull();
     }
 
     private MockMultipartFile photo() {
