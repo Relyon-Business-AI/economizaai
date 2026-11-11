@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -89,9 +90,15 @@ public class DealsService {
         var scope = nearbyScopeService.forUser(user, radiusKm, deviceLatitude, deviceLongitude);
         var friendlyNames = householdProductAliasService.friendlyNamesFor(householdId,
                 List.copyOf(purchased.keySet()));
+        var lowestPrices = priceIndexService.lowestRecentInStorePrices(purchased.keySet());
         var deals = new ArrayList<DealResponse>();
         var suppressedCount = 0;
+        var skippedNoCheaperPrice = 0;
         for (var aggregate : purchased.values()) {
+            if (!canBeatLastPaid(aggregate, lowestPrices)) {
+                skippedNoCheaperPrice++;
+                continue;
+            }
             // ON-mode shortcut: a product muted/dismissed market-wide can't yield
             // a visible deal, so skip the (expensive) bestMarkets lookup outright.
             if (relevanceMode == RelevanceMode.ON
@@ -124,8 +131,9 @@ public class DealsService {
                                 Comparator.nullsLast(Comparator.reverseOrder())))
                 .limit(limit)
                 .toList();
-        log.info("deals.query done household={} scope={} candidates={} qualified={} returned={}",
-                householdId, includeNearby ? scope.tier() : "FOLLOWED", purchased.size(), deals.size(), ranked.size());
+        log.info("deals.query done household={} scope={} candidates={} skipped_no_cheaper={} qualified={} returned={}",
+                householdId, includeNearby ? scope.tier() : "FOLLOWED", purchased.size(), skippedNoCheaperPrice,
+                deals.size(), ranked.size());
         return ranked;
     }
 
@@ -159,13 +167,30 @@ public class DealsService {
      */
     private PriceIndexService.MarketPriceRow cheapestQualifyingMarket(
             List<PriceIndexService.MarketPriceRow> markets, BigDecimal lastPaid) {
-        var requiredDrop = RelevanceThreshold.requiredDropFraction(lastPaid);
-        var threshold = lastPaid.multiply(BigDecimal.valueOf(1.0 - requiredDrop));
+        var threshold = qualifyingPriceCeiling(lastPaid);
         return markets.stream()
                 .filter(market -> market.medianPrice() != null)
                 .filter(market -> market.medianPrice().compareTo(threshold) <= 0)
                 .min(Comparator.comparing(PriceIndexService.MarketPriceRow::medianPrice))
                 .orElse(null);
+    }
+
+    /**
+     * Cheap pre-check before the per-product market ranking: a chain's median is never below the
+     * product's lowest recent observation, so if even that lowest price doesn't reach the
+     * qualifying ceiling, no market can produce a deal and the (expensive) ranking is skipped.
+     */
+    private boolean canBeatLastPaid(ProductAggregate aggregate, Map<UUID, BigDecimal> lowestPrices) {
+        var lastPaid = aggregate.lastUnitPrice;
+        if (lastPaid == null || lastPaid.signum() <= 0) return false;
+        var lowest = lowestPrices.get(aggregate.product.getId());
+        return lowest != null && lowest.compareTo(qualifyingPriceCeiling(lastPaid)) <= 0;
+    }
+
+    /** Highest price that still beats last-paid by the progressive relevance threshold. */
+    private BigDecimal qualifyingPriceCeiling(BigDecimal lastPaid) {
+        var requiredDrop = RelevanceThreshold.requiredDropFraction(lastPaid);
+        return lastPaid.multiply(BigDecimal.valueOf(1.0 - requiredDrop));
     }
 
     /** Compute savings (amount, fraction, pct) against last-paid and assemble the response row. */

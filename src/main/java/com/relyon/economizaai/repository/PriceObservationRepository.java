@@ -106,6 +106,29 @@ public interface PriceObservationRepository extends JpaRepository<PriceObservati
     List<PriceObservation> findRecentByProduct(@Param("productId") UUID productId,
                                                @Param("since") LocalDateTime since);
 
+    interface ProductLowestPrice {
+        UUID getProductId();
+        BigDecimal getLowestPrice();
+    }
+
+    /**
+     * Lowest recent in-store unit price per product, over EXACTLY the rows
+     * {@link #findRecentByProduct} returns (in-store, non-outlier, since). Any chain median
+     * is >= this minimum, so a product whose minimum doesn't beat a threshold can't yield a
+     * qualifying market — callers use it to skip the per-product ranking in one query.
+     */
+    @Query("""
+        SELECT po.product.id AS productId, MIN(po.unitPrice) AS lowestPrice
+        FROM PriceObservation po
+        WHERE po.product.id IN :productIds
+          AND po.channel = 'IN_STORE'
+          AND po.outlier = false
+          AND po.observedAt >= :since
+        GROUP BY po.product.id
+    """)
+    List<ProductLowestPrice> findLowestRecentInStorePrices(@Param("productIds") Collection<UUID> productIds,
+                                                           @Param("since") LocalDateTime since);
+
     /** Online index: recent ONLINE observations for a product, across all sellers (national). */
     @Query("""
         SELECT po FROM PriceObservation po
