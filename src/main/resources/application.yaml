@@ -35,6 +35,12 @@ spring:
       # HTTP with 8s timeouts) would delay every other @Scheduled job.
       pool:
         size: 4
+  data:
+    web:
+      pageable:
+        # Spring's default cap is 2000 — a client-controlled ?size=2000 would load
+        # thousands of receipts in one request. Largest size any client asks for is 100.
+        max-page-size: 100
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -57,6 +63,11 @@ spring:
     properties:
       mail.smtp.auth: true
       mail.smtp.starttls.enable: true
+      # JavaMail defaults are INFINITE — a stalled SMTP server would pin the async
+      # threads that send verification e-mails forever.
+      mail.smtp.connectiontimeout: 10000
+      mail.smtp.timeout: 10000
+      mail.smtp.writetimeout: 10000
 
 jwt:
   secret: ${JWT_SECRET:economizai-dev-secret-key-must-be-at-least-256-bits-long-for-hs256}

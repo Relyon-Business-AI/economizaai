@@ -13,6 +13,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -33,10 +35,13 @@ public class HomeAvailabilityService {
     private final PriceObservationAuditRepository priceObservationAuditRepository;
     private final CollaborativeProperties properties;
 
+    private static final Duration CONTRIBUTING_HOUSEHOLDS_TTL = Duration.ofMinutes(10);
+    private volatile ContributingHouseholds contributingHouseholdsCache;
+
     public HomeAvailabilityResponse forUser(User user) {
         var confirmedReceipts = (int) receiptRepository.countByHouseholdIdAndStatus(
                 user.getHousehold().getId(), ReceiptStatus.CONFIRMED);
-        var contributingHouseholds = (int) priceObservationAuditRepository.countDistinctContributingHouseholds();
+        var contributingHouseholds = cachedContributingHouseholds();
 
         var communityNeed = properties.getCollaborative().getMinHouseholdsForPublic();
         var features = List.of(
@@ -58,6 +63,23 @@ public class HomeAvailabilityService {
                 abbrev(user), confirmedReceipts, contributingHouseholds, locked, features.size());
         return new HomeAvailabilityResponse(features);
     }
+
+    /**
+     * The contributor count is a GLOBAL scan (audits ⨝ observations) and this endpoint
+     * runs on every app open — the number only matters against a small threshold, so a
+     * few minutes of staleness is harmless.
+     */
+    private int cachedContributingHouseholds() {
+        var cached = contributingHouseholdsCache;
+        if (cached != null && cached.countedAt().plus(CONTRIBUTING_HOUSEHOLDS_TTL).isAfter(Instant.now())) {
+            return cached.households();
+        }
+        var counted = (int) priceObservationAuditRepository.countDistinctContributingHouseholds();
+        contributingHouseholdsCache = new ContributingHouseholds(counted, Instant.now());
+        return counted;
+    }
+
+    private record ContributingHouseholds(int households, Instant countedAt) {}
 
     private FeatureAvailability personal(HomeFeature feature, int have, int need) {
         var available = have >= need;
