@@ -437,7 +437,7 @@ public class SefazIngestionService {
             throw new ReceiptParseException("chave-corrupted");
         }
         paidApiGuard.assertUnderGlobalBudget();
-        paidApiGuard.assertCircuitClosed(PaidApiService.INFOSIMPLES);
+        paidApiGuard.assertCircuitClosed(PaidApiService.INFOSIMPLES, uf.name());
         paidApiGuard.assertWithinDailyCap(userId, PaidApiService.INFOSIMPLES);
         try {
             var preParsed = infosimples.get().fetchParsed(chave, uf);
