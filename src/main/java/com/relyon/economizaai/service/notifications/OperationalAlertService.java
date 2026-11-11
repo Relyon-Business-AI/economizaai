@@ -2,8 +2,10 @@ package com.relyon.economizaai.service.notifications;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.relyon.economizaai.dto.response.AdminAlertsConfigResponse;
+import com.relyon.economizaai.model.enums.PaidApiService;
 import com.relyon.economizaai.service.ContactService;
 import com.relyon.economizaai.service.notifications.twilio.TwilioMessageClient;
+import com.relyon.economizaai.service.paidapi.PaidApiGuardService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -31,6 +33,7 @@ public class OperationalAlertService {
 
     private final ContactService contactService;
     private final TwilioMessageClient twilioClient;
+    private final PaidApiGuardService paidApiGuardService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private final List<String> adminPhoneNumbers;
@@ -40,11 +43,13 @@ public class OperationalAlertService {
     public OperationalAlertService(
             ContactService contactService,
             TwilioMessageClient twilioClient,
+            PaidApiGuardService paidApiGuardService,
             @Value("${economizaai.notifications.admin-phone-numbers:}") String adminPhoneNumbersCsv,
             @Value("${economizaai.notifications.twilio.admin-template-sid:}") String whatsAppTemplateSid,
             @Value("${economizaai.notifications.admin-whatsapp-enabled:true}") boolean whatsAppEnabled) {
         this.contactService = contactService;
         this.twilioClient = twilioClient;
+        this.paidApiGuardService = paidApiGuardService;
         this.adminPhoneNumbers = parsePhones(adminPhoneNumbersCsv);
         this.whatsAppTemplateSid = whatsAppTemplateSid;
         this.whatsAppEnabled = whatsAppEnabled;
@@ -59,7 +64,31 @@ public class OperationalAlertService {
      */
     public void alertAdmin(String subject, String body) {
         sendEmail(subject, body);
-        sendWhatsApp(subject);
+        sendWhatsAppToAdmins(subject);
+    }
+
+    /** Whether the admin WhatsApp channel can be used at all (switch on, template, numbers, Twilio). */
+    public boolean isWhatsAppReady() {
+        return whatsAppEnabled && !isBlank(whatsAppTemplateSid) && !adminPhoneNumbers.isEmpty()
+                && twilioClient.isConfigured(true);
+    }
+
+    /**
+     * Sends the headline by WhatsApp and reports whether the provider ACCEPTED it for at
+     * least one admin number — for alerts that are retried until delivered. Never throws.
+     */
+    public boolean sendWhatsAppConfirmed(String headline) {
+        return sendWhatsAppToAdmins(headline) > 0;
+    }
+
+    /** Sends the alert by e-mail and reports whether the mail server ACCEPTED it. Never throws. */
+    public boolean sendEmailConfirmed(String subject, String body) {
+        try {
+            return contactService.notifyAdminConfirmed(subject, body);
+        } catch (RuntimeException ex) {
+            log.warn("ops_alert.email_failed subject='{}' reason={}", subject, ex.getClass().getSimpleName());
+            return false;
+        }
     }
 
     /**
@@ -88,21 +117,30 @@ public class OperationalAlertService {
         }
     }
 
-    private void sendWhatsApp(String headline) {
-        if (!whatsAppEnabled || isBlank(whatsAppTemplateSid) || adminPhoneNumbers.isEmpty()
-                || !twilioClient.isConfigured(true)) {
-            return;
+    /**
+     * Sends the headline to every admin number; returns how many the provider accepted.
+     * An admin alert is the alarm itself, so it is NEVER blocked by the Twilio budget or a
+     * per-user cap — but every attempt is still written to the paid-API ledger.
+     */
+    private int sendWhatsAppToAdmins(String headline) {
+        if (!isWhatsAppReady()) {
+            return 0;
         }
         var variablesJson = templateVariables(headline);
-        if (variablesJson == null) return;
+        if (variablesJson == null) return 0;
+        var accepted = 0;
         for (var phone : adminPhoneNumbers) {
             try {
                 twilioClient.sendWhatsAppTemplate(phone, whatsAppTemplateSid, variablesJson);
+                paidApiGuardService.recordSuccess(null, PaidApiService.TWILIO_MESSAGE, null, "twilio");
+                accepted++;
                 log.info("ops_alert.whatsapp_sent to={}", mask(phone));
             } catch (RuntimeException ex) {
+                paidApiGuardService.recordFailure(null, PaidApiService.TWILIO_MESSAGE, null, "twilio");
                 log.warn("ops_alert.whatsapp_failed to={} reason={}", mask(phone), ex.getClass().getSimpleName());
             }
         }
+        return accepted;
     }
 
     /** {@code {"1":"<headline>"}} with proper JSON escaping of the headline. */
