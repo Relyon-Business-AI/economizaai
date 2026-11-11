@@ -5,9 +5,12 @@ import com.relyon.economizaai.model.enums.ReceiptEntryMethod;
 import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -49,6 +52,71 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
     // old by creation but fresh by the status flip.
     List<Receipt> findByStatusAndUpdatedAtBefore(ReceiptStatus status, LocalDateTime cutoff);
 
+    boolean existsByIdAndStatus(UUID id, ReceiptStatus status);
+
+    /**
+     * Loads the receipt holding a row lock until the transaction ends — serializes the
+     * confirm paths (manual, batch, auto-confirm) on the same nota.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT receipt FROM Receipt receipt WHERE receipt.id = :id")
+    Optional<Receipt> findByIdForUpdate(@Param("id") UUID id);
+
+    /**
+     * Ids of the notas the auto-confirm sweeper can actually confirm: PENDING since before
+     * {@code cutoff}, minus photo notas the user still has to complete (date, market, a name
+     * and a price on every non-excluded item) — those stay in review and are never loaded.
+     */
+    @Query("""
+        SELECT receipt.id FROM Receipt receipt
+        WHERE receipt.status = 'PENDING_CONFIRMATION'
+          AND receipt.updatedAt < :cutoff
+          AND (receipt.origin IS NULL OR receipt.origin <> 'PHOTO' OR (
+                receipt.issuedAt IS NOT NULL
+                AND receipt.marketName IS NOT NULL AND TRIM(receipt.marketName) <> ''
+                AND NOT EXISTS (
+                    SELECT item.id FROM ReceiptItem item
+                    WHERE item.receipt = receipt AND item.excluded = false
+                      AND (item.totalPrice IS NULL
+                           OR ((item.rawDescription IS NULL OR TRIM(item.rawDescription) = '')
+                               AND (item.friendlyDescription IS NULL OR TRIM(item.friendlyDescription) = '')))
+                )
+          ))
+        ORDER BY receipt.updatedAt ASC
+    """)
+    List<UUID> findAutoConfirmableIds(@Param("cutoff") LocalDateTime cutoff, Pageable pageable);
+    // Sweeper timeout as ONE conditional statement: the row is failed only if it is STILL in the
+    // stale status and still older than the cutoff when the UPDATE runs, so an ingest that
+    // finished in the meantime is never overwritten. Returns 1 when this call failed the row.
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE Receipt r
+        SET r.status = :failedStatus, r.parseErrorReason = :reason, r.updatedAt = :now
+        WHERE r.id = :id AND r.status = :staleStatus AND r.updatedAt < :cutoff
+    """)
+    int failIfStillStale(@Param("id") UUID id,
+                         @Param("staleStatus") ReceiptStatus staleStatus,
+                         @Param("cutoff") LocalDateTime cutoff,
+                         @Param("failedStatus") ReceiptStatus failedStatus,
+                         @Param("reason") String reason,
+                         @Param("now") LocalDateTime now);
+
+    // Sweeper second chance for a stranded scan: moved back to the paced queue only if it is
+    // still stale AND was never re-queued before (strandedRequeued is the "once" guard).
+    // Returns 1 when this call re-queued the row.
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE Receipt r
+        SET r.status = :queuedStatus, r.strandedRequeued = true, r.resyncFreeOnly = :freeOnly, r.updatedAt = :now
+        WHERE r.id = :id AND r.status = :staleStatus AND r.updatedAt < :cutoff AND r.strandedRequeued = false
+    """)
+    int requeueStrandedOnce(@Param("id") UUID id,
+                            @Param("staleStatus") ReceiptStatus staleStatus,
+                            @Param("cutoff") LocalDateTime cutoff,
+                            @Param("queuedStatus") ReceiptStatus queuedStatus,
+                            @Param("freeOnly") boolean freeOnly,
+                            @Param("now") LocalDateTime now);
+
     // Paced import worker: oldest IMPORT_QUEUED first, a small page at a time, and a
     // live count of in-flight PROCESSING rows so the worker yields to real scans.
     List<Receipt> findByStatusOrderByCreatedAtAsc(ReceiptStatus status, Pageable pageable);
@@ -80,6 +148,10 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
 
     // Engagement proxy captured (anonymized) at account deletion.
     long countByUserId(UUID userId);
+
+    /** Ids of the user's photo-extracted receipts — the ones that may have photos kept in storage. */
+    @Query("SELECT receipt.id FROM Receipt receipt WHERE receipt.user.id = :userId AND receipt.origin = 'PHOTO'")
+    List<UUID> findPhotoReceiptIdsByUserId(UUID userId);
 
     /**
      * Users with import results newer than their completion-notification claim —
@@ -140,6 +212,9 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
      * loop where a FREE user rejects/deletes-and-resubmits to dodge the cap.
      */
     long countByUserIdAndCreatedAtGreaterThanEqual(UUID userId, LocalDateTime since);
+
+    /** Receipts the user submitted since the cutoff — household-split copies excluded (monthly cap). */
+    long countByUserIdAndSplitCopyFalseAndCreatedAtGreaterThanEqual(UUID userId, LocalDateTime since);
 
     long countByUserIdAndStatus(UUID userId, ReceiptStatus status);
 

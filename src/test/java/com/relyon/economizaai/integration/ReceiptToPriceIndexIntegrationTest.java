@@ -97,7 +97,7 @@ class ReceiptToPriceIndexIntegrationTest {
     private String registerAndLogin(String email) throws Exception {
         var body = """
                 { "name": "%s", "email": "%s", "password": "password123",
-                  "acceptedTermsVersion": "1.0", "acceptedPrivacyVersion": "1.0" }
+                  "acceptedTermsVersion": "1.1", "acceptedPrivacyVersion": "1.1" }
                 """.formatted(email, email);
         var result = mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON).content(body))
@@ -130,7 +130,7 @@ class ReceiptToPriceIndexIntegrationTest {
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", "00000000000000000000000000000000000000000000",
                 UnidadeFederativa.RS, null);
         when(sefazIngestionService.fetch(any(), any())).thenReturn(fetched);
-        when(sefazIngestionService.parse(any(), any())).thenReturn(fakeParsedReceipt(new BigDecimal("28.00")));
+        when(sefazIngestionService.parse(any(), any(), any())).thenReturn(fakeParsedReceipt(new BigDecimal("28.00")));
 
         // submit (PROCESSING) + drive the async ingestion to PENDING_CONFIRMATION
         var receiptId = submitAndIngest(token);
@@ -164,6 +164,32 @@ class ReceiptToPriceIndexIntegrationTest {
     }
 
     @Test
+    void resubmit_whileTheFirstIngestIsStillRunning_returnsTheSameReceipt() throws Exception {
+        // Double tap / app re-send: the first row is still PROCESSING, so the second submit
+        // must hand back that row instead of deleting it and starting (and paying for) a new ingest.
+        var token = registerAndLogin("e2e-inflight@test.com");
+
+        var first = mockMvc.perform(post("/api/v1/receipts")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"qrPayload\":\"" + QR_URL + "\"}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        var firstId = objectMapper.readTree(first.getResponse().getContentAsString()).get("id").asText();
+
+        var second = mockMvc.perform(post("/api/v1/receipts")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"qrPayload\":\"" + QR_URL + "\"}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        var secondJson = objectMapper.readTree(second.getResponse().getContentAsString());
+
+        assertEquals(firstId, secondJson.get("id").asText(), "the in-flight receipt is returned, not replaced");
+        assertEquals("PROCESSING", secondJson.get("status").asText());
+    }
+
+    @Test
     void resubmit_replacesPriorPendingReceiptInsteadOfBlocking() throws Exception {
         // Repro of the FE-reported bug: user scans an NF, closes the app
         // before confirming, then tries to scan the same QR again — the
@@ -173,16 +199,10 @@ class ReceiptToPriceIndexIntegrationTest {
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", "00000000000000000000000000000000000000000000",
                 UnidadeFederativa.RS, null);
         when(sefazIngestionService.fetch(any(), any())).thenReturn(fetched);
-        when(sefazIngestionService.parse(any(), any())).thenReturn(fakeParsedReceipt(new BigDecimal("28.00")));
+        when(sefazIngestionService.parse(any(), any(), any())).thenReturn(fakeParsedReceipt(new BigDecimal("28.00")));
 
-        // First submit — leaves a non-CONFIRMED (PROCESSING) row.
-        var first = mockMvc.perform(post("/api/v1/receipts")
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"qrPayload\":\"" + QR_URL + "\"}"))
-                .andExpect(status().isCreated())
-                .andReturn();
-        var firstId = objectMapper.readTree(first.getResponse().getContentAsString()).get("id").asText();
+        // First submit + ingest — leaves a non-CONFIRMED (PENDING_CONFIRMATION) row the user never confirmed.
+        var firstId = submitAndIngest(token);
 
         // Re-submit the same chave — must succeed (201) with a new id, NOT 409.
         var secondId = submitAndIngest(token);
@@ -207,7 +227,7 @@ class ReceiptToPriceIndexIntegrationTest {
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", "00000000000000000000000000000000000000000000",
                 UnidadeFederativa.RS, null);
         when(sefazIngestionService.fetch(any(), any())).thenReturn(fetched);
-        when(sefazIngestionService.parse(any(), any())).thenReturn(fakeParsedReceipt(new BigDecimal("28.00")));
+        when(sefazIngestionService.parse(any(), any(), any())).thenReturn(fakeParsedReceipt(new BigDecimal("28.00")));
 
         // opt out before submitting
         mockMvc.perform(patch("/api/v1/users/me/contribution")

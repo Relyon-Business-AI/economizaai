@@ -30,7 +30,9 @@ public record UserResponse(
         OffsetDateTime lastIosLoginAt,
         LocalDateTime createdAt,
         AuthProvider authProvider,
-        boolean hasPassword
+        boolean hasPassword,
+        // New address awaiting its confirmation code; null when no change is pending.
+        String pendingEmail
 ) {
     public static UserResponse from(User user) {
         return new UserResponse(
@@ -51,7 +53,13 @@ public record UserResponse(
                 user.getLastIosLoginAt(),
                 BrazilClock.fromUtc(user.getCreatedAt()),
                 user.getAuthProvider(),
-                user.getPassword() != null
+                user.getPassword() != null,
+                activePendingEmail(user)
         );
+    }
+
+    private static String activePendingEmail(User user) {
+        var expiresAt = user.getEmailChangeExpiresAt();
+        return expiresAt != null && expiresAt.isAfter(LocalDateTime.now()) ? user.getPendingEmail() : null;
     }
 }

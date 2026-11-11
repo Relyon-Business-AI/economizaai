@@ -9,6 +9,7 @@ import com.relyon.economizaai.exception.MerchantClaimAlreadyOpenException;
 import com.relyon.economizaai.exception.MerchantClaimAlreadyResolvedException;
 import com.relyon.economizaai.exception.MerchantClaimAttemptsExceededException;
 import com.relyon.economizaai.exception.MerchantClaimCodeExpiredException;
+import com.relyon.economizaai.exception.MerchantClaimCooldownException;
 import com.relyon.economizaai.exception.MerchantClaimCodeInvalidException;
 import com.relyon.economizaai.exception.MerchantClaimNotFoundException;
 import com.relyon.economizaai.exception.MerchantClaimNotVerifiableException;
@@ -33,6 +34,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -88,6 +90,27 @@ public class MerchantClaimService {
         if (claimRepository.existsByUserIdAndCnpjRootAndStatusIn(user.getId(), cnpjRoot, OPEN_STATUSES)) {
             throw new MerchantClaimAlreadyOpenException(cnpjRoot);
         }
+        rejectDuringCooldown(user, cnpjRoot);
+    }
+
+    /**
+     * A closed claim (wrong-code budget spent, code expired, admin rejection) starts a wait
+     * for that user + chain: resubmitting must not hand out a fresh code — and a fresh
+     * e-mail to the company — right away.
+     */
+    private void rejectDuringCooldown(User user, String cnpjRoot) {
+        var cooldownHours = properties.getMerchant().getClaimCooldownHours();
+        var now = BrazilClock.nowDateTime();
+        claimRepository.findFirstByUserIdAndCnpjRootAndStatusAndResolvedAtAfterOrderByResolvedAtDesc(
+                        user.getId(), cnpjRoot, MerchantClaimStatus.REJECTED, now.minusHours(cooldownHours))
+                .ifPresent(closedClaim -> {
+                    var minutesLeft = Duration.between(now, closedClaim.getResolvedAt().plusHours(cooldownHours))
+                            .toMinutes();
+                    var hoursLeft = Math.max(1, (minutesLeft + 59) / 60);
+                    log.info("merchant.claim.cooldown user={} cnpjRoot={} hours_left={}",
+                            user.getId(), cnpjRoot, hoursLeft);
+                    throw new MerchantClaimCooldownException(hoursLeft);
+                });
     }
 
     private MerchantClaim submitWithEmailCode(User user, String cnpj, String cnpjRoot,

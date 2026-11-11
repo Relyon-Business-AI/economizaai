@@ -5,7 +5,6 @@ import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.dto.response.DealResponse;
 import com.relyon.economizaai.model.DealSurfaceState;
 import com.relyon.economizaai.model.User;
-import com.relyon.economizaai.model.enums.DigestFrequency;
 import com.relyon.economizaai.model.enums.NotificationEventType;
 import com.relyon.economizaai.model.enums.NotificationJob;
 import com.relyon.economizaai.model.enums.NotificationType;
@@ -19,10 +18,12 @@ import com.relyon.economizaai.service.notifications.NotificationSettingsService;
 import com.relyon.economizaai.service.notifications.RelevanceThreshold;
 import com.relyon.economizaai.service.priceindex.DealsService;
 import com.relyon.economizaai.service.privacy.LogMasker;
+import com.relyon.economizaai.time.BrazilClock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -32,8 +33,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.DayOfWeek;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,23 +40,30 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Daily deals digest (Phase C): once an hour, for every user whose effective
- * send hour is the current America/Sao_Paulo hour and who hasn't been sent a
- * digest today, compute their relevant deals and — only when at least one is
- * <em>newsworthy</em> (new, meaningfully improved, or lapsed past the
+ * Daily deals digest (Phase C): once an hour, for every user whose stored send
+ * hour has already been reached today (America/Sao_Paulo) and who hasn't been
+ * sent a digest today, compute their relevant deals and — only when at least one
+ * is <em>newsworthy</em> (new, meaningfully improved, or lapsed past the
  * collaborative lookback) — send ONE rollup push pointing at the deals screen.
  *
- * <p>One transaction per user (not one giant batch tx): a single user's failure
- * is logged and skipped so it never aborts the run. Each surfaced newsworthy
- * deal upserts its {@link DealSurfaceState} dedup row and records a {@code SENT}
- * telemetry event; the 1/day cap is marked via {@code User.lastDigestSentAt}.
+ * <p>Due users are selected in SQL, in pages ({@code UserRepository.findDigestDuePage}):
+ * "hour reached" instead of "hour equal", so a late or long run still delivers.
+ * A user with nothing newsworthy keeps the day's slot and is looked at again on
+ * the next hourly run. The slot ({@code User.lastDigestSentAt}) is claimed
+ * atomically right before the send, so overlapping runs never send twice.
+ *
+ * <p>A single user's failure is logged and skipped so it never aborts the run.
+ * Each surfaced newsworthy deal upserts its {@link DealSurfaceState} dedup row
+ * and records a {@code SENT} telemetry event.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class DealsDigestScheduler {
 
-    private static final ZoneId ZONE = ZoneId.of("America/Sao_Paulo");
+    private static final int PAGE_SIZE = 200;
+    /** Sorts before every real id — the starting point of the keyset pagination. */
+    private static final UUID BEFORE_FIRST_ID = new UUID(0L, 0L);
     /** WEEKLY digests only go out on this weekday (see DEV_NOTES). */
     private static final DayOfWeek WEEKLY_DAY = DayOfWeek.THURSDAY;
     /** Minimum discount-fraction improvement (5 p.p.) that re-qualifies a standing deal. */
@@ -85,39 +91,42 @@ public class DealsDigestScheduler {
             zone = "${economizaai.notifications.deals-digest.zone:America/Sao_Paulo}")
     public void run() {
         if (!settingsService.isEnabled(NotificationJob.DEALS_DIGEST)) return;
-        var now = ZonedDateTime.now(ZONE);
-        var currentHour = now.getHour();
-        var candidates = userRepository.findDigestCandidates(DigestFrequency.OFF);
+        scheduleService.assignMissingSendHours();
+        var now = BrazilClock.now();
+        var weeklyDay = WEEKLY_DAY.equals(now.getDayOfWeek());
+        var startOfToday = startOfDay(now.toOffsetDateTime());
 
         var sent = 0;
         var processed = 0;
-        for (var user : candidates) {
-            if (!isDue(user, now, currentHour)) continue;
-            processed++;
-            try {
-                if (effectiveSelf().processUser(user, now.toOffsetDateTime())) sent++;
-            } catch (RuntimeException ex) {
-                // Isolate per-user failures so one bad user can't abort the batch.
-                log.warn("digest.user_failed user={} reason={}",
-                        LogMasker.email(user.getEmail()), ex.getMessage());
+        var afterId = BEFORE_FIRST_ID;
+        while (true) {
+            var dueUsers = userRepository.findDigestDuePage(
+                    now.getHour(), weeklyDay, startOfToday, afterId, PageRequest.of(0, PAGE_SIZE));
+            if (dueUsers.isEmpty()) break;
+            for (var user : dueUsers) {
+                processed++;
+                if (processUserIsolated(user, now.toOffsetDateTime())) sent++;
             }
+            afterId = dueUsers.get(dueUsers.size() - 1).getId();
         }
-        log.info("digest.run hour={} candidates={} sent={}", currentHour, processed, sent);
+        log.info("digest.run hour={} due={} sent={}", now.getHour(), processed, sent);
     }
 
-    private boolean isDue(User user, ZonedDateTime now, int currentHour) {
-        if (user.getDigestFrequency() == DigestFrequency.WEEKLY && !WEEKLY_DAY.equals(now.getDayOfWeek())) {
+    /** Isolate per-user failures so one bad user can't abort the batch. */
+    private boolean processUserIsolated(User user, OffsetDateTime now) {
+        try {
+            return effectiveSelf().processUser(user, now);
+        } catch (RuntimeException ex) {
+            log.warn("digest.user_failed user={} reason={}",
+                    LogMasker.email(user.getEmail()), ex.getMessage());
             return false;
         }
-        if (alreadySentToday(user, now)) return false;
-        return scheduleService.effectiveSendHour(user) == currentHour;
     }
 
-    /** 1/day hard cap: a digest is allowed at most once per calendar day (Sao Paulo). */
-    private boolean alreadySentToday(User user, ZonedDateTime now) {
-        var last = user.getLastDigestSentAt();
-        if (last == null) return false;
-        return last.atZoneSameInstant(ZONE).toLocalDate().isEqual(now.toLocalDate());
+    /** Midnight (Sao Paulo) of the day {@code now} falls on — the 1/day cap boundary. */
+    private OffsetDateTime startOfDay(OffsetDateTime now) {
+        return now.atZoneSameInstant(BrazilClock.ZONE).toLocalDate()
+                .atStartOfDay(BrazilClock.ZONE).toOffsetDateTime();
     }
 
     /** The transactional proxy when wired by Spring; falls back to {@code this} in unit tests. */
@@ -131,10 +140,13 @@ public class DealsDigestScheduler {
      * <p>Deliberately NOT {@code @Transactional}: {@code notificationService.notify(...)} dispatches
      * over the network (Expo push / SMTP) and holding a transaction across it would pin a Hikari
      * connection for the whole round-trip, starving the pool under load. The deal reads and the send
-     * run untransacted; the post-send state (per-deal dedup upserts, SENT telemetry rows, and the
-     * 1/day {@code lastDigestSentAt} cap) is then persisted in ONE short transaction — the "already
-     * sent today" guard still gates entry via {@link #isDue}, and the whole persist block is atomic
-     * (same split as {@code MarketLocationService.geocodeOne}/{@code persistGeocodeResult}).
+     * run untransacted; the post-send state (per-deal dedup upserts and SENT telemetry rows) is then
+     * persisted in ONE short transaction (same split as
+     * {@code MarketLocationService.geocodeOne}/{@code persistGeocodeResult}).
+     *
+     * <p>Nothing newsworthy → nothing is sent and the day's slot is NOT taken (an empty digest
+     * must not use up the once-a-day send). Otherwise the slot is claimed first and the send
+     * follows only for the run that won the claim.
      */
     public boolean processUser(User user, OffsetDateTime now) {
         var deals = dealsService.findDeals(user, true, null, DEAL_LIMIT);
@@ -145,11 +157,18 @@ public class DealsDigestScheduler {
             return false;
         }
 
+        if (userRepository.claimDigestSlot(user.getId(), now, startOfDay(now)) == 0) {
+            log.info("digest.skip user={} reason=already_sent_today", LogMasker.email(user.getEmail()));
+            return false;
+        }
+        user.setLastDigestSentAt(now);
+
         var best = newsworthy.get(0); // DealsService already ranks best-first
         var notification = notificationService.notify(buildPayload(user, best, newsworthy.size()));
         var notificationId = notification != null ? notification.getId() : null;
 
         effectiveSelf().persistDigest(user, newsworthy, notificationId, now);
+        scheduleService.updateSendHourFromShoppingHabits(user);
         log.info("digest.sent user={} best={} newsworthy={}",
                 LogMasker.email(user.getEmail()), best.productName(), newsworthy.size());
         return true;
@@ -158,8 +177,8 @@ public class DealsDigestScheduler {
     /**
      * Persist everything the send produced in one short transaction, AFTER the network dispatch:
      * each newsworthy deal's {@link DealSurfaceState} dedup upsert and its {@code SENT} telemetry
-     * event, then the 1/day cap on {@code User.lastDigestSentAt}. REQUIRES_NEW keeps one user's
-     * persistence isolated from the batch so a single failure is caught in {@link #run}.
+     * event. (The 1/day cap was already taken by the claim, with a targeted update.) REQUIRES_NEW
+     * keeps one user's persistence isolated from the batch so a single failure is caught in {@link #run}.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void persistDigest(User user, List<DealResponse> newsworthy, UUID notificationId, OffsetDateTime now) {
@@ -173,8 +192,6 @@ public class DealsDigestScheduler {
                     .metadata(Map.of("discountFraction", deal.discountFraction()))
                     .build());
         }
-        user.setLastDigestSentAt(now);
-        userRepository.save(user);
     }
 
     /**

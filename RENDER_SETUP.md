@@ -48,7 +48,7 @@ For **each** environment:
 3. **Branch:** `main` (prod) / `development` (dev). Auto-deploy on push: on.
 4. **Instance type:** Standard (prod) / Starter or Free (dev).
 5. **Region:** same as the DB.
-6. **Health check path:** `/actuator/health` (public, returns `{"status":"UP"}`).
+6. **Health check path:** `/actuator/health/readiness` (reflects only the app lifecycle, so a deploy swaps instances without dropping requests); `/actuator/health` stays public for uptime monitors (`{"status":"UP"}`).
 7. **Port:** the container listens on `10000` (matches Render's default `PORT`); the Dockerfile entrypoint already uses `--server.port=${PORT:-10000}`, so it honors whatever port Render injects.
 
 ---
@@ -73,7 +73,7 @@ Everything not listed here has a safe default baked into `application.yaml`.
 | `ADMIN_EMAILS` | comma-list of admin accounts |
 | `CORS_ORIGINS` | your real FE origins (prod domain / app scheme). Do NOT leave the localhost default in prod |
 
-### Third-party keys — copy from the self-host (secret); enable per readiness
+### Third-party keys (secret) — enable per readiness
 | Var | Notes |
 |---|---|
 | `CAPTCHA_PROVIDER` / `CAPTCHA_API_KEY` | `capsolver` + key to enable MS/SC scraping (else those states 503) |
@@ -85,13 +85,26 @@ Everything not listed here has a safe default baked into `application.yaml`.
 | `EXPO_ACCESS_TOKEN` | push notifications |
 | `TWILIO_ACCOUNT_SID/AUTH_TOKEN/FROM_SMS/FROM_WHATSAPP` | SMS/WhatsApp (PRO) |
 | `GOOGLE_OAUTH_CLIENT_IDS` / `APPLE_OAUTH_CLIENT_IDS` | social login audience check |
-| `REVENUECAT_WEBHOOK_AUTH` / `BILLING_WEBHOOK_SECRET` | billing webhooks (secret) |
+| `REVENUECAT_WEBHOOK_AUTH` | RevenueCat (apps) billing webhook (secret) |
+| `MP_ACCESS_TOKEN` / `MP_WEBHOOK_SECRET` | Mercado Pago (web) checkout + webhook (secret) |
+| `ADMIN_PHONE_NUMBERS` | where the admin WhatsApp alerts go (cost ceilings, ops) |
 
-### Cost guards (already have defaults — tune per env)
-`PAID_API_GUARD_ENABLED=true`, `PAID_API_DAILY_BUDGET_CENTS` (R$50 default — raise/lower per env), `INFOSIMPLES_DAILY_CAP`, `CAPTCHA_DAILY_CAP`. In **dev**, consider `INFOSIMPLES_ENABLED=false` + `CAPTCHA_PROVIDER=none` so testing never spends money. (Status quo 2026-10: BOTH envs run `INFOSIMPLES_ENABLED=true` on purpose — CE flows are testable in dev; the daily caps + budget guard bound the spend.)
+### Cost guards (defaults exist — the six ceilings are set explicitly on both envs)
+`PAID_API_GUARD_ENABLED=true`. Each paid service has its own **daily ceiling in cents** — set all six on dev AND prod (owner decision 2026-11-11):
+
+| Var | Value | Service |
+|---|---|---|
+| `PAID_API_BUDGET_INFOSIMPLES_CENTS` | `12000` | Infosimples (R$ 120/day) |
+| `PAID_API_BUDGET_CAPTCHA_CENTS` | `3000` | captcha solves (R$ 30/day) |
+| `PAID_API_BUDGET_LLM_VISION_CENTS` | `3000` | receipt by photo (R$ 30/day) |
+| `PAID_API_BUDGET_LLM_HTML_RESCUE_CENTS` | `1500` | AI HTML rescue (R$ 15/day) |
+| `PAID_API_BUDGET_LLM_CATEGORIZATION_CENTS` | `5000` | AI categorization (R$ 50/day) |
+| `PAID_API_BUDGET_TWILIO_CENTS` | `1500` | SMS / WhatsApp (R$ 15/day) |
+
+Per-user daily caps keep their defaults (`INFOSIMPLES_DAILY_CAP=10`, `CAPTCHA_DAILY_CAP=30`, `LLM_VISION_DAILY_CAP=10`, `LLM_HTML_RESCUE_DAILY_CAP=5`, `LLM_ENRICH_DAILY_CAP=60`, `TWILIO_DAILY_CAP=3`). The old single ceiling `PAID_API_DAILY_BUDGET_CENTS` is now an optional overall limit, off by default (`0`). The admin is warned on WhatsApp at 80% / 100% of each ceiling and of each provider's prepaid balance (`COST_ALERT*`). Both envs run `INFOSIMPLES_ENABLED=true` on purpose — CE flows are testable in dev; the caps and ceilings bound the spend. Full variable reference: `INFRASTRUCTURE.md` → "Environment variables".
 
 ### Behavior flags (defaults are fine; flip when ready)
-`SUBSCRIPTION_ENFORCE=false` (keep off during warm-up), `RELEVANCE_MODE=SHADOW`, `ML_CATEGORY_APPLY_ENABLED=false`, timezone crons already `America/Sao_Paulo`.
+`SUBSCRIPTION_ENFORCE=false` (keep off during warm-up), `RELEVANCE_MODE=SHADOW`, `ML_CATEGORY_APPLY_ENABLED=false`, timezone crons already `America/Sao_Paulo`. On **prod** set `SIGNUP_ALERT_ENABLED=false` (no admin alert per signup).
 
 ---
 
@@ -123,7 +136,7 @@ Logs: `LOG_FILE` is also ephemeral, but the app logs to **stdout** too — Rende
 
 ---
 
-## 7. Secrets migration from the self-host
-- **Generate fresh** (do NOT copy from dev): `JWT_SECRET`, `METRICS_PASSWORD`, webhook secrets.
-- **Copy** the third-party keys (captcha, infosimples, SMTP, Twilio, Expo, OAuth client IDs) into Render env (Secret type).
+## 7. Secrets
+- **Generate fresh** per environment (do NOT copy from dev): `JWT_SECRET`, `METRICS_PASSWORD`, webhook secrets.
+- **Reuse** the third-party keys (captcha, infosimples, Anthropic, R2, SMTP, Twilio, Expo, OAuth client IDs) as Render env vars (Secret type).
 - Never commit any of these; the repo only holds the `${VAR:default}` placeholders.

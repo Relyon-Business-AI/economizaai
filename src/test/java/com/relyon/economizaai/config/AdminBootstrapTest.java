@@ -25,7 +25,28 @@ class AdminBootstrapTest {
     @Mock private UserRepository userRepository;
 
     private User user(Role role) {
-        return User.builder().id(UUID.randomUUID()).email("a@b.com").role(role).build();
+        return User.builder().id(UUID.randomUUID()).email("a@b.com").role(role).emailVerified(true).build();
+    }
+
+    @Test
+    void unverifiedAccount_isNotPromoted() {
+        var unverified = user(Role.USER);
+        unverified.setEmailVerified(false);
+        when(userRepository.findByEmail("a@b.com")).thenReturn(Optional.of(unverified));
+
+        new AdminBootstrap(userRepository, "a@b.com").promoteConfiguredAdmins();
+
+        assertEquals(Role.USER, unverified.getRole());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void configuredEmailIsMatchedInNormalizedForm() {
+        when(userRepository.findByEmail("a@b.com")).thenReturn(Optional.of(user(Role.USER)));
+
+        new AdminBootstrap(userRepository, " A@B.com ").promoteConfiguredAdmins();
+
+        verify(userRepository).save(any(User.class));
     }
 
     @Test

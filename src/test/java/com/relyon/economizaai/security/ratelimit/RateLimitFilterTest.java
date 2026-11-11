@@ -250,6 +250,56 @@ class RateLimitFilterTest {
         assertEquals(200, invokePost("/api/v1/auth/forgot-password", ip).getStatus()); // reset unaffected
     }
 
+    @Test
+    void emailChangeRequestIsLimitedToThreePerHourPerUser() throws Exception {
+        authenticateAs("changer@economizaai.app");
+        for (var i = 0; i < 3; i++) {
+            assertEquals(200, invokePost("/api/v1/users/me/email-change", "30.0.0." + i).getStatus());
+        }
+        assertEquals(429, invokePost("/api/v1/users/me/email-change", "30.0.0.9").getStatus());
+        // Confirming has its own budget.
+        assertEquals(200, invokePost("/api/v1/users/me/email-change/confirm", "30.0.0.9").getStatus());
+    }
+
+    @Test
+    void merchantClaimSubmitIsLimitedPerUserAcrossAddresses() throws Exception {
+        authenticateAs("claimer@economizaai.app");
+        for (var i = 0; i < 3; i++) {
+            assertEquals(200, invokePost("/api/v1/merchant-claims", "31.0.0." + i).getStatus());
+        }
+        assertEquals(429, invokePost("/api/v1/merchant-claims", "31.0.0.9").getStatus());
+    }
+
+    @Test
+    void merchantClaimSubmitIsLimitedPerAddressAcrossUsers() throws Exception {
+        for (var i = 0; i < 3; i++) {
+            authenticateAs("claimer" + i + "@economizaai.app");
+            assertEquals(200, invokePost("/api/v1/merchant-claims", "32.0.0.1").getStatus());
+        }
+        authenticateAs("claimer9@economizaai.app");
+        assertEquals(429, invokePost("/api/v1/merchant-claims", "32.0.0.1").getStatus());
+    }
+
+    @Test
+    void merchantClaimVerifyIsLimitedPerUserAndHasItsOwnBudget() throws Exception {
+        authenticateAs("verifier@economizaai.app");
+        var verifyPath = "/api/v1/merchant-claims/7d9f1c1e-0000-0000-0000-000000000001/verify";
+        for (var i = 0; i < 10; i++) {
+            assertEquals(200, invokePost(verifyPath, "33.0.0." + i).getStatus());
+        }
+        assertEquals(429, invokePost(verifyPath, "33.0.0.99").getStatus());
+        assertEquals(200, invokePost("/api/v1/merchant-claims", "33.0.0.99").getStatus());
+    }
+
+    @Test
+    void profilePictureUploadIsLimitedToTenPerHourPerUser() throws Exception {
+        authenticateAs("avatar@economizaai.app");
+        for (var i = 0; i < 10; i++) {
+            assertEquals(200, invokePost("/api/v1/users/me/profile-picture", "34.0.0." + i).getStatus());
+        }
+        assertEquals(429, invokePost("/api/v1/users/me/profile-picture", "34.0.0.99").getStatus());
+    }
+
     private void authenticateAs(String email) {
         var authentication = new UsernamePasswordAuthenticationToken(email, null, List.of());
         SecurityContextHolder.getContext().setAuthentication(authentication);
@@ -330,5 +380,18 @@ class RateLimitFilterTest {
             invokePost("/api/v1/receipts/0b7c9d0e-0000-0000-0000-000000000001/retry", "20.0.0.3");
         }
         assertEquals(429, invokePost("/api/v1/receipts", "20.0.0.3").getStatus());
+    }
+
+    @Test
+    void referralRedeemAllowsTenAttemptsPerUserThenBlocks() throws Exception {
+        authenticateAs("code-guesser@economizaai.app");
+        for (var attempt = 0; attempt < 10; attempt++) {
+            assertEquals(200, invokePost("/api/v1/referrals/redeem", "20.0.0.4").getStatus());
+        }
+        assertEquals(429, invokePost("/api/v1/referrals/redeem", "20.0.0.4").getStatus());
+
+        // Keyed by user, not IP: someone else on the same network is unaffected.
+        authenticateAs("honest-friend@economizaai.app");
+        assertEquals(200, invokePost("/api/v1/referrals/redeem", "20.0.0.4").getStatus());
     }
 }

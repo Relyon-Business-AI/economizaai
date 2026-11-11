@@ -53,7 +53,7 @@ public final class MgNfceDanfeParser {
         var items = parseItems(html);
         if (items.isEmpty()) {
             log.warn("MG parser found no items for chave {}", LogMasker.chave(chaveAcesso));
-            throw new ReceiptParseException("mg-danfe-no-items");
+            throw new ReceiptParseException("no-items-found");
         }
         var text = Jsoup.parse(html).text();
         return ParsedReceipt.builder()

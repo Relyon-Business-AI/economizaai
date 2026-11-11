@@ -48,7 +48,7 @@ public final class DfNfceDanfeParser {
         var items = parseItems(document);
         if (items.isEmpty()) {
             log.warn("DF parser found no items for chave {}", LogMasker.chave(chaveAcesso));
-            throw new ReceiptParseException("df-danfe-no-items");
+            throw new ReceiptParseException("no-items-found");
         }
         var text = document.text();
         return ParsedReceipt.builder()

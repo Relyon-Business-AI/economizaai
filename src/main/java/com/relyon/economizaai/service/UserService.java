@@ -42,6 +42,7 @@ import com.relyon.economizaai.legal.LegalDocuments;
 import com.relyon.economizaai.model.HouseholdProductAlias;
 import com.relyon.economizaai.model.AccountDeletionFeedback;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.service.AccountStorageCleaner.StoredObjects;
 import com.relyon.economizaai.service.analytics.meta.MetaConversionsService;
 import com.relyon.economizaai.service.attribution.AttributionResolver;
 import com.relyon.economizaai.repository.HouseholdCustomCategoryRepository;
@@ -57,6 +58,7 @@ import com.relyon.economizaai.repository.SubscriptionRepository;
 import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.repository.AccountDeletionFeedbackRepository;
 import com.relyon.economizaai.repository.UserWatchedMarketRepository;
+import com.relyon.economizaai.service.referral.ReferralService;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
 import com.relyon.economizaai.repository.NotificationPreferenceRepository;
 import com.relyon.economizaai.repository.NotificationEventRepository;
@@ -69,6 +71,7 @@ import com.relyon.economizaai.repository.DataShareConsentRepository;
 import com.relyon.economizaai.model.UserWatchedMarket;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.security.ratelimit.LoginAttemptGuard;
+import com.relyon.economizaai.service.auth.EmailNormalizer;
 import com.relyon.economizaai.service.auth.EmailVerificationService;
 import com.relyon.economizaai.service.auth.LoginActivityRecorder;
 import com.relyon.economizaai.service.auth.SignupAlertService;
@@ -129,11 +132,14 @@ public class UserService {
     private final SignupAlertService signupAlertService;
     private final MetaConversionsService metaConversionsService;
     private final AttributionResolver attributionResolver;
+    private final ReferralService referralService;
+    private final AccountStorageCleaner accountStorageCleaner;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        if (userRepository.existsByEmail(request.email())) {
-            throw new EmailAlreadyExistsException(request.email());
+        var email = EmailNormalizer.normalize(request.email());
+        if (userRepository.existsByEmail(email)) {
+            throw new EmailAlreadyExistsException(email);
         }
         if (!LegalDocuments.CURRENT_TERMS_VERSION.equals(request.acceptedTermsVersion())) {
             throw new InvalidLegalVersionException("terms",
@@ -147,7 +153,7 @@ public class UserService {
         var household = householdService.createSoloHousehold();
         var user = User.builder()
                 .name(request.name())
-                .email(request.email())
+                .email(email)
                 .password(passwordEncoder.encode(request.password()))
                 .locale(LocalizedMessageService.requestLocaleTag())
                 .household(household)
@@ -159,6 +165,7 @@ public class UserService {
 
         var savedUser = userRepository.save(user);
         householdService.assignHost(household, savedUser);
+        referralService.attachOnSignup(savedUser, request.referralCode());
         notificationRuleService.ensureDefaults(savedUser);
         loginActivityRecorder.recordRegistration(savedUser, request.platform());
         signupAlertService.notifyNewAccount(savedUser, "e-mail/senha");
@@ -169,15 +176,16 @@ public class UserService {
         log.info("New user registered: {} (household {}, terms v{}, privacy v{})",
                 LogMasker.email(savedUser.getEmail()), household.getId(),
                 savedUser.getAcceptedTermsVersion(), savedUser.getAcceptedPrivacyVersion());
-        return new AuthResponse(token, refreshToken, UserResponse.from(savedUser), false, null);
+        return new AuthResponse(token, refreshToken, UserResponse.from(savedUser), false, null, true);
     }
 
     public AuthResponse login(LoginRequest request) {
         // Every failure path logs the masked email + reason + platform (ip= comes
         // from MDC) so a login that never succeeds — e.g. an App Review attempt —
         // is traceable end-to-end instead of a silent generic "invalid credentials".
-        var maskedEmail = LogMasker.email(request.email());
-        var found = userRepository.findByEmail(request.email());
+        var email = EmailNormalizer.normalize(request.email());
+        var maskedEmail = LogMasker.email(email);
+        var found = userRepository.findByEmail(email);
         // A social-login account (Google/Apple) has no local password, so a password
         // attempt would only ever yield a generic "invalid credentials". Detect it and
         // point the user at the right provider button instead.
@@ -196,15 +204,15 @@ public class UserService {
         // Per-account lockout (independent of IP): stops an attacker who rotates
         // IPs from grinding one account's password. Checked before the password
         // compare, so a locked account is rejected even with the right password.
-        loginAttemptGuard.assertNotLocked(request.email());
+        loginAttemptGuard.assertNotLocked(email);
 
         var user = found.get();
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
-            loginAttemptGuard.recordFailure(request.email());
+            loginAttemptGuard.recordFailure(email);
             log.warn("login.failed reason=bad_password email={} platform={}", maskedEmail, request.platform());
             throw new InvalidCredentialsException();
         }
-        loginAttemptGuard.recordSuccess(request.email());
+        loginAttemptGuard.recordSuccess(email);
 
         loginActivityRecorder.recordLogin(user, request.platform());
         var token = jwtService.generateToken(user);
@@ -483,6 +491,10 @@ public class UserService {
     @Transactional
     public void deleteAccount(User user, DeleteAccountRequest request) {
         recordDeletionFeedback(user, request);
+        subscriptionService.warnIfDeletingPaidSubscriber(user);
+        // Captured before the rows go away; the objects themselves are removed after commit.
+        accountStorageCleaner.deleteAfterCommit(new StoredObjects(
+                user.getProfilePictureKey(), receiptRepository.findPhotoReceiptIdsByUserId(user.getId())));
         var householdId = user.getHousehold().getId();
         userRepository.delete(user);
         log.info("User account deleted: {}", LogMasker.email(user.getEmail()));

@@ -262,4 +262,69 @@ class InsightsRepositoryTest {
         var supportedTotal = insightsRepository.totalSpend(household.getId(), ALL_TIME_FROM, ALL_TIME_TO, SUPPORTED, supported());
         assertEquals(0, supportedTotal.compareTo(new BigDecimal("180.00"))); // unchanged — null CNPJ excluded
     }
+
+    // ---------- week buckets across New Year ----------
+
+    @Test
+    void spendByWeek_keepsTheNewYearWeekInOneBucket() {
+        // Thu 31/12/2026 and Fri 01/01/2027 are the SAME week; grouping by calendar
+        // year used to split it into two buckets.
+        receiptRepository.save(buildReceipt(user, CNPJ_SUPERMARKET, "Mercado A",
+                LocalDateTime.of(2026, Month.DECEMBER, 31, 10, 0), new BigDecimal("40.00"),
+                ReceiptStatus.CONFIRMED, groceries, null));
+        receiptRepository.save(buildReceipt(user, CNPJ_SUPERMARKET, "Mercado A",
+                LocalDateTime.of(2027, Month.JANUARY, 1, 10, 0), new BigDecimal("60.00"),
+                ReceiptStatus.CONFIRMED, groceries, null));
+
+        var from = LocalDateTime.of(2026, Month.DECEMBER, 30, 0, 0);
+        var to = LocalDateTime.of(2027, Month.JANUARY, 2, 0, 0);
+        var weeks = insightsRepository.spendByWeek(household.getId(), from, to, ALL, SENTINEL);
+
+        assertEquals(1, weeks.size(), "one week, one bucket");
+        assertEquals(0, new BigDecimal("100.00").compareTo((BigDecimal) weeks.get(0)[2]));
+        assertEquals(2L, ((Number) weeks.get(0)[3]).longValue());
+    }
+
+    @Test
+    void discountByWeek_usesTheSameBucketKeyAsSpendByWeek() {
+        receiptRepository.save(buildReceipt(user, CNPJ_SUPERMARKET, "Mercado A",
+                LocalDateTime.of(2026, Month.DECEMBER, 31, 10, 0), new BigDecimal("40.00"),
+                ReceiptStatus.CONFIRMED, groceries, null));
+        receiptRepository.save(buildReceipt(user, CNPJ_SUPERMARKET, "Mercado A",
+                LocalDateTime.of(2027, Month.JANUARY, 1, 10, 0), new BigDecimal("60.00"),
+                ReceiptStatus.CONFIRMED, groceries, null));
+
+        var from = LocalDateTime.of(2026, Month.DECEMBER, 30, 0, 0);
+        var to = LocalDateTime.of(2027, Month.JANUARY, 2, 0, 0);
+        var spend = insightsRepository.spendByWeek(household.getId(), from, to, ALL, SENTINEL);
+        var discount = insightsRepository.discountByWeek(household.getId(), from, to, ALL, SENTINEL);
+
+        assertEquals(1, discount.size());
+        assertEquals(((Number) spend.get(0)[0]).intValue(), ((Number) discount.get(0)[0]).intValue());
+        assertEquals(((Number) spend.get(0)[1]).intValue(), ((Number) discount.get(0)[1]).intValue());
+    }
+
+    // ---------- grouped spend for the digests ----------
+
+    @Test
+    void spendByHouseholds_matchesTotalSpendAndCountsReceiptsByPurchaseDate() {
+        var from = LocalDateTime.of(2026, Month.APRIL, 1, 0, 0);
+        var to = LocalDateTime.of(2026, Month.APRIL, 30, 23, 59);
+
+        var rows = insightsRepository.spendByHouseholds(List.of(household.getId()), from, to);
+
+        assertEquals(1, rows.size());
+        assertEquals(household.getId(), rows.get(0)[0]);
+        var dashboardTotal = insightsRepository.totalSpend(household.getId(), from, to, ALL, SENTINEL);
+        assertEquals(0, dashboardTotal.compareTo((BigDecimal) rows.get(0)[1]));
+        assertEquals(2L, ((Number) rows.get(0)[2]).longValue(), "pending receipt is not counted");
+    }
+
+    @Test
+    void spendByHouseholds_hasNoRowForAHouseholdWithoutPurchasesInTheWindow() {
+        var from = LocalDateTime.of(2025, Month.JANUARY, 1, 0, 0);
+        var to = LocalDateTime.of(2025, Month.JANUARY, 31, 23, 59);
+
+        assertTrue(insightsRepository.spendByHouseholds(List.of(household.getId()), from, to).isEmpty());
+    }
 }

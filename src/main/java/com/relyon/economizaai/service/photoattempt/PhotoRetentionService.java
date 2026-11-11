@@ -60,6 +60,23 @@ public class PhotoRetentionService {
         }
     }
 
+    /**
+     * Removes the photos kept for a receipt. Runs whenever a storage backend is wired, even
+     * with the retention toggle off (photos saved earlier must still go). Best-effort: never
+     * throws; returns whether the removal went through.
+     */
+    public boolean deleteAttempt(UUID receiptId) {
+        var storage = storageProvider.getIfAvailable();
+        if (storage == null) return true;
+        try {
+            storage.delete(receiptId.toString());
+            return true;
+        } catch (Exception ex) {
+            log.warn("photo_retention.delete_failed receipt={} reason={}", receiptId, ex.getMessage());
+            return false;
+        }
+    }
+
     /** Photos saved for a receipt (admin retrieval); empty if none/disabled. */
     public List<StoredPhoto> list(UUID receiptId) {
         var storage = storageProvider.getIfAvailable();

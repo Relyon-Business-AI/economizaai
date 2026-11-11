@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.profile;
 
+import com.relyon.economizaai.exception.ImageDecodeBusyException;
 import com.relyon.economizaai.exception.InvalidProfilePictureException;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.repository.UserRepository;
@@ -7,6 +8,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
+import org.mockito.Spy;
+import com.relyon.economizaai.service.scan.ImageDecodeGate;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
@@ -44,6 +47,9 @@ class ProfilePictureServiceTest {
 
     @Mock
     private UserRepository userRepository;
+    @Spy
+    private ImageDecodeGate imageDecodeGate = new ImageDecodeGate(3, 5000);
+
 
     @InjectMocks
     private ProfilePictureService profilePictureService;
@@ -397,5 +403,19 @@ class ProfilePictureServiceTest {
 
         verify(storage).store(any(InputStream.class), contentTypeCaptor.capture(), anyLong());
         assertEquals("image/png", contentTypeCaptor.getValue());
+    }
+
+    @Test
+    void upload_whenDecodeGateIsBusy_refusesWithoutStoringAnything() throws Exception {
+        ReflectionTestUtils.setField(profilePictureService, "maxSizeMb", 5);
+        var user = buildUser();
+        var encoded = new ByteArrayOutputStream();
+        ImageIO.write(new BufferedImage(600, 600, BufferedImage.TYPE_INT_RGB), "png", encoded);
+        var file = new MockMultipartFile("file", "avatar.png", "image/png", encoded.toByteArray());
+        doThrow(new ImageDecodeBusyException()).when(imageDecodeGate).withPermit(any());
+
+        assertThrows(ImageDecodeBusyException.class, () -> profilePictureService.upload(user, file));
+        verifyNoInteractions(storage);
+        verify(userRepository, never()).save(any());
     }
 }

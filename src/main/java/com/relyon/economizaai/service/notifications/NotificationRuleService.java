@@ -45,7 +45,7 @@ public class NotificationRuleService {
     public NotificationRuleResponse create(User user, CreateNotificationRuleRequest request) {
         var type = request.type();
         if (!type.isUserCreatable()) {
-            throw new InvalidNotificationRuleException(type + " is a system default — toggle it instead of creating one");
+            throw InvalidNotificationRuleException.ofKey("notificationrule.invalid.not-creatable");
         }
         var product = resolveAndValidate(type, request);
         var productId = product != null ? product.getId() : null;
@@ -75,13 +75,13 @@ public class NotificationRuleService {
 
     private Product resolveAndValidate(NotificationType type, CreateNotificationRuleRequest request) {
         if (type.requiresThreshold() && request.thresholdPrice() == null) {
-            throw new InvalidNotificationRuleException(type + " requires a thresholdPrice");
+            throw InvalidNotificationRuleException.ofKey("notificationrule.invalid.threshold-required");
         }
         if (!type.requiresProduct()) {
             return null;
         }
         if (request.productId() == null) {
-            throw new InvalidNotificationRuleException(type + " requires a productId");
+            throw InvalidNotificationRuleException.ofKey("notificationrule.invalid.product-required");
         }
         return productRepository.findById(request.productId()).orElseThrow(ProductNotFoundException::new);
     }
@@ -97,6 +97,7 @@ public class NotificationRuleService {
                         .distinct()
                         .toList());
         return rules.stream()
+                .filter(rule -> !rule.getType().isRetired())
                 .map(rule -> NotificationRuleResponse.from(rule,
                         rule.getProduct() != null ? friendlyNames.get(rule.getProduct().getId()) : null))
                 .toList();
@@ -123,7 +124,7 @@ public class NotificationRuleService {
         var rule = ruleRepository.findByIdAndUserId(id, user.getId())
                 .orElseThrow(NotificationRuleNotFoundException::new);
         if (rule.isDefault()) {
-            throw new InvalidNotificationRuleException("system defaults cannot be deleted — disable them instead");
+            throw InvalidNotificationRuleException.ofKey("notificationrule.invalid.default-not-deletable");
         }
         ruleRepository.delete(rule);
         log.info("notification_rule.deleted user={} rule={}", LogMasker.email(user.getEmail()), id);

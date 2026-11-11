@@ -137,7 +137,7 @@ public class PhotoReceiptExtractionService {
         // Validação determinística de TODAS as fotos + cota ANTES de criar a nota — um usuário
         // sem cota recebe 429/503 na hora, não uma nota que falha depois.
         files.forEach(photoUploadValidator::readImage);
-        paidApiGuard.assertUnderGlobalBudget();
+        paidApiGuard.assertUnderDailyBudget(PaidApiService.LLM_VISION);
         paidApiGuard.assertWithinDailyCap(user.getId(), PaidApiService.LLM_VISION);
 
         // Lê os bytes AGORA (o MultipartFile é da request, que termina ao retornarmos).
@@ -178,13 +178,20 @@ public class PhotoReceiptExtractionService {
      * Sem sucesso nenhum / nenhuma é cupom → FAILED_PARSE. Roda num bean-boundary (via {@code self})
      * pra o {@code @Async} valer; exceções NÃO propagam (nada útil sai de thread async).
      */
-    @Async(AsyncConfig.AI_SWEEP_EXECUTOR)
+    @Async(AsyncConfig.PHOTO_EXTRACT_EXECUTOR)
     public void processPhotosAsync(UUID receiptId, User user, List<PhotoData> photos) {
         var extractions = new ArrayList<JsonNode>();
         var anyVisionCallSucceeded = false;
         for (var photo : photos) {
+            // A job that sat in the queue past the sweeper timeout (or whose nota was deleted)
+            // must not pay for vision calls whose result would be discarded.
+            if (!isStillProcessing(receiptId)) {
+                log.info("photo_extract.abandoned receipt={} reason=no_longer_processing extracted={}",
+                        receiptId, extractions.size());
+                return;
+            }
             try {
-                paidApiGuard.assertUnderGlobalBudget();
+                paidApiGuard.assertUnderDailyBudget(PaidApiService.LLM_VISION);
                 paidApiGuard.assertWithinDailyCap(user.getId(), PaidApiService.LLM_VISION);
             } catch (PaidApiQuotaExceededException | PaidApiBudgetExceededException capEx) {
                 log.warn("photo_extract.cap_hit_mid_batch user={} extracted={}", user.getId(), extractions.size());
@@ -228,6 +235,10 @@ public class PhotoReceiptExtractionService {
             return;
         }
         log.info("photo_extract.ok user={} receipt={} photos={}", user.getId(), receiptId, photos.size());
+    }
+
+    private boolean isStillProcessing(UUID receiptId) {
+        return receiptRepository.existsByIdAndStatus(receiptId, ReceiptStatus.PROCESSING);
     }
 
     private Receipt markFailed(UUID receiptId, String reasonKey) {

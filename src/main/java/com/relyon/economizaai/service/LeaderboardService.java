@@ -1,5 +1,7 @@
 package com.relyon.economizaai.service;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.dto.response.LeaderboardResponse;
@@ -14,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -35,11 +38,19 @@ import java.util.stream.Collectors;
 public class LeaderboardService {
 
     private static final int TOP_N = 20;
+    private static final Duration RANKING_TTL = Duration.ofMinutes(5);
+    private static final int MAX_CACHED_WINDOWS = 32;
 
     private final ReceiptItemRepository receiptItemRepository;
     private final UserRepository userRepository;
     private final LocalizedMessageService localizedMessageService;
     private final CollaborativeProperties collaborativeProperties;
+
+    // Opt-in and handles are still read live; only the (identical for everyone) ranking is kept.
+    private final Cache<Integer, List<Row>> rankingByWindow = Caffeine.newBuilder()
+            .expireAfterWrite(RANKING_TTL)
+            .maximumSize(MAX_CACHED_WINDOWS)
+            .build();
 
     /** Public leaderboard: opted-in households only, plus the caller's own standing. */
     @Transactional(readOnly = true)
@@ -107,14 +118,20 @@ public class LeaderboardService {
                 finds, savings, true);
     }
 
+    /** The ranking is one global aggregate — shared by every viewer for a few minutes instead of per request. */
     private List<Row> ranked(int windowDays) {
+        return rankingByWindow.get(windowDays, this::computeRanking);
+    }
+
+    private List<Row> computeRanking(int windowDays) {
         var since = BrazilClock.today().minusDays(windowDays - 1L).atStartOfDay();
         var minHouseholds = collaborativeProperties.getCollaborative().getMinHouseholdsForPublic();
         var rows = new ArrayList<Row>();
         for (var raw : receiptItemRepository.discountHuntersSince(since, minHouseholds)) {
             rows.add(new Row(toUuid(raw[0]), ((Number) raw[1]).longValue(), scale((BigDecimal) raw[2])));
         }
-        return rows;
+        log.debug("leaderboard.ranking.computed windowDays={} households={}", windowDays, rows.size());
+        return List.copyOf(rows);
     }
 
     /** householdId -> first name (privacy-safe handle) for opted-in members. */

@@ -291,4 +291,89 @@ class PasswordResetServiceTest {
         verify(userRepository, never()).save(any());
         verify(passwordEncoder, never()).encode(anyString());
     }
+
+    @Test
+    void requestResetBeyondHourlyLimitIsSilentlyIgnored() {
+        var user = registeredUser();
+        when(userRepository.findByEmail("maria@example.com")).thenReturn(Optional.of(user));
+        when(tokenRepository.countByUserAndCreatedAtAfter(eq(user), any(LocalDateTime.class))).thenReturn(3L);
+
+        passwordResetService.requestReset(new ForgotPasswordRequest("maria@example.com"));
+
+        verify(tokenRepository, never()).save(any());
+        verify(tokenRepository, never()).consumeAllActiveForUser(any(), any());
+        verifyNoInteractions(emailSender);
+    }
+
+    @Test
+    void requestResetWithinHourlyLimitStillIssuesCode() {
+        var user = registeredUser();
+        when(userRepository.findByEmail("maria@example.com")).thenReturn(Optional.of(user));
+        when(tokenRepository.countByUserAndCreatedAtAfter(eq(user), any(LocalDateTime.class))).thenReturn(2L);
+
+        passwordResetService.requestReset(new ForgotPasswordRequest("maria@example.com"));
+
+        verify(tokenRepository).save(any(PasswordResetToken.class));
+    }
+
+    @Test
+    void wrongGuessesAccumulatePerAccountAcrossCodesAndLockVerification() {
+        var user = registeredUser();
+        when(userRepository.findByEmail("maria@example.com")).thenReturn(Optional.of(user));
+        var request = new VerifyResetCodeRequest("maria@example.com", "000000");
+
+        // Ten wrong guesses spread over fresh codes (each code alone would allow five).
+        for (var guess = 0; guess < 10; guess++) {
+            var freshCode = activeCode(user, "123456");
+            stubActiveCode(user, freshCode);
+            assertThrows(InvalidAuthTokenException.class, () -> passwordResetService.verifyCode(request));
+        }
+
+        assertNotNull(user.getPasswordResetLockedUntil());
+        assertTrue(user.getPasswordResetLockedUntil().isAfter(LocalDateTime.now().plusMinutes(29)));
+
+        // Locked: even the RIGHT code on a brand-new token is refused.
+        var rightCode = new VerifyResetCodeRequest("maria@example.com", "123456");
+        assertThrows(InvalidAuthTokenException.class, () -> passwordResetService.verifyCode(rightCode));
+    }
+
+    @Test
+    void accountLockExpiresAfterCoolDown() {
+        var user = registeredUser();
+        user.setPasswordResetLockedUntil(LocalDateTime.now().minusMinutes(1));
+        when(userRepository.findByEmail("maria@example.com")).thenReturn(Optional.of(user));
+        stubActiveCode(user, activeCode(user, "123456"));
+
+        passwordResetService.verifyCode(new VerifyResetCodeRequest("maria@example.com", "123456"));
+    }
+
+    @Test
+    void failuresOutsideTheWindowDoNotCount() {
+        var user = registeredUser();
+        user.setPasswordResetFailedAttempts(9);
+        user.setPasswordResetFailedWindowStartedAt(LocalDateTime.now().minusMinutes(61));
+        when(userRepository.findByEmail("maria@example.com")).thenReturn(Optional.of(user));
+        stubActiveCode(user, activeCode(user, "123456"));
+
+        assertThrows(InvalidAuthTokenException.class,
+                () -> passwordResetService.verifyCode(new VerifyResetCodeRequest("maria@example.com", "000000")));
+
+        assertEquals(1, user.getPasswordResetFailedAttempts());
+        assertEquals(null, user.getPasswordResetLockedUntil());
+    }
+
+    @Test
+    void successfulResetClearsAccountFailureCounters() {
+        var user = registeredUser();
+        user.setPasswordResetFailedAttempts(4);
+        user.setPasswordResetFailedWindowStartedAt(LocalDateTime.now().minusMinutes(5));
+        when(userRepository.findByEmail("maria@example.com")).thenReturn(Optional.of(user));
+        stubActiveCode(user, activeCode(user, "123456"));
+        when(passwordEncoder.encode("new-password")).thenReturn("new-hash");
+
+        passwordResetService.resetPassword(new ResetPasswordRequest("maria@example.com", "123456", "new-password"));
+
+        assertEquals(0, user.getPasswordResetFailedAttempts());
+        assertEquals(null, user.getPasswordResetFailedWindowStartedAt());
+    }
 }

@@ -16,6 +16,7 @@ import com.relyon.economizaai.exception.SefazDeterministicFetchException;
 import com.relyon.economizaai.exception.SefazFetchException;
 import com.relyon.economizaai.exception.SefazPortalRejectionException;
 import com.relyon.economizaai.exception.UnsupportedStateException;
+import com.relyon.economizaai.model.enums.InfosimplesOutcome;
 import com.relyon.economizaai.model.enums.PaidApiService;
 import com.relyon.economizaai.model.enums.StateIngestionOutcome;
 import com.relyon.economizaai.model.enums.StateIngestionStrategy;
@@ -217,6 +218,18 @@ public class SefazIngestionService {
      * NOT deferred. Flag OFF → this parameter is inert and behavior is unchanged.
      */
     public FetchedDocument fetch(String qrPayload, UUID userId, boolean deviceFetchAvailable) {
+        return fetch(qrPayload, userId, deviceFetchAvailable, IngestSpendPolicy.FULL);
+    }
+
+    /**
+     * As {@link #fetch(String, UUID, boolean)} but {@code spendPolicy} states which paid layers
+     * this attempt may use. A layer the policy forbids is simply skipped: the free paths still
+     * run, and a failure propagates as the primary failure (no "state unsupported" evidence is
+     * recorded for a layer that was never allowed to try).
+     */
+    public FetchedDocument fetch(String qrPayload, UUID userId, boolean deviceFetchAvailable,
+                                 IngestSpendPolicy spendPolicy) {
+        var infosimplesAllowed = infosimples.isPresent() && spendPolicy.infosimples();
         var chave = resolveChave(qrPayload);
         var uf = ChaveAcessoParser.extractUf(chave);
         var adapter = adapters.get(uf);
@@ -231,7 +244,7 @@ public class SefazIngestionService {
         if (adapter.requiresQrSignature() && ChaveAcessoParser.isBareChave(qrPayload)) {
             if (ChaveReconsultService.isReconsultable(chave)) {
                 try {
-                    var reconsulted = chaveReconsult.reconsult(chave);
+                    var reconsulted = reconsultByChave(chave, uf, userId, spendPolicy);
                     log.info("sefaz.fetch.bare_chave.reconsult_ok uf={} chave={}", uf, abbrev(chave));
                     return reconsulted;
                 } catch (RuntimeException legacyEx) {
@@ -239,7 +252,7 @@ public class SefazIngestionService {
                             uf, abbrev(chave), describe(legacyEx));
                 }
             }
-            if (infosimples.isPresent()) {
+            if (infosimplesAllowed) {
                 try {
                     var rescued = fetchViaInfosimples(chave, uf, userId);
                     if (isExperimental(adapter)) {
@@ -255,26 +268,38 @@ public class SefazIngestionService {
                     log.info("sefaz.fetch.bare_chave.infosimples_no_data uf={} chave={}", uf, abbrev(chave));
                     throw noDataEx;
                 } catch (RuntimeException infosimplesEx) {
+                    if (isDeterministicInfosimplesAnswer(infosimplesEx)) {
+                        // A nota without products is a verdict about the nota too — no path alert.
+                        log.info("sefaz.fetch.bare_chave.infosimples_no_items uf={} chave={}", uf, abbrev(chave));
+                        throw infosimplesEx;
+                    }
                     log.warn("sefaz.fetch.bare_chave.infosimples_failed uf={} chave={} reason={}",
                             uf, abbrev(chave), describe(infosimplesEx));
                     alertManualChaveNoPath(uf, chave, describe(infosimplesEx));
                     throw infosimplesEx;
                 }
             }
+            if (!spendPolicy.infosimples()) {
+                // The paid layer was withheld on purpose (free-only attempt) — not a missing path.
+                log.info("sefaz.fetch.bare_chave.paid_skipped uf={} chave={}", uf, abbrev(chave));
+                throw new SefazFetchException(uf.name());
+            }
             log.warn("sefaz.fetch.bare_chave.no_path uf={} chave={} — sem legado e Infosimples desabilitado", uf, abbrev(chave));
             alertManualChaveNoPath(uf, chave, "sem reconsulta legada e Infosimples desabilitado");
             throw new SefazFetchException(uf.name());
         }
         // A scrape MAY solve captchas (paid, per token) — the solver tracks the
-        // actual solves and they're ledgered after the fetch. The global kill-switch
+        // actual solves and they're ledgered after the fetch. The captcha daily budget
         // must NOT stop a captcha-free scrape (RS/PR/SP/GO/CE cost nothing): an
         // exhausted budget only forbids the solver from buying a token.
-        var budgetExhausted = paidApiGuard.isGlobalBudgetExhausted();
-        if (!budgetExhausted) {
+        var budgetExhausted = spendPolicy.captchaSolves()
+                && paidApiGuard.isDailyBudgetExhausted(PaidApiService.CAPTCHA_SOLVE);
+        var captchaSpendAllowed = spendPolicy.captchaSolves() && !budgetExhausted;
+        if (captchaSpendAllowed) {
             paidApiGuard.assertWithinDailyCap(userId, PaidApiService.CAPTCHA_SOLVE);
         }
         CaptchaSolveTracker.drain(); // discard any stale count left on this pooled thread
-        CaptchaSolveTracker.blockSpend(budgetExhausted);
+        CaptchaSolveTracker.blockSpend(!captchaSpendAllowed);
         try {
             var html = adapter.fetchHtml(qrPayload);
             recordCaptchaSolves(userId, uf, true);
@@ -320,6 +345,10 @@ public class SefazIngestionService {
                         "QR_PORTAL: " + describe(primaryEx) + "; deferred to on-device fetch (pre-Infosimples)",
                         portalEvidence, false);
             }
+            if (!spendPolicy.infosimples()) {
+                log.info("sefaz.fetch.paid_fallback_skipped uf={} chave={}", uf, abbrev(chave));
+                throw primaryEx;
+            }
             if (infosimples.isEmpty()) {
                 if (experimental) {
                     throw experimentalExhausted(uf, userId, chave, sourceUrlOf(qrPayload),
@@ -347,7 +376,7 @@ public class SefazIngestionService {
                     throw experimentalExhausted(uf, userId, chave, sourceUrlOf(qrPayload),
                             "QR_PORTAL: " + describe(primaryEx) + "; INFOSIMPLES: " + describe(fallbackEx),
                             portalEvidence, primaryEx instanceof ExperimentalCaptchaWallException,
-                            isPortalUnavailable(fallbackEx));
+                            isPortalUnavailable(fallbackEx), infosimplesOutcomeOf(fallbackEx));
                 }
                 throw fallbackEx;
             }
@@ -356,6 +385,41 @@ public class SefazIngestionService {
             // fallback — but any token bought before them was still paid for.
             recordCaptchaSolves(userId, uf, false);
             throw deterministicEx;
+        }
+    }
+
+    /**
+     * The legacy bare-chave reconsult. Free for RS/CE/AM; BA's consult solves an image captcha
+     * per attempt, so it is metered exactly like the QR path: the per-user daily cap, the global
+     * budget and the spend policy decide whether a solve may be bought, and every solve actually
+     * performed is ledgered afterwards. With the spend refused the solver declines, the reconsult
+     * fails and the chain moves on to the next layer.
+     */
+    private FetchedDocument reconsultByChave(String chave, UnidadeFederativa uf, UUID userId,
+                                             IngestSpendPolicy spendPolicy) {
+        var captchaGated = ChaveReconsultService.solvesCaptcha(chave);
+        CaptchaSolveTracker.drain(); // discard any stale count left on this pooled thread
+        CaptchaSolveTracker.blockSpend(captchaGated && !isCaptchaSpendAllowed(userId, uf, spendPolicy));
+        try {
+            var reconsulted = chaveReconsult.reconsult(chave);
+            recordCaptchaSolves(userId, uf, true);
+            return reconsulted;
+        } catch (RuntimeException reconsultEx) {
+            recordCaptchaSolves(userId, uf, false);
+            throw reconsultEx;
+        } finally {
+            CaptchaSolveTracker.blockSpend(false);
+        }
+    }
+
+    private boolean isCaptchaSpendAllowed(UUID userId, UnidadeFederativa uf, IngestSpendPolicy spendPolicy) {
+        if (!spendPolicy.captchaSolves() || paidApiGuard.isDailyBudgetExhausted(PaidApiService.CAPTCHA_SOLVE)) return false;
+        try {
+            paidApiGuard.assertWithinDailyCap(userId, PaidApiService.CAPTCHA_SOLVE);
+            return true;
+        } catch (PaidApiQuotaExceededException capReached) {
+            log.info("sefaz.fetch.bare_chave.captcha_cap_reached uf={}", uf);
+            return false;
         }
     }
 
@@ -436,8 +500,8 @@ public class SefazIngestionService {
                     uf, abbrev(chave));
             throw new ReceiptParseException("chave-corrupted");
         }
-        paidApiGuard.assertUnderGlobalBudget();
-        paidApiGuard.assertCircuitClosed(PaidApiService.INFOSIMPLES);
+        paidApiGuard.assertUnderDailyBudget(PaidApiService.INFOSIMPLES);
+        paidApiGuard.assertCircuitClosed(PaidApiService.INFOSIMPLES, uf.name());
         paidApiGuard.assertWithinDailyCap(userId, PaidApiService.INFOSIMPLES);
         try {
             var preParsed = infosimples.get().fetchParsed(chave, uf);
@@ -455,6 +519,12 @@ public class SefazIngestionService {
             paidApiGuard.recordFailure(userId, PaidApiService.INFOSIMPLES, uf.name(), "infosimples", ex.getCode());
             throw ex;
         } catch (RuntimeException ex) {
+            if (isDeterministicInfosimplesAnswer(ex)) {
+                // The provider answered fine, the nota just carries no products — a per-nota
+                // verdict like "no data": ledgered (the call was billed), not a breaker failure.
+                paidApiGuard.recordDeterministicFailure(userId, PaidApiService.INFOSIMPLES, uf.name(), "infosimples", 200);
+                throw ex;
+            }
             // No provider code (I/O error, timeout) — record null.
             paidApiGuard.recordFailure(userId, PaidApiService.INFOSIMPLES, uf.name(), "infosimples", null);
             throw ex;
@@ -470,6 +540,15 @@ public class SefazIngestionService {
      * before giving up — the chain is ordered by cost.
      */
     public ParsedReceipt parse(FetchedDocument fetched, UUID userId) {
+        return parse(fetched, userId, IngestSpendPolicy.FULL);
+    }
+
+    /**
+     * As {@link #parse(FetchedDocument, UUID)} but {@code spendPolicy} states which paid rescues
+     * (LLM, Infosimples) this attempt may use. With a rescue withheld, the original parse
+     * failure propagates untouched.
+     */
+    public ParsedReceipt parse(FetchedDocument fetched, UUID userId, IngestSpendPolicy spendPolicy) {
         if (fetched.preParsed() != null) return fetched.preParsed();
         var experimental = isExperimental(fetched.adapter());
         var qrHost = StateCoverageService.hostOf(fetched.sourceUrl());
@@ -498,18 +577,23 @@ public class SefazIngestionService {
                 // let the LLM rescue the user's receipt from the same HTML.
                 stateCoverage.recordVerifiedParseFailure(fetched.uf(), fetched.chave(), fetched.sourceUrl(),
                         parseEx.getMessageKey() + ":" + String.join(",", parseEx.getArguments()), fetched.html());
-                var llmRescued = rescueParseViaLlm(fetched, parseEx, userId);
+                var llmRescued = rescueParseViaLlm(fetched, parseEx, userId, spendPolicy);
                 if (llmRescued != null) return llmRescued;
                 throw parseEx;
             }
             stateCoverage.recordFailure(fetched.uf(), fetchLayer,
                     StateIngestionOutcome.PARSE_FAILED, qrHost, describe(parseEx));
-            var llmRescued = rescueParseViaLlm(fetched, parseEx, userId);
+            var llmRescued = rescueParseViaLlm(fetched, parseEx, userId, spendPolicy);
             if (llmRescued != null) {
                 stateCoverage.recordSuccess(fetched.uf(), StateIngestionStrategy.LLM_RESCUE, qrHost);
                 return llmRescued;
             }
+            if (!spendPolicy.infosimples()) {
+                log.info("sefaz.parse.paid_fallback_skipped uf={} chave={}", fetched.uf(), abbrev(fetched.chave()));
+                throw parseEx;
+            }
             var infosimplesNote = "desabilitado";
+            InfosimplesOutcome infosimplesOutcome = null;
             if (infosimples.isPresent()) {
                 log.warn("sefaz.parse.experimental.failed uf={} chave={} reason={} — trying infosimples fallback",
                         fetched.uf(), abbrev(fetched.chave()), parseEx.getMessageKey());
@@ -523,11 +607,12 @@ public class SefazIngestionService {
                     stateCoverage.recordFailure(fetched.uf(), StateIngestionStrategy.INFOSIMPLES,
                             StateIngestionOutcome.FETCH_FAILED, qrHost, describe(fallbackEx));
                     infosimplesNote = describe(fallbackEx);
+                    infosimplesOutcome = infosimplesOutcomeOf(fallbackEx);
                 }
             }
             throw experimentalExhausted(fetched.uf(), userId, fetched.chave(), fetched.sourceUrl(),
                     "QR_PORTAL (parse): " + describe(parseEx) + "; INFOSIMPLES: " + infosimplesNote,
-                    fetched.html(), false);
+                    fetched.html(), false, false, infosimplesOutcome);
         }
     }
 
@@ -538,7 +623,9 @@ public class SefazIngestionService {
      * reconsult arbiter and (for experimental states) Infosimples still apply.
      * Returns null when the rescue didn't produce a validated receipt.
      */
-    private ParsedReceipt rescueParseViaLlm(FetchedDocument fetched, ReceiptParseException parseEx, UUID userId) {
+    private ParsedReceipt rescueParseViaLlm(FetchedDocument fetched, ReceiptParseException parseEx, UUID userId,
+                                            IngestSpendPolicy spendPolicy) {
+        if (!spendPolicy.llmRescue()) return null;
         if (parseEx instanceof SefazPortalRejectionException) return null;
         var rescued = htmlReceiptRescue.rescue(fetched.html(), fetched.chave(), fetched.uf(), fetched.sourceUrl(), userId);
         if (rescued != null) {
@@ -587,19 +674,26 @@ public class SefazIngestionService {
     private ExperimentalStateFailedException experimentalExhausted(UnidadeFederativa uf, UUID userId, String chave,
                                                                    String sourceUrl, String failureSummary,
                                                                    String htmlSnippet, boolean captchaBlocked) {
-        return experimentalExhausted(uf, userId, chave, sourceUrl, failureSummary, htmlSnippet, captchaBlocked, false);
+        return experimentalExhausted(uf, userId, chave, sourceUrl, failureSummary, htmlSnippet, captchaBlocked,
+                false, null);
     }
 
+    /** {@code infosimplesOutcome}: how the paid layer answered inside this chain; null when it was not tried. */
     private ExperimentalStateFailedException experimentalExhausted(UnidadeFederativa uf, UUID userId, String chave,
                                                                    String sourceUrl, String failureSummary,
                                                                    String htmlSnippet, boolean captchaBlocked,
-                                                                   boolean portalUnavailable) {
+                                                                   boolean portalUnavailable,
+                                                                   InfosimplesOutcome infosimplesOutcome) {
         if (prefetchPolicy.isDeviceFetchUf(uf)) {
             log.info("state_coverage.exhausted_skipped uf={} reason=device_fetch_uf", uf);
         } else {
             stateCoverage.reportExhausted(uf, userId, chave, sourceUrl, failureSummary, htmlSnippet);
         }
-        return new ExperimentalStateFailedException(uf.name(), captchaBlocked, portalUnavailable);
+        return new ExperimentalStateFailedException(uf.name(), captchaBlocked, portalUnavailable, infosimplesOutcome);
+    }
+
+    private static InfosimplesOutcome infosimplesOutcomeOf(RuntimeException fallbackEx) {
+        return isDeterministicInfosimplesAnswer(fallbackEx) ? InfosimplesOutcome.NO_DATA : InfosimplesOutcome.FAILED;
     }
 
     /**
@@ -609,7 +703,13 @@ public class SefazIngestionService {
      * worth parking as PORTAL_PENDING and retrying — a not-found never changes.
      */
     private static boolean isPortalUnavailable(RuntimeException fallbackEx) {
-        return !(fallbackEx instanceof InfosimplesNoDataException);
+        return !isDeterministicInfosimplesAnswer(fallbackEx);
+    }
+
+    /** The provider answered and the answer is final for this nota: no data, or a nota without products. */
+    private static boolean isDeterministicInfosimplesAnswer(RuntimeException fallbackEx) {
+        return fallbackEx instanceof InfosimplesNoDataException
+                || (fallbackEx instanceof ReceiptParseException parseEx && parseEx.isNoItemsFound());
     }
 
     private static String describe(RuntimeException ex) {

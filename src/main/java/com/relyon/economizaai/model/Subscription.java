@@ -10,6 +10,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -34,6 +35,9 @@ import java.time.LocalDateTime;
 @SuperBuilder
 public class Subscription extends BaseEntity {
 
+    /** Provider of promo / admin grants — no payment behind the row. */
+    public static final String MANUAL_PROVIDER = "manual";
+
     @OneToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;
@@ -53,4 +57,25 @@ public class Subscription extends BaseEntity {
     /** End of the currently-paid period. Null = open-ended (e.g. manual grant). */
     @Column(name = "current_period_end")
     private LocalDateTime currentPeriodEnd;
+
+    /**
+     * The subscription will not renew (auto-renew turned off, or a pause was scheduled):
+     * access continues until {@code currentPeriodEnd}, then the expiry sweep downgrades.
+     */
+    @Column(name = "cancel_at_period_end", nullable = false)
+    @Builder.Default
+    private boolean cancelAtPeriodEnd = false;
+
+    /** When the launch promo was granted to this user. Set once — the promo never re-fires. */
+    @Column(name = "launch_promo_granted_at")
+    private LocalDateTime launchPromoGrantedAt;
+
+    /** End of the launch promo this user was granted; a paid subscription that ends earlier falls back to it. */
+    @Column(name = "launch_promo_until")
+    private LocalDateTime launchPromoUntil;
+
+    /** True when a real payment provider backs this row (not a promo / admin grant). */
+    public boolean isPaid() {
+        return provider != null && !MANUAL_PROVIDER.equals(provider);
+    }
 }

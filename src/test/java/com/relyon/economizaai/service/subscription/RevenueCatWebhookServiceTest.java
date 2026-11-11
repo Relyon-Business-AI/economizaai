@@ -6,6 +6,7 @@ import com.relyon.economizaai.model.RevenueEvent;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.repository.RevenueEventRepository;
 import com.relyon.economizaai.repository.UserRepository;
+import com.relyon.economizaai.service.referral.ReferralService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -25,6 +26,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -35,6 +37,7 @@ class RevenueCatWebhookServiceTest {
     @Mock private SubscriptionService subscriptionService;
     @Mock private UserRepository userRepository;
     @Mock private RevenueEventRepository revenueEventRepository;
+    @Mock private ReferralService referralService;
     @InjectMocks private RevenueCatWebhookService service;
 
     private User user() {
@@ -68,15 +71,62 @@ class RevenueCatWebhookServiceTest {
     }
 
     @Test
-    void expiration_cancels() {
+    void expiration_endsTheProviderSubscription() {
         var user = user();
         when(userRepository.findByEmail("u@e")).thenReturn(Optional.of(user));
 
         service.handle(event("EXPIRATION", "u@e", EXP_MS));
 
-        verify(subscriptionService).cancel(user);
+        // SubscriptionService decides between FREE and the launch-promo fallback.
+        verify(subscriptionService).endProviderSubscription(user, "revenuecat");
+        verify(subscriptionService, never()).cancel(any());
         verify(subscriptionService, never()).activatePro(any(), any(), any(), any());
         verify(revenueEventRepository, never()).save(any());
+    }
+
+    @Test
+    void subscriptionPaused_isScheduledSoAccessIsKeptUntilPeriodEnd() {
+        var user = user();
+        when(userRepository.findByEmail("u@e")).thenReturn(Optional.of(user));
+
+        service.handle(event("SUBSCRIPTION_PAUSED", "u@e", EXP_MS));
+
+        verify(subscriptionService).markNonRenewing(user, "revenuecat");
+        verify(subscriptionService, never()).cancel(any());
+        verify(subscriptionService, never()).endProviderSubscription(any(), any());
+    }
+
+    @Test
+    void billingIssue_isNoOp() {
+        var user = user();
+        when(userRepository.findByEmail("u@e")).thenReturn(Optional.of(user));
+
+        service.handle(event("BILLING_ISSUE", "u@e", EXP_MS));
+
+        verifyNoInteractions(subscriptionService);
+    }
+
+    @Test
+    void paidPurchase_rewardsTheInviter() {
+        var user = user();
+        when(userRepository.findByEmail("u@e")).thenReturn(Optional.of(user));
+
+        service.handle(event("INITIAL_PURCHASE", "u@e", EXP_MS));
+
+        verify(referralService).rewardInviterForSubscription(user);
+    }
+
+    @Test
+    void freeTrialOrStoreGrant_doesNotCountAsSubscribedForReferrals() {
+        var user = user();
+        when(userRepository.findByEmail("u@e")).thenReturn(Optional.of(user));
+        var freeTrial = new Event("INITIAL_PURCHASE", "u@e", EXP_MS, "pro_monthly", 0.0, "BRL", null, "evt_trial");
+        var storeGrant = new Event("TEMPORARY_ENTITLEMENT_GRANT", "u@e", EXP_MS, "pro_monthly", 9.90, "BRL", null, "evt_grant");
+
+        service.handle(freeTrial);
+        service.handle(storeGrant);
+
+        verify(referralService, never()).rewardInviterForSubscription(any());
     }
 
     @Test
@@ -107,14 +157,16 @@ class RevenueCatWebhookServiceTest {
     }
 
     @Test
-    void cancellation_isNoOp_keepsAccessUntilPeriodEnds() {
+    void cancellation_marksNonRenewingAndKeepsAccessUntilPeriodEnds() {
         var user = user();
         when(userRepository.findByEmail("u@e")).thenReturn(Optional.of(user));
 
         service.handle(event("CANCELLATION", "u@e", EXP_MS));
 
+        verify(subscriptionService).markNonRenewing(user, "revenuecat");
         verify(subscriptionService, never()).activatePro(any(), any(), any(), any());
         verify(subscriptionService, never()).cancel(any());
+        verify(subscriptionService, never()).endProviderSubscription(any(), any());
     }
 
     @Test

@@ -67,7 +67,9 @@ public class JwtService {
     public boolean isTokenValid(String token, UserDetails userDetails) {
         try {
             var username = extractUsername(token);
-            return username.equals(userDetails.getUsername()) && !isTokenExpired(token);
+            // Case-insensitive: e-mails are stored lower-cased, while a token issued before the
+            // normalization may still carry the address as it was typed.
+            return username.equalsIgnoreCase(userDetails.getUsername()) && !isTokenExpired(token);
         } catch (JwtException ex) {
             log.debug("Token validation failed: {}", ex.getMessage());
             return false;

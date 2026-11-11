@@ -20,6 +20,7 @@ import com.relyon.economizaai.exception.InvalidIssuedAtException;
 import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.exception.ReceiptNotEditableException;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
+import com.relyon.economizaai.exception.ReceiptRetryUnavailableException;
 import com.relyon.economizaai.exception.UnsupportedMerchantException;
 import com.relyon.economizaai.exception.UnsupportedStateException;
 import com.relyon.economizaai.model.Category;
@@ -55,7 +56,10 @@ import com.relyon.economizaai.service.sefaz.PrefetchPolicy;
 import com.relyon.economizaai.service.sefaz.ReceiptIngestionService;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
 import com.relyon.economizaai.service.sefaz.StateCoverageService;
+import com.relyon.economizaai.service.subscription.EntitlementClock;
+import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
+import com.relyon.economizaai.service.referral.ReferralService;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -69,6 +73,7 @@ import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Month;
 import java.util.ArrayList;
@@ -90,6 +95,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -109,6 +115,7 @@ class ReceiptServiceTest {
     @Mock private SefazIngestionService sefazIngestionService;
     @Mock private StateCoverageService stateCoverageService;
     @Mock private ReceiptIngestionService receiptIngestionService;
+    @Mock private ReceiptRawHtmlService receiptRawHtmlService;
     @Mock private CanonicalizationService canonicalizationService;
     @Mock private PriceIndexService priceIndexService;
     @Mock private PromoDetector promoDetector;
@@ -121,6 +128,7 @@ class ReceiptServiceTest {
     @Mock private MarketNameService marketNameService;
     @Mock private SubscriptionGateService subscriptionGate;
     @Mock private SubscriptionService subscriptionService;
+    @Mock private ReferralService referralService;
     @Mock private SavingsAttributionService savingsAttributionService;
     @Mock private LocalizedMessageService localizedMessageService;
     @Mock private MerchantSupportGate merchantSupportGate;
@@ -256,6 +264,53 @@ class ReceiptServiceTest {
     }
 
     @Test
+    void submit_sameChaveStillProcessing_returnsTheInFlightRowWithoutASecondIngest() {
+        var user = buildUser();
+        var inFlight = persistedReceipt(user, ReceiptStatus.PROCESSING);
+        when(receiptRepository.findByHouseholdIdAndChaveAcesso(any(), eq(CHAVE_RS))).thenReturn(Optional.of(inFlight));
+        when(receiptRepository.findByIdWithItemsAndProducts(inFlight.getId())).thenReturn(Optional.of(inFlight));
+
+        var response = receiptService.submit(user, new SubmitReceiptRequest(QR_RS), true);
+
+        assertEquals(inFlight.getId(), response.id());
+        assertEquals(ReceiptStatus.PROCESSING, response.status());
+        verify(receiptRepository, never()).delete(any(Receipt.class));
+        verify(receiptRepository, never()).save(any(Receipt.class));
+        verify(receiptIngestionService, never()).ingest(any(), any(), anyBoolean());
+    }
+
+    @Test
+    void submit_sameChaveQueuedForReattempt_returnsTheQueuedRowWithoutASecondIngest() {
+        var user = buildUser();
+        var queued = persistedReceipt(user, ReceiptStatus.IMPORT_QUEUED);
+        when(receiptRepository.findByHouseholdIdAndChaveAcesso(any(), eq(CHAVE_RS))).thenReturn(Optional.of(queued));
+        when(receiptRepository.findByIdWithItemsAndProducts(queued.getId())).thenReturn(Optional.of(queued));
+
+        var response = receiptService.submit(user, new SubmitReceiptRequest(QR_RS));
+
+        assertEquals(queued.getId(), response.id());
+        verify(receiptRepository, never()).delete(any(Receipt.class));
+        verify(receiptIngestionService, never()).ingest(any(), any());
+    }
+
+    @Test
+    void submit_sameChaveFailedBefore_stillReplacesTheStaleRowAndIngests() {
+        var user = buildUser();
+        var failed = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        when(receiptRepository.findByHouseholdIdAndChaveAcesso(any(), eq(CHAVE_RS))).thenReturn(Optional.of(failed));
+        when(receiptRepository.save(any(Receipt.class))).thenAnswer(invocation -> {
+            var saved = invocation.<Receipt>getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        var response = receiptService.submit(user, new SubmitReceiptRequest(QR_RS));
+
+        verify(receiptRepository).delete(failed);
+        verify(receiptIngestionService).ingest(eq(response.id()), eq(QR_RS));
+    }
+
+    @Test
     void retryFailedScan_flipsToProcessingAndReingestsStoredQr() {
         var user = buildUser();
         var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
@@ -268,6 +323,35 @@ class ReceiptServiceTest {
         assertEquals(ReceiptStatus.PROCESSING, receipt.getStatus());
         assertNull(receipt.getParseErrorReason());
         verify(receiptIngestionService).ingest(receipt.getId(), CHAVE_RS, true);
+    }
+
+    @Test
+    void retryFailedScan_deterministicFailure_isRefusedWithAMessageSayingWhatToDo() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        receipt.setParseErrorReason("receipt.parse.failed:infosimples.not-found");
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        var thrown = assertThrows(ReceiptRetryUnavailableException.class,
+                () -> receiptService.retryFailedScan(user, receipt.getId(), true));
+
+        assertEquals("receipt.retry.refused.not_found", thrown.getMessageKey());
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+        verify(receiptIngestionService, never()).ingest(any(), any(), anyBoolean());
+    }
+
+    @Test
+    void retryFailedScan_deterministicFailure_isRefusedForNonScanOriginsToo() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        receipt.setOrigin(ReceiptOrigin.IMPORT);
+        receipt.setParseErrorReason("receipt.merchant.unsupported:");
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        var thrown = assertThrows(ReceiptRetryUnavailableException.class,
+                () -> receiptService.retryFailedScan(user, receipt.getId(), false));
+
+        assertEquals("receipt.retry.refused.merchant", thrown.getMessageKey());
     }
 
     @Test
@@ -355,7 +439,7 @@ class ReceiptServiceTest {
         receipt.setOrigin(ReceiptOrigin.IMPORT);
         receipt.setParseErrorReason("no-items-found:");
         var storedXml = "<?xml version=\"1.0\"?><nfeProc><NFe><infNFe Id=\"NFe" + CHAVE_RS + "\"/></NFe></nfeProc>";
-        receipt.setRawHtml(storedXml);
+        when(receiptRawHtmlService.find(receipt.getId())).thenReturn(Optional.of(storedXml));
         when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
 
         var retried = receiptService.retryFromStoredXml(user, receipt.getId());
@@ -372,7 +456,8 @@ class ReceiptServiceTest {
         var user = buildUser();
         var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
         receipt.setOrigin(ReceiptOrigin.IMPORT);
-        receipt.setRawHtml("<html>a portal error page, not a nota</html>");
+        when(receiptRawHtmlService.find(receipt.getId()))
+                .thenReturn(Optional.of("<html>a portal error page, not a nota</html>"));
         when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
 
         assertFalse(receiptService.retryFromStoredXml(user, receipt.getId()));
@@ -385,7 +470,7 @@ class ReceiptServiceTest {
     void reparse_appliesParsedDataAndSwapsEvidenceWhenRescued() {
         var user = buildUser();
         var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
-        receipt.setRawHtml("<html>rejection page</html>");
+        when(receiptRawHtmlService.find(receipt.getId())).thenReturn(Optional.of("<html>rejection page</html>"));
         receipt.setParseErrorReason("receipt.contingency.pending:227");
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         // The rescue produced items from the reconsulted SAT-WEB DANFE, not the stored page.
@@ -409,11 +494,23 @@ class ReceiptServiceTest {
 
         assertEquals(ReceiptStatus.PENDING_CONFIRMATION, receipt.getStatus());
         assertNull(receipt.getParseErrorReason());
-        assertEquals("<html>satweb danfe</html>", receipt.getRawHtml(),
-                "stored evidence must be the HTML that produced the items");
+        // stored evidence must be the HTML that produced the items
+        verify(receiptRawHtmlService).replace(receipt, "<html>satweb danfe</html>");
         assertEquals("https://www.sefaz.rs.gov.br/NFCE (reconsulta chave 65)", receipt.getSourceUrl());
         assertEquals(1, response.items().size());
         verify(transactionTemplate).execute(any());
+    }
+
+    @Test
+    void reparse_withoutStoredHtml_isRefused() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.FAILED_PARSE);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receiptRawHtmlService.find(receipt.getId())).thenReturn(Optional.empty());
+
+        assertThrows(ReceiptNotEditableException.class, () -> receiptService.reparse(receipt.getId()));
+
+        verify(sefazIngestionService, never()).reparseStored(any(), any(), any(), any());
     }
 
     private User buildUser() {
@@ -862,8 +959,11 @@ class ReceiptServiceTest {
     void submit_throwsPaywallWhenFreeUserAtMonthlyCap() {
         var user = buildUser();
         when(subscriptionGate.monthlyReceiptLimit(any())).thenReturn(5);
-        when(receiptRepository.countByUserIdAndCreatedAtGreaterThanEqual(eq(user.getId()), any()))
+        // Only receipts the user SUBMITTED count — household-split copies are excluded by the query.
+        when(receiptRepository.countByUserIdAndSplitCopyFalseAndCreatedAtGreaterThanEqual(eq(user.getId()), any()))
                 .thenReturn(5L);
+        doThrow(new PaywallException(Feature.RECEIPT_UPLOAD_UNLIMITED.name()))
+                .when(subscriptionGate).requireWithinLimit(user, Feature.RECEIPT_UPLOAD_UNLIMITED, 5L);
 
         var request = new SubmitReceiptRequest(QR_RS);
         assertThrows(PaywallException.class,
@@ -877,7 +977,7 @@ class ReceiptServiceTest {
     void submit_allowsWhenFreeUserUnderMonthlyCap() {
         var user = buildUser();
         when(subscriptionGate.monthlyReceiptLimit(any())).thenReturn(5);
-        when(receiptRepository.countByUserIdAndCreatedAtGreaterThanEqual(eq(user.getId()), any()))
+        when(receiptRepository.countByUserIdAndSplitCopyFalseAndCreatedAtGreaterThanEqual(eq(user.getId()), any()))
                 .thenReturn(2L);
         when(receiptRepository.findByHouseholdIdAndChaveAcesso(any(), eq(CHAVE_RS))).thenReturn(Optional.empty());
         when(receiptRepository.save(any(Receipt.class))).thenAnswer(inv -> {
@@ -1024,12 +1124,42 @@ class ReceiptServiceTest {
         when(receiptRepository.save(receipt)).thenReturn(receipt);
         when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
         when(receiptRepository.countByUserIdAndStatus(user.getId(), ReceiptStatus.CONFIRMED)).thenReturn(1L);
-        var promoEnd = LocalDateTime.now().plusMonths(3);
+        var promoEnd = EntitlementClock.endOfBrazilDay(LocalDate.of(2026, 12, 31));
         when(subscriptionService.grantSignupPromoIfEnabled(user)).thenReturn(promoEnd);
+
+        var response = receiptService.confirm(user, receipt.getId(), null);
+
+        verify(subscriptionService).grantSignupPromoIfEnabled(user);
+        assertEquals(LocalDate.of(2026, 12, 31), response.launchPromo().validUntil());
+    }
+
+    @Test
+    void confirm_firstReceipt_withoutGrant_hasNoLaunchPromoInResponse() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receiptRepository.save(receipt)).thenReturn(receipt);
+        when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
+        when(receiptRepository.countByUserIdAndStatus(user.getId(), ReceiptStatus.CONFIRMED)).thenReturn(1L);
+        // Already granted before, promo over, or a better entitlement kept.
+        when(subscriptionService.grantSignupPromoIfEnabled(user)).thenReturn(null);
+
+        var response = receiptService.confirm(user, receipt.getId(), null);
+
+        assertNull(response.launchPromo());
+    }
+
+    @Test
+    void confirm_checksReferralQualificationAfterCommit() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receiptRepository.save(receipt)).thenReturn(receipt);
+        when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
 
         receiptService.confirm(user, receipt.getId(), null);
 
-        verify(subscriptionService).grantSignupPromoIfEnabled(user);
+        verify(referralService).qualifyAfterCommit(user.getId(), receipt.getId());
     }
 
     @Test
@@ -1041,16 +1171,17 @@ class ReceiptServiceTest {
         when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
         when(receiptRepository.countByUserIdAndStatus(user.getId(), ReceiptStatus.CONFIRMED)).thenReturn(2L);
 
-        receiptService.confirm(user, receipt.getId(), null);
+        var response = receiptService.confirm(user, receipt.getId(), null);
 
         verify(subscriptionService, never()).grantSignupPromoIfEnabled(any(User.class));
+        assertNull(response.launchPromo());
     }
 
     @Test
     void confirmStale_autoConfirmsPendingReceipt() {
         var user = buildUser();
         var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
-        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receiptRepository.findByIdForUpdate(receipt.getId())).thenReturn(Optional.of(receipt));
         when(receiptRepository.save(receipt)).thenReturn(receipt);
         when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
 
@@ -1092,10 +1223,90 @@ class ReceiptServiceTest {
     }
 
     @Test
+    void confirm_takesTheRowLockBeforeCheckingTheStatus() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receiptRepository.save(receipt)).thenReturn(receipt);
+        when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
+
+        receiptService.confirm(user, receipt.getId(), null);
+
+        var order = inOrder(receiptRepository);
+        order.verify(receiptRepository).findByIdForUpdate(receipt.getId());
+        order.verify(receiptRepository).findByIdWithItemsAndProducts(receipt.getId());
+    }
+
+    @Test
+    void confirm_alreadyConfirmedByAnotherRequest_reportsNotEditableAndContributesNothing() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.CONFIRMED);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        assertThrows(ReceiptNotEditableException.class, () -> receiptService.confirm(user, receipt.getId(), null));
+
+        verify(priceIndexService, never()).recordContributions(any());
+    }
+
+    @Test
+    void confirm_uniqueConstraintRaceOnProductCreation_retriesOnceAndSucceeds() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenAnswer(invocation -> {
+            receipt.setStatus(ReceiptStatus.PENDING_CONFIRMATION); // the lost attempt was rolled back
+            return Optional.of(receipt);
+        });
+        when(receiptRepository.save(receipt)).thenReturn(receipt);
+        when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
+        when(canonicalizationService.canonicalize(receipt))
+                .thenThrow(new DataIntegrityViolationException("duplicate key products.ean"))
+                .thenReturn(null);
+
+        var response = receiptService.confirm(user, receipt.getId(), null);
+
+        assertEquals(ReceiptStatus.CONFIRMED, response.receipt().status());
+        verify(canonicalizationService, times(2)).canonicalize(receipt);
+        verify(priceIndexService, times(1)).recordContributions(receipt);
+    }
+
+    @Test
+    void confirm_uniqueConstraintFailsTwice_propagatesAfterASingleRetry() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenAnswer(invocation -> {
+            receipt.setStatus(ReceiptStatus.PENDING_CONFIRMATION);
+            return Optional.of(receipt);
+        });
+        when(canonicalizationService.canonicalize(receipt))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"));
+
+        assertThrows(DataIntegrityViolationException.class, () -> receiptService.confirm(user, receipt.getId(), null));
+
+        verify(canonicalizationService, times(2)).canonicalize(receipt);
+    }
+
+    @Test
+    void confirmBatch_runsEachReceiptInItsOwnTransactionAndSkipsTheFailingOne() {
+        var user = buildUser();
+        var failing = persistedReceipt(user, ReceiptStatus.CONFIRMED); // not confirmable
+        var healthy = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        when(receiptRepository.findByIdWithItemsAndProducts(failing.getId())).thenReturn(Optional.of(failing));
+        when(receiptRepository.findByIdWithItemsAndProducts(healthy.getId())).thenReturn(Optional.of(healthy));
+        when(receiptRepository.save(any(Receipt.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(promoDetector.detectPersonalPromos(any(Receipt.class))).thenReturn(List.of());
+
+        var confirmed = receiptService.confirmBatch(user, List.of(failing.getId(), healthy.getId()));
+
+        assertEquals(1, confirmed);
+        assertEquals(ReceiptStatus.CONFIRMED, healthy.getStatus());
+        verify(transactionTemplate, times(2)).execute(any());
+    }
+
+    @Test
     void confirmStale_skipsWhenNoLongerPending() {
         var user = buildUser();
         var receipt = persistedReceipt(user, ReceiptStatus.CONFIRMED);
-        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receiptRepository.findByIdForUpdate(receipt.getId())).thenReturn(Optional.of(receipt));
 
         receiptService.confirmStale(receipt.getId());
 
@@ -1187,7 +1398,7 @@ class ReceiptServiceTest {
         var user = buildUser();
         var receipt = completePhotoReceipt(user);
         receipt.setIssuedAt(null);
-        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receiptRepository.findByIdForUpdate(receipt.getId())).thenReturn(Optional.of(receipt));
 
         receiptService.confirmStale(receipt.getId());
 

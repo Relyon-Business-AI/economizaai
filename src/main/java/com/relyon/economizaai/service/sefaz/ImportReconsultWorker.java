@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.sefaz;
 
+import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.ReceiptRepository;
@@ -78,17 +79,18 @@ public class ImportReconsultWorker {
             // with their stored payload — a signed QR URL is not reconsultable by chave.
             var scanRetry = queued.getOrigin() == ReceiptOrigin.SCAN;
             var qrPayload = queued.getQrPayload();
-            var userId = transactionTemplate.execute(status -> {
+            var spendPolicy = transactionTemplate.execute(status -> {
                 var receipt = receiptRepository.findById(receiptId).orElse(null);
                 if (receipt == null || receipt.getStatus() != ReceiptStatus.IMPORT_QUEUED) return null;
                 receipt.setStatus(ReceiptStatus.PROCESSING);
+                var policy = consumeQueuedSpendPolicy(receipt);
                 receiptRepository.save(receipt);
-                return receipt.getUser().getId();
+                return policy;
             });
-            if (userId == null) continue;
+            if (spendPolicy == null) continue;
             try {
                 if (scanRetry) {
-                    receiptIngestionService.ingest(receiptId, qrPayload);
+                    receiptIngestionService.ingest(receiptId, qrPayload, spendPolicy);
                 } else {
                     receiptIngestionService.ingestReconsult(receiptId, chave);
                 }
@@ -100,5 +102,16 @@ public class ImportReconsultWorker {
         if (dispatched > 0) {
             log.info("import.worker dispatched={} inFlightBefore={}", dispatched, inFlight);
         }
+    }
+
+    /**
+     * Reads the spend policy the re-queuer asked for and clears the request on the row, so it
+     * applies to this dispatch only: a contingency resync asks for free paths; everything else
+     * (bulk import, admin retry, portal recovery) runs the regular chain.
+     */
+    private static IngestSpendPolicy consumeQueuedSpendPolicy(Receipt receipt) {
+        if (!receipt.isResyncFreeOnly()) return IngestSpendPolicy.FULL;
+        receipt.setResyncFreeOnly(false);
+        return IngestSpendPolicy.FREE_ONLY;
     }
 }

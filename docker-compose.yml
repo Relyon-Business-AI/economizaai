@@ -86,7 +86,6 @@ services:
       METRICS_PASSWORD: ${METRICS_PASSWORD:-}
       # Billing webhooks — empty leaves each webhook seam disabled (fail-closed).
       REVENUECAT_WEBHOOK_AUTH: ${REVENUECAT_WEBHOOK_AUTH:-}
-      BILLING_WEBHOOK_SECRET: ${BILLING_WEBHOOK_SECRET:-}
       # Paywall enforcement — false (default) = all PRO features open in dev.
       SUBSCRIPTION_ENFORCE: ${SUBSCRIPTION_ENFORCE:-false}
       # Twilio — SMS / WhatsApp channels; empty degrades gracefully (dev logs OTP).

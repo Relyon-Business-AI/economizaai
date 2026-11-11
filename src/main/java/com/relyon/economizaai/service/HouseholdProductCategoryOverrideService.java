@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service;
 
+import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.HouseholdCustomCategory;
 import com.relyon.economizaai.model.HouseholdProductCategoryOverride;
 import com.relyon.economizaai.model.Product;
@@ -45,6 +46,26 @@ public class HouseholdProductCategoryOverrideService {
         householdCacheGen.bump(user.getHousehold().getId()); // insights são override-aware → invalida o cache de gastos
         log.info("category.override.set household={} product={} category={}",
                 user.getHousehold().getId(), product.getId(), category);
+    }
+
+    /**
+     * Same upsert for callers that hold the household but no {@link User} (the AI item
+     * correction, which loads the item's own household inside its persist transaction).
+     */
+    @Transactional
+    public void setHouseholdOverride(Household household, Product product, ProductCategory category) {
+        var override = overrideRepository.findByHouseholdIdAndProductId(household.getId(), product.getId())
+                .orElseGet(() -> HouseholdProductCategoryOverride.builder()
+                        .household(household)
+                        .product(product)
+                        .build());
+        override.setCategory(category);
+        override.setCustomCategory(null);
+        override.setCategoryNodeId(null);
+        overrideRepository.save(override);
+        householdCacheGen.bump(household.getId());
+        log.info("category.override.set household={} product={} category={}",
+                household.getId(), product.getId(), category);
     }
 
     /** Upsert: point this household's view of the product at a custom category. */

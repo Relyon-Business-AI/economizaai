@@ -76,7 +76,7 @@ class ConfirmRollbackOnAttributionFailureIntegrationTest {
                 null, "<html/>", "00000000000000000000000000000000000000000000",
                 UnidadeFederativa.RS, null);
         when(sefazIngestionService.fetch(any(), any())).thenReturn(fetched);
-        when(sefazIngestionService.parse(any(), any())).thenReturn(fakeParsedReceipt(new BigDecimal("28.00")));
+        when(sefazIngestionService.parse(any(), any(), any())).thenReturn(fakeParsedReceipt(new BigDecimal("28.00")));
         // Force the best-effort attribution pass to blow up from INSIDE its own
         // @Transactional method, so the shared confirm transaction gets marked
         // rollback-only.
@@ -112,7 +112,7 @@ class ConfirmRollbackOnAttributionFailureIntegrationTest {
     private String registerAndLogin(String email) throws Exception {
         var body = """
                 { "name": "%s", "email": "%s", "password": "password123",
-                  "acceptedTermsVersion": "1.0", "acceptedPrivacyVersion": "1.0" }
+                  "acceptedTermsVersion": "1.1", "acceptedPrivacyVersion": "1.1" }
                 """.formatted(email, email);
         var result = mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON).content(body))

@@ -116,6 +116,30 @@ public class CloudflareR2PhotoAttemptStorage implements PhotoAttemptStorage {
         }
     }
 
+    @Override
+    public void delete(String receiptId) throws IOException {
+        var photos = list(receiptId);
+        for (var photo : photos) {
+            deleteObject(photo.key());
+        }
+        deleteObject(manifestKey(receiptId));
+        log.info("photo_attempt.deleted receipt={} photos={}", receiptId, photos.size());
+    }
+
+    private void deleteObject(String key) throws IOException {
+        var headers = signedHeaders("DELETE", "/" + bucket + "/" + key, hex(sha256(new byte[0])), Instant.now());
+        try {
+            restClient.delete()
+                    .uri(URI.create(objectUrl(key)))
+                    .headers(outgoing -> headers.forEach(outgoing::set))
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (RestClientResponseException ex) {
+            if (ex.getStatusCode().value() == 404) return; // already gone
+            throw new IOException("R2 delete failed: " + ex.getStatusCode(), ex);
+        }
+    }
+
     private void putObject(String key, byte[] data, String contentType) throws IOException {
         var headers = signedHeaders("PUT", "/" + bucket + "/" + key, hex(sha256(data)), Instant.now());
         try {

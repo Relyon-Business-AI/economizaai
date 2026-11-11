@@ -105,10 +105,10 @@ public class WhatsAppReportService {
     }
 
     private static String money(BigDecimal value) {
-        return "R$ " + amount(value);
+        return NotificationTextFormatter.money(value);
     }
 
     private static String amount(BigDecimal value) {
-        return String.format("%,.2f", value == null ? BigDecimal.ZERO : value);
+        return NotificationTextFormatter.amount(value);
     }
 }

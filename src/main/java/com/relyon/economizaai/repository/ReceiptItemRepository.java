@@ -3,6 +3,7 @@ package com.relyon.economizaai.repository;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -240,6 +241,21 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
     List<ReceiptItem> findHouseholdHistoryForProduct(@Param("productId") UUID productId,
                                                      @Param("householdId") UUID householdId);
 
+    /** {@link #findHouseholdHistoryForProduct} for several products in ONE query (confirm-time promo check). */
+    @Query("""
+        SELECT ri FROM ReceiptItem ri
+        JOIN FETCH ri.receipt r
+        JOIN FETCH r.household
+        WHERE ri.product.id IN :productIds
+          AND r.household.id = :householdId
+          AND r.status = 'CONFIRMED'
+          AND ri.excluded = false
+          AND r.origin <> 'PHOTO'
+        ORDER BY r.issuedAt ASC NULLS FIRST
+    """)
+    List<ReceiptItem> findHouseholdHistoryForProducts(@Param("productIds") Collection<UUID> productIds,
+                                                      @Param("householdId") UUID householdId);
+
     /** Which of the given product IDs have at least one confirmed, non-excluded purchase
      *  by the specified household — used to compute hasPriceHistory in batch. */
     @Query("""
@@ -252,6 +268,26 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
     """)
     List<UUID> findProductIdsWithHistoryForHousehold(@Param("productIds") List<UUID> productIds,
                                                      @Param("householdId") UUID householdId);
+
+    /** The household's own products (confirmed, non-excluded purchases), most purchased first — paged in SQL. */
+    @Query(value = """
+        SELECT ri.product.id FROM ReceiptItem ri
+        JOIN ri.receipt r
+        WHERE r.household.id = :householdId
+          AND r.status = 'CONFIRMED'
+          AND ri.excluded = false
+          AND ri.product IS NOT NULL
+        GROUP BY ri.product.id
+        ORDER BY COUNT(DISTINCT r.id) DESC, ri.product.id ASC
+    """, countQuery = """
+        SELECT COUNT(DISTINCT ri.product.id) FROM ReceiptItem ri
+        JOIN ri.receipt r
+        WHERE r.household.id = :householdId
+          AND r.status = 'CONFIRMED'
+          AND ri.excluded = false
+          AND ri.product IS NOT NULL
+    """)
+    Page<UUID> findMostPurchasedProductIdsForHousehold(@Param("householdId") UUID householdId, Pageable pageable);
 
     /** All confirmed, non-excluded purchases of any product by this household, oldest first.
      *  Joins receipt + product so callers can build per-product histories without N+1. */

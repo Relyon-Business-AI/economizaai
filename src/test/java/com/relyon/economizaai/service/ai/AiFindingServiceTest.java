@@ -2,6 +2,7 @@ package com.relyon.economizaai.service.ai;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.relyon.economizaai.dto.request.MergeProductRequest;
+import com.relyon.economizaai.dto.request.SetProductBrandRequest;
 import com.relyon.economizaai.model.AiFinding;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.enums.AiFindingStatus;
@@ -35,6 +36,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -196,6 +198,56 @@ class AiFindingServiceTest {
 
         assertEquals("Bolacha de Milho", product.getGenericName());
         assertEquals("bolacha de milho", product.getGenericNameNorm());
+    }
+
+    @Test
+    void approveProductCorrection_appliesNameBrandAndCategoryToTheGlobalProduct() {
+        var productId = UUID.randomUUID();
+        var defaultNodeId = UUID.randomUUID();
+        var product = Product.builder().id(productId).normalizedName("QJ MIN FRESCAL KG")
+                .category(ProductCategory.GROCERIES).build();
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        when(categoryResolver.idForLegacyEnum(ProductCategory.MEAT_DAIRY)).thenReturn(defaultNodeId);
+        var finding = pending(AiFindingType.PRODUCT_CORRECTION,
+                "{\"productId\":\"" + productId + "\",\"genericName\":\"Queijo Minas\",\"brand\":\"Tirolez\","
+                        + "\"category\":\"MEAT_DAIRY\",\"userHint\":\"é queijo\"}");
+
+        var approved = service.approve(finding.getId());
+
+        assertEquals(AiFindingStatus.APPROVED, approved.getStatus());
+        assertEquals("Queijo Minas", product.getGenericName());
+        assertEquals("queijo minas", product.getGenericNameNorm());
+        var brandRequest = ArgumentCaptor.forClass(SetProductBrandRequest.class);
+        verify(adminProductService).setBrand(eq(productId), brandRequest.capture());
+        assertEquals("Tirolez", brandRequest.getValue().brand());
+        verify(adminProductService).setCategory(productId, ProductCategory.MEAT_DAIRY);
+        verify(adminProductService).setCategoryNode(productId, defaultNodeId);
+    }
+
+    @Test
+    void approveProductCorrection_withoutBrandLeavesTheBrandAlone() {
+        var productId = UUID.randomUUID();
+        when(productRepository.findById(productId))
+                .thenReturn(Optional.of(Product.builder().id(productId).normalizedName("VELA").build()));
+        var finding = pending(AiFindingType.PRODUCT_CORRECTION,
+                "{\"productId\":\"" + productId + "\",\"genericName\":\"Vela\",\"category\":\"OTHER\"}");
+
+        service.approve(finding.getId());
+
+        verify(adminProductService, never()).setBrand(any(), any());
+        verify(adminProductService).setCategory(productId, ProductCategory.OTHER);
+    }
+
+    @Test
+    void rejectProductCorrection_leavesTheGlobalProductUntouched() {
+        var productId = UUID.randomUUID();
+        var finding = pending(AiFindingType.PRODUCT_CORRECTION,
+                "{\"productId\":\"" + productId + "\",\"genericName\":\"Queijo Minas\",\"category\":\"MEAT_DAIRY\"}");
+
+        var rejected = service.reject(finding.getId());
+
+        assertEquals(AiFindingStatus.REJECTED, rejected.getStatus());
+        verifyNoInteractions(adminProductService, productRepository);
     }
 
     @Test

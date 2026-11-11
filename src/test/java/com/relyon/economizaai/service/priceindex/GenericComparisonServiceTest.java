@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -72,7 +73,12 @@ class GenericComparisonServiceTest {
         user = User.builder().id(UUID.randomUUID()).household(household).build();
         lenient().when(viewerLocationService.resolve(any()))
                 .thenReturn(new ViewerLocation(null, null, ViewerLocationService.Source.NONE, "RS"));
-        lenient().when(marketLocationService.findByCnpjs(anyList())).thenReturn(Map.of());
+        // Default: every store is a classified supermarket (grocery tier) with no coordinates.
+        lenient().when(marketLocationService.findByCnpjs(anyList())).thenAnswer(invocation -> {
+            List<String> cnpjs = invocation.getArgument(0);
+            return cnpjs.stream().distinct().collect(Collectors.toMap(cnpj -> cnpj,
+                    cnpj -> MarketLocation.builder().cnpj(cnpj).segment(MerchantSegment.SUPERMARKET).build()));
+        });
         lenient().when(marketNameService.resolveNames(any(), anyList())).thenReturn(Map.of());
         lenient().when(marketNameService.resolveChainNames(anyList())).thenReturn(Map.of());
         lenient().when(marketNameService.friendlyName(any(), any(), any(), any()))
@@ -284,6 +290,26 @@ class GenericComparisonServiceTest {
         var result = service.forProduct(scanned, user);
 
         // Grocery product but observed at a PHARMACY → K=3, only 1 household → blocked.
+        assertThat(result.offers()).isEmpty();
+    }
+
+    @Test
+    void unclassifiedStoreKeepsFullKEvenForGroceryProduct() {
+        var scanned = UUID.randomUUID();
+        var product = product(scanned, "Nestlé", new BigDecimal("200"));
+        when(productRepository.findById(scanned)).thenReturn(Optional.of(product));
+        when(productRepository.findByGenericNameNormOrderByBrandNormAscPackSizeAsc("creme de leite"))
+                .thenReturn(List.of(product));
+        // The store has no location row → its segment is unknown.
+        when(marketLocationService.findByCnpjs(anyList())).thenReturn(Map.of());
+        var observations = List.of(
+                observation(product, "66666666000100", "RS", new BigDecimal("3.49"), LocalDateTime.of(2026, 1, 2, 0, 0)));
+        when(observationRepository.findRecentByProductIds(anyList(), any())).thenReturn(observations);
+        when(auditRepository.countDistinctHouseholdsForProductsByMarket(anyList(), any()))
+                .thenReturn(List.of(householdCount(scanned, "66666666000100", 2L)));
+
+        var result = service.forProduct(scanned, user);
+
         assertThat(result.offers()).isEmpty();
     }
 

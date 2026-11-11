@@ -22,9 +22,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Single gating point for money-spending external calls (Infosimples, captcha
- * solvers). Three responsibilities, matching the cost-control plan:
+ * solvers, Twilio, LLM). Responsibilities, matching the cost-control plan:
  *
  * <ul>
+ *   <li><b>Budget:</b> {@link #assertUnderDailyBudget} stops ONE service once its
+ *       daily R$ ceiling is spent, leaving the others (and free scraping) alone.</li>
  *   <li><b>Cap (A):</b> {@link #assertWithinDailyCap} throws before a user
  *       exceeds their per-day allowance for a service — a hard cost/abuse guard
  *       independent of subscription tier.</li>
@@ -46,10 +48,13 @@ public class PaidApiGuardService {
     private final PaidApiCallRepository repository;
     private Clock clock = Clock.systemUTC();
 
-    /** Recent failure instants per service, pruned to the rolling window on each record. */
-    private final Map<PaidApiService, Deque<Instant>> recentFailures = new ConcurrentHashMap<>();
-    /** When the breaker (if open) reopens the circuit for a service. */
-    private final Map<PaidApiService, Instant> openUntil = new ConcurrentHashMap<>();
+    /**
+     * Recent failure instants per breaker key, pruned to the rolling window on each record.
+     * The key is the service, plus the UF for Infosimples (see {@link #breakerKey}).
+     */
+    private final Map<String, Deque<Instant>> recentFailures = new ConcurrentHashMap<>();
+    /** When the breaker (if open) reopens the circuit for a breaker key. */
+    private final Map<String, Instant> openUntil = new ConcurrentHashMap<>();
 
     public PaidApiGuardService(PaidApiGuardProperties properties, PaidApiCallRepository repository) {
         this.properties = properties;
@@ -79,11 +84,6 @@ public class PaidApiGuardService {
     }
 
     /**
-     * Throws {@link PaidApiBudgetExceededException} once today's total estimated
-     * spend across ALL users reaches the global ceiling — the kill-switch against
-     * a viral spike. No-op when enforcement is off or the budget is unlimited.
-     */
-    /**
      * Daily cap for a SYSTEM worker (no user attribution) — counts all of today's
      * calls for the service. Used by the LLM enrichment/auditor batch jobs.
      */
@@ -98,24 +98,45 @@ public class PaidApiGuardService {
         }
     }
 
-    public void assertUnderGlobalBudget() {
-        if (isGlobalBudgetExhausted()) {
+    /**
+     * Throws {@link PaidApiBudgetExceededException} once today's estimated spend for
+     * THIS service reached its daily ceiling (or the optional overall ceiling is gone).
+     * Only this service stops — the others keep working. No-op when enforcement is off
+     * or the budget is unlimited.
+     */
+    public void assertUnderDailyBudget(PaidApiService service) {
+        if (isDailyBudgetExhausted(service)) {
             throw new PaidApiBudgetExceededException();
         }
     }
 
     /**
-     * Whether today's estimated spend already reached the global ceiling. For callers that
-     * must keep their FREE path working when the budget is gone (a captcha-free scrape costs
-     * nothing) and only refuse the paid step.
+     * Whether today's estimated spend for this service already reached its ceiling. For
+     * callers that must keep their FREE path working when the budget is gone (a
+     * captcha-free scrape costs nothing) and only refuse the paid step.
      */
-    public boolean isGlobalBudgetExhausted() {
+    public boolean isDailyBudgetExhausted(PaidApiService service) {
         if (!properties.isEnabled()) return false;
+        return isServiceBudgetExhausted(service) || isOverallBudgetExhausted();
+    }
+
+    private boolean isServiceBudgetExhausted(PaidApiService service) {
+        var budget = properties.dailyBudgetCents(service);
+        if (budget <= 0) return false;
+        var spent = repository.sumCostCentsByServiceSince(service, startOfTodayUtc());
+        if (spent >= budget) {
+            log.warn("paid_api.budget_exhausted service={} spentCents={} budgetCents={}", service, spent, budget);
+            return true;
+        }
+        return false;
+    }
+
+    private boolean isOverallBudgetExhausted() {
         var budget = properties.getDailyGlobalBudgetCents();
         if (budget <= 0) return false;
         var spent = repository.sumCostCentsSince(startOfTodayUtc());
         if (spent >= budget) {
-            log.warn("paid_api.budget_exhausted spentCents={} budgetCents={}", spent, budget);
+            log.warn("paid_api.budget_exhausted service=ALL spentCents={} budgetCents={}", spent, budget);
             return true;
         }
         return false;
@@ -126,12 +147,28 @@ public class PaidApiGuardService {
      * service is open. No-op when enforcement is off.
      */
     public void assertCircuitClosed(PaidApiService service) {
+        assertCircuitClosed(service, null);
+    }
+
+    /**
+     * As {@link #assertCircuitClosed(PaidApiService)} but scoped to one UF. Infosimples reaches
+     * each state through that state's own portal, so one state's outage must only pause the
+     * paid calls for that state — the others keep working.
+     */
+    public void assertCircuitClosed(PaidApiService service, String uf) {
         if (!properties.isEnabled()) return;
-        var until = openUntil.get(service);
+        var until = openUntil.get(breakerKey(service, uf));
         if (until != null && until.isAfter(clock.instant())) {
-            log.warn("paid_api.circuit_open service={} reopensAt={}", service, until);
+            log.warn("paid_api.circuit_open service={} uf={} reopensAt={}", service, uf, until);
             throw new PaidApiUnavailableException(service.name());
         }
+    }
+
+    /** Infosimples breaker state is per (service, UF); every other service keeps one breaker. */
+    private static String breakerKey(PaidApiService service, String uf) {
+        return service == PaidApiService.INFOSIMPLES && uf != null && !uf.isBlank()
+                ? service.name() + ":" + uf
+                : service.name();
     }
 
     /** Records a successful paid call and closes the breaker for the service. */
@@ -141,8 +178,9 @@ public class PaidApiGuardService {
 
     /** As {@link #recordSuccess(UUID, PaidApiService, String, String)} but with the provider result code. */
     public void recordSuccess(UUID userId, PaidApiService service, String uf, String provider, Integer resultCode) {
-        recentFailures.remove(service);
-        openUntil.remove(service);
+        var breakerKey = breakerKey(service, uf);
+        recentFailures.remove(breakerKey);
+        openUntil.remove(breakerKey);
         persist(userId, service, uf, provider, true, resultCode);
     }
 
@@ -154,7 +192,7 @@ public class PaidApiGuardService {
     /** As {@link #recordFailure(UUID, PaidApiService, String, String)} but with the provider result code. */
     public void recordFailure(UUID userId, PaidApiService service, String uf, String provider, Integer resultCode) {
         persist(userId, service, uf, provider, false, resultCode);
-        registerFailureAndMaybeTrip(service);
+        registerFailureAndMaybeTrip(service, breakerKey(service, uf));
     }
 
     /**
@@ -171,12 +209,12 @@ public class PaidApiGuardService {
         persist(userId, service, uf, provider, false, resultCode);
     }
 
-    private void registerFailureAndMaybeTrip(PaidApiService service) {
+    private void registerFailureAndMaybeTrip(PaidApiService service, String breakerKey) {
         var threshold = properties.getInfosimplesFailureThreshold();
         if (threshold <= 0) return;
         var now = clock.instant();
         var windowStart = now.minusSeconds(properties.getBreakerWindowSeconds());
-        var failures = recentFailures.computeIfAbsent(service, key -> new ArrayDeque<>());
+        var failures = recentFailures.computeIfAbsent(breakerKey, key -> new ArrayDeque<>());
         synchronized (failures) {
             failures.addLast(now);
             while (!failures.isEmpty() && failures.peekFirst().isBefore(windowStart)) {
@@ -184,10 +222,10 @@ public class PaidApiGuardService {
             }
             if (failures.size() >= threshold) {
                 var reopensAt = now.plusSeconds(properties.getBreakerCooldownSeconds());
-                openUntil.put(service, reopensAt);
+                openUntil.put(breakerKey, reopensAt);
                 failures.clear();
-                log.warn("paid_api.circuit_tripped service={} failures={} cooldownS={} reopensAt={}",
-                        service, threshold, properties.getBreakerCooldownSeconds(), reopensAt);
+                log.warn("paid_api.circuit_tripped service={} breaker={} failures={} cooldownS={} reopensAt={}",
+                        service, breakerKey, threshold, properties.getBreakerCooldownSeconds(), reopensAt);
             }
         }
     }

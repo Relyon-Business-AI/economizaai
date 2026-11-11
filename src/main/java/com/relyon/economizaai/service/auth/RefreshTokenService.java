@@ -135,6 +135,31 @@ public class RefreshTokenService {
         log.info("refresh.revoked_all user={} count={}", LogMasker.email(user.getEmail()), revoked);
     }
 
+    /**
+     * Revokes every session of the user except the one {@code keptRefreshToken} belongs to.
+     * A missing, unknown, unusable or foreign token keeps nothing: every session is revoked.
+     */
+    @Transactional
+    public void revokeAllForUserExcept(User user, String keptRefreshToken) {
+        var keptFamilyId = usableFamilyOf(user, keptRefreshToken);
+        if (keptFamilyId == null) {
+            revokeAllForUser(user);
+            return;
+        }
+        var revoked = tokenRepository.revokeAllActiveForUserExceptFamily(user, keptFamilyId);
+        log.info("refresh.revoked_others user={} kept_family={} count={}",
+                LogMasker.email(user.getEmail()), keptFamilyId, revoked);
+    }
+
+    private UUID usableFamilyOf(User user, String presented) {
+        if (presented == null || presented.isBlank()) return null;
+        return tokenRepository.findByToken(CodeHasher.sha256(presented))
+                .filter(stored -> stored.getUser().getId().equals(user.getId()))
+                .filter(stored -> stored.isUsable(LocalDateTime.now()))
+                .map(RefreshTokenService::familyOf)
+                .orElse(null);
+    }
+
     private void revokeFamilyOnReuse(RefreshToken reused, UUID familyId) {
         var owner = reused.getUser();
         var revoked = tokenRepository.revokeActiveForFamily(familyId);

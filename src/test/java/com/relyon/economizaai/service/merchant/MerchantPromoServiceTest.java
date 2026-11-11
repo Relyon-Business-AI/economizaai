@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.merchant;
 
+import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.dto.request.MerchantPromoRequest;
 import com.relyon.economizaai.exception.MerchantAccessNotFoundException;
 import com.relyon.economizaai.exception.MerchantPromoInvalidException;
@@ -12,12 +13,11 @@ import com.relyon.economizaai.model.enums.MerchantPromoSource;
 import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.repository.MerchantAccessRepository;
 import com.relyon.economizaai.repository.MerchantPromoRepository;
-import com.relyon.economizaai.repository.PriceObservationRepository;
+import com.relyon.economizaai.repository.PriceObservationAuditRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -46,14 +46,17 @@ class MerchantPromoServiceTest {
     @Mock private MerchantAccessRepository merchantAccessRepository;
     @Mock private MerchantSubscriptionService merchantSubscriptionService;
     @Mock private ProductRepository productRepository;
-    @Mock private PriceObservationRepository observationRepository;
+    @Mock private PriceObservationAuditRepository auditRepository;
 
-    @InjectMocks private MerchantPromoService service;
+    private final CollaborativeProperties properties = new CollaborativeProperties();
+    private MerchantPromoService service;
 
     private User merchantUser;
 
     @BeforeEach
     void setUp() {
+        service = new MerchantPromoService(promoRepository, merchantAccessRepository,
+                merchantSubscriptionService, productRepository, auditRepository, properties);
         merchantUser = User.builder().id(UUID.randomUUID()).name("Mercado Teste")
                 .email("merchant@economizaai.app").role(Role.MERCHANT).build();
         lenient().when(merchantAccessRepository.findAllByUserId(merchantUser.getId()))
@@ -136,14 +139,34 @@ class MerchantPromoServiceTest {
     }
 
     @Test
-    void create_verifiedWhenReceiptConfirmsPrice() {
+    void create_verifiedWhenThreeHouseholdsConfirmThePrice() {
         var product = Product.builder().id(UUID.randomUUID()).normalizedName("Leite Integral 1L").build();
         when(productRepository.findByEan(EAN)).thenReturn(Optional.of(product));
-        when(observationRepository.existsConfirmingObservation(any(), any(), any(), any(), any()))
-                .thenReturn(true);
+        when(auditRepository.countDistinctHouseholdsConfirmingPromo(any(), any(), any(), any(), any()))
+                .thenReturn(3L);
 
         var response = service.create(merchantUser, validRequest(), MerchantPromoSource.MANUAL);
 
         assertThat(response.verifiedByReceipts()).isTrue();
+    }
+
+    @Test
+    void create_notVerifiedWhenFewerThanKHouseholdsConfirmThePrice() {
+        var product = Product.builder().id(UUID.randomUUID()).normalizedName("Leite Integral 1L").build();
+        when(productRepository.findByEan(EAN)).thenReturn(Optional.of(product));
+        when(auditRepository.countDistinctHouseholdsConfirmingPromo(any(), any(), any(), any(), any()))
+                .thenReturn(2L);
+
+        var response = service.create(merchantUser, validRequest(), MerchantPromoSource.MANUAL);
+
+        assertThat(response.verifiedByReceipts()).isFalse();
+    }
+
+    @Test
+    void create_notVerifiedWithoutCanonicalProduct() {
+        var response = service.create(merchantUser, validRequest(), MerchantPromoSource.MANUAL);
+
+        assertThat(response.verifiedByReceipts()).isFalse();
+        verify(auditRepository, never()).countDistinctHouseholdsConfirmingPromo(any(), any(), any(), any(), any());
     }
 }

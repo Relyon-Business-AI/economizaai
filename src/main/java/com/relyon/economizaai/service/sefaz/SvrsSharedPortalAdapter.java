@@ -8,7 +8,8 @@ import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.sefaz.captcha.CaptchaSolver;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
@@ -56,6 +57,16 @@ public class SvrsSharedPortalAdapter implements SefazAdapter {
     private final long retryDelayMs;
     private final Set<String> allowedUrlHosts;
 
+    // Printed QR codes of some states still point at http:// portals, so plain http stays
+    // accepted by default. Turn it off to fetch https only.
+    @Value("${economizaai.ingestion.sefaz.allow-plain-http:true}")
+    private boolean allowPlainHttp = true;
+
+    /** Test seam for the https-only mode (production value comes from configuration). */
+    void setAllowPlainHttp(boolean allowPlainHttp) {
+        this.allowPlainHttp = allowPlainHttp;
+    }
+
     public SvrsSharedPortalAdapter(RestClient.Builder builder,
                                    CaptchaSolver captchaSolver,
                                    @Value("${economizaai.ingestion.sefaz.timeout-ms:30000}") int timeoutMs,
@@ -65,9 +76,8 @@ public class SvrsSharedPortalAdapter implements SefazAdapter {
                                    @Value("${economizaai.ingestion.sefaz.retry.svrs-max-attempts:3}") int captchaMaxAttempts,
                                    @Value("${economizaai.ingestion.sefaz.retry.delay-ms:5000}") long retryDelayMs,
                                    @Value("${economizaai.ingestion.sefaz.allowed-url-hosts:svrs.rs.gov.br,sefaz.rs.gov.br,fazenda.pr.gov.br,sef.sc.gov.br,fazenda.sp.gov.br}") String allowedUrlHosts) {
-        var requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(Math.min(timeoutMs, 10000));
-        requestFactory.setReadTimeout(timeoutMs);
+        var requestFactory = PortalRedirects.requestFactoryWithoutAutoRedirects(
+                Math.min(timeoutMs, 10000), timeoutMs);
         this.restClient = builder
                 .defaultHeader("User-Agent", userAgent)
                 .defaultHeader("Accept", "text/html,application/xhtml+xml")
@@ -169,9 +179,32 @@ public class SvrsSharedPortalAdapter implements SefazAdapter {
         }
     }
 
-    /** Raw HTTP GET — isolated as a seam so the retry loop is unit-testable. */
+    /** HTTP GET of the portal page — isolated as a seam so the retry loop is unit-testable. */
     protected String httpGet(String url) {
-        return restClient.get().uri(url).retrieve().body(String.class);
+        return getFollowingAllowedRedirects(url);
+    }
+
+    /**
+     * The HTTP client never follows a redirect by itself (see {@link PortalRedirects}):
+     * each hop is followed here, only after its target passed the same host allowlist as
+     * the QR URL, for a bounded number of hops.
+     */
+    private String getFollowingAllowedRedirects(String url) {
+        var current = url;
+        for (var hop = 0; hop <= PortalRedirects.MAX_HOPS; hop++) {
+            var response = exchange(current);
+            var location = response.getHeaders().getFirst(HttpHeaders.LOCATION);
+            if (!response.getStatusCode().is3xxRedirection() || location == null || location.isBlank()) {
+                return response.getBody();
+            }
+            current = resolveUrl(PortalRedirects.resolveLocation(current, location));
+        }
+        throw new TransientSefazFetchException("too-many-redirects");
+    }
+
+    /** Single HTTP GET returning status + headers + body — the seam the redirect loop (and tests) build on. */
+    protected ResponseEntity<String> exchange(String url) {
+        return restClient.get().uri(url).retrieve().toEntity(String.class);
     }
 
     /**
@@ -218,10 +251,7 @@ public class SvrsSharedPortalAdapter implements SefazAdapter {
      */
     protected String fetchWithToken(String originalUrl, String token) {
         var separator = originalUrl.contains("?") ? "&" : "?";
-        return restClient.get()
-                .uri(originalUrl + separator + "g-recaptcha-response=" + token)
-                .retrieve()
-                .body(String.class);
+        return getFollowingAllowedRedirects(originalUrl + separator + "g-recaptcha-response=" + token);
     }
 
     private void sleep(long ms, UnidadeFederativa uf) {
@@ -260,6 +290,10 @@ public class SvrsSharedPortalAdapter implements SefazAdapter {
         if (trimmed.toLowerCase().startsWith("http")) {
             if (!isAllowedSefazUrl(trimmed)) {
                 log.warn("sefaz.url.rejected host not in allowlist");
+                throw new InvalidQrPayloadException();
+            }
+            if (!allowPlainHttp && !PortalRedirects.isHttps(trimmed)) {
+                log.warn("sefaz.url.rejected plain http not accepted");
                 throw new InvalidQrPayloadException();
             }
             return trimmed;

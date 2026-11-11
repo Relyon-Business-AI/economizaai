@@ -1,5 +1,7 @@
 package com.relyon.economizaai.exception;
 
+import com.relyon.economizaai.model.enums.InfosimplesOutcome;
+
 /**
  * Every layer of the experimental fallback chain (QR portal fetch + shared
  * parser, then Infosimples when enabled) failed for a state without a verified
@@ -27,6 +29,13 @@ public class ExperimentalStateFailedException extends ReceiptParseException {
      */
     private final boolean portalUnavailable;
 
+    /**
+     * How the paid Infosimples layer answered inside this chain, or {@code null} when it was not
+     * tried (disabled, or deferred to an on-device fetch first). Lets the ingest avoid paying for
+     * the same lookup again in the later device-fetch steps.
+     */
+    private final InfosimplesOutcome infosimplesOutcome;
+
     public ExperimentalStateFailedException(String state) {
         this(state, false, false);
     }
@@ -36,9 +45,19 @@ public class ExperimentalStateFailedException extends ReceiptParseException {
     }
 
     public ExperimentalStateFailedException(String state, boolean captchaBlocked, boolean portalUnavailable) {
+        this(state, captchaBlocked, portalUnavailable, null);
+    }
+
+    public ExperimentalStateFailedException(String state, boolean captchaBlocked, boolean portalUnavailable,
+                                            InfosimplesOutcome infosimplesOutcome) {
         super("receipt.state.experimental_failed", state);
         this.captchaBlocked = captchaBlocked;
         this.portalUnavailable = portalUnavailable;
+        this.infosimplesOutcome = infosimplesOutcome;
+    }
+
+    public InfosimplesOutcome getInfosimplesOutcome() {
+        return infosimplesOutcome;
     }
 
     public boolean isCaptchaBlocked() {

@@ -1,10 +1,13 @@
 package com.relyon.economizaai.config;
 
+import com.relyon.economizaai.service.subscription.Feature;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.LocalDate;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 @Configuration
 @ConfigurationProperties(prefix = "economizaai")
@@ -42,6 +45,8 @@ public class CollaborativeProperties {
         private int claimCodeTtlHours = 24;
         /** Wrong-code budget before the claim must be re-submitted. */
         private int claimCodeMaxAttempts = 5;
+        /** Wait before the same user may claim the same chain again after a closed (failed/rejected) claim. */
+        private int claimCooldownHours = 24;
         /** Row cap per promo import file/batch. */
         private int importMaxRows = 500;
 
@@ -53,6 +58,8 @@ public class CollaborativeProperties {
         public void setClaimCodeTtlHours(int v) { this.claimCodeTtlHours = v; }
         public int getClaimCodeMaxAttempts() { return claimCodeMaxAttempts; }
         public void setClaimCodeMaxAttempts(int v) { this.claimCodeMaxAttempts = v; }
+        public int getClaimCooldownHours() { return claimCooldownHours; }
+        public void setClaimCooldownHours(int v) { this.claimCooldownHours = v; }
         public int getImportMaxRows() { return importMaxRows; }
         public void setImportMaxRows(int v) { this.importMaxRows = v; }
     }
@@ -87,6 +94,12 @@ public class CollaborativeProperties {
          * even with enforcement off — it bounds the merge/restore work, not the paywall.
          */
         private int householdMembersMax = 6;
+        /**
+         * Days the expiry sweep waits past the paid period end before downgrading a PAID,
+         * still-renewing subscription — a renewal webhook can arrive late. Promo grants and
+         * subscriptions already marked non-renewing get no grace.
+         */
+        private int paidGraceDays = 3;
         private final Free free = new Free();
         private final Promo promo = new Promo();
 
@@ -94,23 +107,34 @@ public class CollaborativeProperties {
         public void setEnforce(boolean v) { this.enforce = v; }
         public int getHouseholdMembersMax() { return householdMembersMax; }
         public void setHouseholdMembersMax(int v) { this.householdMembersMax = v; }
+        public int getPaidGraceDays() { return paidGraceDays; }
+        public void setPaidGraceDays(int v) { this.paidGraceDays = v; }
         public Free getFree() { return free; }
         public Promo getPromo() { return promo; }
 
         /**
-         * Signup promo (2026-09-02, "até segunda ordem"): every new user is
-         * granted PRO. Since 2026-09-29 the grant runs until the FIXED date
-         * {@code until} (launch promo, one synchronized cutover for the whole
-         * base); when {@code until} is unset it falls back to {@code months}
-         * from the registration date. Once {@code until} passes, new signups
-         * stop being granted — no code change needed. Toggle {@code enabled}
-         * off via {@code SUBSCRIPTION_PROMO_ENABLED=false} to end it earlier.
+         * Launch promo: a user is granted PRO when they confirm their FIRST receipt
+         * (not at registration), once per user. The grant runs until the FIXED date
+         * {@code until} (end of that day in Brasília — one synchronized cutover for the
+         * whole base); when {@code until} is unset it falls back to {@code months}
+         * from the grant date. Once {@code until} passes, nobody else is granted —
+         * no code change needed. Toggle {@code enabled} off via
+         * {@code SUBSCRIPTION_PROMO_ENABLED=false} to end it earlier.
+         *
+         * <p>{@code warningDays} are the milestones (days before {@code until}) at which
+         * promo holders without a paid subscription are told the free period is ending.
          */
         public static class Promo {
             private boolean enabled = true;
             private int months = 3;
             private LocalDate until;
+            private boolean warningsEnabled = true;
+            private List<Integer> warningDays = List.of(15, 7, 3, 1);
 
+            public boolean isWarningsEnabled() { return warningsEnabled; }
+            public void setWarningsEnabled(boolean v) { this.warningsEnabled = v; }
+            public List<Integer> getWarningDays() { return warningDays; }
+            public void setWarningDays(List<Integer> v) { this.warningDays = v; }
             public boolean isEnabled() { return enabled; }
             public void setEnabled(boolean v) { this.enabled = v; }
             public int getMonths() { return months; }
@@ -128,7 +152,15 @@ public class CollaborativeProperties {
             private int monthlyReceipts = 5;
             /** Max members of a household with no PRO member (a couple). */
             private int householdMembers = 2;
+            /**
+             * PRO features left OPEN to FREE users while enforcement is on (names of
+             * {@code Feature}) — lets paywalls be switched on one at a time. Empty = every
+             * gated feature is PRO-only.
+             */
+            private Set<Feature> openFeatures = EnumSet.noneOf(Feature.class);
 
+            public Set<Feature> getOpenFeatures() { return openFeatures; }
+            public void setOpenFeatures(Set<Feature> v) { this.openFeatures = v; }
             public int getHouseholdMembers() { return householdMembers; }
             public void setHouseholdMembers(int v) { this.householdMembers = v; }
             public int getWatchedMarkets() { return watchedMarkets; }
@@ -201,6 +233,12 @@ public class CollaborativeProperties {
         private double bestMarketsNearbyRadiusKm = 20;
         private int communityPromoRecentWindowDays = 7;
         /**
+         * "Ofertas pra você": a chain's price only becomes a deal when its most recent
+         * observation is at most this many days old. Older prices still appear (dated) on the
+         * best-markets screen, but are too stale to tell someone "go buy it there".
+         */
+        private int dealsMaxPriceAgeDays = 60;
+        /**
          * TTL of the SHARED community-promo cache (seconds). Detection scans every
          * recent observation, so it runs at most once per TTL for the whole user
          * base — per-viewer geo/watched filtering is applied on top of the cached
@@ -234,6 +272,8 @@ public class CollaborativeProperties {
         public void setBestMarketsNearbyRadiusKm(double v) { this.bestMarketsNearbyRadiusKm = v; }
         public int getCommunityPromoRecentWindowDays() { return communityPromoRecentWindowDays; }
         public void setCommunityPromoRecentWindowDays(int v) { this.communityPromoRecentWindowDays = v; }
+        public int getDealsMaxPriceAgeDays() { return dealsMaxPriceAgeDays; }
+        public void setDealsMaxPriceAgeDays(int v) { this.dealsMaxPriceAgeDays = v; }
         public int getCommunityPromoCacheSeconds() { return communityPromoCacheSeconds; }
         public void setCommunityPromoCacheSeconds(int v) { this.communityPromoCacheSeconds = v; }
     }

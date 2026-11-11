@@ -41,9 +41,10 @@ payments corrected against the code; costs and §3–4 recommendations are still
 - **Apple Developer Program** — US$99/yr (mandatory for iOS).
 
 **Live & paid (per-use, capped):**
-- **Infosimples** — SEFAZ fallback (~R$0.24/query; CE depends on it entirely).
-  Daily budget R$50, per-user cap 20/day, circuit breaker, `paid_api_call` ledger.
-- **CapSolver** — captcha for MS/SC (~US$1–3 per 1000 solves, per-user cap 60/day).
+- **Infosimples** — SEFAZ fallback (~R$0.24/query; rescues fetch failures in every state).
+  Daily ceiling R$120, per-user cap 10/day, circuit breaker per state, `paid_api_call` ledger.
+- **CapSolver** — captcha for the captcha-walled states (~US$1–3 per 1000 solves; daily
+  ceiling R$30, per-user cap 30/day).
 - **Meta Ads** — ad spend itself (API is free; spend-sync + CAPI built, dormant).
 
 **Live & free:**
@@ -59,7 +60,8 @@ payments corrected against the code; costs and §3–4 recommendations are still
 - **OpenAI** (optional second provider of the AI layer — inert until `OPENAI_API_KEY`).
   Note: the AI layer itself (photo-receipt extraction, HTML parse-rescue, curadoria) runs
   on **Anthropic** via `AiGateway` (`ANTHROPIC_API_KEY`) and is a live per-use cost, capped
-  by `economizaai.ai.daily-request-cap`.
+  by the per-service daily ceilings of the paid-API guard (photo R$30, HTML rescue R$15,
+  categorization R$50) plus `economizaai.ai.daily-request-cap` as a secondary fence.
 - **Twilio** (SMS/WhatsApp OTP — no creds)
 - **RevenueCat** (IAP webhooks ready — needs secret; 0–1% of revenue at scale)
 - **Mercado Livre API** (garimpo — no creds)

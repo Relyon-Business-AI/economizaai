@@ -3,11 +3,17 @@ package com.relyon.economizaai.repository;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.AuthProvider;
 import com.relyon.economizaai.model.enums.DigestFrequency;
+import org.springframework.data.domain.Pageable;
+import com.relyon.economizaai.service.auth.EmailNormalizer;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -17,12 +23,47 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
 
     List<User> findByPushDeviceTokenIsNull();
 
+    /**
+     * One page of users that never registered a push token and were not invited to enable
+     * push since {@code nudgedAfter} — the "recently invited" check is part of the query,
+     * not one lookup per user. Keyset-paged by id.
+     */
+    @Query("""
+        SELECT user FROM User user
+        WHERE user.pushDeviceToken IS NULL
+          AND NOT EXISTS (SELECT 1 FROM Notification nudge
+                          WHERE nudge.user = user
+                            AND nudge.type = 'PUSH_OPTIN'
+                            AND nudge.createdAt > :nudgedAfter)
+          AND user.id > :afterId
+        ORDER BY user.id ASC
+    """)
+    List<User> findPushOptInNudgeCandidates(@Param("nudgedAfter") LocalDateTime nudgedAfter,
+                                            @Param("afterId") UUID afterId,
+                                            Pageable pageable);
 
-    Optional<User> findByEmail(String email);
+
+    /**
+     * Account lookup by e-mail. E-mails are stored normalized (trim + lower case), so the
+     * argument is normalized here — every caller (login, reset, social, admin, webhooks)
+     * matches the same account whatever casing was typed.
+     */
+    default Optional<User> findByEmail(String email) {
+        return findByStoredEmail(EmailNormalizer.normalize(email));
+    }
+
+    default boolean existsByEmail(String email) {
+        return existsByStoredEmail(EmailNormalizer.normalize(email));
+    }
+
+    /** Exact match against the stored (already normalized) value — use {@link #findByEmail}. */
+    @Query("SELECT user FROM User user WHERE user.email = :email")
+    Optional<User> findByStoredEmail(String email);
+
+    @Query("SELECT count(user) > 0 FROM User user WHERE user.email = :email")
+    boolean existsByStoredEmail(String email);
 
     Optional<User> findByAuthProviderAndProviderSubject(AuthProvider authProvider, String providerSubject);
-
-    boolean existsByEmail(String email);
 
     List<User> findAllByHouseholdId(UUID householdId);
 
@@ -55,6 +96,63 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
           AND user.digestFrequency <> :off
     """)
     List<User> findDigestCandidates(DigestFrequency off);
+
+    /**
+     * One page of users whose deals digest is due: active, digest not OFF (WEEKLY only on
+     * the weekly day), send hour already reached today and nothing sent yet today. "Reached"
+     * rather than "equal", so a late or long run still delivers. Keyset-paged by id — pass
+     * the last id of the previous page.
+     */
+    @Query("""
+        SELECT user FROM User user
+        JOIN FETCH user.household
+        WHERE user.active = true
+          AND user.digestFrequency <> 'OFF'
+          AND (user.digestFrequency <> 'WEEKLY' OR :weeklyDay = TRUE)
+          AND user.digestEffectiveSendHour <= :currentHour
+          AND (user.lastDigestSentAt IS NULL OR user.lastDigestSentAt < :startOfToday)
+          AND user.id > :afterId
+        ORDER BY user.id ASC
+    """)
+    List<User> findDigestDuePage(@Param("currentHour") int currentHour,
+                                 @Param("weeklyDay") boolean weeklyDay,
+                                 @Param("startOfToday") OffsetDateTime startOfToday,
+                                 @Param("afterId") UUID afterId,
+                                 Pageable pageable);
+
+    /** One page of digest recipients that still have no send hour assigned (new accounts, cleared overrides). */
+    @Query("""
+        SELECT user FROM User user
+        JOIN FETCH user.household
+        WHERE user.active = true
+          AND user.digestFrequency <> 'OFF'
+          AND user.digestEffectiveSendHour IS NULL
+          AND user.id > :afterId
+        ORDER BY user.id ASC
+    """)
+    List<User> findDigestUsersWithoutSendHour(@Param("afterId") UUID afterId, Pageable pageable);
+
+    /** Targeted write — never rewrites the rest of the user row from a stale copy. */
+    @Modifying
+    @Transactional
+    @Query("UPDATE User user SET user.digestEffectiveSendHour = :sendHour WHERE user.id = :userId")
+    int updateDigestEffectiveSendHour(@Param("userId") UUID userId, @Param("sendHour") int sendHour);
+
+    /**
+     * Atomically takes today's digest slot for a user. Returns 1 for the caller that won it
+     * and 0 when it was already taken, so an overlapping run or a second instance cannot
+     * send twice. Called only when there is something to send.
+     */
+    @Modifying
+    @Transactional
+    @Query("""
+        UPDATE User user SET user.lastDigestSentAt = :sentAt
+        WHERE user.id = :userId
+          AND (user.lastDigestSentAt IS NULL OR user.lastDigestSentAt < :startOfToday)
+    """)
+    int claimDigestSlot(@Param("userId") UUID userId,
+                        @Param("sentAt") OffsetDateTime sentAt,
+                        @Param("startOfToday") OffsetDateTime startOfToday);
 
     /** Resolves the user behind a WhatsApp opt-in deep-link token (from "CONFIRMAR-<token>"). */
     Optional<User> findByWhatsAppLinkToken(String whatsAppLinkToken);

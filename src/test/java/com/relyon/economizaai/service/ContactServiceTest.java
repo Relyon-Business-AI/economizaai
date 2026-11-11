@@ -5,6 +5,7 @@ import com.relyon.economizaai.dto.request.ContactRequest;
 import jakarta.mail.Session;
 import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.Test;
+import org.springframework.mail.MailSendException;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -14,6 +15,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.mockito.Mockito.doThrow;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -81,6 +83,30 @@ class ContactServiceTest {
         verify(mailSender).send(captor.capture());
         assertFalse(captor.getValue().getSubject().contains("\n"));
         assertFalse(captor.getValue().getSubject().contains("\r"));
+    }
+
+    @Test
+    void notifyAdminConfirmed_trueWhenTheMailServerAcceptedTheMessage() {
+        when(mailSender.createMimeMessage()).thenReturn(new MimeMessage((Session) null));
+
+        assertTrue(configuredService().notifyAdminConfirmed("teto atingido", "detalhe"));
+
+        verify(mailSender).send(any(MimeMessage.class));
+    }
+
+    @Test
+    void notifyAdminConfirmed_falseWhenTheSendFails() {
+        when(mailSender.createMimeMessage()).thenReturn(new MimeMessage((Session) null));
+        doThrow(new MailSendException("smtp down")).when(mailSender).send(any(MimeMessage.class));
+
+        assertFalse(configuredService().notifyAdminConfirmed("teto atingido", "detalhe"));
+    }
+
+    @Test
+    void notifyAdminConfirmed_falseWhenSmtpIsNotConfigured() {
+        var service = new ContactService(Optional.of(mailSender), "noreply@economiz.ai", "support@economiz.ai", "", "");
+
+        assertFalse(service.notifyAdminConfirmed("teto atingido", "detalhe"));
     }
 
     @Test

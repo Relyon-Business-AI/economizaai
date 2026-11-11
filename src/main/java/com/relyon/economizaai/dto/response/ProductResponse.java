@@ -24,18 +24,17 @@ public record ProductResponse(
     /**
      * Without price-history or household context: defaults {@code hasPriceHistory}
      * to false and {@code friendlyDescription} to null. Used by callers (single get,
-     * post-write echoes) that don't compute the collaborative k-anonymity count or
-     * don't have a household in scope.
+     * post-write echoes) that don't look up the household's purchases or don't have
+     * a household in scope.
      */
     public static ProductResponse from(Product product) {
         return from(product, false, null);
     }
 
     /**
-     * {@code hasPriceHistory} is true when enough distinct households contributed
-     * price observations for this product to clear k-anonymity — i.e. the
-     * collaborative price history is publicly displayable. Computed in batch by
-     * the search path; see {@code ProductService.search}.
+     * {@code hasPriceHistory} is true when the CALLER'S HOUSEHOLD has a confirmed, non-excluded
+     * purchase of this product — i.e. it has its own price history to show. Computed in batch
+     * by the search path; see {@code ProductService.search}.
      */
     public static ProductResponse from(Product product, boolean hasPriceHistory) {
         return from(product, hasPriceHistory, null);

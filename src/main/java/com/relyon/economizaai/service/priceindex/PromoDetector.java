@@ -14,7 +14,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Two flavours of promo detection:
@@ -47,13 +49,13 @@ public class PromoDetector {
         if (receipt.getOrigin() == ReceiptOrigin.PHOTO) {
             return promos;
         }
-        var householdId = receipt.getHousehold().getId();
-        for (var item : receipt.getItems()) {
-            // Personal notification — skip "not mine" lines too (no promo alert for someone else's item).
-            if (item.isExcluded() || item.isExcludedFromPersonal()) continue;
-            if (item.getProduct() == null || item.getUnitPrice() == null) continue;
-            var historical = receiptItemRepository
-                    .findHouseholdHistoryForProduct(item.getProduct().getId(), householdId).stream()
+        var candidates = receipt.getItems().stream().filter(PromoDetector::isPromoCandidate).toList();
+        if (candidates.isEmpty()) {
+            return promos;
+        }
+        var historyByProduct = loadHistoryByProduct(receipt, candidates);
+        for (var item : candidates) {
+            var historical = historyByProduct.getOrDefault(item.getProduct().getId(), List.of()).stream()
                     .filter(previous -> !previous.getId().equals(item.getId()))
                     .filter(previous -> !previous.isExcluded())
                     .filter(previous -> previous.getUnitPrice() != null)
@@ -87,6 +89,20 @@ public class PromoDetector {
             }
         }
         return promos;
+    }
+
+    /** Personal notification — skips excluded and "not mine" lines (no promo alert for someone else's item). */
+    private static boolean isPromoCandidate(ReceiptItem item) {
+        return !item.isExcluded() && !item.isExcludedFromPersonal()
+                && item.getProduct() != null && item.getUnitPrice() != null;
+    }
+
+    /** The household's purchase history of every candidate product, in ONE query. */
+    private Map<UUID, List<ReceiptItem>> loadHistoryByProduct(Receipt receipt, List<ReceiptItem> candidates) {
+        var productIds = candidates.stream().map(item -> item.getProduct().getId()).collect(Collectors.toSet());
+        return receiptItemRepository
+                .findHouseholdHistoryForProducts(productIds, receipt.getHousehold().getId()).stream()
+                .collect(Collectors.groupingBy(previous -> previous.getProduct().getId()));
     }
 
     /**

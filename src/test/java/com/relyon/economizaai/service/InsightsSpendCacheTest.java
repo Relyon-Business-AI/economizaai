@@ -89,4 +89,26 @@ class InsightsSpendCacheTest {
         verify(insightsRepository, times(3))
                 .totalSpend(eq(user.getHousehold().getId()), any(), any(), any(), any());
     }
+
+    @Test
+    void rollingBoundsOnTheSameDay_shareOneCacheEntry() {
+        var morning = LocalDateTime.of(2026, Month.JUNE, 30, 9, 15, 7);
+        var evening = LocalDateTime.of(2026, Month.JUNE, 30, 21, 40, 55);
+
+        insightsService.spend(user, from, morning, MarketScope.ALL);
+        insightsService.spend(user, from, evening, MarketScope.ALL);
+        insightsService.spend(user, from, null, MarketScope.ALL); // open-ended bound is its own key
+
+        verify(insightsRepository, times(2))
+                .totalSpend(eq(user.getHousehold().getId()), any(), any(), any(), any());
+    }
+
+    @Test
+    void boundsOnDifferentDays_areCachedSeparately() {
+        insightsService.spend(user, from, to, MarketScope.ALL);
+        insightsService.spend(user, from, to.minusDays(1), MarketScope.ALL);
+
+        verify(insightsRepository, times(2))
+                .totalSpend(eq(user.getHousehold().getId()), any(), any(), any(), any());
+    }
 }

@@ -19,11 +19,16 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -93,7 +98,7 @@ class PromoDetectorTest {
                 historicalItem(household, product, new BigDecimal("28.00")),
                 historicalItem(household, product, new BigDecimal("28.00")));
         laterPurchases.forEach(later -> later.getReceipt().setIssuedAt(LocalDateTime.of(2026, 10, 1, 10, 0)));
-        when(receiptItemRepository.findHouseholdHistoryForProduct(product.getId(), household.getId()))
+        when(receiptItemRepository.findHouseholdHistoryForProducts(Set.of(product.getId()), household.getId()))
                 .thenReturn(laterPurchases);
 
         assertTrue(detector.detectPersonalPromos(receipt).isEmpty());
@@ -107,7 +112,7 @@ class PromoDetectorTest {
         var currentItem = itemWithProduct(receipt, product, new BigDecimal("20.00"));
 
         // historical median = 28.00. 20 is ~28% below → above the 10% threshold.
-        when(receiptItemRepository.findHouseholdHistoryForProduct(product.getId(), household.getId()))
+        when(receiptItemRepository.findHouseholdHistoryForProducts(Set.of(product.getId()), household.getId()))
                 .thenReturn(List.of(
                         historicalItem(household, product, new BigDecimal("28.00")),
                         historicalItem(household, product, new BigDecimal("28.00")),
@@ -141,7 +146,7 @@ class PromoDetectorTest {
         var receipt = buildReceipt(household);
         itemWithProduct(receipt, product, new BigDecimal("1.00"));
 
-        when(receiptItemRepository.findHouseholdHistoryForProduct(product.getId(), household.getId()))
+        when(receiptItemRepository.findHouseholdHistoryForProducts(Set.of(product.getId()), household.getId()))
                 .thenReturn(List.of(historicalItem(household, product, new BigDecimal("100.00")))); // only 1 prior
 
         assertEquals(0, detector.detectPersonalPromos(receipt).size());
@@ -154,7 +159,7 @@ class PromoDetectorTest {
         var receipt = buildReceipt(household);
         itemWithProduct(receipt, product, new BigDecimal("27.50")); // ~2% below median 28 — within 10% threshold
 
-        when(receiptItemRepository.findHouseholdHistoryForProduct(product.getId(), household.getId()))
+        when(receiptItemRepository.findHouseholdHistoryForProducts(Set.of(product.getId()), household.getId()))
                 .thenReturn(List.of(
                         historicalItem(household, product, new BigDecimal("28.00")),
                         historicalItem(household, product, new BigDecimal("28.00")),
@@ -162,5 +167,31 @@ class PromoDetectorTest {
                 ));
 
         assertEquals(0, detector.detectPersonalPromos(receipt).size());
+    }
+
+    @Test
+    void loadsTheHistoryOfEveryProductInOneQuery() {
+        var household = Household.builder().id(UUID.randomUUID()).inviteCode("X").build();
+        var arroz = Product.builder().id(UUID.randomUUID()).normalizedName("Arroz").build();
+        var feijao = Product.builder().id(UUID.randomUUID()).normalizedName("Feijao").build();
+        var receipt = buildReceipt(household);
+        var arrozItem = itemWithProduct(receipt, arroz, new BigDecimal("20.00"));
+        itemWithProduct(receipt, feijao, new BigDecimal("9.00"));
+
+        when(receiptItemRepository.findHouseholdHistoryForProducts(Set.of(arroz.getId(), feijao.getId()), household.getId()))
+                .thenReturn(List.of(
+                        historicalItem(household, arroz, new BigDecimal("28.00")),
+                        historicalItem(household, feijao, new BigDecimal("9.00")),
+                        historicalItem(household, arroz, new BigDecimal("28.00")),
+                        historicalItem(household, feijao, new BigDecimal("9.00")),
+                        historicalItem(household, arroz, new BigDecimal("28.00")),
+                        historicalItem(household, feijao, new BigDecimal("9.00"))));
+
+        var promos = detector.detectPersonalPromos(receipt);
+
+        assertEquals(1, promos.size());
+        assertEquals(arrozItem.getId(), promos.get(0).receiptItemId());
+        verify(receiptItemRepository, times(1)).findHouseholdHistoryForProducts(any(), any());
+        verifyNoMoreInteractions(receiptItemRepository);
     }
 }

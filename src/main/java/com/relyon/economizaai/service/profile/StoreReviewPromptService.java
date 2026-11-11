@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.profile;
 
 import com.relyon.economizaai.dto.response.StoreReviewPromptResponse;
+import com.relyon.economizaai.exception.UserNotFoundException;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.ReceiptRepository;
@@ -93,10 +94,14 @@ public class StoreReviewPromptService {
     /** The app called the native dialog — count it regardless of whether the OS showed it. */
     @Transactional
     public void recordPrompted(User user) {
-        user.setStoreReviewPromptCount(user.getStoreReviewPromptCount() + 1);
-        user.setStoreReviewLastPromptedAt(LocalDateTime.now());
-        userRepository.save(user);
+        // The authenticated User is a detached snapshot: count on a fresh, managed load so
+        // the save never writes stale columns back (and two prompts never count as one).
+        var managedUser = userRepository.findById(user.getId())
+                .orElseThrow(() -> new UserNotFoundException(user.getId().toString()));
+        managedUser.setStoreReviewPromptCount(managedUser.getStoreReviewPromptCount() + 1);
+        managedUser.setStoreReviewLastPromptedAt(LocalDateTime.now());
+        userRepository.save(managedUser);
         log.info("store_review.prompted user={} count={}",
-                LogMasker.email(user.getEmail()), user.getStoreReviewPromptCount());
+                LogMasker.email(managedUser.getEmail()), managedUser.getStoreReviewPromptCount());
     }
 }

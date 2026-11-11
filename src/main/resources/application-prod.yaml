@@ -13,7 +13,6 @@
 # blank — the feature just stays off):
 #   METRICS_PASSWORD                         — enables Prometheus scraping
 #   REVENUECAT_WEBHOOK_AUTH                  — enables mobile IAP webhook
-#   BILLING_WEBHOOK_SECRET                   — enables the web-billing webhook seam
 #   GOOGLE_OAUTH_CLIENT_IDS / APPLE_OAUTH_CLIENT_IDS — without these the social
 #     login audience check is SKIPPED (token replay risk); set them as soon as
 #     the FE client IDs exist

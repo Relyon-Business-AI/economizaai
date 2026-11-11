@@ -3,6 +3,7 @@ package com.relyon.economizaai.security.ratelimit;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.relyon.economizaai.exception.GlobalExceptionHandler.ErrorResponse;
 import com.relyon.economizaai.service.LocalizedMessageService;
+import com.relyon.economizaai.service.privacy.LogMasker;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -166,6 +167,40 @@ public class RateLimitFilter extends OncePerRequestFilter {
             new RateLimitPolicy("resend", 3, Duration.ofHours(1));
 
     /**
+     * 3 e-mail-change requests per hour per user: each one sends a code to an address the
+     * caller chooses, so it must not become a way to mail strangers in a loop. Confirming is
+     * capped too (the code itself also locks after 5 wrong guesses).
+     */
+    private static final RateLimitPolicy EMAIL_CHANGE_POLICY =
+            new RateLimitPolicy("email-change", 3, Duration.ofHours(1));
+    private static final RateLimitPolicy EMAIL_CHANGE_CONFIRM_POLICY =
+            new RateLimitPolicy("email-change-confirm", 15, Duration.ofHours(1));
+
+    /**
+     * Merchant claims, per user AND per IP: every submit looks a CNPJ up and may e-mail a
+     * third party (the company address), and verify is a code-guessing surface. Both keys
+     * are charged, so neither many accounts behind one address nor one account hopping
+     * addresses gets a larger budget.
+     */
+    private static final RateLimitPolicy MERCHANT_CLAIM_SUBMIT_POLICY =
+            new RateLimitPolicy("merchant-claim-submit", 3, Duration.ofHours(1));
+    private static final RateLimitPolicy MERCHANT_CLAIM_VERIFY_POLICY =
+            new RateLimitPolicy("merchant-claim-verify", 10, Duration.ofHours(1));
+    private static final String MERCHANT_CLAIMS_PATH = "/api/v1/merchant-claims";
+
+    /** POST /api/v1/merchant-claims/{id}/verify. */
+    private static boolean isMerchantClaimVerifyPath(String uri) {
+        return uri.startsWith(MERCHANT_CLAIMS_PATH + "/") && uri.endsWith("/verify");
+    }
+
+    /**
+     * 10 profile-picture uploads per hour per user: each one is a full image decode +
+     * resize + a write to the object storage.
+     */
+    private static final RateLimitPolicy PROFILE_PICTURE_POLICY =
+            new RateLimitPolicy("profile-picture", 10, Duration.ofHours(1));
+
+    /**
      * 10 exports per hour per user. Each export builds the full purchase
      * history in memory (XLSX/PDF) and delivery=email adds an SMTP send —
      * CPU/heap heavy on a single instance, so it can't stay unmetered just
@@ -173,6 +208,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
      */
     private static final RateLimitPolicy EXPORT_POLICY =
             new RateLimitPolicy("export", 10, Duration.ofHours(1));
+
+    /**
+     * 10 referral-code redemptions per hour per user. The code is short, so unthrottled
+     * attempts could be used to probe for valid codes; a real user types it once or twice.
+     */
+    private static final RateLimitPolicy REFERRAL_REDEEM_POLICY =
+            new RateLimitPolicy("referral-redeem", 10, Duration.ofHours(1));
 
     private final RateLimitRegistry registry;
     private final LocalizedMessageService messageService;
@@ -254,6 +296,29 @@ public class RateLimitFilter extends OncePerRequestFilter {
                             && "/api/v1/users/me/email-verification/resend".equals(req.getRequestURI()),
                     KeyStrategy.USER_OR_IP),
             new Rule(
+                    MERCHANT_CLAIM_SUBMIT_POLICY,
+                    req -> "POST".equals(req.getMethod()) && MERCHANT_CLAIMS_PATH.equals(req.getRequestURI()),
+                    List.of(KeyStrategy.USER_OR_IP, KeyStrategy.IP)),
+            new Rule(
+                    MERCHANT_CLAIM_VERIFY_POLICY,
+                    req -> "POST".equals(req.getMethod()) && isMerchantClaimVerifyPath(req.getRequestURI()),
+                    List.of(KeyStrategy.USER_OR_IP, KeyStrategy.IP)),
+            new Rule(
+                    PROFILE_PICTURE_POLICY,
+                    req -> "POST".equals(req.getMethod())
+                            && "/api/v1/users/me/profile-picture".equals(req.getRequestURI()),
+                    KeyStrategy.USER_OR_IP),
+            new Rule(
+                    EMAIL_CHANGE_POLICY,
+                    req -> "POST".equals(req.getMethod())
+                            && "/api/v1/users/me/email-change".equals(req.getRequestURI()),
+                    KeyStrategy.USER_OR_IP),
+            new Rule(
+                    EMAIL_CHANGE_CONFIRM_POLICY,
+                    req -> "POST".equals(req.getMethod())
+                            && "/api/v1/users/me/email-change/confirm".equals(req.getRequestURI()),
+                    KeyStrategy.USER_OR_IP),
+            new Rule(
                     EXPORT_POLICY,
                     req -> "GET".equals(req.getMethod()) && EXPORT_PATHS.contains(req.getRequestURI()),
                     KeyStrategy.USER_OR_IP),
@@ -277,6 +342,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
                     PHONE_OTP_POLICY,
                     req -> ("POST".equals(req.getMethod()) || "PATCH".equals(req.getMethod()))
                             && req.getRequestURI().startsWith("/api/v1/users/me/phone"),
+                    KeyStrategy.USER_OR_IP),
+            // --- Referral program (kept as the LAST rule) ---
+            new Rule(
+                    REFERRAL_REDEEM_POLICY,
+                    req -> "POST".equals(req.getMethod()) && "/api/v1/referrals/redeem".equals(req.getRequestURI()),
                     KeyStrategy.USER_OR_IP)
     );
 
@@ -293,19 +363,23 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
-        var key = rule.keyStrategy.keyFor(request);
-        var bucket = registry.bucketFor(rule.policy, key);
-        var probe = bucket.tryConsumeAndReturnRemaining(1);
-        if (probe.isConsumed()) {
-            response.setHeader("X-RateLimit-Remaining", String.valueOf(probe.getRemainingTokens()));
-            filterChain.doFilter(request, response);
-            return;
+        // A rule may charge several keys (e.g. user AND IP): the request passes only when
+        // every bucket still has a token.
+        var keys = rule.keyStrategies.stream().map(strategy -> strategy.keyFor(request)).distinct().toList();
+        var remainingTokens = Long.MAX_VALUE;
+        for (var key : keys) {
+            var probe = registry.bucketFor(rule.policy, key).tryConsumeAndReturnRemaining(1);
+            if (!probe.isConsumed()) {
+                var retryAfterSeconds = Math.max(1, probe.getNanosToWaitForRefill() / 1_000_000_000L);
+                log.warn("rate_limit.blocked policy={} key={} path={} retry_after_s={}",
+                        rule.policy.name(), LogMasker.rateLimitKey(key), request.getRequestURI(), retryAfterSeconds);
+                writeTooManyRequestsResponse(response, retryAfterSeconds);
+                return;
+            }
+            remainingTokens = Math.min(remainingTokens, probe.getRemainingTokens());
         }
-
-        var retryAfterSeconds = Math.max(1, probe.getNanosToWaitForRefill() / 1_000_000_000L);
-        log.warn("rate_limit.blocked policy={} key={} path={} retry_after_s={}",
-                rule.policy.name(), key, request.getRequestURI(), retryAfterSeconds);
-        writeTooManyRequestsResponse(response, retryAfterSeconds);
+        response.setHeader("X-RateLimit-Remaining", String.valueOf(remainingTokens));
+        filterChain.doFilter(request, response);
     }
 
     /** Exposes the decoded, application-relative path as the request URI for rule matching. */
@@ -333,7 +407,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
         response.getWriter().write(objectMapper.writeValueAsString(body));
     }
 
-    private record Rule(RateLimitPolicy policy, Predicate<HttpServletRequest> matcher, KeyStrategy keyStrategy) {}
+    private record Rule(RateLimitPolicy policy, Predicate<HttpServletRequest> matcher,
+                        List<KeyStrategy> keyStrategies) {
+        private Rule(RateLimitPolicy policy, Predicate<HttpServletRequest> matcher, KeyStrategy keyStrategy) {
+            this(policy, matcher, List.of(keyStrategy));
+        }
+    }
 
     private enum KeyStrategy {
         IP {

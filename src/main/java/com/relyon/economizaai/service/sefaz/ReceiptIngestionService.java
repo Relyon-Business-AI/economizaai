@@ -4,16 +4,20 @@ import com.relyon.economizaai.config.AsyncConfig;
 import com.relyon.economizaai.config.MdcContextFilter;
 import com.relyon.economizaai.exception.DomainException;
 import com.relyon.economizaai.exception.ExperimentalStateFailedException;
+import com.relyon.economizaai.exception.InfosimplesNoDataException;
+import com.relyon.economizaai.exception.PaidApiUnavailableException;
 import com.relyon.economizaai.exception.ReceiptParseException;
 import com.relyon.economizaai.exception.UnsupportedMerchantException;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
+import com.relyon.economizaai.model.enums.InfosimplesOutcome;
 import com.relyon.economizaai.model.enums.ReceiptChannel;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.LocalizedMessageService;
+import com.relyon.economizaai.service.ReceiptRawHtmlService;
 import com.relyon.economizaai.service.extraction.EanCatalogEnrichmentService;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.geo.MerchantSupportGate;
@@ -39,6 +43,7 @@ import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.BiPredicate;
 import java.util.function.Function;
 
 /**
@@ -78,6 +83,8 @@ public class ReceiptIngestionService {
     private final LocalizedMessageService messageService;
     private final PrefetchPolicy prefetchPolicy;
     private final ReceiptAiCategorySuggestionService aiCategorySuggestionService;
+    private final XmlIndexEligibilityService xmlIndexEligibilityService;
+    private final ReceiptRawHtmlService receiptRawHtmlService;
 
     /**
      * Only ping the owner about a note's outcome when the scan took at least this long —
@@ -99,7 +106,19 @@ public class ReceiptIngestionService {
         // Web / photo upload: not "the app" and can't fetch on-device, so a blocked state is a
         // plain FAILED_PARSE (no "update the app" hint, which wouldn't make sense here).
         ingestResolved(receiptId, receipt -> sefazIngestionService.fetch(qrPayload, receipt.getUser().getId()),
-                false, null);
+                false, null, IngestSpendPolicy.FULL);
+    }
+
+    /**
+     * As {@link #ingest(UUID, String)} but with an explicit {@link IngestSpendPolicy} — used by the
+     * paced re-queue lane so an automatic re-attempt (contingency resync) can be limited to the
+     * free paths. Not device-retryable, same as the two-argument variant.
+     */
+    @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
+    public void ingest(UUID receiptId, String qrPayload, IngestSpendPolicy spendPolicy) {
+        ingestResolved(receiptId, receipt -> sefazIngestionService.fetch(
+                        qrPayload, receipt.getUser().getId(), false, spendPolicy),
+                false, null, spendPolicy);
     }
 
     /**
@@ -116,7 +135,7 @@ public class ReceiptIngestionService {
         // telling the user to update, since this state only works on the newer app.
         ingestResolved(receiptId, receipt -> sefazIngestionService.fetch(
                         qrPayload, receipt.getUser().getId(), canDeviceRetry),
-                canDeviceRetry, "receipt.state.app_update_required");
+                canDeviceRetry, "receipt.state.app_update_required", IngestSpendPolicy.FULL);
     }
 
     /**
@@ -137,6 +156,9 @@ public class ReceiptIngestionService {
             var userId = receipt.getUser().getId();
             var uf = receipt.getUf();
             var chave = receipt.getChaveAcesso();
+            // The server attempt that handed this nota to the device may already have asked the
+            // paid provider and been told "no data" — that answer is final, don't pay to hear it again.
+            var spendPolicy = spendPolicyAfterServerAttempt(receipt);
             ParsedReceipt parsed;
             boolean indexEligible;
             try {
@@ -145,7 +167,7 @@ public class ReceiptIngestionService {
                 // for UFs on the device-fetch allowlist (validated, IP-blocked by design); for any
                 // other UF (generic fallback) it's personal-history only — index_eligible=false.
                 var fetched = sefazIngestionService.fromClientContent(rawContent, chave, uf, sourceUrlOf(qrPayload));
-                parsed = sefazIngestionService.parse(fetched, userId);
+                parsed = sefazIngestionService.parse(fetched, userId, spendPolicy);
                 indexEligible = prefetchPolicy.isTrustedForIndex(uf);
             } catch (ReceiptParseException deviceFail) {
                 // On-device content unusable — continue the fallback chain to the paid by-chave
@@ -153,7 +175,7 @@ public class ReceiptIngestionService {
                 // so its result IS index-eligible. If Infosimples also fails, record the ORIGINAL
                 // device failure for review (keeping the raw client content).
                 var rescued = continueToInfosimples(receiptId, chave, uf, userId, rawContent,
-                        sourceUrlOf(qrPayload), deviceFail);
+                        sourceUrlOf(qrPayload), deviceFail, spendPolicy);
                 if (rescued == null) return; // already persisted as FAILED_PARSE
                 parsed = rescued;
                 indexEligible = true;
@@ -178,10 +200,14 @@ public class ReceiptIngestionService {
      * by-chave fallback (the last chain layer). Returns the pre-parsed receipt on success,
      * or null after recording the ORIGINAL device failure as FAILED_PARSE (keeping the raw
      * client content for review) when Infosimples is unavailable or also fails.
+     *
+     * <p>The paid lookup runs AT MOST ONCE per nota in this chain: it is skipped when the server
+     * attempt already got a "no data" answer ({@code spendPolicy} without Infosimples), and when
+     * the parse step that just failed already tried it (the failure carries the outcome).
      */
     private ParsedReceipt continueToInfosimples(UUID receiptId, String chave, UnidadeFederativa uf,
                                                 UUID userId, String rawContent, String sourceUrl,
-                                                ReceiptParseException deviceFail) {
+                                                ReceiptParseException deviceFail, IngestSpendPolicy spendPolicy) {
         // A contingency note with no items isn't a rescuable failure — SEFAZ simply doesn't have it
         // yet. Keep it CONTINGENCY_PENDING (recoverable, no paid spend), same as the server path,
         // instead of burning an Infosimples query on a note that isn't there.
@@ -190,6 +216,21 @@ public class ReceiptIngestionService {
                 null, CpfMasker.strip(rawContent), chave, uf, sourceUrl);
         if (deviceFail.isNoItemsFound() && ChaveAcessoParser.isContingencyEmission(chave)) {
             persistParseFailure(receiptId, clientDoc, deviceFail);
+            return null;
+        }
+        if (!spendPolicy.infosimples()) {
+            log.info("ingest device-fetch failed, infosimples skipped uf={} reason=already_answered_no_data", uf);
+            persistParseFailure(receiptId, clientDoc, new InfosimplesNoDataException(INFOSIMPLES_NOT_FOUND_REASON));
+            return null;
+        }
+        if (deviceFail instanceof ExperimentalStateFailedException chainFail
+                && chainFail.getInfosimplesOutcome() != null) {
+            log.info("ingest device-fetch failed, infosimples skipped uf={} reason=already_tried_in_parse outcome={}",
+                    uf, chainFail.getInfosimplesOutcome());
+            persistParseFailure(receiptId, clientDoc,
+                    chainFail.getInfosimplesOutcome() == InfosimplesOutcome.NO_DATA
+                            ? new InfosimplesNoDataException(INFOSIMPLES_NOT_FOUND_REASON)
+                            : deviceFail);
             return null;
         }
         try {
@@ -214,7 +255,8 @@ public class ReceiptIngestionService {
      */
     @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
     public void ingestReconsult(UUID receiptId, String chave) {
-        ingestResolved(receiptId, receipt -> sefazIngestionService.fetch(chave, receipt.getUser().getId()), false, null);
+        ingestResolved(receiptId, receipt -> sefazIngestionService.fetch(chave, receipt.getUser().getId()),
+                false, null, IngestSpendPolicy.FULL);
     }
 
     /**
@@ -226,19 +268,51 @@ public class ReceiptIngestionService {
      */
     @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
     public void ingestInfosimplesOnly(UUID receiptId, String chave) {
-        ingestResolved(receiptId, receipt -> sefazIngestionService.fetchViaInfosimplesFallback(
-                chave, receipt.getUf(), receipt.getUser().getId()), false, null);
+        ingestResolved(receiptId, receipt -> {
+            if (receipt.getInfosimplesOutcome() == InfosimplesOutcome.NO_DATA) {
+                // The server attempt already paid for this exact answer — fail with it, don't re-ask.
+                log.info("ingest infosimples skipped uf={} reason=already_answered_no_data", receipt.getUf());
+                throw new InfosimplesNoDataException(INFOSIMPLES_NOT_FOUND_REASON);
+            }
+            return sefazIngestionService.fetchViaInfosimplesFallback(
+                    chave, receipt.getUf(), receipt.getUser().getId());
+        }, false, null, IngestSpendPolicy.FULL);
+    }
+
+    /** Reason argument of the "provider has no data for this nota" failure (final — see the i18n key). */
+    private static final String INFOSIMPLES_NOT_FOUND_REASON = "infosimples.not-found";
+
+    private static IngestSpendPolicy spendPolicyAfterServerAttempt(Receipt receipt) {
+        return receipt.getInfosimplesOutcome() == InfosimplesOutcome.NO_DATA
+                ? IngestSpendPolicy.FULL.withoutInfosimples()
+                : IngestSpendPolicy.FULL;
     }
 
     /**
      * Ingest a user-uploaded NFe XML (e-commerce import). The XML is self-contained, so this
      * parses the provided content directly ({@link SefazIngestionService#fromXml}) — no fetch —
      * through the same persist pipeline (EAN warm-up, merchant gate, parse-failure handling).
+     *
+     * <p>Unlike a server fetch, the file is client-authored: it is index-eligible only when
+     * {@link XmlIndexEligibilityService} establishes its authenticity (never for in-store notas).
+     * That check may reconsult the chave over HTTP, so it runs here, untransacted, before the
+     * persist block. Otherwise the nota is kept as personal history only.
      */
     @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
     public void ingestXml(UUID receiptId, String xmlContent) {
         ingestResolved(receiptId, receipt -> sefazIngestionService.fromXml(xmlContent, receipt.getChaveAcesso(), null),
-                false, null);
+                false, null, IngestSpendPolicy.FULL,
+                (parsed, userId) -> xmlIndexEligibilityService.isIndexEligible(xmlContent, parsed, userId));
+    }
+
+    /** Server-fetched content (QR, by-chave reconsult, paid fallback) is self-verified → index-eligible. */
+    private void ingestResolved(UUID receiptId,
+                                Function<Receipt, SefazIngestionService.FetchedDocument> resolver,
+                                boolean canDeviceRetry,
+                                String blockedStateReasonKey,
+                                IngestSpendPolicy spendPolicy) {
+        ingestResolved(receiptId, resolver, canDeviceRetry, blockedStateReasonKey, spendPolicy,
+                (parsed, userId) -> true);
     }
 
     /**
@@ -250,7 +324,9 @@ public class ReceiptIngestionService {
     private void ingestResolved(UUID receiptId,
                                 Function<Receipt, SefazIngestionService.FetchedDocument> resolver,
                                 boolean canDeviceRetry,
-                                String blockedStateReasonKey) {
+                                String blockedStateReasonKey,
+                                IngestSpendPolicy spendPolicy,
+                                BiPredicate<ParsedReceipt, UUID> indexEligibility) {
         MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
         try {
             var receipt = receiptRepository.findById(receiptId).orElse(null);
@@ -267,13 +343,12 @@ public class ReceiptIngestionService {
                 return;
             }
             try {
-                var parsed = sefazIngestionService.parse(fetched, userId);
+                var parsed = sefazIngestionService.parse(fetched, userId, spendPolicy);
                 if (rejectUnsupportedMerchant(receiptId, parsed)) {
                     return;
                 }
                 warmEanCatalog(parsed);
-                // Server-fetched (or import/XML) content is self-verified by our fetch → index-eligible.
-                persistParsed(receiptId, parsed, true);
+                persistParsed(receiptId, parsed, indexEligibility.test(parsed, userId));
             } catch (ExperimentalStateFailedException ex) {
                 routeExperimentalFailure(receiptId, ex, canDeviceRetry, blockedStateReasonKey);
             } catch (ReceiptParseException ex) {
@@ -358,6 +433,8 @@ public class ReceiptIngestionService {
             var receipt = loadIfProcessing(receiptId);
             if (receipt == null) return;
             applyParsed(receipt, parsed);
+            // The document that produced the items is the stored evidence (none → none kept).
+            receiptRawHtmlService.replace(receipt, parsed.rawHtml());
             receipt.setIndexEligible(indexEligible);
             // A successful parse supersedes any prior failure diagnostic (retried notas
             // keep their original reason until the retry actually resolves them).
@@ -466,7 +543,7 @@ public class ReceiptIngestionService {
         transactionTemplate.executeWithoutResult(txStatus -> {
             var receipt = loadIfProcessing(receiptId);
             if (receipt == null) return;
-            receipt.setRawHtml(fetched.html());
+            receiptRawHtmlService.replace(receipt, fetched.html());
             receipt.setSourceUrl(fetched.sourceUrl());
             // Re-failure of an already-diagnosed nota (admin/auto retry kept the old reason) must
             // not re-notify the owner — only the FIRST diagnosis pings (see notifyFailedIfSlow).
@@ -536,10 +613,16 @@ public class ReceiptIngestionService {
      * reach the portal). On the SERVER path this is recoverable — flag the receipt so
      * the app retries the fetch on the user's own (accepted) device. On the DEVICE path
      * (the app already tried) it's a real dead end → FAILED_PARSE, no retry loop.
+     *
+     * <p>A portal that is momentarily UNAVAILABLE comes first: the nota is fine and nothing the
+     * client does can reach it right now, so it is parked PORTAL_PENDING for the recovery sweeper
+     * instead of a doomed device handoff or a terminal "blocked state" failure.
      */
     private void routeExperimentalFailure(UUID receiptId, ExperimentalStateFailedException ex,
                                           boolean canDeviceRetry, String blockedStateReasonKey) {
-        if (ex.isCaptchaBlocked()) {
+        if (ex.isPortalUnavailable()) {
+            markFailed(receiptId, ex);
+        } else if (ex.isCaptchaBlocked()) {
             // A captcha wall the server couldn't pass — the user's phone can't solve it
             // either, so device-fetch would just time out (how DF failed before it got a
             // dedicated adapter). Fail with an honest reason instead of a doomed handoff.
@@ -574,8 +657,12 @@ public class ReceiptIngestionService {
             var receipt = loadIfProcessing(receiptId);
             if (receipt == null) return;
             receipt.setStatus(ReceiptStatus.NEEDS_DEVICE_FETCH);
+            // Remember whether the paid lookup was already spent on this nota (and how it answered),
+            // so the device-fetch steps that follow don't pay for it a second time.
+            receipt.setInfosimplesOutcome(ex.getInfosimplesOutcome());
             receiptRepository.save(receipt);
-            log.info("ingest needs-device-fetch uf={} — server blocked, app will retry on-device", ex.getMessage());
+            log.info("ingest needs-device-fetch uf={} infosimplesOutcome={} — server blocked, app will retry on-device",
+                    ex.getMessage(), ex.getInfosimplesOutcome());
         });
     }
 
@@ -608,8 +695,7 @@ public class ReceiptIngestionService {
                             // The portal/origin was momentarily UNAVAILABLE (615) — the nota exists,
                             // the portal is just offline. Park it PORTAL_PENDING so the recovery
                             // sweeper re-fetches until it's back, instead of a dead FAILED_PARSE.
-                            var portalDown = !contingency
-                                    && ex instanceof ExperimentalStateFailedException esf && esf.isPortalUnavailable();
+                            var portalDown = !contingency && isPortalStillUnavailable(receipt, ex);
                             if (shouldOverwriteReason(receipt, ex)) {
                                 receipt.setParseErrorReason(contingency ? CONTINGENCY_PENDING_REASON + ":"
                                         : portalDown ? PORTAL_UNAVAILABLE_REASON + ":" : failureReason(ex));
@@ -627,6 +713,20 @@ public class ReceiptIngestionService {
             log.error("ingest failed AND could not mark FAILED_PARSE for receipt {}", abbrev(receiptId), inner);
         }
         log.warn("ingest fetch/solve failed status=FAILED_PARSE reason={}", ex.getMessage(), ex);
+    }
+
+    /**
+     * The chain reported the portal/origin as unavailable — or this is a nota already parked for
+     * that reason whose re-attempt was stopped by the paid-API breaker (open precisely because
+     * the portal keeps failing). Either way it stays parked for the next recovery pass.
+     */
+    private static boolean isPortalStillUnavailable(Receipt receipt, RuntimeException ex) {
+        if (ex instanceof ExperimentalStateFailedException chainFail) {
+            return chainFail.isPortalUnavailable();
+        }
+        return ex instanceof PaidApiUnavailableException
+                && receipt.getParseErrorReason() != null
+                && receipt.getParseErrorReason().startsWith(PORTAL_UNAVAILABLE_REASON);
     }
 
     /**
@@ -662,7 +762,6 @@ public class ReceiptIngestionService {
         receipt.setApproxTaxFederal(parsed.approxTaxFederal());
         receipt.setApproxTaxEstadual(parsed.approxTaxEstadual());
         receipt.setSourceUrl(parsed.sourceUrl());
-        receipt.setRawHtml(parsed.rawHtml());
         // Parsers that don't read indPres (NFC-e 65) leave channel null → IN_STORE (presencial).
         receipt.setChannel(parsed.channel() != null ? parsed.channel() : ReceiptChannel.IN_STORE);
         parsed.items().forEach(parsedItem -> receipt.addItem(toReceiptItem(parsedItem)));

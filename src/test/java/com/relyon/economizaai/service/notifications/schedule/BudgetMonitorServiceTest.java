@@ -2,6 +2,7 @@ package com.relyon.economizaai.service.notifications.schedule;
 import org.mockito.Spy;
 import org.springframework.context.support.ResourceBundleMessageSource;
 import com.relyon.economizaai.service.LocalizedMessageService;
+import com.relyon.economizaai.time.BrazilClock;
 
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.NotificationRule;
@@ -9,7 +10,7 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.NotificationJob;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.repository.NotificationRuleRepository;
-import com.relyon.economizaai.repository.ReceiptRepository;
+import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.service.notifications.NotificationPayload;
 import com.relyon.economizaai.service.notifications.NotificationService;
 import com.relyon.economizaai.service.notifications.NotificationSettingsService;
@@ -23,10 +24,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
@@ -39,7 +42,7 @@ import static org.mockito.Mockito.when;
 class BudgetMonitorServiceTest {
 
     @Mock private NotificationRuleRepository ruleRepository;
-    @Mock private ReceiptRepository receiptRepository;
+    @Mock private InsightsRepository insightsRepository;
     @Mock private NotificationService notificationService;
     private static LocalizedMessageService realMessageService() {
         var source = new ResourceBundleMessageSource();
@@ -77,7 +80,7 @@ class BudgetMonitorServiceTest {
         var rule = budgetRule(new BigDecimal("500.00"), null);
         when(ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.BUDGET))
                 .thenReturn(List.of(rule));
-        when(receiptRepository.sumConfirmedTotalSince(eq(HOUSEHOLD_ID), any()))
+        when(insightsRepository.totalSpendAllSegments(eq(HOUSEHOLD_ID), any(), any()))
                 .thenReturn(new BigDecimal("620.00"));
 
         service.run();
@@ -89,13 +92,35 @@ class BudgetMonitorServiceTest {
     }
 
     @Test
+    void run_usesThePurchaseDateWindowOfTheCurrentMonthAndBrazilianMoney() {
+        var rule = budgetRule(new BigDecimal("1500.00"), null);
+        when(ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.BUDGET))
+                .thenReturn(List.of(rule));
+        var fromCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+        var toCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+        when(insightsRepository.totalSpendAllSegments(eq(HOUSEHOLD_ID), fromCaptor.capture(), toCaptor.capture()))
+                .thenReturn(new BigDecimal("1620.5"));
+
+        service.run();
+
+        var month = BrazilClock.currentYearMonth();
+        assertEquals(month.atDay(1).atStartOfDay(), fromCaptor.getValue());
+        assertEquals(month, YearMonth.from(toCaptor.getValue()));
+        assertEquals(month.plusMonths(1), YearMonth.from(toCaptor.getValue().plusNanos(1)));
+        var captor = ArgumentCaptor.forClass(NotificationPayload.class);
+        verify(notificationService).notify(captor.capture());
+        assertTrue(captor.getValue().body().contains("R$ 1.620,50"), captor.getValue().body());
+        assertTrue(captor.getValue().body().contains("R$ 1.500,00"), captor.getValue().body());
+    }
+
+    @Test
     void run_persistsFiredTimestampOnlyAfterSend() {
         // Guards that the notify() dispatch is NOT wrapped in the persist transaction:
         // the send happens first, the fired-timestamp is saved afterwards.
         var rule = budgetRule(new BigDecimal("500.00"), null);
         when(ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.BUDGET))
                 .thenReturn(List.of(rule));
-        when(receiptRepository.sumConfirmedTotalSince(eq(HOUSEHOLD_ID), any()))
+        when(insightsRepository.totalSpendAllSegments(eq(HOUSEHOLD_ID), any(), any()))
                 .thenReturn(new BigDecimal("620.00"));
 
         service.run();
@@ -110,7 +135,7 @@ class BudgetMonitorServiceTest {
         var rule = budgetRule(new BigDecimal("500.00"), null);
         when(ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.BUDGET))
                 .thenReturn(List.of(rule));
-        when(receiptRepository.sumConfirmedTotalSince(eq(HOUSEHOLD_ID), any()))
+        when(insightsRepository.totalSpendAllSegments(eq(HOUSEHOLD_ID), any(), any()))
                 .thenReturn(new BigDecimal("120.00"));
 
         service.run();
@@ -127,6 +152,6 @@ class BudgetMonitorServiceTest {
         service.run();
 
         verify(notificationService, never()).notify(any());
-        verify(receiptRepository, never()).sumConfirmedTotalSince(any(), any());
+        verify(insightsRepository, never()).totalSpendAllSegments(any(), any(), any());
     }
 }

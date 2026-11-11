@@ -23,18 +23,30 @@ spring:
       # scheduled jobs. Ingest holds NO connection during the slow SEFAZ fetch
       # (see ReceiptIngestionService), so 20 is headroom, not a requirement.
       maximum-pool-size: ${DB_POOL_MAX_SIZE:20}
+      # Fail fast under overload: a request that cannot get a connection within this
+      # window gets a localized 503 (GlobalExceptionHandler) instead of hanging 30s (default).
+      connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:6000}
       # Log a leak trace if a connection is held >60s — nothing legitimate should.
       leak-detection-threshold: ${DB_LEAK_DETECTION_MS:60000}
   jpa:
     hibernate:
       ddl-auto: none
     open-in-view: false
+    properties:
+      hibernate:
+        # A confirm writes one observation + audit row per item: send them as JDBC batches
+        # instead of one round-trip each (ids are app-generated UUIDs, so inserts batch).
+        jdbc:
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
   task:
     scheduling:
       # Default is a SINGLE thread — one slow job (geocoding/CNPJ lookups do
-      # HTTP with 8s timeouts) would delay every other @Scheduled job.
+      # HTTP with 8s timeouts) would delay every other @Scheduled job. The slow
+      # jobs are also capped per run (geocode/classify/auto-confirm max-per-run).
       pool:
-        size: 4
+        size: 8
   data:
     web:
       pageable:
@@ -68,6 +80,13 @@ spring:
       mail.smtp.connectiontimeout: 10000
       mail.smtp.timeout: 10000
       mail.smtp.writetimeout: 10000
+
+server:
+  tomcat:
+    threads:
+      # 1 CPU / 20 DB connections: 200 request threads (default) only pile requests up
+      # behind the pool. Beyond this, requests wait in the accept queue instead.
+      max: ${TOMCAT_THREADS_MAX:50}
 
 jwt:
   secret: ${JWT_SECRET:economizai-dev-secret-key-must-be-at-least-256-bits-long-for-hs256}
@@ -146,8 +165,8 @@ economizaai:
     curator-model: ${ECONOMIZAAI_AI_CURATOR_MODEL:claude-sonnet-4-6}
     # Vision model dedicated to photo-receipt extraction — stronger OCR than the extractor tier.
     photo-extract-model: ${ECONOMIZAAI_AI_PHOTO_EXTRACT_MODEL:claude-sonnet-4-6}
-    # Hard daily cap on AI calls — a bug can never run up a surprise bill.
-    daily-request-cap: ${ECONOMIZAAI_AI_DAILY_REQUEST_CAP:300}
+    # Hard daily cap on AI calls — a secondary fence; the R$ ceilings live in paid-api.
+    daily-request-cap: ${ECONOMIZAAI_AI_DAILY_REQUEST_CAP:3000}
     timeout-seconds: ${ECONOMIZAAI_AI_TIMEOUT_SECONDS:60}
     # Prepaid credit budget in USD — shown in the spend panel as "saldo estimado".
     # Set to 0 to hide the balance indicator.
@@ -164,12 +183,32 @@ economizaai:
       set-min-confidence: ${AI_SUBCAT_SET_MIN:0.55}
       change-subcategory-min-confidence: ${AI_SUBCAT_CHANGE_SUB_MIN:0.80}
       change-category-min-confidence: ${AI_SUBCAT_CHANGE_CAT_MIN:0.90}
+  async:
+    # Background AI lanes (AsyncConfig). Fixed-size pools with a bounded queue: a full
+    # queue rejects, and each dispatch site fails the nota / skips the best-effort work.
+    photo-extract:
+      threads: ${ASYNC_PHOTO_EXTRACT_THREADS:3}
+      queue-capacity: ${ASYNC_PHOTO_EXTRACT_QUEUE:30}
+    ai-categorization:
+      threads: ${ASYNC_AI_CATEGORIZATION_THREADS:2}
+      queue-capacity: ${ASYNC_AI_CATEGORIZATION_QUEUE:50}
+  receipts:
+    auto-confirm:
+      # Notas left PENDING are confirmed for the user after after-hours; each sweep
+      # (every sweeper-delay-ms) confirms at most max-per-run, oldest first.
+      enabled: ${RECEIPTS_AUTO_CONFIRM_ENABLED:true}
+      after-hours: ${RECEIPTS_AUTO_CONFIRM_AFTER_HOURS:6}
+      sweeper-delay-ms: ${RECEIPTS_AUTO_CONFIRM_SWEEPER_DELAY_MS:1800000}
+      max-per-run: ${RECEIPTS_AUTO_CONFIRM_MAX_PER_RUN:50}
   ingestion:
     # Async-ingest safety net: PROCESSING receipts older than this are failed by
     # the sweeper so the FE never polls forever. Must exceed the worst-case
     # legitimate ingest (MS captcha wall-clock cap 3 min + fallback).
     processing-timeout-minutes: ${INGEST_PROCESSING_TIMEOUT_MINUTES:10}
     sweeper-delay-ms: ${INGEST_SWEEPER_DELAY_MS:60000}
+    # On shutdown (deploy) the ingest pool waits up to this long for in-flight and queued
+    # ingests to finish instead of dropping them.
+    shutdown-await-seconds: ${INGEST_SHUTDOWN_AWAIT_SECONDS:60}
     # Probe de estados "pausados" no Infosimples (portal da SEFAZ fora): sonda a cada 6h
     # e alerta o dono UMA vez quando a rota volta a responder 200, pra onboardar o estado.
     # Estados com portal caído (615) sob vigilância: SE (caiu ~22/10) e TO (caiu ~09/11), ambos
@@ -177,6 +216,13 @@ economizaai:
     # pra não depender de Infosimples/portal instável (ver docs/MULTI_STATE_RECON.md). Vazio = desliga.
     paused-state-probe:
       ufs: ${SEFAZ_PAUSED_STATE_PROBE_UFS:SE,TO}
+    # In-app FAQ "situação dos estados" (GET /sefaz/state-status): a verified state shows as
+    # UNSTABLE when, in the last window-hours, at least min-failures notas failed for portal
+    # reasons and they outnumber the ingested ones. The answer is cached for cache-seconds.
+    state-status:
+      window-hours: ${SEFAZ_STATE_STATUS_WINDOW_HOURS:24}
+      min-failures: ${SEFAZ_STATE_STATUS_MIN_FAILURES:3}
+      cache-seconds: ${SEFAZ_STATE_STATUS_CACHE_SECONDS:300}
     paused-state-probe-delay-ms: ${SEFAZ_PAUSED_STATE_PROBE_DELAY_MS:21600000}
     paused-state-probe-initial-delay-ms: ${SEFAZ_PAUSED_STATE_PROBE_INITIAL_DELAY_MS:60000}
     device-fetch:
@@ -198,6 +244,11 @@ economizaai:
       # (this is what the dev server runs); set EAN_LIVE_FALLBACK_ENABLED=false to
       # disable, and revisit for prod (OFF-API rate limits at scale).
       live-fallback-enabled: ${EAN_LIVE_FALLBACK_ENABLED:true}
+      # The warm-up runs on the ingest thread, so it is bounded per receipt: a wall-clock
+      # budget for the whole warm-up and a cap on unseen barcodes looked up. Whatever
+      # doesn't fit stays unchecked and is picked up by a later receipt.
+      warmup-budget-ms: ${EAN_WARMUP_BUDGET_MS:5000}
+      warmup-max-eans: ${EAN_WARMUP_MAX_EANS:15}
       live-fallback-timeout-ms: ${EAN_LIVE_FALLBACK_TIMEOUT_MS:2500}
     sefaz:
       timeout-ms: 30000
@@ -221,6 +272,11 @@ economizaai:
       # the host matches one of these suffixes (e.g. svrs.rs.gov.br admits
       # dfe-portal.svrs.rs.gov.br). Extend when onboarding new state portals.
       allowed-url-hosts: ${SEFAZ_ALLOWED_URL_HOSTS:svrs.rs.gov.br,sefaz.rs.gov.br,fazenda.pr.gov.br,sef.sc.gov.br,fazenda.sp.gov.br}
+      # QR codes printed by several states still point at http:// portals (some only
+      # answer there), so plain http is accepted by default; false = fetch https only.
+      # Redirects are never followed automatically: each hop is re-checked against the
+      # host allowlists above/below before it is fetched.
+      allow-plain-http: ${SEFAZ_ALLOW_PLAIN_HTTP:true}
       # UFs allowed to POST client-fetched content to /receipts/prefetched.
       # That content is client-authored (only the embedded chave ties it to
       # SEFAZ), so the endpoint is restricted to portals that block our
@@ -313,16 +369,40 @@ economizaai:
   # provider is failing). Caps of 0 = unlimited.
   paid-api:
     enabled: ${PAID_API_GUARD_ENABLED:true}
-    infosimples-daily-cap-per-user: ${INFOSIMPLES_DAILY_CAP:20}
-    captcha-daily-cap-per-user: ${CAPTCHA_DAILY_CAP:60}
-    twilio-daily-cap-per-user: ${TWILIO_DAILY_CAP:10}
-    llm-html-rescue-daily-cap-per-user: ${LLM_HTML_RESCUE_DAILY_CAP:10}
-    # Contado POR FOTO (nota multi-foto de 5 fotos consome 5) — 15 = ~3 notas longas/dia.
-    llm-vision-daily-cap-per-user: ${LLM_VISION_DAILY_CAP:15}
-    daily-global-budget-cents: ${PAID_API_DAILY_BUDGET_CENTS:5000}   # R$50/day kill-switch; 0 = unlimited
+    infosimples-daily-cap-per-user: ${INFOSIMPLES_DAILY_CAP:10}
+    captcha-daily-cap-per-user: ${CAPTCHA_DAILY_CAP:30}
+    twilio-daily-cap-per-user: ${TWILIO_DAILY_CAP:3}
+    llm-html-rescue-daily-cap-per-user: ${LLM_HTML_RESCUE_DAILY_CAP:5}
+    # Contado POR FOTO (nota multi-foto de 5 fotos consome 5) — 10 = ~2 notas longas/dia.
+    llm-vision-daily-cap-per-user: ${LLM_VISION_DAILY_CAP:10}
+    # IA de categorização (sugestão por nota, fallback pós-confirmação, "corrigir item").
+    llm-enrich-daily-cap-per-user: ${LLM_ENRICH_DAILY_CAP:60}
+    # Teto diário POR SERVIÇO, em centavos (0 = sem teto). Estourou → só aquele serviço para
+    # até a virada do dia (UTC); os demais (e a raspagem grátis) seguem. O admin é avisado
+    # no WhatsApp em 80% e 100% (ver cost-alerts abaixo).
+    infosimples-daily-budget-cents: ${PAID_API_BUDGET_INFOSIMPLES_CENTS:12000}
+    captcha-daily-budget-cents: ${PAID_API_BUDGET_CAPTCHA_CENTS:3000}
+    llm-vision-daily-budget-cents: ${PAID_API_BUDGET_LLM_VISION_CENTS:3000}
+    llm-html-rescue-daily-budget-cents: ${PAID_API_BUDGET_LLM_HTML_RESCUE_CENTS:1500}
+    llm-enrich-daily-budget-cents: ${PAID_API_BUDGET_LLM_CATEGORIZATION_CENTS:5000}
+    twilio-daily-budget-cents: ${PAID_API_BUDGET_TWILIO_CENTS:1500}
+    # Teto geral opcional somando todos os serviços; 0 = desligado (padrão).
+    daily-global-budget-cents: ${PAID_API_DAILY_BUDGET_CENTS:0}
     infosimples-failure-threshold: ${INFOSIMPLES_BREAKER_THRESHOLD:5}
     breaker-window-seconds: ${INFOSIMPLES_BREAKER_WINDOW_S:600}
     breaker-cooldown-seconds: ${INFOSIMPLES_BREAKER_COOLDOWN_S:300}
+  # Avisos de custo no WhatsApp do admin: teto diário de cada serviço e saldo pré-pago dos
+  # provedores (Infosimples, CapSolver, Twilio, Anthropic) em 80% e 100%. Um aviso por
+  # (serviço, limiar, dia/recarga), guardado em cost_alert. A entrega é garantida: tenta de
+  # novo a cada retry-interval até o provedor aceitar; após N falhas no WhatsApp manda também
+  # por e-mail e ainda tenta o WhatsApp mais algumas vezes.
+  cost-alerts:
+    enabled: ${COST_ALERTS_ENABLED:true}
+    budget-check-interval-ms: ${COST_ALERT_BUDGET_CHECK_INTERVAL_MS:60000}
+    balance-check-cron: ${COST_ALERT_BALANCE_CHECK_CRON:0 5 * * * *}   # de hora em hora
+    retry-interval-ms: ${COST_ALERT_RETRY_INTERVAL_MS:120000}
+    email-fallback-after-attempts: ${COST_ALERT_EMAIL_FALLBACK_AFTER:3}
+    max-whatsapp-attempts: ${COST_ALERT_MAX_WHATSAPP_ATTEMPTS:8}
   auth:
     # Dev convenience: when SMTP/Twilio aren't configured, the auth code (password
     # reset, email verify, phone OTP) is logged so the flow can be finished from the
@@ -357,16 +437,24 @@ economizaai:
     # Safety-net sweep: downgrades a PRO whose paid period elapsed without a renewal.
     expiry-interval-ms: ${SUBSCRIPTION_EXPIRY_INTERVAL_MS:3600000}   # hourly
     expiry-initial-delay-ms: 120000
-    # Launch promo (2026-09-29): every registration is granted PRO until the FIXED date
-    # `until` — one synchronized cutover for the whole base instead of per-user rolling
-    # expiries (see V85, which extended existing grants to the same date). When `until`
-    # is unset, falls back to `months` from the signup date (pre-2026-09-29 behavior).
-    # After `until` passes, signups stop being granted. SUBSCRIPTION_PROMO_ENABLED=false ends it earlier.
+    # Days the sweep waits past the period end before downgrading a PAID, still-renewing
+    # subscription (a renewal webhook can be late). Promo / non-renewing rows get no grace.
+    paid-grace-days: ${SUBSCRIPTION_PAID_GRACE_DAYS:3}
+    # Launch promo: PRO is granted when the user confirms their FIRST receipt (not at
+    # registration), once per user, until the FIXED date `until` (end of that day in Brasília) —
+    # one synchronized cutover for the whole base (see V85, which extended existing grants to the
+    # same date). When `until` is unset, falls back to `months` from the grant date. After `until`
+    # passes nobody else is granted. SUBSCRIPTION_PROMO_ENABLED=false ends it earlier.
     # (Existing accounts got a separate one-off 6-month grant via V68__grant_premium_promo.sql.)
+    # End-of-promo warnings: promo holders without a paid subscription are notified (inbox + push)
+    # at each `warning-days` milestone before `until`, by a daily job at `warning-cron` (Brasília).
     promo:
       enabled: ${SUBSCRIPTION_PROMO_ENABLED:true}
       months: ${SUBSCRIPTION_PROMO_MONTHS:3}
       until: ${SUBSCRIPTION_PROMO_UNTIL:2026-12-31}
+      warnings-enabled: ${SUBSCRIPTION_PROMO_WARNINGS_ENABLED:true}
+      warning-days: ${SUBSCRIPTION_PROMO_WARNING_DAYS:15,7,3,1}
+      warning-cron: ${SUBSCRIPTION_PROMO_WARNING_CRON:0 0 10 * * *}
     # Absolute household size (the PRO / family ceiling). Applies even with enforcement off.
     household-members-max: ${HOUSEHOLD_MEMBERS_MAX:6}
     free:
@@ -374,6 +462,12 @@ economizaai:
       history-days: 90                         # FREE: rolling analytics/history window (PRO unlimited)
       monthly-receipts: 5                      # FREE: max receipt submissions per calendar month (PRO unlimited)
       household-members: 2                     # FREE: household size when no member is PRO (any PRO member lifts it to the max)
+      # PRO features left OPEN to FREE while enforcement is on (comma-separated Feature names,
+      # e.g. PUSH_AND_EMAIL_DELIVERY,PHOTO_EXTRACTION) — switch paywalls on one at a time.
+      open-features: ${SUBSCRIPTION_FREE_OPEN_FEATURES:}
+  referral:
+    # Link people share to invite friends; the personal code is appended.
+    share-base-url: ${REFERRAL_SHARE_BASE_URL:https://economizaai.app/?ref=}
   monetization:
     # PRO plan price used to MODEL revenue/LTV/ROAS in the admin acquisition
     # dashboard while real payment data is still sparse (RevenueCat captures real
@@ -413,10 +507,6 @@ economizaai:
     webhook-url: ${GARIMPO_WEBHOOK_URL:}
     search-max-limit: 50
   billing:
-    # Shared secret the provider-agnostic webhook (/api/v1/webhooks/subscription)
-    # verifies via the X-Webhook-Secret header. EMPTY in dev = check skipped.
-    # In prod set this AND configure the provider (Stripe/Mercado Pago) to send it.
-    webhook-secret: ${BILLING_WEBHOOK_SECRET:}
     revenuecat:
       # The fixed string RevenueCat sends in the Authorization header of its webhook
       # (RevenueCat → Integrations → Webhooks → "Authorization header value").
@@ -431,6 +521,16 @@ economizaai:
       plan-amount: ${MP_PLAN_AMOUNT:9.90}        # R$/mês da assinatura Premium
       plan-reason: ${MP_PLAN_REASON:Economiza AI Premium}
       back-url: ${MP_BACK_URL:https://economizaai.app/premium/obrigado}
+  xml-import:
+    # Receipts from a user-uploaded NF-e XML never feed the in-store index. For the ONLINE index
+    # the file must prove its origin: (1) issuer signature anchored in ICP-Brasil, or (2) a paid
+    # reconsult of the chave that matches the file. Otherwise it is personal history only.
+    # PEM bundle with the ICP-Brasil root + intermediate AC certificates. Empty (default) = no
+    # anchor → a signature alone is never accepted and every online XML goes to the reconsult.
+    trust-bundle-path: ${NFE_XML_TRUST_BUNDLE_PATH:}
+    # Paid confirmation (Infosimples, same per-user cap / daily budget / ledger as any other
+    # by-chave fallback). false = online XML without an anchored signature stays out of the index.
+    paid-reconsult-enabled: ${NFE_XML_PAID_RECONSULT_ENABLED:true}
   collaborative:
     enabled: true                              # master switch — disables all observation writes/reads
     min-households-for-public: 3               # k-anon: aggregate queries return empty until this many distinct households contributed
@@ -446,6 +546,7 @@ economizaai:
     community-promo-recent-window-days: 7      # last N days = "recent" sample; older rows are baseline
     lookback-days: 90                          # observations older than this are excluded from reference + promo calcs
     best-markets-lookback-days: 180            # wider window for the best-markets ranking + in-store typical price (dated real prices)
+    deals-max-price-age-days: ${DEALS_MAX_PRICE_AGE_DAYS:60}   # "Ofertas pra você": a chain's latest price must be at most this old to become a deal
   categorizer:
     consensus:
       # User category corrections graduate to global truth (+ learned dictionary)
@@ -492,6 +593,7 @@ economizaai:
     geocode-interval-ms: 600000                # how often the background geocoder scans pending markets (10 min)
     geocode-initial-delay-ms: 30000            # wait this long after startup before first scan
     geocode-delay-ms: 1100                     # 1.1s between geocode calls — Nominatim policy is 1 req/sec/IP
+    geocode-max-per-run: ${GEOCODE_MAX_PER_RUN:25}   # markets geocoded per scan — keeps one run short (~30s) on a big backlog
   merchant:
     # Marketing accounts (docs/MERCHANT_ACCOUNTS.md). promos-feed-enabled is the ONLY
     # consumer-visible switch — everything else is merchant/admin-side and dark by role.
@@ -499,6 +601,7 @@ economizaai:
     free-until: ${MERCHANT_FREE_UNTIL:2026-12-31}   # launch promo: marketing account free until this date
     claim-code-ttl-hours: 24
     claim-code-max-attempts: 5
+    claim-cooldown-hours: ${MERCHANT_CLAIM_COOLDOWN_HOURS:24}   # wait before re-claiming a chain after a closed claim
     import-max-rows: 500
     classify:
       enabled: ${MERCHANT_CLASSIFY_ENABLED:true}   # CNAE-based supermarket/pharmacy verification (best-effort)
@@ -508,6 +611,7 @@ economizaai:
       max-attempts: 3                          # in-call retries before giving up (segment stays UNKNOWN)
       interval-ms: 600000                      # how often the background classifier scans unclassified markets (10 min)
       initial-delay-ms: 45000                  # wait after startup before first scan
+      max-per-run: ${MERCHANT_CLASSIFY_MAX_PER_RUN:25}   # markets classified per scheduled scan (admin backfill is uncapped)
   notifications:
     # Only ping the owner about a scanned note's outcome (ready / failed) when the scan took
     # at least this long — fast notas resolve in seconds while the user is still in the app.
@@ -560,13 +664,22 @@ economizaai:
       mode: ${RELEVANCE_MODE:SHADOW}
       dismissed-days: ${RELEVANCE_DISMISSED_DAYS:14}    # dismissal hides (product[, market]) this long
       muted-days: ${RELEVANCE_MUTED_DAYS:180}           # mute hides the product everywhere this long
+    # Quiet hours (America/Sao_Paulo): from start-hour to end-hour nothing is pushed or
+    # e-mailed. The notification still lands in the inbox at once; the hourly drain job
+    # sends it on its first run after the window ends (at most max-deferred-per-user
+    # pushes per user, oldest first — the rest stay inbox-only). "Sua nota ficou
+    # pronta / falhou / foi recuperada" are exempt.
+    quiet-hours:
+      enabled: ${NOTIFICATIONS_QUIET_HOURS_ENABLED:true}
+      start-hour: ${NOTIFICATIONS_QUIET_HOURS_START:21}
+      end-hour: ${NOTIFICATIONS_QUIET_HOURS_END:8}
+      max-deferred-per-user: ${NOTIFICATIONS_QUIET_HOURS_MAX_DEFERRED:3}
+      drain-cron: ${NOTIFICATIONS_QUIET_HOURS_DRAIN_CRON:0 0 * * * *}
     # Background jobs that drive scheduled notification types.
     replenishment:
-      interval-ms: ${NOTIFICATIONS_REPLENISHMENT_INTERVAL_MS:21600000}   # every 6h: predict product runout
-      initial-delay-ms: 60000
+      cron: ${NOTIFICATIONS_REPLENISHMENT_CRON:0 0 10 * * *}             # daily 10:00 (America/Sao_Paulo): products running low / ran out
     budget:
-      interval-ms: ${NOTIFICATIONS_BUDGET_INTERVAL_MS:21600000}          # every 6h: monthly spend cap check
-      initial-delay-ms: 90000
+      cron: ${NOTIFICATIONS_BUDGET_CRON:0 0 9,18 * * *}                  # 09:00 and 18:00 (America/Sao_Paulo): monthly spend cap check
     digest:
       cron: ${NOTIFICATIONS_DIGEST_CRON:0 0 8 * * MON}                   # weekly Monday 08:00
       zone: ${NOTIFICATIONS_DIGEST_ZONE:America/Sao_Paulo}
@@ -620,6 +733,11 @@ economizaai:
       region: ${R2_REGION:auto}
   receipt-photo:
     max-size-mb: 5            # QR-photo submit and chave-OCR uploads (multipart cap above must stay higher)
+  image-decode:
+    # Global bound on simultaneous full-image decodes/OCR passes (receipt photos, QR photos,
+    # chave OCR, profile pictures). No permit within max-wait-ms -> localized 503.
+    max-concurrent: ${IMAGE_DECODE_MAX_CONCURRENT:3}
+    max-wait-ms: ${IMAGE_DECODE_MAX_WAIT_MS:5000}
   ocr:
     # Tessdata dir for Tess4J (chave OCR). Blank = probe well-known install
     # locations (homebrew/apt). If Tesseract isn't on the host, the OCR

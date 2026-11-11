@@ -2,6 +2,7 @@ package com.relyon.economizaai.controller;
 
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
+import com.relyon.economizaai.service.sefaz.StateStatusService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -17,6 +18,7 @@ import static org.mockito.Mockito.when;
 class SupportedStatesControllerTest {
 
     @Mock private SefazIngestionService sefazIngestionService;
+    @Mock private StateStatusService stateStatusService;
 
     @Test
     void supportedStates_returnsVerifiedAndExperimentalSortedByUfCode() {
@@ -25,7 +27,7 @@ class SupportedStatesControllerTest {
         when(sefazIngestionService.experimentalStates())
                 .thenReturn(EnumSet.of(UnidadeFederativa.BA, UnidadeFederativa.DF));
 
-        var body = new SupportedStatesController(sefazIngestionService).supportedStates().getBody();
+        var body = new SupportedStatesController(sefazIngestionService, stateStatusService).supportedStates().getBody();
 
         assertThat(body).isNotNull();
         assertThat(body.verified()).containsExactly("MG", "RS", "SP");
@@ -37,7 +39,7 @@ class SupportedStatesControllerTest {
         when(sefazIngestionService.getVerifiedStates()).thenReturn(EnumSet.of(UnidadeFederativa.RS));
         when(sefazIngestionService.experimentalStates()).thenReturn(EnumSet.noneOf(UnidadeFederativa.class));
 
-        var body = new SupportedStatesController(sefazIngestionService).supportedStates().getBody();
+        var body = new SupportedStatesController(sefazIngestionService, stateStatusService).supportedStates().getBody();
 
         assertThat(body.verified()).isEqualTo(List.of("RS"));
         assertThat(body.experimental()).isEmpty();
