@@ -7,6 +7,8 @@ import com.relyon.economizaai.model.MarketChain;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.repository.HouseholdMarketAliasRepository;
 import com.relyon.economizaai.repository.MarketChainRepository;
+import com.relyon.economizaai.repository.MarketLocationRepository;
+import com.relyon.economizaai.repository.MarketLocationRepository.MarketTradeName;
 import com.relyon.economizaai.service.cache.HouseholdCacheGen;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,6 +23,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -37,6 +40,7 @@ class MarketNameServiceTest {
 
     @Mock private HouseholdMarketAliasRepository aliasRepository;
     @Mock private MarketChainRepository marketChainRepository;
+    @Mock private MarketLocationRepository marketLocationRepository;
     @Mock private HouseholdCacheGen householdCacheGen;
     @InjectMocks private MarketNameService service;
 
@@ -232,6 +236,94 @@ class MarketNameServiceTest {
     void cleanLegalName_nullAndBlankPassThrough() {
         assertEquals(null, MarketNameService.cleanLegalName(null));
         assertEquals("   ", MarketNameService.cleanLegalName("   "));
+    }
+
+    @Test
+    void resolve_usesTradeNameWhenHouseholdHasNoRename() {
+        when(aliasRepository.findByHouseholdIdAndMarketCnpj(HOUSEHOLD_ID, CNPJ)).thenReturn(Optional.empty());
+        when(marketLocationRepository.findTradeNamesByCnpjIn(List.of(CNPJ)))
+                .thenReturn(List.of(tradeName(CNPJ, "ASSAI ATACADISTA")));
+
+        assertEquals("Assai Atacadista", service.resolve(HOUSEHOLD_ID, CNPJ, "SENDAS DISTRIBUIDORA S/A"));
+    }
+
+    @Test
+    void resolve_prefersHouseholdRenameOverTradeName() {
+        when(aliasRepository.findByHouseholdIdAndMarketCnpj(HOUSEHOLD_ID, CNPJ))
+                .thenReturn(Optional.of(alias("Assaí da esquina")));
+
+        assertEquals("Assaí da esquina", service.resolve(HOUSEHOLD_ID, CNPJ, "SENDAS DISTRIBUIDORA S/A"));
+        verify(marketLocationRepository, never()).findTradeNamesByCnpjIn(any());
+    }
+
+    @Test
+    void resolve_cleansRazaoSocialWhenNoRenameAndNoTradeName() {
+        when(aliasRepository.findByHouseholdIdAndMarketCnpj(HOUSEHOLD_ID, CNPJ)).thenReturn(Optional.empty());
+
+        assertEquals("Companhia Zaffari",
+                service.resolve(HOUSEHOLD_ID, CNPJ, "COMPANHIA ZAFFARI COMERCIO E INDUSTRIA"));
+    }
+
+    @Test
+    void resolve_usesTradeNameEvenWithoutHousehold() {
+        when(marketLocationRepository.findTradeNamesByCnpjIn(List.of(CNPJ)))
+                .thenReturn(List.of(tradeName(CNPJ, "GIASSI SUPERMERCADO")));
+
+        assertEquals("Giassi Supermercado", service.resolve(null, CNPJ, "GIASSI & CIA LTDA"));
+    }
+
+    @Test
+    void resolveNames_mergesTradeNamesUnderHouseholdRenames() {
+        var otherCnpj = "99999999000100";
+        var cnpjs = List.of(CNPJ, otherCnpj);
+        when(marketLocationRepository.findTradeNamesByCnpjIn(cnpjs))
+                .thenReturn(List.of(tradeName(CNPJ, "ASSAI ATACADISTA"), tradeName(otherCnpj, "GIASSI SUPERMERCADO")));
+        when(aliasRepository.findAllByHouseholdIdAndMarketCnpjIn(HOUSEHOLD_ID, cnpjs))
+                .thenReturn(List.of(alias("Assaí da esquina")));
+
+        var names = service.resolveNames(HOUSEHOLD_ID, cnpjs);
+
+        assertEquals("Assaí da esquina", names.get(CNPJ));
+        assertEquals("Giassi Supermercado", names.get(otherCnpj));
+    }
+
+    @Test
+    void resolveNames_ignoresFillerTradeNames() {
+        when(marketLocationRepository.findTradeNamesByCnpjIn(List.of(CNPJ)))
+                .thenReturn(List.of(tradeName(CNPJ, "********")));
+
+        assertTrue(service.resolveNames(null, List.of(CNPJ)).isEmpty());
+    }
+
+    @Test
+    void applyOverride_cleansRazaoSocialWhenMarketHasNoName() {
+        assertEquals("Companhia Zaffari",
+                service.applyOverride(Map.of(), CNPJ, "COMPANHIA ZAFFARI COMERCIO E INDUSTRIA"));
+    }
+
+    @Test
+    void isUsableTradeName_requiresRealLetters() {
+        assertTrue(MarketNameService.isUsableTradeName("ASSAI ATACADISTA"));
+        assertFalse(MarketNameService.isUsableTradeName("********"));
+        assertFalse(MarketNameService.isUsableTradeName("0"));
+        assertFalse(MarketNameService.isUsableTradeName(null));
+    }
+
+    @Test
+    void formatTradeName_titleCasesAndKeepsConnectivesLowercase() {
+        assertEquals("Mercadinho da Praça", MarketNameService.formatTradeName(" MERCADINHO DA PRAÇA "));
+    }
+
+    private static MarketTradeName tradeName(String cnpj, String tradeName) {
+        return new MarketTradeName() {
+            @Override public String getCnpj() {
+                return cnpj;
+            }
+
+            @Override public String getTradeName() {
+                return tradeName;
+            }
+        };
     }
 
     @Test

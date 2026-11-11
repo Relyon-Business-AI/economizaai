@@ -168,6 +168,28 @@ class CnpjActivityClientTest {
     }
 
     @Test
+    void lookup_extractsTradeName() {
+        var lookup = clientWithBody("{\"cnae_fiscal\":\"4711302\",\"razao_social\":\"SENDAS DISTRIBUIDORA S/A\","
+                + "\"nome_fantasia\":\"ASSAI ATACADISTA\"}")
+                .lookup("11111111000111");
+
+        assertEquals("ASSAI ATACADISTA", lookup.tradeName());
+        assertTrue(lookup.registryAnswered());
+    }
+
+    @Test
+    void lookup_blankTradeNameIsNull() {
+        var lookup = clientWithBody("{\"cnae_fiscal\":\"4711302\",\"nome_fantasia\":\"\"}").lookup("11111111000111");
+
+        assertEquals(null, lookup.tradeName());
+    }
+
+    @Test
+    void lookup_failedFetchDidNotAnswer() {
+        assertFalse(clientWithBody(null).lookup("11111111000111").registryAnswered());
+    }
+
+    @Test
     void lookup_extractsRegistryAddressForGeocoding() {
         var lookup = clientWithBody("{\"cnae_fiscal\":\"4711301\",\"descricao_tipo_de_logradouro\":\"RUA\","
                 + "\"logradouro\":\"XV DE NOVEMBRO\",\"numero\":\"100\",\"municipio\":\"BLUMENAU\",\"uf\":\"SC\","
