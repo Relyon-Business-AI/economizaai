@@ -31,8 +31,9 @@ import java.time.LocalDateTime;
 @SuperBuilder
 public class RevenueEvent extends BaseEntity {
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false)
+    /** Null once the account is deleted — the money event outlives the user (V145). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
     private User user;
 
     @Column(nullable = false, length = 40)
