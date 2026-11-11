@@ -30,8 +30,8 @@ public class LocalizedMessageService {
 
     /**
      * Translate with an EXPLICIT locale — for messages produced off the request
-     * thread (emails, push notifications) where the recipient's stored locale,
-     * not the request's {@code Accept-Language}, decides the language.
+     * thread (emails, push notifications), where there is no request
+     * {@code Accept-Language}; callers pass {@link #toLocale}.
      */
     public String translate(String key, Locale locale, Object... args) {
         return messageSource.getMessage(key, args, locale);
@@ -47,10 +47,13 @@ public class LocalizedMessageService {
         return messageSource.getMessage(resolvable, LocaleContextHolder.getLocale());
     }
 
-    /** Maps a stored locale tag ("pt"/"en") to a Locale, defaulting to pt. */
+    /**
+     * The language of every off-request message (push, e-mail, WhatsApp): always
+     * Portuguese. The app has no language selector, so the tag captured from the
+     * device at signup is not a user choice and is deliberately ignored here.
+     */
     public static Locale toLocale(String localeTag) {
-        if (localeTag == null || localeTag.isBlank()) return DEFAULT_LOCALE;
-        return Locale.forLanguageTag(localeTag);
+        return DEFAULT_LOCALE;
     }
 
     /**

@@ -58,15 +58,17 @@ class WhatsAppReportServiceTest {
     }
 
     @Test
-    void weekWithPurchases_rendersInTheUsersLocale() {
+    void weekWithPurchases_isAlwaysPortugueseWithBrazilianMoney() {
         stubReport(2, List.of(new CategorySpend("BEVERAGES", new BigDecimal("50.00"))),
                 List.of(new MarketSpend("Mercado X", "12345678000190", new BigDecimal("150.00"), 2)));
 
         var english = service.buildWeeklyReport(userWithLocale("en")).text();
         var portuguese = service.buildWeeklyReport(userWithLocale("pt")).text();
 
-        assertThat(english).contains("*Your Economiza AI summary*", "purchases", "Where it went:", "Beverages", "Stores:");
-        assertThat(portuguese).contains("*Seu resumo Economiza AI*", "compras", "Onde foi:", "Bebidas", "Mercados:");
+        assertThat(portuguese).contains("*Seu resumo Economiza AI*", "compras", "Onde foi:", "Bebidas", "Mercados:",
+                "R$ 150,00");
+        // No language selector in the app: a device-captured "en" still gets Portuguese.
+        assertThat(english).isEqualTo(portuguese);
     }
 
     @Test

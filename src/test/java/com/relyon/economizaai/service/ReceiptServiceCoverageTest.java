@@ -327,9 +327,10 @@ class ReceiptServiceCoverageTest {
         when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of(promo));
         lenient().when(notificationRuleService.isEnabled(any(), eq(NotificationType.PROMO_PERSONAL))).thenReturn(true);
         user.setLocale("en");
-        when(localizedMessageService.translate("notification.personal_promo.title", Locale.forLanguageTag("en"),
+        // The device language captured at signup never decides the push language — always pt.
+        when(localizedMessageService.translate("notification.personal_promo.title", Locale.forLanguageTag("pt"),
                 "ARROZ TIO J 5KG")).thenReturn("You saved on ARROZ TIO J 5KG");
-        when(localizedMessageService.translate("notification.personal_promo.body", Locale.forLanguageTag("en"),
+        when(localizedMessageService.translate("notification.personal_promo.body", Locale.forLanguageTag("pt"),
                 "ARROZ TIO J 5KG", "19,90", "Mercado X", "31")).thenReturn("localized body");
 
         var response = receiptService.confirm(user, receipt.getId(), new ConfirmReceiptRequest(null));
