@@ -21,6 +21,7 @@ import com.relyon.economizaai.service.sefaz.captcha.CaptchaSolveTracker;
 import com.relyon.economizaai.service.sefaz.captcha.CaptchaSolver;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService.FetchedDocument;
 import com.relyon.economizaai.exception.PaidApiBudgetExceededException;
+import com.relyon.economizaai.exception.PaidApiQuotaExceededException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -34,6 +35,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -45,6 +47,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -898,6 +901,74 @@ class SefazIngestionServiceTest {
         assertSame(legacy, fetched);
         verify(chaveReconsult).reconsult(CHAVE_RS);
         verifyNoInteractions(infosimples); // a reconsulta grátis resolveu — nada pago
+    }
+
+    @Test
+    void fetch_bareChaveBaReconsult_ledgersEverySolveItBought() {
+        var baAdapter = mockAdapterFor(UnidadeFederativa.BA);
+        when(baAdapter.requiresQrSignature()).thenReturn(true);
+        var service = new SefazIngestionService(List.of(baAdapter), Optional.empty(), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+        var userId = UUID.randomUUID();
+        var danfe = new FetchedDocument(baAdapter, "<html>danfe</html>", CHAVE_BA, UnidadeFederativa.BA, "ba");
+        when(chaveReconsult.reconsult(CHAVE_BA)).thenAnswer(invocation -> {
+            CaptchaSolveTracker.assertSpendAllowed();
+            CaptchaSolveTracker.recordSolve(); // first code rejected by the portal
+            CaptchaSolveTracker.recordSolve(); // re-solved, accepted
+            return danfe;
+        });
+
+        var fetched = service.fetch(CHAVE_BA, userId);
+
+        assertSame(danfe, fetched);
+        verify(paidApiGuard).assertWithinDailyCap(userId, PaidApiService.CAPTCHA_SOLVE);
+        verify(paidApiGuard, times(2)).recordSuccess(userId, PaidApiService.CAPTCHA_SOLVE, "BA", null);
+    }
+
+    @Test
+    void fetch_bareChaveBaReconsult_failedAttemptStillLedgersItsSolves() {
+        var baAdapter = mockAdapterFor(UnidadeFederativa.BA);
+        when(baAdapter.requiresQrSignature()).thenReturn(true);
+        var service = new SefazIngestionService(List.of(baAdapter), Optional.empty(), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+        when(chaveReconsult.reconsult(CHAVE_BA)).thenAnswer(invocation -> {
+            CaptchaSolveTracker.recordSolve();
+            throw new SefazFetchException("BA");
+        });
+
+        assertThrows(SefazFetchException.class, () -> service.fetch(CHAVE_BA, null));
+
+        verify(paidApiGuard).recordFailure(null, PaidApiService.CAPTCHA_SOLVE, "BA", null);
+    }
+
+    @Test
+    void fetch_bareChaveBaReconsult_userOverTheCaptchaCap_buysNoSolve() {
+        var baAdapter = mockAdapterFor(UnidadeFederativa.BA);
+        when(baAdapter.requiresQrSignature()).thenReturn(true);
+        var service = new SefazIngestionService(List.of(baAdapter), Optional.empty(), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+        var userId = UUID.randomUUID();
+        doThrow(new PaidApiQuotaExceededException("CAPTCHA_SOLVE"))
+                .when(paidApiGuard).assertWithinDailyCap(userId, PaidApiService.CAPTCHA_SOLVE);
+        when(chaveReconsult.reconsult(CHAVE_BA)).thenAnswer(invocation -> {
+            CaptchaSolveTracker.assertSpendAllowed(); // the solver's own gate refuses the purchase
+            return null;
+        });
+
+        assertThrows(SefazFetchException.class, () -> service.fetch(CHAVE_BA, userId));
+
+        verify(paidApiGuard, never()).recordSuccess(any(), any(), any(), any());
+        verify(paidApiGuard, never()).recordFailure(any(), any(), any(), any());
+    }
+
+    @Test
+    void fetch_bareChaveFreeReconsult_skipsTheCaptchaMetering() {
+        var rsAdapter = mockAdapterFor(UnidadeFederativa.RS);
+        when(rsAdapter.requiresQrSignature()).thenReturn(true);
+        var service = new SefazIngestionService(List.of(rsAdapter), Optional.empty(), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+        when(chaveReconsult.reconsult(CHAVE_RS))
+                .thenReturn(new FetchedDocument(rsAdapter, "<html/>", CHAVE_RS, UnidadeFederativa.RS, "satweb"));
+
+        service.fetch(CHAVE_RS, UUID.randomUUID());
+
+        verifyNoInteractions(paidApiGuard);
     }
 
     @Test

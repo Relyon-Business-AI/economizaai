@@ -46,6 +46,14 @@ public class ChaveReconsultService {
                 && "65".equals(ChaveAcessoParser.extractModel(chave));
     }
 
+    /**
+     * True when this chave's reconsult sits behind a captcha (BA's image "anti-robô") — every
+     * fetch buys at least one solve, so callers must meter it like any other paid captcha.
+     */
+    public static boolean solvesCaptcha(String chave) {
+        return ChaveAcessoParser.extractUf(chave) == UnidadeFederativa.BA;
+    }
+
     public FetchedDocument reconsult(String chave) {
         var uf = ChaveAcessoParser.extractUf(chave);
         if (uf == UnidadeFederativa.RS) {

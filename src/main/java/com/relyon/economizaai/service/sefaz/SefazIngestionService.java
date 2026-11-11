@@ -243,7 +243,7 @@ public class SefazIngestionService {
         if (adapter.requiresQrSignature() && ChaveAcessoParser.isBareChave(qrPayload)) {
             if (ChaveReconsultService.isReconsultable(chave)) {
                 try {
-                    var reconsulted = chaveReconsult.reconsult(chave);
+                    var reconsulted = reconsultByChave(chave, uf, userId, spendPolicy);
                     log.info("sefaz.fetch.bare_chave.reconsult_ok uf={} chave={}", uf, abbrev(chave));
                     return reconsulted;
                 } catch (RuntimeException legacyEx) {
@@ -378,6 +378,41 @@ public class SefazIngestionService {
             // fallback — but any token bought before them was still paid for.
             recordCaptchaSolves(userId, uf, false);
             throw deterministicEx;
+        }
+    }
+
+    /**
+     * The legacy bare-chave reconsult. Free for RS/CE/AM; BA's consult solves an image captcha
+     * per attempt, so it is metered exactly like the QR path: the per-user daily cap, the global
+     * budget and the spend policy decide whether a solve may be bought, and every solve actually
+     * performed is ledgered afterwards. With the spend refused the solver declines, the reconsult
+     * fails and the chain moves on to the next layer.
+     */
+    private FetchedDocument reconsultByChave(String chave, UnidadeFederativa uf, UUID userId,
+                                             IngestSpendPolicy spendPolicy) {
+        var captchaGated = ChaveReconsultService.solvesCaptcha(chave);
+        CaptchaSolveTracker.drain(); // discard any stale count left on this pooled thread
+        CaptchaSolveTracker.blockSpend(captchaGated && !isCaptchaSpendAllowed(userId, uf, spendPolicy));
+        try {
+            var reconsulted = chaveReconsult.reconsult(chave);
+            recordCaptchaSolves(userId, uf, true);
+            return reconsulted;
+        } catch (RuntimeException reconsultEx) {
+            recordCaptchaSolves(userId, uf, false);
+            throw reconsultEx;
+        } finally {
+            CaptchaSolveTracker.blockSpend(false);
+        }
+    }
+
+    private boolean isCaptchaSpendAllowed(UUID userId, UnidadeFederativa uf, IngestSpendPolicy spendPolicy) {
+        if (!spendPolicy.captchaSolves() || paidApiGuard.isGlobalBudgetExhausted()) return false;
+        try {
+            paidApiGuard.assertWithinDailyCap(userId, PaidApiService.CAPTCHA_SOLVE);
+            return true;
+        } catch (PaidApiQuotaExceededException capReached) {
+            log.info("sefaz.fetch.bare_chave.captcha_cap_reached uf={}", uf);
+            return false;
         }
     }
 
