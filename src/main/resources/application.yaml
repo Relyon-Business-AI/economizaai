@@ -446,6 +446,7 @@ economizaai:
     community-promo-recent-window-days: 7      # last N days = "recent" sample; older rows are baseline
     lookback-days: 90                          # observations older than this are excluded from reference + promo calcs
     best-markets-lookback-days: 180            # wider window for the best-markets ranking + in-store typical price (dated real prices)
+    deals-max-price-age-days: ${DEALS_MAX_PRICE_AGE_DAYS:60}   # "Ofertas pra você": a chain's latest price must be at most this old to become a deal
   categorizer:
     consensus:
       # User category corrections graduate to global truth (+ learned dictionary)
