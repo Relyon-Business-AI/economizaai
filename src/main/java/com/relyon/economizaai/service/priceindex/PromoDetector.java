@@ -2,6 +2,7 @@ package com.relyon.economizaai.service.priceindex;
 
 import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.model.Receipt;
+import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import lombok.RequiredArgsConstructor;
@@ -53,9 +54,10 @@ public class PromoDetector {
             if (item.getProduct() == null || item.getUnitPrice() == null) continue;
             var historical = receiptItemRepository
                     .findHouseholdHistoryForProduct(item.getProduct().getId(), householdId).stream()
-                    .filter(prev -> !prev.getId().equals(item.getId()))
-                    .filter(prev -> !prev.isExcluded())
-                    .filter(prev -> prev.getUnitPrice() != null)
+                    .filter(previous -> !previous.getId().equals(item.getId()))
+                    .filter(previous -> !previous.isExcluded())
+                    .filter(previous -> previous.getUnitPrice() != null)
+                    .filter(previous -> wasBoughtBefore(previous, receipt))
                     .toList();
             if (historical.size() < properties.getPersonalPromo().getMinPurchasesForBaseline()) continue;
 
@@ -85,6 +87,20 @@ public class PromoDetector {
             }
         }
         return promos;
+    }
+
+    /**
+     * The baseline is what the household paid BEFORE this purchase. Without this, scanning a
+     * backlog of old notas compared each one against NEWER (inflated) prices and fired a false
+     * "você economizou" per item. A nota with no issue date keeps the whole history.
+     */
+    private static boolean wasBoughtBefore(ReceiptItem previous, Receipt receipt) {
+        var purchasedAt = receipt.getIssuedAt();
+        var previousPurchasedAt = previous.getReceipt().getIssuedAt();
+        if (purchasedAt == null || previousPurchasedAt == null) {
+            return !previous.getReceipt().getId().equals(receipt.getId());
+        }
+        return previousPurchasedAt.isBefore(purchasedAt);
     }
 
     public record PersonalPromo(

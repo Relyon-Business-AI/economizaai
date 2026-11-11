@@ -123,7 +123,8 @@ public class ShoppingListOptimizer {
                         item -> new MarketCandidate(item.getReceipt().getCnpjEmitente(),
                                 item.getReceipt().getMarketName(), item.getUnitPrice(),
                                 PlanItem.PriceSource.LOCAL_HISTORY),
-                        (existing, replacement) -> existing));
+                        // History comes oldest-first, so the later row is the most recent purchase.
+                        (older, newer) -> newer));
 
         // Community panel as fallback — median per market that local history misses.
         if (properties.getCollaborative().isEnabled()) {

@@ -17,6 +17,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -76,6 +77,26 @@ class PromoDetectorTest {
                 .lineNumber(1)
                 .rawDescription("X")
                 .build();
+    }
+
+    @Test
+    void ignoresPurchasesMadeAfterTheReceiptBeingConfirmed() {
+        // Backlog scan: an OLD nota must not be compared against newer (pricier) purchases.
+        var household = Household.builder().id(UUID.randomUUID()).inviteCode("X").build();
+        var product = Product.builder().id(UUID.randomUUID()).normalizedName("Arroz").build();
+        var receipt = buildReceipt(household);
+        receipt.setIssuedAt(LocalDateTime.of(2026, 6, 1, 10, 0));
+        itemWithProduct(receipt, product, new BigDecimal("20.00"));
+
+        var laterPurchases = List.of(
+                historicalItem(household, product, new BigDecimal("28.00")),
+                historicalItem(household, product, new BigDecimal("28.00")),
+                historicalItem(household, product, new BigDecimal("28.00")));
+        laterPurchases.forEach(later -> later.getReceipt().setIssuedAt(LocalDateTime.of(2026, 10, 1, 10, 0)));
+        when(receiptItemRepository.findHouseholdHistoryForProduct(product.getId(), household.getId()))
+                .thenReturn(laterPurchases);
+
+        assertTrue(detector.detectPersonalPromos(receipt).isEmpty());
     }
 
     @Test
