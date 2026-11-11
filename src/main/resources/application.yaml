@@ -335,6 +335,18 @@ economizaai:
     infosimples-failure-threshold: ${INFOSIMPLES_BREAKER_THRESHOLD:5}
     breaker-window-seconds: ${INFOSIMPLES_BREAKER_WINDOW_S:600}
     breaker-cooldown-seconds: ${INFOSIMPLES_BREAKER_COOLDOWN_S:300}
+  # Avisos de custo no WhatsApp do admin: teto diário de cada serviço e saldo pré-pago dos
+  # provedores (Infosimples, CapSolver, Twilio, Anthropic) em 80% e 100%. Um aviso por
+  # (serviço, limiar, dia/recarga), guardado em cost_alert. A entrega é garantida: tenta de
+  # novo a cada retry-interval até o provedor aceitar; após N falhas no WhatsApp manda também
+  # por e-mail e ainda tenta o WhatsApp mais algumas vezes.
+  cost-alerts:
+    enabled: ${COST_ALERTS_ENABLED:true}
+    budget-check-interval-ms: ${COST_ALERT_BUDGET_CHECK_INTERVAL_MS:60000}
+    balance-check-cron: ${COST_ALERT_BALANCE_CHECK_CRON:0 5 * * * *}   # de hora em hora
+    retry-interval-ms: ${COST_ALERT_RETRY_INTERVAL_MS:120000}
+    email-fallback-after-attempts: ${COST_ALERT_EMAIL_FALLBACK_AFTER:3}
+    max-whatsapp-attempts: ${COST_ALERT_MAX_WHATSAPP_ATTEMPTS:8}
   auth:
     # Dev convenience: when SMTP/Twilio aren't configured, the auth code (password
     # reset, email verify, phone OTP) is logged so the flow can be finished from the
