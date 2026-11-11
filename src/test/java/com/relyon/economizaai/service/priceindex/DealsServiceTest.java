@@ -24,16 +24,19 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -69,6 +72,44 @@ class DealsServiceTest {
                 new ViewerLocation(null, null, Source.NONE, "RS"), Set.of(WATCHED_CNPJ), 10));
         lenient().when(marketNameService.resolve(any(), any(), any()))
                 .thenAnswer(invocation -> invocation.getArgument(2));
+        // Default: every product has SOME very cheap recent observation, so the pre-check lets it
+        // through and each test exercises the full ranking path as before.
+        lenient().when(priceIndexService.lowestRecentInStorePrices(any())).thenAnswer(invocation -> {
+            Collection<UUID> productIds = invocation.getArgument(0);
+            return productIds.stream().collect(Collectors.toMap(productId -> productId, productId -> new BigDecimal("0.01")));
+        });
+    }
+
+    @Test
+    void skipsRankingWhenNoRecentObservationCanBeatLastPaid() {
+        when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID))
+                .thenReturn(List.of(purchase(new BigDecimal("10.00"), LocalDateTime.now())));
+        // Lowest recent price R$9.50 — only 5% below last-paid, short of the ~12% required at R$10.
+        doReturn(Map.of(PRODUCT_ID, new BigDecimal("9.50"))).when(priceIndexService).lowestRecentInStorePrices(any());
+
+        assertTrue(dealsService.findDeals(user(), true, null, 20).isEmpty());
+        verify(priceIndexService, never()).bestMarketsInScope(any(), anyInt(), any());
+    }
+
+    @Test
+    void skipsRankingWhenProductHasNoRecentObservation() {
+        when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID))
+                .thenReturn(List.of(purchase(new BigDecimal("10.00"), LocalDateTime.now())));
+        doReturn(Map.of()).when(priceIndexService).lowestRecentInStorePrices(any());
+
+        assertTrue(dealsService.findDeals(user(), false, null, 20).isEmpty());
+        verify(priceIndexService, never()).bestMarketsAtWatched(any(), anyInt(), any());
+    }
+
+    @Test
+    void rankingStillDecidesWhenLowestPriceClearsTheCeiling() {
+        when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID))
+                .thenReturn(List.of(purchase(new BigDecimal("10.00"), LocalDateTime.now())));
+        doReturn(Map.of(PRODUCT_ID, new BigDecimal("7.00"))).when(priceIndexService).lowestRecentInStorePrices(any());
+        when(priceIndexService.bestMarketsAtWatched(eq(PRODUCT_ID), anyInt(), any()))
+                .thenReturn(List.of(market(WATCHED_CNPJ, new BigDecimal("7.00"), 3L, null, true)));
+
+        assertEquals(1, dealsService.findDeals(user(), false, null, 20).size());
     }
 
     private User user() {
