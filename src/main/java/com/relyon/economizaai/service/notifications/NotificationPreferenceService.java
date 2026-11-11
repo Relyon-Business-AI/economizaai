@@ -70,6 +70,8 @@ public class NotificationPreferenceService {
     public DigestPreferencesResponse updateDigestPreferences(User user, UpdateDigestPreferencesRequest request) {
         user.setDigestFrequency(request.frequency());
         user.setDigestSendHour(request.sendHour());
+        // An explicit hour is the effective one; clearing it lets the digest job pick again.
+        user.setDigestEffectiveSendHour(request.sendHour());
         userRepository.save(user);
         log.info("digest.preferences.updated user={} frequency={} sendHour={}",
                 LogMasker.email(user.getEmail()), request.frequency(), request.sendHour());
