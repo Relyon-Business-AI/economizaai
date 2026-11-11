@@ -54,6 +54,7 @@ import com.relyon.economizaai.dto.response.MarketChainResponse;
 import com.relyon.economizaai.dto.response.OrphanedObservationsResponse;
 import com.relyon.economizaai.dto.response.ProductMergeResultResponse;
 import com.relyon.economizaai.dto.response.ProductVariantSplitResponse;
+import com.relyon.economizaai.dto.response.AiProductVariantSplitResponse;
 import com.relyon.economizaai.dto.response.PurgeObservationsResponse;
 import com.relyon.economizaai.dto.response.RelevanceReportResponse;
 import com.relyon.economizaai.dto.response.StateCoverageResponse;
@@ -76,6 +77,7 @@ import com.relyon.economizaai.service.admin.AdminNotificationEffectivenessServic
 import com.relyon.economizaai.service.admin.AdminNotificationService;
 import com.relyon.economizaai.service.admin.AdminProductService;
 import com.relyon.economizaai.service.admin.ProductVariantSplitService;
+import com.relyon.economizaai.service.admin.AiProductVariantSplitService;
 import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.dto.response.TaxonomyCoverageResponse;
 import com.relyon.economizaai.service.admin.AdminDevService;
@@ -152,6 +154,7 @@ public class AdminController {
     private final AdminLlmService adminLlmService;
     private final AdminProductService adminProductService;
     private final ProductVariantSplitService productVariantSplitService;
+    private final AiProductVariantSplitService aiProductVariantSplitService;
     private final CategoryResolver categoryResolver;
     private final MarketLocationService marketLocationService;
     private final RelevanceReportService relevanceReportService;
@@ -811,11 +814,23 @@ public class AdminController {
      * <p>{@code dryRun=true} (default) returns the PLAN and mutates nothing.
      * {@code dryRun=false} applies the split. Idempotent: single-signature products
      * are skipped, so re-running once clean is a no-op.
+     *
+     * <p>{@code strategy=AI} runs the AI-assisted split instead — the long-tail cleanup for
+     * products the deterministic dictionary CANNOT disambiguate ("CAFE MELITTA 500G" still
+     * mixing Pimpinela/Canecão/Melitta, brand×flavour collisions). It gates on the still-mixed
+     * variant-conflict set (cap {@code max}, default 50 for AI), asks the LLM to cluster each
+     * product's items, and enforces EAN cohesion OVER the AI. Returns {@code AiProductVariantSplitResponse}
+     * ({@code aiAvailable=false} no-op when no AI provider has a key). The default strategy
+     * ({@code DETERMINISTIC}) returns {@code ProductVariantSplitResponse} as before.
      */
     @PostMapping("/products/split-variants")
-    public ResponseEntity<ProductVariantSplitResponse> splitVariants(
+    public ResponseEntity<?> splitVariants(
             @RequestParam(defaultValue = "true") boolean dryRun,
-            @RequestParam(defaultValue = "500") int max) {
+            @RequestParam(defaultValue = "500") int max,
+            @RequestParam(defaultValue = "DETERMINISTIC") String strategy) {
+        if ("AI".equalsIgnoreCase(strategy)) {
+            return ResponseEntity.ok(aiProductVariantSplitService.splitVariants(max, dryRun));
+        }
         return ResponseEntity.ok(productVariantSplitService.splitVariants(max, dryRun));
     }
 
