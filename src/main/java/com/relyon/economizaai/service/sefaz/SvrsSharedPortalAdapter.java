@@ -161,6 +161,9 @@ public class SvrsSharedPortalAdapter implements SefazAdapter {
             if (html == null || html.isBlank()) {
                 throw new TransientSefazFetchException("empty-body");
             }
+            if (PortalErrorBodyDetector.looksLikeServerErrorStub(html)) {
+                throw new TransientSefazFetchException("server-error-stub");
+            }
             if (uf == UnidadeFederativa.SC && ScSecurityChallengeDetector.looksLikeHtml(html)) {
                 throw new CaptchaUnavailableException(uf.name());
             }
