@@ -38,9 +38,9 @@ Open a **new** terminal after installing (PATH refresh), then verify:
 
 Nothing secret lives in this repo. You need:
 
-1. **GitHub** — your account (`polyf`) already has **write** access to
-   `Relyon-Business-AI/economizaai`: you can push to `development` and `main`. Nothing
-   to do.
+1. **GitHub** — **write** access for your own GitHub account to
+   `Relyon-Business-AI/economizaai` (ask Alexandre to add you). You push task branches
+   and open PRs; `development` and `main` only change through merged PRs (section 7).
 2. **Render access** — you'll receive a **Render API key** from Alexandre
    (the workspace is single-member, so no dashboard invite). Store it with:
 
@@ -71,19 +71,21 @@ emailed).
 ## 3. Clone, authenticate, and configure git
 
 ```powershell
-gh auth login                  # log in as YOUR GitHub account (polyf) — browser flow, HTTPS
+gh auth login                  # log in as YOUR GitHub account — browser flow, HTTPS
 gh auth setup-git              # makes git push use that login
 git clone https://github.com/Relyon-Business-AI/economizaai.git
 cd economizaai
 git checkout development
 git config user.name "Your Name"             # local to this repo
-git config user.email "your@email.com"       # the email on your polyf account
+git config user.email "your@email.com"       # the email on your GitHub account
 ```
 
-The auth step matters: cloning works anonymously, but **pushing (= deploying)
-fails without it**. Verify with `gh auth status` showing `polyf`.
+The auth step matters: cloning works anonymously, but **pushing fails without it**.
+Verify with `gh auth status` showing your account.
 
-Git identity is configured **per-repo, never globally** (project convention).
+Git identity is configured **per-repo, never globally** (project convention). Anything
+specific to you or your machine (accounts, tokens, local paths) goes in `CLAUDE.local.md`
+(gitignored), never in `CLAUDE.md`.
 
 ## 4. Run it locally
 
@@ -110,8 +112,8 @@ expected; use the dev environment for anything catalog-dependent.
 | Env | URL | Branch | Deploys |
 |---|---|---|---|
 | **local** | `http://localhost:8080/api/v1` | your working copy | — |
-| **dev** | `https://api-dev.economizaai.app/api/v1` | `development` | **auto on every merge/push** (Render Free plan: sleeps after 15 min idle, first request may take ~3 min) |
-| **prod** | `https://api.economizaai.app/api/v1` | `main` | auto on push to `main` — **owner only** |
+| **dev** | `https://api-dev.economizaai.app/api/v1` | `development` | **auto on every merge** (Render Free plan: sleeps after 15 min idle, first request may take ~3 min) |
+| **prod** | `https://api.economizaai.app/api/v1` | `main` | auto on merge of the release PR — **with Alexandre's go** |
 
 > ⚠️ Use the custom domains above, NOT the `*.onrender.com` URLs — they're
 > misleadingly named: **prod**'s is `economiz-ai.onrender.com` and the **dev**
@@ -147,32 +149,31 @@ Example prompts that work well:
 
 ## 7. Daily workflow
 
-> ⚠️ **Process changed (2026-11) — `DEPLOY.md` / `CLAUDE.md` → "Git Workflow" are the
-> current rule and win over this section and section 9:** work on a task branch off
-> `development`, open **one PR** into `development` (no direct pushes), and release to
-> prod via a PR `development` → `main` merged with Alexandre's ok. The commands below
-> still show the older direct-push flow and have not been rewritten.
+Same process as the frontend — `DEPLOY.md` is the short version, with a diagram.
 
 ```powershell
 git checkout development
-git pull --rebase origin development   # ALWAYS before starting AND before pushing
+git pull --rebase origin development        # start from the latest
+git checkout -b feat/my-task                # ONE branch per task
 # ... work with Claude, commit locally as pieces complete ...
-.\mvnw.cmd test                        # must be green
-git pull --rebase origin development   # again — a bot also pushes to this branch
-git push origin development            # ⚠️ this IS a dev deploy (see rules below)
+.\mvnw.cmd test                             # must be green — the Render build does NOT run tests
+git pull --rebase origin development        # again, right before pushing
+git push -u origin feat/my-task             # pushing a task branch deploys nothing
+gh pr create --base development             # ONE PR for the whole task
 ```
+
+Merge the PR only when the task is complete. The merge deploys dev by itself; validate
+there (section 9).
 
 ### The rules that bite (all enforced, not suggestions)
 
-1. **A push to `development` auto-deploys dev and blips availability for real
-   users.** Don't push during the day without Alexandre's go-ahead. Urgent bug
-   fixes may ship anytime; features/docs/refactors batch up and push at night.
-   Commit locally as much as you want — pushing is the gate. One push = one
-   blip, so batch commits into a single push.
-2. **`main` is prod.** Never commit to it directly — it only ever receives
-   merges from `development`, as a deliberate prod release (section 9).
-3. **Always `git pull --rebase` before pushing** — an autonomous bot also
-   commits to `development`; racing it means rejected pushes.
+1. **Never push straight to `development`.** Everything arrives through a PR. Every merge
+   redeploys dev, which is down for a few minutes each time, and back-to-back merges cancel
+   each other — so one merge per task, not per commit. Commit locally as much as you want.
+2. **`main` is prod.** Never commit to it and never cherry-pick into it — it only receives
+   the release PR `development` → `main`, merged with Alexandre's go (section 9).
+3. **Always `git pull --rebase origin <branch>` before pushing** — an autonomous bot also
+   pushes fixes; racing it means rejected pushes.
 4. **Never mention Claude/AI in commit messages.** No `Co-Authored-By`, no
    "generated with" lines. Atomic commits, one logical change each. (Your Claude
    may try to add a co-author trailer by default — tell it not to, or amend.)
@@ -182,7 +183,9 @@ git push origin development            # ⚠️ this IS a dev deploy (see rules 
    (`test92843@economizaai.app`). Never gmail/example.com — analytics cleanup
    filters on that domain. If a test must *receive* mail, use the shared QA
    account `alexandre@economizaai.app`.
-7. **Flyway**: never edit an existing migration — add a new `V{n}__*.sql`.
+7. **Flyway**: never edit an existing migration — add a new `V{n}__*.sql`, and check the
+   number is not already taken on `development` (parallel branches collide; the tests do
+   not catch it, only the deploy does).
 8. **i18n**: every user-facing string goes in both `messages_pt.properties` and
    `messages_en.properties`.
 
@@ -201,30 +204,25 @@ git push origin development            # ⚠️ this IS a dev deploy (see rules 
 
 ## 9. Deploying
 
-- **Dev**: `git push origin development` — that's it, Render builds and deploys
-  (~a few minutes). Then hit `/actuator/health` and smoke-test your change.
-- **Prod**: releasing = merging `development` into `main` and pushing — that
-  push IS the prod deploy, hitting real users. You're authorized to do this on
-  your own judgment (no sign-off needed), as long as: the change has been
-  **verified working on dev first**, tests are green, and you prefer
-  low-traffic hours for anything risky. The procedure:
+- **Dev**: merging your task PR into `development` — that's it, Render builds and deploys
+  (a few minutes; the service may also need to wake up). Then hit
+  `https://api-dev.economizaai.app/actuator/health` and validate your change there.
+- **Prod**: a release is a PR `development` → `main`, opened once the change is
+  **validated on dev**, and merged **with Alexandre's go** — that merge IS the prod deploy,
+  hitting real users. No direct commits and no cherry-picks into `main`.
 
   ```powershell
-  git checkout development
-  git pull --rebase origin development
-  git checkout main
-  git pull --rebase origin main
-  git merge development
-  git push origin main            # ← this deploys prod
-  git checkout development
+  gh pr create --base main --head development --title "release: <what is going out>"
+  # wait for Alexandre's ok, then merge the PR
   ```
 
   After the deploy: check `https://api.economizaai.app/actuator/health`
   and smoke-test the released change on prod.
+- **Front depends on a backend change?** The backend goes to prod first.
 
 ## 10. Cross-repo changes (FE + backend)
 
 The backend defines the contract; the FE adapts. If the FE needs a shape the
 backend doesn't provide, that's a backend change first. For changes touching
-both repos: one PR/commit on each side referencing the other, `API.md` +
-`CHANGELOG.md` updated, and ship them together respecting the deploy window.
+both repos: one PR on each side referencing the other, `API.md` +
+`CHANGELOG.md` updated, and release the backend before the frontend.

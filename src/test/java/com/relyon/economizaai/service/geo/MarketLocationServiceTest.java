@@ -19,6 +19,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Pageable;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -27,6 +30,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -229,7 +233,7 @@ class MarketLocationServiceTest {
 
     @Test
     void geocodePending_noPending_doesNothing() {
-        when(repository.findAllByLatitudeIsNullAndGeocodeAttemptsLessThan(anyInt()))
+        when(repository.findAllByLatitudeIsNullAndGeocodeAttemptsLessThan(anyInt(), any(Pageable.class)))
                 .thenReturn(List.of());
 
         service.geocodePending();
@@ -241,7 +245,7 @@ class MarketLocationServiceTest {
     void geocodePending_geocodesEachPendingMarket() {
         var marketOne = MarketLocation.builder().cnpj("1").cnpjRoot("11111111").address("A").build();
         var marketTwo = MarketLocation.builder().cnpj("2").cnpjRoot("22222222").address("B").build();
-        when(repository.findAllByLatitudeIsNullAndGeocodeAttemptsLessThan(anyInt()))
+        when(repository.findAllByLatitudeIsNullAndGeocodeAttemptsLessThan(anyInt(), any(Pageable.class)))
                 .thenReturn(List.of(marketOne, marketTwo));
         when(geocoder.geocode(any())).thenReturn(Optional.empty());
         when(repository.findById(any())).thenReturn(Optional.of(marketOne), Optional.of(marketTwo));
@@ -258,7 +262,7 @@ class MarketLocationServiceTest {
                 .address("RUA A , 1 , , CENTRO , CARAZINHO , RS").geocodeAttempts(0).build();
         var marketTwo = MarketLocation.builder().cnpj("2").cnpjRoot("22222222")
                 .address("RUA B , 2 , , CENTRO , CARAZINHO , RS").geocodeAttempts(0).build();
-        when(repository.findAllByLatitudeIsNullAndGeocodeAttemptsLessThan(anyInt()))
+        when(repository.findAllByLatitudeIsNullAndGeocodeAttemptsLessThan(anyInt(), any(Pageable.class)))
                 .thenReturn(List.of(marketOne, marketTwo));
         when(geocoder.geocode(any())).thenReturn(Optional.empty());
         when(geocoder.rateLimitedSince(any())).thenReturn(true);
@@ -305,6 +309,55 @@ class MarketLocationServiceTest {
         verify(geocoder).geocode("CNPJ 11111111000111, Brasil");
     }
 
+    @Test
+    void geocodePending_asksForAtMostTheConfiguredCapPerRun() {
+        ReflectionTestUtils.setField(service, "geocodeMaxPerRun", 7);
+        var limitCaptor = ArgumentCaptor.forClass(Pageable.class);
+        when(repository.findAllByLatitudeIsNullAndGeocodeAttemptsLessThan(anyInt(), limitCaptor.capture()))
+                .thenReturn(List.of());
+
+        service.geocodePending();
+
+        assertThat(limitCaptor.getValue().getPageSize()).isEqualTo(7);
+        assertThat(limitCaptor.getValue().getPageNumber()).isZero();
+    }
+
+    @Test
+    void scheduledSegmentClassification_capsTheRunAcrossBothPendingBuckets() {
+        ReflectionTestUtils.setField(service, "classifyMaxPerRun", 2);
+        var unknownOne = MarketLocation.builder().cnpj("u1").cnpjRoot("11111111").build();
+        var unknownTwo = MarketLocation.builder().cnpj("u2").cnpjRoot("22222222").build();
+        var missingIbge = MarketLocation.builder().cnpj("b1").cnpjRoot("33333333")
+                .segment(MerchantSegment.SUPERMARKET).segmentAttempts(1).build();
+        var limitCaptor = ArgumentCaptor.forClass(Pageable.class);
+        when(cnpjActivityClient.isEnabled()).thenReturn(true);
+        when(repository.findAllBySegmentAndSegmentAttemptsLessThan(eq(MerchantSegment.UNKNOWN), anyInt(), limitCaptor.capture()))
+                .thenReturn(List.of(unknownOne, unknownTwo));
+        when(repository.findAllByIbgeCityCodeIsNullAndSegmentNotAndSegmentAttemptsLessThan(
+                eq(MerchantSegment.UNKNOWN), anyInt(), any(Pageable.class)))
+                .thenReturn(List.of(missingIbge));
+        when(cnpjActivityClient.lookup(any()))
+                .thenReturn(new CnpjActivityClient.CnpjLookup(MerchantSegment.UNKNOWN, null, List.of()));
+
+        service.scheduledSegmentClassification();
+
+        assertThat(limitCaptor.getValue().getPageSize()).isEqualTo(2);
+        verify(cnpjActivityClient, times(2)).lookup(any());
+        verify(cnpjActivityClient, never()).lookup("b1");
+    }
+
+    @Test
+    void classifyPendingSegments_adminBackfillStaysUncapped() {
+        var limitCaptor = ArgumentCaptor.forClass(Pageable.class);
+        when(cnpjActivityClient.isEnabled()).thenReturn(true);
+        when(repository.findAllBySegmentAndSegmentAttemptsLessThan(eq(MerchantSegment.UNKNOWN), anyInt(), limitCaptor.capture()))
+                .thenReturn(List.of());
+
+        service.classifyPendingSegments();
+
+        assertThat(limitCaptor.getValue().isUnpaged()).isTrue();
+    }
+
     // ---------- classifyPendingSegments ----------
 
     @Test
@@ -314,13 +367,13 @@ class MarketLocationServiceTest {
         var summary = service.classifyPendingSegments();
 
         assertThat(summary.attempted()).isZero();
-        verify(repository, never()).findAllBySegmentAndSegmentAttemptsLessThan(any(), anyInt());
+        verify(repository, never()).findAllBySegmentAndSegmentAttemptsLessThan(any(), anyInt(), any(Pageable.class));
     }
 
     @Test
     void classifyPendingSegments_returnsZeroSummaryWhenNoPending() {
         when(cnpjActivityClient.isEnabled()).thenReturn(true);
-        when(repository.findAllBySegmentAndSegmentAttemptsLessThan(eq(MerchantSegment.UNKNOWN), anyInt()))
+        when(repository.findAllBySegmentAndSegmentAttemptsLessThan(eq(MerchantSegment.UNKNOWN), anyInt(), any(Pageable.class)))
                 .thenReturn(List.of());
 
         var summary = service.classifyPendingSegments();
@@ -336,7 +389,7 @@ class MarketLocationServiceTest {
         var otherMarket = MarketLocation.builder().cnpj("o").cnpjRoot("oooooooo").build();
         var unknownMarket = MarketLocation.builder().cnpj("u").cnpjRoot("uuuuuuuu").build();
         when(cnpjActivityClient.isEnabled()).thenReturn(true);
-        when(repository.findAllBySegmentAndSegmentAttemptsLessThan(eq(MerchantSegment.UNKNOWN), anyInt()))
+        when(repository.findAllBySegmentAndSegmentAttemptsLessThan(eq(MerchantSegment.UNKNOWN), anyInt(), any(Pageable.class)))
                 .thenReturn(List.of(pharmacyMarket, supermarketMarket, otherMarket, unknownMarket));
         when(cnpjActivityClient.lookup("p")).thenReturn(new CnpjActivityClient.CnpjLookup(MerchantSegment.PHARMACY, null, List.of("4771701")));
         when(cnpjActivityClient.lookup("s")).thenReturn(new CnpjActivityClient.CnpjLookup(MerchantSegment.SUPERMARKET, null, List.of("4711302")));
@@ -489,6 +542,32 @@ class MarketLocationServiceTest {
     }
 
     @Test
+    void resolveForIngest_concurrentRegistrationOfTheSameMarket_reusesTheWinnersRow() {
+        var registeredByTheOtherIngest = new MarketLocation();
+        registeredByTheOtherIngest.setCnpj("33333333000133");
+        registeredByTheOtherIngest.setSegment(MerchantSegment.SUPERMARKET);
+        when(repository.findByCnpj("33333333000133"))
+                .thenReturn(Optional.empty())                          // our "not registered yet" check
+                .thenReturn(Optional.of(registeredByTheOtherIngest));  // re-read after losing the race
+        when(repository.save(any(MarketLocation.class)))
+                .thenThrow(new DataIntegrityViolationException("uk_market_location_cnpj"));
+
+        var resolved = service.resolveForIngest("33333333000133", "Mercado Novo", "Rua C");
+
+        assertThat(resolved).isSameAs(registeredByTheOtherIngest);
+    }
+
+    @Test
+    void resolveForIngest_constraintViolationWithNoExistingRow_stillPropagates() {
+        when(repository.findByCnpj("44444444000144")).thenReturn(Optional.empty());
+        when(repository.save(any(MarketLocation.class)))
+                .thenThrow(new DataIntegrityViolationException("some other constraint"));
+
+        assertThatThrownBy(() -> service.resolveForIngest("44444444000144", "Mercado", "Rua D"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
     void resolveForIngest_newMarket_registersAndClassifiesInline() {
         when(repository.findByCnpj("22222222000122")).thenReturn(Optional.empty());
         when(repository.save(any(MarketLocation.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -534,10 +613,10 @@ class MarketLocationServiceTest {
         var classified = MarketLocation.builder().cnpj("b").cnpjRoot("bbbbbbbb")
                 .segment(MerchantSegment.SUPERMARKET).segmentAttempts(1).build();
         when(cnpjActivityClient.isEnabled()).thenReturn(true);
-        when(repository.findAllBySegmentAndSegmentAttemptsLessThan(eq(MerchantSegment.UNKNOWN), anyInt()))
+        when(repository.findAllBySegmentAndSegmentAttemptsLessThan(eq(MerchantSegment.UNKNOWN), anyInt(), any(Pageable.class)))
                 .thenReturn(List.of());
         when(repository.findAllByIbgeCityCodeIsNullAndSegmentNotAndSegmentAttemptsLessThan(
-                eq(MerchantSegment.UNKNOWN), anyInt()))
+                eq(MerchantSegment.UNKNOWN), anyInt(), any(Pageable.class)))
                 .thenReturn(List.of(classified));
         when(cnpjActivityClient.lookup("b"))
                 .thenReturn(new CnpjActivityClient.CnpjLookup(MerchantSegment.SUPERMARKET, "4314902", List.of("4711302")));

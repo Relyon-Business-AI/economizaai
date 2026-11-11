@@ -5,12 +5,14 @@ import com.relyon.economizaai.exception.CaptchaUnavailableException;
 import com.relyon.economizaai.exception.ExperimentalCaptchaWallException;
 import com.relyon.economizaai.exception.ExperimentalStateFailedException;
 import com.relyon.economizaai.exception.InfosimplesNoDataException;
+import com.relyon.economizaai.exception.InfosimplesProviderException;
 import com.relyon.economizaai.exception.InvalidQrPayloadException;
 import com.relyon.economizaai.exception.ReceiptParseException;
 import com.relyon.economizaai.exception.SefazDeterministicFetchException;
 import com.relyon.economizaai.exception.SefazFetchException;
 import com.relyon.economizaai.exception.SefazPortalRejectionException;
 import com.relyon.economizaai.exception.UnsupportedStateException;
+import com.relyon.economizaai.model.enums.InfosimplesOutcome;
 import com.relyon.economizaai.model.enums.PaidApiService;
 import com.relyon.economizaai.model.enums.StateIngestionOutcome;
 import com.relyon.economizaai.model.enums.StateIngestionStrategy;
@@ -21,6 +23,7 @@ import com.relyon.economizaai.service.sefaz.captcha.CaptchaSolveTracker;
 import com.relyon.economizaai.service.sefaz.captcha.CaptchaSolver;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService.FetchedDocument;
 import com.relyon.economizaai.exception.PaidApiBudgetExceededException;
+import com.relyon.economizaai.exception.PaidApiQuotaExceededException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -34,8 +37,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -45,6 +50,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -234,7 +240,7 @@ class SefazIngestionServiceTest {
         var rsAdapter = mockAdapterFor(UnidadeFederativa.RS);
         var httpPayload = "https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx?p=" + CHAVE_RS;
         when(rsAdapter.fetchHtml(httpPayload)).thenReturn("<html>ok</html>");
-        when(paidApiGuard.isGlobalBudgetExhausted()).thenReturn(true);
+        when(paidApiGuard.isDailyBudgetExhausted(PaidApiService.CAPTCHA_SOLVE)).thenReturn(true);
         var service = new SefazIngestionService(List.of(rsAdapter), Optional.empty(), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
 
         var fetched = service.fetch(httpPayload, null);
@@ -251,7 +257,7 @@ class SefazIngestionServiceTest {
             CaptchaSolveTracker.assertSpendAllowed();
             return "<html>ok</html>";
         });
-        when(paidApiGuard.isGlobalBudgetExhausted()).thenReturn(true);
+        when(paidApiGuard.isDailyBudgetExhausted(PaidApiService.CAPTCHA_SOLVE)).thenReturn(true);
         var service = new SefazIngestionService(List.of(captchaAdapter), Optional.empty(), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
 
         assertThrows(PaidApiBudgetExceededException.class,
@@ -826,6 +832,44 @@ class SefazIngestionServiceTest {
     }
 
     @Test
+    void fetch_experimentalChain_infosimplesNoData_carriesTheAnswerOnTheFailure() {
+        var generic = genericAdapter(null); // portal unreachable
+        var infosimples = mock(InfosimplesService.class);
+        when(infosimples.fetchParsed(eq(CHAVE_BA), eq(UnidadeFederativa.BA)))
+                .thenThrow(new InfosimplesNoDataException("infosimples.not-found", 612));
+        var service = new SefazIngestionService(List.of(generic), Optional.of(infosimples), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+
+        var thrown = assertThrows(ExperimentalStateFailedException.class, () -> service.fetch(QR_URL_BA, null));
+
+        assertEquals(InfosimplesOutcome.NO_DATA, thrown.getInfosimplesOutcome());
+        assertFalse(thrown.isPortalUnavailable());
+    }
+
+    @Test
+    void fetch_experimentalChain_infosimplesUnstable_isPortalUnavailableWithFailedOutcome() {
+        var generic = genericAdapter(null); // portal unreachable
+        var infosimples = mock(InfosimplesService.class);
+        when(infosimples.fetchParsed(eq(CHAVE_BA), eq(UnidadeFederativa.BA)))
+                .thenThrow(new InfosimplesProviderException(615));
+        var service = new SefazIngestionService(List.of(generic), Optional.of(infosimples), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+
+        var thrown = assertThrows(ExperimentalStateFailedException.class, () -> service.fetch(QR_URL_BA, null));
+
+        assertEquals(InfosimplesOutcome.FAILED, thrown.getInfosimplesOutcome());
+        assertTrue(thrown.isPortalUnavailable());
+    }
+
+    @Test
+    void fetch_experimentalChain_infosimplesDisabled_leavesTheOutcomeEmpty() {
+        var generic = genericAdapter(null);
+        var service = new SefazIngestionService(List.of(generic), Optional.empty(), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+
+        var thrown = assertThrows(ExperimentalStateFailedException.class, () -> service.fetch(QR_URL_BA, null));
+
+        assertNull(thrown.getInfosimplesOutcome());
+    }
+
+    @Test
     void fetch_deviceFetchUfExhausted_recordsNoEvidence() {
         // PE fails server-side BY DESIGN (portal blocks our datacenter IP) — the
         // handoff to on-device fetch must not pile up EXHAUSTED evidence that
@@ -898,6 +942,89 @@ class SefazIngestionServiceTest {
         assertSame(legacy, fetched);
         verify(chaveReconsult).reconsult(CHAVE_RS);
         verifyNoInteractions(infosimples); // a reconsulta grátis resolveu — nada pago
+    }
+
+    @Test
+    void fetch_bareChaveBaReconsult_ledgersEverySolveItBought() {
+        var baAdapter = mockAdapterFor(UnidadeFederativa.BA);
+        when(baAdapter.requiresQrSignature()).thenReturn(true);
+        var service = new SefazIngestionService(List.of(baAdapter), Optional.empty(), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+        var userId = UUID.randomUUID();
+        var danfe = new FetchedDocument(baAdapter, "<html>danfe</html>", CHAVE_BA, UnidadeFederativa.BA, "ba");
+        when(chaveReconsult.reconsult(CHAVE_BA)).thenAnswer(invocation -> {
+            CaptchaSolveTracker.assertSpendAllowed();
+            CaptchaSolveTracker.recordSolve(); // first code rejected by the portal
+            CaptchaSolveTracker.recordSolve(); // re-solved, accepted
+            return danfe;
+        });
+
+        var fetched = service.fetch(CHAVE_BA, userId);
+
+        assertSame(danfe, fetched);
+        verify(paidApiGuard).assertWithinDailyCap(userId, PaidApiService.CAPTCHA_SOLVE);
+        verify(paidApiGuard, times(2)).recordSuccess(userId, PaidApiService.CAPTCHA_SOLVE, "BA", null);
+    }
+
+    @Test
+    void fetch_bareChaveBaReconsult_failedAttemptStillLedgersItsSolves() {
+        var baAdapter = mockAdapterFor(UnidadeFederativa.BA);
+        when(baAdapter.requiresQrSignature()).thenReturn(true);
+        var service = new SefazIngestionService(List.of(baAdapter), Optional.empty(), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+        when(chaveReconsult.reconsult(CHAVE_BA)).thenAnswer(invocation -> {
+            CaptchaSolveTracker.recordSolve();
+            throw new SefazFetchException("BA");
+        });
+
+        assertThrows(SefazFetchException.class, () -> service.fetch(CHAVE_BA, null));
+
+        verify(paidApiGuard).recordFailure(null, PaidApiService.CAPTCHA_SOLVE, "BA", null);
+    }
+
+    @Test
+    void fetch_bareChaveBaReconsult_userOverTheCaptchaCap_buysNoSolve() {
+        var baAdapter = mockAdapterFor(UnidadeFederativa.BA);
+        when(baAdapter.requiresQrSignature()).thenReturn(true);
+        var service = new SefazIngestionService(List.of(baAdapter), Optional.empty(), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+        var userId = UUID.randomUUID();
+        doThrow(new PaidApiQuotaExceededException("CAPTCHA_SOLVE"))
+                .when(paidApiGuard).assertWithinDailyCap(userId, PaidApiService.CAPTCHA_SOLVE);
+        when(chaveReconsult.reconsult(CHAVE_BA)).thenAnswer(invocation -> {
+            CaptchaSolveTracker.assertSpendAllowed(); // the solver's own gate refuses the purchase
+            return null;
+        });
+
+        assertThrows(SefazFetchException.class, () -> service.fetch(CHAVE_BA, userId));
+
+        verify(paidApiGuard, never()).recordSuccess(any(), any(), any(), any());
+        verify(paidApiGuard, never()).recordFailure(any(), any(), any(), any());
+    }
+
+    @Test
+    void fetch_bareChaveFreeReconsult_skipsTheCaptchaMetering() {
+        var rsAdapter = mockAdapterFor(UnidadeFederativa.RS);
+        when(rsAdapter.requiresQrSignature()).thenReturn(true);
+        var service = new SefazIngestionService(List.of(rsAdapter), Optional.empty(), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+        when(chaveReconsult.reconsult(CHAVE_RS))
+                .thenReturn(new FetchedDocument(rsAdapter, "<html/>", CHAVE_RS, UnidadeFederativa.RS, "satweb"));
+
+        service.fetch(CHAVE_RS, UUID.randomUUID());
+
+        verifyNoInteractions(paidApiGuard);
+    }
+
+    @Test
+    void fetch_bareChaveInfosimplesZeroItems_failsWithoutTheNoPathAlert() {
+        var spAdapter = mockAdapterFor(UnidadeFederativa.SP);
+        when(spAdapter.requiresQrSignature()).thenReturn(true);
+        var infosimples = mock(InfosimplesService.class);
+        when(infosimples.fetchParsed(eq(CHAVE_SP), eq(UnidadeFederativa.SP)))
+                .thenThrow(new ReceiptParseException("no-items-found"));
+        var service = new SefazIngestionService(List.of(spAdapter), Optional.of(infosimples), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+
+        var thrown = assertThrows(ReceiptParseException.class, () -> service.fetch(CHAVE_SP, null));
+
+        assertTrue(thrown.isNoItemsFound());
+        verifyNoInteractions(operationalAlert);
     }
 
     @Test
@@ -1258,6 +1385,59 @@ class SefazIngestionServiceTest {
                 () -> service.fetchViaInfosimplesFallback(CHAVE_SP, UnidadeFederativa.SP, null));
 
         verify(paidApiGuard).recordDeterministicFailure(null, PaidApiService.INFOSIMPLES, "SP", "infosimples", 612);
+    }
+
+    @Test
+    void fetchViaInfosimplesFallback_zeroItems_isLedgeredAsDeterministicNotBreakerFailure() {
+        var infosimples = mock(InfosimplesService.class);
+        when(infosimples.fetchParsed(eq(CHAVE_SP), eq(UnidadeFederativa.SP)))
+                .thenThrow(new ReceiptParseException("no-items-found"));
+        var service = new SefazIngestionService(List.of(mockAdapterFor(UnidadeFederativa.SP)), Optional.of(infosimples),
+                paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+
+        var thrown = assertThrows(ReceiptParseException.class,
+                () -> service.fetchViaInfosimplesFallback(CHAVE_SP, UnidadeFederativa.SP, null));
+
+        assertTrue(thrown.isNoItemsFound());
+        verify(paidApiGuard).recordDeterministicFailure(null, PaidApiService.INFOSIMPLES, "SP", "infosimples", 200);
+        verify(paidApiGuard, never()).recordFailure(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void fetch_freeOnlyPolicy_skipsInfosimplesAndBlocksCaptchaSpend() {
+        var adapter = mockAdapterFor(UnidadeFederativa.SP);
+        when(adapter.fetchHtml(CHAVE_SP)).thenAnswer(invocation -> {
+            // A solver asked for a token during a free-only attempt must be refused.
+            assertThrows(RuntimeException.class, CaptchaSolveTracker::assertSpendAllowed);
+            throw new SefazFetchException("SP");
+        });
+        var infosimples = mock(InfosimplesService.class);
+        var service = new SefazIngestionService(List.of(adapter), Optional.of(infosimples),
+                paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+
+        assertThrows(SefazFetchException.class,
+                () -> service.fetch(CHAVE_SP, null, false, IngestSpendPolicy.FREE_ONLY));
+
+        verifyNoInteractions(infosimples);
+        verify(paidApiGuard, never()).assertWithinDailyCap(any(), any());
+        CaptchaSolveTracker.blockSpend(false);
+    }
+
+    @Test
+    void parse_freeOnlyPolicy_experimentalParseFailure_spendsOnNeitherLlmNorInfosimples() {
+        var generic = genericAdapter("<html>weird layout</html>");
+        var infosimples = mock(InfosimplesService.class);
+        var service = new SefazIngestionService(List.of(generic), Optional.of(infosimples),
+                paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+        var fetched = new FetchedDocument(generic, "<html>weird layout</html>", CHAVE_BA, UnidadeFederativa.BA, QR_URL_BA);
+
+        var thrown = assertThrows(ReceiptParseException.class,
+                () -> service.parse(fetched, null, IngestSpendPolicy.FREE_ONLY));
+
+        assertEquals("receipt.parse.failed", thrown.getMessageKey());
+        verifyNoInteractions(infosimples);
+        verifyNoInteractions(htmlReceiptRescue);
+        verify(stateCoverage, never()).reportExhausted(any(), any(), any(), any(), any(), any());
     }
 
     @Test

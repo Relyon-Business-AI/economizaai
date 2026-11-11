@@ -37,6 +37,7 @@ import com.relyon.economizaai.service.sefaz.ParsedReceipt;
 import com.relyon.economizaai.service.sefaz.ParsedReceiptItem;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
+import com.relyon.economizaai.service.referral.ReferralService;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,6 +52,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -96,6 +99,7 @@ class ReceiptServiceCoverageTest {
     @Mock private ReceiptItemRepository receiptItemRepository;
     @Mock private SefazIngestionService sefazIngestionService;
     @Mock private ReceiptIngestionService receiptIngestionService;
+    @Mock private ReceiptRawHtmlService receiptRawHtmlService;
     @Mock private CanonicalizationService canonicalizationService;
     @Mock private PriceIndexService priceIndexService;
     @Mock private PromoDetector promoDetector;
@@ -108,14 +112,20 @@ class ReceiptServiceCoverageTest {
     @Mock private MarketNameService marketNameService;
     @Mock private SubscriptionGateService subscriptionGate;
     @Mock private SubscriptionService subscriptionService;
+    @Mock
+    private ReferralService referralService;
     @Mock private SavingsAttributionService savingsAttributionService;
     @Mock private MerchantSupportGate merchantSupportGate;
     @Mock private LocalizedMessageService localizedMessageService;
+    @Mock private TransactionTemplate transactionTemplate;
 
     @InjectMocks private ReceiptService receiptService;
 
     @BeforeEach
     void stubMarketNames() {
+        // confirm runs inside a TransactionTemplate — execute the callback inline.
+        lenient().when(transactionTemplate.execute(any()))
+                .thenAnswer(invocation -> invocation.<TransactionCallback<Object>>getArgument(0).doInTransaction(null));
         lenient().when(canonicalizationService.previewCategory(any())).thenReturn(Optional.empty());
         lenient().when(marketNameService.resolve(any(), any(), any()))
                 .thenAnswer(invocation -> invocation.getArgument(2));
@@ -327,9 +337,10 @@ class ReceiptServiceCoverageTest {
         when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of(promo));
         lenient().when(notificationRuleService.isEnabled(any(), eq(NotificationType.PROMO_PERSONAL))).thenReturn(true);
         user.setLocale("en");
-        when(localizedMessageService.translate("notification.personal_promo.title", Locale.forLanguageTag("en"),
+        // The device language captured at signup never decides the push language — always pt.
+        when(localizedMessageService.translate("notification.personal_promo.title", Locale.forLanguageTag("pt"),
                 "ARROZ TIO J 5KG")).thenReturn("You saved on ARROZ TIO J 5KG");
-        when(localizedMessageService.translate("notification.personal_promo.body", Locale.forLanguageTag("en"),
+        when(localizedMessageService.translate("notification.personal_promo.body", Locale.forLanguageTag("pt"),
                 "ARROZ TIO J 5KG", "19,90", "Mercado X", "31")).thenReturn("localized body");
 
         var response = receiptService.confirm(user, receipt.getId(), new ConfirmReceiptRequest(null));
@@ -384,6 +395,7 @@ class ReceiptServiceCoverageTest {
         assertEquals(2, added.getLineNumber(), "line number appended after existing max");
         assertEquals("FEIJAO PRETO 1KG", added.getRawDescription());
         assertEquals("Feijão Preto 1kg", added.getFriendlyDescription());
+        assertTrue(added.isUserModified(), "a line the user typed never feeds the price index");
         verify(householdCacheGen).bump(receipt.getHousehold().getId());
     }
 
@@ -452,6 +464,56 @@ class ReceiptServiceCoverageTest {
         verify(receiptItemRepository).save(item);
         verify(householdProductAliasService).rememberFromItem(receipt.getHousehold(), item);
         verify(householdCacheGen).bump(receipt.getHousehold().getId());
+    }
+
+    @Test
+    void updateItem_changedPriceFlagsLineAsUserModified() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        var item = receipt.getItems().get(0);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId()))
+                .thenReturn(Optional.of(receipt));
+        var cheaperPrice = new UpdateReceiptItemRequest(
+                "ignored", null, new BigDecimal("2"), "UN",
+                new BigDecimal("1.00"), new BigDecimal("2.00"), null, null, null, null);
+
+        receiptService.updateItem(user, receipt.getId(), item.getId(), cheaperPrice);
+
+        assertTrue(item.isUserModified());
+    }
+
+    @Test
+    void updateItem_changedQuantityOrEanFlagsLineAsUserModified() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        var item = receipt.getItems().get(0);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId()))
+                .thenReturn(Optional.of(receipt));
+        var newEan = new UpdateReceiptItemRequest(
+                "ignored", "7890000000001", new BigDecimal("2"), "UN",
+                new BigDecimal("28.90"), new BigDecimal("57.80"), null, null, null, null);
+
+        receiptService.updateItem(user, receipt.getId(), item.getId(), newEan);
+
+        assertTrue(item.isUserModified());
+    }
+
+    @Test
+    void updateItem_renameOrExclusionKeepsLineUntouchedForTheIndex() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        var item = receipt.getItems().get(0);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId()))
+                .thenReturn(Optional.of(receipt));
+        // Same numbers echoed back with client formatting (scale, case, 2-decimal unit price).
+        var renameOnly = new UpdateReceiptItemRequest(
+                "ignored", "", new BigDecimal("2.000"), "un",
+                new BigDecimal("28.9"), new BigDecimal("57.8"), Boolean.TRUE, "Arroz da casa", null, null);
+
+        receiptService.updateItem(user, receipt.getId(), item.getId(), renameOnly);
+
+        assertFalse(item.isUserModified());
+        assertEquals("Arroz da casa", item.getFriendlyDescription());
     }
 
     @Test

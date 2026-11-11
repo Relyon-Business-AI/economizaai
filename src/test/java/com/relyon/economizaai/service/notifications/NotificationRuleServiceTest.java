@@ -183,11 +183,11 @@ class NotificationRuleServiceTest {
     @Test
     void ensureDefaults_seedsOnlyMissingDefaults() {
         var owner = user();
-        // CHEAPER_MARKET already seeded; the rest are missing.
+        // DIGEST already seeded; the rest are missing.
         when(ruleRepository.findByUserIdAndTypeAndProductIsNull(eq(owner.getId()), any()))
                 .thenAnswer(invocation -> {
                     NotificationType type = invocation.getArgument(1);
-                    return type == NotificationType.CHEAPER_MARKET
+                    return type == NotificationType.DIGEST
                             ? Optional.of(NotificationRule.builder().id(UUID.randomUUID())
                                     .user(owner).type(type).isDefault(true).build())
                             : Optional.empty();
@@ -200,7 +200,22 @@ class NotificationRuleServiceTest {
         verify(ruleRepository, times(defaultCount - 1)).save(saveCaptor.capture());
         assertTrue(saveCaptor.getAllValues().stream().allMatch(NotificationRule::isDefault));
         assertTrue(saveCaptor.getAllValues().stream()
-                .noneMatch(rule -> rule.getType() == NotificationType.CHEAPER_MARKET));
+                .noneMatch(rule -> rule.getType() == NotificationType.DIGEST));
+    }
+
+    @Test
+    void ensureDefaults_neverSeedsTheRetiredToggles() {
+        var owner = user();
+        when(ruleRepository.findByUserIdAndTypeAndProductIsNull(eq(owner.getId()), any()))
+                .thenReturn(Optional.empty());
+
+        service.ensureDefaults(owner);
+
+        var saveCaptor = ArgumentCaptor.forClass(NotificationRule.class);
+        verify(ruleRepository, times(NotificationType.defaults().size())).save(saveCaptor.capture());
+        assertTrue(saveCaptor.getAllValues().stream().noneMatch(rule -> rule.getType().isRetired()));
+        assertTrue(NotificationType.defaults().stream().noneMatch(type ->
+                type == NotificationType.PROMO_COMMUNITY || type == NotificationType.CHEAPER_MARKET));
     }
 
     // ---- isEnabled ----
@@ -239,5 +254,22 @@ class NotificationRuleServiceTest {
 
         assertEquals("CAFE 500G", rules.get(0).productName());
         assertEquals("Cafe do papai", rules.get(0).friendlyDescription());
+    }
+
+    @Test
+    void list_hidesTheRetiredToggles() {
+        var user = user();
+        var retired = NotificationRule.builder().id(UUID.randomUUID()).user(user)
+                .type(NotificationType.PROMO_COMMUNITY).isDefault(true).build();
+        var alsoRetired = NotificationRule.builder().id(UUID.randomUUID()).user(user)
+                .type(NotificationType.CHEAPER_MARKET).isDefault(true).build();
+        var live = NotificationRule.builder().id(UUID.randomUUID()).user(user)
+                .type(NotificationType.DIGEST).isDefault(true).build();
+        when(ruleRepository.findAllByUserIdFetchProduct(user.getId())).thenReturn(List.of(retired, alsoRetired, live));
+
+        var listed = service.list(user);
+
+        assertEquals(1, listed.size());
+        assertEquals(NotificationType.DIGEST, listed.get(0).type());
     }
 }

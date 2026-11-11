@@ -75,6 +75,23 @@ class HouseholdProductCategoryOverrideServiceTest {
     }
 
     @Test
+    void setHouseholdOverride_replacesAnyPreviousTargetWithTheEnumCategory() {
+        var household = Household.builder().id(UUID.randomUUID()).build();
+        var product = product();
+        var existing = HouseholdProductCategoryOverride.builder()
+                .household(household).product(product).categoryNodeId(UUID.randomUUID()).build();
+        when(overrideRepository.findByHouseholdIdAndProductId(household.getId(), product.getId()))
+                .thenReturn(Optional.of(existing));
+
+        service.setHouseholdOverride(household, product, ProductCategory.MEAT_DAIRY);
+
+        verify(overrideRepository).save(existing);
+        assertEquals(ProductCategory.MEAT_DAIRY, existing.getCategory());
+        assertEquals(null, existing.getCategoryNodeId());
+        verify(householdCacheGen).bump(household.getId());
+    }
+
+    @Test
     void overridesByProduct_mapsProductIdToCategory() {
         var household = UUID.randomUUID();
         var product = product();

@@ -132,7 +132,7 @@ class NotificationRuleEngineTest {
     }
 
     @Test
-    void priceDrop_notificationLocalizedToUserLocale_en() {
+    void priceDrop_isPortugueseEvenForADeviceCapturedEnglishLocale() {
         var enUser = owner(null, null);
         enUser.setLocale("en");
         var rule = priceRule(NotificationType.PRICE_DROP, new BigDecimal("6.00"), null, null, enUser);
@@ -143,12 +143,13 @@ class NotificationRuleEngineTest {
 
         var captor = ArgumentCaptor.forClass(NotificationPayload.class);
         verify(notificationService).notifyAfterCommit(captor.capture());
-        assertTrue(captor.getValue().title().startsWith("Price drop:"), captor.getValue().title());
-        assertTrue(captor.getValue().body().contains("You asked to be alerted below"), captor.getValue().body());
+        assertTrue(captor.getValue().title().startsWith("Preço baixou:"), captor.getValue().title());
+        assertTrue(captor.getValue().body().contains("R$ 5,49"), captor.getValue().body());
+        assertTrue(captor.getValue().body().contains("abaixo de R$ 6,00"), captor.getValue().body());
     }
 
     @Test
-    void priceDrop_marketNameFallbackLocalizedToUserLocale_en() {
+    void priceDrop_marketNameFallbackIsPortuguese() {
         var enUser = owner(null, null);
         enUser.setLocale("en");
         var rule = priceRule(NotificationType.PRICE_DROP, new BigDecimal("6.00"), null, null, enUser);
@@ -163,8 +164,7 @@ class NotificationRuleEngineTest {
 
         var captor = ArgumentCaptor.forClass(NotificationPayload.class);
         verify(notificationService).notifyAfterCommit(captor.capture());
-        // The fallback market name follows the recipient's locale — never hardcoded pt.
-        assertTrue(captor.getValue().body().contains("a nearby market"), captor.getValue().body());
+        assertTrue(captor.getValue().body().contains("um mercado próximo"), captor.getValue().body());
     }
 
     @Test

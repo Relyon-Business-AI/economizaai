@@ -6,13 +6,13 @@ import com.relyon.economizaai.exception.InvalidQrPayloadException;
 import com.relyon.economizaai.exception.SefazFetchException;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.sefaz.captcha.CaptchaSolver;
+import com.relyon.economizaai.service.privacy.LogMasker;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -72,10 +72,10 @@ public class GenericQrPortalAdapter implements SefazAdapter {
     private static final Pattern URL_HOST = Pattern.compile(
             "^(https?)://([^/?#@\\\\]+?)(?::\\d+)?(?=[/?#]|$)", Pattern.CASE_INSENSITIVE);
     private static final int EVIDENCE_SNIPPET_CHARS = 600;
-    // The JDK HttpURLConnection auto-follows same-scheme redirects but NOT
-    // http->https (PE bounces http:80 -> https:444 and answers with the NFe XML).
-    // We follow those hops ourselves, re-checking the SSRF allowlist each time.
-    private static final int MAX_REDIRECTS = 4;
+    // The HTTP client never follows a redirect by itself (see PortalRedirects): every hop —
+    // same scheme or not (PE bounces http:80 -> https:444 and answers with the NFe XML) —
+    // is followed here, after re-checking the host allowlist.
+    private static final int MAX_REDIRECTS = PortalRedirects.MAX_HOPS;
 
     private final RestClient restClient;
     private final CaptchaSolver captchaSolver;
@@ -83,6 +83,16 @@ public class GenericQrPortalAdapter implements SefazAdapter {
     private final int maxAttempts;
     private final long retryDelayMs;
     private final Set<String> allowedHostSuffixes;
+
+    // Printed QR codes of several states still point at http:// portals (some only answer
+    // there), so plain http stays accepted by default. Turn it off to fetch https only.
+    @Value("${economizaai.ingestion.sefaz.allow-plain-http:true}")
+    private boolean allowPlainHttp = true;
+
+    /** Test seam for the https-only mode (production value comes from configuration). */
+    void setAllowPlainHttp(boolean allowPlainHttp) {
+        this.allowPlainHttp = allowPlainHttp;
+    }
 
     public GenericQrPortalAdapter(RestClient.Builder builder,
                                   CaptchaSolver captchaSolver,
@@ -92,9 +102,8 @@ public class GenericQrPortalAdapter implements SefazAdapter {
                                   @Value("${economizaai.ingestion.sefaz.experimental.max-attempts:3}") int maxAttempts,
                                   @Value("${economizaai.ingestion.sefaz.retry.delay-ms:5000}") long retryDelayMs,
                                   @Value("${economizaai.ingestion.sefaz.experimental.allowed-host-suffixes:gov.br}") String allowedHostSuffixes) {
-        var requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(Math.min(timeoutMs, 10000));
-        requestFactory.setReadTimeout(timeoutMs);
+        var requestFactory = PortalRedirects.requestFactoryWithoutAutoRedirects(
+                Math.min(timeoutMs, 10000), timeoutMs);
         this.restClient = builder
                 .defaultHeader("User-Agent", userAgent)
                 .defaultHeader("Accept", "text/html,application/xhtml+xml")
@@ -139,13 +148,14 @@ public class GenericQrPortalAdapter implements SefazAdapter {
                 sleep(retryDelayMs, uf);
             }
         }
-        log.warn("sefaz.experimental.exhausted uf={} attempts={} url={}", uf, maxAttempts, url);
+        log.warn("sefaz.experimental.exhausted uf={} attempts={} url={}", uf, maxAttempts, LogMasker.portalUrl(url));
         throw new ExperimentalPortalFetchException(uf.name(),
                 "transient failures exhausted " + maxAttempts + " attempts (timeouts/5xx/empty body)");
     }
 
     private String fetchOnce(String url, int attempt, UnidadeFederativa uf) {
-        log.info("sefaz.experimental.fetch uf={} attempt={}/{} url={}", uf, attempt, maxAttempts, url);
+        log.info("sefaz.experimental.fetch uf={} attempt={}/{} url={}",
+                uf, attempt, maxAttempts, LogMasker.portalUrl(url));
         try {
             var fetched = httpFetch(url);
             if (fetched.body() == null || fetched.body().isBlank()) {
@@ -240,7 +250,7 @@ public class GenericQrPortalAdapter implements SefazAdapter {
         body.set("cf-turnstile-response", token);
         body.set("g-recaptcha-response", token);
         try {
-            log.info("sefaz.experimental.form_replay uf={} action={}", uf, action);
+            log.info("sefaz.experimental.form_replay uf={} action={}", uf, LogMasker.portalUrl(action));
             return httpPostForm(action, body, fetched.cookieHeader());
         } catch (RestClientException ex) {
             log.warn("sefaz.experimental.form_replay_failed uf={} reason={}", uf, ex.getClass().getSimpleName());
@@ -323,12 +333,11 @@ public class GenericQrPortalAdapter implements SefazAdapter {
     }
 
     /**
-     * Raw HTTP GET that follows cross-scheme redirects the JDK client won't (see
-     * {@link #MAX_REDIRECTS}), returning the body + the FINAL url + accumulated
-     * cookies — the form replay needs the post-redirect url and session cookies.
-     * Isolated as a seam so the retry loop is unit-testable. Every redirect hop is
-     * re-validated against the SSRF allowlist via {@link #resolveUrl}, so a portal
-     * can't bounce the server off {@code gov.br}.
+     * Raw HTTP GET that follows redirects itself (bounded by {@link #MAX_REDIRECTS}),
+     * returning the body + the FINAL url + accumulated cookies — the form replay needs
+     * the post-redirect url and session cookies. Isolated as a seam so the retry loop is
+     * unit-testable. Every redirect hop is re-validated against the host allowlist via
+     * {@link #resolveUrl}, so a portal can't bounce the server off {@code gov.br}.
      */
     protected PortalFetch httpFetch(String url) {
         var current = url;
@@ -343,7 +352,7 @@ public class GenericQrPortalAdapter implements SefazAdapter {
             if (location == null || location.isBlank()) {
                 return new PortalFetch(response.getBody(), current, cookieHeader(cookies));
             }
-            current = resolveUrl(location);
+            current = resolveUrl(PortalRedirects.resolveLocation(current, location));
         }
         throw new TransientFetchException("too-many-redirects");
     }
@@ -358,9 +367,13 @@ public class GenericQrPortalAdapter implements SefazAdapter {
         return restClient.get().uri(url).retrieve().toEntity(String.class);
     }
 
-    /** Form-urlencoded POST (the captcha form replay), carrying the captcha page's cookies. */
+    /**
+     * Form-urlencoded POST (the captcha form replay), carrying the captcha page's cookies.
+     * A redirect answer (post-then-redirect) is followed as a GET through {@link #httpFetch},
+     * so its target goes through the host allowlist like any other hop.
+     */
     protected String httpPostForm(String url, MultiValueMap<String, String> body, String cookieHeader) {
-        return restClient.post()
+        var response = restClient.post()
                 .uri(url)
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .headers(headers -> {
@@ -370,8 +383,12 @@ public class GenericQrPortalAdapter implements SefazAdapter {
                 })
                 .body(body)
                 .retrieve()
-                .toEntity(String.class)
-                .getBody();
+                .toEntity(String.class);
+        var location = response.getHeaders().getFirst(HttpHeaders.LOCATION);
+        if (response.getStatusCode().is3xxRedirection() && location != null && !location.isBlank()) {
+            return httpFetch(resolveUrl(PortalRedirects.resolveLocation(url, location))).body();
+        }
+        return response.getBody();
     }
 
     @Override
@@ -401,6 +418,10 @@ public class GenericQrPortalAdapter implements SefazAdapter {
                 .anyMatch(suffix -> host.equals(suffix) || host.endsWith("." + suffix));
         if (!allowed) {
             log.warn("sefaz.experimental.url.rejected host not under allowed suffixes");
+            throw new InvalidQrPayloadException();
+        }
+        if (!allowPlainHttp && !PortalRedirects.isHttps(trimmed)) {
+            log.warn("sefaz.experimental.url.rejected plain http not accepted");
             throw new InvalidQrPayloadException();
         }
         return trimmed;

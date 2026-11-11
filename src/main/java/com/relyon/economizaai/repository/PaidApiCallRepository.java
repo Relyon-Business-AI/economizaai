@@ -22,6 +22,13 @@ public interface PaidApiCallRepository extends JpaRepository<PaidApiCall, UUID> 
     @Query("SELECT COALESCE(SUM(call.estimatedCostCents), 0) FROM PaidApiCall call WHERE call.createdAt >= :since")
     long sumCostCentsSince(@Param("since") OffsetDateTime since);
 
+    /** Estimated spend (cents) of ONE service since {@code since} — the per-service daily budget gauge. */
+    @Query("""
+        SELECT COALESCE(SUM(call.estimatedCostCents), 0) FROM PaidApiCall call
+        WHERE call.service = :service AND call.createdAt >= :since
+    """)
+    long sumCostCentsByServiceSince(@Param("service") PaidApiService service, @Param("since") OffsetDateTime since);
+
     /** Spend + volume grouped by service since {@code since} — the cost report's service breakdown. */
     @Query("""
         SELECT call.service AS service,

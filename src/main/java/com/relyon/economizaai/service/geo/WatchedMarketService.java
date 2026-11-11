@@ -6,7 +6,6 @@ import com.relyon.economizaai.exception.MarketNotFoundException;
 import com.relyon.economizaai.model.MarketLocation;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.UserWatchedMarket;
-import com.relyon.economizaai.exception.PaywallException;
 import com.relyon.economizaai.repository.MarketLocationRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.repository.UserWatchedMarketRepository;
@@ -167,9 +166,7 @@ public class WatchedMarketService {
         if (existing.isEmpty()) {
             // Cap only NEW pins — re-pinning an existing one is always allowed.
             var current = watchedRepository.findAllByUserId(user.getId()).size();
-            if (current >= subscriptionGate.watchedMarketLimit(user)) {
-                throw new PaywallException(Feature.WATCHED_MARKETS_UNLIMITED.name());
-            }
+            subscriptionGate.requireWithinLimit(user, Feature.WATCHED_MARKETS_UNLIMITED, current);
             watchedRepository.save(UserWatchedMarket.builder()
                     .user(user)
                     .marketCnpj(normalized)

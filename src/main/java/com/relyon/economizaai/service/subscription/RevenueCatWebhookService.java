@@ -6,6 +6,7 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.repository.RevenueEventRepository;
 import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.privacy.LogMasker;
+import com.relyon.economizaai.service.referral.ReferralService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,11 +25,15 @@ import java.util.UUID;
  * Translates a RevenueCat webhook event into our subscription lifecycle.
  *
  * <p>The app sets RevenueCat's {@code app_user_id} to our user identity (UUID or
- * email), so we resolve the user from it. Events are grouped: anything that
- * grants/extends access activates PRO until the event's expiration; an
- * expiration revokes it. A bare cancellation (auto-renew turned off) is a no-op
- * — access continues until the period actually ends, then the expiry sweep (or
- * the EXPIRATION event) downgrades it.
+ * email), so we resolve the user from it. Events are grouped:
+ * <ul>
+ *   <li>anything that grants/extends access activates PRO until the event's expiration;</li>
+ *   <li>{@code CANCELLATION} (auto-renew turned off) and {@code SUBSCRIPTION_PAUSED} (sent when
+ *       a pause is SCHEDULED, not when it takes effect) only mark the subscription as
+ *       non-renewing — the user paid until the period end and keeps PRO until then;</li>
+ *   <li>{@code EXPIRATION} ends it — back to the launch promo when the user still has it,
+ *       FREE otherwise.</li>
+ * </ul>
  */
 @Slf4j
 @Service
@@ -41,12 +46,16 @@ public class RevenueCatWebhookService {
     private static final Set<String> ACTIVATING = Set.of(
             "INITIAL_PURCHASE", "RENEWAL", "UNCANCELLATION", "PRODUCT_CHANGE",
             "NON_RENEWING_PURCHASE", "SUBSCRIPTION_EXTENDED", "TEMPORARY_ENTITLEMENT_GRANT");
-    /** Events that end PRO entitlement now. */
-    private static final Set<String> REVOKING = Set.of("EXPIRATION", "SUBSCRIPTION_PAUSED");
+    /** The subscription will not renew, but the paid period is still running. */
+    private static final Set<String> NON_RENEWING = Set.of("CANCELLATION", "SUBSCRIPTION_PAUSED");
+    private static final String EXPIRATION = "EXPIRATION";
+    /** Activations that are a real purchase (not an extension/grant) — what counts as "subscribed" for referrals. */
+    private static final Set<String> PURCHASES = Set.of("INITIAL_PURCHASE", "RENEWAL", "NON_RENEWING_PURCHASE");
 
     private final SubscriptionService subscriptionService;
     private final UserRepository userRepository;
     private final RevenueEventRepository revenueEventRepository;
+    private final ReferralService referralService;
 
     @Transactional
     public void handle(Event event) {
@@ -64,11 +73,16 @@ public class RevenueCatWebhookService {
         if (ACTIVATING.contains(type)) {
             subscriptionService.activatePro(user, PROVIDER, event.productId(), periodEnd(event));
             recordRevenue(user, event, type);
-        } else if (REVOKING.contains(type)) {
-            subscriptionService.cancel(user);
+            if (isPaidPurchase(event, type)) {
+                referralService.rewardInviterForSubscription(user);
+            }
+        } else if (NON_RENEWING.contains(type)) {
+            subscriptionService.markNonRenewing(user, PROVIDER);
+        } else if (EXPIRATION.equals(type)) {
+            subscriptionService.endProviderSubscription(user, PROVIDER);
         } else {
-            // CANCELLATION / BILLING_ISSUE / TRANSFER / TEST / aliases: keep current
-            // entitlement (the user still has access until the period lapses).
+            // BILLING_ISSUE / TRANSFER / TEST / aliases: keep the current entitlement (a billing
+            // issue is retried by the store; the expiry sweep's grace covers the gap).
             log.debug("revenuecat.webhook noop type={} user={}", type, LogMasker.email(user.getEmail()));
             return;
         }
@@ -82,6 +96,11 @@ public class RevenueCatWebhookService {
         } catch (IllegalArgumentException notAUuid) {
             return userRepository.findByEmail(appUserId);
         }
+    }
+
+    /** Money actually changed hands — a free trial or a store grant is not a subscription yet. */
+    private static boolean isPaidPurchase(Event event, String type) {
+        return PURCHASES.contains(type) && event.price() != null && event.price() > 0;
     }
 
     private LocalDateTime periodEnd(Event event) {

@@ -17,5 +17,11 @@ public enum AiFindingType {
     /** Product missing a friendly generic name → proposed name. */
     FRIENDLY_NAME,
     /** Receipt-level anomaly (absurd price, duplicated line) — informational. */
-    ANOMALY
+    ANOMALY,
+    /**
+     * A user's "corrigir item" proposes a new name/brand/category for a shared product. The
+     * correction already applies to that user's household; approving applies it to the GLOBAL
+     * product for everyone, rejecting leaves the catalog as it was.
+     */
+    PRODUCT_CORRECTION
 }

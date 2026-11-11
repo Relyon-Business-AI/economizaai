@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Collection;
@@ -23,6 +24,30 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     Page<Notification> findSentSince(@Param("since") LocalDateTime since, Pageable pageable);
 
     long countByUserIdAndReadAtIsNull(UUID userId);
+
+    /** Users with at least one notification still held back by the quiet hours (one page). */
+    @Query("SELECT DISTINCT notification.user.id FROM Notification notification WHERE notification.dispatchDeferred = true")
+    List<UUID> findUserIdsWithDeferredDispatch(Pageable pageable);
+
+    /** One user's held-back notifications, oldest first — the order they are sent in. */
+    @Query("""
+        SELECT notification FROM Notification notification
+        JOIN FETCH notification.user
+        WHERE notification.dispatchDeferred = true AND notification.user.id = :userId
+        ORDER BY notification.createdAt ASC
+    """)
+    List<Notification> findDeferredByUserId(@Param("userId") UUID userId);
+
+    /**
+     * Atomically takes a held-back notification for sending. Returns 1 for the caller that
+     * won it and 0 for everyone else, so an overlapping run or a second instance never
+     * sends the same row twice.
+     */
+    @Modifying
+    @Transactional
+    @Query("UPDATE Notification notification SET notification.dispatchDeferred = false "
+            + "WHERE notification.id = :id AND notification.dispatchDeferred = true")
+    int claimDeferredDispatch(@Param("id") UUID id);
 
     boolean existsByUserIdAndPayloadContainingAndCreatedAtAfter(UUID userId, String payloadFragment, LocalDateTime after);
 

@@ -1,7 +1,9 @@
 package com.relyon.economizaai.controller;
 
 import com.relyon.economizaai.dto.request.ChangePasswordRequest;
+import com.relyon.economizaai.dto.request.ConfirmEmailChangeRequest;
 import com.relyon.economizaai.dto.request.DeleteAccountRequest;
+import com.relyon.economizaai.dto.request.RequestEmailChangeRequest;
 import com.relyon.economizaai.dto.request.SetPasswordRequest;
 import com.relyon.economizaai.dto.request.UpdateContributionRequest;
 import com.relyon.economizaai.dto.request.UpdateDigestPreferencesRequest;
@@ -26,6 +28,7 @@ import com.relyon.economizaai.exception.CepNotResolvableException;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.UserService;
 import com.relyon.economizaai.service.geo.CepLocationService;
+import com.relyon.economizaai.service.auth.EmailChangeService;
 import com.relyon.economizaai.service.auth.EmailVerificationService;
 import com.relyon.economizaai.service.auth.PhoneVerificationService;
 import com.relyon.economizaai.service.notifications.NotificationPreferenceService;
@@ -34,6 +37,7 @@ import com.relyon.economizaai.service.notifications.WhatsAppOptInService;
 import com.relyon.economizaai.service.profile.ProfilePictureService;
 import com.relyon.economizaai.service.profile.StoreReviewPromptService;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -66,6 +70,7 @@ public class UserController {
     private final NotificationPreferenceService notificationPreferenceService;
     private final ProfilePictureService profilePictureService;
     private final EmailVerificationService emailVerificationService;
+    private final EmailChangeService emailChangeService;
     private final PhoneVerificationService phoneVerificationService;
     private final SavingsService savingsService;
     private final SubscriptionService subscriptionService;
@@ -214,6 +219,31 @@ public class UserController {
     @PostMapping("/me/email-verification/resend")
     public ResponseEntity<Void> resendEmailVerification(@AuthenticationPrincipal User user) {
         emailVerificationService.resend(user);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "E-mail change — step 1: request",
+            description = "Needs the current password. Sends a 6-digit code (valid 30 min) to the NEW address; "
+                    + "the account e-mail does not change yet. 409 = account without password, or address in use.")
+    @PostMapping("/me/email-change")
+    public ResponseEntity<Void> requestEmailChange(@AuthenticationPrincipal User user,
+                                                   @Valid @RequestBody RequestEmailChangeRequest request) {
+        emailChangeService.requestChange(user, request);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "E-mail change — step 2: confirm the code",
+            description = "Switches the account to the new (verified) e-mail, notifies the old address and "
+                    + "revokes the other sessions. 400 = invalid/expired code.")
+    @PostMapping("/me/email-change/confirm")
+    public ResponseEntity<UserResponse> confirmEmailChange(@AuthenticationPrincipal User user,
+                                                           @Valid @RequestBody ConfirmEmailChangeRequest request) {
+        return ResponseEntity.ok(emailChangeService.confirmChange(user, request));
+    }
+
+    @DeleteMapping("/me/email-change")
+    public ResponseEntity<Void> cancelEmailChange(@AuthenticationPrincipal User user) {
+        emailChangeService.cancelChange(user);
         return ResponseEntity.noContent().build();
     }
 

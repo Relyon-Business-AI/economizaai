@@ -150,7 +150,8 @@ public class NotificationRuleEngine {
         var marketName = friendlyMarketName(rule, observation, locale);
         var title = messageService.translate("notification.price_drop.title", locale, productName);
         var body = messageService.translate("notification.price_drop.body", locale,
-                productName, observation.getUnitPrice().toString(), marketName, rule.getThresholdPrice().toString());
+                productName, NotificationTextFormatter.amount(observation.getUnitPrice()), marketName,
+                NotificationTextFormatter.amount(rule.getThresholdPrice()));
         notificationService.notifyAfterCommit(new NotificationPayload(
                 rule.getUser(), rule.getType(), title, body, baseExtras(rule, observation)));
     }

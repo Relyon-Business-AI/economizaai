@@ -11,4 +11,12 @@ public class ReceiptRetryUnavailableException extends DomainException {
     public ReceiptRetryUnavailableException() {
         super("receipt.retry.unavailable");
     }
+
+    /**
+     * The nota failed for a reason a retry cannot change (corrupted chave, nota not found at
+     * the portal, unsupported merchant…) — {@code messageKey} tells the user what to do instead.
+     */
+    public ReceiptRetryUnavailableException(String messageKey) {
+        super(messageKey);
+    }
 }

@@ -27,6 +27,7 @@ import com.relyon.economizaai.exception.ReceiptPhotoIncompleteException;
 import com.relyon.economizaai.exception.InvalidIssuedAtException;
 import com.relyon.economizaai.exception.ReceiptNotEditableException;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
+import com.relyon.economizaai.exception.ReceiptRetryUnavailableException;
 import com.relyon.economizaai.exception.UnsupportedMerchantException;
 import com.relyon.economizaai.config.MdcContextFilter;
 import com.relyon.economizaai.model.Receipt;
@@ -53,6 +54,7 @@ import org.springframework.data.jpa.domain.Specification;
 import com.relyon.economizaai.service.notifications.NotificationPayload;
 import com.relyon.economizaai.service.notifications.NotificationRuleService;
 import com.relyon.economizaai.service.notifications.NotificationService;
+import com.relyon.economizaai.service.notifications.NotificationTextFormatter;
 import com.relyon.economizaai.service.notifications.SavingsAttributionService;
 import com.relyon.economizaai.service.priceindex.PriceIndexService;
 import com.relyon.economizaai.service.privacy.LogMasker;
@@ -63,8 +65,11 @@ import com.relyon.economizaai.service.sefaz.ParsedReceipt;
 import com.relyon.economizaai.service.sefaz.ParsedReceiptItem;
 import com.relyon.economizaai.service.sefaz.PrefetchPolicy;
 import com.relyon.economizaai.service.sefaz.ReceiptIngestionService;
+import com.relyon.economizaai.service.sefaz.ReceiptRetryPolicy;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
 import com.relyon.economizaai.service.sefaz.StateCoverageService;
+import com.relyon.economizaai.service.referral.ReferralService;
+import com.relyon.economizaai.service.subscription.EntitlementClock;
 import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
@@ -87,6 +92,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -127,8 +133,10 @@ public class ReceiptService {
     private final MarketNameService marketNameService;
     private final SubscriptionGateService subscriptionGate;
     private final SubscriptionService subscriptionService;
+    private final ReferralService referralService;
     private final SavingsAttributionService savingsAttributionService;
     private final ReceiptIngestionService receiptIngestionService;
+    private final ReceiptRawHtmlService receiptRawHtmlService;
     private final TransactionTemplate transactionTemplate;
 
     /**
@@ -151,9 +159,12 @@ public class ReceiptService {
     public ReceiptResponse submit(User user, SubmitReceiptRequest request) {
         var qrPayload = request.qrPayload();
         var chave = sefazIngestionService.resolveChave(qrPayload);
-        var receipt = validateAndPersistProcessing(user, qrPayload, chave, request.entryMethod());
+        var submission = validateAndPersistProcessing(user, qrPayload, chave, request.entryMethod());
+        var receipt = submission.receipt();
         var receiptId = receipt.getId();
-        dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload));
+        if (submission.needsIngestDispatch()) {
+            dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload));
+        }
         return withFriendlyName(user.getHousehold().getId(), receipt, ReceiptResponse.from(receipt));
     }
 
@@ -168,9 +179,12 @@ public class ReceiptService {
     public ReceiptResponse submit(User user, SubmitReceiptRequest request, boolean deviceCapable) {
         var qrPayload = request.qrPayload();
         var chave = sefazIngestionService.resolveChave(qrPayload);
-        var receipt = validateAndPersistProcessing(user, qrPayload, chave, request.entryMethod());
+        var submission = validateAndPersistProcessing(user, qrPayload, chave, request.entryMethod());
+        var receipt = submission.receipt();
         var receiptId = receipt.getId();
-        dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload, deviceCapable));
+        if (submission.needsIngestDispatch()) {
+            dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingest(receiptId, qrPayload, deviceCapable));
+        }
         return withFriendlyName(user.getHousehold().getId(), receipt, ReceiptResponse.from(receipt));
     }
 
@@ -189,9 +203,12 @@ public class ReceiptService {
         prefetchPolicy.requireAllowed(ChaveAcessoParser.extractUf(chave));
         // A prefetched receipt started as a QR scan (the app scanned the QR, then fetched the
         // page on-device) — let the derivation read QR_SCAN from the URL payload.
-        var receipt = validateAndPersistProcessing(user, qrPayload, chave, null);
+        var submission = validateAndPersistProcessing(user, qrPayload, chave, null);
+        var receipt = submission.receipt();
         var receiptId = receipt.getId();
-        dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingestPrefetched(receiptId, qrPayload, rawContent));
+        if (submission.needsIngestDispatch()) {
+            dispatchAfterCommit(receiptId, () -> receiptIngestionService.ingestPrefetched(receiptId, qrPayload, rawContent));
+        }
         return withFriendlyName(user.getHousehold().getId(), receipt, ReceiptResponse.from(receipt));
     }
 
@@ -311,6 +328,7 @@ public class ReceiptService {
     @Transactional
     public boolean retryFailedScan(User user, UUID receiptId, boolean deviceCapable) {
         var receipt = loadOwned(user, receiptId);
+        refuseRetryThatCannotHelp(receipt);
         if (receipt.getOrigin() != ReceiptOrigin.SCAN) {
             return false;
         }
@@ -331,6 +349,20 @@ public class ReceiptService {
     }
 
     /**
+     * A failure that is a final verdict about the nota itself (corrupted chave, the portal has
+     * no such nota, unsupported merchant…) fails the exact same way on every retry — and a retry
+     * may pay for the fetch again. Refuse it with a localized message that says what to do
+     * instead. Applies to every origin, so it runs before the origin-specific retry paths.
+     */
+    private static void refuseRetryThatCannotHelp(Receipt receipt) {
+        if (receipt.getStatus() != ReceiptStatus.FAILED_PARSE) return;
+        ReceiptRetryPolicy.refusalMessageKey(receipt.getParseErrorReason()).ifPresent(refusalKey -> {
+            log.info("retry.refused reason={} message={}", receipt.getParseErrorReason(), refusalKey);
+            throw new ReceiptRetryUnavailableException(refusalKey);
+        });
+    }
+
+    /**
      * Honest retry for notas whose source is a stored, self-contained XML
      * (e-commerce import): re-parses the STORED content — no SEFAZ fetch, no
      * reconsult. Returns {@code false} when there's no re-parseable stored XML
@@ -343,7 +375,7 @@ public class ReceiptService {
         if (receipt.getStatus() != ReceiptStatus.FAILED_PARSE) {
             return false;
         }
-        var storedXml = receipt.getRawHtml();
+        var storedXml = receiptRawHtmlService.find(receiptId).orElse(null);
         if (storedXml == null || !NfceXmlParser.looksLikeNfeXml(storedXml)) {
             return false;
         }
@@ -410,9 +442,13 @@ public class ReceiptService {
      * PROCESSING for the async ingestion to fill in. The chave must arrive
      * already resolved (see {@link #submit}) — resolution can hit HTTP and never
      * belongs anywhere near a transaction.
+     *
+     * <p>A chave this household already has IN FLIGHT (the user tapped twice, or the app
+     * re-sent while the first ingest is still running) returns that row and asks for no new
+     * dispatch — starting over would run, and pay for, the same fetch twice.
      */
-    private Receipt validateAndPersistProcessing(User user, String qrPayload, String chave,
-                                                 ReceiptEntryMethod entryMethod) {
+    private Submission validateAndPersistProcessing(User user, String qrPayload, String chave,
+                                                    ReceiptEntryMethod entryMethod) {
         log.info("submit chave={}", LogMasker.chave(chave));
 
         // Fail unsupported UFs up front with a localized 400 — the async path
@@ -469,13 +505,39 @@ public class ReceiptService {
             log.info("submit rejected reason=merchant_unsupported cnpj={}", ChaveAcessoParser.extractCnpj(chave));
             throw new UnsupportedMerchantException();
         }
+        var inFlight = findInFlightSubmission(user, chave);
+        if (inFlight.isPresent()) {
+            return new Submission(inFlight.get(), false);
+        }
         enforceMonthlyReceiptCap(user);
         replaceStalePriorOrRejectConfirmedDuplicate(user, chave);
 
         var receipt = persistProcessing(user, qrPayload, chave, ReceiptOrigin.SCAN, entryMethod);
         MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receipt.getId()));
         log.info("submit ok status=PROCESSING (ingestion dispatched)");
-        return receipt;
+        return new Submission(receipt, true);
+    }
+
+    /** The receipt a submit resolved to, and whether a new ingest has to be dispatched for it. */
+    private record Submission(Receipt receipt, boolean needsIngestDispatch) {}
+
+    private static final Set<ReceiptStatus> IN_FLIGHT_STATUSES =
+            EnumSet.of(ReceiptStatus.PROCESSING, ReceiptStatus.IMPORT_QUEUED);
+
+    /**
+     * The household's row for this chave when its ingest is still running or queued. Reloaded
+     * with its items so the response can be built outside a transaction.
+     */
+    private Optional<Receipt> findInFlightSubmission(User user, String chave) {
+        var householdId = user.getHousehold().getId();
+        return receiptRepository.findByHouseholdIdAndChaveAcesso(householdId, chave)
+                .filter(existing -> IN_FLIGHT_STATUSES.contains(existing.getStatus()))
+                .map(existing -> {
+                    MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(existing.getId()));
+                    log.info("submit.already_in_flight chave={} status={} household={}",
+                            LogMasker.chave(chave), existing.getStatus(), householdId);
+                    return receiptRepository.findByIdWithItemsAndProducts(existing.getId()).orElse(existing);
+                });
     }
 
     /**
@@ -549,22 +611,19 @@ public class ReceiptService {
     }
 
     /**
-     * FREE plan caps receipts per calendar month. Counts ALL statuses this month
-     * so reject/delete-and-resubmit can't game the limit; PRO (limit MAX_VALUE)
+     * FREE plan caps receipts per calendar month. Counts every receipt the user SUBMITTED this
+     * month, in any status, so reject/delete-and-resubmit can't game the limit; the copies a
+     * household split creates are not submissions and don't count. PRO (limit MAX_VALUE)
      * bypasses entirely.
      */
     public void enforceMonthlyReceiptCap(User user) {
-        var monthlyLimit = subscriptionGate.monthlyReceiptLimit(user);
-        if (monthlyLimit == Integer.MAX_VALUE) {
+        if (subscriptionGate.monthlyReceiptLimit(user) == Integer.MAX_VALUE) {
             return;
         }
         var startOfMonth = BrazilClock.currentYearMonth().atDay(1).atStartOfDay();
-        var thisMonth = receiptRepository.countByUserIdAndCreatedAtGreaterThanEqual(user.getId(), startOfMonth);
-        if (thisMonth >= monthlyLimit) {
-            log.info("paywall.blocked user={} feature={} thisMonth={} limit={}",
-                    LogMasker.email(user.getEmail()), Feature.RECEIPT_UPLOAD_UNLIMITED, thisMonth, monthlyLimit);
-            throw new PaywallException(Feature.RECEIPT_UPLOAD_UNLIMITED.name());
-        }
+        var submittedThisMonth = receiptRepository
+                .countByUserIdAndSplitCopyFalseAndCreatedAtGreaterThanEqual(user.getId(), startOfMonth);
+        subscriptionGate.requireWithinLimit(user, Feature.RECEIPT_UPLOAD_UNLIMITED, submittedThisMonth);
     }
 
     /**
@@ -865,10 +924,24 @@ public class ReceiptService {
      * index → market registry → notifications → savings). Returns the receipt plus
      * the personal promos detected for this purchase.
      */
-    @Transactional
     public ConfirmReceiptResponse confirm(User user, UUID receiptId, ConfirmReceiptRequest request) {
         MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
         log.info("confirm started");
+        try {
+            return transactionTemplate.execute(txStatus -> confirmInTransaction(user, receiptId, request));
+        } catch (DataIntegrityViolationException lostCreationRace) {
+            // Two households confirming the same first-seen EAN/description at the same moment both
+            // try to create the product/alias; the loser's transaction is rolled back whole. The
+            // retry re-reads, finds the row the winner committed and links to it.
+            log.warn("confirm.retry reason=unique_constraint_race");
+            return transactionTemplate.execute(txStatus -> confirmInTransaction(user, receiptId, request));
+        }
+    }
+
+    private ConfirmReceiptResponse confirmInTransaction(User user, UUID receiptId, ConfirmReceiptRequest request) {
+        // Row lock first: a double tap / client retry / the auto-confirm sweeper waits here and
+        // then sees CONFIRMED, instead of both passing the pending check and contributing twice.
+        receiptRepository.findByIdForUpdate(receiptId);
         var receipt = loadOwned(user, receiptId);
         requirePending(receipt);
         applyItemExclusions(receipt, request);
@@ -923,7 +996,7 @@ public class ReceiptService {
      */
     @Transactional
     public void confirmStale(UUID receiptId) {
-        var receipt = receiptRepository.findById(receiptId).orElse(null);
+        var receipt = receiptRepository.findByIdForUpdate(receiptId).orElse(null);
         if (receipt == null || receipt.getStatus() != ReceiptStatus.PENDING_CONFIRMATION) {
             return;
         }
@@ -965,17 +1038,32 @@ public class ReceiptService {
         marketLocationService.registerMarketFromReceipt(receipt);
         notifyPersonalPromos(user, receipt, personalPromos);
         var saved = receiptRepository.save(receipt);
-        if (receiptRepository.countByUserIdAndStatus(user.getId(), ReceiptStatus.CONFIRMED) == 1) {
-            var promoEnd = subscriptionService.grantSignupPromoIfEnabled(user);
-            if (promoEnd != null) {
-                log.info("confirm first_receipt_promo_granted user={} validUntil={}", user.getEmail(), promoEnd);
-            }
-        }
+        var launchPromo = grantLaunchPromoOnFirstReceipt(user);
+        referralService.qualifyAfterCommit(user.getId(), saved.getId());
         attributeSavings(saved);
         householdCacheGen.bump(receipt.getHousehold().getId());
         log.info("confirm ok status=CONFIRMED personalPromos={}", personalPromos.size());
         return new ConfirmReceiptResponse(
-                withFriendlyName(user.getHousehold().getId(), saved, ReceiptResponse.from(saved)), personalPromos);
+                withFriendlyName(user.getHousehold().getId(), saved, ReceiptResponse.from(saved)), personalPromos,
+                launchPromo);
+    }
+
+    /**
+     * The launch promo (free Premium) is granted when the user confirms their FIRST receipt.
+     * Returns what the client shows, or null when this confirmation granted nothing (not the
+     * first receipt, promo over/disabled, already granted, or a better entitlement kept).
+     */
+    private ConfirmReceiptResponse.LaunchPromo grantLaunchPromoOnFirstReceipt(User user) {
+        if (receiptRepository.countByUserIdAndStatus(user.getId(), ReceiptStatus.CONFIRMED) != 1) {
+            return null;
+        }
+        var promoEnd = subscriptionService.grantSignupPromoIfEnabled(user);
+        if (promoEnd == null) {
+            return null;
+        }
+        log.info("confirm first_receipt_promo_granted user={} validUntil={}",
+                LogMasker.email(user.getEmail()), promoEnd);
+        return new ConfirmReceiptResponse.LaunchPromo(EntitlementClock.brazilDayOf(promoEnd));
     }
 
     /**
@@ -1048,7 +1136,7 @@ public class ReceiptService {
         var locale = LocalizedMessageService.toLocale(user.getLocale());
         for (var promo : promos) {
             var title = localizedMessageService.translate("notification.personal_promo.title", locale, promo.productName());
-            var paid = promo.paidPrice().setScale(2, RoundingMode.HALF_UP).toPlainString().replace('.', ',');
+            var paid = NotificationTextFormatter.amount(promo.paidPrice());
             var pct = promo.savingsPct().setScale(0, RoundingMode.HALF_UP).toPlainString();
             var body = localizedMessageService.translate("notification.personal_promo.body", locale,
                     promo.productName(), paid, receipt.getMarketName(), pct);
@@ -1129,11 +1217,12 @@ public class ReceiptService {
     /**
      * Confirm several of the household's receipts in one call (bulk "save definitively"
      * on the import screen). Each goes through the same confirm as {@link #confirm} with
-     * default options; ids not owned / not confirmable are skipped. Returns how many were
-     * actually confirmed.
+     * default options, in its own transaction; ids not owned / not confirmable are skipped.
+     * Returns how many were actually confirmed.
      */
-    @Transactional
     public int confirmBatch(User user, List<UUID> receiptIds) {
+        // Deliberately NOT @Transactional: each confirm commits (or rolls back) on its own, so
+        // one failing nota is really skipped instead of poisoning the whole batch at commit.
         var confirmed = 0;
         for (var receiptId : receiptIds) {
             try {
@@ -1167,14 +1256,14 @@ public class ReceiptService {
         // must never be held across an outbound call. Plain read → untransacted
         // parse → short TransactionTemplate persist, same as ReceiptIngestionService.
         var receipt = receiptRepository.findById(receiptId).orElseThrow(ReceiptNotFoundException::new);
-        if (receipt.getRawHtml() == null || receipt.getRawHtml().isBlank()) {
-            throw new ReceiptNotEditableException("RAW_HTML_MISSING");
-        }
+        var storedHtml = receiptRawHtmlService.find(receiptId)
+                .filter(html -> !html.isBlank())
+                .orElseThrow(() -> new ReceiptNotEditableException("RAW_HTML_MISSING"));
         log.info("reparse start status_was={} chave={}",
                 receipt.getStatus(), LogMasker.chave(receipt.getChaveAcesso()));
 
         var parsed = sefazIngestionService.reparseStored(
-                receipt.getUf(), receipt.getRawHtml(), receipt.getChaveAcesso(), receipt.getSourceUrl());
+                receipt.getUf(), storedHtml, receipt.getChaveAcesso(), receipt.getSourceUrl());
 
         return transactionTemplate.execute(txStatus -> {
             var managed = receiptRepository.findById(receiptId).orElseThrow(ReceiptNotFoundException::new);
@@ -1192,7 +1281,7 @@ public class ReceiptService {
             // DANFE, not the stored rejection page — persist the HTML that
             // actually produced them so a future reparse is deterministic.
             if (parsed.rawHtml() != null && !parsed.rawHtml().isBlank()) {
-                managed.setRawHtml(parsed.rawHtml());
+                receiptRawHtmlService.replace(managed, parsed.rawHtml());
             }
             if (parsed.sourceUrl() != null) {
                 managed.setSourceUrl(parsed.sourceUrl());
@@ -1299,6 +1388,7 @@ public class ReceiptService {
                 .unit(request.unit())
                 .unitPrice(request.unitPrice())
                 .totalPrice(request.totalPrice())
+                .userModified(true)
                 .build();
         receipt.addItem(item);
         receiptItemRepository.save(item);
@@ -1412,6 +1502,7 @@ public class ReceiptService {
     private void applyUpdate(ReceiptItem item, UpdateReceiptItemRequest request) {
         // rawDescription stays immutable — it's the SEFAZ-issued audit text.
         // Display overrides go on friendlyDescription.
+        if (changesPriceData(item, request)) item.setUserModified(true);
         item.setEan(request.ean());
         item.setQuantity(request.quantity());
         item.setUnit(request.unit());
@@ -1423,6 +1514,33 @@ public class ReceiptService {
                     ? null : request.friendlyDescription());
         }
         applyPaidPrice(item, request.paidTotalPrice(), request.paidUnitPrice());
+    }
+
+    /**
+     * Whether the edit touches what the price index would publish (EAN, quantity, unit, prices).
+     * Renames, exclusions and the manual paid price are personal-layer edits and don't count.
+     * Unit price is compared at cent precision: clients round the stored 4-decimal value when
+     * they echo it back, and that echo must not be mistaken for an edit.
+     */
+    private static boolean changesPriceData(ReceiptItem item, UpdateReceiptItemRequest request) {
+        return !sameText(item.getEan(), request.ean())
+                || !sameText(item.getUnit(), request.unit())
+                || !sameAmount(item.getQuantity(), request.quantity(), BigDecimal.ZERO)
+                || !sameAmount(item.getTotalPrice(), request.totalPrice(), BigDecimal.ZERO)
+                || !sameAmount(item.getUnitPrice(), request.unitPrice(), UNIT_PRICE_ECHO_TOLERANCE);
+    }
+
+    private static final BigDecimal UNIT_PRICE_ECHO_TOLERANCE = new BigDecimal("0.005");
+
+    private static boolean sameText(String stored, String requested) {
+        var storedText = stored == null ? "" : stored.trim();
+        var requestedText = requested == null ? "" : requested.trim();
+        return storedText.equalsIgnoreCase(requestedText);
+    }
+
+    private static boolean sameAmount(BigDecimal stored, BigDecimal requested, BigDecimal tolerance) {
+        if (stored == null || requested == null) return stored == requested;
+        return stored.subtract(requested).abs().compareTo(tolerance) <= 0;
     }
 
     /**

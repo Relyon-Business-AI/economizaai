@@ -1,10 +1,10 @@
 package com.relyon.economizaai.service;
 
-import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -30,16 +30,19 @@ public class PendingReceiptAutoConfirmer {
     private final ReceiptService receiptService;
     private final boolean enabled;
     private final int afterHours;
+    private final int maxPerRun;
 
     public PendingReceiptAutoConfirmer(
             ReceiptRepository receiptRepository,
             ReceiptService receiptService,
             @Value("${economizaai.receipts.auto-confirm.enabled:true}") boolean enabled,
-            @Value("${economizaai.receipts.auto-confirm.after-hours:6}") int afterHours) {
+            @Value("${economizaai.receipts.auto-confirm.after-hours:6}") int afterHours,
+            @Value("${economizaai.receipts.auto-confirm.max-per-run:50}") int maxPerRun) {
         this.receiptRepository = receiptRepository;
         this.receiptService = receiptService;
         this.enabled = enabled;
         this.afterHours = Math.max(1, afterHours);
+        this.maxPerRun = Math.max(1, maxPerRun);
     }
 
     @Scheduled(fixedDelayString = "${economizaai.receipts.auto-confirm.sweeper-delay-ms:1800000}")
@@ -51,8 +54,9 @@ public class PendingReceiptAutoConfirmer {
         // updatedAt, not createdAt: a nota rescued by retry is old by creation but
         // fresh by the flip to PENDING — it deserves the full review window (same
         // rationale as the ProcessingReceiptSweeper).
-        var stale = receiptRepository.findByStatusAndUpdatedAtBefore(ReceiptStatus.PENDING_CONFIRMATION, cutoff)
-                .stream().map(Receipt::getId).toList();
+        // Ids only, oldest first, capped per tick; photo notas still missing data are filtered
+        // out in the query (confirmStale would skip them anyway), so they are never loaded.
+        var stale = receiptRepository.findAutoConfirmableIds(cutoff, PageRequest.of(0, maxPerRun));
         if (stale.isEmpty()) {
             return;
         }
@@ -65,7 +69,8 @@ public class PendingReceiptAutoConfirmer {
                 log.warn("auto-confirm.failed receipt={} reason={}", abbrev(receiptId.toString()), ex.getMessage());
             }
         }
-        log.info("auto-confirm.swept pending={} confirmed={} olderThanHours={}", stale.size(), confirmed, afterHours);
+        log.info("auto-confirm.swept pending={} confirmed={} olderThanHours={} maxPerRun={}",
+                stale.size(), confirmed, afterHours, maxPerRun);
     }
 
     private static String abbrev(String id) {

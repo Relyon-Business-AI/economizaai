@@ -420,16 +420,18 @@ public class ReceiptController {
 
     /**
      * User correction of a misclassified item: the user tells us what the product
-     * actually is; the AI re-classifies with that hint and updates the product.
-     * Creates a MISSING_RULE finding for admin review — if approved, it becomes a
-     * curated dictionary entry so future notas with the same description match directly.
+     * actually is; the AI re-classifies with that hint. The result applies to THIS
+     * household only (friendly name + category override); the shared product is not
+     * changed. The proposal is queued for admin review as a PRODUCT_CORRECTION finding
+     * (approve = apply to the global product) plus a MISSING_RULE finding (approve =
+     * curated dictionary entry so future notas with the same description match directly).
      */
     @PostMapping("/{id}/items/{itemId}/correction")
     public ResponseEntity<ReceiptResponse> correctItem(@AuthenticationPrincipal User user,
                                                        @PathVariable UUID id,
                                                        @PathVariable UUID itemId,
                                                        @Valid @RequestBody ItemCorrectionRequest request) {
-        aiItemCorrectionService.correct(id, itemId, user.getHousehold().getId(), request.hint());
+        aiItemCorrectionService.correct(id, itemId, user.getHousehold().getId(), user.getId(), request.hint());
         return ResponseEntity.ok(receiptService.get(user, id));
     }
 
@@ -442,7 +444,7 @@ public class ReceiptController {
         // connection across the outbound HTTP call (see CLAUDE.md transaction rules).
         // The confirm is already committed: a full AI lane must not turn it into a 500.
         try {
-            aiItemFallbackService.applyFallback(id);
+            aiItemFallbackService.applyFallback(id, user.getId());
         } catch (TaskRejectedException aiLaneFull) {
             log.warn("confirm.ai_fallback_skipped reason=ai_lane_full");
         }

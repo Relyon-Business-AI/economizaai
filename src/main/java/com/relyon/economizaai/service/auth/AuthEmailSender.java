@@ -95,6 +95,27 @@ public class AuthEmailSender {
         dispatch(email, messageService.translate("merchant.claim.email.subject", locale), text, html, "merchant-claim");
     }
 
+    /** E-mail-change code, sent to the NEW address — proves the user controls it. */
+    public void sendEmailChangeCode(String newEmail, Locale locale, String code, int ttlMinutes) {
+        var text = messageService.translate("auth.email.change.text", locale, ttlMinutes, code);
+        var html = codeEmailHtml(locale,
+                messageService.translate("auth.email.change.heading", locale),
+                messageService.translate("auth.email.change.intro", locale),
+                code,
+                messageService.translate("auth.email.change.validity", locale, ttlMinutes),
+                messageService.translate("auth.email.change.disclaimer", locale));
+        dispatch(newEmail, messageService.translate("auth.email.change.subject", locale), text, html, "email-change");
+    }
+
+    /** Notice to the OLD address after a confirmed change, so an unexpected change is noticed. */
+    public void sendEmailChangedNotice(String oldEmail, Locale locale, String maskedNewEmail) {
+        var intro = messageService.translate("auth.email.changed.intro", locale, maskedNewEmail);
+        var disclaimer = messageService.translate("auth.email.changed.disclaimer", locale);
+        var html = shell(locale, messageService.translate("auth.email.changed.heading", locale), intro, "", disclaimer);
+        dispatch(oldEmail, messageService.translate("auth.email.changed.subject", locale),
+                intro + "\n\n" + disclaimer, html, "email-changed-notice");
+    }
+
     /**
      * Hands the SMTP send to the async pool (SignupAlertService pattern) so the
      * caller's transaction never waits on SMTP. Advisory on rejection: the code

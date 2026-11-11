@@ -124,6 +124,17 @@ public class ReceiptItem extends BaseEntity {
     @Column(name = "ai_category_id")
     private UUID aiCategoryId;
 
+    /**
+     * True when the USER authored this line's price data: a line they added by hand, or a
+     * server-fetched line whose EAN, quantity, unit, price or product they changed while the
+     * receipt was pending. The line still counts in the household's own history, but it is no
+     * longer the document SEFAZ issued, so it never feeds the shared price index. Sticky: editing
+     * the values back does not clear it.
+     */
+    @Column(name = "user_modified", nullable = false)
+    @Builder.Default
+    private boolean userModified = false;
+
     /** True when a manual paid total is recorded below the as-printed total — i.e. the line was on promotion. */
     public boolean isPromotional() {
         return paidTotalPrice != null

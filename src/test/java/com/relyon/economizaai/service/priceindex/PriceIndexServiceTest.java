@@ -100,7 +100,8 @@ class PriceIndexServiceTest {
         when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(observations);
         when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
                 .thenReturn(List.of(chainCount("AAAAAAAA", 1L)));
-        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
+        when(marketLocationService.findByCnpjs(any()))
+                .thenReturn(Map.of("AAAAAAAA000111", supermarket("AAAAAAAA000111")));
         when(privacyTierResolver.isSensitiveProduct(productId)).thenReturn(false);
         when(privacyTierResolver.thresholdsFor(false)).thenReturn(new PrivacyTierResolver.Thresholds(1, 1));
 
@@ -109,6 +110,41 @@ class PriceIndexServiceTest {
         assertEquals(1, rows.size(), "grocery tier: n=1 is disclosable");
         assertEquals(1L, rows.get(0).distinctHouseholds());
         assertEquals(0, new BigDecimal("4.99").compareTo(rows.get(0).latestPrice()));
+    }
+
+    @Test
+    void bestMarkets_chainWithAnUnclassifiedStoreKeepsTheFullK() {
+        var productId = UUID.randomUUID();
+        var observations = List.of(obsAt(productId, "UUUUUUUU000111", "Loja nova", new BigDecimal("4.99")));
+        when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(observations);
+        when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
+                .thenReturn(List.of(chainCount("UUUUUUUU", 2L)));
+        // No location row for the store: its segment is unknown.
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
+        when(privacyTierResolver.isSensitiveProduct(productId)).thenReturn(false);
+
+        var rows = service.bestMarkets(productId, 10, null, null, null, Set.of());
+
+        assertTrue(rows.isEmpty(), "an unclassified store must stay under the full K (2 households < 3)");
+        verify(privacyTierResolver).thresholdsFor(true);
+        verify(privacyTierResolver, never()).thresholdsFor(false);
+    }
+
+    @Test
+    void referencePrice_unclassifiedStoreUsesTheFullK() {
+        var productId = UUID.randomUUID();
+        var cnpj = "UUUUUUUU000111";
+        when(observationRepository.findRecentByProductAndMarket(eq(productId), eq(cnpj), any()))
+                .thenReturn(List.of(obsAt(productId, cnpj, "Loja nova", new BigDecimal("4.99"))));
+        when(auditRepository.countDistinctHouseholdsForProductMarket(eq(productId), eq(cnpj), any())).thenReturn(1L);
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
+        when(privacyTierResolver.isSensitiveProduct(productId)).thenReturn(false);
+
+        var reference = service.referencePrice(productId, cnpj);
+
+        assertTrue(reference.kAnonBlocked());
+        assertNull(reference.medianPrice());
+        verify(privacyTierResolver).thresholdsFor(true);
     }
 
     @Test
@@ -154,7 +190,13 @@ class PriceIndexServiceTest {
 
     private MarketLocation located(String cnpj, String latitude, String longitude) {
         return MarketLocation.builder().cnpj(cnpj).cnpjRoot(cnpj.substring(0, 8))
-                .latitude(new BigDecimal(latitude)).longitude(new BigDecimal(longitude)).build();
+                .latitude(new BigDecimal(latitude)).longitude(new BigDecimal(longitude))
+                .segment(MerchantSegment.SUPERMARKET).build();
+    }
+
+    private MarketLocation supermarket(String cnpj) {
+        return MarketLocation.builder().cnpj(cnpj).cnpjRoot(cnpj.substring(0, 8))
+                .segment(MerchantSegment.SUPERMARKET).build();
     }
 
     private static List<String> chainNames(List<PriceIndexService.MarketPriceRow> rows) {
@@ -261,6 +303,71 @@ class PriceIndexServiceTest {
     }
 
     @Test
+    void bestMarkets_ranksAndBadgesByTheDisplayedLatestPriceNotTheMedian() {
+        var productId = UUID.randomUUID();
+        // Chain A: old prices were low (median 4.00) but the latest — the number shown — is 6.00.
+        // Chain B: steady 5.00. The row that SHOWS the lowest number (B) must rank first and
+        // carry the badge.
+        var chainA = List.of(
+                obsOn(productId, "AAAAAAAA000111", "Rede A", "4.00", 40),
+                obsOn(productId, "AAAAAAAA000111", "Rede A", "4.00", 30),
+                obsOn(productId, "AAAAAAAA000111", "Rede A", "6.00", 2));
+        var chainB = List.of(
+                obsOn(productId, "BBBBBBBB000111", "Rede B", "5.00", 35),
+                obsOn(productId, "BBBBBBBB000111", "Rede B", "5.00", 5));
+        var observations = new ArrayList<PriceObservation>(chainA);
+        observations.addAll(chainB);
+        when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(observations);
+        when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
+                .thenReturn(List.of(chainCount("AAAAAAAA", 3L), chainCount("BBBBBBBB", 3L)));
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of(
+                "AAAAAAAA000111", supermarket("AAAAAAAA000111"), "BBBBBBBB000111", supermarket("BBBBBBBB000111")));
+        when(privacyTierResolver.thresholdsFor(false)).thenReturn(new PrivacyTierResolver.Thresholds(1, 1));
+
+        var rows = service.bestMarkets(productId, 10, null, null, null, Set.of());
+
+        assertEquals(List.of("Rede B", "Rede A"), chainNames(rows));
+        assertTrue(rows.get(0).isCheapest());
+        assertFalse(rows.get(1).isCheapest());
+        assertEquals(0, new BigDecimal("5.00").compareTo(rows.get(0).latestPrice()));
+        assertEquals(0, new BigDecimal("6.00").compareTo(rows.get(1).latestPrice()));
+        assertTrue(rows.get(1).medianPrice().compareTo(rows.get(0).medianPrice()) < 0,
+                "chain A still has the lower median — it just must not drive rank or badge");
+        var cheapestShown = rows.stream().map(PriceIndexService.MarketPriceRow::latestPrice)
+                .min(BigDecimal::compareTo).orElseThrow();
+        assertTrue(rows.stream().filter(PriceIndexService.MarketPriceRow::isCheapest)
+                .allMatch(row -> row.latestPrice().compareTo(cheapestShown) == 0),
+                "the badge can only sit on the row showing the lowest number");
+    }
+
+    @Test
+    void bestMarkets_sameDayObservationsPickOnePriceDeterministically() {
+        var productId = UUID.randomUUID();
+        var cheaper = obsOn(productId, "AAAAAAAA000111", "Rede A", "4.50", 3);
+        var dearer = obsOn(productId, "AAAAAAAA000222", "Rede A", "4.90", 3);
+        when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
+                .thenReturn(List.of(chainCount("AAAAAAAA", 2L)));
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of(
+                "AAAAAAAA000111", supermarket("AAAAAAAA000111"), "AAAAAAAA000222", supermarket("AAAAAAAA000222")));
+        when(privacyTierResolver.thresholdsFor(false)).thenReturn(new PrivacyTierResolver.Thresholds(1, 1));
+
+        when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(List.of(cheaper, dearer));
+        var firstOrder = service.bestMarkets(productId, 10, null, null, null, Set.of());
+        when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(List.of(dearer, cheaper));
+        var reversedOrder = service.bestMarkets(productId, 10, null, null, null, Set.of());
+
+        assertEquals(0, new BigDecimal("4.90").compareTo(firstOrder.get(0).latestPrice()));
+        assertEquals(0, firstOrder.get(0).latestPrice().compareTo(reversedOrder.get(0).latestPrice()),
+                "the quoted price must not depend on row order");
+    }
+
+    private PriceObservation obsOn(UUID productId, String cnpj, String marketName, String price, int daysAgo) {
+        var observation = obsAt(productId, cnpj, marketName, new BigDecimal(price));
+        observation.setObservedAt(LocalDateTime.now().minusDays(daysAgo).toLocalDate().atStartOfDay());
+        return observation;
+    }
+
+    @Test
     void bestMarketsForViewer_stateScopePicksTheInStateStoreButPricesTheWholeChain() {
         var productId = UUID.randomUUID();
         var rsStore = obsAt(productId, "DDDDDDDD000111", "Rede RS", new BigDecimal("6.00"));
@@ -270,7 +377,8 @@ class PriceIndexServiceTest {
         when(observationRepository.findRecentByProduct(eq(productId), any())).thenReturn(List.of(rsStore, scStore));
         when(auditRepository.countDistinctHouseholdsForProductByChain(eq(productId), any()))
                 .thenReturn(List.of(chainCount("DDDDDDDD", 2L)));
-        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of(
+                "DDDDDDDD000111", supermarket("DDDDDDDD000111"), "DDDDDDDD000222", supermarket("DDDDDDDD000222")));
         when(privacyTierResolver.thresholdsFor(false)).thenReturn(new PrivacyTierResolver.Thresholds(1, 1));
         var location = new ViewerLocation(null, null, ViewerLocationService.Source.NONE, "RS");
 
@@ -344,6 +452,33 @@ class PriceIndexServiceTest {
             obs.setId(UUID.randomUUID());
             return obs;
         });
+    }
+
+    @Test
+    void recordContributions_skipsUserModifiedLinesButKeepsUntouchedOnes() {
+        var untouched = itemWithProduct(product(), new BigDecimal("10"));
+        var edited = itemWithProduct(product(), new BigDecimal("0.01"));
+        edited.setUserModified(true);
+        var receipt = buildConfirmedReceipt(true, untouched, edited);
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
+        stubObservationSaveEchoing();
+
+        var written = service.recordContributions(receipt);
+
+        assertEquals(1, written, "only the line still matching the issued document contributes");
+        verify(observationRepository, times(1)).save(argThat(
+                observation -> new BigDecimal("10").compareTo(observation.getUnitPrice()) == 0));
+    }
+
+    @Test
+    void recordContributions_receiptWithOnlyUserModifiedLinesWritesNothing() {
+        var added = itemWithProduct(product(), new BigDecimal("3"));
+        added.setUserModified(true);
+        var receipt = buildConfirmedReceipt(true, added);
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
+
+        assertEquals(0, service.recordContributions(receipt));
+        verify(observationRepository, never()).save(any(PriceObservation.class));
     }
 
     @Test

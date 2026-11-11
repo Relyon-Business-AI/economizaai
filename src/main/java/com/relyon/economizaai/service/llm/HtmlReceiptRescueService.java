@@ -91,7 +91,7 @@ public class HtmlReceiptRescueService {
             return null;
         }
         try {
-            paidApiGuard.assertUnderGlobalBudget();
+            paidApiGuard.assertUnderDailyBudget(PaidApiService.LLM_HTML_RESCUE);
             paidApiGuard.assertWithinDailyCap(userId, PaidApiService.LLM_HTML_RESCUE);
         } catch (PaidApiBudgetExceededException | PaidApiQuotaExceededException guardEx) {
             log.info("llm_rescue.blocked uf={} chave={} reason={}",

@@ -1,57 +1,58 @@
-# Render Blueprint — economizai DEV environment.
+# Render Blueprint — Economiza AI backend (dev + prod).
 # ---------------------------------------------------------------------------
-# One web service (the Spring Boot app, built from the repo Dockerfile) + one
-# managed Postgres. This replaces the self-hosted Windows box for DEV.
+# THE RENDER DASHBOARD IS THE SOURCE OF TRUTH. The live services were created
+# and are changed in the dashboard / through the Render API, not by applying
+# this file. It documents what runs (see INFRASTRUCTURE.md for IDs, domains
+# and history) and is the starting point for standing up a fresh environment.
+# Do NOT re-apply it over the live services without diffing first, and keep
+# it in step when a service changes.
 #
-# HOW TO USE
-#   1. Render Dashboard → New → Blueprint → connect this repo (branch: development).
-#      Render reads this file and provisions both services.
-#   2. Fill the env vars marked `sync: false` (secrets) in the dashboard — they
-#      are intentionally NOT in git. See INFRASTRUCTURE.md "Render setup".
-#   3. First deploy runs Flyway automatically (creates all tables). If you are
-#      restoring a pg_dump from the old box, do it BEFORE the first app boot or
-#      let Flyway run then load data-only (see migrate-to-render.ps1).
+# Two environments, each = one web service (the Spring Boot app, built from the
+# repo Dockerfile) + its own managed Postgres. Never point both at one DB.
 #
-# NOTE ON DATABASE_URL: the app needs a JDBC url (jdbc:postgresql://host:port/db).
-# Render's `fromDatabase … property: connectionString` yields a plain
-# postgresql:// url, which the JDBC driver REJECTS. So we DON'T wire the URL
-# automatically — set DATABASE_URL, DB_USERNAME, DB_PASSWORD by hand from the
-# Postgres instance's "Info" tab (host/port/db → build the jdbc url yourself).
-# This is the one manual step; INFRASTRUCTURE.md spells it out.
+#   prod  economizai-api-prod   branch main         Standard (2 GB)  api.economizaai.app
+#   dev   economizaai-api-dev   branch development  Free (512 MB)    api-dev.economizaai.app
 #
-# This is DEV: SPRING_PROFILES_ACTIVE is left unset → the app defaults to the
-# `dev` profile (Swagger on, lenient). Flip to `prod` only when launching.
+# No disk on either service: profile pictures and receipt photos live in
+# Cloudflare R2, which is what allows zero-downtime deploys. Logs go to stdout.
+# Region is not recorded here — use the same region for a service and its DB.
+#
+# SECRETS are marked `sync: false`: they are filled in the dashboard and never
+# live in git. An optional integration left blank simply stays off (fail-closed).
+#
+# DATABASE_URL: the app needs the JDBC form (jdbc:postgresql://<host>:5432/<db>).
+# Render's `fromDatabase … connectionString` yields a plain postgresql:// URL,
+# which the JDBC driver rejects — so DATABASE_URL, DB_USERNAME and DB_PASSWORD
+# are set BY HAND from the Postgres "Info" tab (use the INTERNAL host).
+#
+# Everything not listed has a safe default in application.yaml; the full list of
+# tuning variables is in INFRASTRUCTURE.md → "Environment variables".
 # ---------------------------------------------------------------------------
 
 databases:
-  - name: economizai-db
-    plan: basic-256mb          # ~US$7/mo; free tier EXPIRES in 30 days (do not use)
-    databaseName: economizai
-    user: economizai
+  - name: economizai-db-prod
+    plan: basic-256mb          # never the free tier — a free Postgres expires in 30 days
+    postgresMajorVersion: "18"
+
+  - name: economizaai-db-dev
+    plan: basic-256mb
     postgresMajorVersion: "18"
 
 services:
+  # ------------------------------------------------------------------ PROD --
   - type: web
-    name: economizai-app
+    name: economizai-api-prod
     runtime: docker
-    plan: starter              # ~US$7/mo; never sleeps. free tier sleeps after 15min.
-    branch: development
+    plan: standard             # 2 GB — the JVM does not fit in less
+    branch: main
     dockerfilePath: ./Dockerfile
-    healthCheckPath: /actuator/health
-    autoDeploy: true           # push to `development` → auto-build+deploy
-    disk:
-      name: economizai-profilepics
-      mountPath: /data/profile-pics   # matches PROFILE_PICTURE_DIR below
-      sizeGB: 1                        # ~US$0.25/mo; keeps profile pics across deploys
+    healthCheckPath: /actuator/health/readiness
+    autoDeploy: true           # a merge into `main` IS the prod deploy (owner-gated, see DEPLOY.md)
     envVars:
-      # --- App runtime ---
-      - key: PROFILE_PICTURE_DIR
-        value: /data/profile-pics       # persist on the disk above (Render /tmp is ephemeral)
-      - key: LOG_FILE
-        value: /tmp/economizai/app.log  # container-local; real log aggregation is a prod TODO
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod            # no weak defaults: boot fails without the required vars; Swagger off
 
-      # --- Database (set BY HAND from the Postgres Info tab — see header note) ---
-      # DATABASE_URL must be the JDBC form: jdbc:postgresql://<host>:<port>/economizai
+      # --- Database (by hand, JDBC form — see header) ---
       - key: DATABASE_URL
         sync: false
       - key: DB_USERNAME
@@ -61,11 +62,19 @@ services:
 
       # --- Security ---
       - key: JWT_SECRET
-        generateValue: true             # Render generates a strong random secret
+        sync: false
       - key: CORS_ORIGINS
-        sync: false                     # the FE origin(s) + the Render app URL, comma-separated
+        sync: false            # real FE origins only, comma-separated
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: METRICS_PASSWORD
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_IDS
+        sync: false
+      - key: APPLE_OAUTH_CLIENT_IDS
+        sync: false
 
-      # --- SEFAZ scanning (paid; reuse the working dev keys for now) ---
+      # --- SEFAZ scanning (paid) ---
       - key: CAPTCHA_PROVIDER
         value: capsolver
       - key: CAPTCHA_API_KEY
@@ -75,9 +84,39 @@ services:
       - key: INFOSIMPLES_API_KEY
         sync: false
 
-      # --- Email (auth verification/reset) ---
+      # --- AI layer (photo extraction, HTML rescue, categorization) ---
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
+      # --- Daily spend ceiling per paid service, in cents (owner decision 2026-11-11) ---
+      - key: PAID_API_BUDGET_INFOSIMPLES_CENTS
+        value: "12000"
+      - key: PAID_API_BUDGET_CAPTCHA_CENTS
+        value: "3000"
+      - key: PAID_API_BUDGET_LLM_VISION_CENTS
+        value: "3000"
+      - key: PAID_API_BUDGET_LLM_HTML_RESCUE_CENTS
+        value: "1500"
+      - key: PAID_API_BUDGET_LLM_CATEGORIZATION_CENTS
+        value: "5000"
+      - key: PAID_API_BUDGET_TWILIO_CENTS
+        value: "1500"
+
+      # --- Object storage (Cloudflare R2) ---
+      - key: PROFILE_PICTURE_STORAGE
+        value: r2
+      - key: R2_ENDPOINT
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+
+      # --- E-mail ---
       - key: SMTP_HOST
-        value: smtpout.secureserver.net
+        sync: false
       - key: SMTP_PORT
         value: "587"
       - key: SMTP_USERNAME
@@ -87,6 +126,117 @@ services:
       - key: EMAIL_FROM
         sync: false
 
-      # --- Admin bootstrap (promoted to ADMIN on every boot) ---
+      # --- Push / SMS / WhatsApp ---
+      - key: EXPO_ACCESS_TOKEN
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM_SMS
+        sync: false
+      - key: TWILIO_FROM_WHATSAPP
+        sync: false
+      - key: ADMIN_PHONE_NUMBERS
+        sync: false            # where the admin WhatsApp alerts (cost ceilings, ops) go
+
+      # --- Billing (inert until credentialed) ---
+      - key: REVENUECAT_WEBHOOK_AUTH
+        sync: false
+      - key: MP_ACCESS_TOKEN
+        sync: false
+      - key: MP_WEBHOOK_SECRET
+        sync: false
+
+      # --- Behaviour flags ---
+      - key: SIGNUP_ALERT_ENABLED
+        value: "false"         # no admin alert per signup during the campaign (owner decision 2026-11-11)
+      - key: SUBSCRIPTION_ENFORCE
+        value: "false"         # the owner flips it when charging starts
+
+  # ------------------------------------------------------------------- DEV --
+  - type: web
+    name: economizaai-api-dev
+    runtime: docker
+    plan: free                 # sleeps after 15 min idle; cold start ~3 min
+    branch: development
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /actuator/health/readiness
+    autoDeploy: true           # every merge into `development` redeploys dev
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: dev,lowmem      # lowmem: lazy beans, no boot backfills, delayed jobs (fits 512 MB)
+      - key: JAVA_TOOL_OPTIONS
+        sync: false            # the heap/metaspace flags that make the app fit in 512 MB — see DEV_NOTES
+
+      # --- Database (by hand, JDBC form — see header) ---
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+
+      # --- Security ---
+      - key: JWT_SECRET
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
       - key: ADMIN_EMAILS
+        sync: false
+
+      # --- SEFAZ scanning (paid; bounded by the ceilings below) ---
+      - key: CAPTCHA_PROVIDER
+        value: capsolver
+      - key: CAPTCHA_API_KEY
+        sync: false
+      - key: INFOSIMPLES_ENABLED
+        value: "true"
+      - key: INFOSIMPLES_API_KEY
+        sync: false
+
+      # --- AI layer ---
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
+      # --- Daily spend ceiling per paid service, in cents (owner decision 2026-11-11) ---
+      - key: PAID_API_BUDGET_INFOSIMPLES_CENTS
+        value: "12000"
+      - key: PAID_API_BUDGET_CAPTCHA_CENTS
+        value: "3000"
+      - key: PAID_API_BUDGET_LLM_VISION_CENTS
+        value: "3000"
+      - key: PAID_API_BUDGET_LLM_HTML_RESCUE_CENTS
+        value: "1500"
+      - key: PAID_API_BUDGET_LLM_CATEGORIZATION_CENTS
+        value: "5000"
+      - key: PAID_API_BUDGET_TWILIO_CENTS
+        value: "1500"
+
+      # --- Object storage (Cloudflare R2 — the dev bucket) ---
+      - key: PROFILE_PICTURE_STORAGE
+        value: r2
+      - key: R2_ENDPOINT
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+
+      # --- E-mail (test mail goes to the QA mailbox, never the main inbox) ---
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USERNAME
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: CONTACT_RECIPIENT
+        sync: false
+      - key: BETA_RECIPIENT
         sync: false

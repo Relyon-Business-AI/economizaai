@@ -17,6 +17,7 @@ import com.relyon.economizaai.model.enums.SubscriptionTier;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.UserService;
+import com.relyon.economizaai.service.auth.EmailChangeService;
 import com.relyon.economizaai.service.auth.EmailVerificationService;
 import com.relyon.economizaai.service.auth.PhoneVerificationService;
 import com.relyon.economizaai.service.notifications.NotificationPreferenceService;
@@ -71,6 +72,9 @@ class UserControllerCoverageTest {
     @MockitoBean private StoreReviewPromptService storeReviewPromptService;
     @MockitoBean private CepLocationService cepLocationService;
     @MockitoBean private EmailVerificationService emailVerificationService;
+
+    @MockitoBean
+    private EmailChangeService emailChangeService;
     @MockitoBean private PhoneVerificationService phoneVerificationService;
     @MockitoBean private JwtService jwtService;
     @MockitoBean private UserDetailsService userDetailsService;
@@ -95,7 +99,7 @@ class UserControllerCoverageTest {
                 Role.USER, SubscriptionTier.FREE, true, true, LocalDateTime.now(),
                 new BigDecimal("-30.0277"), new BigDecimal("-51.2287"),
                 null, null, null, null, null, LocalDateTime.now(),
-                AuthProvider.LOCAL, true);
+                AuthProvider.LOCAL, true, null);
     }
 
     @Test

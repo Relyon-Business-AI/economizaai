@@ -5,10 +5,14 @@ import io.sentry.Sentry;
 import jakarta.validation.ConstraintViolation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -19,6 +23,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.sql.SQLTransientConnectionException;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
@@ -32,6 +37,8 @@ public class GlobalExceptionHandler {
 
     private static final String VALIDATION_FAILED_KEY = "validation.failed";
     /** A constraint whose message is one of our own bundle keys, e.g. {@code message = "{validation.color.hex}"}. */
+    private static final String OVERLOAD_RETRY_AFTER_SECONDS = "5";
+    private static final int MAX_CAUSE_DEPTH = 10;
     private static final Pattern CUSTOM_VALIDATION_MESSAGE = Pattern.compile("\\{(validation\\.[\\w.-]+)}");
 
     private final LocalizedMessageService messageService;
@@ -97,6 +104,11 @@ public class GlobalExceptionHandler {
         return respond(ex, HttpStatus.CONFLICT, "Set-password attempt on account that already has one");
     }
 
+    @ExceptionHandler(EmailChangeConflictException.class)
+    public ResponseEntity<ErrorResponse> handleEmailChangeConflict(EmailChangeConflictException ex) {
+        return respond(ex, HttpStatus.CONFLICT, "E-mail change refused");
+    }
+
     @ExceptionHandler(BillingNotConfiguredException.class)
     public ResponseEntity<ErrorResponse> handleBillingNotConfigured(BillingNotConfiguredException ex) {
         return respond(ex, HttpStatus.SERVICE_UNAVAILABLE, "Checkout requested but billing provider not configured");
@@ -118,7 +130,7 @@ public class GlobalExceptionHandler {
         return respond(ex, HttpStatus.NOT_FOUND, "Entity not found");
     }
 
-    @ExceptionHandler({InvalidInviteCodeException.class, InvalidQrPayloadException.class, InvalidChaveException.class, UnsupportedStateException.class, ManualChaveUnsupportedException.class, PrefetchedUnsupportedException.class, ReceiptParseException.class, ReceiptNotEditableException.class, ReceiptHasUnpricedItemsException.class, ReceiptPhotoIncompleteException.class, InvalidIssuedAtException.class, AlreadyInHouseholdException.class, InvalidLegalVersionException.class, InvalidProfilePictureException.class, InvalidAuthTokenException.class, InvalidShoppingListItemException.class, InvalidProductMergeException.class, InvalidCategoryMigrationException.class, InvalidCategoryTargetException.class, InvalidCategoryNestingException.class, InvalidNotificationRuleException.class, InvalidCnpjException.class, InvalidPhoneNumberException.class, InvalidPhoneVerificationException.class, InvalidNotificationEventException.class, InvalidConsentRequestException.class, InvalidReceiptPhotoException.class, AdminUserDeletionException.class, InvalidExportFormatException.class, InvalidItemPriceException.class, InvalidGarimpoWatchException.class, ImportFileUnreadableException.class, ReceiptRetryUnavailableException.class, InvalidCampaignStateException.class, InvalidCampaignScheduleException.class, InvalidCampaignRecipientsException.class, BuiltInAudienceException.class, InvalidMerchantSegmentException.class})
+    @ExceptionHandler({InvalidInviteCodeException.class, InvalidQrPayloadException.class, InvalidChaveException.class, UnsupportedStateException.class, ManualChaveUnsupportedException.class, PrefetchedUnsupportedException.class, ReceiptParseException.class, ReceiptNotEditableException.class, ReceiptHasUnpricedItemsException.class, ReceiptPhotoIncompleteException.class, InvalidIssuedAtException.class, AlreadyInHouseholdException.class, InvalidLegalVersionException.class, InvalidProfilePictureException.class, InvalidAuthTokenException.class, InvalidShoppingListItemException.class, InvalidProductMergeException.class, InvalidCategoryMigrationException.class, InvalidCategoryTargetException.class, InvalidCategoryNestingException.class, InvalidNotificationRuleException.class, HouseholdSelfRemovalException.class, InvalidCnpjException.class, InvalidPhoneNumberException.class, InvalidPhoneVerificationException.class, InvalidNotificationEventException.class, InvalidConsentRequestException.class, InvalidReceiptPhotoException.class, AdminUserDeletionException.class, InvalidExportFormatException.class, InvalidItemPriceException.class, InvalidGarimpoWatchException.class, ImportFileUnreadableException.class, ReceiptRetryUnavailableException.class, InvalidCampaignStateException.class, InvalidCampaignScheduleException.class, InvalidCampaignRecipientsException.class, BuiltInAudienceException.class, InvalidMerchantSegmentException.class, InvalidEmailChangeCodeException.class})
     public ResponseEntity<ErrorResponse> handleBadRequest(DomainException ex) {
         return respond(ex, HttpStatus.BAD_REQUEST, "Bad request");
     }
@@ -185,6 +197,21 @@ public class GlobalExceptionHandler {
         return respond(ex, HttpStatus.SERVICE_UNAVAILABLE, "Photo extraction unavailable");
     }
 
+    @ExceptionHandler(ItemCorrectionUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleItemCorrectionUnavailable(ItemCorrectionUnavailableException ex) {
+        return respond(ex, HttpStatus.SERVICE_UNAVAILABLE, "Item correction unavailable");
+    }
+
+    @ExceptionHandler(ItemCorrectionFailedException.class)
+    public ResponseEntity<ErrorResponse> handleItemCorrectionFailed(ItemCorrectionFailedException ex) {
+        return respond(ex, HttpStatus.UNPROCESSABLE_CONTENT, "Item correction could not identify the product");
+    }
+
+    @ExceptionHandler(ImageDecodeBusyException.class)
+    public ResponseEntity<ErrorResponse> handleImageDecodeBusy(ImageDecodeBusyException ex) {
+        return respond(ex, HttpStatus.SERVICE_UNAVAILABLE, "Image decode refused: all decode permits busy");
+    }
+
     @ExceptionHandler(OcrUnavailableException.class)
     public ResponseEntity<ErrorResponse> handleOcrUnavailable(OcrUnavailableException ex) {
         return respond(ex, HttpStatus.SERVICE_UNAVAILABLE, "OCR engine not available on this host");
@@ -207,7 +234,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(PaidApiBudgetExceededException.class)
     public ResponseEntity<ErrorResponse> handlePaidApiBudget(PaidApiBudgetExceededException ex) {
-        return respond(ex, HttpStatus.SERVICE_UNAVAILABLE, "Paid-API global daily budget exhausted");
+        return respond(ex, HttpStatus.SERVICE_UNAVAILABLE, "Paid-API daily budget exhausted");
     }
 
     @ExceptionHandler(MerchantAccessNotFoundException.class)
@@ -238,6 +265,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MerchantClaimAlreadyOpenException.class)
     public ResponseEntity<ErrorResponse> handleMerchantClaimAlreadyOpen(MerchantClaimAlreadyOpenException ex) {
         return respond(ex, HttpStatus.CONFLICT, "Merchant claim already open for this chain");
+    }
+
+    @ExceptionHandler(MerchantClaimCooldownException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantClaimCooldown(MerchantClaimCooldownException ex) {
+        return respond(ex, HttpStatus.TOO_MANY_REQUESTS, "Merchant claim refused: cool-down after a closed claim");
     }
 
     @ExceptionHandler(MerchantChainAlreadyGrantedException.class)
@@ -370,6 +402,34 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(HttpStatus.PAYLOAD_TOO_LARGE.value(), message, LocalDateTime.now()));
     }
 
+    /**
+     * The connection pool had no free connection within {@code hikari.connection-timeout}:
+     * the app is overloaded, not broken. Answer fast with a 503 the client can retry,
+     * instead of the generic 500. Any other data-access failure stays a 500.
+     */
+    @ExceptionHandler({CannotCreateTransactionException.class, CannotGetJdbcConnectionException.class,
+            DataAccessResourceFailureException.class})
+    public ResponseEntity<ErrorResponse> handleDatabaseUnavailable(Exception ex) {
+        if (!isConnectionPoolTimeout(ex)) {
+            return handleGeneric(ex);
+        }
+        log.warn("db.pool_exhausted reason={}", ex.getClass().getSimpleName());
+        var message = messageService.translate("error.overloaded");
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, OVERLOAD_RETRY_AFTER_SECONDS)
+                .body(new ErrorResponse(HttpStatus.SERVICE_UNAVAILABLE.value(), message, LocalDateTime.now()));
+    }
+
+    private static boolean isConnectionPoolTimeout(Throwable failure) {
+        var depth = 0;
+        for (var cause = failure; cause != null && depth < MAX_CAUSE_DEPTH; cause = cause.getCause(), depth++) {
+            if (cause instanceof SQLTransientConnectionException) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex) {
         var message = messageService.translate("error.internal");
@@ -398,6 +458,13 @@ public class GlobalExceptionHandler {
         var localized = messageService.resolve(fieldError);
         if (localized != null) return localized;
         return fieldError.getDefaultMessage() != null ? fieldError.getDefaultMessage() : "invalid";
+    }
+
+    // --- Referral program ---
+    @ExceptionHandler(ReferralCodeRejectedException.class)
+    public ResponseEntity<ErrorResponse> handleReferralCodeRejected(ReferralCodeRejectedException ex) {
+        var status = ex.isAccountNoLongerEligible() ? HttpStatus.CONFLICT : HttpStatus.BAD_REQUEST;
+        return respond(ex, status, "Referral code rejected");
     }
 
     private ResponseEntity<ErrorResponse> respond(DomainException ex, HttpStatus status, String logContext) {

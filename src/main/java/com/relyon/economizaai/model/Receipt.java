@@ -1,5 +1,6 @@
 package com.relyon.economizaai.model;
 
+import com.relyon.economizaai.model.enums.InfosimplesOutcome;
 import com.relyon.economizaai.model.enums.ReceiptChannel;
 import com.relyon.economizaai.model.enums.ReceiptEntryMethod;
 import com.relyon.economizaai.model.enums.ReceiptOrigin;
@@ -112,8 +113,8 @@ public class Receipt extends BaseEntity implements HouseholdScoped {
     @Column(name = "source_url", columnDefinition = "TEXT")
     private String sourceUrl;
 
-    @Column(name = "raw_html", columnDefinition = "TEXT")
-    private String rawHtml;
+    // The portal document this receipt was parsed from is NOT mapped here: it lives in
+    // ReceiptRawHtml (own table, read via ReceiptRawHtmlService) so no receipt query carries it.
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
@@ -131,6 +132,28 @@ public class Receipt extends BaseEntity implements HouseholdScoped {
     @Column(name = "resyncing_from_contingency", nullable = false)
     private boolean resyncingFromContingency;
 
+    // Set by ContingencyResyncSweeper on re-queue and consumed (cleared) by ImportReconsultWorker at
+    // dispatch: the NEXT queued attempt must use free paths only (no captcha, Infosimples or LLM).
+    @Column(name = "resync_free_only", nullable = false)
+    private boolean resyncFreeOnly;
+
+    // True once the contingency resync granted this nota its single paid attempt (the last one
+    // before the window closes) — every other resync attempt is free-only.
+    @Column(name = "contingency_paid_attempted", nullable = false)
+    private boolean contingencyPaidAttempted;
+
+    // True once ProcessingReceiptSweeper gave this stranded scan its single second chance
+    // (re-queued instead of failed) — the guard that keeps the re-queue from looping.
+    @Column(name = "stranded_requeued", nullable = false)
+    private boolean strandedRequeued;
+
+    // How the paid Infosimples lookup answered in the server attempt that handed this nota to the
+    // device (NEEDS_DEVICE_FETCH); null = not tried. Read by the device-fetch steps so the same
+    // paid lookup is not repeated — never after a "no data" answer.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "infosimples_outcome", length = 20)
+    private InfosimplesOutcome infosimplesOutcome;
+
     // False ONLY for device-fetched (client-authored) content from a state that isn't on the
     // device-fetch trust allowlist — such content is personal-history only and never feeds the
     // collaborative index (same trust class as PHOTO). Default/true for every server-fetched and
@@ -138,6 +161,12 @@ public class Receipt extends BaseEntity implements HouseholdScoped {
     @Column(name = "index_eligible", nullable = false)
     @Builder.Default
     private boolean indexEligible = true;
+
+    // True for the COPY a household split leaves behind (HouseholdSplitService). A copy is not a
+    // submission, so it does not count toward the FREE monthly receipt cap.
+    @Column(name = "split_copy", nullable = false)
+    @Builder.Default
+    private boolean splitCopy = false;
 
     // BatchSize: list endpoints (GET /receipts, dashboard) read items per row —
     // batching turns that page-sized N+1 into one IN query.

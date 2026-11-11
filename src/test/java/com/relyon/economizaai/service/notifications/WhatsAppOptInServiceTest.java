@@ -5,6 +5,10 @@ import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.notifications.WhatsAppReportService.WeeklyReport;
 import com.relyon.economizaai.service.notifications.twilio.TwilioMessageClient;
+import com.relyon.economizaai.service.paidapi.PaidApiGuardService;
+import com.relyon.economizaai.exception.PaidApiBudgetExceededException;
+import com.relyon.economizaai.exception.PaidApiQuotaExceededException;
+import com.relyon.economizaai.model.enums.PaidApiService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.support.TransactionCallback;
@@ -38,6 +42,7 @@ class WhatsAppOptInServiceTest {
     private final ReportChartTokenService chartTokenService = mock(ReportChartTokenService.class);
     private final LocalizedMessageService messageService = mock(LocalizedMessageService.class);
     private final TransactionTemplate transactionTemplate = mock(TransactionTemplate.class);
+    private final PaidApiGuardService paidApiGuardService = mock(PaidApiGuardService.class);
 
     private WhatsAppOptInService service;
 
@@ -47,7 +52,7 @@ class WhatsAppOptInServiceTest {
         when(transactionTemplate.execute(any())).thenAnswer(invocation ->
                 invocation.getArgument(0, TransactionCallback.class).doInTransaction(null));
         service = new WhatsAppOptInService(userRepository, twilioClient, reportService, chartTokenService,
-                messageService, transactionTemplate, "whatsapp:+14063448189", "https://api.economizaai.app");
+                messageService, transactionTemplate, paidApiGuardService, "whatsapp:+14063448189", "https://api.economizaai.app");
     }
 
     private User userWithToken(String token) {
@@ -111,6 +116,60 @@ class WhatsAppOptInServiceTest {
 
         // ...and the user still gets the report as text-only
         verify(twilioClient).sendWhatsApp(eq("+5551997513229"), contains("SEU RESUMO"));
+    }
+
+    @Test
+    void handleInbound_reply_goesThroughTwilioCapAndBudget_andIsLedgered() {
+        var user = User.builder().id(UUID.randomUUID()).email("u@economizaai.app").whatsAppLinkToken("tok123").build();
+        when(userRepository.findByWhatsAppLinkToken("tok123")).thenReturn(Optional.of(user));
+        when(reportService.buildWeeklyReport(user)).thenReturn(new WeeklyReport("SEU RESUMO", false));
+
+        service.handleInbound("+5551997513229", "RELATORIO-tok123");
+
+        verify(paidApiGuardService).assertWithinDailyCap(user.getId(), PaidApiService.TWILIO_MESSAGE);
+        verify(paidApiGuardService).assertUnderDailyBudget(PaidApiService.TWILIO_MESSAGE);
+        verify(paidApiGuardService).recordSuccess(user.getId(), PaidApiService.TWILIO_MESSAGE, null, "twilio");
+    }
+
+    @Test
+    void handleInbound_userOverTwilioCap_skipsTheReply() {
+        var user = User.builder().id(UUID.randomUUID()).email("u@economizaai.app").whatsAppLinkToken("tok123").build();
+        when(userRepository.findByWhatsAppLinkToken("tok123")).thenReturn(Optional.of(user));
+        when(reportService.buildWeeklyReport(user)).thenReturn(new WeeklyReport("SEU RESUMO", false));
+        doThrow(new PaidApiQuotaExceededException("TWILIO_MESSAGE"))
+                .when(paidApiGuardService).assertWithinDailyCap(user.getId(), PaidApiService.TWILIO_MESSAGE);
+
+        assertDoesNotThrow(() -> service.handleInbound("+5551997513229", "RELATORIO-tok123"));
+
+        verify(twilioClient, never()).sendWhatsApp(anyString(), anyString(), any());
+        verify(paidApiGuardService, never()).recordSuccess(any(), any(), any(), any());
+    }
+
+    @Test
+    void handleInbound_twilioBudgetSpent_skipsTheReply_butKeepsTheOptIn() {
+        var user = User.builder().id(UUID.randomUUID()).email("u@economizaai.app").whatsAppLinkToken("tok123").build();
+        when(userRepository.findByWhatsAppLinkToken("tok123")).thenReturn(Optional.of(user));
+        when(reportService.buildWeeklyReport(user)).thenReturn(new WeeklyReport("SEU RESUMO", false));
+        when(messageService.translate(eq("whatsapp.optin.confirmed"), any(Locale.class))).thenReturn("Vinculado!");
+        doThrow(new PaidApiBudgetExceededException())
+                .when(paidApiGuardService).assertUnderDailyBudget(PaidApiService.TWILIO_MESSAGE);
+
+        service.handleInbound("+5551997513229", "CONFIRMAR-tok123");
+
+        assertTrue(user.isWhatsAppOptIn());
+        verify(twilioClient, never()).sendWhatsApp(anyString(), anyString(), any());
+    }
+
+    @Test
+    void handleInbound_failedSend_isLedgeredAsFailure() {
+        var user = User.builder().id(UUID.randomUUID()).email("u@economizaai.app").whatsAppLinkToken("tok123").build();
+        when(userRepository.findByWhatsAppLinkToken("tok123")).thenReturn(Optional.of(user));
+        when(reportService.buildWeeklyReport(user)).thenReturn(new WeeklyReport("SEU RESUMO", false));
+        doThrow(new RuntimeException("twilio 500")).when(twilioClient).sendWhatsApp(anyString(), anyString(), any());
+
+        service.handleInbound("+5551997513229", "RELATORIO-tok123");
+
+        verify(paidApiGuardService).recordFailure(user.getId(), PaidApiService.TWILIO_MESSAGE, null, "twilio");
     }
 
     @Test

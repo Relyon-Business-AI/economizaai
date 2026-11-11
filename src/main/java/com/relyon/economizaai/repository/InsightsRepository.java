@@ -25,6 +25,19 @@ import java.util.UUID;
 @Repository
 public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
 
+    /**
+     * The year a week BELONGS to (ISO week-numbering year), so the days around New Year
+     * stay in one bucket: 1–3 Jan that fall in the last week of the previous year take
+     * that year, and late-December days already in week 1 take the next one. Written as
+     * a portable expression (HQL has no ISO-year field) — grouping by the calendar year
+     * split that week in two.
+     */
+    String ISO_WEEK_YEAR = """
+        (EXTRACT(YEAR FROM r.issuedAt)
+         + CASE WHEN EXTRACT(MONTH FROM r.issuedAt) = 1 AND EXTRACT(WEEK FROM r.issuedAt) >= 52 THEN -1
+                WHEN EXTRACT(MONTH FROM r.issuedAt) = 12 AND EXTRACT(WEEK FROM r.issuedAt) = 1 THEN 1
+                ELSE 0 END)""";
+
     // The household's CONFIRMED-receipt CNPJs that count for the lens. An admin
     // SUPPORTED override promotes a merchant stuck UNKNOWN (CNAE never resolved) to
     // "mercado suportado", a BLOCKED override excludes it even with a grocery segment,
@@ -168,8 +181,18 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
                                    @Param("scope") String scope,
                                    @Param("supportedCnpjs") Collection<String> supportedCnpjs);
 
+    /**
+     * The household's spend in a period as the dashboard defines it, over every segment:
+     * item totals (without excluded / "not mine" lines) of confirmed receipts, by PURCHASE
+     * date. Anything that tells the user how much they spent must use this.
+     */
+    default BigDecimal totalSpendAllSegments(UUID householdId, LocalDateTime from, LocalDateTime to) {
+        return totalSpend(householdId, from, to, "ALL", List.of("__none__"));
+    }
+
     @Query("""
-        SELECT EXTRACT(YEAR FROM r.issuedAt) AS year,
+        SELECT """ + ISO_WEEK_YEAR + """
+                AS year,
                EXTRACT(WEEK FROM r.issuedAt) AS week,
                COALESCE(SUM(r.discountTotal), 0) AS discount
         FROM Receipt r
@@ -180,7 +203,8 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
           AND (:scope = 'ALL'
                OR (:scope = 'SUPPORTED' AND r.cnpjEmitente IN :supportedCnpjs)
                OR (:scope = 'OTHER' AND (r.cnpjEmitente IS NULL OR r.cnpjEmitente NOT IN :supportedCnpjs)))
-        GROUP BY EXTRACT(YEAR FROM r.issuedAt), EXTRACT(WEEK FROM r.issuedAt)
+        GROUP BY """ + ISO_WEEK_YEAR + """
+                , EXTRACT(WEEK FROM r.issuedAt)
     """)
     List<Object[]> discountByWeek(@Param("householdId") UUID householdId,
                                   @Param("from") LocalDateTime from,
@@ -286,7 +310,8 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
                                           @Param("to") LocalDateTime to);
 
     @Query("""
-        SELECT EXTRACT(YEAR FROM r.issuedAt) AS year,
+        SELECT """ + ISO_WEEK_YEAR + """
+                AS year,
                EXTRACT(WEEK FROM r.issuedAt) AS week,
                COALESCE(SUM(ri.totalPrice), 0) AS total,
                COUNT(DISTINCT r.id) AS receiptCount
@@ -301,7 +326,8 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
           AND (:scope = 'ALL'
                OR (:scope = 'SUPPORTED' AND r.cnpjEmitente IN :supportedCnpjs)
                OR (:scope = 'OTHER' AND (r.cnpjEmitente IS NULL OR r.cnpjEmitente NOT IN :supportedCnpjs)))
-        GROUP BY EXTRACT(YEAR FROM r.issuedAt), EXTRACT(WEEK FROM r.issuedAt)
+        GROUP BY """ + ISO_WEEK_YEAR + """
+                , EXTRACT(WEEK FROM r.issuedAt)
         ORDER BY year ASC, week ASC
     """)
     List<Object[]> spendByWeek(@Param("householdId") UUID householdId,
@@ -309,4 +335,28 @@ public interface InsightsRepository extends JpaRepository<Receipt, UUID> {
                                @Param("to") LocalDateTime to,
                                @Param("scope") String scope,
                                @Param("supportedCnpjs") Collection<String> supportedCnpjs);
+
+    /**
+     * The dashboard's spend definition ({@link #totalSpend}, every segment) for MANY
+     * households at once: (householdId, total, receiptCount) by PURCHASE date. Households
+     * with nothing in the window have no row. Used by the spend digests so a notification
+     * never disagrees with the screen it opens.
+     */
+    @Query("""
+        SELECT r.household.id AS householdId,
+               COALESCE(SUM(ri.totalPrice), 0) AS total,
+               COUNT(DISTINCT r.id) AS receiptCount
+        FROM ReceiptItem ri
+        JOIN ri.receipt r
+        WHERE r.household.id IN :householdIds
+          AND r.status = 'CONFIRMED'
+          AND ri.excluded = false
+          AND ri.excludedFromPersonal = false
+          AND r.issuedAt >= :from
+          AND r.issuedAt <= :to
+        GROUP BY r.household.id
+    """)
+    List<Object[]> spendByHouseholds(@Param("householdIds") Collection<UUID> householdIds,
+                                     @Param("from") LocalDateTime from,
+                                     @Param("to") LocalDateTime to);
 }

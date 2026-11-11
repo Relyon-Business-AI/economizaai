@@ -2,6 +2,7 @@ package com.relyon.economizaai.repository;
 
 import com.relyon.economizaai.model.Subscription;
 import com.relyon.economizaai.model.enums.SubscriptionStatus;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -29,6 +30,34 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, UUID
     """)
     List<Subscription> findActiveExpiredBefore(@Param("status") SubscriptionStatus status,
                                                @Param("cutoff") LocalDateTime cutoff);
+
+    /**
+     * One keyset page of launch-promo holders still owed the given end-of-promo warning: ACTIVE
+     * promo rows (never a paid subscription) of active accounts, not yet warned for this
+     * milestone, and with no reward window that would keep them Premium past the promo end.
+     */
+    @Query("""
+        SELECT s FROM Subscription s
+        JOIN FETCH s.user promoUser
+        WHERE s.status = 'ACTIVE'
+          AND s.provider = 'manual'
+          AND s.launchPromoGrantedAt IS NOT NULL
+          AND s.currentPeriodEnd IS NOT NULL
+          AND s.currentPeriodEnd <= :promoEnd
+          AND promoUser.active = TRUE
+          AND s.id > :afterId
+          AND NOT EXISTS (
+              SELECT warning.id FROM LaunchPromoWarning warning
+              WHERE warning.userId = promoUser.id AND warning.milestoneDays = :milestoneDays)
+          AND NOT EXISTS (
+              SELECT reward.id FROM PremiumGrant reward
+              WHERE reward.user = promoUser AND reward.endsAt > :promoEnd)
+        ORDER BY s.id
+    """)
+    List<Subscription> findLaunchPromoHoldersToWarn(@Param("promoEnd") LocalDateTime promoEnd,
+                                                    @Param("milestoneDays") int milestoneDays,
+                                                    @Param("afterId") UUID afterId,
+                                                    Pageable page);
 
     // --- Subscription analytics (admin dashboard) ---
     // Promo/admin grants are recorded with provider "manual" (SubscriptionService.grantSignupPromoIfEnabled)

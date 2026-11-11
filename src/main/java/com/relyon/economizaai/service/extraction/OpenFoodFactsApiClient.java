@@ -6,11 +6,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.BooleanSupplier;
 
 /**
  * Live lookup of a barcode against the Open Food Facts family of open databases,
@@ -71,34 +73,90 @@ public class OpenFoodFactsApiClient {
      * (status == 1) as a catalog-import row, or empty when no database knows it
      * or every call errors. Never throws — a lookup failure must not break ingest.
      */
-    @SuppressWarnings("unchecked")
     public Optional<OpenFoodFactsRow> fetch(String ean) {
-        if (!enabled || ean == null || ean.isBlank()) return Optional.empty();
+        return Optional.ofNullable(lookup(ean).row());
+    }
+
+    /** As {@link #lookup(String, BooleanSupplier)} with no time budget. */
+    public LookupResult lookup(String ean) {
+        return lookup(ean, () -> false);
+    }
+
+    /**
+     * Looks one barcode up across the OFF-family databases and says HOW it ended, so the caller
+     * can tell "nobody knows this barcode" (safe to remember) from "we couldn't ask" (must be
+     * asked again later):
+     * <ul>
+     *   <li>{@link LookupStatus#FOUND} — the first database that knows it (status == 1);</li>
+     *   <li>{@link LookupStatus#NOT_FOUND} — EVERY database answered and none knows it;</li>
+     *   <li>{@link LookupStatus#UNAVAILABLE} — at least one database gave no usable answer
+     *       (timeout, 429, 5xx, empty body) or the time budget ran out before asking them all.</li>
+     * </ul>
+     * Never throws — a lookup failure must not break ingest. {@code budgetExpired} is checked
+     * before each database so a slow API can't hold the caller past its budget.
+     */
+    public LookupResult lookup(String ean, BooleanSupplier budgetExpired) {
+        if (!enabled || ean == null || ean.isBlank()) return LookupResult.unavailable();
+        var everyDatabaseAnswered = true;
         for (var host : hosts) {
+            if (budgetExpired.getAsBoolean()) {
+                everyDatabaseAnswered = false;
+                break;
+            }
             try {
-                var url = host.trim() + "/api/v2/product/" + ean + ".json?fields=" + FIELDS;
-                var body = get(url);
-                if (body == null) continue;
-                var status = body.get("status");
-                if (!(status instanceof Number number) || number.intValue() != 1) continue;
-                if (!(body.get("product") instanceof Map<?, ?> product)) continue;
-                var categoryTags = joinTags(product.get("categories_tags"));
-                log.info("off.api.hit ean={} host={}", ean, host.trim());
-                return Optional.of(new OpenFoodFactsRow(
-                        ean,
-                        asString(product.get("product_name")),
-                        asString(product.get("brands")),
-                        categoryTags,
-                        asString(product.get("image_url")),
-                        asString(product.get("quantity")),
-                        joinTags(product.get("labels_tags")),
-                        asString(product.get("nutriscore_grade")),
-                        asInteger(product.get("nova_group"))));
+                var body = get(host.trim() + "/api/v2/product/" + ean + ".json?fields=" + FIELDS);
+                if (body == null) {
+                    everyDatabaseAnswered = false;
+                    continue;
+                }
+                var row = toRow(ean, body);
+                if (row != null) {
+                    log.info("off.api.hit ean={} host={}", ean, host.trim());
+                    return LookupResult.found(row);
+                }
+            } catch (HttpClientErrorException.NotFound unknownBarcode) {
+                // The database answered: it has no such product. Keep asking the siblings.
             } catch (RuntimeException ex) {
+                everyDatabaseAnswered = false;
                 log.debug("off.api.error ean={} host={} reason={}", ean, host.trim(), ex.getClass().getSimpleName());
             }
         }
-        return Optional.empty();
+        return everyDatabaseAnswered ? LookupResult.notFound() : LookupResult.unavailable();
+    }
+
+    /** The catalog row for an answered lookup, or null when the database doesn't know the barcode. */
+    private static OpenFoodFactsRow toRow(String ean, Map<String, Object> body) {
+        var status = body.get("status");
+        if (!(status instanceof Number number) || number.intValue() != 1) return null;
+        if (!(body.get("product") instanceof Map<?, ?> product)) return null;
+        return new OpenFoodFactsRow(
+                ean,
+                asString(product.get("product_name")),
+                asString(product.get("brands")),
+                joinTags(product.get("categories_tags")),
+                asString(product.get("image_url")),
+                asString(product.get("quantity")),
+                joinTags(product.get("labels_tags")),
+                asString(product.get("nutriscore_grade")),
+                asInteger(product.get("nova_group")));
+    }
+
+    public enum LookupStatus { FOUND, NOT_FOUND, UNAVAILABLE }
+
+    /** {@code row} is present only for {@link LookupStatus#FOUND}. */
+    public record LookupResult(LookupStatus status, OpenFoodFactsRow row) {
+
+        public static LookupResult found(OpenFoodFactsRow row) {
+            return new LookupResult(LookupStatus.FOUND, row);
+        }
+
+        public static LookupResult notFound() {
+            return new LookupResult(LookupStatus.NOT_FOUND, null);
+        }
+
+        public static LookupResult unavailable() {
+            return new LookupResult(LookupStatus.UNAVAILABLE, null);
+        }
     }
 
     /** HTTP seam — isolated so the host-fallback + parsing logic is unit-testable. */

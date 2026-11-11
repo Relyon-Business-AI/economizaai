@@ -55,5 +55,8 @@ public interface AiFindingRepository extends JpaRepository<AiFinding, UUID> {
 
     boolean existsByTypeAndTitle(AiFindingType type, String title);
 
+    /** Dedupe lookup by a fragment of the JSON payload (e.g. {@code "productId":"<uuid>"}). */
+    boolean existsByTypeAndStatusAndPayloadContaining(AiFindingType type, AiFindingStatus status, String payloadFragment);
+
     boolean existsByTypeAndStatusAndTitleStartingWith(AiFindingType type, AiFindingStatus status, String titlePrefix);
 }

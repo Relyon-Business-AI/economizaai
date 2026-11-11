@@ -111,7 +111,8 @@ not in any chat session. The brain:
 | `EXPO_TOKEN` | frontend Actions | `eas update`/`eas build` unattended | ⛔ **owner must add** (EAS access token) |
 | `E2E_ADMIN_EMAIL` / `_PASSWORD` | both | harness/e2e login | optional |
 | `SUBSCRIPTION_ENFORCE` | Render (dev/prod) | flips the paywall ON (default false → gates inert) | ⛔ owner flips when charging |
-| `BILLING_WEBHOOK_SECRET` | Render (prod) | provider-agnostic subscription webhook auth | ⛔ owner sets with the web provider |
+| `MP_ACCESS_TOKEN` / `MP_WEBHOOK_SECRET` | Render (prod) | Mercado Pago (web) checkout + webhook auth | ⛔ owner sets with the web provider |
+| `PAID_API_BUDGET_*_CENTS` (six) | Render (dev + prod) | daily spend ceiling per paid service | ⛔ owner sets (values in INFRASTRUCTURE.md) |
 | `REVENUECAT_WEBHOOK_AUTH` | Render (prod) | RevenueCat (iOS/Android) webhook auth | ⛔ owner sets when store billing goes live |
 | `ECOMMERCE_*` (ML client-id/secret/affiliate) | Render | e-commerce comparison provider — inert until set | ⛔ owner sets (see DEV_NOTES / docs/ECOMMERCE_COMPARISON.md) |
 | `META_ADS_*` / `META_CAPI_*` | Render | ad-spend sync + conversions API — inert until set | ⛔ owner sets |

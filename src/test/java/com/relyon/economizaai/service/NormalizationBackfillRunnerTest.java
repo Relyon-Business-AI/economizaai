@@ -15,14 +15,19 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -86,6 +91,46 @@ class NormalizationBackfillRunnerTest {
 
         runner.backfillProductNorms();
         verify(productRepository, times(1)).saveAll(any());
+    }
+
+    @Test
+    void onApplicationReady_runsOnABackgroundThreadSoReadinessIsNotHeld() throws InterruptedException {
+        var backfillThread = new AtomicReference<String>();
+        var finished = new CountDownLatch(1);
+        when(curatedRepository.findAll()).thenAnswer(invocation -> {
+            backfillThread.set(Thread.currentThread().getName());
+            return List.of();
+        });
+        when(learnedRepository.findAll()).thenReturn(List.of());
+        when(brandRepository.findAll()).thenReturn(List.of());
+        when(productRepository.findNeedingNormBackfill()).thenReturn(List.of());
+        when(aliasRepository.findAll()).thenAnswer(invocation -> {
+            finished.countDown();
+            return List.of();
+        });
+
+        runner.onApplicationReady();
+
+        assertTrue(finished.await(5, TimeUnit.SECONDS));
+        assertEquals("normalization-backfill", backfillThread.get());
+    }
+
+    @Test
+    void onApplicationReady_backgroundOff_runsOnTheCallingThread() {
+        ReflectionTestUtils.setField(runner, "background", false);
+        var backfillThread = new AtomicReference<String>();
+        when(curatedRepository.findAll()).thenAnswer(invocation -> {
+            backfillThread.set(Thread.currentThread().getName());
+            return List.of();
+        });
+        when(learnedRepository.findAll()).thenReturn(List.of());
+        when(brandRepository.findAll()).thenReturn(List.of());
+        when(productRepository.findNeedingNormBackfill()).thenReturn(List.of());
+        when(aliasRepository.findAll()).thenReturn(List.of());
+
+        runner.onApplicationReady();
+
+        assertEquals(Thread.currentThread().getName(), backfillThread.get());
     }
 
     @Test

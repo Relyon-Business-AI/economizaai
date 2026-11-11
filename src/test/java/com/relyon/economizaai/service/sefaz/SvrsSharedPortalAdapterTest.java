@@ -9,6 +9,8 @@ import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.sefaz.captcha.CaptchaSolver;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
@@ -18,7 +20,9 @@ import org.springframework.web.client.ResourceAccessException;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 import java.util.function.IntFunction;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -474,5 +478,83 @@ class SvrsSharedPortalAdapterTest {
 
         assertEquals("<html>danfe direto</html>", stub.fetchHtml(CHAVE_RS));
         assertEquals(0, solves.get());
+    }
+
+    private static final String QR_URL_RS = "https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx?p=" + CHAVE_RS + "|2|1|1|ABCDEF";
+
+    private SvrsSharedPortalAdapter adapterWithExchange(Function<String, ResponseEntity<String>> exchange) {
+        return new SvrsSharedPortalAdapter(RestClient.builder(), NO_CAPTCHA, 5000, "test", "RS", 1, 3, 0L,
+                "svrs.rs.gov.br,sefaz.rs.gov.br") {
+            @Override
+            protected ResponseEntity<String> exchange(String url) {
+                return exchange.apply(url);
+            }
+        };
+    }
+
+    @Test
+    void fetchHtml_followsRedirectToAnotherAllowedHost() {
+        var requested = new ArrayList<String>();
+        var stub = adapterWithExchange(url -> {
+            requested.add(url);
+            return url.contains("dfe-portal.svrs.rs.gov.br")
+                    ? ResponseEntity.ok("<html>danfe</html>")
+                    : ResponseEntity.status(HttpStatus.FOUND)
+                            .header(HttpHeaders.LOCATION, "https://dfe-portal.svrs.rs.gov.br/Dfe/QrCodeNFce?p=x").body("");
+        });
+
+        assertEquals("<html>danfe</html>", stub.fetchHtml(QR_URL_RS));
+        assertEquals(2, requested.size());
+    }
+
+    /** Same-scheme hops used to be followed inside the HTTP client, out of the allowlist's sight. */
+    @Test
+    void fetchHtml_rejectsRedirectOffTheAllowlistWithoutRequestingIt() {
+        var requested = new ArrayList<String>();
+        var stub = adapterWithExchange(url -> {
+            requested.add(url);
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .header(HttpHeaders.LOCATION, "https://internal.example.com/admin").body("");
+        });
+
+        assertThrows(InvalidQrPayloadException.class, () -> stub.fetchHtml(QR_URL_RS));
+        assertEquals(1, requested.size());
+    }
+
+    @Test
+    void fetchHtml_followsRelativeRedirectOnTheSameHost() {
+        var requested = new ArrayList<String>();
+        var stub = adapterWithExchange(url -> {
+            requested.add(url);
+            return url.endsWith("/NFCE/danfe")
+                    ? ResponseEntity.ok("<html>danfe</html>")
+                    : ResponseEntity.status(HttpStatus.MOVED_PERMANENTLY).header(HttpHeaders.LOCATION, "danfe").body("");
+        });
+
+        assertEquals("<html>danfe</html>", stub.fetchHtml(QR_URL_RS));
+        assertEquals("https://www.sefaz.rs.gov.br/NFCE/danfe", requested.get(1));
+    }
+
+    @Test
+    void fetchHtml_boundsRedirectLoops() {
+        var requests = new AtomicInteger();
+        var stub = adapterWithExchange(url -> {
+            requests.incrementAndGet();
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .header(HttpHeaders.LOCATION, "https://www.sefaz.rs.gov.br/loop").body("");
+        });
+
+        assertThrows(SefazFetchException.class, () -> stub.fetchHtml(QR_URL_RS));
+        assertEquals(5, requests.get());
+    }
+
+    @Test
+    void httpsOnlyMode_rejectsPlainHttpQr() {
+        var stub = adapterWithExchange(url -> ResponseEntity.ok("<html>danfe</html>"));
+        stub.setAllowPlainHttp(false);
+
+        assertThrows(InvalidQrPayloadException.class,
+                () -> stub.fetchHtml("http://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx?p=" + CHAVE_RS + "|2|1|1|ABCDEF"));
+        assertEquals("<html>danfe</html>", stub.fetchHtml(QR_URL_RS));
     }
 }

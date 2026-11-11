@@ -13,6 +13,7 @@ import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.geo.MerchantSupportGate;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import com.relyon.economizaai.service.sefaz.ChaveAcessoParser;
+import com.relyon.economizaai.service.sefaz.ReceiptRetryPolicy;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -115,6 +116,9 @@ public class ReceiptImportService {
             // A photo nota carries a synthetic chave (no UF) — there's nothing to re-fetch, and parsing
             // it threw "QR code inválido" instead of the honest "can't retry" message.
             if (receipt.getOrigin() == ReceiptOrigin.PHOTO) continue;
+            // A final verdict about the nota (corrupted chave, not found at the portal…) fails the
+            // same way on every attempt — skip it instead of paying for the fetch again.
+            if (ReceiptRetryPolicy.isDeterministicFailure(receipt.getParseErrorReason())) continue;
             var chave = receipt.getChaveAcesso();
             if (chave == null || !hasFetchPath(chave)) continue;
             receipt.setStatus(ReceiptStatus.IMPORT_QUEUED);

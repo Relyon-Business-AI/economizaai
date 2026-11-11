@@ -11,6 +11,7 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.HouseholdSplitService;
+import com.relyon.economizaai.service.ReceiptRawHtmlService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,10 +35,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 @DataJpaTest
 @ActiveProfiles("test")
-@Import(HouseholdSplitService.class)
+@Import({HouseholdSplitService.class, ReceiptRawHtmlService.class})
 class HouseholdSplitIntegrationTest {
 
     @Autowired private HouseholdSplitService splitService;
+    @Autowired private ReceiptRawHtmlService receiptRawHtmlService;
     @Autowired private ReceiptRepository receiptRepository;
     @Autowired private HouseholdRepository householdRepository;
     @Autowired private UserRepository userRepository;
@@ -110,6 +112,28 @@ class HouseholdSplitIntegrationTest {
             assertEquals(0, new BigDecimal("8.00").compareTo(copy.getItems().get(0).getPaidTotalPrice()));
         });
         assertEquals(3, receiptRepository.findAllByHouseholdId(shared.getId()).size(), "originals stay put");
+    }
+
+    @Test
+    void copyInto_carriesTheStoredPortalDocumentToTheCopy() {
+        var withDocument = seedReceipt(host, shared, "DOC1", ReceiptStatus.CONFIRMED);
+        seedReceipt(host, shared, "NODOC", ReceiptStatus.CONFIRMED);
+        receiptRawHtmlService.replace(withDocument, "<html>danfe</html>");
+        flushAndClear();
+
+        splitService.copyInto(shared, home, null);
+        flushAndClear();
+
+        var copies = receiptRepository.findAllByHouseholdId(home.getId());
+        var copyWithDocument = copies.stream()
+                .filter(copy -> copy.getChaveAcesso().equals("DOC1")).findFirst().orElseThrow();
+        var copyWithoutDocument = copies.stream()
+                .filter(copy -> copy.getChaveAcesso().equals("NODOC")).findFirst().orElseThrow();
+        assertNotEquals(withDocument.getId(), copyWithDocument.getId());
+        assertEquals("<html>danfe</html>", receiptRawHtmlService.find(copyWithDocument.getId()).orElseThrow());
+        assertTrue(receiptRawHtmlService.find(copyWithoutDocument.getId()).isEmpty());
+        assertEquals("<html>danfe</html>", receiptRawHtmlService.find(withDocument.getId()).orElseThrow(),
+                "the original keeps its document");
     }
 
     @Test

@@ -55,7 +55,7 @@ public class AiGateway {
     private final AiProviderSettingsService providerSettings;
     private final AiUsageLogRepository usageRepository;
 
-    @Value("${economizaai.ai.daily-request-cap:300}")
+    @Value("${economizaai.ai.daily-request-cap:3000}")
     private int dailyRequestCap;
 
     @Value("${economizaai.ai.budget-usd:0}")

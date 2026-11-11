@@ -257,7 +257,7 @@
     "destinatario": {
      "cnpj": "",
      "cpf": "***",
-     "nome": "Leonardo Santos de Araujo",
+     "nome": "Fulano Exemplo da Silva",
      "ie": "",
      "uf": "SP",
      "destino_operacao": "1 - Operação Interna",
@@ -477,7 +477,7 @@
      "cnpj": "",
      "cpf": "***",
      "ie": "",
-     "nome": "Leonardo Santos de Araujo",
+     "nome": "Fulano Exemplo da Silva",
      "municipio": "3550308 - Sao Paulo",
      "uf": "SP",
      "pais": "1058 - Brasil",

@@ -21,6 +21,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import org.hibernate.annotations.BatchSize;
+import org.hibernate.annotations.DynamicUpdate;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -36,6 +37,10 @@ import java.util.List;
 // BatchSize: list endpoints that expose the owning user per row (admin receipts)
 // initialize the lazy proxies in one IN query instead of one query per row.
 @BatchSize(size = 50)
+// Only the columns that actually changed go into the UPDATE: a flow that touches one field
+// (push token, digest hour, review counter) can no longer write back the rest of the row
+// and undo a concurrent change to tier, household or role.
+@DynamicUpdate
 @Getter
 @Setter
 @NoArgsConstructor
@@ -168,6 +173,14 @@ public class User extends BaseEntity implements UserDetails {
     @Column(name = "digest_send_hour")
     private Integer digestSendHour;
 
+    /**
+     * The hour the deals digest is actually due (explicit override, else inferred from
+     * shopping habits, else a per-user default). Persisted so due users are selected in
+     * SQL; null until the digest job assigns it.
+     */
+    @Column(name = "digest_effective_send_hour")
+    private Integer digestEffectiveSendHour;
+
     @Column(name = "last_digest_sent_at")
     private OffsetDateTime lastDigestSentAt;
 
@@ -193,6 +206,34 @@ public class User extends BaseEntity implements UserDetails {
 
     @Column(name = "email_verified_at")
     private LocalDateTime emailVerifiedAt;
+
+    // Pending e-mail change (EmailChangeService): the address awaiting confirmation plus the
+    // hashed 6-digit code sent to it. The account e-mail only changes once the code is confirmed.
+    @Column(name = "pending_email")
+    private String pendingEmail;
+
+    @Column(name = "email_change_code_hash")
+    private String emailChangeCodeHash;
+
+    @Column(name = "email_change_expires_at")
+    private LocalDateTime emailChangeExpiresAt;
+
+    @Column(name = "email_change_attempts", nullable = false)
+    @Builder.Default
+    private int emailChangeAttempts = 0;
+
+    // Password-reset guess throttle, counted per ACCOUNT across every code issued
+    // (PasswordResetService): wrong guesses in the current window, when that window
+    // started, and until when further verification is refused.
+    @Column(name = "password_reset_failed_attempts", nullable = false)
+    @Builder.Default
+    private int passwordResetFailedAttempts = 0;
+
+    @Column(name = "password_reset_failed_window_started_at")
+    private LocalDateTime passwordResetFailedWindowStartedAt;
+
+    @Column(name = "password_reset_locked_until")
+    private LocalDateTime passwordResetLockedUntil;
 
     // E.164 phone number (e.g. +5551999999999). Nullable until the user sets it.
     @Column(name = "phone_number", length = 20)

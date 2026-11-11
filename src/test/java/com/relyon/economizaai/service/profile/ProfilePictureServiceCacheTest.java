@@ -5,6 +5,8 @@ import com.relyon.economizaai.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.Spy;
+import com.relyon.economizaai.service.scan.ImageDecodeGate;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -28,6 +30,9 @@ class ProfilePictureServiceCacheTest {
 
     @Mock
     private UserRepository userRepository;
+    @Spy
+    private ImageDecodeGate imageDecodeGate = new ImageDecodeGate(3, 5000);
+
 
     @InjectMocks
     private ProfilePictureService profilePictureService;

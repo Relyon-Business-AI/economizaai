@@ -17,6 +17,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -59,7 +60,7 @@ class AiFineCategoryClassifierTest {
         var productId = UUID.randomUUID();
         var systemCaptor = ArgumentCaptor.forClass(String.class);
         var userCaptor = ArgumentCaptor.forClass(String.class);
-        when(aiGateway.complete(eq(AiActivity.FINE_CATEGORY_CLASSIFY), eq("sonnet"), anyString(), anyString(), anyInt()))
+        when(aiGateway.complete(eq(AiActivity.FINE_CATEGORY_CLASSIFY), eq("sonnet"), anyString(), anyString(), anyInt(), any()))
                 .thenReturn("[{\"id\":\"" + productId + "\",\"slug\":\"aves\",\"confidence\":0.9}]");
 
         var inputs = List.of(new ClassificationInput(productId, "FRANGO RESF KG", "FRANGO", "Sadia", "Carnes", null));
@@ -72,7 +73,7 @@ class AiFineCategoryClassifierTest {
 
         // modelo curator; gabarito (definição + exemplos) vai no SYSTEM (cacheável); contexto do produto no USER
         verify(aiGateway).complete(eq(AiActivity.FINE_CATEGORY_CLASSIFY), eq("sonnet"),
-                systemCaptor.capture(), userCaptor.capture(), anyInt());
+                systemCaptor.capture(), userCaptor.capture(), anyInt(), any());
         var system = systemCaptor.getValue();
         var user = userCaptor.getValue();
         assertTrue(system.contains("aves (Aves)"), "lista de subcategorias no system");
@@ -84,7 +85,7 @@ class AiFineCategoryClassifierTest {
     @Test
     void suggest_skipsInvalidSlug() {
         var productId = UUID.randomUUID();
-        when(aiGateway.complete(eq(AiActivity.FINE_CATEGORY_CLASSIFY), eq("sonnet"), anyString(), anyString(), anyInt()))
+        when(aiGateway.complete(eq(AiActivity.FINE_CATEGORY_CLASSIFY), eq("sonnet"), anyString(), anyString(), anyInt(), any()))
                 .thenReturn("[{\"id\":\"" + productId + "\",\"slug\":\"inventado\",\"confidence\":0.9}]");
 
         var result = classifier.suggest(List.of(
@@ -97,7 +98,7 @@ class AiFineCategoryClassifierTest {
     void suggest_acceptsCategorySlug_whenOnlyConfidentOnCategory() {
         // a LLM pode devolver só a CATEGORIA quando não tem certeza da subcategoria
         var productId = UUID.randomUUID();
-        when(aiGateway.complete(eq(AiActivity.FINE_CATEGORY_CLASSIFY), eq("sonnet"), anyString(), anyString(), anyInt()))
+        when(aiGateway.complete(eq(AiActivity.FINE_CATEGORY_CLASSIFY), eq("sonnet"), anyString(), anyString(), anyInt(), any()))
                 .thenReturn("[{\"id\":\"" + productId + "\",\"slug\":\"carnes\",\"confidence\":0.7}]");
 
         var result = classifier.suggest(List.of(
@@ -113,7 +114,7 @@ class AiFineCategoryClassifierTest {
         // categoria sem subcategoria (Pet): o único alvo possível é o slug da categoria
         var productId = UUID.randomUUID();
         var systemCaptor = ArgumentCaptor.forClass(String.class);
-        when(aiGateway.complete(eq(AiActivity.FINE_CATEGORY_CLASSIFY), eq("sonnet"), systemCaptor.capture(), anyString(), anyInt()))
+        when(aiGateway.complete(eq(AiActivity.FINE_CATEGORY_CLASSIFY), eq("sonnet"), systemCaptor.capture(), anyString(), anyInt(), any()))
                 .thenReturn("[{\"id\":\"" + productId + "\",\"slug\":\"pet\",\"confidence\":0.95}]");
 
         var result = classifier.suggest(List.of(

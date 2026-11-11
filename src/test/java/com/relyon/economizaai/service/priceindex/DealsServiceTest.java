@@ -6,6 +6,7 @@ import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.DealPriceSource;
 import com.relyon.economizaai.model.enums.RelevanceMode;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
@@ -23,6 +24,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -60,6 +62,9 @@ class DealsServiceTest {
     private static final UUID PRODUCT_ID = UUID.randomUUID();
     private static final String WATCHED_CNPJ = "12345678000199";
     private static final String NEARBY_CNPJ = "99887766000155";
+    /** Where the household's last purchase happened by default — a chain no candidate belongs to. */
+    private static final String HOME_CNPJ = "55443322000111";
+    private static final LocalDateTime RECENT_DAY = LocalDate.now().minusDays(20).atStartOfDay();
 
     @BeforeEach
     void setUp() {
@@ -123,16 +128,152 @@ class DealsServiceTest {
                 .category(ProductCategory.MEAT_DAIRY).build();
     }
 
+    /** A purchase at a chain that none of the candidate markets belong to. */
     private ReceiptItem purchase(BigDecimal unitPrice, LocalDateTime issuedAt) {
-        var receipt = Receipt.builder().issuedAt(issuedAt).build();
+        return purchaseAt(HOME_CNPJ, unitPrice, issuedAt);
+    }
+
+    private ReceiptItem purchaseAt(String cnpj, BigDecimal unitPrice, LocalDateTime issuedAt) {
+        var receipt = Receipt.builder().issuedAt(issuedAt).cnpjEmitente(cnpj).build();
         return ReceiptItem.builder().product(product()).unitPrice(unitPrice).receipt(receipt).build();
     }
 
-    private PriceIndexService.MarketPriceRow market(String cnpj, BigDecimal median, long households,
+    private PriceIndexService.MarketPriceRow market(String cnpj, BigDecimal price, long households,
+                                                    Double distanceKm, boolean watching) {
+        return market(cnpj, price, price, RECENT_DAY, households, distanceKm, watching);
+    }
+
+    private PriceIndexService.MarketPriceRow market(String cnpj, BigDecimal median, BigDecimal latestPrice,
+                                                    LocalDateTime latestObservedAt, long households,
                                                     Double distanceKm, boolean watching) {
         return new PriceIndexService.MarketPriceRow(cnpj, PriceIndexService.cnpjRoot(cnpj), "Mercado",
-                median, median, median, LocalDateTime.of(2026, 1, 1, 0, 0), 5, households, distanceKm, watching,
+                median, latestPrice, latestPrice, latestObservedAt, 5, households, distanceKm, watching,
                 false, false);
+    }
+
+    @Test
+    void dealPriceIsTheLatestObservedPriceNotTheMedian() {
+        when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID))
+                .thenReturn(List.of(purchase(new BigDecimal("10.00"), LocalDateTime.now())));
+        // Median R$9.90 would not qualify; the latest observation (R$7.00) does.
+        when(priceIndexService.bestMarketsAtWatched(eq(PRODUCT_ID), anyInt(), any()))
+                .thenReturn(List.of(market(WATCHED_CNPJ, new BigDecimal("9.90"), new BigDecimal("7.00"),
+                        RECENT_DAY, 3L, null, true)));
+
+        var deals = dealsService.findDeals(user(), false, null, 20);
+
+        assertEquals(1, deals.size());
+        assertEquals(0, new BigDecimal("7.00").compareTo(deals.get(0).currentPrice()));
+        assertEquals(RECENT_DAY, deals.get(0).observedAt(), "observedAt is the day of the price observation");
+    }
+
+    @Test
+    void cheapMedianWithAnExpensiveLatestPriceIsNotADeal() {
+        when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID))
+                .thenReturn(List.of(purchase(new BigDecimal("10.00"), LocalDateTime.now())));
+        when(priceIndexService.bestMarketsAtWatched(eq(PRODUCT_ID), anyInt(), any()))
+                .thenReturn(List.of(market(WATCHED_CNPJ, new BigDecimal("7.00"), new BigDecimal("9.90"),
+                        RECENT_DAY, 3L, null, true)));
+
+        assertTrue(dealsService.findDeals(user(), false, null, 20).isEmpty());
+    }
+
+    @Test
+    void latestPriceOlderThanSixtyDaysIsNotADeal() {
+        when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID))
+                .thenReturn(List.of(purchase(new BigDecimal("10.00"), LocalDateTime.now())));
+        var staleDay = LocalDate.now().minusDays(75).atStartOfDay();
+        when(priceIndexService.bestMarketsAtWatched(eq(PRODUCT_ID), anyInt(), any()))
+                .thenReturn(List.of(market(WATCHED_CNPJ, new BigDecimal("7.00"), new BigDecimal("7.00"),
+                        staleDay, 3L, null, true)));
+
+        assertTrue(dealsService.findDeals(user(), false, null, 20).isEmpty());
+    }
+
+    @Test
+    void priceAgeWindowIsConfigurable() {
+        properties.getCollaborative().setDealsMaxPriceAgeDays(90);
+        when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID))
+                .thenReturn(List.of(purchase(new BigDecimal("10.00"), LocalDateTime.now())));
+        var olderDay = LocalDate.now().minusDays(75).atStartOfDay();
+        when(priceIndexService.bestMarketsAtWatched(eq(PRODUCT_ID), anyInt(), any()))
+                .thenReturn(List.of(market(WATCHED_CNPJ, new BigDecimal("7.00"), new BigDecimal("7.00"),
+                        olderDay, 3L, null, true)));
+
+        assertEquals(1, dealsService.findDeals(user(), false, null, 20).size());
+    }
+
+    @Test
+    void neverSuggestsTheChainOfTheLastPurchase() {
+        // Last bought at the WATCHED chain for R$10; another store of that same chain shows R$7.
+        var siblingStoreOfSameChain = WATCHED_CNPJ.substring(0, 8) + "000270";
+        when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID))
+                .thenReturn(List.of(purchaseAt(WATCHED_CNPJ, new BigDecimal("10.00"), LocalDateTime.now())));
+        when(priceIndexService.bestMarketsAtWatched(eq(PRODUCT_ID), anyInt(), any()))
+                .thenReturn(List.of(market(siblingStoreOfSameChain, new BigDecimal("7.00"), 3L, null, true)));
+
+        assertTrue(dealsService.findDeals(user(), false, null, 20).isEmpty());
+    }
+
+    @Test
+    void skipsTheLastPurchaseChainAndSurfacesTheNextCheapestOne() {
+        when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID))
+                .thenReturn(List.of(purchaseAt(WATCHED_CNPJ, new BigDecimal("10.00"), LocalDateTime.now())));
+        when(priceIndexService.bestMarketsAtWatched(eq(PRODUCT_ID), anyInt(), any()))
+                .thenReturn(List.of(
+                        market(WATCHED_CNPJ, new BigDecimal("6.00"), 3L, null, true),
+                        market(NEARBY_CNPJ, new BigDecimal("7.50"), 3L, null, true)));
+
+        var deals = dealsService.findDeals(user(), false, null, 20);
+
+        assertEquals(1, deals.size());
+        assertEquals(NEARBY_CNPJ, deals.get(0).marketCnpj());
+        assertEquals(0, new BigDecimal("7.50").compareTo(deals.get(0).currentPrice()));
+    }
+
+    @Test
+    void ownEarlierPurchaseAtAnotherChainIsLabelledOwnPurchase() {
+        // Paid R$7 at NEARBY last month, then R$10 at WATCHED last week → "você pagou menos no NEARBY".
+        when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID)).thenReturn(List.of(
+                purchaseAt(NEARBY_CNPJ, new BigDecimal("7.0000"), RECENT_DAY.plusHours(18)),
+                purchaseAt(WATCHED_CNPJ, new BigDecimal("10.00"), LocalDateTime.now())));
+        when(priceIndexService.bestMarketsAtWatched(eq(PRODUCT_ID), anyInt(), any()))
+                .thenReturn(List.of(market(NEARBY_CNPJ, new BigDecimal("7.00"), 1L, null, true)));
+
+        var deals = dealsService.findDeals(user(), false, null, 20);
+
+        assertEquals(1, deals.size());
+        assertEquals(DealPriceSource.OWN_PURCHASE, deals.get(0).priceSource());
+        assertEquals(RECENT_DAY, deals.get(0).observedAt());
+        assertEquals(0, new BigDecimal("10.00").compareTo(deals.get(0).lastPaidPrice()));
+    }
+
+    @Test
+    void observationFromAnotherHouseholdIsLabelledCommunity() {
+        when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID))
+                .thenReturn(List.of(purchase(new BigDecimal("10.00"), LocalDateTime.now())));
+        when(priceIndexService.bestMarketsAtWatched(eq(PRODUCT_ID), anyInt(), any()))
+                .thenReturn(List.of(market(NEARBY_CNPJ, new BigDecimal("7.00"), 1L, null, true)));
+
+        var deals = dealsService.findDeals(user(), false, null, 20);
+
+        assertEquals(DealPriceSource.COMMUNITY, deals.get(0).priceSource());
+    }
+
+    @Test
+    void ownPurchaseAtTheChainOnAnotherDayOrPriceStaysCommunity() {
+        // The household did buy at NEARBY, but the observation pricing the chain is a later,
+        // different one — so it is someone else's evidence.
+        when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID)).thenReturn(List.of(
+                purchaseAt(NEARBY_CNPJ, new BigDecimal("8.00"), RECENT_DAY.minusDays(10)),
+                purchaseAt(NEARBY_CNPJ, new BigDecimal("7.90"), RECENT_DAY.plusHours(9)),
+                purchaseAt(WATCHED_CNPJ, new BigDecimal("10.00"), LocalDateTime.now())));
+        when(priceIndexService.bestMarketsAtWatched(eq(PRODUCT_ID), anyInt(), any()))
+                .thenReturn(List.of(market(NEARBY_CNPJ, new BigDecimal("7.00"), 2L, null, true)));
+
+        var deals = dealsService.findDeals(user(), false, null, 20);
+
+        assertEquals(DealPriceSource.COMMUNITY, deals.get(0).priceSource());
     }
 
     @Test
@@ -264,7 +405,7 @@ class DealsServiceTest {
         var lowSavingsItem = purchase(new BigDecimal("10.00"), LocalDateTime.now());
         var highSavingsItem = ReceiptItem.builder().product(pricierProduct)
                 .unitPrice(new BigDecimal("20.00"))
-                .receipt(Receipt.builder().issuedAt(LocalDateTime.now()).build()).build();
+                .receipt(Receipt.builder().issuedAt(LocalDateTime.now()).cnpjEmitente(HOME_CNPJ).build()).build();
         when(receiptItemRepository.findConfirmedHistoryForHousehold(HOUSEHOLD_ID))
                 .thenReturn(List.of(lowSavingsItem, highSavingsItem));
 

@@ -1,6 +1,11 @@
 package com.relyon.economizaai.service.ai;
 
+import com.relyon.economizaai.exception.PaidApiBudgetExceededException;
+import com.relyon.economizaai.exception.PaidApiQuotaExceededException;
+import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
+import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.PaidApiService;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
@@ -12,6 +17,7 @@ import com.relyon.economizaai.service.extraction.AiFineCategoryClassifier.Classi
 import com.relyon.economizaai.service.extraction.AiFineCategoryClassifier.FineSuggestion;
 import com.relyon.economizaai.service.extraction.ProductExtraction;
 import com.relyon.economizaai.service.extraction.ProductExtractor;
+import com.relyon.economizaai.service.paidapi.PaidApiGuardService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,9 +28,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 
-import static com.relyon.economizaai.config.AsyncConfig.AI_SWEEP_EXECUTOR;
+import static com.relyon.economizaai.config.AsyncConfig.AI_CATEGORIZATION_EXECUTOR;
 
 /**
  * A camada FINAL do cascade de categorização do scan: assim que a nota fica
@@ -51,6 +58,7 @@ public class ReceiptAiCategorySuggestionService {
     private final ProductExtractor productExtractor;
     private final AiFineCategoryClassifier classifier;
     private final CategoryResolver categoryResolver;
+    private final PaidApiGuardService paidApiGuard;
 
     /** Mesmo piso do sweep de admin pra PREENCHER subcategoria vazia (ação SET). */
     @Value("${economizaai.ai.subcategory-suggestion.set-min-confidence:0.55}")
@@ -61,7 +69,7 @@ public class ReceiptAiCategorySuggestionService {
     }
 
     /** Entrada async (despachada pós-commit da ingestão). Nunca propaga falha — é best-effort. */
-    @Async(AI_SWEEP_EXECUTOR)
+    @Async(AI_CATEGORIZATION_EXECUTOR)
     public void suggestForReceiptAsync(UUID receiptId) {
         try {
             suggestForReceipt(receiptId);
@@ -73,7 +81,9 @@ public class ReceiptAiCategorySuggestionService {
     /** Síncrono (testável): classifica os itens não resolvidos e grava as sugestões. */
     public void suggestForReceipt(UUID receiptId) {
         if (!classifier.isEnabled()) return;
-        if (!isPendingConfirmation(receiptId)) return;
+        var receipt = receiptRepository.findById(receiptId).orElse(null);
+        if (receipt == null || receipt.getStatus() != ReceiptStatus.PENDING_CONFIRMATION) return;
+        var ownerId = ownerIdOf(receipt);
 
         var items = receiptItemRepository.findByReceiptId(receiptId);
         var candidates = new ArrayList<ReceiptItem>();
@@ -93,10 +103,14 @@ public class ReceiptAiCategorySuggestionService {
             return;
         }
 
+        // Gasto atribuído ao dono da nota: teto diário de IA de categorização + limite por usuário.
+        if (isBlockedByCostGuard(receiptId, ownerId)) return;
+
         // Chamada de IA FORA de transação (uma por nota; o gabarito fixo é cacheado pelo provedor).
         List<FineSuggestion> suggestions;
         try {
-            suggestions = classifier.suggest(buildInputs(candidates, extractionByItem));
+            suggestions = classifier.suggest(buildInputs(candidates, extractionByItem), ownerId);
+            paidApiGuard.recordSuccess(ownerId, PaidApiService.LLM_ENRICH, null, "ai");
         } catch (AiGateway.AiUnavailableException unavailable) {
             log.warn("receipt.ai_suggest.unavailable receipt={} reason={}", receiptId, unavailable.getMessage());
             return;
@@ -116,6 +130,22 @@ public class ReceiptAiCategorySuggestionService {
         return receiptRepository.findById(receiptId)
                 .map(receipt -> receipt.getStatus() == ReceiptStatus.PENDING_CONFIRMATION)
                 .orElse(false);
+    }
+
+    private static UUID ownerIdOf(Receipt receipt) {
+        return Optional.ofNullable(receipt.getUser()).map(User::getId).orElse(null);
+    }
+
+    /** Best-effort: teto/limite estourado pula a sugestão em silêncio (uma linha de log). */
+    private boolean isBlockedByCostGuard(UUID receiptId, UUID ownerId) {
+        try {
+            paidApiGuard.assertUnderDailyBudget(PaidApiService.LLM_ENRICH);
+            paidApiGuard.assertWithinDailyCap(ownerId, PaidApiService.LLM_ENRICH);
+            return false;
+        } catch (PaidApiBudgetExceededException | PaidApiQuotaExceededException guardEx) {
+            log.info("receipt.ai_suggest.skipped receipt={} reason={}", receiptId, guardEx.getClass().getSimpleName());
+            return true;
+        }
     }
 
     /** Item com EAN de produto já conhecido vai ser LINKADO no confirm — não gastamos IA com ele. */

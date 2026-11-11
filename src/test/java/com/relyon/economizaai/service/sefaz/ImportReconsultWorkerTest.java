@@ -17,6 +17,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -97,9 +98,28 @@ class ImportReconsultWorkerTest {
 
         worker(true).processQueue();
 
-        verify(receiptIngestionService).ingest(queuedScan.getId(), signedQrUrl);
+        verify(receiptIngestionService).ingest(queuedScan.getId(), signedQrUrl, IngestSpendPolicy.FULL);
         verify(receiptIngestionService, never()).ingestReconsult(any(), any());
         assertEquals(ReceiptStatus.PROCESSING, queuedScan.getStatus());
+    }
+
+    @Test
+    void tick_queuedFreeOnlyResync_dispatchesWithFreePolicyAndConsumesTheRequest() {
+        var user = User.builder().id(UUID.randomUUID()).email("test790@economizaai.app").build();
+        var signedQrUrl = "https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx?p=" + CHAVE + "|2|1|1|hash";
+        var queuedResync = Receipt.builder().user(user).chaveAcesso(CHAVE)
+                .qrPayload(signedQrUrl)
+                .resyncFreeOnly(true)
+                .status(ReceiptStatus.IMPORT_QUEUED).build();
+        queuedResync.setId(UUID.randomUUID());
+        when(receiptRepository.countByStatus(ReceiptStatus.PROCESSING)).thenReturn(0L);
+        when(receiptRepository.findByStatusOrderByCreatedAtAsc(any(), any())).thenReturn(List.of(queuedResync));
+        when(receiptRepository.findById(queuedResync.getId())).thenReturn(Optional.of(queuedResync));
+
+        worker(true).processQueue();
+
+        verify(receiptIngestionService).ingest(queuedResync.getId(), signedQrUrl, IngestSpendPolicy.FREE_ONLY);
+        assertFalse(queuedResync.isResyncFreeOnly(), "the free-only request applies to one dispatch only");
     }
 
     @Test

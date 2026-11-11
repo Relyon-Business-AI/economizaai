@@ -31,15 +31,20 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -48,6 +53,8 @@ import java.util.stream.Collectors;
 public class ProductService {
 
     private static final double PRODUCT_SEARCH_NEARBY_RADIUS_KM = 20.0;
+    private static final int MIN_CATALOG_QUERY_LENGTH = 2;
+    private static final int MAX_SEARCH_CANDIDATES = 200;
 
     private final ProductRepository productRepository;
     private final CategoryResolver categoryResolver;
@@ -61,12 +68,24 @@ public class ProductService {
     private final BrandAliasPromotionService brandAliasPromotionService;
     private final ViewerLocationService viewerLocationService;
 
+    /**
+     * Product search for the app's picker. Bounded on purpose — it runs per keystroke:
+     * <ul>
+     *   <li>no term → the household's own products, most purchased first (paged in SQL);</li>
+     *   <li>a term shorter than {@value #MIN_CATALOG_QUERY_LENGTH} characters → only the household's
+     *       own products matching it (the catalog is not searched);</li>
+     *   <li>otherwise → at most {@value #MAX_SEARCH_CANDIDATES} catalog candidates per source, ranked
+     *       by local relevance and paged over that capped set.</li>
+     * </ul>
+     */
     @Transactional(readOnly = true)
     public Page<ProductResponse> search(String query, User user, Pageable pageable) {
         var trimmedQuery = (query == null || query.isBlank()) ? null : query.trim();
         var householdId = user.getHousehold().getId();
-        var products = withHouseholdAliasMatches(
-                productRepository.searchAll(trimmedQuery), householdId, trimmedQuery);
+        if (trimmedQuery == null) {
+            return mostPurchasedByHousehold(householdId, pageable);
+        }
+        var products = searchCandidates(trimmedQuery, householdId);
         if (products.isEmpty()) {
             return new PageImpl<>(List.of(), pageable, 0);
         }
@@ -83,28 +102,67 @@ public class ProductService {
         return page(sorted, pageable);
     }
 
+    private Page<ProductResponse> mostPurchasedByHousehold(UUID householdId, Pageable pageable) {
+        var idsPage = receiptItemRepository.findMostPurchasedProductIdsForHousehold(householdId, withoutSort(pageable));
+        var productIds = idsPage.getContent();
+        if (productIds.isEmpty()) {
+            return new PageImpl<>(List.of(), idsPage.getPageable(), idsPage.getTotalElements());
+        }
+        var productsById = productRepository.findAllById(productIds).stream()
+                .collect(Collectors.toMap(Product::getId, Function.identity()));
+        var friendlyByProduct = householdProductAliasService.resolvedNamesFor(householdId, productIds);
+        var content = productIds.stream()
+                .map(productsById::get)
+                .filter(Objects::nonNull)
+                .map(product -> ProductResponse.from(product, true, friendlyByProduct.get(product.getId())))
+                .toList();
+        return new PageImpl<>(content, idsPage.getPageable(), idsPage.getTotalElements());
+    }
+
+    /** The ordering is fixed by the query; a client-sent sort must not reach the JPQL. */
+    private static Pageable withoutSort(Pageable pageable) {
+        if (pageable == null || pageable.isUnpaged()) {
+            return PageRequest.of(0, MAX_SEARCH_CANDIDATES);
+        }
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+    }
+
+    /**
+     * The capped candidate set for a term: catalog matches by name/EAN and by absorbed receipt
+     * description (only from {@value #MIN_CATALOG_QUERY_LENGTH} characters on), plus what the
+     * household itself bought or renamed — so its own products are never cut by the cap.
+     */
+    private List<Product> searchCandidates(String query, UUID householdId) {
+        var pattern = containsPattern(query);
+        var limit = PageRequest.of(0, MAX_SEARCH_CANDIDATES);
+        var candidatesById = new LinkedHashMap<UUID, Product>();
+        if (query.length() >= MIN_CATALOG_QUERY_LENGTH) {
+            addCandidates(candidatesById, productRepository.searchCatalogByNameOrEan(query, pattern, limit));
+            addCandidates(candidatesById, productRepository.searchCatalogByAliasDescription(pattern, limit));
+        }
+        addCandidates(candidatesById, productRepository.searchPurchasedByHousehold(householdId, query, pattern, limit));
+        addCandidates(candidatesById, householdProductAliasRepository.findProductsByFriendlyNameContaining(householdId, query));
+        return List.copyOf(candidatesById.values());
+    }
+
+    private static void addCandidates(Map<UUID, Product> candidatesById, List<Product> products) {
+        products.forEach(product -> candidatesById.putIfAbsent(product.getId(), product));
+    }
+
+    /** {@code %term%} lowercased, with LIKE wildcards in the term escaped by '!' (the queries' ESCAPE char). */
+    static String containsPattern(String query) {
+        var escaped = query.toLowerCase(Locale.ROOT)
+                .replace("!", "!!")
+                .replace("%", "!%")
+                .replace("_", "!_");
+        return "%" + escaped + "%";
+    }
+
     @Transactional(readOnly = true)
     public ProductResponse get(UUID id, User user) {
         var product = loadProduct(id);
         return ProductResponse.from(product, false,
                 householdProductAliasService.resolvedNameFor(user.getHousehold().getId(), product.getId()));
-    }
-
-    /**
-     * Catalog-name matches plus products this household renamed to something
-     * matching the query — the user searches by the name THEY gave the product.
-     */
-    private List<Product> withHouseholdAliasMatches(List<Product> products, UUID householdId, String query) {
-        if (query == null) return products;
-        var aliasMatches = householdProductAliasRepository
-                .findProductsByFriendlyNameContaining(householdId, query);
-        if (aliasMatches.isEmpty()) return products;
-        var knownIds = products.stream().map(Product::getId).collect(Collectors.toSet());
-        var merged = new ArrayList<>(products);
-        aliasMatches.stream()
-                .filter(aliasProduct -> !knownIds.contains(aliasProduct.getId()))
-                .forEach(merged::add);
-        return merged;
     }
 
     /**
@@ -236,6 +294,7 @@ public class ProductService {
             var itemNormalized = DescriptionNormalizer.normalize(item.getRawDescription());
             if (itemNormalized.equals(normalized)) {
                 item.setProduct(product);
+                item.setUserModified(true); // user-chosen product link → personal history only
                 receiptItemRepository.save(item);
                 linked++;
             }

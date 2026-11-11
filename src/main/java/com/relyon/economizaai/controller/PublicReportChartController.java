@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Locale;
+import com.relyon.economizaai.service.LocalizedMessageService;
 
 /**
  * Serves a user's last-7-days category pie chart as a PNG over an UNAUTHENTICATED URL,
@@ -52,9 +52,7 @@ public class PublicReportChartController {
 
         var to = BrazilClock.nowDateTime();
         var report = reportAssembler.assemble(user, to.minusDays(7), to);
-        var locale = user.getLocale() == null || user.getLocale().isBlank()
-                ? Locale.forLanguageTag("pt")
-                : Locale.forLanguageTag(user.getLocale());
+        var locale = LocalizedMessageService.toLocale(user.getLocale());
         var png = chartService.renderCategoryPie(report, locale);
         if (png == null) {
             return ResponseEntity.notFound().build();

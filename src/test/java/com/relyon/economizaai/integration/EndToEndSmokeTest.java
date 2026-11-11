@@ -70,7 +70,7 @@ class EndToEndSmokeTest {
     @Order(3)
     void registerNewUserReturnsTokenPair() throws Exception {
         var body = "{\"name\":\"Smoke Tester\",\"email\":\"smoke@test.com\",\"password\":\"password123\","
-                + "\"acceptedTermsVersion\":\"1.0\",\"acceptedPrivacyVersion\":\"1.0\"}";
+                + "\"acceptedTermsVersion\":\"1.1\",\"acceptedPrivacyVersion\":\"1.1\"}";
         var result = mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated())

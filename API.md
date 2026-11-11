@@ -116,28 +116,39 @@ POST /api/v1/auth/register
   "name": "Maria Silva",
   "email": "maria@example.com",
   "password": "atLeast8chars",
-  "acceptedTermsVersion": "1.0",
-  "acceptedPrivacyVersion": "1.0",
+  "acceptedTermsVersion": "1.1",
+  "acceptedPrivacyVersion": "1.1",
   "platform": "WEB",               // optional: WEB | ANDROID | IOS
   "attribution": {                 // optional — marketing attribution, all fields optional strings
     "utmSource": "instagram", "utmMedium": "cpc", "utmCampaign": "black-friday",
     "utmContent": "video-a", "utmTerm": "mercado barato",
     "clickId": "<fbclid>", "referrer": "https://...", "landingPath": "/promo"
-  }
+  },
+  "referralCode": "ABC2345"        // optional — the inviter's code (see "Referral program")
 }
 → 201 {
   "token": "...", "refreshToken": "...", "user": { ... },
   "signupPromoGranted": false,
-  "signupPromoValidUntil": null
+  "signupPromoValidUntil": null,
+  "newAccount": true
 }
 ```
 
+**`newAccount`** is `true` only when THIS call created the account: `register`, and
+`google` / `apple` when the social sign-in created the user. It is `false` on `login`,
+`refresh` and a returning social user. Fire the signup analytics events off it.
+
 **Launch promo — granted on the FIRST confirmed nota, not at signup (since 2026-11-07).**
-While the promo is on, a new account gets PRO when it confirms its first receipt (valid
-until the fixed `SUBSCRIPTION_PROMO_UNTIL` date). The `signupPromoGranted` /
+While the promo is on, an account gets PRO when it confirms its first receipt (valid
+until the fixed `SUBSCRIPTION_PROMO_UNTIL` date), once per user. The `signupPromoGranted` /
 `signupPromoValidUntil` fields are kept for contract compatibility but are now always
-`false`/`null` on `register` / `google` / `apple` / `login` / `refresh`. To show
-"grátis até DD/MM", read `GET /users/me/subscription` after the first confirm.
+`false`/`null` on `register` / `google` / `apple` / `login` / `refresh`. The confirm that
+granted it says so in its own response (`launchPromo`, §3 "Review + confirm"); afterwards
+read `GET /users/me/subscription` to show "grátis até DD/MM".
+
+**`referralCode` is optional** on `/register`, `/google` and `/apple`. It is applied only
+when the call creates the account, and silently ignored when it is unknown, the user's
+own code, or the account already existed — it never fails the signup.
 
 `platform` is **optional** on all auth endpoints (`/register`, `/login`, `/google`,
 `/apple`). Send `WEB`, `ANDROID`, or `IOS`. It records the **registration platform**
@@ -170,8 +181,11 @@ member, and they get an `inviteCode` valid for 48h. They can:
 ```
 POST /api/v1/auth/login
 { "email": "maria@example.com", "password": "...", "platform": "ANDROID" }  // platform optional
-→ 200 { "token": "...", "refreshToken": "...", "user": { ... } }
+→ 200 { "token": "...", "refreshToken": "...", "user": { ... }, "newAccount": false }
 ```
+
+E-mails are case-insensitive everywhere (register, login, reset, social): the address is
+trimmed and lower-cased server-side, so `Maria@X.com` and `maria@x.com` are one account.
 
 - **Wrong email/password** → `401 auth.invalid.credentials` (same error for unknown email or wrong password — no account-enumeration).
 - **Password login on a social account** → `409 auth.social_account` (the email belongs to a Google/Apple account with no password). The response carries the provider so you can point the user at the right button:
@@ -185,12 +199,14 @@ POST /api/v1/auth/login
 The mobile app runs the **native** Google / Apple sign-in SDK, gets the provider token, and sends it here. The backend verifies the token (RS256 against the provider's JWKS; issuer/expiry checks, and audience when client IDs are configured), then **finds-or-creates** the user and returns the **same `AuthResponse`** as password login.
 
 ```
-POST /api/v1/auth/google   { "idToken": "<google id_token>", "platform": "ANDROID" }                 → 200 { token, refreshToken, user, signupPromoGranted, signupPromoValidUntil }
-POST /api/v1/auth/apple    { "identityToken": "<apple identity_token>", "name": "Maria Silva", "platform": "IOS" } → 200 { token, refreshToken, user, signupPromoGranted, signupPromoValidUntil }
+POST /api/v1/auth/google   { "idToken": "<google id_token>", "platform": "ANDROID", "referralCode": "ABC2345" }                 → 200 { token, refreshToken, user, signupPromoGranted, signupPromoValidUntil, newAccount }
+POST /api/v1/auth/apple    { "identityToken": "<apple identity_token>", "name": "Maria Silva", "platform": "IOS", "referralCode": "ABC2345" } → 200 { token, refreshToken, user, signupPromoGranted, signupPromoValidUntil, newAccount }
 ```
 
-`signupPromoGranted`/`signupPromoValidUntil` behave exactly as in `/register` above —
-`true`/set only when this call just created the account (not on a returning user's login).
+`newAccount` is `true` only when this call just created the account (not on a returning
+user's login); `referralCode` is optional and only applied in that case.
+`signupPromoGranted`/`signupPromoValidUntil` behave exactly as in `/register` above
+(always `false`/`null`).
 
 - First-time social users get a **solo household**, `emailVerified=true` (the provider already verified it — no verification email is sent), and the current legal versions are accepted on their behalf (show terms in the app before the social button).
 - If an existing **local** account has the same email, the provider is **linked** to it.
@@ -217,7 +233,11 @@ GET    /api/v1/users/me                 → current user
 PUT    /api/v1/users/me                 { "name": "..." }
 PUT    /api/v1/users/me/password        { "currentPassword": "...", "newPassword": "..." }
 POST   /api/v1/users/me/password        { "newPassword": "..." }   ← set a FIRST password (social account); 409 if one exists
-DELETE /api/v1/users/me                 → LGPD account deletion (cascades all data)
+POST   /api/v1/users/me/email-change          { "newEmail": "...", "currentPassword": "..." }  → 204 (see "Change e-mail")
+POST   /api/v1/users/me/email-change/confirm  { "code": "123456", "refreshToken": "..."? }     → 200 UserResponse
+DELETE /api/v1/users/me/email-change          → 204 (cancel the pending change)
+DELETE /api/v1/users/me                 → LGPD account deletion (cascades all data; also removes the profile picture
+                                          and the stored receipt photos from object storage)
 GET    /api/v1/users/me/export          → LGPD data export (ALL personal data: user + accountExtras + household + receipts + notificationRules + watchedMarketCnpjs + subscription + marketAliases + customCategories + categoryOverrides + manualPurchases + shoppingLists + notifications)
 PATCH  /api/v1/users/me/contribution    { "contributionOptIn": false }   ← LGPD opt-out from collaborative panel
 PATCH  /api/v1/users/me/location        { "latitude": -30.0277, "longitude": -51.2287 }
@@ -247,6 +267,8 @@ GET    /api/v1/users/me/subscription    → SubscriptionStatusResponse (see §7b
 GET    /api/v1/users/me/notification-preferences
 PUT    /api/v1/users/me/notification-preferences
        { "preferences": [ { "type": "PROMO_PERSONAL", "channel": "PUSH" }, ... ] }
+       ← PROMO_COMMUNITY and CHEAPER_MARKET are retired toggles: no longer listed by the GET and ignored
+         in the PUT (their content lives in the deals digest — see digest-preferences below)
 
 GET    /api/v1/users/me/digest-preferences   → { "frequency": "DAILY", "sendHour": 17 }
 PUT    /api/v1/users/me/digest-preferences
@@ -263,7 +285,39 @@ DELETE /api/v1/users/me/profile-picture
 
 **Set password (social accounts)**: a Google/Apple user has no local password. `POST /users/me/password` (authenticated) creates one, enabling email+password login **in addition to** the social login (which keeps working). Returns `200 { "message": ... }`; `409 user.password.already.set` when the account already has a password (use the `PUT` instead). `UserResponse` exposes `authProvider` (`LOCAL|GOOGLE|APPLE`) and `hasPassword` so the FE can decide between "create password" and "change password" UI. After setting one, `forgot-password` also works for that account.
 
+**Change e-mail** (accounts with a password): three calls, code-based like the other flows.
+
+```
+POST /api/v1/users/me/email-change
+{ "newEmail": "maria.nova@example.com", "currentPassword": "..." }
+→ 204   (a 6-digit code, valid 30 min, is e-mailed to the NEW address; the account e-mail does not change yet)
+
+POST /api/v1/users/me/email-change/confirm
+{ "code": "123456", "refreshToken": "<this device's refresh token>" }   // refreshToken optional
+→ 200 UserResponse   (email = the new address, emailVerified = true, pendingEmail = null)
+
+DELETE /api/v1/users/me/email-change   → 204   (cancels the pending change; idempotent)
+```
+
+| Response | When |
+|---|---|
+| 409 `user.email-change.password-required` | Social-only account (no password). Send the user to "create password" (`POST /users/me/password`) first. |
+| 409 `user.email-change.in-use` | The new address already belongs to another account (also possible at confirm, if it was registered meanwhile). |
+| 409 `user.email-change.same-email` | The new address is the current one. |
+| 400 (invalid current password) | `currentPassword` is wrong. |
+| 400 `user.email-change.code-invalid` | Wrong, expired or already-used code, or the code locked after 5 wrong guesses — request a new one. |
+| 429 | More than 3 requests/hour, or more than 15 confirm attempts/hour. |
+
+On confirm the old address gets a notice e-mail and **every other session is signed out**.
+Send this device's `refreshToken` in the confirm body to keep it signed in; without it
+ALL refresh tokens are revoked (the current access token still works until it expires).
+While a change is pending, `UserResponse.pendingEmail` carries the new address (`null`
+otherwise, including after the code expires) — use it to render "confirme o código
+enviado para …" with resend/cancel actions. A new request replaces the previous code.
+
 **Profile picture**: standard multipart upload. The response is JSON `{ "status": "ok" }` on success.
+Capped at **10 uploads/hour** per user (429); `503 image.decode.busy` when too many images are being
+decoded at once (retry in a few seconds).
 
 - **On upload**: server-side downscales JPEG/PNG to a 512px max dimension before storing (saves disk + bandwidth, no FE work).
 - **On GET**: returns the raw image bytes. **Never 404s** — when no picture has been uploaded, the server generates a deterministic initials avatar (PNG, 256x256, color hashed from email) so `<img>` tags always render. Inspect the **`X-Profile-Picture-Fallback: true|false`** response header to distinguish a generated avatar from a user-uploaded photo (handy for "edit photo" vs "upload photo" copy).
@@ -284,11 +338,58 @@ POST /api/v1/webhooks/mercadopago          ← Mercado Pago only (x-signature HM
 env — gate the subscribe button on it (no app release needed for the switch-on).
 
 The FE opens `checkoutUrl` (browser/webview) and the user authorizes the monthly
-subscription there. Entitlement flips **only via the webhook** (preapproval
-`authorized` → PRO until next payment date; `cancelled`/`paused` → FREE), so an
-abandoned checkout changes nothing. Poll `GET /users/me/subscription` after the
-back_url redirect to reflect the new tier. Inert until `MP_ACCESS_TOKEN` /
-`MP_WEBHOOK_SECRET` are set. Apps keep using RevenueCat (`/webhooks/revenuecat`).
+subscription there. Entitlement flips **only via the webhook**, so an abandoned
+checkout changes nothing: preapproval `authorized` → PRO until the next payment
+date; each approved monthly charge (`subscription_authorized_payment`) advances
+the period; `cancelled`/`paused` only stops the renewal — PRO is kept until the
+paid period ends (`cancelAtPeriodEnd: true` on `GET /users/me/subscription`).
+Poll `GET /users/me/subscription` after the back_url redirect to reflect the new
+tier. Inert until `MP_ACCESS_TOKEN` / `MP_WEBHOOK_SECRET` are set. Apps keep using
+RevenueCat (`/webhooks/revenuecat`).
+
+### Referral program — "indique um amigo"
+
+```
+GET /api/v1/referrals/me
+→ 200 {
+  "code": "ABC2345",
+  "shareUrl": "https://economizaai.app/?ref=ABC2345",
+  "invitedCount": 4,          // accounts attached to this user's code
+  "qualifiedCount": 2,        // of those, how many already qualified
+  "rewardedMonths": 1,        // months of Premium earned by inviting
+  "firstRewardUsed": true,    // the one-time "first friend who scans" reward is spent
+  "referredBy": false,        // this account was itself invited by someone
+  "canRedeemCode": true       // this account may still enter someone else's code
+}
+
+POST /api/v1/referrals/redeem
+{ "code": "ABC2345" }
+→ 204
+```
+
+The code is created on the first `GET` and never changes (7 characters, upper-case
+letters and digits; input is trimmed and upper-cased server-side). A new account is
+attached to an inviter either at signup (`referralCode` on `/register`, `/google`,
+`/apple`) or later through `redeem`, which is allowed only while the account has **no
+confirmed receipt** and was **never referred** (`canRedeemCode`).
+
+| Response | When |
+|---|---|
+| 400 `referral.code.invalid` | Unknown code (or the code of someone this user invited). |
+| 400 `referral.code.own` | The user's own code. |
+| 409 `referral.redeem.already_referred` | The account already used a code. |
+| 409 `referral.redeem.too_late` | The account already has a confirmed receipt. |
+| 429 | More than 10 redeem attempts/hour. |
+
+Rules (server-side, nothing for the FE to compute): a referral **qualifies** when the
+invited person confirms a receipt that fed the collaborative index, while living in a
+different household than the inviter. The inviter's **first** qualified referral earns
+1 month of Premium (once); from then on, 1 month per invited friend who subscribes.
+Months accumulate and start after the inviter's current entitlement ends (so after the
+launch promo). The invited friend earns nothing. Each reward arrives as a `SYSTEM`
+notification with `payload.kind = "REFERRAL_REWARD"` (`rewardKind`, `startsOn`,
+`endsOn`); the end of the earned time is `rewardPremiumUntil` on
+`GET /users/me/subscription`.
 
 ### Password reset + email verification
 
@@ -303,6 +404,8 @@ POST /api/v1/users/me/email-verification/resend                           → 20
 **Both flows are code-based** (mobile-friendly — no links anywhere). Password reset: step 1 emails a **6-digit code**; step 2 lets the app validate the code before showing the new-password screen (optional but recommended); step 3 sets the password. Email verification: signup (or resend) emails a 6-digit code; the app confirms it with `verify-email`. Codes are **single-use**, a new request **invalidates the previous** code, and **5 wrong attempts lock the code** (request a new one). Reset codes expire in **60 min**; verification codes in **24 h**. `verify-email` is idempotent for already-verified accounts.
 
 `forgot-password` always returns 204 — even when the email isn't registered, to avoid leaking valid addresses. `verify-reset-code`, `reset-password`, and `verify-email` return **400** on an invalid/stale/used/locked code.
+
+**Per-account limits on password reset:** at most **3 reset codes per hour** per account — further `forgot-password` calls still return 204 but send nothing (tell the user to check the e-mail already sent). Wrong guesses are also counted per account across codes: after **10 wrong codes within an hour** the account refuses reset-code verification (400) for **30 minutes**, even with a fresh code.
 
 **Dev mode**: when SMTP isn't configured, the email body (incl. the code) is logged with a `[DEV-MODE]` prefix instead of being sent. The endpoints still return 204, so the flow works for FE testing — grab the code from logs.
 
@@ -343,7 +446,8 @@ GET  /api/v1/households/invites/{code}     → { householdName, hostFirstName, m
 POST /api/v1/households/join               { "inviteCode": "ABC123", "bringData": true }   ← case-insensitive
 POST /api/v1/households/leave              → see "Leaving" below
 POST /api/v1/households/me/invite-code/regenerate   → HOST ONLY (403); rotates the code, extends TTL another 48h
-DELETE /api/v1/households/me/members/{memberId}     → HOST ONLY (403); the member moves out as if they left
+DELETE /api/v1/households/me/members/{memberId}     → HOST ONLY (403); the member moves out as if they left;
+                                                      400 household.remove.self when memberId is the caller (use "leave")
 GET  /api/v1/households/me/members/{memberId}/profile-picture → that member's photo (same headers as /users/me/profile-picture); 404 if not in my household
 ```
 
@@ -473,6 +577,30 @@ best-effort catch-all we attempt-and-capture but haven't proven (beta). Use it t
 "Funciona em: …" on the scan screen. A scan from an unverified state is still attempted
 (so we capture the nota to add support) up to an evidence cap per UF; past that it returns
 a localized 400 (`receipt.state.unsupported`). Authenticated, not admin.
+
+**Resubmitting a chave that is still in flight.** If the household already has this
+chave in `PROCESSING` or `IMPORT_QUEUED` (double tap, or the app re-sent while the first
+ingest is running), `POST /receipts` returns **that same receipt** (same `id`, still 201)
+and starts nothing new — just keep polling it. A `CONFIRMED` duplicate is still 409.
+
+**How each state is doing right now** — for the in-app FAQ ("situação dos estados"):
+
+```
+GET /api/v1/sefaz/state-status
+→ 200 [
+  { "uf": "AC", "name": "Acre",              "status": "VALIDATING" },
+  { "uf": "RS", "name": "Rio Grande do Sul", "status": "WORKING" },
+  { "uf": "SE", "name": "Sergipe",           "status": "UNSTABLE" },
+  ...
+]
+```
+
+All 27 UFs, ordered by `uf`. `WORKING` = verified adapter and healthy; `UNSTABLE` =
+verified but its portal is on the paused watch list or its recent notas are mostly
+failing for portal reasons; `VALIDATING` = experimental (still collecting notas — scans
+are attempted, results not guaranteed). Authenticated, not admin; the answer is the same
+for every user and cached server-side for ~5 minutes. Never hardcode the state list in
+the app — render it from here.
 
 ### Submit a receipt the app fetched on-device (blocked states, e.g. PE)
 
@@ -624,6 +752,7 @@ monthly cap and rate limit as `POST /receipts`. Extra error:
 |---|---|
 | 400 `receipt.photo.qr.unreadable` | No decodable QR in the photo (blur/glare/too far). Ask for a closer, well-lit retake. |
 | 400 `receipt.photo.invalid.type` / `receipt.photo.empty` / `receipt.photo.too.large` | Upload validation. |
+| 503 `image.decode.busy` | Too many images are being decoded at once (server-wide limit). Retry in a few seconds. Same on `/receipts/chave/photo`. |
 
 On mobile keep scanning client-side (faster, no upload) — this endpoint is the
 no-camera fallback.
@@ -705,6 +834,36 @@ HTTP errors: the receipt lands in `status=FAILED_PARSE` and the new
 (e.g. `receipt.parse.failed:no-items-found`). It's `null` for non-failed
 receipts and is intended for debugging/support — don't render it raw to users.
 
+**Server overload (any endpoint).** When the server has no free database connection
+it answers fast with **`503 error.overloaded`** and a **`Retry-After: 5`** header
+instead of hanging or returning a 500. This also applies while the JWT is being
+checked, so an overloaded server never answers 401 for a valid token. Treat it as
+"try again in a few seconds" — never as a signed-out session.
+
+**Cost guard on paid fetches.** Some notas need a paid step (captcha solve, the
+Infosimples by-chave lookup, AI extraction). Each paid service has a per-user daily
+cap and a daily spend ceiling; free scraping is never blocked by them.
+
+| Paid service | Per-user cap / day | Daily ceiling (all users) |
+|---|---|---|
+| Infosimples (by-chave lookup) | 10 | R$ 120 |
+| Captcha solve | 30 | R$ 30 |
+| Receipt by photo (vision, counted per photo) | 10 | R$ 30 |
+| HTML parse rescue (AI) | 5 | R$ 15 |
+| AI categorization (suggestions, post-confirm fallback, "corrigir item") | 60 | R$ 50 |
+| SMS / WhatsApp (Twilio) | 3 | R$ 15 |
+
+The values are server config (env vars — see `INFRASTRUCTURE.md`); ceilings reset at
+midnight UTC (21:00 Brasília). What the app sees:
+
+| Response | When |
+|---|---|
+| `receipt.paid_api.quota_exceeded` | The user hit their daily cap. Via polling on a scan (`FAILED_PARSE`); **429** on synchronous calls. |
+| `receipt.paid_api.budget_exhausted` | The service's daily ceiling is spent. Via polling on a scan; **503** on synchronous calls. Only that service stops. |
+| `receipt.paid_api.circuit_open` | The provider is failing and paused for a few minutes (**503** / via polling). |
+| 429 `phone.otp.quota_exceeded` | SMS cap reached on the phone-OTP flow. |
+| 429 `ai.correction.limit_reached` | AI-categorization cap reached on "corrigir item". |
+
 ### Review + confirm
 
 After submit, the user sees `status=PENDING_CONFIRMATION` with parsed items.
@@ -748,6 +907,8 @@ POST   /api/v1/receipts/{id}/retry                   → "tentar novamente" de n
                                                         (aproveita fallbacks novos, ex. resgate RS 227);
                                                         IMPORT re-enfileira a reconsulta por chave. 202;
                                                         poll GET /receipts/{id}. Aceita X-Device-Fetch.
+                                                        400 localizado quando a falha é definitiva (ver
+                                                        "Retry refused" abaixo).
 POST   /api/v1/receipts/{id}/device-content { "rawContent": "<HTML/XML>", "unavailable": false }
                                                      → 200 ReceiptResponse. Nota deixada em NEEDS_DEVICE_FETCH
                                                         (portal do estado bloqueia o IP do servidor): o app busca
@@ -755,10 +916,16 @@ POST   /api/v1/receipts/{id}/device-content { "rawContent": "<HTML/XML>", "unava
                                                         re-ingere a MESMA nota. Mesmo rate limit do submit.
 POST   /api/v1/receipts/{id}/items/{itemId}/correction { "hint": "o que o produto realmente é" }
                                                      → 200 ReceiptResponse. Correção de item mal classificado:
-                                                        a IA reclassifica com a dica e atualiza o produto; gera
-                                                        um finding MISSING_RULE pra revisão do admin.
+                                                        a IA reclassifica com a dica e aplica o resultado SÓ
+                                                        PARA A CASA (nome amigável + categoria); o produto
+                                                        global não muda — a proposta vai pra revisão do admin
+                                                        (findings PRODUCT_CORRECTION + MISSING_RULE).
+                                                        429 ai.correction.limit_reached (limite diário);
+                                                        503 item.correction.unavailable (IA fora — tentar depois);
+                                                        422 item.correction.failed (não identificou — pedir
+                                                        outra descrição).
 POST   /api/v1/receipts/{id}/confirm                 → commit. Optional body { excludedItemIds: [uuid, ...] }
-                                                        Returns { receipt, personalPromos: [...] }
+                                                        Returns { receipt, personalPromos: [...], launchPromo }
 POST   /api/v1/receipts/{id}/reject                  → discard. Receipt stays as REJECTED in history.
 DELETE /api/v1/receipts/{id}                         → hard delete. Frees the chave so it can be re-imported.
                                                         Removes the receipt + its items + audit-trail rows
@@ -828,6 +995,42 @@ Confirm is what triggers downstream side effects:
 
 `personalPromos` in the confirm response is the list of items the user paid
 notably less for than usual — surface as "Você economizou" cards.
+
+**`launchPromo`** in the confirm response is non-null only on the ONE confirmation
+that granted the launch promo (the user's first confirmed receipt, while the promo
+is on):
+
+```json
+{ "receipt": { ... }, "personalPromos": [ ... ], "launchPromo": { "validUntil": "2026-12-31" } }
+```
+
+`validUntil` is the last day of free Premium (a date, Brasília calendar). Show the
+"você ganhou Premium grátis até DD/MM" notice when it is present; it is `null` on
+every other confirm (not the first receipt, promo over/disabled, already granted, or
+the user already has a better entitlement).
+
+**A line the user edited or added does not feed the collaborative index.** Changing an
+item's price data (or adding an item) keeps it in the household's own history, but
+that line is skipped when the receipt contributes prices; untouched lines of the same
+receipt still contribute.
+
+**Retry refused (`POST /receipts/{id}/retry` → 400).** Some failures are a final
+verdict about the nota itself — retrying would only fail the same way — so the retry
+is refused with a localized message telling the user what to do instead. This happens
+when the receipt's `parseErrorReason` is (exactly, or as a `key:` prefix) one of:
+
+| `parseErrorReason` | Meaning |
+|---|---|
+| `receipt.parse.failed:chave-corrupted`, `receipt.chave.typo` | The 44 digits were read wrong — rescan the QR or retype. |
+| `receipt.parse.failed:infosimples.not-found` | The portal has no such nota (cancelled / never transmitted). |
+| `receipt.contingency.unavailable` | The store never transmitted the contingency nota. |
+| `receipt.merchant.unsupported` | Not a grocery/pharmacy merchant. |
+| `receipt.qr.invalid` | The payload is not an NFC-e QR code. |
+| `receipt.state.unsupported` | No way to read this state yet. |
+| `receipt.manual-chave.unsupported`, `receipt.manual-chave.nfe-unsupported` | The state can't be consulted from a typed chave — scan the QR. |
+
+Hide the "tentar de novo" button for these keys. Every other failure stays retryable.
+The batch `POST /receipts/retry` silently skips the same notas.
 
 ### List + filter
 
@@ -1120,7 +1323,7 @@ de folha em `categoryNodeSlug` (correção de item, regra de dicionário, aprova
 ## 5. Products
 
 ```
-GET   /api/v1/products?query=arroz&page=0&size=20    → GLOBAL catalog search by name or exact EAN (autocomplete)
+GET   /api/v1/products?query=arroz&page=0&size=20    → product picker search by name or exact EAN (autocomplete; see "Search behaviour")
 GET   /api/v1/products/mine                          → products MY household has actually bought
 GET   /api/v1/products/{id}/markets[?includeNearby=&radiusKm=] → where this product is, and at what price
 GET   /api/v1/products/{id}                          → single product
@@ -1157,7 +1360,17 @@ since those endpoints only checked the alias table. Both tiers are per
 household, so different households can still see different names for the
 same catalog product.
 
-`GET /products` stays the **global** catalog (for autocomplete when creating alerts/rules etc.). For "the products I buy", use the two household-scoped endpoints:
+**Search behaviour of `GET /products` (2026-11-11)** — it runs per keystroke, so it is bounded on purpose:
+
+| `query` | What comes back |
+|---|---|
+| absent / blank | The **household's own products**, most purchased first, paged in the database (`page`/`size`; a client `sort` is ignored). |
+| 1 character | Only the household's own products matching it — the catalog is not searched. |
+| 2+ characters | Catalog matches by name / exact EAN and by receipt description, **capped at ~200 candidates per source**, plus everything the household bought or renamed that matches (never cut by the cap). Ranked by local relevance and paged over that capped set, so `totalElements` tops out around the cap — it is not the catalog size. |
+
+`hasPriceHistory` on each row is `true` when the **caller's household** has a confirmed, non-excluded purchase of the product (it has its own price history to show).
+
+`GET /products` with 2+ characters is still the **global** catalog (for autocomplete when creating alerts/rules etc.). For "the products I buy", use the two household-scoped endpoints:
 
 - **`GET /products/mine`** → `List<HouseholdProductResponse>` = products your household has bought (confirmed, non-excluded), newest purchase first. Each: `{ productId, name, friendlyName, brand, category, timesBought, lastBoughtAt, lastUnitPrice, lastMarketCnpj, lastMarketName, lastMarketFriendlyName }`. `friendlyName` is your household's own rename of the product (null when never renamed) — prefer it for display. Display `lastMarketFriendlyName` (your custom market name when set, else the original `lastMarketName`).
   - **Search matches the rename too** (2026-08-26): the optional `query` filters by product name, brand **and `friendlyName`**. Same for `GET /products?query=` (returns products you renamed to something matching, even when the catalog name doesn't match) and `GET /receipts?q=`.
@@ -1258,7 +1471,9 @@ GET /api/v1/price-index/promos/feed[?lat=&lng=]   (lat/lng = GPS do aparelho, os
 ```
 
 **`sort` (2026-11-10)** on best-markets + both generic-comparison endpoints (default
-`CHEAPEST`): `CHEAPEST` = price ascending (historical; best-markets keeps watched-first);
+`CHEAPEST`): `CHEAPEST` = price ascending (historical; best-markets keeps watched-first;
+since 2026-11-11 best-markets orders by each row's `latestPrice` — the number the card
+shows — and `isCheapest` goes to the lowest `latestPrice`, no longer to the lowest median);
 `NEAREST` = `distanceKm` ascending, nulls last. The radius/scope cascade is unchanged —
 `sort` only reorders. Independently of the order, each row/offer carries persistent
 `isCheapest`/`isNearest` booleans (decided over the whole result set) so the FE shows
@@ -1339,7 +1554,9 @@ the median for "usual price" contexts.
 **n=1** (`distinctHouseholds` may be 1 — render it honestly, never promise "3
 famílias"). `latestObservedAt`/`mostRecentAt` carry **day precision only**. Anything
 SENSITIVE keeps the full K=3 / min 5 observations: products in the health category
-group and observations from PHARMACY stores. List-shaped reads (admin, exports,
+group and observations from any store that is NOT classified as grocery retail —
+pharmacies and, since 2026-11-11, stores whose segment is still unknown/unclassified
+(a product without a category stays grocery). List-shaped reads (admin, exports,
 merchant panel) always keep K=3.
 
 ### Barcode scan flow (scan → price nearby)
@@ -1454,9 +1671,9 @@ Authenticated like the other price-index endpoints.
 ## 7b. Deals — "Ofertas pra você"
 
 The active, ranked list of discounts currently relevant to the household: for
-every product the household has bought, the best **currently-observed** community
-price at a relevant market that beats what the household last paid by a
-meaningful margin. This is the screen a future digest push will deep-link into.
+every product the household has bought, the cheapest market chain whose **most
+recent observed price** beats what the household last paid by a meaningful
+margin. This is the screen the daily digest push deep-links into.
 
 ```
 GET /api/v1/deals?includeNearby=false&radiusKm=5&limit=20
@@ -1468,7 +1685,7 @@ GET /api/v1/deals?includeNearby=false&radiusKm=5&limit=20
       "category":         "MEAT_DAIRY",
       "marketCnpj":       "12345678000199",
       "marketName":       "Atacadão (Centro)",   // household friendly name
-      "currentPrice":     7.00,                   // k-anon community median
+      "currentPrice":     7.00,                   // the chain's MOST RECENT observed price (≤ 60 days old)
       "lastPaidPrice":    10.00,
       "savingsAmount":    3.00,
       "savingsPct":       30.00,
@@ -1476,10 +1693,23 @@ GET /api/v1/deals?includeNearby=false&radiusKm=5&limit=20
       "distinctHouseholds": 4,
       "distanceKm":       2.3,                    // nullable
       "isWatched":        true,
-      "observedAt":       "2026-06-01T18:00:00"
+      "observedAt":       "2026-11-01T00:00:00",  // day of the observation that priced `currentPrice`
+      "priceSource":      "COMMUNITY"             // OWN_PURCHASE | COMMUNITY
     }
   ]
 ```
+
+**What the price fields mean (2026-11-11):**
+- `currentPrice` is the chain's **latest observed price**, at most 60 days old
+  (`DEALS_MAX_PRICE_AGE_DAYS`) — the same number the best-markets screen shows as
+  `latestPrice` for that chain. It is no longer a median.
+- `observedAt` is the **date of that observation** (day precision — the time part is
+  midnight), not the date of the household's last purchase.
+- `priceSource` says whose observation it is: `OWN_PURCHASE` = the household itself paid
+  that price at that chain on that day ("Você pagou R$ 7,00 no Atacadão em 01/11");
+  `COMMUNITY` = someone else's receipt ("Visto por R$ 7,00 no Atacadão em 01/11").
+- The chain where the household made its **last** purchase of the product is never
+  suggested (that is the price being compared against).
 
 Params (all optional): `includeNearby` (default `false` — watched markets only;
 `true` also considers markets within `radiusKm` of home), `radiusKm`,
@@ -1487,10 +1717,11 @@ Params (all optional): `includeNearby` (default `false` — watched markets only
 
 Ranking: by savings (discount fraction) desc, tie-broken by purchase frequency.
 The discount bar is **progressive** — ~20% required on a R$1 item, ~5% on a
-R$200 one — so trivial drops don't surface. K-anonymity protected: the community
-price is disclosed only when ≥ 3 distinct households contributed; below that the
-market is dropped. Returns `[]` when the collaborative index is off or nothing
-qualifies.
+R$200 one — so trivial drops don't surface. K-anonymity is applied **by tier**
+inside the price index, as on best-markets (§7): grocery prices may be shown from a
+single household's receipt; health products and non-grocery / unknown-segment
+stores need ≥ 3 distinct households, below that the chain is dropped. Returns `[]`
+when the collaborative index is off or nothing qualifies.
 
 **Relevance feedback (2026-06-12):** the `DISMISSED` / `MUTED` events the app
 reports (§10b) feed a per-user suppression filter on this list and the digest —
@@ -1503,18 +1734,24 @@ once validated it flips ON server-side with no API change — so always send
 ### How the daily deals digest works (push)
 
 The deals screen above is always-on and read-only. The **digest** is the push
-that nudges the user back to it. A scheduler runs hourly and, for each user who
-is *due that hour* and hasn't already received a digest *today* (1/day hard cap),
-recomputes their deals and sends **one** `DEALS_DIGEST` push — but only when at
-least one deal is **newsworthy** (brand-new, discount improved by ≥ 5 p.p. /
-crossed a stricter relevance step, or it lapsed past the collaborative lookback
-window). Standing, unchanged deals never re-notify.
+that nudges the user back to it. A scheduler runs hourly and, for each user whose
+send hour **has already been reached today** and who hasn't received a digest
+*today* (1/day hard cap), recomputes their deals and sends **one** `DEALS_DIGEST`
+push — but only when at least one deal is **newsworthy** (brand-new, discount
+improved by ≥ 5 p.p. / crossed a stricter relevance step, or it lapsed past the
+collaborative lookback window). Standing, unchanged deals never re-notify. With
+nothing newsworthy nothing is sent and the day's slot is not used up — the user is
+looked at again on the next hourly run. The push quotes the same price as the
+deals screen.
 
 - **Preferences**: `GET`/`PUT /api/v1/users/me/digest-preferences` (above).
   `frequency` `OFF` = never; `WEEKLY` = once a week (currently Thursdays);
   `DAILY` = at most once a day. `sendHour` (0-23) overrides the send time;
-  leave it `null` and the backend infers it from the household's typical
-  shopping hour, falling back to ~16:00. Timezone is America/Sao_Paulo (v1).
+  leave it `null` and the backend picks it: the household's typical shopping
+  hour minus one once there is enough history, otherwise a per-user default
+  spread between 11:00 and 19:00. Timezone is America/Sao_Paulo (v1).
+- **Quiet hours**: a digest due between 21:00 and 08:00 lands in the inbox and its
+  push goes out after 08:00 (§10b "Quiet hours").
 - **The push** lands in the inbox as a `DEALS_DIGEST` `Notification` (see §
   Notifications). Body: e.g. `"Café 22% mais barato — e mais 3 ofertas pra
   você"`. Its `payload` carries `deeplink: "economizai://deals"`, `screen:
@@ -1571,15 +1808,27 @@ into the backend by webhooks — this endpoint is what the app reads to render
 the paywall state and a "manage subscription" screen.
 
 ```json
-{ "tier": "PRO", "status": "ACTIVE", "provider": "revenuecat", "currentPeriodEnd": "2026-07-12T10:00:00" }
+{ "tier": "PRO", "status": "ACTIVE", "provider": "revenuecat", "currentPeriodEnd": "2026-07-12T10:00:00",
+  "cancelAtPeriodEnd": false, "rewardPremiumUntil": null }
 ```
 
-- `tier` — `FREE` | `PRO` (same value as in `GET /users/me`).
+- `tier` — `FREE` | `PRO` (same value as in `GET /users/me`). PRO while the
+  subscription is `ACTIVE` **or** a referral-reward window is running.
 - `status` — provider lifecycle: `ACTIVE` | `CANCELED` | `EXPIRED`, or `null`
   if the user never had a subscription record (plain FREE).
-- `provider` — e.g. `revenuecat`, `manual` (admin grant), `null` for FREE.
-- `currentPeriodEnd` — when the paid period lapses; the hourly expiry sweep
-  downgrades to FREE after this. `null` for FREE.
+- `provider` — e.g. `revenuecat`, `mercadopago`, `manual` (launch promo or admin
+  grant), `null` for FREE.
+- `currentPeriodEnd` — when the current period lapses. `null` for FREE and for
+  open-ended admin grants. The hourly expiry sweep downgrades after it: on time
+  for the launch promo and for a non-renewing subscription; a paid, still-renewing
+  subscription gets a **3-day grace** first (a renewal notice can be late).
+- `cancelAtPeriodEnd` — `true` when the subscription will **not renew** (the user
+  cancelled / paused at the store or at Mercado Pago). Access continues until
+  `currentPeriodEnd` — show "seu Premium vai até DD/MM", not "cancelado".
+- `rewardPremiumUntil` — end of the Premium time earned through referrals, when
+  some is still ahead (it starts after the current period); `null` otherwise.
+- A paid subscription that ends while the user's launch promo is still running
+  falls back to the promo (`provider: "manual"`, `currentPeriodEnd` = promo end).
 - Route "manage subscription" by `provider`: store-bought subs are managed in
   the store (App Store / Play), not via our API.
 
@@ -1702,7 +1951,7 @@ POST /api/v1/notifications/{id}/read         → mark single as read
 POST /api/v1/notifications/mark-all-read     → { "marked": N }
 ```
 
-Each `NotificationResponse` carries `payload` — the JSON we attached when we generated the notification (`receiptId`, `productId`, `savingsPct`, etc) so cards can deep-link. `type` is one of `PROMO_PERSONAL`, `PROMO_COMMUNITY`, `CHEAPER_MARKET`, `DEALS_DIGEST`, `DIGEST`, `PRICE_DROP`, `STOCKOUT`, `BUDGET`, `SYSTEM` — what triggers each and how to toggle it is in §10f.
+Each `NotificationResponse` carries `payload` — the JSON we attached when we generated the notification (`receiptId`, `productId`, `savingsPct`, etc) so cards can deep-link. `type` is one of `PROMO_PERSONAL`, `DEALS_DIGEST`, `DIGEST`, `PRICE_DROP`, `STOCKOUT`, `BUDGET`, `SYSTEM`, `RECEIPT_READY`, `RECEIPT_FAILED`, `RECEIPT_RECOVERED`, `PUSH_OPTIN`, `HOUSEHOLD_MEMBER_JOINED`, `HOUSEHOLD_MEMBER_LEFT` (old inbox rows may still carry the retired `PROMO_COMMUNITY` / `CHEAPER_MARKET`) — what triggers each and how to toggle it is in §10f.
 
 Each response also carries `destination` — a routing hint derived from `type` so the FE knows which screen to open when the card is tapped (the concrete id it needs is already in `payload`). Values:
 
@@ -1714,7 +1963,13 @@ Each response also carries `destination` — a routing hint derived from `type` 
 | `BUDGET`        | budget screen          | `BUDGET`                                                      |
 | `INBOX`         | generic inbox          | `SYSTEM` (and any future/unmapped type)                      |
 
-> **Real-time vs digest:** the only notifications pushed in **real time** (on receipt confirm) are the user's explicit alerts — `PRICE_DROP` and `BUDGET`. The **discovery** notifications (`PROMO_PERSONAL` / `PROMO_COMMUNITY` / `CHEAPER_MARKET`) are now delivered **only via the daily deals digest** (§ "How the daily deals digest works"), not in real time.
+> **Real-time vs digest:** the only notifications pushed in **real time** (on receipt confirm) are the user's explicit alerts — `PRICE_DROP` and `BUDGET`. The **discovery** content (personal promos, community promos, cheaper market) is delivered **only via the daily deals digest** (§ "How the daily deals digest works"), not in real time. `PROMO_COMMUNITY` and `CHEAPER_MARKET` no longer exist as toggles (2026-11-11) — the digest frequency is the control.
+
+**Quiet hours — 21:00 to 08:00 (America/Sao_Paulo).** Nothing is pushed or e-mailed inside the window. The notification still lands in the inbox immediately (so `GET /notifications` and the unread badge are live); its push goes out on the first hourly run after 08:00 — at most **3 held-back pushes per user**, oldest first; the rest stay inbox-only. Exempt, always immediate: `RECEIPT_READY`, `RECEIPT_FAILED`, `RECEIPT_RECOVERED` (they answer something the user just did). Nothing for the FE to do, but don't expect a push for a night-time event before 08:00.
+
+**Money and language in notification texts.** Amounts are formatted Brazilian-style (`R$ 1.234,50`) and server-generated notification texts are always in Portuguese, whatever `Accept-Language` the device sent at signup.
+
+**System notices worth a dedicated card** (all `type: "SYSTEM"`, told apart by `payload.kind`): `LAUNCH_PROMO_ENDING` — the free Premium is about to end (sent 15, 7, 3 and 1 day before, only to promo holders without a paid subscription; route to the paywall); `REFERRAL_REWARD` — a referral earned a month of Premium (`rewardKind`, `startsOn`, `endsOn`).
 
 ### Report a telemetry event (client → server)
 
@@ -1850,7 +2105,7 @@ POST   /api/v1/admin/analytics/store/ios/sync      → {"rowsSynced": n} — for
 GET    /api/v1/admin/analytics/retention-cohorts?weeks=8&includeInternal=false → RetentionCohortResponse (weekly cohort triangle + per-channel pooled retention curve)
 POST   /api/v1/admin/analytics/ad-spend/sync       → {"rowsSynced": n} — run the Meta ad-spend sync now instead of waiting for the daily cron (0 when Meta is not configured)
 GET    /api/v1/admin/costs/infosimples             → InfosimplesFinanceResponse — painel da conta pré-paga: saldo/consumoMes/franquiaMinima ao vivo, aVarrerNoFechamento + proximoFechamento (dia 1º), totais históricos e historico[] mensal (recarga/consumo/varrido)
-GET    /api/v1/admin/costs?days=30                 → CostReportResponse (paid-API spend: total + by service + by state + today vs budget + conta Infosimples ao vivo: infosimplesSaldo, infosimplesConsumoMes (cobrado real), infosimplesFranquiaMinima — null se indisponível)
+GET    /api/v1/admin/costs?days=30                 → CostReportResponse (paid-API spend: total + by service + by state + today vs budget + conta Infosimples ao vivo: infosimplesSaldo, infosimplesConsumoMes (cobrado real), infosimplesFranquiaMinima — null se indisponível). `dailyGlobalBudgetCents` é o teto geral OPCIONAL (0 = desligado, o padrão desde 2026-11-11); os tetos que valem são por serviço (config, ver §3 "Cost guard" / INFRASTRUCTURE.md) e não vêm nesta resposta.
 GET    /api/v1/admin/state-coverage?days=           → StateCoverageResponse (per-UF: VERIFIED/EXPERIMENTAL + NOTA outcomes attempts/successes/failures/pending/users/failureReasons + per-layer `strategies` telemetry)
 GET    /api/v1/admin/ingestion-health?days=30&includeInternal=false → IngestionHealthResponse (pipeline health: status mix, parse success rate, stuck/timeout counts, per-UF outcomes, top parseErrorReason keys — from the receipts table)
 GET    /api/v1/admin/notifications/relevance-report?days=30 → RelevanceReportResponse (deal-suppression shadow-mode KPI before flipping relevance ON)
@@ -2012,12 +2267,12 @@ DELETE /api/v1/notification-rules/{id}       → 204 (defaults can't be deleted 
 | type | fires when |
 |------|-----------|
 | `PROMO_PERSONAL` | you paid below your own historical median on a confirmed receipt |
-| `PROMO_COMMUNITY` | a product you've bought is flagged as a promo anywhere in the network |
-| `CHEAPER_MARKET` | a product you've bought is seen **at one of your watched markets** (§ Markets) below your last paid price — see drop rule below |
 | `DIGEST` | weekly (Mon 08:00) summary of your household's activity |
 
-- **`CHEAPER_MARKET` scope & toggle:** by default it watches only **your favourite/watched markets**. Set `radiusKm` on the rule (via PATCH) to *also* include any market within that distance of home. The required drop **scales with price**: ~20% on a ~R$1 item down to ~5% on a ~R$200 item (log-interpolated), so cheap items need a deep cut to ping you and pricey items trigger on a small %. Payload includes `lastPaidPrice` and `savingsPct`.
-- **Upsert:** `POST` of an existing `(type, productId)` updates it. Posting a default-scope type is rejected (`400`) — toggle it instead.
+- **Retired (2026-11-11):** `PROMO_COMMUNITY` and `CHEAPER_MARKET` are no longer seeded or returned by `GET /notification-rules` — remove their toggles from the screen. Community promos and "cheaper at another market" reach the user through the deals digest (§7b), governed by `digest-preferences`.
+- **Upsert:** `POST` of an existing `(type, productId)` updates it. Posting a default-scope type is rejected (`400 notificationrule.invalid.not-creatable`) — toggle it instead. The other validation errors are localized too: `notificationrule.invalid.threshold-required`, `notificationrule.invalid.product-required`, and `notificationrule.invalid.default-not-deletable` on `DELETE` of a default.
+- **`STOCKOUT` cadence:** the reminder follows the consumption-prediction screen — "Já comprei" / "Adiar" there silence it — runs once a day (10:00) and stops after **3 reminders** without a new purchase.
+- **`BUDGET`:** the scheduled check runs at 09:00 and 18:00 against the household's spend for the month **by purchase date** (the same number the dashboard shows).
 - **Channel:** `channel` overrides the per-type preference (§10 preferences) for that one rule. Channels: `PUSH` (live), `EMAIL` (live once SMTP is wired), `ALEXA`/`SMS`/`WHATSAPP` (structure only — not yet functional), `NONE`.
 - **No self-notify / cooldown:** community rules never fire for the contributor's own household; at most one fire per rule per 24h.
 
@@ -2051,7 +2306,8 @@ POST   /api/v1/merchant/promos/batch     → MerchantPromoImportResponse — bod
   assinatura ativa → **402** `merchant.subscription.required` quando não há.
 - **Assinatura (modal do portal do lojista)**: status `PROMO` + `freeUntil` = mostrar
   o modal "conta de marketing grátis até {freeUntil}" (promo de lançamento, 31/12/2026).
-- `verifiedByReceipts` = cupom NFC-e real da rede, dentro da janela, preço ≤ anunciado (±1%).
+- `verifiedByReceipts` = cupons NFC-e reais da rede, dentro da janela, preço ≤ anunciado (±1%),
+  vindos de pelo menos K casas distintas (um cupom só não verifica mais).
 
 ## 10h. Merchant claims (qualquer usuário autenticado)
 
@@ -2067,8 +2323,12 @@ POST /api/v1/merchant-claims/{id}/verify → MerchantClaimResponse — body {cod
 ```
 
 - Código: 6 dígitos, TTL 24h, 5 tentativas; expirado/estourado fecha o claim
-  (REJECTED, motivo `code_expired`/`code_attempts_exceeded`) — basta resubmeter.
+  (REJECTED, motivo `code_expired`/`code_attempts_exceeded`). Depois de um claim
+  encerrado, um novo claim para a MESMA rede só é aceito após 24 h
+  (`MERCHANT_CLAIM_COOLDOWN_HOURS`) → **429** `merchant.claim.cooldown` antes disso.
 - 409 claim aberto duplicado ou rede já concedida; 400 código errado; 429 tentativas estouradas.
+- Rate limit (por usuário E por IP — os dois baldes são cobrados): envio 3/hora,
+  verificação 10/hora → 429 com `Retry-After`.
 
 ### Feed patrocinado (consumer — INERTE por flag)
 
@@ -2121,7 +2381,7 @@ GET    /api/v1/admin/products/unmatched-report?topN=30 → item→product matchi
 # ── AI assist layer — /api/v1/categorizer/ai/** (ALL ADMIN only: spends money / mutates global state) ──
 GET    /api/v1/categorizer/ai/status           → { enabled, extractorModel, curatorModel, pendingQueue{itensNaoCasados, produtosSemMarca, produtosSemNome, produtosOutros}, lastSweep{…} }
 POST   /api/v1/categorizer/ai/sweep?full=false → starts the async sweep (full=true walks the WHOLE queue — historical backfill)
-GET    /api/v1/categorizer/ai/findings?status=PENDING&type=&page=0&size=30&sort= → Page<AiFinding> (review queue)
+GET    /api/v1/categorizer/ai/findings?status=PENDING&type=&page=0&size=30&sort= → Page<AiFinding> (review queue; `type=PRODUCT_CORRECTION` = a user's "corrigir item" proposal — it already applies to that user's household; approve applies it to the GLOBAL product, reject leaves the catalog as it was)
 POST   /api/v1/categorizer/ai/findings/{id}/approve → AiFinding — optional JSON body with field overrides
 POST   /api/v1/categorizer/ai/findings/{id}/reject  → AiFinding
 GET    /api/v1/categorizer/ai/findings/{id}/ufs     → ["RS", …] — UFs where the finding's product was scanned
@@ -2178,12 +2438,14 @@ Mostly for ops. Categorization runs automatically on receipt confirm.
 ## 12. Legal
 
 ```
-GET /api/v1/legal/terms             → { "version": "1.0", "content": "...", "updatedAt": "..." }
+GET /api/v1/legal/terms             → { "version": "1.1", "content": "...", "updatedAt": "..." }
 GET /api/v1/legal/privacy-policy    → same shape (alias: /api/v1/legal/privacy)
 ```
 
 Both are public (no auth). Show before register; pass the returned `version` in
-the register request.
+the register request. Current version of both documents: **1.1** (since
+2026-11-11) — a register call still sending `"1.0"` is rejected with 400, so always
+send the version read from these endpoints, never a hardcoded one.
 
 ---
 
@@ -2204,13 +2466,21 @@ gating service.
 | Capability | FREE | PRO | Enforcement |
 | --- | --- | --- | --- |
 | Watched markets (`POST /markets/watched/{cnpj}`) | 3 pins | unlimited | New pin over the cap → **402**. Unpin / re-pin existing is always fine. |
-| Receipt uploads (`POST /receipts`) | 5 / calendar month | unlimited | Over the cap → **402**. Counts ALL statuses (reject/resubmit can't game it). |
-| History window (`/insights/*`, `/items`) | last 90 days | full range | `from` older than 90d (or omitted) is silently clamped. No error — just windowed. |
-| Notification delivery | in-app inbox only | inbox + push/email | FREE inbox row is always saved (`delivered=false`, `failureReason=free_tier_inbox_only`); push/email skipped. |
+| Receipt uploads (`POST /receipts`) — `RECEIPT_UPLOAD_UNLIMITED` | 5 / calendar month | unlimited | Over the cap → **402**. Counts ALL statuses of receipts the user SUBMITTED (reject/resubmit can't game it); copies created by a household split are not usage. |
+| History window (`/insights/*`, `/items`) — `HISTORY_FULL_RANGE` | last 90 days | full range | `from` older than 90d (or omitted) is silently clamped. No error — just windowed. |
+| Notification delivery — `PUSH_AND_EMAIL_DELIVERY` | in-app inbox only | inbox + push/email | FREE inbox row is always saved (`delivered=false`, `failureReason=free_tier_inbox_only`); push/email skipped. **Transactional notifications are never held back, whatever the plan:** `RECEIPT_READY` / `RECEIPT_FAILED` / `RECEIPT_RECOVERED`, `HOUSEHOLD_MEMBER_JOINED` / `HOUSEHOLD_MEMBER_LEFT`, and `SYSTEM` notices not sent by an admin campaign (account, billing, consent). |
 | Basket optimization (`POST /shopping-list/optimize`) | — | ✅ | FREE → **402**. |
 | History export (`GET /receipts/export`) | — | ✅ | FREE → **402** (`CSV_EXPORT`). |
 | Receipt by photo (`POST /receipts/items-photo`) | — | ✅ | FREE → **402** (`PHOTO_EXTRACTION`); also counts toward the monthly receipt cap. |
 | Household size (join) | 2 people | 6 people | One PRO member lifts the whole household to the max. Over the cap → localized `household.full.free` / `household.full.max`. The absolute max (6) applies even with enforcement off. |
+
+The gate is **per feature** (`Feature` enum: `WATCHED_MARKETS_UNLIMITED`,
+`HISTORY_FULL_RANGE`, `PUSH_AND_EMAIL_DELIVERY`, `RECEIPT_UPLOAD_UNLIMITED`,
+`BASKET_OPTIMIZATION`, `CSV_EXPORT`, `PHOTO_EXTRACTION`). With enforcement on, the
+server can still leave chosen features open to FREE
+(`SUBSCRIPTION_FREE_OPEN_FEATURES`, comma-separated feature names) so paywalls can be
+switched on one at a time — so don't assume "FREE ⇒ every row above is blocked";
+react to the 402 of each call.
 
 **402 response** (Payment Required) — distinct from 403 (forbidden). Standard
 error shape; the message resolves `subscription.upgrade_required` with the
@@ -2220,20 +2490,25 @@ requires a PRO subscription."* Treat 402 as "show the upgrade prompt".
 **Admin set-tier (ops / promos / testing):**
 `PUT /api/v1/admin/users/{id}/subscription-tier` — body `{ "tier": "PRO" }`
 or `{ "tier": "FREE" }`. ADMIN-only. Returns the admin user detail. PRO
-activates a manual subscription; FREE cancels it.
+activates a manual subscription; FREE cancels it right away.
 
-**Billing webhook (integration seam):**
-`POST /api/v1/webhooks/subscription` — public route, provider-agnostic. A real
-payment provider (Stripe / Mercado Pago) maps its webhook event onto:
-```json
-{ "userEmail": "u@x.com", "action": "ACTIVATE",
-  "provider": "stripe", "providerRef": "sub_123",
-  "currentPeriodEnd": "2026-12-31T00:00:00" }
-```
-`action` is `ACTIVATE` (grant PRO) or `CANCEL` (drop to FREE). Verified by the
-`X-Webhook-Secret` header against `economizaai.billing.webhook-secret`
-(empty in dev → check skipped; set + wrong/missing → **401**). FE doesn't call
-this — it's server-to-server from the provider.
+**Billing webhooks** are provider-specific and server-to-server only (the FE never
+calls them): RevenueCat below for the apps, Mercado Pago (`POST /webhooks/mercadopago`,
+§1 "Subscription checkout") for the web. The generic `POST /webhooks/subscription`
+seam was removed on 2026-11-11.
+
+**Subscription lifecycle (what the app can rely on):**
+- The **launch promo** is granted once per user, on their first confirmed receipt,
+  until the fixed promo end date. It never replaces a paid subscription, an open-ended
+  grant or a period that already ends later.
+- Promo holders without a paid subscription get an inbox + push warning 15, 7, 3 and
+  1 day before the promo ends (`SYSTEM`, `payload.kind = "LAUNCH_PROMO_ENDING"`).
+- **Cancelling keeps access until the end of the paid period** (`cancelAtPeriodEnd`).
+  A paid, still-renewing subscription whose renewal is late gets 3 days of grace
+  before the downgrade.
+- A paid subscription that ends while the promo is still running falls back to the promo.
+- Referral rewards are separate Premium windows that queue after the current period
+  (`rewardPremiumUntil`).
 
 **RevenueCat webhook (mobile IAP — Apple StoreKit + Google Play):**
 `POST /api/v1/webhooks/revenuecat` — public route, server-to-server from
@@ -2245,9 +2520,10 @@ every call 401). Body is the standard RevenueCat event envelope; we read only:
 { "event": { "type": "INITIAL_PURCHASE", "app_user_id": "<our user UUID or email>",
   "expiration_at_ms": 1798761600000, "product_id": "economizai_pro_monthly", "id": "evt_..." } }
 ```
-Purchase/renewal-type events grant PRO until `expiration_at_ms`;
-`EXPIRATION`/`SUBSCRIPTION_PAUSED` drop to FREE. A bare `CANCELLATION`
-(auto-renew off) is a no-op — access lasts until the period ends. Always 200
+Purchase/renewal-type events grant PRO until `expiration_at_ms`. `CANCELLATION`
+(auto-renew off) and `SUBSCRIPTION_PAUSED` (a pause was scheduled) only mark the
+subscription non-renewing — access lasts until the period ends. `EXPIRATION` ends
+it: back to the launch promo when the user still has it, FREE otherwise. Always 200
 for accepted calls (unknown users are a logged no-op) so RevenueCat doesn't
 retry. FE never calls this.
 
@@ -2280,10 +2556,23 @@ retry. FE never calls this.
   (30/hour), exports (10/hour), `households/join` + invite preview (10/hour),
   phone OTP (10/hour), `email-verification/resend` (3/hour), `/contact` and
   `/beta-signup` (5/hour each), `/visits` and `/app-config` (60/min).
+  New on 2026-11-11: profile-picture upload (`POST /users/me/profile-picture`,
+  **10/hour**), e-mail change request (`POST /users/me/email-change`, **3/hour**)
+  and confirm (`…/email-change/confirm`, **15/hour**), referral redeem
+  (`POST /referrals/redeem`, **10/hour**), merchant claim submit
+  (`POST /merchant-claims`, **3/hour**) and verify
+  (`POST /merchant-claims/{id}/verify`, **10/hour**). Auth and public routes are
+  keyed by IP, authenticated routes by user; the two merchant-claim buckets are
+  charged per user AND per IP (the request passes only when both still have a token).
   Over-quota responses are `429 Too Many Requests` with a
   `Retry-After: <seconds>` header and a translated message body. Successful
   responses on rate-limited routes carry `X-RateLimit-Remaining` so the FE
   can warn the user before they hit the wall. Other routes are uncapped.
+- **Overload.** `503` + `Retry-After: 5` (`error.overloaded`) means the server is
+  saturated, not that the request was wrong or the session ended — retry after the
+  delay (§3 "Error paths").
+- **E-mails are case-insensitive** (trimmed + lower-cased server-side) on every auth
+  and account endpoint.
 
 ---
 

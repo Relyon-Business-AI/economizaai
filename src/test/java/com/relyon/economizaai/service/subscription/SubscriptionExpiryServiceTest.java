@@ -1,12 +1,13 @@
 package com.relyon.economizaai.service.subscription;
 
+import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.model.Subscription;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.SubscriptionStatus;
 import com.relyon.economizaai.repository.SubscriptionRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -25,34 +26,78 @@ class SubscriptionExpiryServiceTest {
 
     @Mock private SubscriptionRepository subscriptionRepository;
     @Mock private SubscriptionService subscriptionService;
-    @InjectMocks private SubscriptionExpiryService service;
+    @Mock private PremiumGrantService premiumGrantService;
 
-    private Subscription lapsed() {
+    private SubscriptionExpiryService service;
+
+    @BeforeEach
+    void setUp() {
+        // default grace: 3 days
+        service = new SubscriptionExpiryService(subscriptionRepository, subscriptionService,
+                premiumGrantService, new CollaborativeProperties());
+    }
+
+    private Subscription lapsed(String provider, int daysAgo) {
         var user = User.builder().id(UUID.randomUUID()).email("u@e").build();
-        return Subscription.builder().user(user).status(SubscriptionStatus.ACTIVE)
-                .currentPeriodEnd(LocalDateTime.now().minusDays(2)).build();
+        return Subscription.builder().user(user).status(SubscriptionStatus.ACTIVE).provider(provider)
+                .currentPeriodEnd(LocalDateTime.now().minusDays(daysAgo)).build();
+    }
+
+    private void lapsedAre(Subscription... subscriptions) {
+        when(subscriptionRepository.findActiveExpiredBefore(eq(SubscriptionStatus.ACTIVE), any()))
+                .thenReturn(List.of(subscriptions));
     }
 
     @Test
-    void run_expiresEveryLapsedSubscription() {
-        var a = lapsed();
-        var b = lapsed();
-        when(subscriptionRepository.findActiveExpiredBefore(eq(SubscriptionStatus.ACTIVE), any()))
-                .thenReturn(List.of(a, b));
+    void run_expiresEveryLapsedPromoSubscriptionWithoutGrace() {
+        var promo = lapsed("manual", 0);
+        var legacyNullProvider = lapsed(null, 1);
+        lapsedAre(promo, legacyNullProvider);
 
         service.run();
 
-        verify(subscriptionService).expire(a);
-        verify(subscriptionService).expire(b);
+        verify(subscriptionService).expire(promo);
+        verify(subscriptionService).expire(legacyNullProvider);
     }
 
     @Test
-    void run_noLapsed_doesNothing() {
-        when(subscriptionRepository.findActiveExpiredBefore(eq(SubscriptionStatus.ACTIVE), any()))
-                .thenReturn(List.of());
+    void run_givesAPaidRenewingSubscriptionAGraceWindow() {
+        var lateRenewal = lapsed("revenuecat", 2);
+        lapsedAre(lateRenewal);
 
         service.run();
 
         verify(subscriptionService, never()).expire(any());
+    }
+
+    @Test
+    void run_expiresAPaidSubscriptionOnceTheGraceIsOver() {
+        var unpaid = lapsed("mercadopago", 4);
+        lapsedAre(unpaid);
+
+        service.run();
+
+        verify(subscriptionService).expire(unpaid);
+    }
+
+    @Test
+    void run_expiresANonRenewingPaidSubscriptionAtPeriodEnd() {
+        var cancelled = lapsed("revenuecat", 0);
+        cancelled.setCancelAtPeriodEnd(true);
+        lapsedAre(cancelled);
+
+        service.run();
+
+        verify(subscriptionService).expire(cancelled);
+    }
+
+    @Test
+    void run_noLapsed_doesNothingButStillReconcilesRewardWindows() {
+        lapsedAre();
+
+        service.run();
+
+        verify(subscriptionService, never()).expire(any());
+        verify(premiumGrantService).reconcileTiers();
     }
 }

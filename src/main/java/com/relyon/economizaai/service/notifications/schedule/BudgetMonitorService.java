@@ -6,10 +6,11 @@ import com.relyon.economizaai.model.NotificationRule;
 import com.relyon.economizaai.model.enums.NotificationJob;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.repository.NotificationRuleRepository;
-import com.relyon.economizaai.repository.ReceiptRepository;
+import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.service.notifications.NotificationPayload;
 import com.relyon.economizaai.service.notifications.NotificationService;
 import com.relyon.economizaai.service.notifications.NotificationSettingsService;
+import com.relyon.economizaai.service.notifications.NotificationTextFormatter;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +28,9 @@ import java.util.Map;
 
 /**
  * Monthly budget alerts (BUDGET rules). Notifies once per calendar month when a
- * household's confirmed spend in the current month reaches the user's threshold.
+ * household's spend in the current month reaches the user's threshold. "Spend" is
+ * the dashboard's figure — item totals by PURCHASE date — so scanning old receipts
+ * today never counts against this month.
  */
 @Slf4j
 @Service
@@ -35,7 +38,7 @@ import java.util.Map;
 public class BudgetMonitorService {
 
     private final NotificationRuleRepository ruleRepository;
-    private final ReceiptRepository receiptRepository;
+    private final InsightsRepository insightsRepository;
     private final NotificationService notificationService;
     private final LocalizedMessageService messageService;
     private final NotificationSettingsService settingsService;
@@ -54,19 +57,22 @@ public class BudgetMonitorService {
      * only the fired-timestamp is persisted afterwards, in a short transaction (same split as
      * {@code MarketLocationService.geocodeOne}/{@code persistGeocodeResult}).
      */
-    @Scheduled(fixedDelayString = "${economizaai.notifications.budget.interval-ms:21600000}",
-            initialDelayString = "${economizaai.notifications.budget.initial-delay-ms:90000}")
+    @Scheduled(cron = "${economizaai.notifications.budget.cron:0 0 9,18 * * *}",
+            zone = "America/Sao_Paulo")
     public void run() {
         if (!settingsService.isEnabled(NotificationJob.BUDGET_ALERT)) return;
         var rules = ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.BUDGET);
         if (rules.isEmpty()) return;
         var now = BrazilClock.nowDateTime();
-        var startOfMonth = BrazilClock.currentYearMonth().atDay(1).atStartOfDay();
+        var currentMonth = BrazilClock.currentYearMonth();
+        var startOfMonth = currentMonth.atDay(1).atStartOfDay();
+        var endOfMonth = currentMonth.plusMonths(1).atDay(1).atStartOfDay().minusNanos(1);
         var fired = 0;
         for (var rule : rules) {
             if (rule.getThresholdPrice() == null || rule.getUser().getHousehold() == null) continue;
             if (firedThisMonth(rule, now)) continue;
-            var spend = receiptRepository.sumConfirmedTotalSince(rule.getUser().getHousehold().getId(), startOfMonth);
+            var spend = insightsRepository.totalSpendAllSegments(
+                    rule.getUser().getHousehold().getId(), startOfMonth, endOfMonth);
             if (spend.compareTo(rule.getThresholdPrice()) < 0) continue;
             notify(rule, spend);
             self.markFired(rule, now);
@@ -92,7 +98,8 @@ public class BudgetMonitorService {
         var title = messageService.translate("notification.budget.title", locale);
         var monthName = BrazilClock.today().getMonth().getDisplayName(TextStyle.FULL, locale);
         var body = messageService.translate("notification.budget.body", locale,
-                spend.toString(), monthName, rule.getThresholdPrice().toString());
+                NotificationTextFormatter.amount(spend), monthName,
+                NotificationTextFormatter.amount(rule.getThresholdPrice()));
         notificationService.notify(new NotificationPayload(
                 rule.getUser(), NotificationType.BUDGET, title, body,
                 Map.of(

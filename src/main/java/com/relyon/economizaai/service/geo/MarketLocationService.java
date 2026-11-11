@@ -18,6 +18,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -76,6 +80,14 @@ public class MarketLocationService {
     @Value("${economizaai.geo.geocode-delay-ms:1100}")
     private long geocodeDelayMs;
 
+    // Per-run caps: each geocode sleeps ~1.1 s and each CNAE lookup is an HTTP call with
+    // retries, so an unbounded backlog would hold a scheduler thread for the whole list.
+    @Value("${economizaai.geo.geocode-max-per-run:25}")
+    private int geocodeMaxPerRun = 25;
+
+    @Value("${economizaai.merchant.classify.max-per-run:25}")
+    private int classifyMaxPerRun = 25;
+
     /** Called from ReceiptService.confirm — idempotent register, never geocodes inline. */
     @Transactional
     public void registerMarketFromReceipt(Receipt receipt) {
@@ -111,7 +123,7 @@ public class MarketLocationService {
      */
     public MarketLocation resolveForIngest(String cnpj, String name, String address) {
         if (cnpj == null || cnpj.isBlank()) return null;
-        var market = self.register(cnpj, name, address);
+        var market = registerOrReuseConcurrentRegistration(cnpj, name, address);
         if (market.getSegment() == MerchantSegment.UNKNOWN
                 && market.getSegmentAttempts() < MAX_SEGMENT_ATTEMPTS
                 && cnpjActivityClient.isEnabled()) {
@@ -120,12 +132,29 @@ public class MarketLocationService {
         return market;
     }
 
+    /**
+     * Two ingests of the same never-seen market can both pass the "not registered yet" check;
+     * the slower one then trips the unique CNPJ constraint when its short transaction commits.
+     * The market exists either way, so the loser re-reads the winner's row instead of turning
+     * an already-fetched receipt into a failure. Each call to {@link #register} runs in its own
+     * transaction (the ingest pipeline is untransacted), so the failed insert rolls back alone.
+     */
+    private MarketLocation registerOrReuseConcurrentRegistration(String cnpj, String name, String address) {
+        try {
+            return self.register(cnpj, name, address);
+        } catch (DataIntegrityViolationException concurrentRegistration) {
+            log.info("market_location.register_race cnpj={} outcome=reused_existing", cnpj);
+            return repository.findByCnpj(cnpj).orElseThrow(() -> concurrentRegistration);
+        }
+    }
+
     @Scheduled(fixedDelayString = "${economizaai.geo.geocode-interval-ms:600000}",
                initialDelayString = "${economizaai.geo.geocode-initial-delay-ms:30000}")
     public void geocodePending() {
-        var pending = repository.findAllByLatitudeIsNullAndGeocodeAttemptsLessThan(MAX_GEOCODE_ATTEMPTS);
+        var pending = repository.findAllByLatitudeIsNullAndGeocodeAttemptsLessThan(MAX_GEOCODE_ATTEMPTS,
+                leastAttemptedFirst(geocodeMaxPerRun, "geocodeAttempts"));
         if (pending.isEmpty()) return;
-        log.info("geocode.batch.start pending={}", pending.size());
+        log.info("geocode.batch.start pending={} maxPerRun={}", pending.size(), geocodeMaxPerRun);
         for (var market : pending) {
             if (!self.geocodeOne(market)) {
                 log.warn("geocode.batch.paused reason=rate_limited remaining={}", pending.size() - pending.indexOf(market));
@@ -294,22 +323,30 @@ public class MarketLocationService {
     @Scheduled(fixedDelayString = "${economizaai.merchant.classify.interval-ms:3600000}",
                initialDelayString = "${economizaai.merchant.classify.initial-delay-ms:45000}")
     public void scheduledSegmentClassification() {
-        classifyPendingSegments();
+        classifyPendingSegments(leastAttemptedFirst(classifyMaxPerRun, "segmentAttempts"));
     }
 
     /**
-     * Classifies every still-UNKNOWN market (attempts capped). Also the
+     * Classifies every still-UNKNOWN market (attempts capped) in one go — the
      * admin-triggered backfill entry point. Returns a per-segment summary.
      */
     public SegmentClassificationSummary classifyPendingSegments() {
+        return classifyPendingSegments(Pageable.unpaged());
+    }
+
+    /** One classification pass over at most {@code limit} markets per pending bucket. */
+    private SegmentClassificationSummary classifyPendingSegments(Pageable limit) {
         if (!cnpjActivityClient.isEnabled()) return new SegmentClassificationSummary(0, 0, 0, 0, 0, 0, 0);
         var pending = new ArrayList<>(repository.findAllBySegmentAndSegmentAttemptsLessThan(
-                MerchantSegment.UNKNOWN, MAX_SEGMENT_ATTEMPTS));
+                MerchantSegment.UNKNOWN, MAX_SEGMENT_ATTEMPTS, limit));
         // Backfill: rows classified before we captured the IBGE code. Bounded by
         // the attempts counter (incremented per lookup) so a registry that never
         // returns the code can't be polled forever.
         pending.addAll(repository.findAllByIbgeCityCodeIsNullAndSegmentNotAndSegmentAttemptsLessThan(
-                MerchantSegment.UNKNOWN, MAX_SEGMENT_ATTEMPTS + MAX_IBGE_BACKFILL_ATTEMPTS));
+                MerchantSegment.UNKNOWN, MAX_SEGMENT_ATTEMPTS + MAX_IBGE_BACKFILL_ATTEMPTS, limit));
+        if (limit.isPaged() && pending.size() > limit.getPageSize()) {
+            pending.subList(limit.getPageSize(), pending.size()).clear();
+        }
         if (pending.isEmpty()) return new SegmentClassificationSummary(0, 0, 0, 0, 0, 0, 0);
         log.info("merchant.classify.batch.start pending={}", pending.size());
         var pharmacy = 0;
@@ -333,6 +370,12 @@ public class MarketLocationService {
                 pending.size(), pharmacy, supermarket, foodRetail, foodService, other, unknown);
         return new SegmentClassificationSummary(pending.size(), pharmacy, supermarket, foodRetail, foodService,
                 other, unknown);
+    }
+
+    /** A page of at most {@code maxPerRun} rows, never-tried first so a stubborn row can't starve the rest. */
+    private static Pageable leastAttemptedFirst(int maxPerRun, String attemptsProperty) {
+        return PageRequest.of(0, Math.max(1, maxPerRun),
+                Sort.by(Sort.Order.asc(attemptsProperty), Sort.Order.asc("createdAt")));
     }
 
     public record SegmentClassificationSummary(int attempted, int pharmacy, int supermarket, int foodRetail,

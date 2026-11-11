@@ -13,6 +13,8 @@ import org.springframework.web.client.RestClient;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.util.regex.Pattern;
+import java.util.List;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -88,6 +90,36 @@ class InfosimplesServiceTest {
 
         assertEquals(rjChave, parsed.chaveAcesso());
         assertEquals(2, parsed.items().size());
+    }
+
+    @Test
+    void fetchParsed_successWithoutProducts_failsAsNoItemsFound() {
+        server.expect(requestTo(BASE_URL + "/api/v2/consultas/sefaz/ms/nfce?token=test-key&nfce=" + CHAVE))
+                .andRespond(withSuccess("""
+                        {"code":200,"code_message":"ok","data":[{
+                          "emitente":{"normalizado_cnpj":"77863223012709","nome_razao_social":"MERCADO"},
+                          "normalizado_valor_a_pagar":10.0,"produtos":[]}]}
+                        """, MediaType.APPLICATION_JSON));
+
+        var thrown = assertThrows(ReceiptParseException.class, () -> service.fetchParsed(CHAVE, UnidadeFederativa.MS));
+
+        assertTrue(thrown.isNoItemsFound());
+    }
+
+    @Test
+    void fetchParsed_productWithoutDescription_getsADefaultInsteadOfNull() {
+        server.expect(requestTo(BASE_URL + "/api/v2/consultas/sefaz/ms/nfce?token=test-key&nfce=" + CHAVE))
+                .andRespond(withSuccess("""
+                        {"code":200,"code_message":"ok","data":[{
+                          "emitente":{"normalizado_cnpj":"77863223012709","nome_razao_social":"MERCADO"},
+                          "normalizado_valor_a_pagar":10.0,
+                          "produtos":[{"normalizado_quantidade":1,"normalizado_valor_total_produto":10.0}]}]}
+                        """, MediaType.APPLICATION_JSON));
+
+        var parsed = service.fetchParsed(CHAVE, UnidadeFederativa.MS);
+
+        assertEquals(1, parsed.items().size());
+        assertEquals(InfosimplesService.MISSING_DESCRIPTION, parsed.items().get(0).rawDescription());
     }
 
     @Test
@@ -257,7 +289,7 @@ class InfosimplesServiceTest {
     void fetchParsed_handlesNullEmitente() {
         var json = "{\"code\":200,\"data\":[{\"emitente\":null,\"informacoes_nota\":null,"
                 + "\"normalizado_valor_a_pagar\":10.00,\"normalizado_valor_desconto\":null,"
-                + "\"produtos\":[],\"site_receipt\":null}]}";
+                + "\"produtos\":[{\"nome\":\"ARROZ\",\"normalizado_quantidade\":1,\"normalizado_valor_total_produto\":5.00}],\"site_receipt\":null}]}";
         server.expect(requestTo(BASE_URL + "/api/v2/consultas/sefaz/ms/nfce?token=test-key&nfce=" + CHAVE))
                 .andRespond(withSuccess(json, MediaType.APPLICATION_JSON));
 
@@ -267,7 +299,7 @@ class InfosimplesServiceTest {
         assertNull(parsed.marketName());
         assertNull(parsed.issuedAt());
         assertEquals(0, new BigDecimal("10.00").compareTo(parsed.totalAmount()));
-        assertEquals(0, parsed.items().size());
+        assertEquals(1, parsed.items().size());
     }
 
     @Test
@@ -275,7 +307,7 @@ class InfosimplesServiceTest {
         var json = "{\"code\":200,\"data\":[{\"emitente\":null,"
                 + "\"informacoes_nota\":{\"data_emissao\":\"invalid\",\"hora_emissao\":\"99:99:99\"},"
                 + "\"normalizado_valor_a_pagar\":5.00,\"normalizado_valor_desconto\":null,"
-                + "\"produtos\":[],\"site_receipt\":null}]}";
+                + "\"produtos\":[{\"nome\":\"ARROZ\",\"normalizado_quantidade\":1,\"normalizado_valor_total_produto\":5.00}],\"site_receipt\":null}]}";
         server.expect(requestTo(BASE_URL + "/api/v2/consultas/sefaz/ms/nfce?token=test-key&nfce=" + CHAVE))
                 .andRespond(withSuccess(json, MediaType.APPLICATION_JSON));
 
@@ -448,6 +480,19 @@ class InfosimplesServiceTest {
         assertEquals(0, parsed.totalAmount().compareTo(new BigDecimal("33.94")));
     }
 
+    /** Fixtures are committed to a public repo: the recipient of a real nota must stay fictitious. */
+    @Test
+    void nationalNfeFixture_carriesOnlyAFictitiousRecipientName() {
+        var recipientNames = Pattern.compile("\"destinatario\":\\s*\\{[^}]*?\"nome\":\\s*\"([^\"]*)\"")
+                .matcher(fixture("nfe-nacional-sp55"))
+                .results()
+                .map(match -> match.group(1))
+                .filter(name -> !name.isBlank())
+                .toList();
+
+        assertEquals(List.of("Fulano Exemplo da Silva", "Fulano Exemplo da Silva"), recipientNames);
+    }
+
     private static String fixture(String name) {
         try {
             return new String(new ClassPathResource("fixtures/infosimples/" + name + ".json")
@@ -503,7 +548,7 @@ class InfosimplesServiceTest {
                 "informacoes_nota": {"data_emissao": "01/07/2026", "hora_emissao": "10:00:00"},
                 "normalizado_valor_a_pagar": 1.00,
                 "normalizado_valor_desconto": null,
-                "produtos": [],
+                "produtos": [{"nome": "ARROZ", "normalizado_quantidade": 1, "normalizado_valor_total_produto": 5.00}],
                 "site_receipt": null
               }]
             }

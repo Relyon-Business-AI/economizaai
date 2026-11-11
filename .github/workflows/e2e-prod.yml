@@ -26,7 +26,7 @@ jobs:
       - name: Run E2E against prod
         id: run
         env:
-          BASE_URL: https://economiz-ai.onrender.com
+          BASE_URL: https://api.economizaai.app
           # Prod-specific admin creds (optional — admin steps skip without them).
           # Deliberately NOT the dev E2E_ADMIN_* secrets: those users don't exist on prod.
           E2E_ADMIN_EMAIL: ${{ secrets.E2E_PROD_ADMIN_EMAIL }}

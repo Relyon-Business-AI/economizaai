@@ -50,4 +50,26 @@ class LogMaskerTest {
         assertNull(LogMasker.token(null));
         assertEquals("****", LogMasker.token("abc"));
     }
+
+    @Test
+    void portalUrl_keepsHostAndAbbreviatedChaveOnly() {
+        var url = "https://portalsped.fazenda.mg.gov.br/portalnfce/sistema/qrcode.xhtml"
+                + "?p=31260412345678000190650010000123451123456789|2|1|1|ABCDEF0123";
+
+        assertEquals("portalsped.fazenda.mg.gov.br chave=****6789", LogMasker.portalUrl(url));
+    }
+
+    @Test
+    void portalUrl_withoutChaveOrHost() {
+        assertEquals("www.sefaz.rs.gov.br chave=none", LogMasker.portalUrl("https://www.sefaz.rs.gov.br/consulta"));
+        assertEquals("unknown-host chave=none", LogMasker.portalUrl("not a url at all"));
+        assertNull(LogMasker.portalUrl(null));
+    }
+
+    @Test
+    void rateLimitKey_masksTheEmailOfUserKeysOnly() {
+        assertEquals("user:m***@example.com", LogMasker.rateLimitKey("user:maria@example.com"));
+        assertEquals("ip:203.0.113.7", LogMasker.rateLimitKey("ip:203.0.113.7"));
+        assertNull(LogMasker.rateLimitKey(null));
+    }
 }

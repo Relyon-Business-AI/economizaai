@@ -18,6 +18,7 @@ import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -88,4 +89,17 @@ public class NotificationRule extends BaseEntity {
     /** Last time this rule fired — drives the anti-spam cooldown. */
     @Column(name = "last_fired_at")
     private LocalDateTime lastFiredAt;
+
+    /**
+     * Replenishment only: how many reminders went out for the purchase dated
+     * {@link #reminderPurchaseDate}. Reminders stop at a small cap; a newer purchase
+     * (different date) starts the count again.
+     */
+    @Column(name = "reminder_count", nullable = false)
+    @lombok.Builder.Default
+    private int reminderCount = 0;
+
+    /** Replenishment only: the last-purchase date the current {@link #reminderCount} refers to. */
+    @Column(name = "reminder_purchase_date")
+    private LocalDate reminderPurchaseDate;
 }
