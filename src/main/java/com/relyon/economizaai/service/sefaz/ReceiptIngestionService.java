@@ -5,6 +5,7 @@ import com.relyon.economizaai.config.MdcContextFilter;
 import com.relyon.economizaai.exception.DomainException;
 import com.relyon.economizaai.exception.ExperimentalStateFailedException;
 import com.relyon.economizaai.exception.InfosimplesNoDataException;
+import com.relyon.economizaai.exception.PaidApiUnavailableException;
 import com.relyon.economizaai.exception.ReceiptParseException;
 import com.relyon.economizaai.exception.UnsupportedMerchantException;
 import com.relyon.economizaai.model.Receipt;
@@ -590,10 +591,16 @@ public class ReceiptIngestionService {
      * reach the portal). On the SERVER path this is recoverable — flag the receipt so
      * the app retries the fetch on the user's own (accepted) device. On the DEVICE path
      * (the app already tried) it's a real dead end → FAILED_PARSE, no retry loop.
+     *
+     * <p>A portal that is momentarily UNAVAILABLE comes first: the nota is fine and nothing the
+     * client does can reach it right now, so it is parked PORTAL_PENDING for the recovery sweeper
+     * instead of a doomed device handoff or a terminal "blocked state" failure.
      */
     private void routeExperimentalFailure(UUID receiptId, ExperimentalStateFailedException ex,
                                           boolean canDeviceRetry, String blockedStateReasonKey) {
-        if (ex.isCaptchaBlocked()) {
+        if (ex.isPortalUnavailable()) {
+            markFailed(receiptId, ex);
+        } else if (ex.isCaptchaBlocked()) {
             // A captcha wall the server couldn't pass — the user's phone can't solve it
             // either, so device-fetch would just time out (how DF failed before it got a
             // dedicated adapter). Fail with an honest reason instead of a doomed handoff.
@@ -666,8 +673,7 @@ public class ReceiptIngestionService {
                             // The portal/origin was momentarily UNAVAILABLE (615) — the nota exists,
                             // the portal is just offline. Park it PORTAL_PENDING so the recovery
                             // sweeper re-fetches until it's back, instead of a dead FAILED_PARSE.
-                            var portalDown = !contingency
-                                    && ex instanceof ExperimentalStateFailedException esf && esf.isPortalUnavailable();
+                            var portalDown = !contingency && isPortalStillUnavailable(receipt, ex);
                             if (shouldOverwriteReason(receipt, ex)) {
                                 receipt.setParseErrorReason(contingency ? CONTINGENCY_PENDING_REASON + ":"
                                         : portalDown ? PORTAL_UNAVAILABLE_REASON + ":" : failureReason(ex));
@@ -685,6 +691,20 @@ public class ReceiptIngestionService {
             log.error("ingest failed AND could not mark FAILED_PARSE for receipt {}", abbrev(receiptId), inner);
         }
         log.warn("ingest fetch/solve failed status=FAILED_PARSE reason={}", ex.getMessage(), ex);
+    }
+
+    /**
+     * The chain reported the portal/origin as unavailable — or this is a nota already parked for
+     * that reason whose re-attempt was stopped by the paid-API breaker (open precisely because
+     * the portal keeps failing). Either way it stays parked for the next recovery pass.
+     */
+    private static boolean isPortalStillUnavailable(Receipt receipt, RuntimeException ex) {
+        if (ex instanceof ExperimentalStateFailedException chainFail) {
+            return chainFail.isPortalUnavailable();
+        }
+        return ex instanceof PaidApiUnavailableException
+                && receipt.getParseErrorReason() != null
+                && receipt.getParseErrorReason().startsWith(PORTAL_UNAVAILABLE_REASON);
     }
 
     /**

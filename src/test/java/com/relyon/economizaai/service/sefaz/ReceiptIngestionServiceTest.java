@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.sefaz;
 
 import com.relyon.economizaai.exception.ExperimentalStateFailedException;
+import com.relyon.economizaai.exception.PaidApiUnavailableException;
 import com.relyon.economizaai.exception.ReceiptParseException;
 import com.relyon.economizaai.exception.SefazFetchException;
 import com.relyon.economizaai.model.Household;
@@ -284,6 +285,67 @@ class ReceiptIngestionServiceTest {
         service.ingestPrefetched(receipt.getId(), QR, "<xml/>");
 
         assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+    }
+
+    @Test
+    void ingest_portalUnavailable_deviceCapableClient_parksPortalPendingInsteadOfDeviceHandoff() {
+        var receipt = processingReceipt();
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fetch(eq(QR), any(), anyBoolean())).thenThrow(
+                new ExperimentalStateFailedException("SE", false, true, InfosimplesOutcome.FAILED));
+
+        service.ingest(receipt.getId(), QR, true);
+
+        assertEquals(ReceiptStatus.PORTAL_PENDING, receipt.getStatus());
+        assertTrue(receipt.getParseErrorReason().startsWith("receipt.portal.unavailable"));
+        assertTrue(receipt.isResyncingFromContingency(), "the recovery sweeper pings the owner when it comes back");
+    }
+
+    @Test
+    void ingest_portalUnavailable_olderApp_parksPortalPendingInsteadOfAppUpdateFailure() {
+        var receipt = processingReceipt();
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fetch(eq(QR), any(), anyBoolean())).thenThrow(
+                new ExperimentalStateFailedException("SE", false, true, InfosimplesOutcome.FAILED));
+
+        service.ingest(receipt.getId(), QR, false);
+
+        assertEquals(ReceiptStatus.PORTAL_PENDING, receipt.getStatus());
+    }
+
+    @Test
+    void ingest_portalUnavailableBehindACaptchaWall_stillParksPortalPending() {
+        var receipt = processingReceipt();
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fetch(eq(QR), any(), anyBoolean())).thenThrow(
+                new ExperimentalStateFailedException("BA", true, true, InfosimplesOutcome.FAILED));
+
+        service.ingest(receipt.getId(), QR, true);
+
+        assertEquals(ReceiptStatus.PORTAL_PENDING, receipt.getStatus());
+    }
+
+    @Test
+    void markFailed_parkedNotaStoppedByTheOpenBreaker_staysPortalPending() {
+        var receipt = processingReceipt();
+        receipt.setParseErrorReason("receipt.portal.unavailable:");
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        service.markFailed(receipt.getId(), new PaidApiUnavailableException("INFOSIMPLES"));
+
+        assertEquals(ReceiptStatus.PORTAL_PENDING, receipt.getStatus());
+        assertEquals("receipt.portal.unavailable:", receipt.getParseErrorReason());
+    }
+
+    @Test
+    void markFailed_freshNotaStoppedByTheOpenBreaker_failsWithTheBreakerReason() {
+        var receipt = processingReceipt();
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        service.markFailed(receipt.getId(), new PaidApiUnavailableException("INFOSIMPLES"));
+
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+        assertEquals("receipt.paid_api.circuit_open:INFOSIMPLES", receipt.getParseErrorReason());
     }
 
     @Test
