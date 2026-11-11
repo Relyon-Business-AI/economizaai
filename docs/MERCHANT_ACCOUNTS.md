@@ -115,8 +115,10 @@ exigência do CLAUDE.md), `AdminMerchantAccessServiceTest`, casos de `setRole` n
   próprios EANs; scanner físico é fluxo de corredor, não de publicação.
 - Validações: EAN 8–14 dígitos, preço > 0 (scale 2), fim ≥ início, janela duplicada
   por (rede, EAN) → 409. Match EAN → produto canônico no write.
-- **`verifiedByReceipts`**: cupom NFC-e real da rede, dentro da janela, com preço ≤
-  anunciado (tolerância 1%) — o selo "verificado", nosso diferencial.
+- **`verifiedByReceipts`**: cupons NFC-e reais da rede, dentro da janela, com preço ≤
+  anunciado (tolerância 1%), vindos de pelo menos K casas distintas (o mesmo piso de
+  k-anonimato dos outros dados públicos — a compra de uma casa só não acende o selo) —
+  o selo "verificado", nosso diferencial.
 - Moderação admin: `GET /admin/merchant-promos`, `PATCH /admin/merchant-promos/{id}/active`.
 
 **Assinatura de marketing (`merchant_subscriptions`, por REDE):**
