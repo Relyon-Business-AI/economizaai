@@ -1277,6 +1277,43 @@ class SefazIngestionServiceTest {
     }
 
     @Test
+    void fetch_freeOnlyPolicy_skipsInfosimplesAndBlocksCaptchaSpend() {
+        var adapter = mockAdapterFor(UnidadeFederativa.SP);
+        when(adapter.fetchHtml(CHAVE_SP)).thenAnswer(invocation -> {
+            // A solver asked for a token during a free-only attempt must be refused.
+            assertThrows(RuntimeException.class, CaptchaSolveTracker::assertSpendAllowed);
+            throw new SefazFetchException("SP");
+        });
+        var infosimples = mock(InfosimplesService.class);
+        var service = new SefazIngestionService(List.of(adapter), Optional.of(infosimples),
+                paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+
+        assertThrows(SefazFetchException.class,
+                () -> service.fetch(CHAVE_SP, null, false, IngestSpendPolicy.FREE_ONLY));
+
+        verifyNoInteractions(infosimples);
+        verify(paidApiGuard, never()).assertWithinDailyCap(any(), any());
+        CaptchaSolveTracker.blockSpend(false);
+    }
+
+    @Test
+    void parse_freeOnlyPolicy_experimentalParseFailure_spendsOnNeitherLlmNorInfosimples() {
+        var generic = genericAdapter("<html>weird layout</html>");
+        var infosimples = mock(InfosimplesService.class);
+        var service = new SefazIngestionService(List.of(generic), Optional.of(infosimples),
+                paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+        var fetched = new FetchedDocument(generic, "<html>weird layout</html>", CHAVE_BA, UnidadeFederativa.BA, QR_URL_BA);
+
+        var thrown = assertThrows(ReceiptParseException.class,
+                () -> service.parse(fetched, null, IngestSpendPolicy.FREE_ONLY));
+
+        assertEquals("receipt.parse.failed", thrown.getMessageKey());
+        verifyNoInteractions(infosimples);
+        verifyNoInteractions(htmlReceiptRescue);
+        verify(stateCoverage, never()).reportExhausted(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
     void fetchViaInfosimplesFallback_noProvider_throwsRescuable() {
         var service = new SefazIngestionService(List.of(mockAdapterFor(UnidadeFederativa.RS)), Optional.empty(),
                 paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);

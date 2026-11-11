@@ -217,6 +217,18 @@ public class SefazIngestionService {
      * NOT deferred. Flag OFF → this parameter is inert and behavior is unchanged.
      */
     public FetchedDocument fetch(String qrPayload, UUID userId, boolean deviceFetchAvailable) {
+        return fetch(qrPayload, userId, deviceFetchAvailable, IngestSpendPolicy.FULL);
+    }
+
+    /**
+     * As {@link #fetch(String, UUID, boolean)} but {@code spendPolicy} states which paid layers
+     * this attempt may use. A layer the policy forbids is simply skipped: the free paths still
+     * run, and a failure propagates as the primary failure (no "state unsupported" evidence is
+     * recorded for a layer that was never allowed to try).
+     */
+    public FetchedDocument fetch(String qrPayload, UUID userId, boolean deviceFetchAvailable,
+                                 IngestSpendPolicy spendPolicy) {
+        var infosimplesAllowed = infosimples.isPresent() && spendPolicy.infosimples();
         var chave = resolveChave(qrPayload);
         var uf = ChaveAcessoParser.extractUf(chave);
         var adapter = adapters.get(uf);
@@ -239,7 +251,7 @@ public class SefazIngestionService {
                             uf, abbrev(chave), describe(legacyEx));
                 }
             }
-            if (infosimples.isPresent()) {
+            if (infosimplesAllowed) {
                 try {
                     var rescued = fetchViaInfosimples(chave, uf, userId);
                     if (isExperimental(adapter)) {
@@ -261,6 +273,11 @@ public class SefazIngestionService {
                     throw infosimplesEx;
                 }
             }
+            if (!spendPolicy.infosimples()) {
+                // The paid layer was withheld on purpose (free-only attempt) — not a missing path.
+                log.info("sefaz.fetch.bare_chave.paid_skipped uf={} chave={}", uf, abbrev(chave));
+                throw new SefazFetchException(uf.name());
+            }
             log.warn("sefaz.fetch.bare_chave.no_path uf={} chave={} — sem legado e Infosimples desabilitado", uf, abbrev(chave));
             alertManualChaveNoPath(uf, chave, "sem reconsulta legada e Infosimples desabilitado");
             throw new SefazFetchException(uf.name());
@@ -269,12 +286,13 @@ public class SefazIngestionService {
         // actual solves and they're ledgered after the fetch. The global kill-switch
         // must NOT stop a captcha-free scrape (RS/PR/SP/GO/CE cost nothing): an
         // exhausted budget only forbids the solver from buying a token.
-        var budgetExhausted = paidApiGuard.isGlobalBudgetExhausted();
-        if (!budgetExhausted) {
+        var budgetExhausted = spendPolicy.captchaSolves() && paidApiGuard.isGlobalBudgetExhausted();
+        var captchaSpendAllowed = spendPolicy.captchaSolves() && !budgetExhausted;
+        if (captchaSpendAllowed) {
             paidApiGuard.assertWithinDailyCap(userId, PaidApiService.CAPTCHA_SOLVE);
         }
         CaptchaSolveTracker.drain(); // discard any stale count left on this pooled thread
-        CaptchaSolveTracker.blockSpend(budgetExhausted);
+        CaptchaSolveTracker.blockSpend(!captchaSpendAllowed);
         try {
             var html = adapter.fetchHtml(qrPayload);
             recordCaptchaSolves(userId, uf, true);
@@ -319,6 +337,10 @@ public class SefazIngestionService {
                 throw experimentalExhausted(uf, userId, chave, sourceUrlOf(qrPayload),
                         "QR_PORTAL: " + describe(primaryEx) + "; deferred to on-device fetch (pre-Infosimples)",
                         portalEvidence, false);
+            }
+            if (!spendPolicy.infosimples()) {
+                log.info("sefaz.fetch.paid_fallback_skipped uf={} chave={}", uf, abbrev(chave));
+                throw primaryEx;
             }
             if (infosimples.isEmpty()) {
                 if (experimental) {
@@ -476,6 +498,15 @@ public class SefazIngestionService {
      * before giving up — the chain is ordered by cost.
      */
     public ParsedReceipt parse(FetchedDocument fetched, UUID userId) {
+        return parse(fetched, userId, IngestSpendPolicy.FULL);
+    }
+
+    /**
+     * As {@link #parse(FetchedDocument, UUID)} but {@code spendPolicy} states which paid rescues
+     * (LLM, Infosimples) this attempt may use. With a rescue withheld, the original parse
+     * failure propagates untouched.
+     */
+    public ParsedReceipt parse(FetchedDocument fetched, UUID userId, IngestSpendPolicy spendPolicy) {
         if (fetched.preParsed() != null) return fetched.preParsed();
         var experimental = isExperimental(fetched.adapter());
         var qrHost = StateCoverageService.hostOf(fetched.sourceUrl());
@@ -504,16 +535,20 @@ public class SefazIngestionService {
                 // let the LLM rescue the user's receipt from the same HTML.
                 stateCoverage.recordVerifiedParseFailure(fetched.uf(), fetched.chave(), fetched.sourceUrl(),
                         parseEx.getMessageKey() + ":" + String.join(",", parseEx.getArguments()), fetched.html());
-                var llmRescued = rescueParseViaLlm(fetched, parseEx, userId);
+                var llmRescued = rescueParseViaLlm(fetched, parseEx, userId, spendPolicy);
                 if (llmRescued != null) return llmRescued;
                 throw parseEx;
             }
             stateCoverage.recordFailure(fetched.uf(), fetchLayer,
                     StateIngestionOutcome.PARSE_FAILED, qrHost, describe(parseEx));
-            var llmRescued = rescueParseViaLlm(fetched, parseEx, userId);
+            var llmRescued = rescueParseViaLlm(fetched, parseEx, userId, spendPolicy);
             if (llmRescued != null) {
                 stateCoverage.recordSuccess(fetched.uf(), StateIngestionStrategy.LLM_RESCUE, qrHost);
                 return llmRescued;
+            }
+            if (!spendPolicy.infosimples()) {
+                log.info("sefaz.parse.paid_fallback_skipped uf={} chave={}", fetched.uf(), abbrev(fetched.chave()));
+                throw parseEx;
             }
             var infosimplesNote = "desabilitado";
             if (infosimples.isPresent()) {
@@ -544,7 +579,9 @@ public class SefazIngestionService {
      * reconsult arbiter and (for experimental states) Infosimples still apply.
      * Returns null when the rescue didn't produce a validated receipt.
      */
-    private ParsedReceipt rescueParseViaLlm(FetchedDocument fetched, ReceiptParseException parseEx, UUID userId) {
+    private ParsedReceipt rescueParseViaLlm(FetchedDocument fetched, ReceiptParseException parseEx, UUID userId,
+                                            IngestSpendPolicy spendPolicy) {
+        if (!spendPolicy.llmRescue()) return null;
         if (parseEx instanceof SefazPortalRejectionException) return null;
         var rescued = htmlReceiptRescue.rescue(fetched.html(), fetched.chave(), fetched.uf(), fetched.sourceUrl(), userId);
         if (rescued != null) {

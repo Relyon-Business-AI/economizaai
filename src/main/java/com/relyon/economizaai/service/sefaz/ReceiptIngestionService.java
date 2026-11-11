@@ -99,7 +99,19 @@ public class ReceiptIngestionService {
         // Web / photo upload: not "the app" and can't fetch on-device, so a blocked state is a
         // plain FAILED_PARSE (no "update the app" hint, which wouldn't make sense here).
         ingestResolved(receiptId, receipt -> sefazIngestionService.fetch(qrPayload, receipt.getUser().getId()),
-                false, null);
+                false, null, IngestSpendPolicy.FULL);
+    }
+
+    /**
+     * As {@link #ingest(UUID, String)} but with an explicit {@link IngestSpendPolicy} — used by the
+     * paced re-queue lane so an automatic re-attempt (contingency resync) can be limited to the
+     * free paths. Not device-retryable, same as the two-argument variant.
+     */
+    @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
+    public void ingest(UUID receiptId, String qrPayload, IngestSpendPolicy spendPolicy) {
+        ingestResolved(receiptId, receipt -> sefazIngestionService.fetch(
+                        qrPayload, receipt.getUser().getId(), false, spendPolicy),
+                false, null, spendPolicy);
     }
 
     /**
@@ -116,7 +128,7 @@ public class ReceiptIngestionService {
         // telling the user to update, since this state only works on the newer app.
         ingestResolved(receiptId, receipt -> sefazIngestionService.fetch(
                         qrPayload, receipt.getUser().getId(), canDeviceRetry),
-                canDeviceRetry, "receipt.state.app_update_required");
+                canDeviceRetry, "receipt.state.app_update_required", IngestSpendPolicy.FULL);
     }
 
     /**
@@ -145,7 +157,7 @@ public class ReceiptIngestionService {
                 // for UFs on the device-fetch allowlist (validated, IP-blocked by design); for any
                 // other UF (generic fallback) it's personal-history only — index_eligible=false.
                 var fetched = sefazIngestionService.fromClientContent(rawContent, chave, uf, sourceUrlOf(qrPayload));
-                parsed = sefazIngestionService.parse(fetched, userId);
+                parsed = sefazIngestionService.parse(fetched, userId, IngestSpendPolicy.FULL);
                 indexEligible = prefetchPolicy.isTrustedForIndex(uf);
             } catch (ReceiptParseException deviceFail) {
                 // On-device content unusable — continue the fallback chain to the paid by-chave
@@ -214,7 +226,8 @@ public class ReceiptIngestionService {
      */
     @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
     public void ingestReconsult(UUID receiptId, String chave) {
-        ingestResolved(receiptId, receipt -> sefazIngestionService.fetch(chave, receipt.getUser().getId()), false, null);
+        ingestResolved(receiptId, receipt -> sefazIngestionService.fetch(chave, receipt.getUser().getId()),
+                false, null, IngestSpendPolicy.FULL);
     }
 
     /**
@@ -227,7 +240,7 @@ public class ReceiptIngestionService {
     @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
     public void ingestInfosimplesOnly(UUID receiptId, String chave) {
         ingestResolved(receiptId, receipt -> sefazIngestionService.fetchViaInfosimplesFallback(
-                chave, receipt.getUf(), receipt.getUser().getId()), false, null);
+                chave, receipt.getUf(), receipt.getUser().getId()), false, null, IngestSpendPolicy.FULL);
     }
 
     /**
@@ -238,7 +251,7 @@ public class ReceiptIngestionService {
     @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
     public void ingestXml(UUID receiptId, String xmlContent) {
         ingestResolved(receiptId, receipt -> sefazIngestionService.fromXml(xmlContent, receipt.getChaveAcesso(), null),
-                false, null);
+                false, null, IngestSpendPolicy.FULL);
     }
 
     /**
@@ -250,7 +263,8 @@ public class ReceiptIngestionService {
     private void ingestResolved(UUID receiptId,
                                 Function<Receipt, SefazIngestionService.FetchedDocument> resolver,
                                 boolean canDeviceRetry,
-                                String blockedStateReasonKey) {
+                                String blockedStateReasonKey,
+                                IngestSpendPolicy spendPolicy) {
         MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
         try {
             var receipt = receiptRepository.findById(receiptId).orElse(null);
@@ -267,7 +281,7 @@ public class ReceiptIngestionService {
                 return;
             }
             try {
-                var parsed = sefazIngestionService.parse(fetched, userId);
+                var parsed = sefazIngestionService.parse(fetched, userId, spendPolicy);
                 if (rejectUnsupportedMerchant(receiptId, parsed)) {
                     return;
                 }

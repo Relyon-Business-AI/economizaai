@@ -130,7 +130,7 @@ class ReceiptToPriceIndexIntegrationTest {
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", "00000000000000000000000000000000000000000000",
                 UnidadeFederativa.RS, null);
         when(sefazIngestionService.fetch(any(), any())).thenReturn(fetched);
-        when(sefazIngestionService.parse(any(), any())).thenReturn(fakeParsedReceipt(new BigDecimal("28.00")));
+        when(sefazIngestionService.parse(any(), any(), any())).thenReturn(fakeParsedReceipt(new BigDecimal("28.00")));
 
         // submit (PROCESSING) + drive the async ingestion to PENDING_CONFIRMATION
         var receiptId = submitAndIngest(token);
@@ -173,7 +173,7 @@ class ReceiptToPriceIndexIntegrationTest {
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", "00000000000000000000000000000000000000000000",
                 UnidadeFederativa.RS, null);
         when(sefazIngestionService.fetch(any(), any())).thenReturn(fetched);
-        when(sefazIngestionService.parse(any(), any())).thenReturn(fakeParsedReceipt(new BigDecimal("28.00")));
+        when(sefazIngestionService.parse(any(), any(), any())).thenReturn(fakeParsedReceipt(new BigDecimal("28.00")));
 
         // First submit — leaves a non-CONFIRMED (PROCESSING) row.
         var first = mockMvc.perform(post("/api/v1/receipts")
@@ -207,7 +207,7 @@ class ReceiptToPriceIndexIntegrationTest {
         var fetched = new SefazIngestionService.FetchedDocument(null, "<html/>", "00000000000000000000000000000000000000000000",
                 UnidadeFederativa.RS, null);
         when(sefazIngestionService.fetch(any(), any())).thenReturn(fetched);
-        when(sefazIngestionService.parse(any(), any())).thenReturn(fakeParsedReceipt(new BigDecimal("28.00")));
+        when(sefazIngestionService.parse(any(), any(), any())).thenReturn(fakeParsedReceipt(new BigDecimal("28.00")));
 
         // opt out before submitting
         mockMvc.perform(patch("/api/v1/users/me/contribution")

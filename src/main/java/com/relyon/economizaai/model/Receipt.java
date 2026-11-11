@@ -131,6 +131,16 @@ public class Receipt extends BaseEntity implements HouseholdScoped {
     @Column(name = "resyncing_from_contingency", nullable = false)
     private boolean resyncingFromContingency;
 
+    // Set by ContingencyResyncSweeper on re-queue and consumed (cleared) by ImportReconsultWorker at
+    // dispatch: the NEXT queued attempt must use free paths only (no captcha, Infosimples or LLM).
+    @Column(name = "resync_free_only", nullable = false)
+    private boolean resyncFreeOnly;
+
+    // True once the contingency resync granted this nota its single paid attempt (the last one
+    // before the window closes) — every other resync attempt is free-only.
+    @Column(name = "contingency_paid_attempted", nullable = false)
+    private boolean contingencyPaidAttempted;
+
     // False ONLY for device-fetched (client-authored) content from a state that isn't on the
     // device-fetch trust allowlist — such content is personal-history only and never feeds the
     // collaborative index (same trust class as PHOTO). Default/true for every server-fetched and

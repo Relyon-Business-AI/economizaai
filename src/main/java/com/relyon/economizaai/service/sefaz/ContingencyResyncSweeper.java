@@ -11,6 +11,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 
@@ -24,6 +25,10 @@ import java.util.ArrayList;
  *
  * <p>The user sees a transparent "aguardando SEFAZ" state with NO manual retry button: the resync
  * is automatic, so a manual retry would just burn a fetch on a note SEFAZ still doesn't have.
+ *
+ * <p><b>Spend:</b> the note usually just isn't on SEFAZ yet, so paying for it on every pass is
+ * waste. Resync attempts are FREE-ONLY ({@link IngestSpendPolicy#FREE_ONLY}); the paid chain is
+ * allowed exactly once per note, on the last attempt before the window closes.
  */
 @Slf4j
 @Service
@@ -33,12 +38,17 @@ public class ContingencyResyncSweeper {
 
     private final ReceiptRepository receiptRepository;
     private final int windowHours;
+    private final Duration lastAttemptMargin;
 
     public ContingencyResyncSweeper(
             ReceiptRepository receiptRepository,
-            @Value("${economizaai.ingestion.contingency-window-hours:72}") int windowHours) {
+            @Value("${economizaai.ingestion.contingency-window-hours:72}") int windowHours,
+            @Value("${economizaai.ingestion.contingency-resync-delay-ms:21600000}") long resyncDelayMs) {
         this.receiptRepository = receiptRepository;
         this.windowHours = Math.max(1, windowHours);
+        // One resync interval plus 10% slack: every note sees at least one pass inside this margin
+        // before its deadline, even with the scheduler drifting a little between passes.
+        this.lastAttemptMargin = Duration.ofMillis(Math.max(0, resyncDelayMs)).multipliedBy(11).dividedBy(10);
     }
 
     @Scheduled(fixedDelayString = "${economizaai.ingestion.contingency-resync-delay-ms:21600000}")
@@ -58,6 +68,7 @@ public class ContingencyResyncSweeper {
             receipt.setStatus(ReceiptStatus.FAILED_PARSE);
             receipt.setParseErrorReason("receipt.contingency.unavailable:");
             receipt.setResyncingFromContingency(false);
+            receipt.setResyncFreeOnly(false);
         });
         receiptRepository.saveAll(expired);
         log.info("contingency.resync gave_up count={} windowHours={}", expired.size(), windowHours);
@@ -68,6 +79,8 @@ public class ContingencyResyncSweeper {
         var pending = receiptRepository.findByStatusAndCreatedAtAfter(
                 ReceiptStatus.CONTINGENCY_PENDING, cutoff, PageRequest.of(0, BATCH));
         var requeued = new ArrayList<Receipt>();
+        var paidAttempts = 0;
+        var now = LocalDateTime.now();
         for (var receipt : pending) {
             // Same guards as the manual retry: only QR scans with a stored payload can be re-fetched.
             if (receipt.getOrigin() != ReceiptOrigin.SCAN) continue;
@@ -76,10 +89,27 @@ public class ContingencyResyncSweeper {
             receipt.setStatus(ReceiptStatus.IMPORT_QUEUED);
             // Mark it so the ingest success path knows to notify the owner if this fetch recovers it.
             receipt.setResyncingFromContingency(true);
+            var paidAttempt = grantsPaidAttempt(receipt, now);
+            receipt.setResyncFreeOnly(!paidAttempt);
+            if (paidAttempt) {
+                receipt.setContingencyPaidAttempted(true);
+                paidAttempts++;
+            }
             requeued.add(receipt);
         }
         if (requeued.isEmpty()) return;
         receiptRepository.saveAll(requeued);
-        log.info("contingency.resync requeued={} of pending={}", requeued.size(), pending.size());
+        log.info("contingency.resync requeued={} of pending={} paidAttempts={}",
+                requeued.size(), pending.size(), paidAttempts);
+    }
+
+    /**
+     * The paid chain runs once per note: on the last pass before the window closes, and only if
+     * that single paid attempt wasn't already granted (a restart can replay a pass).
+     */
+    private boolean grantsPaidAttempt(Receipt receipt, LocalDateTime now) {
+        if (receipt.isContingencyPaidAttempted() || receipt.getCreatedAt() == null) return false;
+        var deadline = receipt.getCreatedAt().plusHours(windowHours);
+        return !now.plus(lastAttemptMargin).isBefore(deadline);
     }
 }
