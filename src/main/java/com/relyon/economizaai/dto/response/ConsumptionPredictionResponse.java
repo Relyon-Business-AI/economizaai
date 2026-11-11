@@ -13,6 +13,8 @@ import java.util.UUID;
  * @param confidence            coarse signal so the FE can down-weight low-sample estimates
  * @param status                {@code RAN_OUT} (overdue), {@code RUNNING_LOW} (within threshold),
  *                              or {@code OK} (informational)
+ * @param typeLabel             product's generic type ("biscoito", "salame") — drives the FE icon
+ * @param categorySlug          taxonomy leaf slug, a second hint for the FE icon (nullable)
  */
 public record ConsumptionPredictionResponse(
         UUID productId,
@@ -26,8 +28,21 @@ public record ConsumptionPredictionResponse(
         BigDecimal averageQuantityPerPurchase,
         int sampleSize,
         Confidence confidence,
-        Status status
+        Status status,
+        String typeLabel,
+        String categorySlug
 ) {
     public enum Confidence { LOW, MEDIUM, HIGH }
     public enum Status { OK, RUNNING_LOW, RAN_OUT }
+
+    /** Pre-icon shape, kept for callers that don't resolve the product type. */
+    public ConsumptionPredictionResponse(UUID productId, String productName, String friendlyDescription,
+                                         ProductCategory category, LocalDate lastPurchaseDate,
+                                         LocalDate predictedNextPurchaseDate, long daysUntilNextPurchase,
+                                         BigDecimal averageIntervalDays, BigDecimal averageQuantityPerPurchase,
+                                         int sampleSize, Confidence confidence, Status status) {
+        this(productId, productName, friendlyDescription, category, lastPurchaseDate, predictedNextPurchaseDate,
+                daysUntilNextPurchase, averageIntervalDays, averageQuantityPerPurchase, sampleSize, confidence,
+                status, null, null);
+    }
 }

@@ -2,6 +2,7 @@ package com.relyon.economizaai.controller;
 
 import com.relyon.economizaai.dto.request.LogManualPurchaseRequest;
 import com.relyon.economizaai.dto.request.SnoozeProductRequest;
+import com.relyon.economizaai.dto.response.ConsumptionPredictionPageResponse;
 import com.relyon.economizaai.dto.response.ConsumptionPredictionResponse;
 import com.relyon.economizaai.dto.response.SuggestedShoppingListResponse;
 import com.relyon.economizaai.model.User;
@@ -40,6 +41,16 @@ public class ConsumptionController {
     @GetMapping("/predictions")
     public ResponseEntity<List<ConsumptionPredictionResponse>> predictions(@AuthenticationPrincipal User user) {
         return ResponseEntity.ok(service.predict(user));
+    }
+
+    /** Paged + filterable predictions, closest to running out first, with per-status counts. */
+    @GetMapping("/predictions/page")
+    public ResponseEntity<ConsumptionPredictionPageResponse> predictionsPage(
+            @AuthenticationPrincipal User user,
+            @RequestParam(required = false) ConsumptionPredictionResponse.Status status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "30") int size) {
+        return ResponseEntity.ok(service.predictPage(user, status, page, size));
     }
 
     @GetMapping("/suggested-list")

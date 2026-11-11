@@ -1,5 +1,17 @@
 # economizai — what's new
 
+## 2026-11-11 — Previsão de consumo: regra de 3 compras, ícone por tipo e lista paginada
+
+- **Regra:** um produto só entra na previsão com compras em **3 dias diferentes** (era 2). Fallback: se
+  NENHUM produto da casa chega a 3, usa 2 — a tela nunca fica vazia pra quem está começando. Configurável
+  (`consumption.min-purchases-for-prediction` / `fallback-min-purchases-for-prediction`). O desbloqueio da
+  feature na Home continua em 2 notas.
+- **Ícone:** `ConsumptionPredictionResponse` ganhou `typeLabel` (tipo genérico do produto) e `categorySlug`
+  (folha da taxonomia) — o enum `category` antigo dava ícones errados (biscoito como fruta, suíno como peixe).
+- **Novo `GET /consumption/predictions/page`**: `status` opcional (filtro), `page`/`size`, ordenado por
+  urgência (mais perto de acabar primeiro) + `counts` por status pros chips de filtro. O endpoint antigo
+  `/predictions` continua igual (versões antigas do app).
+
 ## 2026-11-10 — Split de produtos mal-mesclados por variante (admin)
 
 - **Novo endpoint ADMIN `POST /api/v1/admin/products/split-variants?dryRun=true|false&max=500`.**

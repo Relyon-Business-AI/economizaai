@@ -6426,6 +6426,63 @@
 					"response": []
 				},
 				{
+					"name": "Predictions page (filter + urgency order)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/consumption/predictions/page?status=RAN_OUT&page=0&size=30",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"consumption",
+								"predictions",
+								"page"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "RAN_OUT"
+								},
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "30"
+								}
+							]
+						},
+						"description": "Response inclui `friendlyDescription` (apelido que o domic\u00edlio deu ao produto; null se nunca renomeado) ao lado do nome de cat\u00e1logo."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200 OK', () => pm.response.to.have.status(200));",
+									"pm.test('page shape', () => {",
+									"  const body = pm.response.json();",
+									"  pm.expect(body.items).to.be.an('array');",
+									"  pm.expect(body.counts).to.have.keys('ranOut', 'runningLow', 'ok', 'total');",
+									"  pm.expect(body).to.have.property('hasMore');",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
 					"name": "Suggested shopping list (RAN_OUT + RUNNING_LOW only)",
 					"request": {
 						"method": "GET",
@@ -9938,6 +9995,62 @@
 									"    if (Array.isArray(rows) && rows.length > 0) {",
 									"        pm.expect(rows[0]).to.have.property('friendlyDescription');",
 									"    }",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "34b. Consumption predictions (paged)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/consumption/predictions/page?status=RAN_OUT&page=0&size=30",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"consumption",
+								"predictions",
+								"page"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "RAN_OUT"
+								},
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "30"
+								}
+							]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200 OK', () => pm.response.to.have.status(200));",
+									"pm.test('page shape', () => {",
+									"  const body = pm.response.json();",
+									"  pm.expect(body.items).to.be.an('array');",
+									"  pm.expect(body.counts).to.have.keys('ranOut', 'runningLow', 'ok', 'total');",
+									"  pm.expect(body).to.have.property('hasMore');",
 									"});"
 								]
 							}
