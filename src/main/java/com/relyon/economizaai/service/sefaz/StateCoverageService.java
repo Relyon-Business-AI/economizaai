@@ -36,7 +36,7 @@ import java.util.stream.Collectors;
  * On-demand learning for the experimental multi-state rollout: records every
  * fallback-chain layer attempt on a non-verified UF, alerts the admin inbox on
  * the two events that need a human — the FIRST success on a new state (grab a
- * fixture from the receipt's rawHtml, promote the UF to a verified adapter)
+ * fixture from the receipt's stored HTML, promote the UF to a verified adapter)
  * and total chain failure (build support; the email carries the evidence).
  *
  * <p>Also watches VERIFIED states for REGRESSION: a portal we already support
@@ -136,7 +136,7 @@ public class StateCoverageService {
 
                         Próximos passos para promover a UF a "verificada":
                         1. Confira os itens/total da nota no app (validação por usuário real).
-                        2. Salve o rawHtml do receipt como fixture em src/test/resources/fixtures/sefaz/%s/.
+                        2. Salve o HTML guardado da nota (tabela receipt_raw_html) como fixture em src/test/resources/fixtures/sefaz/%s/.
                         3. Se a camada foi QR_PORTAL, adicione %s a economizaai.ingestion.sefaz.svrs.states \
                         e o host à allowlist — a UF passa a usar o adapter verificado.
                         """.formatted(uf, strategy, qrHost, uf.name().toLowerCase(), uf));
@@ -228,7 +228,7 @@ public class StateCoverageService {
                     - chave: %s
                     - URL do QR: %s
                     - Camadas tentadas: %s
-                    - Receipt FAILED_PARSE com este chave guarda o rawHtml (quando o fetch funcionou).
+                    - Receipt FAILED_PARSE com este chave guarda o HTML na tabela receipt_raw_html (quando o fetch funcionou).
                     - Recon do portal: docs/MULTI_STATE_RECON.md (tier da UF + notas do probe).
 
                     Primeiros %d chars da resposta do portal (CPF já removido):

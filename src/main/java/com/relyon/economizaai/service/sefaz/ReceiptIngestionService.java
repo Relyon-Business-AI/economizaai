@@ -17,6 +17,7 @@ import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.LocalizedMessageService;
+import com.relyon.economizaai.service.ReceiptRawHtmlService;
 import com.relyon.economizaai.service.extraction.EanCatalogEnrichmentService;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.geo.MerchantSupportGate;
@@ -83,6 +84,7 @@ public class ReceiptIngestionService {
     private final PrefetchPolicy prefetchPolicy;
     private final ReceiptAiCategorySuggestionService aiCategorySuggestionService;
     private final XmlIndexEligibilityService xmlIndexEligibilityService;
+    private final ReceiptRawHtmlService receiptRawHtmlService;
 
     /**
      * Only ping the owner about a note's outcome when the scan took at least this long —
@@ -431,6 +433,8 @@ public class ReceiptIngestionService {
             var receipt = loadIfProcessing(receiptId);
             if (receipt == null) return;
             applyParsed(receipt, parsed);
+            // The document that produced the items is the stored evidence (none → none kept).
+            receiptRawHtmlService.replace(receipt, parsed.rawHtml());
             receipt.setIndexEligible(indexEligible);
             // A successful parse supersedes any prior failure diagnostic (retried notas
             // keep their original reason until the retry actually resolves them).
@@ -539,7 +543,7 @@ public class ReceiptIngestionService {
         transactionTemplate.executeWithoutResult(txStatus -> {
             var receipt = loadIfProcessing(receiptId);
             if (receipt == null) return;
-            receipt.setRawHtml(fetched.html());
+            receiptRawHtmlService.replace(receipt, fetched.html());
             receipt.setSourceUrl(fetched.sourceUrl());
             // Re-failure of an already-diagnosed nota (admin/auto retry kept the old reason) must
             // not re-notify the owner — only the FIRST diagnosis pings (see notifyFailedIfSlow).
@@ -758,7 +762,6 @@ public class ReceiptIngestionService {
         receipt.setApproxTaxFederal(parsed.approxTaxFederal());
         receipt.setApproxTaxEstadual(parsed.approxTaxEstadual());
         receipt.setSourceUrl(parsed.sourceUrl());
-        receipt.setRawHtml(parsed.rawHtml());
         // Parsers that don't read indPres (NFC-e 65) leave channel null → IN_STORE (presencial).
         receipt.setChannel(parsed.channel() != null ? parsed.channel() : ReceiptChannel.IN_STORE);
         parsed.items().forEach(parsedItem -> receipt.addItem(toReceiptItem(parsedItem)));

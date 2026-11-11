@@ -113,8 +113,8 @@ public class Receipt extends BaseEntity implements HouseholdScoped {
     @Column(name = "source_url", columnDefinition = "TEXT")
     private String sourceUrl;
 
-    @Column(name = "raw_html", columnDefinition = "TEXT")
-    private String rawHtml;
+    // The portal document this receipt was parsed from is NOT mapped here: it lives in
+    // ReceiptRawHtml (own table, read via ReceiptRawHtmlService) so no receipt query carries it.
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)

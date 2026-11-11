@@ -15,6 +15,7 @@ import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.LocalizedMessageService;
+import com.relyon.economizaai.service.ReceiptRawHtmlService;
 import com.relyon.economizaai.service.ai.ReceiptAiCategorySuggestionService;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.geo.MerchantSupportGate;
@@ -47,7 +48,6 @@ import java.util.function.Consumer;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -78,6 +78,7 @@ class ReceiptIngestionServiceTest {
     @Mock private LocalizedMessageService messageService;
     @Mock private ReceiptAiCategorySuggestionService aiCategorySuggestionService;
     @Mock private XmlIndexEligibilityService xmlIndexEligibilityService;
+    @Mock private ReceiptRawHtmlService receiptRawHtmlService;
 
     @InjectMocks private ReceiptIngestionService service;
 
@@ -144,6 +145,7 @@ class ReceiptIngestionServiceTest {
         assertEquals("ARROZ TIO J 5KG", receipt.getItems().get(0).getRawDescription());
         assertEquals("Mercado X", receipt.getMarketName());
         verify(receiptRepository).save(receipt);
+        verify(receiptRawHtmlService).replace(receipt, "<html/>");
     }
 
     @Test
@@ -201,6 +203,8 @@ class ReceiptIngestionServiceTest {
 
         assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
         verify(receiptRepository).save(receipt);
+        // the fetched page is kept for review
+        verify(receiptRawHtmlService).replace(receipt, "<html/>");
     }
 
     @Test
@@ -619,7 +623,7 @@ class ReceiptIngestionServiceTest {
         assertEquals("12345678000190", receipt.getCnpjEmitente());
         assertEquals("Mercado X", receipt.getMarketName());
         assertTrue(receipt.getItems().isEmpty());
-        assertNull(receipt.getRawHtml());
+        verifyNoInteractions(receiptRawHtmlService);
         verify(receiptRepository).save(receipt);
     }
 

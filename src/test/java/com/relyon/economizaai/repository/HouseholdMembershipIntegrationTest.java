@@ -9,6 +9,7 @@ import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.HouseholdMergeService;
 import com.relyon.economizaai.service.HouseholdService;
 import com.relyon.economizaai.service.HouseholdSplitService;
+import com.relyon.economizaai.service.ReceiptRawHtmlService;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.cache.HouseholdCacheGen;
 import com.relyon.economizaai.service.notifications.NotificationService;
@@ -46,7 +47,8 @@ import static org.mockito.Mockito.when;
  */
 @DataJpaTest
 @ActiveProfiles("test")
-@Import({HouseholdService.class, HouseholdMergeService.class, HouseholdSplitService.class})
+@Import({HouseholdService.class, HouseholdMergeService.class, HouseholdSplitService.class,
+        ReceiptRawHtmlService.class})
 class HouseholdMembershipIntegrationTest {
 
     @Autowired private HouseholdService householdService;
