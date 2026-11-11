@@ -481,7 +481,7 @@ class ReceiptIngestionServiceTest {
         var fetched = new SefazIngestionService.FetchedDocument(null, "<xml/>", CHAVE_RS, UnidadeFederativa.RS, null, parsed);
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fromXml("<uploaded/>", CHAVE_RS, null)).thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(parsed);
+        when(sefazIngestionService.parse(eq(fetched), any(), any())).thenReturn(parsed);
         when(xmlIndexEligibilityService.isIndexEligible("<uploaded/>", parsed, receipt.getUser().getId()))
                 .thenReturn(true);
 
@@ -498,7 +498,7 @@ class ReceiptIngestionServiceTest {
         var fetched = new SefazIngestionService.FetchedDocument(null, "<xml/>", CHAVE_RS, UnidadeFederativa.RS, null, parsed);
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fromXml("<uploaded/>", CHAVE_RS, null)).thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(parsed);
+        when(sefazIngestionService.parse(eq(fetched), any(), any())).thenReturn(parsed);
         when(xmlIndexEligibilityService.isIndexEligible("<uploaded/>", parsed, receipt.getUser().getId()))
                 .thenReturn(false);
 
@@ -516,7 +516,7 @@ class ReceiptIngestionServiceTest {
         var fetched = new SefazIngestionService.FetchedDocument(null, "<xml/>", CHAVE_RS, UnidadeFederativa.RS, null, parsed);
         when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
         when(sefazIngestionService.fromXml("<uploaded/>", CHAVE_RS, null)).thenReturn(fetched);
-        when(sefazIngestionService.parse(eq(fetched), any())).thenReturn(parsed);
+        when(sefazIngestionService.parse(eq(fetched), any(), any())).thenReturn(parsed);
 
         service.ingestXml(receipt.getId(), "<uploaded/>");
 

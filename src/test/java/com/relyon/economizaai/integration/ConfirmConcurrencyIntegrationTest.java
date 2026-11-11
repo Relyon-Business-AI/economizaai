@@ -147,7 +147,7 @@ class ConfirmConcurrencyIntegrationTest {
         var fetched = new SefazIngestionService.FetchedDocument(
                 null, "<html/>", "00000000000000000000000000000000000000000000", UnidadeFederativa.RS, null);
         when(sefazIngestionService.fetch(any(), any())).thenReturn(fetched);
-        when(sefazIngestionService.parse(any(), any())).thenReturn(parsedReceipt(chave, ean));
+        when(sefazIngestionService.parse(any(), any(), any())).thenReturn(parsedReceipt(chave, ean));
         var qrUrl = "https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx?p=" + chave + "|2|1";
         var submitResult = mockMvc.perform(post("/api/v1/receipts")
                         .header("Authorization", "Bearer " + token)
