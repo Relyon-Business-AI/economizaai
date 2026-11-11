@@ -19,6 +19,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -27,6 +28,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -486,6 +488,32 @@ class MarketLocationServiceTest {
 
         assertThat(resolved).isSameAs(market);
         verify(cnpjActivityClient, never()).lookup(any());
+    }
+
+    @Test
+    void resolveForIngest_concurrentRegistrationOfTheSameMarket_reusesTheWinnersRow() {
+        var registeredByTheOtherIngest = new MarketLocation();
+        registeredByTheOtherIngest.setCnpj("33333333000133");
+        registeredByTheOtherIngest.setSegment(MerchantSegment.SUPERMARKET);
+        when(repository.findByCnpj("33333333000133"))
+                .thenReturn(Optional.empty())                          // our "not registered yet" check
+                .thenReturn(Optional.of(registeredByTheOtherIngest));  // re-read after losing the race
+        when(repository.save(any(MarketLocation.class)))
+                .thenThrow(new DataIntegrityViolationException("uk_market_location_cnpj"));
+
+        var resolved = service.resolveForIngest("33333333000133", "Mercado Novo", "Rua C");
+
+        assertThat(resolved).isSameAs(registeredByTheOtherIngest);
+    }
+
+    @Test
+    void resolveForIngest_constraintViolationWithNoExistingRow_stillPropagates() {
+        when(repository.findByCnpj("44444444000144")).thenReturn(Optional.empty());
+        when(repository.save(any(MarketLocation.class)))
+                .thenThrow(new DataIntegrityViolationException("some other constraint"));
+
+        assertThatThrownBy(() -> service.resolveForIngest("44444444000144", "Mercado", "Rua D"))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test

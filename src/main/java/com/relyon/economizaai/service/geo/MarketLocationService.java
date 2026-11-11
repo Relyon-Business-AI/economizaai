@@ -18,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -111,13 +112,29 @@ public class MarketLocationService {
      */
     public MarketLocation resolveForIngest(String cnpj, String name, String address) {
         if (cnpj == null || cnpj.isBlank()) return null;
-        var market = self.register(cnpj, name, address);
+        var market = registerOrReuseConcurrentRegistration(cnpj, name, address);
         if (market.getSegment() == MerchantSegment.UNKNOWN
                 && market.getSegmentAttempts() < MAX_SEGMENT_ATTEMPTS
                 && cnpjActivityClient.isEnabled()) {
             self.classifySegmentOne(market);
         }
         return market;
+    }
+
+    /**
+     * Two ingests of the same never-seen market can both pass the "not registered yet" check;
+     * the slower one then trips the unique CNPJ constraint when its short transaction commits.
+     * The market exists either way, so the loser re-reads the winner's row instead of turning
+     * an already-fetched receipt into a failure. Each call to {@link #register} runs in its own
+     * transaction (the ingest pipeline is untransacted), so the failed insert rolls back alone.
+     */
+    private MarketLocation registerOrReuseConcurrentRegistration(String cnpj, String name, String address) {
+        try {
+            return self.register(cnpj, name, address);
+        } catch (DataIntegrityViolationException concurrentRegistration) {
+            log.info("market_location.register_race cnpj={} outcome=reused_existing", cnpj);
+            return repository.findByCnpj(cnpj).orElseThrow(() -> concurrentRegistration);
+        }
     }
 
     @Scheduled(fixedDelayString = "${economizaai.geo.geocode-interval-ms:600000}",
