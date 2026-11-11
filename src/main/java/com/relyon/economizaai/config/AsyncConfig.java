@@ -1,6 +1,7 @@
 package com.relyon.economizaai.config;
 
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -27,7 +28,8 @@ public class AsyncConfig {
 
     @Bean(RECEIPT_INGEST_EXECUTOR)
     @Profile("!test")
-    public Executor receiptIngestExecutor() {
+    public Executor receiptIngestExecutor(
+            @Value("${economizaai.ingestion.shutdown-await-seconds:60}") int shutdownAwaitSeconds) {
         var executor = new ThreadPoolTaskExecutor();
         // core == max: a ThreadPoolExecutor only grows past core once the queue is FULL,
         // so core 4 / max 8 ran 4 threads until 50 scans were already waiting.
@@ -36,6 +38,10 @@ public class AsyncConfig {
         executor.setAllowCoreThreadTimeOut(true);
         executor.setQueueCapacity(200);
         executor.setThreadNamePrefix("receipt-ingest-");
+        // Graceful shutdown: a deploy must not drop notas mid-ingest. On context close the
+        // pool stops taking work and waits (bounded) for the running and queued ingests.
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(Math.max(0, shutdownAwaitSeconds));
         // Propagate the request's MDC (req=, user=) onto the ingest thread so
         // async ingestion log lines stay traceable per user — otherwise only the
         // rcpt= tag (set inside ingest) survives.

@@ -170,6 +170,9 @@ economizaai:
     # legitimate ingest (MS captcha wall-clock cap 3 min + fallback).
     processing-timeout-minutes: ${INGEST_PROCESSING_TIMEOUT_MINUTES:10}
     sweeper-delay-ms: ${INGEST_SWEEPER_DELAY_MS:60000}
+    # On shutdown (deploy) the ingest pool waits up to this long for in-flight and queued
+    # ingests to finish instead of dropping them.
+    shutdown-await-seconds: ${INGEST_SHUTDOWN_AWAIT_SECONDS:60}
     # Probe de estados "pausados" no Infosimples (portal da SEFAZ fora): sonda a cada 6h
     # e alerta o dono UMA vez quando a rota volta a responder 200, pra onboardar o estado.
     # Estados com portal caído (615) sob vigilância: SE (caiu ~22/10) e TO (caiu ~09/11), ambos
