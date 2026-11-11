@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service;
 
 import com.relyon.economizaai.dto.request.JoinHouseholdRequest;
+import com.relyon.economizaai.exception.HouseholdSelfRemovalException;
 import com.relyon.economizaai.exception.InvalidInviteCodeException;
 import com.relyon.economizaai.exception.NotHouseholdHostException;
 import com.relyon.economizaai.exception.NotInHouseholdException;
@@ -234,7 +235,7 @@ class HouseholdServiceCoverageTest {
         when(userRepository.findAllByHouseholdId(household.getId())).thenReturn(List.of(actor));
         var actorId = actor.getId();
 
-        assertThrows(IllegalArgumentException.class, () -> householdService.removeMember(actor, actorId));
+        assertThrows(HouseholdSelfRemovalException.class, () -> householdService.removeMember(actor, actorId));
         verify(userRepository, never()).save(any());
     }
 

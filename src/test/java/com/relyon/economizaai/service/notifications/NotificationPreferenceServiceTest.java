@@ -70,6 +70,23 @@ class NotificationPreferenceServiceTest {
     }
 
     @Test
+    void listHidesTheRetiredToggles() {
+        var user = user();
+        var retired = NotificationPreference.builder().user(user)
+                .type(NotificationType.PROMO_COMMUNITY).channel(NotificationChannel.PUSH).build();
+        var alsoRetired = NotificationPreference.builder().user(user)
+                .type(NotificationType.CHEAPER_MARKET).channel(NotificationChannel.PUSH).build();
+        var live = NotificationPreference.builder().user(user)
+                .type(NotificationType.PRICE_DROP).channel(NotificationChannel.EMAIL).build();
+        when(preferenceRepository.findAllByUserId(user.getId())).thenReturn(List.of(retired, alsoRetired, live));
+
+        var result = preferenceService.list(user);
+
+        assertEquals(1, result.size());
+        assertEquals(NotificationType.PRICE_DROP, result.get(0).type());
+    }
+
+    @Test
     void updateCreatesPreferenceRowForType() {
         var user = user();
         var request = new UpdateNotificationPreferencesRequest(List.of(

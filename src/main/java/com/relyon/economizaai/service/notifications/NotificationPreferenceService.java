@@ -32,6 +32,7 @@ public class NotificationPreferenceService {
     @Transactional(readOnly = true)
     public List<NotificationPreferenceResponse> list(User user) {
         return preferenceRepository.findAllByUserId(user.getId()).stream()
+                .filter(preference -> !preference.getType().isRetired())
                 .map(p -> new NotificationPreferenceResponse(p.getType(), p.getChannel()))
                 .toList();
     }
@@ -42,6 +43,7 @@ public class NotificationPreferenceService {
         // mentions (multi-channel). Replace that type's rows wholesale; types not in
         // the request are left untouched.
         var channelsByType = request.preferences().stream()
+                .filter(preference -> !preference.type().isRetired())
                 .collect(Collectors.groupingBy(
                         UpdateNotificationPreferencesRequest.Preference::type,
                         LinkedHashMap::new,

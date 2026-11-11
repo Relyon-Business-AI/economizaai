@@ -6,6 +6,7 @@ import com.relyon.economizaai.dto.response.InvitePreviewResponse;
 import com.relyon.economizaai.exception.AlreadyInHouseholdException;
 import com.relyon.economizaai.exception.HouseholdFullException;
 import com.relyon.economizaai.exception.HouseholdLeaveFirstException;
+import com.relyon.economizaai.exception.HouseholdSelfRemovalException;
 import com.relyon.economizaai.exception.InvalidInviteCodeException;
 import com.relyon.economizaai.exception.NotHouseholdHostException;
 import com.relyon.economizaai.exception.NotInHouseholdException;
@@ -148,7 +149,7 @@ public class HouseholdService {
         var members = membersOf(household);
         requireHost(actor, household, members);
         if (actor.getId().equals(memberId)) {
-            throw new IllegalArgumentException("Use POST /households/leave to leave on your own — kick is for others");
+            throw new HouseholdSelfRemovalException();
         }
         var target = userRepository.findById(memberId).orElseThrow(NotInHouseholdException::new);
         if (!household.getId().equals(target.getHousehold().getId())) {
