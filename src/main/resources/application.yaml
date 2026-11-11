@@ -40,9 +40,10 @@ spring:
   task:
     scheduling:
       # Default is a SINGLE thread — one slow job (geocoding/CNPJ lookups do
-      # HTTP with 8s timeouts) would delay every other @Scheduled job.
+      # HTTP with 8s timeouts) would delay every other @Scheduled job. The slow
+      # jobs are also capped per run (geocode/classify/auto-confirm max-per-run).
       pool:
-        size: 4
+        size: 8
   data:
     web:
       pageable:
@@ -181,6 +182,14 @@ economizaai:
     ai-categorization:
       threads: ${ASYNC_AI_CATEGORIZATION_THREADS:2}
       queue-capacity: ${ASYNC_AI_CATEGORIZATION_QUEUE:50}
+  receipts:
+    auto-confirm:
+      # Notas left PENDING are confirmed for the user after after-hours; each sweep
+      # (every sweeper-delay-ms) confirms at most max-per-run, oldest first.
+      enabled: ${RECEIPTS_AUTO_CONFIRM_ENABLED:true}
+      after-hours: ${RECEIPTS_AUTO_CONFIRM_AFTER_HOURS:6}
+      sweeper-delay-ms: ${RECEIPTS_AUTO_CONFIRM_SWEEPER_DELAY_MS:1800000}
+      max-per-run: ${RECEIPTS_AUTO_CONFIRM_MAX_PER_RUN:50}
   ingestion:
     # Async-ingest safety net: PROCESSING receipts older than this are failed by
     # the sweeper so the FE never polls forever. Must exceed the worst-case
@@ -509,6 +518,7 @@ economizaai:
     geocode-interval-ms: 600000                # how often the background geocoder scans pending markets (10 min)
     geocode-initial-delay-ms: 30000            # wait this long after startup before first scan
     geocode-delay-ms: 1100                     # 1.1s between geocode calls — Nominatim policy is 1 req/sec/IP
+    geocode-max-per-run: ${GEOCODE_MAX_PER_RUN:25}   # markets geocoded per scan — keeps one run short (~30s) on a big backlog
   merchant:
     # Marketing accounts (docs/MERCHANT_ACCOUNTS.md). promos-feed-enabled is the ONLY
     # consumer-visible switch — everything else is merchant/admin-side and dark by role.
@@ -525,6 +535,7 @@ economizaai:
       max-attempts: 3                          # in-call retries before giving up (segment stays UNKNOWN)
       interval-ms: 600000                      # how often the background classifier scans unclassified markets (10 min)
       initial-delay-ms: 45000                  # wait after startup before first scan
+      max-per-run: ${MERCHANT_CLASSIFY_MAX_PER_RUN:25}   # markets classified per scheduled scan (admin backfill is uncapped)
   notifications:
     # Only ping the owner about a scanned note's outcome (ready / failed) when the scan took
     # at least this long — fast notas resolve in seconds while the user is still in the app.
