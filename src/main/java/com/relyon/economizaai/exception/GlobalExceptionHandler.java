@@ -185,6 +185,16 @@ public class GlobalExceptionHandler {
         return respond(ex, HttpStatus.SERVICE_UNAVAILABLE, "Photo extraction unavailable");
     }
 
+    @ExceptionHandler(ItemCorrectionUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleItemCorrectionUnavailable(ItemCorrectionUnavailableException ex) {
+        return respond(ex, HttpStatus.SERVICE_UNAVAILABLE, "Item correction unavailable");
+    }
+
+    @ExceptionHandler(ItemCorrectionFailedException.class)
+    public ResponseEntity<ErrorResponse> handleItemCorrectionFailed(ItemCorrectionFailedException ex) {
+        return respond(ex, HttpStatus.UNPROCESSABLE_CONTENT, "Item correction could not identify the product");
+    }
+
     @ExceptionHandler(OcrUnavailableException.class)
     public ResponseEntity<ErrorResponse> handleOcrUnavailable(OcrUnavailableException ex) {
         return respond(ex, HttpStatus.SERVICE_UNAVAILABLE, "OCR engine not available on this host");
