@@ -1,5 +1,25 @@
 # economizai — what's new
 
+## 2026-11-11 — Split de variantes por IA: conservador + safe-apply gate (admin)
+
+**O que o FE precisa saber**
+
+- **`POST /admin/products/split-variants?strategy=AI`** ficou CONSERVADOR — ele estava
+  SUPER-separando produtos legítimos (itens com nome IDÊNTICO acabavam em produtos diferentes só
+  porque o código de barras real era outro — e um re-cadastro de GTIN é comum). Agora:
+  - **Guarda de coesão por nome idêntico** (igual à coesão por EAN): itens cujo `raw_description`
+    NORMALIZADO é idêntico são forçados a UM grupo, a IA nunca os separa.
+  - **Prompt conservador**: a IA só separa quando os nomes mostram marca/sabor/variante claramente
+    diferentes; na dúvida mantém junto; código de barras diferente NÃO separa.
+  - **Safe-apply gate**: no apply (`dryRun=false`) só materializa o split quando a IA respondeu
+    com confiança ALTA E os grupos têm nomes MATERIALMENTE DIFERENTES. Separações de baixa
+    confiança ou de nome idêntico são DESCARTADAS (itens ficam juntos).
+- **`AiProductVariantSplitResponse` ganhou `safety[]`** (preenchido só em `dryRun=true`): um veredito
+  por produto — `{ productId, productName, proposedGroups, confidence (HIGH|LOW), safeToApply,
+  reason }`, com `reason` ∈ `SAFE | LOW_CONFIDENCE | NAMES_NOT_MATERIALLY_DIFFERENT | NO_SPLIT`.
+  Permite pré-visualizar exatamente o que um apply real mudaria (SAFE) vs descartaria (SKIPPED).
+  `splits[]` no apply real passa a conter só os splits SAFE. Campo vazio no apply.
+
 ## 2026-11-11 — Release pré-campanha: custo, conta, assinatura, indicação, ofertas e capacidade
 
 **O que o FE precisa saber** (detalhes e exemplos no `API.md`)
