@@ -8,7 +8,6 @@ import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.model.enums.SubscriptionTier;
 import com.relyon.economizaai.repository.NotificationPreferenceRepository;
 import com.relyon.economizaai.repository.NotificationRepository;
-import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -76,8 +76,8 @@ class NotificationServiceTest {
 
     private NotificationService service(boolean withEmail, boolean withPush) {
         // Default: delivery allowed (PRO). FREE-tier behavior is exercised by
-        // the inbox-only test, which stubs allows(...) false.
-        lenient().when(subscriptionGate.allows(any(), eq(Feature.PUSH_AND_EMAIL_DELIVERY))).thenReturn(true);
+        // the inbox-only test, which stubs allowsDelivery(...) false.
+        lenient().when(subscriptionGate.allowsDelivery(any(), any(), anyBoolean())).thenReturn(true);
         // notify() agora salva ANTES do dispatch (pra ter o id no payload do push)
         // e de novo depois — o mock devolve a própria entidade.
         lenient().when(notificationRepository.save(any()))
@@ -165,7 +165,7 @@ class NotificationServiceTest {
         when(emailDispatcher.channel()).thenReturn(NotificationChannel.EMAIL);
         when(pushDispatcher.channel()).thenReturn(NotificationChannel.PUSH);
         when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
-        when(subscriptionGate.allows(any(), eq(Feature.PUSH_AND_EMAIL_DELIVERY))).thenReturn(false);
+        when(subscriptionGate.allowsDelivery(any(), eq(NotificationType.PROMO_PERSONAL), eq(false))).thenReturn(false);
         var svc = new NotificationService(preferenceRepository, notificationRepository, subscriptionGate,
                 transactionManager, List.of(emailDispatcher, pushDispatcher), quietHours, dispatchExecutor);
 

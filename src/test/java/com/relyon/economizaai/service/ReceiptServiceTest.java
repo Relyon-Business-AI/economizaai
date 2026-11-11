@@ -55,7 +55,10 @@ import com.relyon.economizaai.service.sefaz.PrefetchPolicy;
 import com.relyon.economizaai.service.sefaz.ReceiptIngestionService;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
 import com.relyon.economizaai.service.sefaz.StateCoverageService;
+import com.relyon.economizaai.service.subscription.EntitlementClock;
+import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
+import com.relyon.economizaai.service.referral.ReferralService;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -69,6 +72,7 @@ import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Month;
 import java.util.ArrayList;
@@ -121,6 +125,7 @@ class ReceiptServiceTest {
     @Mock private MarketNameService marketNameService;
     @Mock private SubscriptionGateService subscriptionGate;
     @Mock private SubscriptionService subscriptionService;
+    @Mock private ReferralService referralService;
     @Mock private SavingsAttributionService savingsAttributionService;
     @Mock private LocalizedMessageService localizedMessageService;
     @Mock private MerchantSupportGate merchantSupportGate;
@@ -862,8 +867,11 @@ class ReceiptServiceTest {
     void submit_throwsPaywallWhenFreeUserAtMonthlyCap() {
         var user = buildUser();
         when(subscriptionGate.monthlyReceiptLimit(any())).thenReturn(5);
-        when(receiptRepository.countByUserIdAndCreatedAtGreaterThanEqual(eq(user.getId()), any()))
+        // Only receipts the user SUBMITTED count — household-split copies are excluded by the query.
+        when(receiptRepository.countByUserIdAndSplitCopyFalseAndCreatedAtGreaterThanEqual(eq(user.getId()), any()))
                 .thenReturn(5L);
+        doThrow(new PaywallException(Feature.RECEIPT_UPLOAD_UNLIMITED.name()))
+                .when(subscriptionGate).requireWithinLimit(user, Feature.RECEIPT_UPLOAD_UNLIMITED, 5L);
 
         var request = new SubmitReceiptRequest(QR_RS);
         assertThrows(PaywallException.class,
@@ -877,7 +885,7 @@ class ReceiptServiceTest {
     void submit_allowsWhenFreeUserUnderMonthlyCap() {
         var user = buildUser();
         when(subscriptionGate.monthlyReceiptLimit(any())).thenReturn(5);
-        when(receiptRepository.countByUserIdAndCreatedAtGreaterThanEqual(eq(user.getId()), any()))
+        when(receiptRepository.countByUserIdAndSplitCopyFalseAndCreatedAtGreaterThanEqual(eq(user.getId()), any()))
                 .thenReturn(2L);
         when(receiptRepository.findByHouseholdIdAndChaveAcesso(any(), eq(CHAVE_RS))).thenReturn(Optional.empty());
         when(receiptRepository.save(any(Receipt.class))).thenAnswer(inv -> {
@@ -1024,12 +1032,42 @@ class ReceiptServiceTest {
         when(receiptRepository.save(receipt)).thenReturn(receipt);
         when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
         when(receiptRepository.countByUserIdAndStatus(user.getId(), ReceiptStatus.CONFIRMED)).thenReturn(1L);
-        var promoEnd = LocalDateTime.now().plusMonths(3);
+        var promoEnd = EntitlementClock.endOfBrazilDay(LocalDate.of(2026, 12, 31));
         when(subscriptionService.grantSignupPromoIfEnabled(user)).thenReturn(promoEnd);
+
+        var response = receiptService.confirm(user, receipt.getId(), null);
+
+        verify(subscriptionService).grantSignupPromoIfEnabled(user);
+        assertEquals(LocalDate.of(2026, 12, 31), response.launchPromo().validUntil());
+    }
+
+    @Test
+    void confirm_firstReceipt_withoutGrant_hasNoLaunchPromoInResponse() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receiptRepository.save(receipt)).thenReturn(receipt);
+        when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
+        when(receiptRepository.countByUserIdAndStatus(user.getId(), ReceiptStatus.CONFIRMED)).thenReturn(1L);
+        // Already granted before, promo over, or a better entitlement kept.
+        when(subscriptionService.grantSignupPromoIfEnabled(user)).thenReturn(null);
+
+        var response = receiptService.confirm(user, receipt.getId(), null);
+
+        assertNull(response.launchPromo());
+    }
+
+    @Test
+    void confirm_checksReferralQualificationAfterCommit() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receiptRepository.save(receipt)).thenReturn(receipt);
+        when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
 
         receiptService.confirm(user, receipt.getId(), null);
 
-        verify(subscriptionService).grantSignupPromoIfEnabled(user);
+        verify(referralService).qualifyAfterCommit(user.getId(), receipt.getId());
     }
 
     @Test
@@ -1041,9 +1079,10 @@ class ReceiptServiceTest {
         when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
         when(receiptRepository.countByUserIdAndStatus(user.getId(), ReceiptStatus.CONFIRMED)).thenReturn(2L);
 
-        receiptService.confirm(user, receipt.getId(), null);
+        var response = receiptService.confirm(user, receipt.getId(), null);
 
         verify(subscriptionService, never()).grantSignupPromoIfEnabled(any(User.class));
+        assertNull(response.launchPromo());
     }
 
     @Test

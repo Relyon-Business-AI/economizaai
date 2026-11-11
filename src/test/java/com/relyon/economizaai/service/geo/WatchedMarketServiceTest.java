@@ -14,6 +14,7 @@ import com.relyon.economizaai.exception.PaywallException;
 import com.relyon.economizaai.repository.MarketLocationRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.repository.UserWatchedMarketRepository;
+import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -356,12 +358,13 @@ class WatchedMarketServiceTest {
         when(marketRepository.findByCnpj("11111111000111")).thenReturn(Optional.of(location));
         when(watchedRepository.findByUserIdAndMarketCnpj(user.getId(), "11111111000111"))
                 .thenReturn(Optional.empty());
-        when(subscriptionGate.watchedMarketLimit(any())).thenReturn(3);
         when(watchedRepository.findAllByUserId(user.getId())).thenReturn(List.of(
                 UserWatchedMarket.builder().marketCnpj("aaaaaaaa000111").build(),
                 UserWatchedMarket.builder().marketCnpj("bbbbbbbb000111").build(),
                 UserWatchedMarket.builder().marketCnpj("cccccccc000111").build()
         ));
+        doThrow(new PaywallException(Feature.WATCHED_MARKETS_UNLIMITED.name()))
+                .when(subscriptionGate).requireWithinLimit(user, Feature.WATCHED_MARKETS_UNLIMITED, 3L);
 
         assertThrows(PaywallException.class, () -> service.watch(user, "11111111000111"));
         verify(watchedRepository, never()).save(any());

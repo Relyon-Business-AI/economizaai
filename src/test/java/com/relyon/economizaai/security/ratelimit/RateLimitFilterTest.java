@@ -331,4 +331,17 @@ class RateLimitFilterTest {
         }
         assertEquals(429, invokePost("/api/v1/receipts", "20.0.0.3").getStatus());
     }
+
+    @Test
+    void referralRedeemAllowsTenAttemptsPerUserThenBlocks() throws Exception {
+        authenticateAs("code-guesser@economizaai.app");
+        for (var attempt = 0; attempt < 10; attempt++) {
+            assertEquals(200, invokePost("/api/v1/referrals/redeem", "20.0.0.4").getStatus());
+        }
+        assertEquals(429, invokePost("/api/v1/referrals/redeem", "20.0.0.4").getStatus());
+
+        // Keyed by user, not IP: someone else on the same network is unaffected.
+        authenticateAs("honest-friend@economizaai.app");
+        assertEquals(200, invokePost("/api/v1/referrals/redeem", "20.0.0.4").getStatus());
+    }
 }

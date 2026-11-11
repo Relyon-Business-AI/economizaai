@@ -66,6 +66,8 @@ import com.relyon.economizaai.service.sefaz.PrefetchPolicy;
 import com.relyon.economizaai.service.sefaz.ReceiptIngestionService;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
 import com.relyon.economizaai.service.sefaz.StateCoverageService;
+import com.relyon.economizaai.service.referral.ReferralService;
+import com.relyon.economizaai.service.subscription.EntitlementClock;
 import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
@@ -128,6 +130,7 @@ public class ReceiptService {
     private final MarketNameService marketNameService;
     private final SubscriptionGateService subscriptionGate;
     private final SubscriptionService subscriptionService;
+    private final ReferralService referralService;
     private final SavingsAttributionService savingsAttributionService;
     private final ReceiptIngestionService receiptIngestionService;
     private final TransactionTemplate transactionTemplate;
@@ -550,22 +553,19 @@ public class ReceiptService {
     }
 
     /**
-     * FREE plan caps receipts per calendar month. Counts ALL statuses this month
-     * so reject/delete-and-resubmit can't game the limit; PRO (limit MAX_VALUE)
+     * FREE plan caps receipts per calendar month. Counts every receipt the user SUBMITTED this
+     * month, in any status, so reject/delete-and-resubmit can't game the limit; the copies a
+     * household split creates are not submissions and don't count. PRO (limit MAX_VALUE)
      * bypasses entirely.
      */
     public void enforceMonthlyReceiptCap(User user) {
-        var monthlyLimit = subscriptionGate.monthlyReceiptLimit(user);
-        if (monthlyLimit == Integer.MAX_VALUE) {
+        if (subscriptionGate.monthlyReceiptLimit(user) == Integer.MAX_VALUE) {
             return;
         }
         var startOfMonth = BrazilClock.currentYearMonth().atDay(1).atStartOfDay();
-        var thisMonth = receiptRepository.countByUserIdAndCreatedAtGreaterThanEqual(user.getId(), startOfMonth);
-        if (thisMonth >= monthlyLimit) {
-            log.info("paywall.blocked user={} feature={} thisMonth={} limit={}",
-                    LogMasker.email(user.getEmail()), Feature.RECEIPT_UPLOAD_UNLIMITED, thisMonth, monthlyLimit);
-            throw new PaywallException(Feature.RECEIPT_UPLOAD_UNLIMITED.name());
-        }
+        var submittedThisMonth = receiptRepository
+                .countByUserIdAndSplitCopyFalseAndCreatedAtGreaterThanEqual(user.getId(), startOfMonth);
+        subscriptionGate.requireWithinLimit(user, Feature.RECEIPT_UPLOAD_UNLIMITED, submittedThisMonth);
     }
 
     /**
@@ -966,17 +966,32 @@ public class ReceiptService {
         marketLocationService.registerMarketFromReceipt(receipt);
         notifyPersonalPromos(user, receipt, personalPromos);
         var saved = receiptRepository.save(receipt);
-        if (receiptRepository.countByUserIdAndStatus(user.getId(), ReceiptStatus.CONFIRMED) == 1) {
-            var promoEnd = subscriptionService.grantSignupPromoIfEnabled(user);
-            if (promoEnd != null) {
-                log.info("confirm first_receipt_promo_granted user={} validUntil={}", user.getEmail(), promoEnd);
-            }
-        }
+        var launchPromo = grantLaunchPromoOnFirstReceipt(user);
+        referralService.qualifyAfterCommit(user.getId(), saved.getId());
         attributeSavings(saved);
         householdCacheGen.bump(receipt.getHousehold().getId());
         log.info("confirm ok status=CONFIRMED personalPromos={}", personalPromos.size());
         return new ConfirmReceiptResponse(
-                withFriendlyName(user.getHousehold().getId(), saved, ReceiptResponse.from(saved)), personalPromos);
+                withFriendlyName(user.getHousehold().getId(), saved, ReceiptResponse.from(saved)), personalPromos,
+                launchPromo);
+    }
+
+    /**
+     * The launch promo (free Premium) is granted when the user confirms their FIRST receipt.
+     * Returns what the client shows, or null when this confirmation granted nothing (not the
+     * first receipt, promo over/disabled, already granted, or a better entitlement kept).
+     */
+    private ConfirmReceiptResponse.LaunchPromo grantLaunchPromoOnFirstReceipt(User user) {
+        if (receiptRepository.countByUserIdAndStatus(user.getId(), ReceiptStatus.CONFIRMED) != 1) {
+            return null;
+        }
+        var promoEnd = subscriptionService.grantSignupPromoIfEnabled(user);
+        if (promoEnd == null) {
+            return null;
+        }
+        log.info("confirm first_receipt_promo_granted user={} validUntil={}",
+                LogMasker.email(user.getEmail()), promoEnd);
+        return new ConfirmReceiptResponse.LaunchPromo(EntitlementClock.brazilDayOf(promoEnd));
     }
 
     /**

@@ -50,6 +50,19 @@ public class MercadoPagoClient {
             LocalDateTime nextPaymentDate) {
     }
 
+    /**
+     * One recurring charge of a preapproval ("authorized payment" / invoice). {@code paymentStatus}
+     * is the status of the underlying payment ({@code approved} once the money was collected).
+     */
+    public record AuthorizedPayment(
+            String id,
+            String preapprovalId,
+            String paymentId,
+            String paymentStatus,
+            BigDecimal transactionAmount,
+            LocalDateTime debitDate) {
+    }
+
     public Preapproval createPreapproval(String payerEmail, String externalReference) {
         var body = Map.of(
                 "reason", properties.getPlanReason(),
@@ -80,6 +93,15 @@ public class MercadoPagoClient {
         return parsePreapproval(json);
     }
 
+    public AuthorizedPayment fetchAuthorizedPayment(String authorizedPaymentId) {
+        var json = exchange(() -> restClient.get()
+                .uri(properties.getApiBaseUrl() + "/authorized_payments/" + authorizedPaymentId)
+                .header("Authorization", "Bearer " + properties.getAccessToken())
+                .retrieve()
+                .body(String.class));
+        return parseAuthorizedPayment(json);
+    }
+
     private String exchange(ApiCall call) {
         try {
             var response = call.execute();
@@ -106,6 +128,26 @@ public class MercadoPagoClient {
                     root.path("payer_email").asText(null),
                     amountOf(root.path("auto_recurring").path("transaction_amount")),
                     dateOf(root.path("next_payment_date")));
+        } catch (MercadoPagoApiException invalid) {
+            throw invalid;
+        } catch (Exception parseFailure) {
+            throw new MercadoPagoApiException("unparseable response: " + parseFailure.getMessage());
+        }
+    }
+
+    private AuthorizedPayment parseAuthorizedPayment(String json) {
+        try {
+            var root = objectMapper.readTree(json);
+            if (root.path("id").isMissingNode() || root.path("id").asText().isBlank()) {
+                throw new MercadoPagoApiException("response without authorized payment id");
+            }
+            return new AuthorizedPayment(
+                    root.path("id").asText(),
+                    root.path("preapproval_id").asText(null),
+                    root.path("payment").path("id").asText(null),
+                    root.path("payment").path("status").asText(null),
+                    amountOf(root.path("transaction_amount")),
+                    dateOf(root.path("debit_date")));
         } catch (MercadoPagoApiException invalid) {
             throw invalid;
         } catch (Exception parseFailure) {

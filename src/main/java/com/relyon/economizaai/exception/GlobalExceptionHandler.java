@@ -400,6 +400,13 @@ public class GlobalExceptionHandler {
         return fieldError.getDefaultMessage() != null ? fieldError.getDefaultMessage() : "invalid";
     }
 
+    // --- Referral program ---
+    @ExceptionHandler(ReferralCodeRejectedException.class)
+    public ResponseEntity<ErrorResponse> handleReferralCodeRejected(ReferralCodeRejectedException ex) {
+        var status = ex.isAccountNoLongerEligible() ? HttpStatus.CONFLICT : HttpStatus.BAD_REQUEST;
+        return respond(ex, status, "Referral code rejected");
+    }
+
     private ResponseEntity<ErrorResponse> respond(DomainException ex, HttpStatus status, String logContext) {
         var message = messageService.translate(ex);
         log.warn("{}: {}", logContext, message);

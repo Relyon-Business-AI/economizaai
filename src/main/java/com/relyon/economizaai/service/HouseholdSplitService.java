@@ -194,6 +194,7 @@ public class HouseholdSplitService {
                 .status(original.getStatus())
                 .confirmedAt(original.getConfirmedAt())
                 .indexEligible(false)
+                .splitCopy(true)
                 .build();
         original.getItems().forEach(item -> copy.addItem(copyReceiptItem(item)));
         return copy;

@@ -18,6 +18,7 @@ import com.relyon.economizaai.service.auth.RefreshTokenService;
 import com.relyon.economizaai.service.analytics.meta.MetaConversionsService;
 import com.relyon.economizaai.service.auth.SignupAlertService;
 import com.relyon.economizaai.service.notifications.NotificationRuleService;
+import com.relyon.economizaai.service.referral.ReferralService;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +39,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -69,6 +71,8 @@ class SocialLoginServiceTest {
 
     @Mock
     private SubscriptionService subscriptionService;
+    @Mock
+    private ReferralService referralService;
 
     @Mock
     private SignupAlertService signupAlertService;
@@ -407,5 +411,37 @@ class SocialLoginServiceTest {
         socialLoginService.loginWithApple(new AppleLoginRequest("identity-token", "Joao", Platform.IOS));
 
         verify(loginActivityRecorder).recordRegistration(any(User.class), eq(Platform.IOS));
+    }
+
+    @Test
+    void loginWithGoogle_newUser_attachesTheReferralCode() {
+        when(googleTokenVerifier.verify("id-token"))
+                .thenReturn(new GoogleTokenVerifier.GoogleClaims("sub-1", "maria@example.com", true, "Maria"));
+        when(userRepository.findByAuthProviderAndProviderSubject(AuthProvider.GOOGLE, "sub-1"))
+                .thenReturn(Optional.empty());
+        when(userRepository.findByEmail("maria@example.com")).thenReturn(Optional.empty());
+        when(householdService.createSoloHousehold())
+                .thenReturn(Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build());
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        stubTokenIssue();
+
+        socialLoginService.loginWithGoogle(new GoogleLoginRequest("id-token", null, null, "ABC2345"));
+
+        verify(referralService).attachOnSignup(any(User.class), eq("ABC2345"));
+    }
+
+    @Test
+    void loginWithGoogle_existingUser_ignoresTheReferralCode() {
+        var existing = User.builder().id(UUID.randomUUID()).name("Maria").email("maria@example.com")
+                .authProvider(AuthProvider.GOOGLE).providerSubject("sub-1").build();
+        when(googleTokenVerifier.verify("id-token"))
+                .thenReturn(new GoogleTokenVerifier.GoogleClaims("sub-1", "maria@example.com", true, "Maria"));
+        when(userRepository.findByAuthProviderAndProviderSubject(AuthProvider.GOOGLE, "sub-1"))
+                .thenReturn(Optional.of(existing));
+        stubTokenIssue();
+
+        socialLoginService.loginWithGoogle(new GoogleLoginRequest("id-token", null, null, "ABC2345"));
+
+        verifyNoInteractions(referralService);
     }
 }

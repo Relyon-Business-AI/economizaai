@@ -139,18 +139,44 @@ across markets, and basket-level inflation tracking."
   (`SUBSCRIPTION_ENFORCE`, default off) — with it off every user behaves as PRO.
 - ✅ `Subscription` entity + `SubscriptionService.activatePro/cancel` (tier kept in sync).
 - ✅ Admin set-tier — `PUT /api/v1/admin/users/{id}/subscription-tier`.
-- ✅ Provider-agnostic webhook — `POST /api/v1/webhooks/subscription` (seam for a real provider).
+- ✅ Subscription lifecycle (2026-11): a provider cancellation / scheduled pause only marks the
+  subscription non-renewing — PRO is kept until the paid period ends; the hourly expiry sweep
+  downgrades (3-day grace for a paid, still-renewing subscription — `SUBSCRIPTION_PAID_GRACE_DAYS`;
+  none for the promo). A paid subscription that ends while the launch promo is still running
+  falls back to the promo. Mercado Pago monthly charges (`subscription_authorized_payment`)
+  advance the period and record one revenue event per payment.
+- ✅ Launch promo granted ONCE per user (first confirmed receipt), never over a better
+  entitlement; the app is told in the confirm response (`launchPromo.validUntil`). Promo holders
+  without a paid subscription are warned at D-15 / D-7 / D-3 / D-1 (`LaunchPromoWarningService`).
+- ✅ Per-feature gate: `economizaai.subscription.free.open-features` leaves chosen PRO features
+  open to FREE (switch paywalls on one at a time); transactional notifications are never held
+  back by the delivery gate; household-split receipt copies don't count toward the monthly cap.
+- ✅ Referral program ("indique um amigo") — see "Referral program" below.
+- ❌ Provider-agnostic webhook `POST /api/v1/webhooks/subscription` — REMOVED (2026-11, unused).
 - 🟡 Payment provider — **chosen and wired, INERT until credentialed** (see "2a" above): web =
   Mercado Pago (`GET /subscriptions/plan`, `POST /subscriptions/checkout`,
   `POST /webhooks/mercadopago`; inert until `MP_ACCESS_TOKEN`/`MP_WEBHOOK_SECRET`); apps =
   RevenueCat (`POST /webhooks/revenuecat`, fail-closed without the auth header; FE
-  `src/services/iap.ts` + `PremiumScreen`). The generic `POST /api/v1/webhooks/subscription`
-  seam stays available.
+  `src/services/iap.ts` + `PremiumScreen`).
 - 🟡 Self-serve subscription: read side shipped (`GET /users/me/subscription`); there is no
   `PUT /users/me/subscription` / in-app cancel endpoint.
 - ⬜ Feature-flag service so we can A/B individual gates.
 - ⬜ Top markets/categories `?limit` hard cap for FREE (history window is gated; the limit cap is not yet).
 - ⬜ Manual preference override (AVOID/MUST_HAVE) — depends on Phase 2.6.
+
+#### Referral program (owner decision 2026-11-11)
+
+- Each user has a personal code / link (`GET /referrals/me`). A NEW account is attached to the
+  inviter at signup (`referralCode`) or via `POST /referrals/redeem` while it has no confirmed
+  receipt. One referrer per account, ever.
+- A referral **qualifies** when the invited person confirms a receipt that contributed to the
+  collaborative index (photo notes, unverified XML, a chave another household already scanned and
+  opted-out users don't count) while living in a different household than the inviter.
+- The inviter's **first** qualified referral earns **1 month of Premium — once**. From then on,
+  **1 month per invited person who subscribes** to paid Premium. The invited person earns nothing.
+- Months **accumulate**: each one queues after the inviter's current entitlement (during the
+  launch promo, a month earned now runs 01/01 → 31/01; a second one 01/02 → 28/02). Reward time
+  lives in `premium_grants` (its own entitlement) and never replaces or shortens a subscription.
 
 #### Gating sequence (which paywalls to ship first)
 1. ✅ **Watched markets cap** (3 free) — shipped.

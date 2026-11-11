@@ -22,6 +22,7 @@ import com.relyon.economizaai.service.auth.RefreshTokenService;
 import com.relyon.economizaai.service.auth.SignupAlertService;
 import com.relyon.economizaai.service.notifications.NotificationRuleService;
 import com.relyon.economizaai.service.privacy.LogMasker;
+import com.relyon.economizaai.service.referral.ReferralService;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -61,6 +62,7 @@ public class SocialLoginService {
     private final SignupAlertService signupAlertService;
     private final MetaConversionsService metaConversionsService;
     private final AttributionResolver attributionResolver;
+    private final ReferralService referralService;
 
     @Transactional
     public AuthResponse loginWithGoogle(GoogleLoginRequest request) {
@@ -69,7 +71,8 @@ public class SocialLoginService {
             throw new InvalidOAuthTokenException();
         }
         var resolved = resolveOrCreateUser(AuthProvider.GOOGLE, claims.subject(), claims.email(),
-                claims.emailVerified(), claims.name(), request.platform(), request.attribution());
+                claims.emailVerified(), claims.name(), request.platform(), request.attribution(),
+                request.referralCode());
         return issueAuth(resolved.user(), resolved.signupPromoValidUntil());
     }
 
@@ -80,7 +83,8 @@ public class SocialLoginService {
             throw new InvalidOAuthTokenException();
         }
         var resolved = resolveOrCreateUser(AuthProvider.APPLE, claims.subject(), claims.email(),
-                claims.emailVerified(), claims.name(), request.platform(), request.attribution());
+                claims.emailVerified(), claims.name(), request.platform(), request.attribution(),
+                request.referralCode());
         return issueAuth(resolved.user(), resolved.signupPromoValidUntil());
     }
 
@@ -89,7 +93,7 @@ public class SocialLoginService {
 
     private ResolvedUser resolveOrCreateUser(AuthProvider provider, String subject, String email,
                                      boolean emailVerified, String name, Platform platform,
-                                     AttributionInfo attribution) {
+                                     AttributionInfo attribution, String referralCode) {
         var bySubject = userRepository.findByAuthProviderAndProviderSubject(provider, subject);
         if (bySubject.isPresent()) {
             var user = bySubject.get();
@@ -105,7 +109,9 @@ public class SocialLoginService {
                 return new ResolvedUser(user, null);
             }
         }
-        return createSocialUser(provider, subject, email, emailVerified, name, platform, attribution);
+        var created = createSocialUser(provider, subject, email, emailVerified, name, platform, attribution);
+        referralService.attachOnSignup(created.user(), referralCode);
+        return created;
     }
 
     private User linkProvider(User user, AuthProvider provider, String subject, boolean emailVerified) {

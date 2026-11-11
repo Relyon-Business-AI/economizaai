@@ -4,22 +4,29 @@ import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.exception.PaywallException;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.model.enums.SubscriptionTier;
+import com.relyon.economizaai.service.privacy.LogMasker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Single source of truth for FREE/PRO gating. Per CLAUDE.md, no controller or
  * service may inline {@code if (user.tier != PRO)} — every paywall decision
  * goes through here.
  *
- * <p>PRO allows everything. FREE is allowed only the features that aren't gated;
- * the typed limit helpers expose the numeric caps (watched markets, history
- * window, monthly receipts) so callers enforce them consistently.
+ * <p>PRO allows everything. For FREE the policy is PER FEATURE: a gated feature is
+ * PRO-only unless it is listed in {@code economizaai.subscription.free.open-features}
+ * (so paywalls can be switched on one at a time). Two features are METERED rather
+ * than on/off — watched markets and monthly receipts — FREE may use them up to a
+ * numeric cap ({@link #requireWithinLimit}). Notification DELIVERY has its own rule:
+ * transactional notifications are never held back ({@link #allowsDelivery}).
  *
  * <p><strong>Enforcement is OFF by default</strong>
  * ({@code economizaai.subscription.enforce=false}). While off, every call here
@@ -34,37 +41,84 @@ public class SubscriptionGateService {
 
     private final CollaborativeProperties properties;
 
-    /** True when the user's tier grants the feature. Enforcement off or PRO → always true. */
+    /**
+     * Notifications the user must receive whatever their plan: the outcome of something they
+     * did (a receipt finished/failed/was recovered), household membership changes, and
+     * account/security notices. Only promotional types fall under the PRO delivery gate.
+     */
+    private static final Set<NotificationType> TRANSACTIONAL_TYPES = EnumSet.of(
+            NotificationType.RECEIPT_READY, NotificationType.RECEIPT_FAILED, NotificationType.RECEIPT_RECOVERED,
+            NotificationType.HOUSEHOLD_MEMBER_JOINED, NotificationType.HOUSEHOLD_MEMBER_LEFT);
+
+    /**
+     * True when the user may use the feature without limit. Enforcement off or PRO → always
+     * true; FREE → only the features explicitly left open by config.
+     */
     public boolean allows(User user, Feature feature) {
         if (unlimited(user)) return true;
-        // FREE users are blocked from every PRO-gated feature. The numeric
-        // caps (watched markets, receipts, history) are enforced by the
-        // dedicated limit helpers below, not by allows().
-        return false;
+        return free().getOpenFeatures().contains(feature);
     }
 
     /** Throws {@link PaywallException} (→ 402) when the user can't use the feature. */
     public void require(User user, Feature feature) {
         if (!allows(user, feature)) {
             log.info("paywall.blocked user={} feature={} tier={}",
-                    user.getEmail(), feature, user.getSubscriptionTier());
+                    LogMasker.email(user.getEmail()), feature, user.getSubscriptionTier());
             throw new PaywallException(feature.name());
         }
     }
 
+    /**
+     * Gate for the METERED features: FREE may use them until {@code currentUsage} reaches the
+     * feature's cap; one more is a paywall (→ 402). No-op for PRO / enforcement off / a feature
+     * left open to FREE.
+     */
+    public void requireWithinLimit(User user, Feature feature, long currentUsage) {
+        var limit = limitFor(user, feature);
+        if (currentUsage >= limit) {
+            log.info("paywall.blocked user={} feature={} tier={} usage={} limit={}",
+                    LogMasker.email(user.getEmail()), feature, user.getSubscriptionTier(), currentUsage, limit);
+            throw new PaywallException(feature.name());
+        }
+    }
+
+    private int limitFor(User user, Feature feature) {
+        return switch (feature) {
+            case WATCHED_MARKETS_UNLIMITED -> watchedMarketLimit(user);
+            case RECEIPT_UPLOAD_UNLIMITED -> monthlyReceiptLimit(user);
+            case HISTORY_FULL_RANGE, PUSH_AND_EMAIL_DELIVERY, BASKET_OPTIMIZATION, CSV_EXPORT, PHOTO_EXTRACTION ->
+                    throw new IllegalArgumentException(feature + " is not a metered feature");
+        };
+    }
+
+    /**
+     * May this notification leave the inbox (push / e-mail)? Transactional ones always do —
+     * the receipt/household types, and organic SYSTEM notices (account, billing, consent),
+     * i.e. SYSTEM not sent by an admin campaign. Everything else is the PRO delivery feature.
+     */
+    public boolean allowsDelivery(User user, NotificationType type, boolean fromCampaign) {
+        if (TRANSACTIONAL_TYPES.contains(type) || (type == NotificationType.SYSTEM && !fromCampaign)) {
+            return true;
+        }
+        return allows(user, Feature.PUSH_AND_EMAIL_DELIVERY);
+    }
+
     /** Max pinned watched markets: FREE = config, PRO/enforcement-off = unlimited. */
     public int watchedMarketLimit(User user) {
-        return unlimited(user) ? Integer.MAX_VALUE : free().getWatchedMarkets();
+        return allows(user, Feature.WATCHED_MARKETS_UNLIMITED) ? Integer.MAX_VALUE : free().getWatchedMarkets();
     }
 
     /** FREE rolling history window in days; null for PRO/enforcement-off (unlimited). */
     public Integer freeHistoryWindowDays(User user) {
-        return unlimited(user) ? null : free().getHistoryDays();
+        return allows(user, Feature.HISTORY_FULL_RANGE) ? null : free().getHistoryDays();
     }
 
-    /** Max receipt submissions per calendar month: FREE = config, PRO/enforcement-off = unlimited. */
+    /**
+     * Max receipt submissions per calendar month: FREE = config, PRO/enforcement-off = unlimited.
+     * Callers count the receipts the user SUBMITTED — household-split copies are not usage.
+     */
     public int monthlyReceiptLimit(User user) {
-        return unlimited(user) ? Integer.MAX_VALUE : free().getMonthlyReceipts();
+        return allows(user, Feature.RECEIPT_UPLOAD_UNLIMITED) ? Integer.MAX_VALUE : free().getMonthlyReceipts();
     }
 
     /**

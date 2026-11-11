@@ -25,13 +25,23 @@ public record RegisterRequest(
         Platform platform,
         @Schema(description = "Optional marketing attribution read off the landing URL — utm params, click id, "
                 + "referrer. Forwarded by the web FE on the first signup; omit on app signups.")
-        AttributionInfo attribution
+        AttributionInfo attribution,
+        @Schema(description = "Optional referral code of the person who invited this user. Applied only when THIS "
+                + "call creates the account; silently ignored when invalid.", example = "ABC2345")
+        String referralCode
 ) {
+
+    /** Back-compat: signup without a referral code. */
+    public RegisterRequest(String name, String email, String password,
+                           String acceptedTermsVersion, String acceptedPrivacyVersion, Platform platform,
+                           AttributionInfo attribution) {
+        this(name, email, password, acceptedTermsVersion, acceptedPrivacyVersion, platform, attribution, null);
+    }
 
     /** Back-compat: signup without marketing attribution (app clients, tests). */
     public RegisterRequest(String name, String email, String password,
                            String acceptedTermsVersion, String acceptedPrivacyVersion, Platform platform) {
-        this(name, email, password, acceptedTermsVersion, acceptedPrivacyVersion, platform, null);
+        this(name, email, password, acceptedTermsVersion, acceptedPrivacyVersion, platform, null, null);
     }
 
     @AssertTrue(message = "{validation.legal.acceptance-required}")
