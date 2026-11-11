@@ -29,6 +29,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -406,6 +407,18 @@ public class PriceIndexService {
         }
         log.debug("best_markets.scope product={} scope=NATIONAL", productId);
         return rankChains(productId, limit, unlocated, observation -> true, sort);
+    }
+
+    /**
+     * Lowest recent in-store price per product, over the same observation window the best-markets
+     * ranking uses. Products without any recent observation are absent from the map.
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, BigDecimal> lowestRecentInStorePrices(Collection<UUID> productIds) {
+        if (productIds.isEmpty()) return Map.of();
+        return observationRepository.findLowestRecentInStorePrices(productIds, bestMarketsSince()).stream()
+                .collect(Collectors.toMap(PriceObservationRepository.ProductLowestPrice::getProductId,
+                        PriceObservationRepository.ProductLowestPrice::getLowestPrice));
     }
 
     /** Only the chains the viewer watches ("Mercados que sigo"); empty when they watch none. */

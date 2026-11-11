@@ -1,5 +1,13 @@
 # economizai — what's new
 
+## 2026-11-11 — "Ofertas pra você" mais rápido (mesmo resultado)
+
+- `GET /deals` fazia ~4 consultas POR produto que a casa já comprou (743 produtos numa casa grande ≈ 3 mil
+  consultas). Agora uma consulta só traz o menor preço recente de cada produto e pula, antes do ranking, os que
+  não têm NENHUM preço capaz de bater o último pago (a mediana de uma rede nunca fica abaixo desse mínimo —
+  resultado idêntico). Na casa medida, 743 → 198 produtos ranqueados. Log `deals.query done` ganhou
+  `skipped_no_cheaper=`. Sem mudança de contrato.
+
 ## 2026-11-11 — Previsão de consumo: regra de 3 compras, ícone por tipo e lista paginada
 
 - **Regra:** um produto só entra na previsão com compras em **3 dias diferentes** (era 2). Fallback: se
