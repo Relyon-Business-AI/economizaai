@@ -571,12 +571,18 @@ public class SefazIngestionService {
                 throw parseEx;
             }
             if (!experimental) {
-                // A verified state's parser failed on real HTML — the regression
-                // signature (portal changed its DANFE format). Record it either way
-                // (a burst alerts the admin with the HTML to fix the adapter), then
-                // let the LLM rescue the user's receipt from the same HTML.
-                stateCoverage.recordVerifiedParseFailure(fetched.uf(), fetched.chave(), fetched.sourceUrl(),
-                        parseEx.getMessageKey() + ":" + String.join(",", parseEx.getArguments()), fetched.html());
+                // Only a broken contract feeds the regression alert: the portal served
+                // THIS nota's page and the verified parser could not read it (a burst
+                // alerts the admin with the HTML to fix the adapter). Anything else is
+                // the portal not delivering the nota. Either way the LLM may still
+                // rescue the user's receipt from the same HTML.
+                if (isParserContractBreak(fetched, parseEx)) {
+                    stateCoverage.recordVerifiedParseFailure(fetched.uf(), fetched.chave(), fetched.sourceUrl(),
+                            parseEx.getMessageKey() + ":" + String.join(",", parseEx.getArguments()), fetched.html());
+                } else {
+                    stateCoverage.recordFailure(fetched.uf(), StateIngestionStrategy.VERIFIED_ADAPTER,
+                            StateIngestionOutcome.FETCH_FAILED, qrHost, "not-the-nota-page: " + describe(parseEx));
+                }
                 var llmRescued = rescueParseViaLlm(fetched, parseEx, userId, spendPolicy);
                 if (llmRescued != null) return llmRescued;
                 throw parseEx;
@@ -614,6 +620,17 @@ public class SefazIngestionService {
                     "QR_PORTAL (parse): " + describe(parseEx) + "; INFOSIMPLES: " + infosimplesNote,
                     fetched.html(), false, false, infosimplesOutcome);
         }
+    }
+
+    /**
+     * A parser regression is decided on positive evidence, not on the failure alone: the
+     * response must be this nota's own page (it prints the chave) and the parser must NOT
+     * have understood it. A recognized rejection page (cStat) was understood; an outage
+     * stub or generic error page carries no chave — neither says the layout changed.
+     */
+    private static boolean isParserContractBreak(FetchedDocument fetched, ReceiptParseException parseEx) {
+        return !(parseEx instanceof SefazPortalRejectionException)
+                && NotaPageEvidence.carriesChave(fetched.html(), fetched.chave());
     }
 
     /**
