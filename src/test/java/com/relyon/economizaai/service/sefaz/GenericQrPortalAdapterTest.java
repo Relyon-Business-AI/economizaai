@@ -21,6 +21,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.ArrayList;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -315,4 +316,48 @@ class GenericQrPortalAdapterTest {
 
         assertThrows(ExperimentalPortalFetchException.class, () -> adapter.fetchHtml(QR_URL_BA));
     }
+
+    /** Same-scheme hops used to be followed inside the HTTP client, out of the allowlist's sight. */
+    @Test
+    void httpGet_rejectsSameSchemeRedirectOffGovBr() {
+        var requested = new ArrayList<String>();
+        var adapter = adapterWithExchange(url -> {
+            requested.add(url);
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .header(HttpHeaders.LOCATION, "http://internal.example.com/admin").body("stub");
+        });
+
+        assertThrows(InvalidQrPayloadException.class,
+                () -> adapter.fetchHtml("http://nfce.sefaz.pe.gov.br/nfce/consulta?p=" + CHAVE_PE_HTTP + "|3|1"));
+        assertEquals(1, requested.size(), "the off-allowlist target must never be requested");
+    }
+
+    @Test
+    void httpGet_followsRelativeRedirectOnTheSameAllowedHost() {
+        var requested = new ArrayList<String>();
+        var adapter = adapterWithExchange(url -> {
+            requested.add(url);
+            return url.endsWith("/danfe")
+                    ? ResponseEntity.ok("<html>danfe</html>")
+                    : ResponseEntity.status(HttpStatus.FOUND).header(HttpHeaders.LOCATION, "/nfce/danfe").body("");
+        });
+
+        var body = adapter.fetchHtml("http://nfce.sefaz.pe.gov.br/nfce/consulta?p=" + CHAVE_PE_HTTP + "|3|1");
+
+        assertEquals("<html>danfe</html>", body);
+        assertEquals("http://nfce.sefaz.pe.gov.br/nfce/danfe", requested.get(1));
+    }
+
+    @Test
+    void httpsOnlyMode_rejectsPlainHttpQrAndPlainHttpRedirect() {
+        var adapter = adapterWithExchange(url -> ResponseEntity.status(HttpStatus.FOUND)
+                .header(HttpHeaders.LOCATION, "http://nfe.sefaz.ba.gov.br/plain").body(""));
+        adapter.setAllowPlainHttp(false);
+
+        assertThrows(InvalidQrPayloadException.class,
+                () -> adapter.fetchHtml("http://nfce.sefaz.pe.gov.br/nfce/consulta?p=" + CHAVE_PE_HTTP + "|3|1"));
+        assertThrows(InvalidQrPayloadException.class, () -> adapter.fetchHtml(QR_URL_BA));
+    }
+
+    private static final String CHAVE_PE_HTTP = "26260942591651264205650010000777891671062850";
 }

@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.awt.image.BufferedImage;
 import java.util.List;
 import java.util.Map;
 
@@ -38,7 +39,11 @@ public class QrCodePhotoDecoder {
     private final PhotoUploadValidator photoUploadValidator;
 
     public String decode(MultipartFile file) {
-        var image = photoUploadValidator.readImage(file);
+        return photoUploadValidator.withDecodedImage(file, this::decodeImage);
+    }
+
+    /** QR decode of an already-decoded upload — the caller holds the decode permit. */
+    public String decodeImage(BufferedImage image) {
         var source = new BufferedImageLuminanceSource(image);
         try {
             var result = decodeWithBothBinarizers(source);

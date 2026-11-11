@@ -6,6 +6,7 @@ import com.relyon.economizaai.exception.InvalidProfilePictureException;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.privacy.LogMasker;
+import com.relyon.economizaai.service.scan.ImageDecodeGate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -53,6 +54,7 @@ public class ProfilePictureService {
 
     private final ProfilePictureStorage storage;
     private final UserRepository userRepository;
+    private final ImageDecodeGate imageDecodeGate;
 
     // Hot cache of rendered pictures keyed by ETag (storage key for uploads, a name/email
     // hash for generated initials). Every Home/Settings/Casa focus used to re-fetch the
@@ -80,7 +82,11 @@ public class ProfilePictureService {
         return "\"initials-" + Integer.toHexString(seed.hashCode()) + "\"";
     }
 
-    @Transactional
+    /**
+     * Deliberately NOT transactional: the decode may wait for a permit and the store is an
+     * outbound call to the object storage — neither may pin a database connection. The
+     * only write is the short {@code save} at the end.
+     */
     public void upload(User user, MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new InvalidProfilePictureException("profile.picture.empty");
@@ -176,6 +182,10 @@ public class ProfilePictureService {
             return new ProcessedImage(original, contentType);
         }
         assertDeclaredDimensionsSane(original);
+        return imageDecodeGate.withPermit(() -> downscale(original, contentType));
+    }
+
+    private ProcessedImage downscale(byte[] original, String contentType) {
         try {
             var source = ImageIO.read(new ByteArrayInputStream(original));
             if (source == null) {

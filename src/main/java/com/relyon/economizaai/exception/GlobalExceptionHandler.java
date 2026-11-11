@@ -97,6 +97,11 @@ public class GlobalExceptionHandler {
         return respond(ex, HttpStatus.CONFLICT, "Set-password attempt on account that already has one");
     }
 
+    @ExceptionHandler(EmailChangeConflictException.class)
+    public ResponseEntity<ErrorResponse> handleEmailChangeConflict(EmailChangeConflictException ex) {
+        return respond(ex, HttpStatus.CONFLICT, "E-mail change refused");
+    }
+
     @ExceptionHandler(BillingNotConfiguredException.class)
     public ResponseEntity<ErrorResponse> handleBillingNotConfigured(BillingNotConfiguredException ex) {
         return respond(ex, HttpStatus.SERVICE_UNAVAILABLE, "Checkout requested but billing provider not configured");
@@ -118,7 +123,7 @@ public class GlobalExceptionHandler {
         return respond(ex, HttpStatus.NOT_FOUND, "Entity not found");
     }
 
-    @ExceptionHandler({InvalidInviteCodeException.class, InvalidQrPayloadException.class, InvalidChaveException.class, UnsupportedStateException.class, ManualChaveUnsupportedException.class, PrefetchedUnsupportedException.class, ReceiptParseException.class, ReceiptNotEditableException.class, ReceiptHasUnpricedItemsException.class, ReceiptPhotoIncompleteException.class, InvalidIssuedAtException.class, AlreadyInHouseholdException.class, InvalidLegalVersionException.class, InvalidProfilePictureException.class, InvalidAuthTokenException.class, InvalidShoppingListItemException.class, InvalidProductMergeException.class, InvalidCategoryMigrationException.class, InvalidCategoryTargetException.class, InvalidCategoryNestingException.class, InvalidNotificationRuleException.class, HouseholdSelfRemovalException.class, InvalidCnpjException.class, InvalidPhoneNumberException.class, InvalidPhoneVerificationException.class, InvalidNotificationEventException.class, InvalidConsentRequestException.class, InvalidReceiptPhotoException.class, AdminUserDeletionException.class, InvalidExportFormatException.class, InvalidItemPriceException.class, InvalidGarimpoWatchException.class, ImportFileUnreadableException.class, ReceiptRetryUnavailableException.class, InvalidCampaignStateException.class, InvalidCampaignScheduleException.class, InvalidCampaignRecipientsException.class, BuiltInAudienceException.class, InvalidMerchantSegmentException.class})
+    @ExceptionHandler({InvalidInviteCodeException.class, InvalidQrPayloadException.class, InvalidChaveException.class, UnsupportedStateException.class, ManualChaveUnsupportedException.class, PrefetchedUnsupportedException.class, ReceiptParseException.class, ReceiptNotEditableException.class, ReceiptHasUnpricedItemsException.class, ReceiptPhotoIncompleteException.class, InvalidIssuedAtException.class, AlreadyInHouseholdException.class, InvalidLegalVersionException.class, InvalidProfilePictureException.class, InvalidAuthTokenException.class, InvalidShoppingListItemException.class, InvalidProductMergeException.class, InvalidCategoryMigrationException.class, InvalidCategoryTargetException.class, InvalidCategoryNestingException.class, InvalidNotificationRuleException.class, HouseholdSelfRemovalException.class, InvalidCnpjException.class, InvalidPhoneNumberException.class, InvalidPhoneVerificationException.class, InvalidNotificationEventException.class, InvalidConsentRequestException.class, InvalidReceiptPhotoException.class, AdminUserDeletionException.class, InvalidExportFormatException.class, InvalidItemPriceException.class, InvalidGarimpoWatchException.class, ImportFileUnreadableException.class, ReceiptRetryUnavailableException.class, InvalidCampaignStateException.class, InvalidCampaignScheduleException.class, InvalidCampaignRecipientsException.class, BuiltInAudienceException.class, InvalidMerchantSegmentException.class, InvalidEmailChangeCodeException.class})
     public ResponseEntity<ErrorResponse> handleBadRequest(DomainException ex) {
         return respond(ex, HttpStatus.BAD_REQUEST, "Bad request");
     }
@@ -195,6 +200,11 @@ public class GlobalExceptionHandler {
         return respond(ex, HttpStatus.UNPROCESSABLE_CONTENT, "Item correction could not identify the product");
     }
 
+    @ExceptionHandler(ImageDecodeBusyException.class)
+    public ResponseEntity<ErrorResponse> handleImageDecodeBusy(ImageDecodeBusyException ex) {
+        return respond(ex, HttpStatus.SERVICE_UNAVAILABLE, "Image decode refused: all decode permits busy");
+    }
+
     @ExceptionHandler(OcrUnavailableException.class)
     public ResponseEntity<ErrorResponse> handleOcrUnavailable(OcrUnavailableException ex) {
         return respond(ex, HttpStatus.SERVICE_UNAVAILABLE, "OCR engine not available on this host");
@@ -248,6 +258,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MerchantClaimAlreadyOpenException.class)
     public ResponseEntity<ErrorResponse> handleMerchantClaimAlreadyOpen(MerchantClaimAlreadyOpenException ex) {
         return respond(ex, HttpStatus.CONFLICT, "Merchant claim already open for this chain");
+    }
+
+    @ExceptionHandler(MerchantClaimCooldownException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantClaimCooldown(MerchantClaimCooldownException ex) {
+        return respond(ex, HttpStatus.TOO_MANY_REQUESTS, "Merchant claim refused: cool-down after a closed claim");
     }
 
     @ExceptionHandler(MerchantChainAlreadyGrantedException.class)

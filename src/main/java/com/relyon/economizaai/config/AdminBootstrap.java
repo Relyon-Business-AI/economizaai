@@ -2,6 +2,8 @@ package com.relyon.economizaai.config;
 
 import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.repository.UserRepository;
+import com.relyon.economizaai.service.auth.EmailNormalizer;
+import com.relyon.economizaai.service.privacy.LogMasker;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -21,8 +23,10 @@ import java.util.List;
  * only writes when the role actually changes. Survives DB rebuilds: re-promotes
  * the configured emails as soon as those accounts exist again.
  *
- * <p>The account must already exist (registered via the app). An unknown email
- * is logged and re-checked on the next boot — no account is created here.
+ * <p>The account must already exist (registered via the app) AND have its e-mail
+ * verified: the configured address only proves who the admin is once someone has shown
+ * they control that mailbox. An unknown or unverified account is logged and re-checked
+ * on the next boot — no account is created here.
  */
 @Slf4j
 @Component
@@ -34,10 +38,9 @@ public class AdminBootstrap {
     public AdminBootstrap(UserRepository userRepository,
                           @Value("${economizaai.admin.emails:}") String adminEmails) {
         this.userRepository = userRepository;
-        // Match the email exactly as stored — registration persists it as-typed
-        // (no normalization), and findByEmail is an exact lookup.
+        // Same canonical form the accounts are stored in (trim + lower case).
         this.adminEmails = Arrays.stream(adminEmails.split(","))
-                .map(String::trim)
+                .map(EmailNormalizer::normalize)
                 .filter(email -> !email.isEmpty())
                 .distinct()
                 .toList();
@@ -51,14 +54,20 @@ public class AdminBootstrap {
         for (var email : adminEmails) {
             var user = userRepository.findByEmail(email).orElse(null);
             if (user == null) {
-                log.warn("admin.bootstrap.skip email={} reason=no_such_account (will retry next boot)", email);
+                log.warn("admin.bootstrap.skip email={} reason=no_such_account (will retry next boot)",
+                        LogMasker.email(email));
                 continue;
             }
             if (user.getRole() == Role.ADMIN) continue;
+            if (!user.isEmailVerified()) {
+                log.warn("admin.bootstrap.skip email={} reason=email_not_verified (will retry next boot)",
+                        LogMasker.email(email));
+                continue;
+            }
             user.setRole(Role.ADMIN);
             userRepository.save(user);
             promoted++;
-            log.info("admin.bootstrap.promoted email={}", email);
+            log.info("admin.bootstrap.promoted email={}", LogMasker.email(email));
         }
         log.info("admin.bootstrap done configured={} promoted={}", adminEmails.size(), promoted);
     }

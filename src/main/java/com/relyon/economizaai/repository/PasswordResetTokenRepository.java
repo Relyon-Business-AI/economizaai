@@ -20,6 +20,9 @@ public interface PasswordResetTokenRepository extends JpaRepository<PasswordRese
     // the typed code would never find the row to increment on a wrong guess).
     Optional<PasswordResetToken> findFirstByUserAndConsumedAtIsNullOrderByCreatedAtDesc(User user);
 
+    /** Codes issued to the account since {@code since} — the per-account request ceiling. */
+    long countByUserAndCreatedAtAfter(User user, LocalDateTime since);
+
     // Invalidate any still-open codes for a user before issuing a new one, so only the
     // most recent code works (standard OTP hygiene — a leaked older code is dead).
     @Modifying

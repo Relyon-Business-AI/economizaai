@@ -90,15 +90,14 @@ class AuthControllerTest {
                 null,
                 LocalDateTime.now(),
                 AuthProvider.LOCAL,
-                true
-        );
+                true, null);
     }
 
     @Test
     void register_shouldReturn201WithToken() throws Exception {
         var request = new RegisterRequest("John", "john@test.com", "password123", "1.0", "1.0", null);
         var promoValidUntil = LocalDateTime.now().plusMonths(3);
-        var response = new AuthResponse("jwt-token", "refresh-token", sampleUserResponse(), true, promoValidUntil);
+        var response = new AuthResponse("jwt-token", "refresh-token", sampleUserResponse(), true, promoValidUntil, true);
         when(userService.register(any(RegisterRequest.class))).thenReturn(response);
 
         mockMvc.perform(post("/api/v1/auth/register")
@@ -109,7 +108,8 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.user.name").value("John"))
                 .andExpect(jsonPath("$.user.subscriptionTier").value("FREE"))
                 .andExpect(jsonPath("$.signupPromoGranted").value(true))
-                .andExpect(jsonPath("$.signupPromoValidUntil").exists());
+                .andExpect(jsonPath("$.signupPromoValidUntil").exists())
+                .andExpect(jsonPath("$.newAccount").value(true));
     }
 
     @Test
@@ -144,7 +144,8 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").value("jwt-token"));
+                .andExpect(jsonPath("$.token").value("jwt-token"))
+                .andExpect(jsonPath("$.newAccount").value(false));
     }
 
     @Test

@@ -128,6 +128,7 @@ class SocialLoginServiceTest {
         verify(subscriptionService, never()).grantSignupPromoIfEnabled(any(User.class));
         assertEquals(false, response.signupPromoGranted());
         assertNull(response.signupPromoValidUntil());
+        assertTrue(response.newAccount());
     }
 
     @Test
@@ -148,6 +149,7 @@ class SocialLoginServiceTest {
         var response = socialLoginService.loginWithGoogle(new GoogleLoginRequest("id-token", null));
 
         assertEquals("jwt-token", response.token());
+        assertEquals(false, response.newAccount());
         verify(userRepository, never()).save(any(User.class));
         verify(householdService, never()).createSoloHousehold();
         verify(notificationRuleService, never()).ensureDefaults(any(User.class));
@@ -443,5 +445,22 @@ class SocialLoginServiceTest {
         socialLoginService.loginWithGoogle(new GoogleLoginRequest("id-token", null, null, "ABC2345"));
 
         verifyNoInteractions(referralService);
+    }
+
+    @Test
+    void loginWithGoogle_newUser_storesProviderEmailNormalized() {
+        when(googleTokenVerifier.verify("id-token"))
+                .thenReturn(new GoogleTokenVerifier.GoogleClaims("sub-9", " Maria@Example.COM", true, "Maria"));
+        when(userRepository.findByAuthProviderAndProviderSubject(AuthProvider.GOOGLE, "sub-9"))
+                .thenReturn(Optional.empty());
+        when(userRepository.findByEmail("maria@example.com")).thenReturn(Optional.empty());
+        when(householdService.createSoloHousehold())
+                .thenReturn(Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build());
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        stubTokenIssue();
+
+        var response = socialLoginService.loginWithGoogle(new GoogleLoginRequest("id-token", null));
+
+        assertEquals("maria@example.com", response.user().email());
     }
 }

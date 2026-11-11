@@ -45,6 +45,8 @@ public class CollaborativeProperties {
         private int claimCodeTtlHours = 24;
         /** Wrong-code budget before the claim must be re-submitted. */
         private int claimCodeMaxAttempts = 5;
+        /** Wait before the same user may claim the same chain again after a closed (failed/rejected) claim. */
+        private int claimCooldownHours = 24;
         /** Row cap per promo import file/batch. */
         private int importMaxRows = 500;
 
@@ -56,6 +58,8 @@ public class CollaborativeProperties {
         public void setClaimCodeTtlHours(int v) { this.claimCodeTtlHours = v; }
         public int getClaimCodeMaxAttempts() { return claimCodeMaxAttempts; }
         public void setClaimCodeMaxAttempts(int v) { this.claimCodeMaxAttempts = v; }
+        public int getClaimCooldownHours() { return claimCooldownHours; }
+        public void setClaimCooldownHours(int v) { this.claimCooldownHours = v; }
         public int getImportMaxRows() { return importMaxRows; }
         public void setImportMaxRows(int v) { this.importMaxRows = v; }
     }

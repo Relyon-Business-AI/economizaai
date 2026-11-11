@@ -58,6 +58,7 @@ import com.relyon.economizaai.repository.UserWatchedMarketRepository;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.security.ratelimit.LoginAttemptGuard;
 import com.relyon.economizaai.model.enums.Platform;
+import com.relyon.economizaai.service.AccountStorageCleaner.StoredObjects;
 import com.relyon.economizaai.service.auth.EmailVerificationService;
 import com.relyon.economizaai.service.auth.LoginActivityRecorder;
 import com.relyon.economizaai.service.auth.RefreshTokenService;
@@ -200,6 +201,9 @@ class UserServiceTest {
 
     @Mock
     private AccountDeletionFeedbackRepository accountDeletionFeedbackRepository;
+
+    @Mock
+    private AccountStorageCleaner accountStorageCleaner;
 
     @InjectMocks
     private UserService userService;
@@ -541,6 +545,20 @@ class UserServiceTest {
     }
 
     @Test
+    void deleteAccount_schedulesRemovalOfProfilePictureAndReceiptPhotos() {
+        var user = buildUser();
+        user.setProfilePictureKey("pic-key");
+        var photoReceiptId = UUID.randomUUID();
+        when(receiptRepository.findPhotoReceiptIdsByUserId(user.getId())).thenReturn(List.of(photoReceiptId));
+        when(userRepository.countByHouseholdId(user.getHousehold().getId())).thenReturn(0L);
+
+        userService.deleteAccount(user);
+
+        verify(accountStorageCleaner).deleteAfterCommit(new StoredObjects("pic-key", List.of(photoReceiptId)));
+        verify(userRepository).delete(user);
+    }
+
+    @Test
     void exportData_returnsAllPersonalDataSectionsScopedToUser() {
         var user = buildUser();
         var householdId = user.getHousehold().getId();
@@ -672,5 +690,54 @@ class UserServiceTest {
         var order = inOrder(subscriptionService, userRepository);
         order.verify(subscriptionService).warnIfDeletingPaidSubscriber(user);
         order.verify(userRepository).delete(user);
+    }
+
+    @Test
+    void register_storesEmailTrimmedAndLowerCased() {
+        var request = new RegisterRequest("Maria", "  Maria.Silva@Test.COM ", "password123", "1.0", "1.0", null);
+        var household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
+        when(userRepository.existsByEmail("maria.silva@test.com")).thenReturn(false);
+        when(householdService.createSoloHousehold()).thenReturn(household);
+        when(passwordEncoder.encode("password123")).thenReturn("encoded");
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(jwtService.generateToken(any(User.class))).thenReturn("jwt-token");
+
+        var response = userService.register(request);
+
+        assertEquals("maria.silva@test.com", response.user().email());
+    }
+
+    @Test
+    void register_rejectsEmailAlreadyRegisteredWithOtherCasing() {
+        var request = new RegisterRequest("Maria", "MARIA@test.com", "password123", "1.0", "1.0", null);
+        when(userRepository.existsByEmail("maria@test.com")).thenReturn(true);
+
+        assertThrows(EmailAlreadyExistsException.class, () -> userService.register(request));
+    }
+
+    @Test
+    void register_flagsNewAccount() {
+        var request = new RegisterRequest("John", "john@test.com", "password123", "1.0", "1.0", null);
+        var household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
+        when(householdService.createSoloHousehold()).thenReturn(household);
+        when(passwordEncoder.encode("password123")).thenReturn("encoded");
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(jwtService.generateToken(any(User.class))).thenReturn("jwt-token");
+
+        assertEquals(true, userService.register(request).newAccount());
+    }
+
+    @Test
+    void login_looksUpNormalizedEmailAndIsNeverNewAccount() {
+        var request = new LoginRequest(" John@Test.com", "password123", null);
+        var user = buildUser();
+        when(userRepository.findByEmail("john@test.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password123", "encoded")).thenReturn(true);
+        when(jwtService.generateToken(user)).thenReturn("jwt-token");
+
+        var response = userService.login(request);
+
+        assertEquals(false, response.newAccount());
+        verify(loginAttemptGuard).recordSuccess("john@test.com");
     }
 }

@@ -217,4 +217,36 @@ class AuthEmailSenderTest {
         assertDoesNotThrow(() -> sender.sendPasswordResetCode(RECIPIENT, PT, RESET_CODE, 60));
         verify(mailSender).send(any(MimeMessage.class));
     }
+
+    @Test
+    void sendsEmailChangeCodeToTheNewAddress() throws Exception {
+        var mailSender = mailSenderReturningRealMime();
+        var sender = new AuthEmailSender(Optional.of(mailSender), messageService(), Runnable::run, FROM, "smtp-user", true);
+
+        sender.sendEmailChangeCode(RECIPIENT, PT, VERIFY_CODE, 30);
+
+        var captor = ArgumentCaptor.forClass(MimeMessage.class);
+        verify(mailSender).send(captor.capture());
+        var sent = captor.getValue();
+        assertEquals("Confirme seu novo e-mail — Economiza AI", sent.getSubject());
+        var body = bodyOf(sent);
+        assertTrue(body.contains(VERIFY_CODE), "rendered email must contain the code");
+        assertTrue(body.contains("30 minutos"), "rendered email must state the TTL");
+    }
+
+    @Test
+    void sendsEmailChangedNoticeToTheOldAddressWithMaskedNewAddress() throws Exception {
+        var mailSender = mailSenderReturningRealMime();
+        var sender = new AuthEmailSender(Optional.of(mailSender), messageService(), Runnable::run, FROM, "smtp-user", true);
+
+        sender.sendEmailChangedNotice(RECIPIENT, PT, "n***@economizaai.app");
+
+        var captor = ArgumentCaptor.forClass(MimeMessage.class);
+        verify(mailSender).send(captor.capture());
+        var sent = captor.getValue();
+        assertEquals("O e-mail da sua conta foi alterado — Economiza AI", sent.getSubject());
+        var body = bodyOf(sent);
+        assertTrue(body.contains("n***@economizaai.app"), "notice names the (masked) new address");
+        assertTrue(body.contains("contato@economizaai.app"), "notice points to support");
+    }
 }

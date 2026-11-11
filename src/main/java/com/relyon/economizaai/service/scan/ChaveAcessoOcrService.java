@@ -54,11 +54,19 @@ public class ChaveAcessoOcrService {
     private final OcrEngine ocrEngine;
     private final QrCodePhotoDecoder qrCodePhotoDecoder;
 
+    /**
+     * The upload is decoded ONCE, under a single decode permit, and that same image feeds
+     * the QR attempt and every OCR pass.
+     */
     public ChaveExtractionResponse extractChave(MultipartFile file) {
+        return photoUploadValidator.withDecodedImage(file, this::extractChaveFromImage);
+    }
+
+    private ChaveExtractionResponse extractChaveFromImage(BufferedImage image) {
         // QR na foto primeiro: o payload ASSINADO funciona em qualquer estado,
         // enquanto a chave pura (OCR) só onde há consulta pública por chave.
         try {
-            var qrPayload = qrCodePhotoDecoder.decode(file);
+            var qrPayload = qrCodePhotoDecoder.decodeImage(image);
             var chave = ChaveAcessoParser.extractChave(qrPayload);
             log.info("chave_ocr.qr_in_photo chave={} uf={}", LogMasker.chave(chave), ChaveAcessoParser.extractUf(chave));
             return new ChaveExtractionResponse(chave, ChaveAcessoParser.extractUf(chave), qrPayload);
@@ -68,7 +76,6 @@ public class ChaveAcessoOcrService {
         if (!ocrEngine.isAvailable()) {
             throw new OcrUnavailableException();
         }
-        var image = photoUploadValidator.readImage(file);
         // Passe leve primeiro (barato, pega a maioria). Só se falhar roda o passe
         // forte, mais caro — ele não regride o leve (roda depois) e o gate
         // DV+UF+modelo em findValidChave garante que nenhum dos dois devolva lixo.

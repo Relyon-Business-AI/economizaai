@@ -12,6 +12,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -135,11 +136,24 @@ class StoreReviewPromptServiceTest {
     @Test
     void recordPromptedIncrementsCountAndStampsTime() {
         user.setStoreReviewPromptCount(1);
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
 
         service.recordPrompted(user);
 
         assertEquals(2, user.getStoreReviewPromptCount());
         assertNotNull(user.getStoreReviewLastPromptedAt());
         verify(userRepository).save(user);
+    }
+
+    @Test
+    void recordPromptedCountsOnTheFreshRowNotTheStaleRequestPrincipal() {
+        var stored = User.builder().id(user.getId()).email(user.getEmail()).storeReviewPromptCount(2).build();
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(stored));
+
+        service.recordPrompted(user);   // the principal still believes the count is 0
+
+        assertEquals(3, stored.getStoreReviewPromptCount());
+        verify(userRepository).save(stored);
+        verify(userRepository, never()).save(user);
     }
 }
