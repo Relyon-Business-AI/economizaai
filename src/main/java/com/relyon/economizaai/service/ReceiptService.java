@@ -866,10 +866,24 @@ public class ReceiptService {
      * index → market registry → notifications → savings). Returns the receipt plus
      * the personal promos detected for this purchase.
      */
-    @Transactional
     public ConfirmReceiptResponse confirm(User user, UUID receiptId, ConfirmReceiptRequest request) {
         MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
         log.info("confirm started");
+        try {
+            return transactionTemplate.execute(txStatus -> confirmInTransaction(user, receiptId, request));
+        } catch (DataIntegrityViolationException lostCreationRace) {
+            // Two households confirming the same first-seen EAN/description at the same moment both
+            // try to create the product/alias; the loser's transaction is rolled back whole. The
+            // retry re-reads, finds the row the winner committed and links to it.
+            log.warn("confirm.retry reason=unique_constraint_race");
+            return transactionTemplate.execute(txStatus -> confirmInTransaction(user, receiptId, request));
+        }
+    }
+
+    private ConfirmReceiptResponse confirmInTransaction(User user, UUID receiptId, ConfirmReceiptRequest request) {
+        // Row lock first: a double tap / client retry / the auto-confirm sweeper waits here and
+        // then sees CONFIRMED, instead of both passing the pending check and contributing twice.
+        receiptRepository.findByIdForUpdate(receiptId);
         var receipt = loadOwned(user, receiptId);
         requirePending(receipt);
         applyItemExclusions(receipt, request);
@@ -924,7 +938,7 @@ public class ReceiptService {
      */
     @Transactional
     public void confirmStale(UUID receiptId) {
-        var receipt = receiptRepository.findById(receiptId).orElse(null);
+        var receipt = receiptRepository.findByIdForUpdate(receiptId).orElse(null);
         if (receipt == null || receipt.getStatus() != ReceiptStatus.PENDING_CONFIRMATION) {
             return;
         }
@@ -1145,11 +1159,12 @@ public class ReceiptService {
     /**
      * Confirm several of the household's receipts in one call (bulk "save definitively"
      * on the import screen). Each goes through the same confirm as {@link #confirm} with
-     * default options; ids not owned / not confirmable are skipped. Returns how many were
-     * actually confirmed.
+     * default options, in its own transaction; ids not owned / not confirmable are skipped.
+     * Returns how many were actually confirmed.
      */
-    @Transactional
     public int confirmBatch(User user, List<UUID> receiptIds) {
+        // Deliberately NOT @Transactional: each confirm commits (or rolls back) on its own, so
+        // one failing nota is really skipped instead of poisoning the whole batch at commit.
         var confirmed = 0;
         for (var receiptId : receiptIds) {
             try {

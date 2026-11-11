@@ -31,7 +31,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
-import static com.relyon.economizaai.config.AsyncConfig.AI_SWEEP_EXECUTOR;
+import static com.relyon.economizaai.config.AsyncConfig.AI_CATEGORIZATION_EXECUTOR;
 
 /**
  * A camada FINAL do cascade de categorização do scan: assim que a nota fica
@@ -69,7 +69,7 @@ public class ReceiptAiCategorySuggestionService {
     }
 
     /** Entrada async (despachada pós-commit da ingestão). Nunca propaga falha — é best-effort. */
-    @Async(AI_SWEEP_EXECUTOR)
+    @Async(AI_CATEGORIZATION_EXECUTOR)
     public void suggestForReceiptAsync(UUID receiptId) {
         try {
             suggestForReceipt(receiptId);

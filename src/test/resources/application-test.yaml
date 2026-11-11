@@ -13,6 +13,11 @@ spring:
   flyway:
     enabled: false
 
+economizaai:
+  startup-backfills:
+    # Same-thread run at startup so no background writer races the tests' own data.
+    background: false
+
 jwt:
   secret: test-secret-key-must-be-at-least-256-bits-long-for-hs256-signing-algorithm
   expiration: 3600000

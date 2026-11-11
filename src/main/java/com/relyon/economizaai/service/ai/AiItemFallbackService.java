@@ -26,7 +26,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import static com.relyon.economizaai.config.AsyncConfig.AI_SWEEP_EXECUTOR;
+import static com.relyon.economizaai.config.AsyncConfig.AI_CATEGORIZATION_EXECUTOR;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -80,7 +80,7 @@ public class AiItemFallbackService {
      * The spend is attributed to {@code userId} (per-user daily cap + ledger).
      * No-op when AI is disabled.
      */
-    @Async(AI_SWEEP_EXECUTOR)
+    @Async(AI_CATEGORIZATION_EXECUTOR)
     public void applyFallback(UUID receiptId, UUID userId) {
         if (!aiGateway.isEnabled()) return;
         runReceiptFallback(receiptId, userId);

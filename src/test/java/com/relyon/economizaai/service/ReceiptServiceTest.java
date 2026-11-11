@@ -94,6 +94,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -1089,7 +1090,7 @@ class ReceiptServiceTest {
     void confirmStale_autoConfirmsPendingReceipt() {
         var user = buildUser();
         var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
-        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receiptRepository.findByIdForUpdate(receipt.getId())).thenReturn(Optional.of(receipt));
         when(receiptRepository.save(receipt)).thenReturn(receipt);
         when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
 
@@ -1131,10 +1132,90 @@ class ReceiptServiceTest {
     }
 
     @Test
+    void confirm_takesTheRowLockBeforeCheckingTheStatus() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receiptRepository.save(receipt)).thenReturn(receipt);
+        when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
+
+        receiptService.confirm(user, receipt.getId(), null);
+
+        var order = inOrder(receiptRepository);
+        order.verify(receiptRepository).findByIdForUpdate(receipt.getId());
+        order.verify(receiptRepository).findByIdWithItemsAndProducts(receipt.getId());
+    }
+
+    @Test
+    void confirm_alreadyConfirmedByAnotherRequest_reportsNotEditableAndContributesNothing() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.CONFIRMED);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        assertThrows(ReceiptNotEditableException.class, () -> receiptService.confirm(user, receipt.getId(), null));
+
+        verify(priceIndexService, never()).recordContributions(any());
+    }
+
+    @Test
+    void confirm_uniqueConstraintRaceOnProductCreation_retriesOnceAndSucceeds() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenAnswer(invocation -> {
+            receipt.setStatus(ReceiptStatus.PENDING_CONFIRMATION); // the lost attempt was rolled back
+            return Optional.of(receipt);
+        });
+        when(receiptRepository.save(receipt)).thenReturn(receipt);
+        when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
+        when(canonicalizationService.canonicalize(receipt))
+                .thenThrow(new DataIntegrityViolationException("duplicate key products.ean"))
+                .thenReturn(null);
+
+        var response = receiptService.confirm(user, receipt.getId(), null);
+
+        assertEquals(ReceiptStatus.CONFIRMED, response.receipt().status());
+        verify(canonicalizationService, times(2)).canonicalize(receipt);
+        verify(priceIndexService, times(1)).recordContributions(receipt);
+    }
+
+    @Test
+    void confirm_uniqueConstraintFailsTwice_propagatesAfterASingleRetry() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenAnswer(invocation -> {
+            receipt.setStatus(ReceiptStatus.PENDING_CONFIRMATION);
+            return Optional.of(receipt);
+        });
+        when(canonicalizationService.canonicalize(receipt))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"));
+
+        assertThrows(DataIntegrityViolationException.class, () -> receiptService.confirm(user, receipt.getId(), null));
+
+        verify(canonicalizationService, times(2)).canonicalize(receipt);
+    }
+
+    @Test
+    void confirmBatch_runsEachReceiptInItsOwnTransactionAndSkipsTheFailingOne() {
+        var user = buildUser();
+        var failing = persistedReceipt(user, ReceiptStatus.CONFIRMED); // not confirmable
+        var healthy = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        when(receiptRepository.findByIdWithItemsAndProducts(failing.getId())).thenReturn(Optional.of(failing));
+        when(receiptRepository.findByIdWithItemsAndProducts(healthy.getId())).thenReturn(Optional.of(healthy));
+        when(receiptRepository.save(any(Receipt.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(promoDetector.detectPersonalPromos(any(Receipt.class))).thenReturn(List.of());
+
+        var confirmed = receiptService.confirmBatch(user, List.of(failing.getId(), healthy.getId()));
+
+        assertEquals(1, confirmed);
+        assertEquals(ReceiptStatus.CONFIRMED, healthy.getStatus());
+        verify(transactionTemplate, times(2)).execute(any());
+    }
+
+    @Test
     void confirmStale_skipsWhenNoLongerPending() {
         var user = buildUser();
         var receipt = persistedReceipt(user, ReceiptStatus.CONFIRMED);
-        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receiptRepository.findByIdForUpdate(receipt.getId())).thenReturn(Optional.of(receipt));
 
         receiptService.confirmStale(receipt.getId());
 
@@ -1226,7 +1307,7 @@ class ReceiptServiceTest {
         var user = buildUser();
         var receipt = completePhotoReceipt(user);
         receipt.setIssuedAt(null);
-        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receiptRepository.findByIdForUpdate(receipt.getId())).thenReturn(Optional.of(receipt));
 
         receiptService.confirmStale(receipt.getId());
 

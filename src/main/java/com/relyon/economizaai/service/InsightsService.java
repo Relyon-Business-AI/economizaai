@@ -54,9 +54,12 @@ public class InsightsService {
         return spend(user, from, to, MarketScope.ALL);
     }
 
+    // The key carries the DAY of each bound, not the instant: a client sending to=now would
+    // otherwise never repeat a key. Entries live 5 minutes and any receipt change bumps the
+    // household generation, so two instants on the same day cannot serve different data for long.
     @Transactional(readOnly = true)
     @Cacheable(value = CachingConfig.INSIGHTS_SPEND_CACHE,
-            key = "#user.household.id + ':' + @householdCacheGen.get(#user.household.id) + ':' + #user.subscriptionTier + ':' + #scope + ':' + #from + ':' + #to + ':' + T(org.springframework.context.i18n.LocaleContextHolder).getLocale().getLanguage()")
+            key = "#user.household.id + ':' + @householdCacheGen.get(#user.household.id) + ':' + #user.subscriptionTier + ':' + #scope + ':' + #from?.toLocalDate() + ':' + #to?.toLocalDate() + ':' + T(org.springframework.context.i18n.LocaleContextHolder).getLocale().getLanguage()")
     public SpendInsightsResponse spend(User user, LocalDateTime from, LocalDateTime to, MarketScope scope) {
         var householdId = user.getHousehold().getId();
         // FREE tier: clamp the lower bound to the allowed history window. Tier is

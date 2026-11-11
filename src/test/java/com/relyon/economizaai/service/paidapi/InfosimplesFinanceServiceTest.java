@@ -11,6 +11,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -21,6 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -32,10 +36,14 @@ class InfosimplesFinanceServiceTest {
     @Mock private InfosimplesMonthHistoryRepository historyRepository;
     @Mock private InfosimplesService infosimples;
     @Mock private InfosimplesAlertService alertService;
+    @Mock private TransactionTemplate transactionTemplate;
 
     private InfosimplesFinanceService service() {
+        // The snapshot write runs inside a TransactionTemplate — execute the callback inline.
+        lenient().when(transactionTemplate.execute(any()))
+                .thenAnswer(invocation -> invocation.<TransactionCallback<Object>>getArgument(0).doInTransaction(null));
         return new InfosimplesFinanceService(snapshotRepository, historyRepository,
-                Optional.of(infosimples), alertService);
+                Optional.of(infosimples), alertService, transactionTemplate);
     }
 
     private static InfosimplesMonthHistory month(String month, String recarga, String consumo,
@@ -172,5 +180,32 @@ class InfosimplesFinanceServiceTest {
         service().closePreviousMonth();
 
         verify(historyRepository, never()).save(any());
+    }
+
+    @Test
+    void takeDailySnapshot_readsTheAccountBeforeOpeningTheTransaction() {
+        when(infosimples.fetchAccount()).thenReturn(Optional.of(new InfosimplesAccount(
+                new BigDecimal("50.00"), new BigDecimal("3.00"), new BigDecimal("100"))));
+        when(snapshotRepository.findTopByOrderByTakenAtDesc()).thenReturn(Optional.empty());
+        when(snapshotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        var finance = service();
+
+        finance.takeDailySnapshot();
+
+        var order = inOrder(infosimples, alertService, transactionTemplate);
+        order.verify(infosimples).fetchAccount();
+        order.verify(alertService).checkLowBalance(new BigDecimal("50.00"));
+        order.verify(transactionTemplate).execute(any());
+    }
+
+    @Test
+    void takeDailySnapshot_accountUnreachable_alertsWithoutOpeningATransaction() {
+        when(infosimples.fetchAccount()).thenReturn(Optional.empty());
+        var finance = service();
+
+        finance.takeDailySnapshot();
+
+        verify(alertService).alertAccountUnreachable();
+        verify(transactionTemplate, never()).execute(any());
     }
 }

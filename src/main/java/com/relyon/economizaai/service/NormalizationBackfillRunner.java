@@ -15,10 +15,11 @@ import com.relyon.economizaai.service.extraction.BrandExtractor;
 import com.relyon.economizaai.service.extraction.DictionaryClassifier;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
-import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.core.annotation.Order;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -41,14 +42,20 @@ import java.util.function.Supplier;
  * Idempotent: re-normalizing an already-normalized value is a no-op, so this is
  * safe to run on every boot. Non-destructive: on a key collision (another row
  * already holds the normalized key) it logs and SKIPS rather than deleting —
- * leaving the duplicate for manual resolution. Never blocks startup.
+ * leaving the duplicate for manual resolution.
+ *
+ * <p>Runs AFTER the app is ready, on its own background thread: it reads every
+ * dictionary row and product alias, and doing that before readiness made each
+ * deploy slower to accept traffic as the catalog grew. The app serves correctly
+ * while it runs (it only rewrites keys that predate the current normalizer).
  */
 @Slf4j
 @Component
 @ConditionalOnProperty(name = "economizaai.startup-backfills.enabled", havingValue = "true", matchIfMissing = true)
-@Order(50)
 @RequiredArgsConstructor
-public class NormalizationBackfillRunner implements ApplicationRunner {
+public class NormalizationBackfillRunner {
+
+    private static final String BACKGROUND_THREAD_NAME = "normalization-backfill";
 
     private final CuratedDictionaryEntryRepository curatedRepository;
     private final LearnedDictionaryRepository learnedRepository;
@@ -58,7 +65,28 @@ public class NormalizationBackfillRunner implements ApplicationRunner {
     private final DictionaryClassifier dictionaryClassifier;
     private final BrandExtractor brandExtractor;
 
-    @Override
+    /** Off only where a deterministic, same-thread run is needed (the test profile). */
+    @Value("${economizaai.startup-backfills.background:true}")
+    private boolean background = true;
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void onApplicationReady() {
+        if (!background) {
+            run(null);
+            return;
+        }
+        Thread.ofPlatform().name(BACKGROUND_THREAD_NAME).daemon(true).start(this::runQuietly);
+        log.info("normalization.backfill.scheduled thread={}", BACKGROUND_THREAD_NAME);
+    }
+
+    private void runQuietly() {
+        try {
+            run(null);
+        } catch (RuntimeException ex) {
+            log.warn("normalization.backfill.failed table=all reason={}", ex.getClass().getSimpleName());
+        }
+    }
+
     public void run(ApplicationArguments args) {
         var curatedUpdated = backfillCuratedKeys();
         backfillLearnedKeys();

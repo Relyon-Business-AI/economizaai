@@ -5,9 +5,11 @@ import com.relyon.economizaai.model.enums.ReceiptEntryMethod;
 import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -48,6 +50,40 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
     // window are stuck/stale. updatedAt, not createdAt: retried/rescued rows are
     // old by creation but fresh by the status flip.
     List<Receipt> findByStatusAndUpdatedAtBefore(ReceiptStatus status, LocalDateTime cutoff);
+
+    boolean existsByIdAndStatus(UUID id, ReceiptStatus status);
+
+    /**
+     * Loads the receipt holding a row lock until the transaction ends — serializes the
+     * confirm paths (manual, batch, auto-confirm) on the same nota.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT receipt FROM Receipt receipt WHERE receipt.id = :id")
+    Optional<Receipt> findByIdForUpdate(@Param("id") UUID id);
+
+    /**
+     * Ids of the notas the auto-confirm sweeper can actually confirm: PENDING since before
+     * {@code cutoff}, minus photo notas the user still has to complete (date, market, a name
+     * and a price on every non-excluded item) — those stay in review and are never loaded.
+     */
+    @Query("""
+        SELECT receipt.id FROM Receipt receipt
+        WHERE receipt.status = 'PENDING_CONFIRMATION'
+          AND receipt.updatedAt < :cutoff
+          AND (receipt.origin IS NULL OR receipt.origin <> 'PHOTO' OR (
+                receipt.issuedAt IS NOT NULL
+                AND receipt.marketName IS NOT NULL AND TRIM(receipt.marketName) <> ''
+                AND NOT EXISTS (
+                    SELECT item.id FROM ReceiptItem item
+                    WHERE item.receipt = receipt AND item.excluded = false
+                      AND (item.totalPrice IS NULL
+                           OR ((item.rawDescription IS NULL OR TRIM(item.rawDescription) = '')
+                               AND (item.friendlyDescription IS NULL OR TRIM(item.friendlyDescription) = '')))
+                )
+          ))
+        ORDER BY receipt.updatedAt ASC
+    """)
+    List<UUID> findAutoConfirmableIds(@Param("cutoff") LocalDateTime cutoff, Pageable pageable);
 
     // Paced import worker: oldest IMPORT_QUEUED first, a small page at a time, and a
     // live count of in-flight PROCESSING rows so the worker yields to real scans.

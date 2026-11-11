@@ -1,10 +1,12 @@
 package com.relyon.economizaai.config;
 
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.task.SyncTaskExecutor;
+import org.springframework.core.task.TaskDecorator;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
@@ -126,5 +128,76 @@ public class AsyncConfig {
     @Profile("test")
     public Executor notificationDispatchExecutorSync() {
         return new SyncTaskExecutor();
+    }
+
+    public static final String PHOTO_EXTRACT_EXECUTOR = "photoExtractExecutor";
+
+    /**
+     * Photo-receipt extraction (one vision call per photo, user waiting on the result).
+     * Own lane so a burst of uploads queues here instead of being rejected behind an
+     * admin sweep; a full queue still rejects, and the dispatch site fails the receipt.
+     */
+    @Bean(PHOTO_EXTRACT_EXECUTOR)
+    @Profile("!test")
+    public Executor photoExtractExecutor(
+            @Value("${economizaai.async.photo-extract.threads:3}") int threads,
+            @Value("${economizaai.async.photo-extract.queue-capacity:30}") int queueCapacity) {
+        return boundedExecutor("photo-extract-", threads, queueCapacity);
+    }
+
+    @Bean(PHOTO_EXTRACT_EXECUTOR)
+    @Profile("test")
+    public Executor photoExtractExecutorSync() {
+        return new SyncTaskExecutor();
+    }
+
+    public static final String AI_CATEGORIZATION_EXECUTOR = "aiCategorizationExecutor";
+
+    /**
+     * User-triggered categorization (per-ingest category suggestion + per-confirm item
+     * fallback). Best-effort work: when the queue is full the dispatch site skips it and
+     * the daily job covers the rest.
+     */
+    @Bean(AI_CATEGORIZATION_EXECUTOR)
+    @Profile("!test")
+    public Executor aiCategorizationExecutor(
+            @Value("${economizaai.async.ai-categorization.threads:2}") int threads,
+            @Value("${economizaai.async.ai-categorization.queue-capacity:50}") int queueCapacity) {
+        return boundedExecutor("ai-categorize-", threads, queueCapacity);
+    }
+
+    @Bean(AI_CATEGORIZATION_EXECUTOR)
+    @Profile("test")
+    public Executor aiCategorizationExecutorSync() {
+        return new SyncTaskExecutor();
+    }
+
+    /** Fixed-size pool (core == max, so the queue is only used once every thread is busy) that rejects when full. */
+    static ThreadPoolTaskExecutor boundedExecutor(String threadNamePrefix, int threads, int queueCapacity) {
+        var executor = new ThreadPoolTaskExecutor();
+        var poolSize = Math.max(1, threads);
+        executor.setCorePoolSize(poolSize);
+        executor.setMaxPoolSize(poolSize);
+        executor.setAllowCoreThreadTimeOut(true);
+        executor.setQueueCapacity(Math.max(0, queueCapacity));
+        executor.setThreadNamePrefix(threadNamePrefix);
+        executor.setTaskDecorator(mdcPropagatingDecorator());
+        executor.initialize();
+        return executor;
+    }
+
+    /** Carries the submitting thread's MDC (req=, user=, rcpt=) onto the worker thread. */
+    static TaskDecorator mdcPropagatingDecorator() {
+        return runnable -> {
+            var contextMap = MDC.getCopyOfContextMap();
+            return () -> {
+                if (contextMap != null) MDC.setContextMap(contextMap);
+                try {
+                    runnable.run();
+                } finally {
+                    MDC.clear();
+                }
+            };
+        };
     }
 }

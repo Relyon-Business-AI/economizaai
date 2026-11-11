@@ -20,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -89,5 +90,20 @@ class LeaderboardServiceTest {
 
         assertThat(user.isShareInLeaderboard()).isTrue();
         verify(userRepository).save(user);
+    }
+
+    @Test
+    void rankingIsComputedOncePerWindowAndSharedAcrossViewers() {
+        when(receiptItemRepository.discountHuntersSince(any(), eq(3))).thenReturn(List.<Object[]>of(
+                new Object[]{householdA, 10L, new BigDecimal("50.00")}));
+        when(userRepository.findByShareInLeaderboardTrue()).thenReturn(List.of());
+        when(localizedMessageService.translate("leaderboard.handle.anonymous")).thenReturn("Caçador");
+        when(localizedMessageService.translate("leaderboard.handle.me")).thenReturn("Você");
+
+        service.discountHunters(30, householdA);
+        service.discountHunters(30, householdB);
+        service.discountHunters(7, householdA); // another window is its own entry
+
+        verify(receiptItemRepository, times(2)).discountHuntersSince(any(), eq(3));
     }
 }
