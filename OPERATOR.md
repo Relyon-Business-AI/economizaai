@@ -4,8 +4,8 @@ How economizai is operated by AI agents (Claude) with a human (the owner) on the
 critical-decision button. This is the **constitution**: every scheduled agent and
 every interactive session reads it and obeys the autonomous-vs-gated split below.
 
-Covers **both repos**: the Spring Boot backend (`economiz.AI`) and the Expo/React
-Native frontend (`polyf/economiza-ai-front`).
+Covers **both repos**: the Spring Boot backend (`Relyon-Business-AI/economizaai`) and the Expo/React
+Native frontend (`Relyon-Business-AI/economiza-ai-front`).
 
 ---
 
@@ -27,10 +27,12 @@ monitor → triage → reproduce → fix → test (harness) → deploy → valid
 - **Backend (dev)**: already implemented — see `.github/AUTOFIX.md` (log-sweep 2h, nightly
   E2E, chaos, reproduce-first autofix, `AUTONOMOUS_FIXES.md` ledger + `AUTOFIX_LESSONS.md`).
 - **Backend (prod)**: ALERT-ONLY — `log-sweep-prod.yml` (2h) + `e2e-prod.yml` (nightly,
-  self-cleaning flow) open deduplicated `prod-error` issues via `prod_alert.py`. The fixer
+  self-cleaning flow) open deduplicated `prod-error` issues via `prod_alert.py`; plus
+  `event-watch-prod.yml` (every 30 min, Render infra events) and `disk-watch-prod.yml`
+  (daily, prod DB disk). The fixer
   never touches prod; chaos/stress stays dev-only. Fix on dev → gated prod deploy.
-- **Frontend**: harness in `economiza-ai-front/TESTING.md` (web/Android/iOS). CI operator
-  to be added (see "Build plan").
+- **Frontend**: harness in `economiza-ai-front/TESTING.md` (web/Android/iOS). CI workflows
+  exist in the FE repo (`ci.yml`, `web-e2e.yml`, `ota-deploy.yml` — see "Build plan").
 
 ## Cross-repo coordination (backend ⇄ frontend)
 
@@ -81,9 +83,9 @@ pings the owner. Precedent: the `NEEDS-HUMAN` tags in `AUTONOMOUS_FIXES.md`.
 
 Backend pushes to `development` auto-deploy and blip availability. Fixes may ship
 anytime; **features batch for the night / an explicit go** (see CLAUDE.md → Git Workflow).
-Backend **prod** deploys from `main` (Render `economizai-app-prod`, auto-deploy): the
+Backend **prod** deploys from `main` (Render `economizai-api-prod`, auto-deploy): the
 release IS the push — merge `development` → `main` only on the owner's go. See
-INFRASTRUCTURE.md → "Environments & release flow".
+INFRASTRUCTURE.md → "Current reality (Render)".
 Frontend OTA has no downtime, but **production** OTA is still gated (user-facing).
 
 ## Environment & continuity
@@ -114,7 +116,13 @@ not in any chat session. The brain:
 | `ECOMMERCE_*` (ML client-id/secret/affiliate) | Render | e-commerce comparison provider — inert until set | ⛔ owner sets (see DEV_NOTES / docs/ECOMMERCE_COMPARISON.md) |
 | `META_ADS_*` / `META_CAPI_*` | Render | ad-spend sync + conversions API — inert until set | ⛔ owner sets |
 
-## Build plan (frontend operator — to add)
+## Build plan (frontend operator)
+
+> Status vs the FE repo's `.github/workflows` (checked 2026-11-10): `ci.yml` and
+> `web-e2e.yml` exist and target `master`; `ota-deploy.yml` exists and publishes to the
+> **production** channel on push to `master` (other channels via manual dispatch), but is
+> inert until the repo variable `OTA_ENABLED=true` and the `EXPO_TOKEN` secret are set.
+> Item 3 (FE error monitor) has no workflow yet. The plan below is the original text.
 
 1. **Harness in CI** — GitHub Action running the Playwright web lane on every PR (cheap,
    no device); native lanes on demand / bundled builds.

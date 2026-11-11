@@ -145,6 +145,12 @@
 			"key": "merchantClaimId",
 			"value": "",
 			"description": "Id de claim de mercado (fluxo de reivindica\u00e7\u00e3o)"
+		},
+		{
+			"key": "chainId",
+			"value": "",
+			"type": "string",
+			"description": "Id de uma rede de mercado (GET /admin/chains)"
 		}
 	],
 	"item": [
@@ -1460,6 +1466,59 @@
 								"me"
 							]
 						}
+					},
+					"response": []
+				},
+				{
+					"name": "WhatsApp opt-in status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/whatsapp",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"whatsapp"
+							]
+						},
+						"description": "WhatsAppStatusResponse {optIn, weeklyReportEnabled, maskedNumber, confirmLink, reportLink}. confirmLink/reportLink are wa.me deep-links carrying the per-user token (reverse opt-in)."
+					},
+					"response": []
+				},
+				{
+					"name": "WhatsApp — toggle weekly report",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/whatsapp",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"whatsapp"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"weeklyReportEnabled\": true\n}"
+						},
+						"description": "Flips the weekly-report toggle. Requires a prior opt-in (linked WhatsApp number). Returns WhatsAppStatusResponse."
 					},
 					"response": []
 				}
@@ -5067,6 +5126,240 @@
 							]
 						},
 						"description": "Re-enriquece os findings pendentes da IA (roda de novo a camada de enriquecimento sobre o backlog). 200 { enriched }."
+					},
+					"response": []
+				},
+				{
+					"name": "AI: UFs de um achado",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/ai/findings/{{aiFindingId}}/ufs",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"ai",
+								"findings",
+								"{{aiFindingId}}",
+								"ufs"
+							]
+						},
+						"description": "[ADMIN] UFs onde o produto/descrição do achado foi escaneado — ajuda a identificar marcas regionais."
+					},
+					"response": []
+				},
+				{
+					"name": "AI: reprocessar fallback (diagnóstico)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/ai/reprocess-fallback?limit=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"ai",
+								"reprocess-fallback"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10"
+								}
+							]
+						},
+						"description": "[ADMIN] Re-roda o fallback em tempo real sobre notas com itens não casados e devolve o placar {receipts, matched, alreadyMatched, parseFailed, blankName, gone, callError}."
+					},
+					"response": []
+				},
+				{
+					"name": "AI: comparação entre modelos",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/ai/model-comparison?days=30",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"ai",
+								"model-comparison"
+							],
+							"query": [
+								{
+									"key": "days",
+									"value": "30"
+								}
+							]
+						},
+						"description": "[ADMIN] Por modelo no período: custo, volume, confiabilidade, latência e taxa de aceitação dos achados (days=0 → tudo)."
+					},
+					"response": []
+				},
+				{
+					"name": "AI: benchmark de acurácia de um modelo",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/ai/benchmark-model?model=",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"ai",
+								"benchmark-model"
+							],
+							"query": [
+								{
+									"key": "model",
+									"value": ""
+								}
+							]
+						},
+						"description": "[ADMIN] Dispara (assíncrono, amostrado) o benchmark de acurácia de um modelo contra o golden set. 202 {runId, status, model}. Param sample opcional. GASTA créditos de IA."
+					},
+					"response": []
+				},
+				{
+					"name": "AI: histórico de benchmarks",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/ai/benchmark-model/runs",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"ai",
+								"benchmark-model",
+								"runs"
+							]
+						},
+						"description": "[ADMIN] Histórico de rodadas de benchmark — compara a acurácia de cada modelo lado a lado."
+					},
+					"response": []
+				},
+				{
+					"name": "AI: provedores por tier",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/ai/providers",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"ai",
+								"providers"
+							]
+						},
+						"description": "[ADMIN] Provedor/modelo atual de cada tier + catálogo de opções e quais provedores têm credencial."
+					},
+					"response": []
+				},
+				{
+					"name": "AI: trocar provedor de um tier",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/ai/providers/EXTRACTOR",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"ai",
+								"providers",
+								"EXTRACTOR"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"provider\": \"ANTHROPIC\",\n  \"model\": \"\"\n}"
+						},
+						"description": "[ADMIN] Troca o provedor/modelo de um tier (EXTRACTOR | CURATOR) — efeito imediato, sem redeploy. provider: ANTHROPIC | OPENAI."
+					},
+					"response": []
+				},
+				{
+					"name": "Recategorize taxonomy",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/recategorize-taxonomy",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"recategorize-taxonomy"
+							]
+						},
+						"description": "[ADMIN] Recategoriza os produtos na taxonomia de 2 níveis. Returns {keywordUpdated, llmUpdated, eansScanned, catalogRowsEnriched, productsUpdated}. MUTATES the catalog and may spend AI credits."
+					},
+					"response": []
+				},
+				{
+					"name": "Recategorize taxonomy — calibrate (dry-run)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/categorizer/recategorize-taxonomy/calibrate?sample=100",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"categorizer",
+								"recategorize-taxonomy",
+								"calibrate"
+							],
+							"query": [
+								{
+									"key": "sample",
+									"value": "100"
+								}
+							]
+						},
+						"description": "[ADMIN] Amostra de calibração: {sample, keywordHigh, keywordLow, keywordNone, llmPlaced, agree, precisionPct, disagreements[]}."
 					},
 					"response": []
 				}
@@ -19340,6 +19633,627 @@
 								"taxonomy-coverage"
 							]
 						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get audience",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/notifications/audiences/{{audienceId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"notifications",
+								"audiences",
+								"{{audienceId}}"
+							]
+						},
+						"description": "One audience (AudienceResponse, with live matchCount). ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Users — predominant UF per household",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users/uf?householdIds={{e2eHouseholdId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"users",
+								"uf"
+							],
+							"query": [
+								{
+									"key": "householdIds",
+									"value": "{{e2eHouseholdId}}"
+								}
+							]
+						},
+						"description": "Lazy lookup for the user list: householdId → UF the household scans most notas from. Repeat householdIds for several. Households with no nota are absent. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Users — lifetime paid-API cost",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users/cost?userIds={{userId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"users",
+								"cost"
+							],
+							"query": [
+								{
+									"key": "userIds",
+									"value": "{{userId}}"
+								}
+							]
+						},
+						"description": "Lazy lookup for the user list: userId → lifetime paid-API cost in cents. Repeat userIds for several. Users with no paid call are absent (treat as 0). ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "User cost breakdown",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users/{{userId}}/cost",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"users",
+								"{{userId}}",
+								"cost"
+							]
+						},
+						"description": "UserCostResponse {totalCents, byService[], byMonth[]} — where one user's paid-API cost comes from (lifetime). ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Account deletion reasons",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/analytics/deletion-reasons?days=30",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"analytics",
+								"deletion-reasons"
+							],
+							"query": [
+								{
+									"key": "days",
+									"value": "30"
+								}
+							]
+						},
+						"description": "DeletionReasonStatsResponse {windowDays, total, answered, lines[], recentNotes[]}. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Marketing dashboard",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/marketing/dashboard?days=30",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"marketing",
+								"dashboard"
+							],
+							"query": [
+								{
+									"key": "days",
+									"value": "30"
+								}
+							]
+						},
+						"description": "Meta Ads spend + Google Search Console organic metrics for the window. Both sections carry configured=false until their env vars are set. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "iOS store analytics",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/analytics/store/ios?days=90",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"analytics",
+								"store",
+								"ios"
+							],
+							"query": [
+								{
+									"key": "days",
+									"value": "90"
+								}
+							]
+						},
+						"description": "Funil iOS pré-instalação (impressões, page views, installs por fonte) da App Store Connect. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Trigger iOS store analytics sync now",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/analytics/store/ios/sync",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"analytics",
+								"store",
+								"ios",
+								"sync"
+							]
+						},
+						"description": "Força a sincronização imediata dos dados da App Store Connect. Returns {rowsSynced}. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Chains — list",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/chains?page=0&size=20",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"chains"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "20"
+								}
+							]
+						},
+						"description": "Page<MarketChainResponse> {id, cnpjRoot, name, logoUrl, marketCount}. Optional filters: state, search, city, hasLogo. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Chains — states",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/chains/states",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"chains",
+								"states"
+							]
+						},
+						"description": "UFs that have chains (filter options). ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Chains — cities",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/chains/cities?state=RS",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"chains",
+								"cities"
+							],
+							"query": [
+								{
+									"key": "state",
+									"value": "RS"
+								}
+							]
+						},
+						"description": "Cities that have chains (filter options); optional state filter. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Chains — create",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/chains",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"chains"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"cnpjRoot\": \"{{cnpjRoot}}\",\n  \"name\": \"Rede Exemplo\"\n}"
+						},
+						"description": "Creates a market chain keyed by CNPJ root (first 8 digits). Returns MarketChainResponse. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Chains — rename",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/chains/{{chainId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"chains",
+								"{{chainId}}"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Rede Exemplo\"\n}"
+						},
+						"description": "Updates the chain name. Returns MarketChainResponse. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Chains — upload logo",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/chains/{{chainId}}/logo",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"chains",
+								"{{chainId}}",
+								"logo"
+							]
+						},
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": ""
+								}
+							]
+						},
+						"description": "Multipart upload, field \"file\". Returns MarketChainResponse with logoUrl. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Chains — delete logo",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/chains/{{chainId}}/logo",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"chains",
+								"{{chainId}}",
+								"logo"
+							]
+						},
+						"description": "204. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Chain logo (public)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/chains/logo/{{chainId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"chains",
+								"logo",
+								"{{chainId}}"
+							]
+						},
+						"description": "PUBLIC (no auth). PNG bytes of the chain logo, Cache-Control public 1 year; 404 when the chain has no logo. This is the path returned in MarketChainResponse.logoUrl."
+					},
+					"response": []
+				},
+				{
+					"name": "Photo attempts — settings",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/photo-attempts/settings",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"photo-attempts",
+								"settings"
+							]
+						},
+						"description": "Estado do toggle de retenção de fotos (temporário). Returns {enabled}. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Photo attempts — update settings",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/photo-attempts/settings",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"photo-attempts",
+								"settings"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"enabled\": false\n}"
+						},
+						"description": "Liga/desliga a retenção de fotos ao vivo (em memória, até reiniciar). Returns {enabled}. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Photo attempts — list photos of a receipt",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/photo-attempts/{{receiptId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"photo-attempts",
+								"{{receiptId}}"
+							]
+						},
+						"description": "Lista as fotos guardadas de uma tentativa de extração: {receiptId, count, photos[{index, mediaType, downloadPath}]}. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Photo attempts — download photo",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/photo-attempts/{{receiptId}}/0",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"photo-attempts",
+								"{{receiptId}}",
+								"0"
+							]
+						},
+						"description": "Baixa uma foto guardada da tentativa (bytes) pelo index; 404 se não existir. ADMIN only."
 					},
 					"response": []
 				}

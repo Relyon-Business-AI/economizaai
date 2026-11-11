@@ -84,7 +84,7 @@ GitHub repo: `economizaai` (https://github.com/Relyon-Business-AI/economizaai.gi
 
 ### API & Postman
 - All APIs are versioned: `/api/v1/...`
-- A Postman collection is maintained at `postman/economizaai.postman_collection.json`
+- A Postman collection is maintained at `postman/economizai.postman_collection.json`
 - Every endpoint change (create, update, remove) must update the Postman collection
 - The collection includes an **E2E Flow** folder — a sequential test suite that runs all requests in logical order, each setting data for the next. This must also be updated on any endpoint change.
 - REST endpoints follow standard conventions: plural nouns, proper HTTP methods
@@ -162,7 +162,7 @@ Two environments, no staging. Pushing a branch deploys it:
 - `API.md` is the FE-facing endpoint walk-through. Update when endpoints/payloads change.
 - `CHANGELOG.md` is the FE-facing **diary** of meaningful changes — new endpoints, response-shape changes, behavior changes the FE needs to know about. **Newest entry always at the top.** Add an entry on every meaningful change (a feature shipped, a contract change, a bug the FE was likely tripping on). NOT every commit — only the user-visible / FE-visible deltas. Date stamp every entry. This is read by the FE's tooling to understand "what changed since I last looked."
 - `DEV_NOTES.md` lists shortcuts/hacks that are fine for dev but must be revisited before prod (local-disk storage, stub services, weak secrets, etc). Add an entry whenever you ship a "good enough for dev" choice with a known prod gap.
-- `INFRASTRUCTURE.md` is the single source of truth for the **self-hosted dev server** (Quick Links to API/Swagger/health/logs at the top; the full stack, auto-deploy, backups, monitoring, and a dev→prod migration map). Update when infra changes.
+- `INFRASTRUCTURE.md` is the single source of truth for the **backend infra on Render** (prod + dev services, DBs, deploy semantics, gotchas, Quick Links to API/Swagger/health; the retired self-hosted Windows box is kept at the bottom for history only). Update when infra changes.
 
 ## Build & Run
 ```bash

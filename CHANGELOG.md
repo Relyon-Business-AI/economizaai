@@ -1,5 +1,43 @@
 # economizai — what's new
 
+## 2026-11-10 — Auditoria pré-campanha: robustez, segurança e regras (sem mudança de contrato quebrando)
+
+**O que o FE precisa saber**
+- **Rate limit de cadastro separado.** `POST /auth/register`, `/auth/google` e `/auth/apple` saíram do balde
+  de 5/min/IP e ganharam o próprio (**20/min/IP**) — operadora com CGNAT derrubava o 3º cadastro por minuto
+  com 429. Os endpoints de código (forgot/verify/reset/verify-email) seguem em 5/min.
+- **`/receipts/xml`, `/receipts/retry` e `/receipts/{id}/retry`** entraram no balde de envio (30/h por usuário).
+- **Paginação:** `size` acima de **100** é truncado para 100 (antes o teto era 2000).
+- **`GET /households/me` → `inviteCodeExpiresAt`** agora vem em horário de Brasília como os outros campos
+  (vinha em UTC e a tela mostrava o convite valendo 3 h a mais).
+- **`POST /receipts/{id}/confirm`** não devolve mais 500 quando a fila de IA está cheia (a nota já estava
+  confirmada; o retry dava 400).
+- **Lista sugerida do dashboard** (`suggestedList`) vem ordenada por urgência (mais perto de acabar primeiro),
+  igual a `/consumption/predictions/page`.
+
+**Ingestão / custo**
+- O teto diário global de APIs pagas (`PAID_API_DAILY_BUDGET_CENTS`) **não bloqueia mais raspagens gratuitas**
+  (RS/PR/SP/GO/CE): com o teto estourado, só a compra de captcha / Infosimples é recusada. Antes, R$ 50 de gasto
+  derrubavam TODO scan de QR do país até o dia seguinte.
+- CapSolver com timeout de conexão/leitura (um travamento do provedor prendia a thread de ingestão) e resposta
+  malformada tratada.
+- Pool de ingestão 8 threads fixas / fila 200 (era 4 efetivas / fila 50); SMTP com timeout de 10 s.
+- Conteúdo de device-fetch guardado em falha agora passa pelo strip de CPF.
+
+**Segurança**
+- Rate limiter casa pelo caminho DECODIFICADO (`/api/v1/%61uth/...` furava todos os limites).
+- Login social em conta local de e-mail **nunca verificado**: a senha antiga é apagada e as sessões revogadas
+  (pré-sequestro de conta).
+- `/webhooks/subscription` rejeita o segredo placeholder `CHANGEME`.
+
+**Regras / dados**
+- Exclusão de conta não dá mais 500 quando (a) a casa vazia ainda guarda notas de ex-membro, ou (b) o usuário
+  tem `revenue_events` (V145: `user_id` vira nulo na exclusão; o evento financeiro fica).
+- "Você economizou" (promo pessoal) compara só com compras **anteriores** à nota — escanear notas antigas em
+  lote disparava alerta falso por item.
+- Plano de compras usa o preço da compra **mais recente** em cada mercado (pegava a mais antiga).
+- Promoções da comunidade: recálculo single-flight (um por vez, os demais servem o cache);
+  `/home/availability` cacheia a contagem global por 10 min.
 ## 2026-11-10 — Split de variantes: mais marcas e sabores reconhecidos
 
 - O `POST /api/v1/admin/products/split-variants` ainda deixava ~28 produtos misturando marcas/variantes

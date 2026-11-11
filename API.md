@@ -1,4 +1,4 @@
-# economizai — API guide for the FE
+# Economiza AI — API guide for the FE
 
 Practical walk-through of the backend, organized by user flow. For the
 machine-readable contract, hit **`/swagger-ui`** on whichever environment
@@ -15,8 +15,11 @@ you're against (everything's annotated with descriptions and examples).
 Both environments run the same code (prod is deployed from `main`, promoted from
 `development`); dev is where features land first and where test/screenshot data lives.
 
-All `/api/v1/**` routes (except `/auth/*` and `/legal/*`) require a JWT in the
-`Authorization: Bearer <token>` header. Access tokens expire after 24h —
+All `/api/v1/**` routes require a JWT in the `Authorization: Bearer <token>`
+header, except the public ones: `/auth/*`, `/legal/*`, `/webhooks/*`,
+`/public/report-charts/*`, `/contact`, `/beta-signup`, `/visits`, `/app-config`
+and `/chains/logo/*`. `/admin/**` and `/categorizer/ai/**` need `ROLE_ADMIN`,
+`/merchant/**` needs `ROLE_MERCHANT` (403 otherwise). Access tokens expire after 24h —
 exchange the long-lived refresh token (30d) for a new pair via
 `POST /auth/refresh` instead of forcing the user back to the login screen. The
 header `Accept-Language: pt` gives Portuguese error messages; default is `pt`,
@@ -82,7 +85,7 @@ POST /api/v1/beta-signup   → 202 Accepted (public, no auth)
 Beta-tester lead capture. Body: `{ "name", "email", "phone"? }` — `name` and `email`
 required (`email` must be valid), `phone` optional (max 30 chars, free-form); **no
 `message`**. Emails the lead to our beta inbox with a distinct subject
-(`[economizai beta tester] …`) so it's separable from `/contact`. **Public**,
+(`[Economiza AI beta tester] …`) so it's separable from `/contact`. **Public**,
 **rate-limited to 5/hour per IP** (own bucket, separate from `/contact`). Returns `202`
 with no body on success.
 
@@ -124,19 +127,17 @@ POST /api/v1/auth/register
 }
 → 201 {
   "token": "...", "refreshToken": "...", "user": { ... },
-  "signupPromoGranted": true,
-  "signupPromoValidUntil": "2027-03-02T12:00:00"
+  "signupPromoGranted": false,
+  "signupPromoValidUntil": null
 }
 ```
 
-**Signup promo banner ("até segunda ordem"):** while the promo is on, every brand-new
-account is granted PRO automatically. `signupPromoGranted` is `true` only on the exact
-`register` / `google` / `apple` call that just created the account **and** the promo was
-active for it; `signupPromoValidUntil` is the PRO expiry to show ("grátis até DD/MM").
-Both are always `false`/`null` on `/login` and `/refresh` — check them right after
-register/social-login to fire a one-time banner, don't poll for them elsewhere. If the
-promo is later turned off, new signups simply get `signupPromoGranted: false` again — no
-contract change needed on your side.
+**Launch promo — granted on the FIRST confirmed nota, not at signup (since 2026-11-07).**
+While the promo is on, a new account gets PRO when it confirms its first receipt (valid
+until the fixed `SUBSCRIPTION_PROMO_UNTIL` date). The `signupPromoGranted` /
+`signupPromoValidUntil` fields are kept for contract compatibility but are now always
+`false`/`null` on `register` / `google` / `apple` / `login` / `refresh`. To show
+"grátis até DD/MM", read `GET /users/me/subscription` after the first confirm.
 
 `platform` is **optional** on all auth endpoints (`/register`, `/login`, `/google`,
 `/apple`). Send `WEB`, `ANDROID`, or `IOS`. It records the **registration platform**
@@ -235,6 +236,14 @@ POST   /api/v1/users/me/store-review-prompt  → { "status": "ok" }
        ← call right after StoreReview.requestReview(); counts the prompt + starts the cooldown
 PATCH  /api/v1/users/me/phone           { "phoneNumber": "+5551999999999" }  → 204 (E.164; sends a 6-digit OTP via SMS)
 POST   /api/v1/users/me/phone/verify    { "code": "123456" }                 → 204 (400 on wrong/expired code)
+GET    /api/v1/users/me/whatsapp        → { optIn, weeklyReportEnabled, maskedNumber, confirmLink, reportLink }
+       ← WhatsApp opt-in (reverse flow): confirmLink / reportLink are wa.me deep-links carrying a
+         per-user token ("CONFIRMAR-<token>" links the number, "RELATORIO-<token>" pulls the report
+         on demand); the user sends the message and the inbound webhook does the linking.
+PATCH  /api/v1/users/me/whatsapp        { "weeklyReportEnabled": true|false }  → same shape
+       ← toggles the weekly report; requires a prior opt-in (linked number), error otherwise
+GET    /api/v1/users/me/savings         → SavingsSummaryResponse (see §7b "Savings")
+GET    /api/v1/users/me/subscription    → SubscriptionStatusResponse (see §7b "Subscription status")
 GET    /api/v1/users/me/notification-preferences
 PUT    /api/v1/users/me/notification-preferences
        { "preferences": [ { "type": "PROMO_PERSONAL", "channel": "PUSH" }, ... ] }
@@ -259,7 +268,7 @@ DELETE /api/v1/users/me/profile-picture
 - **On upload**: server-side downscales JPEG/PNG to a 512px max dimension before storing (saves disk + bandwidth, no FE work).
 - **On GET**: returns the raw image bytes. **Never 404s** — when no picture has been uploaded, the server generates a deterministic initials avatar (PNG, 256x256, color hashed from email) so `<img>` tags always render. Inspect the **`X-Profile-Picture-Fallback: true|false`** response header to distinguish a generated avatar from a user-uploaded photo (handy for "edit photo" vs "upload photo" copy).
 - **WebP**: stored as-is (no resize). All other formats (JPEG/PNG) are normalized.
-- Storage is local-disk in dev (ephemeral on Render free tier — see `DEV_NOTES.md` for the prod plan); the API contract won't change when we swap backends.
+- Storage is selected by `PROFILE_PICTURE_STORAGE`: `local` (disk — the default, ephemeral on Render) or `r2` (Cloudflare R2). The API contract is the same for both.
 
 ### Subscription checkout (web)
 
@@ -309,6 +318,14 @@ POST  /api/v1/users/me/phone/verify  { "code": "123456" }                 → 20
 `phoneNumber` must be E.164 (leading `+`, country code, 8–15 digits) — otherwise `400`. Setting the phone stores it as **unverified** and sends a 6-digit OTP (10-minute TTL) over SMS. Submit that code to `…/phone/verify`; a correct, unexpired code marks the phone verified (`204`). Wrong, expired, or missing code → `400`.
 
 A verified phone is required for the **SMS** and **WHATSAPP** notification channels to actually deliver. **Dev mode**: when Twilio isn't configured, the OTP is logged with a `[DEV-MODE] phone OTP for …` prefix in the server logs instead of being texted — the endpoint still returns 204, so grab the code from the logs.
+
+**WhatsApp server-to-server routes (FE never calls these):**
+`POST /api/v1/webhooks/twilio/whatsapp-inbound` — Twilio's inbound-message webhook
+(form-urlencoded, checked via the `X-Twilio-Signature` header); it handles the
+`CONFIRMAR-<token>` / `RELATORIO-<token>` messages behind `GET /users/me/whatsapp`.
+`GET /api/v1/public/report-charts/{token}.png` — the last-7-days spend-by-category pie
+(PNG) Twilio fetches as the report's media; public but gated by a short-lived HMAC
+token (404 on an invalid/expired token).
 
 ---
 
@@ -417,7 +434,10 @@ POST /api/v1/receipts
   "qrPayload": "<whatever the camera scanned>",
   "entryMethod": "QR_SCAN"   // OPTIONAL — see below
 }
-→ 201 ReceiptResponse with status="PENDING_CONFIRMATION"
+→ 201 ReceiptResponse with status="PROCESSING"   (async — poll GET /receipts/{id} until
+                                                  PENDING_CONFIRMATION, FAILED_PARSE or one of the
+                                                  waiting states: NEEDS_DEVICE_FETCH, CONTINGENCY_PENDING,
+                                                  PORTAL_PENDING)
 ```
 
 **Optional `entryMethod`** (analytics only, doesn't change behavior): tells us HOW the
@@ -479,12 +499,18 @@ from our IP, no paid fallback. Same validation, caps, and `ReceiptResponse`.
   already routes automatically: native + blocked UF (PE) + URL payload → this
   endpoint; everything else → `POST /receipts`.
 
-### Bulk import receipts from access keys (chaves) — onboarding (RS only)
+### Bulk import receipts from access keys (chaves) — onboarding
 
-Fill a new user's history from the **chaves** they export from the Nota Fiscal
-Gaúcha portal, without scanning each nota. Each eligible **RS** chave (NFC-e 65 /
-NF-e 55) is reconsulted on a public SEFAZ portal and ingested through the normal
-pipeline.
+Fill a new user's history from the **chaves** they export from a state program
+(e.g. the Nota Fiscal Gaúcha portal), without scanning each nota. Each chave
+(NFC-e 65 / NF-e 55, any UF) rides the by-chave fetch chain and is ingested
+through the normal pipeline.
+
+> **ADMIN-only for now.** `/receipts/import`, `/receipts/import/**`,
+> `POST /receipts/confirm-batch` and `POST /receipts/delete-batch` require
+> `ROLE_ADMIN` (operator tool, not exposed to end users yet) — a normal user gets
+> 403. `POST /receipts/xml` and `POST /receipts/retry` are open to any
+> authenticated user.
 
 ```
 POST /api/v1/receipts/import
@@ -543,7 +569,7 @@ POST /api/v1/receipts/xml   (multipart/form-data, field "files" — accepts seve
   **ReceiptImportResponse** as bulk import (`received`, `queued`, `queuedReceiptIds`,
   `rejected`, `rejectedChaves[{chave, reason, reasonMessage}]`).
 - **Self-contained:** the chave and every line item are read from the XML itself — **no SEFAZ
-  fetch** — so it works for **any UF** (unlike chave re-consult, which is RS-only). CPF is stripped
+  fetch** — so it works for **any UF** and never depends on a portal or paid lookup. CPF is stripped
   before persist.
 - Same dedup + monthly cap + per-item rejection semantics as bulk import; nothing is dropped
   silently. Reason keys reuse `receipt.import.*` (`invalid_chave`, `duplicate`, `cap_reached`).
@@ -559,6 +585,14 @@ GET  /api/v1/receipts/import/staging
 POST /api/v1/receipts/confirm-batch
 { "ids": ["<uuid>", ...] }
 → 200 { "affected": <int> }   // confirm (definitive save) several at once
+
+POST /api/v1/receipts/delete-batch
+{ "ids": ["<uuid>", ...] }
+→ 200 { "affected": <int> }   // delete several of the household's notas at once
+
+POST /api/v1/receipts/retry
+{ "ids": ["<uuid>", ...] }
+→ 202 { "affected": <int> }   // re-queue failed IMPORT notas ("tentar de novo" on the import screen)
 ```
 
 - Staging returns everything except `CONFIRMED` (which has been saved definitively and
@@ -615,10 +649,11 @@ come back as an error, not a wrong chave:
 | 400 `receipt.photo.chave.unreadable` | No valid 44-digit chave found in the photo. Offer manual typing. |
 | 503 `receipt.ocr.unavailable` | OCR engine not available on the host. Offer manual typing. |
 
-Note the existing per-state rule still applies at submit time: a bare chave is
-rejected (`receipt.manual-chave.unsupported`) for any state that can't be
-consulted without the QR's signature params — always RS, and every
-signature-gated or experimental state while the paid by-chave fallback is off.
+Note the bare-chave rule still applies at submit time: a bare chave is rejected
+(`receipt.manual-chave.unsupported`) only when there is no fetch path at all for
+it — i.e. the state's adapter needs the QR's signature params, the chave isn't
+covered by the free legacy reconsult, AND the paid by-chave fallback
+(Infosimples) is off. No state is hard-blocked (RS included).
 
 ### State coverage — every UF is accepted
 
@@ -655,7 +690,7 @@ Since 2026-07-16 the product gates by establishment type (from the CNPJ's CNAE):
 | 400 `receipt.qr.invalid` | Couldn't extract a 44-digit chave from the input |
 | 400 `receipt.state.unsupported` | Only if the experimental chain is disabled server-side (kill-switch) |
 | 400 `receipt.merchant.unsupported` | Known restaurant/bar CNPJ (or admin-blocked). Also arrives via polling for first-time merchants. |
-| — `receipt.contingency.pending` | Via polling (`FAILED_PARSE`): the note was issued in contingency (printed "EMITIDA EM CONTINGÊNCIA") and SEFAZ doesn't have it yet — user should rescan later. |
+| — `receipt.contingency.pending` | Via polling (`status=CONTINGENCY_PENDING`, not a failure): the note was issued in contingency (printed "EMITIDA EM CONTINGÊNCIA") and SEFAZ doesn't have it yet. The server re-fetches automatically (up to ~72h) — no rescan needed; it only turns `FAILED_PARSE` if the store never transmits it. |
 | — `receipt.sefaz.rejected_qr:<code>` | Via polling (`FAILED_PARSE`): SEFAZ portal refused the QR with a numbered rejection (e.g. 227 DigestValue mismatch). |
 | — `receipt.state.experimental_failed` | Via polling (`FAILED_PARSE`): experimental state, every fallback layer failed. Team auto-notified. |
 | 503 `receipt.captcha.unavailable` | State requires CAPTCHA but solver isn't enabled (shouldn't happen in prod) |
@@ -713,6 +748,15 @@ POST   /api/v1/receipts/{id}/retry                   → "tentar novamente" de n
                                                         (aproveita fallbacks novos, ex. resgate RS 227);
                                                         IMPORT re-enfileira a reconsulta por chave. 202;
                                                         poll GET /receipts/{id}. Aceita X-Device-Fetch.
+POST   /api/v1/receipts/{id}/device-content { "rawContent": "<HTML/XML>", "unavailable": false }
+                                                     → 200 ReceiptResponse. Nota deixada em NEEDS_DEVICE_FETCH
+                                                        (portal do estado bloqueia o IP do servidor): o app busca
+                                                        a nota no aparelho e reposta o conteúdo bruto; o servidor
+                                                        re-ingere a MESMA nota. Mesmo rate limit do submit.
+POST   /api/v1/receipts/{id}/items/{itemId}/correction { "hint": "o que o produto realmente é" }
+                                                     → 200 ReceiptResponse. Correção de item mal classificado:
+                                                        a IA reclassifica com a dica e atualiza o produto; gera
+                                                        um finding MISSING_RULE pra revisão do admin.
 POST   /api/v1/receipts/{id}/confirm                 → commit. Optional body { excludedItemIds: [uuid, ...] }
                                                         Returns { receipt, personalPromos: [...] }
 POST   /api/v1/receipts/{id}/reject                  → discard. Receipt stays as REJECTED in history.
@@ -774,7 +818,7 @@ These are **estimates from the IBPT national table** (taxes embedded in the reta
 
 **Item-level promo flag (new)** — each `ReceiptResponse.items[*]` now carries `nfcePromoFlag: boolean`. True when the SEFAZ HTML signaled the line was on promo / discount (a discount cell was present, or the description carries stems like "OFERTA", "PROMO", "DESCONTO", "COMBO", "LEVE 3"). Use it for visual emphasis ("oferta!" badge) on receipt detail cards. Backend behavior: flagged items are excluded from baseline calcs in community-promo detection so we don't compare promos to historic promos.
 
-**Item-level category (new)** — each `ReceiptResponse.items[*]` now carries `category: string | null`. Resolved from the linked `Product` (when the item has been canonicalized). Values: `GROCERIES`, `BEVERAGES`, `PRODUCE`, `MEAT_DAIRY`, `BAKERY`, `CLEANING`, `PERSONAL_CARE`, `OTHER`. `null` when the item hasn't been linked to a Product yet, or the Product has no category set. Use it to show a category chip per line on the ReviewScreen / receipt detail without a follow-up `GET /products/{id}` call.
+**Item-level category (new)** — each `ReceiptResponse.items[*]` now carries `category: string | null`. Resolved from the linked `Product` (when the item has been canonicalized). Values: `GROCERIES`, `BEVERAGES`, `PRODUCE`, `MEAT_DAIRY`, `BAKERY`, `CLEANING`, `PERSONAL_CARE`, `HEALTH`, `PET_SUPPLIES`, `OTHER`. `null` when the item hasn't been linked to a Product yet, or the Product has no category set. Use it to show a category chip per line on the ReviewScreen / receipt detail without a follow-up `GET /products/{id}` call.
 
 Confirm is what triggers downstream side effects:
 - Item canonicalization (raw text → canonical Product)
@@ -793,8 +837,10 @@ GET /api/v1/receipts
     &to=2026-04-30T23:59:59
     &marketCnpj=83261420003255
     &category=GROCERIES               ← multi-value: repeat for OR (?category=GROCERIES&category=CLEANING)
-    &status=CONFIRMED                  ← optional: PENDING_CONFIRMATION|CONFIRMED|REJECTED|FAILED_PARSE (invalid → 400; absent → all EXCEPT FAILED_PARSE)
+    &status=CONFIRMED                  ← optional ReceiptStatus: IMPORT_QUEUED|PROCESSING|NEEDS_DEVICE_FETCH|PENDING_CONFIRMATION|CONFIRMED|REJECTED|FAILED_PARSE|CONTINGENCY_PENDING|PORTAL_PENDING (invalid → 400; absent → all EXCEPT FAILED_PARSE)
     &q=leite condensado
+    &categorySlug=queijos             ← taxonomy slug (category or subcategory); preferred over `category`
+    &scope=MARKET                     ← segment lens (ALL default | MARKET | PHARMACY | FUEL | OTHERS; legacy SUPPORTED | OTHER)
     &page=0&size=20
 → Page<ReceiptSummaryResponse>  (each row has marketName, issuedAt, totalAmount, householdTotalAmount, discountTotal, approxTaxTotal, itemCount, status)
 ```
@@ -1594,7 +1640,7 @@ clears any active snooze on that product (the user just took action).
 ## 9. Shopping list optimizer (PRO-52)
 
 ```
-POST /api/v1/shopping-list/optimize
+POST /api/v1/shopping-list/optimize      (alias: /api/v1/shopping-lists/optimize — same handler)
 {
   "items": [
     { "productId": "<uuid-1>", "quantity": 2 },
@@ -1722,11 +1768,16 @@ Each item is **either** linked to a canonical `Product` (auto-suggestion-friendl
 
 ---
 
-## 10d. Admin (ROLE_ADMIN only — not consumed by the FE)
+## 10d. Admin (ROLE_ADMIN only — consumed only by the FE's admin dashboard, never the consumer app)
 
 ```
-GET    /api/v1/admin/users?q=&page=&size=&sort=   → Page<AdminUserSummaryResponse> (sort: createdAt|name|subscriptionTier|receiptCount|totalSpend, e.g. receiptCount,desc)
+GET    /api/v1/admin/users?q=&from=&to=&platform=&channel=&uf=&includeInternal=false&page=&size=&sort=   → Page<AdminUserSummaryResponse> (sort: createdAt|name|subscriptionTier|receiptCount|totalSpend, e.g. receiptCount,desc; from/to ISO date-time; platform = registration Platform; channel = AcquisitionChannel)
+GET    /api/v1/admin/users/uf?householdIds=<uuid>&householdIds=…   → { "<householdId>": "SP", … } — predominant UF per household (lazy lookup for the user list; households with no nota are absent)
+GET    /api/v1/admin/users/cost?userIds=<uuid>&userIds=…           → { "<userId>": <cents>, … } — lifetime paid-API cost per user (absent = 0)
 GET    /api/v1/admin/users/{id}              → AdminUserDetailResponse
+GET    /api/v1/admin/users/{id}/cost         → UserCostResponse { totalCents, byService[], byMonth[] } — where one user's paid-API cost comes from (lifetime)
+PUT    /api/v1/admin/users/{id}/subscription-tier → AdminUserDetailResponse — body {"tier":"PRO"|"FREE"} (see §13)
+PATCH  /api/v1/admin/users/{id}/metrics-exclusion → AdminUserDetailResponse — body {"excluded":true|false}
 DELETE /api/v1/admin/users/{id}              → 204 (deletes account + data; 400 for ADMIN accounts)
 PATCH  /api/v1/admin/users/{id}/role          → AdminUserDetailResponse — body {"role":"MERCHANT"|"USER"}; anything touching ADMIN → 409; demoting a MERCHANT revokes its chain grants
 GET    /api/v1/admin/users/{id}/merchant-access           → List<MerchantAccessResponse> {cnpjRoot, grantedAt}
@@ -1737,14 +1788,22 @@ POST   /api/v1/admin/merchant-claims/{id}/approve → MerchantClaimResponse (pro
 POST   /api/v1/admin/merchant-claims/{id}/reject  → MerchantClaimResponse — body {reason?}
 GET    /api/v1/admin/merchant-promos?cnpjRoot=&page=&size= → Page<MerchantPromoResponse> (moderação das promos anunciadas)
 PATCH  /api/v1/admin/merchant-promos/{id}/active   → MerchantPromoResponse — body {"active":false} (tira de circulação sem apagar)
-GET    /api/v1/admin/receipts?from=&to=&marketCnpj=&category=&q=&householdId=&uf=&status=&parseErrorReason=&page=&size=
+GET    /api/v1/admin/receipts?from=&to=&marketCnpj=&category=&q=&householdId=&uf=&status=&parseErrorReason=&userQ=&includeInternal=false&page=&size=
                                               → Page<AdminReceiptSummaryResponse> — { receipt: ReceiptSummaryResponse, owner: {id,name,email}|null, uf, createdAt, parseErrorReason, parseErrorMessage }
-GET    /api/v1/admin/receipts/{id}            → ReceiptResponse
+GET    /api/v1/admin/receipts/stats?<same filters as the list>   → AdminReceiptStatsResponse { count, totalAmount } — list header total
+GET    /api/v1/admin/receipts/failure-breakdown?<same filters, minus status/parseErrorReason> → [{ reason, count }] — FAILED_PARSE notas grouped by reason ("falhas por motivo" pie; status forced to FAILED_PARSE)
+GET    /api/v1/admin/receipts/entry-methods?days=30 → EntryMethodStatsResponse { windowDays, total, lines[] } — how notas are entered (QR scan / typed chave / photographed chave / photo / import): share + per-method failure rate
+GET    /api/v1/admin/receipts/{id}            → AdminReceiptDetailResponse { receipt: ReceiptResponse, owner }
 POST   /api/v1/admin/receipts/{id}/reparse    → 200 ReceiptResponse
+POST   /api/v1/admin/receipts/retry-by-reason  → 202 { affected } — body {"reasonContains":"INFOSIMPLES"}; re-ingere toda nota FAILED_PARSE cujo motivo contém o fragmento
 POST   /api/v1/admin/receipts/retry-batch      → 202 { affected } — re-ingere o backlog FAILED_PARSE de notas escaneadas pelo qrPayload guardado (cross-household; body opcional { ids: [...] }, sem body = backlog inteiro, cap 200)
 POST   /api/v1/admin/notifications/test       → 202 Accepted
+GET    /api/v1/admin/alerts/config            → AdminAlertsConfigResponse { emailActive, whatsAppEnabled, adminPhoneCount, adminTemplateConfigured, twilioWhatsAppConfigured, templateStatus } — canais de alerta operacional do admin
+POST   /api/v1/admin/alerts/test              → 200 { triggered, at, … } — dispara um alerta operacional de teste (e-mail + WhatsApp quando configurado)
 GET    /api/v1/admin/notifications/sent?days=30&page=&size=  → Page<AdminNotificationSummaryResponse> (sent notifications, newest first)
+GET    /api/v1/admin/notifications/effectiveness?days=30   → NotificationEffectivenessResponse { windowDays, byType[], byHour[], byDayOfWeek[], topTexts[] }
 GET    /api/v1/admin/notifications/audiences               → List<AudienceResponse> (built-in first, live matchCount)
+GET    /api/v1/admin/notifications/audiences/{id}          → AudienceResponse
 POST   /api/v1/admin/notifications/audiences               → 201 AudienceResponse
 PUT    /api/v1/admin/notifications/audiences/{id}          → AudienceResponse (built-in → 400)
 DELETE /api/v1/admin/notifications/audiences/{id}          → 204 (built-in → 400; usado por campanha → 409)
@@ -1761,7 +1820,7 @@ GET    /api/v1/admin/notifications/campaigns/{id}/metrics  → CampaignMetricsRe
 GET    /api/v1/admin/notifications/settings                → List<NotificationSettingResponse> (notificações de sistema: enabled/agenda/templates + defaults)
 PUT    /api/v1/admin/notifications/settings/{job}          → NotificationSettingResponse (job ∈ WEEKLY_DIGEST|MONTHLY_DIGEST|DEALS_DIGEST|BUDGET_ALERT|REPLENISHMENT; efeito imediato)
 GET    /api/v1/admin/notifications/insights?days=30        → NotificationInsightsResponse (funil por tipo c/ abertura, melhor horário, por UF, engajados vs silenciosos, conversões R$)
-GET    /api/v1/admin/products?page=&size=&q=&category=&source= → Page<ProductResponse> (catalog; optional filters: name/EAN substring, category e.g. OTHER, categorizationSource)
+GET    /api/v1/admin/products?page=&size=&q=&category=&categoryNodeSlug=&source= → Page<ProductResponse> (catalog; optional filters: name/EAN substring, category e.g. OTHER, taxonomy node slug, categorizationSource)
 GET    /api/v1/admin/products/missing-brand    → Page<MissingBrandProductResponse>
 PATCH  /api/v1/admin/products/{id}/brand       → 200 ProductResponse
 PATCH  /api/v1/admin/products/{id}/category    → 200 ProductResponse — body {"category":"PET_SUPPLIES"}; sets GLOBAL enum + locks it (source=USER)
@@ -1779,14 +1838,20 @@ POST   /api/v1/admin/llm/disagreements/{id}/resolve?accept=true|false → 204 (a
 PUT    /api/v1/admin/merchants/{cnpj}/support      → SupportOverrideResult — body {"override":"SUPPORTED"|"BLOCKED"|null}; SUPPORTED backfills the price index from the merchant's confirmed receipts
 PUT    /api/v1/admin/merchants/{cnpj}/classification → ClassificationResult — body {"segment":"SUPERMARKET"|"PHARMACY"|"GAS_STATION"|"OTHER"}; veredito por segmento (Mercado/Farmácia/Combustível/Bloquear). Grava o segmento como MANUAL (o classificador CNAE não sobrescreve), limpa o override p/ segmentos suportados (ou BLOCKED p/ OTHER) e faz backfill do índice. Preferir a /support — evita que um mercado promovido vaze pra lente Farmácia
 DELETE /api/v1/admin/products/{id}?force=false     → 200 ProductDeletionResponse (prune test/junk catalog rows)
-GET    /api/v1/admin/analytics/acquisition?days=30&includeInternal=false → AcquisitionAnalyticsResponse (signup funnel + timeline by channel + byPlatform + campaign breakdown + Meta ad-spend / cost-per-signup)
-GET    /api/v1/admin/analytics/subscriptions?includeInternal=false       → SubscriptionAnalyticsResponse (users by tier, paying-active, promo-granted)
+GET    /api/v1/admin/overview?includeInternal=false → AdminOverviewResponse { usersTotal, usersToday, usersThisWeek, usersPro, usersPayingActive, receiptsTotal, receiptsToday, parseRate30d, activeHouseholds1d/7d/30d, stickiness, totalSpendConfirmed, priceObservations, contributingHouseholds, byState[] } — "Visão geral" do painel
+GET    /api/v1/admin/market-intel?includeInternal=false → MarketIntelResponse { priceObservations, contributingHouseholds, topProducts[], topMarkets[], topMarketsByChain[], categorySpend[], byUf[] }
+GET    /api/v1/admin/analytics/acquisition?days=30&includeInternal=false → AcquisitionReportResponse (signup funnel + timeline by channel + byPlatform + campaign breakdown + Meta ad-spend / cost-per-signup)
+GET    /api/v1/admin/analytics/subscriptions?includeInternal=false       → SubscriptionReportResponse (users by tier, paying-active, promo-granted)
+GET    /api/v1/admin/analytics/deletion-reasons?days=30 → DeletionReasonStatsResponse { windowDays, total, answered, lines[], recentNotes[] } — motivos de exclusão de conta
+GET    /api/v1/admin/marketing/dashboard?days=30   → MarketingDashboardResponse { windowDays, from, to, meta, organic } — Meta Ads spend + Google Search Console; each section carries configured=false until its env vars are set
+GET    /api/v1/admin/analytics/store/ios?days=90   → StoreAnalyticsResponse { configured, dataDelayNote, syncedAt, dataFrom, dataTo, totals, bySource[], dailyRows[] } — funil iOS pré-instalação (App Store Connect)
+POST   /api/v1/admin/analytics/store/ios/sync      → {"rowsSynced": n} — força a sincronização da App Store Connect agora
 GET    /api/v1/admin/analytics/retention-cohorts?weeks=8&includeInternal=false → RetentionCohortResponse (weekly cohort triangle + per-channel pooled retention curve)
 POST   /api/v1/admin/analytics/ad-spend/sync       → {"rowsSynced": n} — run the Meta ad-spend sync now instead of waiting for the daily cron (0 when Meta is not configured)
 GET    /api/v1/admin/costs/infosimples             → InfosimplesFinanceResponse — painel da conta pré-paga: saldo/consumoMes/franquiaMinima ao vivo, aVarrerNoFechamento + proximoFechamento (dia 1º), totais históricos e historico[] mensal (recarga/consumo/varrido)
 GET    /api/v1/admin/costs?days=30                 → CostReportResponse (paid-API spend: total + by service + by state + today vs budget + conta Infosimples ao vivo: infosimplesSaldo, infosimplesConsumoMes (cobrado real), infosimplesFranquiaMinima — null se indisponível)
-GET    /api/v1/admin/state-coverage                → StateCoverageResponse (per-UF: VERIFIED/EXPERIMENTAL + NOTA outcomes attempts/successes/failures/pending/users/failureReasons + per-layer `strategies` telemetry)
-GET    /api/v1/admin/ingestion-health?days=30      → IngestionHealthResponse (pipeline health: status mix, parse success rate, stuck/timeout counts, per-UF outcomes, top parseErrorReason keys — from the receipts table)
+GET    /api/v1/admin/state-coverage?days=           → StateCoverageResponse (per-UF: VERIFIED/EXPERIMENTAL + NOTA outcomes attempts/successes/failures/pending/users/failureReasons + per-layer `strategies` telemetry)
+GET    /api/v1/admin/ingestion-health?days=30&includeInternal=false → IngestionHealthResponse (pipeline health: status mix, parse success rate, stuck/timeout counts, per-UF outcomes, top parseErrorReason keys — from the receipts table)
 GET    /api/v1/admin/notifications/relevance-report?days=30 → RelevanceReportResponse (deal-suppression shadow-mode KPI before flipping relevance ON)
 DELETE /api/v1/admin/receipts/{id}/observations    → PurgeObservationsResponse (pull one receipt's contributions out of the price index)
 GET    /api/v1/admin/ecommerce/offers?ean=&page=&size= → Page<CuratedOfferResponse> (curated online offers, newest edits first)
@@ -1794,6 +1859,22 @@ POST   /api/v1/admin/ecommerce/offers              → CuratedOfferResponse — 
 PUT    /api/v1/admin/ecommerce/offers/{id}         → CuratedOfferResponse
 DELETE /api/v1/admin/ecommerce/offers/{id}         → 204
 GET    /api/v1/admin/leaderboard/discount-hunters?days=30 → LeaderboardResponse (all households, emails as handles)
+
+# ── Redes de mercado (chains) + logos ──
+GET    /api/v1/admin/chains?state=&search=&city=&hasLogo=&page=0&size=20 → Page<MarketChainResponse> { id, cnpjRoot, name, logoUrl, marketCount }
+GET    /api/v1/admin/chains/states                 → ["RS", …] — UFs com redes (filtro)
+GET    /api/v1/admin/chains/cities?state=          → ["Porto Alegre", …] — cidades com redes (filtro)
+POST   /api/v1/admin/chains                        → MarketChainResponse — body {cnpjRoot, name}
+PUT    /api/v1/admin/chains/{id}                   → MarketChainResponse — body {name}
+POST   /api/v1/admin/chains/{id}/logo              → MarketChainResponse — multipart, campo "file"
+DELETE /api/v1/admin/chains/{id}/logo              → remove o logo
+GET    /api/v1/chains/logo/{id}                    → PNG do logo (PÚBLICO, sem auth; Cache-Control público de 1 ano; 404 sem logo). É o caminho devolvido em `logoUrl` (`/chains/logo/{id}?v=…`)
+
+# ── Fotos retidas de tentativas de nota por foto (diagnóstico; toggle temporário, em memória) ──
+GET    /api/v1/admin/photo-attempts/settings       → { enabled }
+POST   /api/v1/admin/photo-attempts/settings       → { enabled } — body { "enabled": true|false }; vale até o próximo restart
+GET    /api/v1/admin/photo-attempts/{receiptId}    → { receiptId, count, photos[] } (cada foto com index, mediaType e o caminho de download)
+GET    /api/v1/admin/photo-attempts/{receiptId}/{index} → bytes da foto (404 se não existir)
 
 # ── Garimpo de promoções (admin deal-hunting; live calls need ML creds — 503 without) ──
 GET    /api/v1/admin/garimpo/search?q=&marketplace=mercadolivre&offset=0&limit=20&minDiscount= → GarimpoSearchResponse (live term search; changed prices land in the history; minDiscount filters the response only)
@@ -1826,7 +1907,7 @@ POST   /api/v1/admin/dev/seed-discounted-receipt?targetEmail= → ReceiptRespons
 - **Set product brand** — body `{ "brand": "Tio João" }`. Lightweight PATCH that only sets `brand`. Returns the updated `ProductResponse`. Use after the missing-brand listing to fill catalog gaps; subsequent canonicalization for items of this product (and the metadata-dedup gate) become more accurate as soon as brand is set.
 - **Products duplicates** — returns groups of products that share an exact `(genericName, brand, packSize, packUnit)` profile and are therefore probable duplicates. Each group: `{ genericName, brand, packSize, packUnit, category, products: [ProductResponse] }`. Only products with all four metadata dimensions populated are eligible. Within a group, the oldest product appears first — a natural default survivor.
 - **Merge product** — body `{ "absorbedId": "<uuid>", "dryRun": false }`. The `{id}` in the path is the **survivor**. Migrates all aliases, receipt items, price observations, manual purchases, shopping-list items, household aliases (drops where survivor already has one for the household), and consumption snoozes (same conflict logic) from `absorbed` to the survivor; deletes `absorbed`. Set `dryRun: true` to get the migration counts without applying any change — the only undo is to **not** apply. Returns `ProductMergeResultResponse` with per-table counts.
-- **Recategorize catalog** — re-runs the extraction cascade over every product's stored description and compares to what's stored. `GET` = dry-run report `{ totalProducts, mismatchCount, applicableFromDictionary, mlSuggestions, skippedUserOverrides, mismatches:[{productId, normalizedName, ean, currentCategory, currentSource, suggestedCategory, suggestedSource, userOverride}] }`. `POST` = apply: by **default applies only trusted dictionary suggestions** (the ML layer is currently unreliable), skipping manual (`source=USER`) categories and null suggestions. Pass `?includeMl=true` to also apply ML suggestions. Use after editing the dictionary to fix already-ingested products (categorization otherwise only runs once per product, at creation).
+- **Recategorize catalog** — the old `GET`/`POST /admin/products/recategorize` were removed. Use `POST /categorizer/recategorize-taxonomy` (and its `/calibrate` dry-run) — see §11.
 
 - **Acquisition analytics** — `GET /admin/analytics/acquisition?days=30` (window default 30). Powers the marketing dashboard from the immutable `acquisitionChannel` derived at signup (see §1 `attribution`) plus the Meta ad-spend rollup. Shape:
   ```
@@ -2005,16 +2086,17 @@ GET /api/v1/price-index/sponsored-promos → List<SponsoredPromoResponse> {promo
 
 ```
 GET  /api/v1/categorizer/classify?description=Milho&description=Lays
-                                       → full chain: dictionary + ML + final decision (dev)
-GET  /api/v1/categorizer/ml/predict?description=Milho&description=Lays
-                                       → ML model ALONE (dev — inspect/improve the model)
+                                       → dry-run of the cascade with the dictionary breakdown (dev)
 POST /api/v1/categorizer/benchmark     → categorization accuracy % over the golden set (records a snapshot)   [ADMIN only]
 GET  /api/v1/categorizer/quality/history?limit=50 → quality trend over time (snapshots)
-GET  /api/v1/categorizer/status        → ML model state
-POST /api/v1/categorizer/retrain       → trigger retraining manually          [ADMIN only]
+GET  /api/v1/categorizer/live-accuracy → LiveAccuracyResponse { total, correct, accuracyPct, mismatches[] } [ADMIN only]
+GET  /api/v1/categorizer/simulate?minTokens=3&maxTokens=6&sampleSize=2000 → PhraseTokenSimulationResponse — dry-run of the phrase-token limits over unmatched items + golden set [ADMIN only]
 POST /api/v1/categorizer/auto-promote  → trigger learned-dictionary promotion  [ADMIN only]
+POST /api/v1/categorizer/recategorize-taxonomy → { keywordUpdated, llmUpdated, eansScanned, catalogRowsEnriched, productsUpdated } — recategorize products into the 2-level taxonomy [ADMIN only]
+GET  /api/v1/categorizer/recategorize-taxonomy/calibrate?sample=100 → { sample, keywordHigh, keywordLow, keywordNone, llmPlaced, agree, precisionPct, disagreements[] } [ADMIN only]
 POST   /api/v1/categorizer/promote-consensus  → graduate user-correction consensus → learned dict [ADMIN only]
 GET    /api/v1/categorizer/consensus         → list all CONSENSUS-graduated products             [ADMIN only]
+GET    /api/v1/categorizer/consensus/audit?productId=&limit=50 → consensus-graduation audit rows { productId, category, householdIds, votes } [ADMIN only]
 DELETE /api/v1/categorizer/learned           → clear all auto-promoted learned entries + reset in-memory dict [ADMIN only]
 DELETE /api/v1/categorizer/consensus         → revert all CONSENSUS-graduated products to NONE  [ADMIN only]
 POST   /api/v1/categorizer/dictionary/import  → bulk-upsert token mappings into learned dict       [ADMIN only]
@@ -2024,15 +2106,39 @@ DELETE /api/v1/categorizer/dictionary/curated/{id} → 204 — delete one curate
 GET    /api/v1/categorizer/dictionary/learned?q=&page=&size= → Page<LearnedEntryResponse> — list/search learned entries [ADMIN only]
 DELETE /api/v1/categorizer/dictionary/learned/{id} → 204 — delete one learned entry + hot-reload  [ADMIN only]
 POST   /api/v1/categorizer/brands/import      → bulk-upsert brand-registry entries, hot-reloaded   [ADMIN only]
-POST   /api/v1/categorizer/brands/derive-from-catalog?minProducts=2 → grow registry from EAN-catalog brands (no external calls) [ADMIN only]
+GET    /api/v1/categorizer/brands?q=&limit=20  → ["Tio João", …] — brand display names (autocomplete)            [ADMIN only]
+GET    /api/v1/categorizer/brands/entries?q=&limit=50 → [{ id, normalizedKey, displayName, source }]           [ADMIN only]
+DELETE /api/v1/categorizer/brands/{id}        → 204 — delete one brand-registry entry              [ADMIN only]
+POST   /api/v1/categorizer/brands/promote-aliases → promote recurring brand aliases into the registry [ADMIN only]
+POST   /api/v1/categorizer/brands/derive-from-catalog?minProducts=2&onlyBrazil=true → grow registry from EAN-catalog brands (no external calls) [ADMIN only]
 POST   /api/v1/categorizer/benchmark/import   → bulk-upsert golden-set rows for the benchmark      [ADMIN only]
 POST   /api/v1/categorizer/ean-catalog/import → bulk-seed EAN→category catalog (pre-mapped rows)   [ADMIN only]
 POST   /api/v1/categorizer/ean-catalog/import-off → bulk-seed from RAW Open Food Facts rows (server maps tags) [ADMIN only]
 GET    /api/v1/admin/products/brand-coverage    → dry-run brand-extraction coverage over the base  [ADMIN only]
 GET    /api/v1/admin/products/unmatched-report?topN=30 → item→product matching KPI + worst orphans [ADMIN only]
+
+# ── AI assist layer — /api/v1/categorizer/ai/** (ALL ADMIN only: spends money / mutates global state) ──
+GET    /api/v1/categorizer/ai/status           → { enabled, extractorModel, curatorModel, pendingQueue{itensNaoCasados, produtosSemMarca, produtosSemNome, produtosOutros}, lastSweep{…} }
+POST   /api/v1/categorizer/ai/sweep?full=false → starts the async sweep (full=true walks the WHOLE queue — historical backfill)
+GET    /api/v1/categorizer/ai/findings?status=PENDING&type=&page=0&size=30&sort= → Page<AiFinding> (review queue)
+POST   /api/v1/categorizer/ai/findings/{id}/approve → AiFinding — optional JSON body with field overrides
+POST   /api/v1/categorizer/ai/findings/{id}/reject  → AiFinding
+GET    /api/v1/categorizer/ai/findings/{id}/ufs     → ["RS", …] — UFs where the finding's product was scanned
+POST   /api/v1/categorizer/ai/findings/approve-bulk → { approved, failed } — body: [<findingId>, …]
+POST   /api/v1/categorizer/ai/findings/approve-subcategories-above?threshold=0.9 → { approved, failed }
+POST   /api/v1/categorizer/ai/findings/re-enrich    → re-enriches pending findings
+POST   /api/v1/categorizer/ai/suggest-subcategories?limit=120 → 202 — background sweep filing one PENDING subcategory suggestion per product
+POST   /api/v1/categorizer/ai/reprocess-fallback?limit=10 → { receipts, matched, alreadyMatched, parseFailed, blankName, gone, callError } (diagnostic)
+GET    /api/v1/categorizer/ai/usage?days=30    → spend panel { days, totalCalls, totalInputTokens, totalOutputTokens, totalCostUsd, allTimeCostUsd, budgetUsd, estimatedBalanceUsd, byActivity[], byDay[] }
+GET    /api/v1/categorizer/ai/model-comparison?days=30 → [{ model, provider, calls, costUsd, avgCostPerCallUsd, successRatePct, avgLatencyMs, findingsCreated/Approved/Rejected, acceptanceRatePct, avgConfidence }] (days=0 → all time)
+POST   /api/v1/categorizer/ai/benchmark-model?model=&sample= → starts an async accuracy benchmark of one model against the golden set
+GET    /api/v1/categorizer/ai/benchmark-model/runs → benchmark run history
+GET    /api/v1/categorizer/ai/providers        → current provider/model per tier + option catalog + which providers have credentials
+PUT    /api/v1/categorizer/ai/providers/{tier} → body { provider, model } — switch a tier's provider/model, effective immediately
+GET    /api/v1/categorizer/ai/classify?description= → LLM proposal for ONE description (admin "Testar" screen; costs one small call)
 ```
 
-> The **model-training / catalog-mutating** endpoints (`retrain`, `auto-promote`, `promote-consensus`, `learned`, `consensus`, the four `*/import`s, and `benchmark` — it records a snapshot) require `Role.ADMIN` — a normal user gets `403`. The read/debug GETs (`classify`, `ml/predict`, `quality/history`, `status`) remain open to any authenticated user.
+> The **catalog-mutating** endpoints (`auto-promote`, `promote-consensus`, `recategorize-taxonomy`, `learned`, `consensus`, every `*/import`, the `brands/*` writes, and `benchmark` — it records a snapshot), the dictionary/brand/consensus listings, `simulate`, `live-accuracy`, `recategorize-taxonomy/calibrate` and everything under `/categorizer/ai/**` require `Role.ADMIN` — a normal user gets `403`. Only the read/debug GETs `classify` and `quality/history` remain open to any authenticated user.
 
 > Since 2026-07-02 the curated dictionary, brand registry and benchmark golden set live in **DB tables** (formerly classpath CSVs) — the three new imports make them editable at runtime, no deploy needed. Bodies: curated `[{keyword, genericName, category}]`, brands `[{key, displayName}]`, benchmark `[{description, expectedCategory, expectedBrand?, expectedPackSize?, expectedPackUnit?}]`. All are upserts returning `{imported, skipped}`.
 
@@ -2048,9 +2154,9 @@ GET    /api/v1/admin/products/unmatched-report?topN=30 → item→product matchi
 
 **`POST /ean-catalog/import`** — bulk-seeds the EAN catalog (step A2 in the canonicalization cascade). Body: `[{ ean, genericName?, brand?, category?, source }]`. `source` accepts `OPEN_FOOD_FACTS`, `CURATED_IMPORT`, or `USER_CONFIRMED`. Upserts by EAN — re-importing the same EAN updates it. Returns `{ imported, skipped }`. Designed to receive Open Food Facts Brazil dump data; entries with blank/null EAN are skipped. Category and brand from the catalog enrich newly created products but never overwrite data already extracted from the receipt description.
 
-**`/benchmark` (quality metric)** — runs the cascade over `seed/categorization-benchmark.csv` (curated description → true category/brand/quantity) and returns per-field accuracy: `{ total, correct, accuracyPct (category), wrong, uncategorized, brandChecked, brandCorrect, brandAccuracyPct, quantityChecked, quantityCorrect, quantityAccuracyPct, mlCategoryChecked, mlCategoryCorrect, mlCategoryAccuracyPct, failures:[{description, field, expected, got, source}] }`. Brand/quantity are scored only on golden rows that declare them. `mlCategory*` is the ML model measured **alone** (shadow) — it's currently gated OUT of the live cascade (`category-apply-enabled=false`); watch `mlCategoryAccuracyPct` to decide when to re-enable. Each call records a snapshot.
+**`/benchmark` (quality metric)** — runs the cascade over `seed/categorization-benchmark.csv` (curated description → true category/brand/quantity) and returns per-field accuracy: `{ total, correct, accuracyPct (category), wrong, uncategorized, brandChecked, brandCorrect, brandAccuracyPct, quantityChecked, quantityCorrect, quantityAccuracyPct, failures:[{description, field, expected, got, source}] }`. Brand/quantity are scored only on golden rows that declare them. Each call records a snapshot. (The trained-ML classifier was retired — the `mlCategory*` fields no longer exist.)
 
-**`/quality/history`** — the trend: snapshots (newest first) from benchmark runs + backfills. Each: `{ recordedAt, trigger, accuracyPct, benchmarkCorrect, benchmarkTotal, catalogProducts, catalogCategorized, catalogCoveragePct, brandAccuracyPct, quantityAccuracyPct, mlAccuracyPct, mlReady }`.
+**`/quality/history`** — the trend: snapshots (newest first) from benchmark runs + backfills. Each: `{ recordedAt, trigger, accuracyPct, benchmarkCorrect, benchmarkTotal, catalogProducts, catalogCategorized, catalogCoveragePct, brandAccuracyPct, quantityAccuracyPct }`.
 
 Mostly for ops. Categorization runs automatically on receipt confirm.
 
@@ -2061,15 +2167,10 @@ Mostly for ops. Categorization runs automatically on receipt confirm.
   "category": "PRODUCE", "genericName": "Batata", "brand": null,
   "packSize": null, "packUnit": null,
   "source": "DICTIONARY",
-  "dictionary": { "genericName": "Batata", "category": "PRODUCE", "source": "DICTIONARY" },
-  "mlCategory": { "label": "GROCERIES", "confidence": 0.40, "meetsThreshold": false },
-  "mlGenericName": { "label": "Salgadinho", "confidence": 0.40, "meetsThreshold": false },
-  "mlReady": true, "mlConfidenceThreshold": 0.75
+  "dictionary": { "genericName": "Batata", "category": "PRODUCE", "source": "DICTIONARY" }
 }
 ```
-`source` says which layer won (`DICTIONARY`/`LEARNED_DICTIONARY`/`ML`/`NONE`) — the fast way to tell a bad dictionary entry from an over-confident ML guess. `mlApplied` tells you whether the ML guess is actually used in the live cascade (currently `false` — ML is benched).
-
-**`/ml/predict` (dev, ML-only)** — the model's raw guess per term, ignoring the dictionary and the apply gate: `[{ input, category:{label,confidence,meetsThreshold}, genericName:{...}, ready, confidenceThreshold }]`. Use it to inspect/improve the model in isolation; `/classify` is the whole chain.
+`source` says which layer won (a `CategorizationSource`, e.g. `DICTIONARY`/`LEARNED_DICTIONARY`/`NONE`). The trained-ML layer was retired (`ML` is a tombstone value no product carries), so the old `ml*` fields and the `/ml/predict`, `/status` and `/retrain` endpoints no longer exist. For an LLM opinion on one description use `GET /categorizer/ai/classify` (ADMIN).
 
 ---
 
@@ -2077,7 +2178,7 @@ Mostly for ops. Categorization runs automatically on receipt confirm.
 
 ```
 GET /api/v1/legal/terms             → { "version": "1.0", "content": "...", "updatedAt": "..." }
-GET /api/v1/legal/privacy-policy    → same shape
+GET /api/v1/legal/privacy-policy    → same shape (alias: /api/v1/legal/privacy)
 ```
 
 Both are public (no auth). Show before register; pass the returned `version` in
@@ -2106,6 +2207,9 @@ gating service.
 | History window (`/insights/*`, `/items`) | last 90 days | full range | `from` older than 90d (or omitted) is silently clamped. No error — just windowed. |
 | Notification delivery | in-app inbox only | inbox + push/email | FREE inbox row is always saved (`delivered=false`, `failureReason=free_tier_inbox_only`); push/email skipped. |
 | Basket optimization (`POST /shopping-list/optimize`) | — | ✅ | FREE → **402**. |
+| History export (`GET /receipts/export`) | — | ✅ | FREE → **402** (`CSV_EXPORT`). |
+| Receipt by photo (`POST /receipts/items-photo`) | — | ✅ | FREE → **402** (`PHOTO_EXTRACTION`); also counts toward the monthly receipt cap. |
+| Household size (join) | 2 people | 6 people | One PRO member lifts the whole household to the max. Over the cap → localized `household.full.free` / `household.full.max`. The absolute max (6) applies even with enforcement off. |
 
 **402 response** (Payment Required) — distinct from 403 (forbidden). Standard
 error shape; the message resolves `subscription.upgrade_required` with the
@@ -2164,18 +2268,27 @@ retry. FE never calls this.
 - **Volume gates** mean some endpoints return empty until enough data
   accumulates (predictions: ≥2 per product, preferences: ≥5 per generic,
   reference price: ≥5 samples + ≥3 households). This is by design.
-- **Rate limiting.** `POST /auth/*` is capped at **5 req/min/IP**;
-  `POST /receipts` is capped at **30 req/hour/user**. Over-quota responses
-  are `429 Too Many Requests` with a `Retry-After: <seconds>` header and a
-  translated message body. Successful responses on rate-limited routes
-  carry `X-RateLimit-Remaining` so the FE can warn the user before they
-  hit the wall. Other routes are uncapped.
+- **Rate limiting.** `POST /auth/login` is capped at **15 req/min**,
+  `POST /auth/refresh` at **60 req/min**, account creation / social sign-in
+  (`POST /auth/register`, `/auth/google`, `/auth/apple`) share **20 req/min**,
+  every other `POST /auth/*` at **5 req/min**; receipt submits (`POST /receipts`,
+  `/receipts/photo`, `/receipts/chave/photo`, `/receipts/prefetched`,
+  `/receipts/items-photo`, `/receipts/xml`, `/receipts/retry`,
+  `/receipts/{id}/retry`, `/receipts/{id}/device-content`) share **30 req/hour**.
+  Pageable endpoints clamp `size` to **100**. Also capped: bulk import (5/hour), `extract-chaves`
+  (30/hour), exports (10/hour), `households/join` + invite preview (10/hour),
+  phone OTP (10/hour), `email-verification/resend` (3/hour), `/contact` and
+  `/beta-signup` (5/hour each), `/visits` and `/app-config` (60/min).
+  Over-quota responses are `429 Too Many Requests` with a
+  `Retry-After: <seconds>` header and a translated message body. Successful
+  responses on rate-limited routes carry `X-RateLimit-Remaining` so the FE
+  can warn the user before they hit the wall. Other routes are uncapped.
 
 ---
 
 ## Postman collection
 
 Full request library + sequential E2E flow at
-`postman/economizaai.postman_collection.json`. Set the `baseUrl` collection
+`postman/economizai.postman_collection.json`. Set the `baseUrl` collection
 variable to your environment, optionally set `qrPayload` to a real NFC-e for
 the receipt steps.

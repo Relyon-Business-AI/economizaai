@@ -8,18 +8,21 @@ Topology: **two environments, each = 1 Web Service + 1 managed Postgres**, with
 **separate databases** and **separate secrets**. Never point dev and prod at the
 same DB.
 
+> This is the generic setup runbook. The live services, plans and IDs (dev on Free since
+> 2026-11-03, prod on Standard 2 GB) are in [`INFRASTRUCTURE.md`](./INFRASTRUCTURE.md).
+
 | | dev | prod |
 |---|---|---|
 | Web Service | Starter (or Free, spins down) | **Standard — 1 CPU / 2 GB** (JVM needs ≥1 GB; do NOT use 512 MB Starter) |
 | Postgres | Basic (256 MB) | Basic/Standard with **daily backups on** |
-| Auto-deploy branch | `development` | `production` (merge `development → production` to release) |
+| Auto-deploy branch | `development` | `main` (merge `development → main` to release; the old `production` branch was deleted 2026-09-01) |
 | Always-on | Free spins down (schedulers pause — OK for dev) | Yes (paid = always-on; schedulers/sweepers need it) |
 
 ---
 
 ## 0. Prereqs
 - GitHub repo connected to Render.
-- Create a `production` branch off `development` (release by merging into it).
+- Prod deploys from `main` (release by merging `development` into it — see `DEPLOY.md`).
 - Decide region — Render has **no Brazil region**; pick **Ohio** (closest East) or Oregon. Use the SAME region for a service and its DB (private networking + low latency).
 
 ---
@@ -42,11 +45,11 @@ For **each** environment:
 For **each** environment:
 1. Render → New → **Web Service** → from the repo.
 2. **Runtime: Docker** (it auto-detects the `Dockerfile`). No build/start command needed.
-3. **Branch:** `production` (prod) / `development` (dev). Auto-deploy on push: on.
+3. **Branch:** `main` (prod) / `development` (dev). Auto-deploy on push: on.
 4. **Instance type:** Standard (prod) / Starter or Free (dev).
 5. **Region:** same as the DB.
 6. **Health check path:** `/actuator/health` (public, returns `{"status":"UP"}`).
-7. **Port:** the container listens on `10000` (matches Render's default `PORT`). *(Optional hardening: change the Dockerfile entrypoint to `--server.port=${PORT:-10000}` so it honors whatever port Render injects.)*
+7. **Port:** the container listens on `10000` (matches Render's default `PORT`); the Dockerfile entrypoint already uses `--server.port=${PORT:-10000}`, so it honors whatever port Render injects.
 
 ---
 
@@ -74,7 +77,9 @@ Everything not listed here has a safe default baked into `application.yaml`.
 | Var | Notes |
 |---|---|
 | `CAPTCHA_PROVIDER` / `CAPTCHA_API_KEY` | `capsolver` + key to enable MS/SC scraping (else those states 503) |
-| `INFOSIMPLES_ENABLED` / `INFOSIMPLES_API_KEY` | `true` + key to enable CE + fallback (paid) |
+| `INFOSIMPLES_ENABLED` / `INFOSIMPLES_API_KEY` | `true` + key to enable the paid SEFAZ fallback (all UFs) |
+| `ANTHROPIC_API_KEY` | AI layer (`economizaai.ai`: photo-receipt extraction, HTML parse-rescue, curadoria). Blank = AI features fail closed |
+| `PROFILE_PICTURE_STORAGE` + `R2_ENDPOINT` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | `r2` + Cloudflare R2 creds for profile pictures (see §4) |
 | `SMTP_HOST/PORT/USERNAME/PASSWORD` + `EMAIL_FROM` | enables email verification + digests |
 | `NOTIFICATIONS_EMAIL_ENABLED` | `true` once SMTP works |
 | `EXPO_ACCESS_TOKEN` | push notifications |
@@ -94,6 +99,7 @@ Everything not listed here has a safe default baked into `application.yaml`.
 Render web filesystems are **ephemeral** — wiped on every deploy/restart. `PROFILE_PICTURE_DIR` (default `/tmp/...`) means **uploaded profile pics vanish on each deploy**. Options:
 - **Now (quick):** attach a Render **Disk** to the service, mount at e.g. `/var/economizai/pics`, set `PROFILE_PICTURE_DIR` to it. (A disk pins the service to 1 instance — fine until you scale horizontally.)
 - **Before scale:** move to object storage (S3/Cloudflare R2). Tracked in DEV_NOTES.
+- **Current (since 2026-10-09):** the object-storage option is built and in use — set `PROFILE_PICTURE_STORAGE=r2` plus the `R2_*` vars (`application.yaml` → `economizaai.profile-picture`); no Render Disk needed, which also allows zero-downtime deploys. See DEV_NOTES "Profile picture storage".
 
 Logs: `LOG_FILE` is also ephemeral, but the app logs to **stdout** too — Render captures that, so use the Render log stream (no disk needed for logs).
 
