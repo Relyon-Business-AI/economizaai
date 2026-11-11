@@ -667,7 +667,19 @@ class UserServiceTest {
     }
 
     @Test
-    void login_looksUpNormalizedEmail() {
+    void register_flagsNewAccount() {
+        var request = new RegisterRequest("John", "john@test.com", "password123", "1.0", "1.0", null);
+        var household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
+        when(householdService.createSoloHousehold()).thenReturn(household);
+        when(passwordEncoder.encode("password123")).thenReturn("encoded");
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(jwtService.generateToken(any(User.class))).thenReturn("jwt-token");
+
+        assertEquals(true, userService.register(request).newAccount());
+    }
+
+    @Test
+    void login_looksUpNormalizedEmailAndIsNeverNewAccount() {
         var request = new LoginRequest(" John@Test.com", "password123", null);
         var user = buildUser();
         when(userRepository.findByEmail("john@test.com")).thenReturn(Optional.of(user));
@@ -676,7 +688,7 @@ class UserServiceTest {
 
         var response = userService.login(request);
 
-        assertNotNull(response);
+        assertEquals(false, response.newAccount());
         verify(loginAttemptGuard).recordSuccess("john@test.com");
     }
 }

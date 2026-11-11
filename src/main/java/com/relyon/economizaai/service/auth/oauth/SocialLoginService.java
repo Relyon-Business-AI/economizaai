@@ -72,7 +72,7 @@ public class SocialLoginService {
         var resolved = resolveOrCreateUser(AuthProvider.GOOGLE, claims.subject(),
                 EmailNormalizer.normalize(claims.email()),
                 claims.emailVerified(), claims.name(), request.platform(), request.attribution());
-        return issueAuth(resolved.user(), resolved.signupPromoValidUntil());
+        return issueAuth(resolved);
     }
 
     @Transactional
@@ -84,11 +84,14 @@ public class SocialLoginService {
         var resolved = resolveOrCreateUser(AuthProvider.APPLE, claims.subject(),
                 EmailNormalizer.normalize(claims.email()),
                 claims.emailVerified(), claims.name(), request.platform(), request.attribution());
-        return issueAuth(resolved.user(), resolved.signupPromoValidUntil());
+        return issueAuth(resolved);
     }
 
-    /** {@code signupPromoValidUntil} is non-null only when this call just created the account and granted it the promo. */
-    private record ResolvedUser(User user, LocalDateTime signupPromoValidUntil) {}
+    /**
+     * {@code signupPromoValidUntil} is non-null only when this call just created the account and
+     * granted it the promo; {@code newAccount} is true only when this call created the account.
+     */
+    private record ResolvedUser(User user, LocalDateTime signupPromoValidUntil, boolean newAccount) {}
 
     private ResolvedUser resolveOrCreateUser(AuthProvider provider, String subject, String email,
                                      boolean emailVerified, String name, Platform platform,
@@ -98,14 +101,14 @@ public class SocialLoginService {
             var user = bySubject.get();
             log.info("social.login matched_by_subject provider={} user={}", provider, LogMasker.email(user.getEmail()));
             loginActivityRecorder.recordLogin(user, platform);
-            return new ResolvedUser(user, null);
+            return new ResolvedUser(user, null, false);
         }
         if (email != null && !email.isBlank()) {
             var byEmail = userRepository.findByEmail(email);
             if (byEmail.isPresent()) {
                 var user = linkProvider(byEmail.get(), provider, subject, emailVerified);
                 loginActivityRecorder.recordLogin(user, platform);
-                return new ResolvedUser(user, null);
+                return new ResolvedUser(user, null, false);
             }
         }
         return createSocialUser(provider, subject, email, emailVerified, name, platform, attribution);
@@ -184,13 +187,14 @@ public class SocialLoginService {
         metaConversionsService.reportCompleteRegistration(savedUser, provider.name().toLowerCase());
         log.info("social.login created provider={} user={} household={}",
                 provider, LogMasker.email(savedUser.getEmail()), household.getId());
-        return new ResolvedUser(savedUser, null);
+        return new ResolvedUser(savedUser, null, true);
     }
 
-    private AuthResponse issueAuth(User user, LocalDateTime signupPromoValidUntil) {
+    private AuthResponse issueAuth(ResolvedUser resolved) {
+        var user = resolved.user();
         var token = jwtService.generateToken(user);
         var refreshToken = refreshTokenService.issue(user);
         return new AuthResponse(token, refreshToken, UserResponse.from(user),
-                signupPromoValidUntil != null, signupPromoValidUntil);
+                resolved.signupPromoValidUntil() != null, resolved.signupPromoValidUntil(), resolved.newAccount());
     }
 }

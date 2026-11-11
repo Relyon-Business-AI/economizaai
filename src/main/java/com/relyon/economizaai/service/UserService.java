@@ -171,7 +171,7 @@ public class UserService {
         log.info("New user registered: {} (household {}, terms v{}, privacy v{})",
                 LogMasker.email(savedUser.getEmail()), household.getId(),
                 savedUser.getAcceptedTermsVersion(), savedUser.getAcceptedPrivacyVersion());
-        return new AuthResponse(token, refreshToken, UserResponse.from(savedUser), false, null);
+        return new AuthResponse(token, refreshToken, UserResponse.from(savedUser), false, null, true);
     }
 
     public AuthResponse login(LoginRequest request) {

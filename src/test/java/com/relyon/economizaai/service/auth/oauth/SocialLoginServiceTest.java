@@ -124,6 +124,7 @@ class SocialLoginServiceTest {
         verify(subscriptionService, never()).grantSignupPromoIfEnabled(any(User.class));
         assertEquals(false, response.signupPromoGranted());
         assertNull(response.signupPromoValidUntil());
+        assertTrue(response.newAccount());
     }
 
     @Test
@@ -144,6 +145,7 @@ class SocialLoginServiceTest {
         var response = socialLoginService.loginWithGoogle(new GoogleLoginRequest("id-token", null));
 
         assertEquals("jwt-token", response.token());
+        assertEquals(false, response.newAccount());
         verify(userRepository, never()).save(any(User.class));
         verify(householdService, never()).createSoloHousehold();
         verify(notificationRuleService, never()).ensureDefaults(any(User.class));
