@@ -142,6 +142,11 @@ public class Receipt extends BaseEntity implements HouseholdScoped {
     @Column(name = "contingency_paid_attempted", nullable = false)
     private boolean contingencyPaidAttempted;
 
+    // True once ProcessingReceiptSweeper gave this stranded scan its single second chance
+    // (re-queued instead of failed) — the guard that keeps the re-queue from looping.
+    @Column(name = "stranded_requeued", nullable = false)
+    private boolean strandedRequeued;
+
     // How the paid Infosimples lookup answered in the server attempt that handed this nota to the
     // device (NEEDS_DEVICE_FETCH); null = not tried. Read by the device-fetch steps so the same
     // paid lookup is not repeated — never after a "no data" answer.
