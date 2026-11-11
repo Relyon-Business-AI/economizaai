@@ -1,6 +1,8 @@
 package com.relyon.economizaai.service.notifications;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.relyon.economizaai.config.AsyncConfig;
 import com.relyon.economizaai.model.Notification;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.NotificationChannel;
@@ -10,6 +12,8 @@ import com.relyon.economizaai.repository.NotificationRepository;
 import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import lombok.extern.slf4j.Slf4j;
+import org.hibernate.Hibernate;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -24,6 +28,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * Orchestrates notification delivery:
@@ -32,6 +38,11 @@ import java.util.Set;
  *  2. Picks the matching dispatcher (or no-ops gracefully).
  *  3. Persists a Notification row with the dispatch outcome — gives us
  *     an audit trail and a basis for a future user-facing inbox endpoint.
+ *
+ * <p>This is also the single gate for the quiet hours ({@link QuietHoursPolicy}):
+ * inside the window the inbox row is written as usual but the outbound dispatch
+ * is held back ({@code dispatchDeferred}) until {@link DeferredNotificationDrainer}
+ * sends it when the window ends.
  */
 @Slf4j
 @Service
@@ -51,15 +62,24 @@ public class NotificationService {
      * suspends the completing tx and commits the row in its own.
      */
     private final TransactionTemplate afterCommitTxTemplate;
+    private final QuietHoursPolicy quietHours;
+    private final Executor dispatchExecutor;
+
+    static final String REASON_POOL_REJECTED = "dispatch_pool_rejected";
+    static final String REASON_FREE_TIER = "free_tier_inbox_only";
 
     public NotificationService(NotificationPreferenceRepository preferenceRepository,
                                NotificationRepository notificationRepository,
                                SubscriptionGateService subscriptionGate,
                                PlatformTransactionManager transactionManager,
-                               List<NotificationDispatcher> dispatchers) {
+                               List<NotificationDispatcher> dispatchers,
+                               QuietHoursPolicy quietHours,
+                               @Qualifier(AsyncConfig.NOTIFICATION_DISPATCH_EXECUTOR) Executor dispatchExecutor) {
         this.preferenceRepository = preferenceRepository;
         this.notificationRepository = notificationRepository;
         this.subscriptionGate = subscriptionGate;
+        this.quietHours = quietHours;
+        this.dispatchExecutor = dispatchExecutor;
         this.afterCommitTxTemplate = new TransactionTemplate(transactionManager);
         this.afterCommitTxTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.dispatchersByChannel = new EnumMap<>(NotificationChannel.class);
@@ -122,10 +142,16 @@ public class NotificationService {
                 log.debug("notification.inbox_only user={} type={} reason=no_outbound_selected",
                         payload.user().getEmail(), payload.type());
             } else {
-                notification.setFailureReason("free_tier_inbox_only");
+                notification.setFailureReason(REASON_FREE_TIER);
                 log.info("notification.inbox_only user={} type={} reason=free_tier",
                         payload.user().getEmail(), payload.type());
             }
+            return new Plan(notification, outbound, false);
+        }
+        if (quietHours.holdsBackNow(payload.type())) {
+            notification.setDispatchDeferred(true);
+            log.info("notification.deferred user={} type={} reason=quiet_hours",
+                    payload.user().getEmail(), payload.type());
             return new Plan(notification, outbound, false);
         }
         return new Plan(notification, outbound, true);
@@ -169,20 +195,90 @@ public class NotificationService {
      * and a rolled-back business operation never notifies anyone. Callers build
      * the payload inside their transaction (the COLLECT half); the dispatch and
      * the Notification row land after commit in their own short transactions.
-     * Without an active transaction it dispatches immediately. Fire-and-forget:
+     * Without an active transaction it is handed off right away. Fire-and-forget:
      * callers that need the saved row must call {@link #notify} directly.
+     *
+     * <p>The work runs on the dispatch executor, never on the committing thread:
+     * that thread still has its connection checked out during {@code afterCommit},
+     * and an Expo/SMTP round-trip there would hold it (plus a second one for the
+     * row) for seconds.
      */
     public void notifyAfterCommit(NotificationPayload payload) {
+        // The worker thread outlives this session — a lazy User proxy must be loaded now.
+        Hibernate.initialize(payload.user());
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    dispatchDeferred(payload);
+                    handOffToDispatchExecutor(payload);
                 }
             });
         } else {
-            dispatchDeferred(payload);
+            handOffToDispatchExecutor(payload);
         }
+    }
+
+    /**
+     * Never throws into the caller — the business result is already committed. A full
+     * pool keeps the inbox row (a short write, no outbound call) and records why the
+     * push did not go out.
+     */
+    private void handOffToDispatchExecutor(NotificationPayload payload) {
+        try {
+            dispatchExecutor.execute(() -> persistAndDispatch(payload));
+        } catch (RejectedExecutionException rejection) {
+            log.warn("notification.dispatch_rejected user={} type={} reason=pool_full",
+                    payload.user().getEmail(), payload.type());
+            persistInboxOnly(payload, REASON_POOL_REJECTED);
+        }
+    }
+
+    private void persistInboxOnly(NotificationPayload payload, String failureReason) {
+        try {
+            var plan = planDelivery(payload);
+            if (plan == null) return;
+            var notification = plan.notification();
+            // A row already held back by the quiet hours needs no worker: the drain job sends it.
+            if (!notification.isDispatchDeferred() && notification.getFailureReason() == null) {
+                notification.setFailureReason(failureReason);
+            }
+            afterCommitTxTemplate.executeWithoutResult(status -> notificationRepository.save(notification));
+        } catch (RuntimeException ex) {
+            log.warn("notification.inbox_only_failed user={} type={} reason={}",
+                    payload.user().getEmail(), payload.type(), ex.getMessage());
+        }
+    }
+
+    /**
+     * Sends a notification that was held back by the quiet hours and already claimed by the
+     * drain job. Channels are resolved again — the user may have muted the type or lost the
+     * push token overnight. Runs untransacted; only the outcome is saved.
+     */
+    void dispatchHeldBack(Notification heldBack) {
+        var payload = new NotificationPayload(heldBack.getUser(), heldBack.getType(), heldBack.getTitle(),
+                heldBack.getBody(), deserialize(heldBack.getPayload()), heldBack.getCampaignId());
+        var configured = configuredChannels(heldBack.getUser(), heldBack.getType());
+        var outbound = configured.contains(NotificationChannel.NONE)
+                ? EnumSet.noneOf(NotificationChannel.class)
+                : outboundChannels(heldBack.getUser(), configured);
+        heldBack.setDispatchDeferred(false);
+        if (outbound.isEmpty()) {
+            notificationRepository.save(heldBack);
+            return;
+        }
+        if (!subscriptionGate.allows(heldBack.getUser(), Feature.PUSH_AND_EMAIL_DELIVERY)) {
+            keepInboxOnly(heldBack, REASON_FREE_TIER);
+            return;
+        }
+        dispatchAll(payload, heldBack, outbound);
+        notificationRepository.save(heldBack);
+    }
+
+    /** Settles a held-back notification without sending it (it stays in the inbox). */
+    void keepInboxOnly(Notification heldBack, String reason) {
+        heldBack.setDispatchDeferred(false);
+        heldBack.setFailureReason(reason);
+        notificationRepository.save(heldBack);
     }
 
     /**
@@ -191,7 +287,7 @@ public class NotificationService {
      * plain {@code save()} inside the afterCommit phase does not commit; the outbound HTTP
      * dispatch then runs OUTSIDE any transaction (never pin a connection across an HTTP call).
      */
-    private void dispatchDeferred(NotificationPayload payload) {
+    private void persistAndDispatch(NotificationPayload payload) {
         try {
             var plan = planDelivery(payload);
             if (plan == null) return;
@@ -230,6 +326,16 @@ public class NotificationService {
 
     private static boolean hasPushToken(User user) {
         return user.getPushDeviceToken() != null && !user.getPushDeviceToken().isBlank();
+    }
+
+    private Map<String, Object> deserialize(String extrasJson) {
+        if (extrasJson == null || extrasJson.isBlank()) return Map.of();
+        try {
+            return objectMapper.readValue(extrasJson, new TypeReference<Map<String, Object>>() {});
+        } catch (Exception ex) {
+            log.warn("notification.payload.deserialize_failed: {}", ex.getMessage());
+            return Map.of();
+        }
     }
 
     private String serialize(Map<String, Object> extras) {

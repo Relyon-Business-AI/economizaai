@@ -23,3 +23,9 @@ management:
     # call — fine in prod (real SMTP), but flaky in tests (no SMTP server).
     mail:
       enabled: false
+
+economizaai:
+  notifications:
+    quiet-hours:
+      # Tests run at any hour — dispatch must not depend on the wall clock.
+      enabled: false

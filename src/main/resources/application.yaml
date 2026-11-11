@@ -560,6 +560,17 @@ economizaai:
       mode: ${RELEVANCE_MODE:SHADOW}
       dismissed-days: ${RELEVANCE_DISMISSED_DAYS:14}    # dismissal hides (product[, market]) this long
       muted-days: ${RELEVANCE_MUTED_DAYS:180}           # mute hides the product everywhere this long
+    # Quiet hours (America/Sao_Paulo): from start-hour to end-hour nothing is pushed or
+    # e-mailed. The notification still lands in the inbox at once; the hourly drain job
+    # sends it on its first run after the window ends (at most max-deferred-per-user
+    # pushes per user, oldest first — the rest stay inbox-only). "Sua nota ficou
+    # pronta / falhou / foi recuperada" are exempt.
+    quiet-hours:
+      enabled: ${NOTIFICATIONS_QUIET_HOURS_ENABLED:true}
+      start-hour: ${NOTIFICATIONS_QUIET_HOURS_START:21}
+      end-hour: ${NOTIFICATIONS_QUIET_HOURS_END:8}
+      max-deferred-per-user: ${NOTIFICATIONS_QUIET_HOURS_MAX_DEFERRED:3}
+      drain-cron: ${NOTIFICATIONS_QUIET_HOURS_DRAIN_CRON:0 0 * * * *}
     # Background jobs that drive scheduled notification types.
     replenishment:
       interval-ms: ${NOTIFICATIONS_REPLENISHMENT_INTERVAL_MS:21600000}   # every 6h: predict product runout

@@ -89,4 +89,42 @@ public class AsyncConfig {
     public Executor aiSweepExecutorSync() {
         return new SyncTaskExecutor();
     }
+
+    public static final String NOTIFICATION_DISPATCH_EXECUTOR = "notificationDispatchExecutor";
+
+    /**
+     * Outbound notification dispatch (Expo/SMTP round-trips) — keeps those calls off the
+     * request/ingestion thread that just committed and off the scheduler threads. Small and
+     * bounded: a burst queues, and a full queue is handled by the caller (the inbox row is
+     * kept, only the push is dropped). No task here holds a DB connection across the HTTP call.
+     */
+    @Bean(NOTIFICATION_DISPATCH_EXECUTOR)
+    @Profile("!test")
+    public Executor notificationDispatchExecutor() {
+        var executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(4);
+        executor.setMaxPoolSize(4);
+        executor.setAllowCoreThreadTimeOut(true);
+        executor.setQueueCapacity(500);
+        executor.setThreadNamePrefix("notif-dispatch-");
+        executor.setTaskDecorator(runnable -> {
+            var contextMap = MDC.getCopyOfContextMap();
+            return () -> {
+                if (contextMap != null) MDC.setContextMap(contextMap);
+                try {
+                    runnable.run();
+                } finally {
+                    MDC.clear();
+                }
+            };
+        });
+        executor.initialize();
+        return executor;
+    }
+
+    @Bean(NOTIFICATION_DISPATCH_EXECUTOR)
+    @Profile("test")
+    public Executor notificationDispatchExecutorSync() {
+        return new SyncTaskExecutor();
+    }
 }
