@@ -320,6 +320,22 @@ class SvrsSharedPortalAdapterTest {
     }
 
     @Test
+    void fetchHtml_retriesServerErrorStubServedWithHttp200ThenSucceeds() {
+        var calls = new AtomicInteger();
+        var stub = adapterWithHttp(5, calls, call -> call == 1 ? "Erro interno no servidor" : "<html>ok</html>");
+        assertEquals("<html>ok</html>", stub.fetchHtml(CHAVE_RS));
+        assertEquals(2, calls.get());
+    }
+
+    @Test
+    void fetchHtml_serverErrorStubOnEveryAttempt_surfacesFetchFailureNotParseFailure() {
+        var calls = new AtomicInteger();
+        var stub = adapterWithHttp(3, calls, call -> "Erro interno no servidor");
+        assertThrows(SefazFetchException.class, () -> stub.fetchHtml(CHAVE_RS));
+        assertEquals(3, calls.get());
+    }
+
+    @Test
     void fetchHtml_scSecurityVerifyUrlThrowsCaptchaUnavailableBeforeChaveExtraction() {
         var scAdapter = new SvrsSharedPortalAdapter(RestClient.builder(), NO_CAPTCHA,
                 5000, "test", "SC", 5, 3, 0L, "sef.sc.gov.br");
