@@ -216,4 +216,40 @@ class RefreshTokenServiceTest {
                 .expiresAt(LocalDateTime.now().plusDays(30))
                 .build();
     }
+
+    @Test
+    void revokeAllForUserExcept_keepsTheFamilyOfThePresentedToken() {
+        var owner = User.builder().id(UUID.randomUUID()).email("test@test.com").build();
+        var familyId = UUID.randomUUID();
+        var stored = RefreshToken.builder().user(owner).familyId(familyId)
+                .token(CodeHasher.sha256("device-token")).expiresAt(LocalDateTime.now().plusDays(1)).build();
+        when(tokenRepository.findByToken(CodeHasher.sha256("device-token"))).thenReturn(Optional.of(stored));
+
+        service.revokeAllForUserExcept(owner, "device-token");
+
+        verify(tokenRepository).revokeAllActiveForUserExceptFamily(owner, familyId);
+        verify(tokenRepository, never()).revokeAllActiveForUser(any());
+    }
+
+    @Test
+    void revokeAllForUserExcept_withoutTokenRevokesEverySession() {
+        var owner = User.builder().id(UUID.randomUUID()).email("test@test.com").build();
+
+        service.revokeAllForUserExcept(owner, null);
+
+        verify(tokenRepository).revokeAllActiveForUser(owner);
+    }
+
+    @Test
+    void revokeAllForUserExcept_ignoresATokenThatBelongsToAnotherUser() {
+        var owner = User.builder().id(UUID.randomUUID()).email("test@test.com").build();
+        var stranger = User.builder().id(UUID.randomUUID()).email("other@test.com").build();
+        var foreign = RefreshToken.builder().user(stranger).familyId(UUID.randomUUID())
+                .token(CodeHasher.sha256("foreign-token")).expiresAt(LocalDateTime.now().plusDays(1)).build();
+        when(tokenRepository.findByToken(CodeHasher.sha256("foreign-token"))).thenReturn(Optional.of(foreign));
+
+        service.revokeAllForUserExcept(owner, "foreign-token");
+
+        verify(tokenRepository).revokeAllActiveForUser(owner);
+    }
 }

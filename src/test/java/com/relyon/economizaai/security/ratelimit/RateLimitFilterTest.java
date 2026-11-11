@@ -250,6 +250,17 @@ class RateLimitFilterTest {
         assertEquals(200, invokePost("/api/v1/auth/forgot-password", ip).getStatus()); // reset unaffected
     }
 
+    @Test
+    void emailChangeRequestIsLimitedToThreePerHourPerUser() throws Exception {
+        authenticateAs("changer@economizaai.app");
+        for (var i = 0; i < 3; i++) {
+            assertEquals(200, invokePost("/api/v1/users/me/email-change", "30.0.0." + i).getStatus());
+        }
+        assertEquals(429, invokePost("/api/v1/users/me/email-change", "30.0.0.9").getStatus());
+        // Confirming has its own budget.
+        assertEquals(200, invokePost("/api/v1/users/me/email-change/confirm", "30.0.0.9").getStatus());
+    }
+
     private void authenticateAs(String email) {
         var authentication = new UsernamePasswordAuthenticationToken(email, null, List.of());
         SecurityContextHolder.getContext().setAuthentication(authentication);

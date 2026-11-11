@@ -194,6 +194,21 @@ public class User extends BaseEntity implements UserDetails {
     @Column(name = "email_verified_at")
     private LocalDateTime emailVerifiedAt;
 
+    // Pending e-mail change (EmailChangeService): the address awaiting confirmation plus the
+    // hashed 6-digit code sent to it. The account e-mail only changes once the code is confirmed.
+    @Column(name = "pending_email")
+    private String pendingEmail;
+
+    @Column(name = "email_change_code_hash")
+    private String emailChangeCodeHash;
+
+    @Column(name = "email_change_expires_at")
+    private LocalDateTime emailChangeExpiresAt;
+
+    @Column(name = "email_change_attempts", nullable = false)
+    @Builder.Default
+    private int emailChangeAttempts = 0;
+
     // Password-reset guess throttle, counted per ACCOUNT across every code issued
     // (PasswordResetService): wrong guesses in the current window, when that window
     // started, and until when further verification is refused.

@@ -3,6 +3,10 @@ package com.relyon.economizaai.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.relyon.economizaai.config.SecurityConfig;
 import com.relyon.economizaai.dto.request.ChangePasswordRequest;
+import com.relyon.economizaai.dto.request.ConfirmEmailChangeRequest;
+import com.relyon.economizaai.dto.request.RequestEmailChangeRequest;
+import com.relyon.economizaai.exception.EmailChangeConflictException;
+import com.relyon.economizaai.exception.InvalidEmailChangeCodeException;
 import com.relyon.economizaai.dto.request.DeleteAccountRequest;
 import com.relyon.economizaai.dto.request.SetPasswordRequest;
 import com.relyon.economizaai.dto.request.UpdateContributionRequest;
@@ -34,6 +38,7 @@ import com.relyon.economizaai.exception.InvalidPhoneVerificationException;
 import com.relyon.economizaai.service.notifications.NotificationPreferenceService;
 import com.relyon.economizaai.service.notifications.SavingsService;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
+import com.relyon.economizaai.service.auth.EmailChangeService;
 import com.relyon.economizaai.service.auth.EmailVerificationService;
 import com.relyon.economizaai.service.auth.PhoneVerificationService;
 import com.relyon.economizaai.service.profile.ProfilePictureService;
@@ -104,6 +109,9 @@ class UserControllerTest {
     private EmailVerificationService emailVerificationService;
 
     @MockitoBean
+    private EmailChangeService emailChangeService;
+
+    @MockitoBean
     private PhoneVerificationService phoneVerificationService;
 
     @MockitoBean
@@ -156,8 +164,7 @@ class UserControllerTest {
                 user.getLastIosLoginAt(),
                 user.getCreatedAt(),
                 user.getAuthProvider(),
-                user.getPassword() != null
-        );
+                user.getPassword() != null, null);
     }
 
     @Test
@@ -305,7 +312,7 @@ class UserControllerTest {
         var response = new UserResponse(user.getId(), user.getName(), user.getEmail(),
                 user.getRole(), user.getSubscriptionTier(), false, true, user.getEmailVerifiedAt(),
                 null, null, null, null, null, null, null, user.getCreatedAt(),
-                AuthProvider.LOCAL, true);
+                AuthProvider.LOCAL, true, null);
         when(userService.updateContribution(any(User.class), any(UpdateContributionRequest.class)))
                 .thenReturn(response);
 
@@ -323,7 +330,7 @@ class UserControllerTest {
         var ur = new UserResponse(user.getId(), user.getName(), user.getEmail(),
                 user.getRole(), user.getSubscriptionTier(), true, true, user.getEmailVerifiedAt(),
                 null, null, null, null, null, null, null, user.getCreatedAt(),
-                AuthProvider.LOCAL, true);
+                AuthProvider.LOCAL, true, null);
         var hr = new HouseholdResponse(
                 UUID.randomUUID(), null, user.getId(), "ABC123", LocalDateTime.now().plusHours(48),
                 List.of(new HouseholdResponse.HouseholdMember(user.getId(), user.getName(), user.getEmail(), null)),
@@ -591,5 +598,119 @@ class UserControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void requestEmailChange_shouldReturn204() throws Exception {
+        var user = buildUser();
+
+        mockMvc.perform(post("/api/v1/users/me/email-change")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new RequestEmailChangeRequest("new@economizaai.app", "password123"))))
+                .andExpect(status().isNoContent());
+
+        verify(emailChangeService).requestChange(any(User.class), any(RequestEmailChangeRequest.class));
+    }
+
+    @Test
+    void requestEmailChange_shouldReturn400ForMalformedEmail() throws Exception {
+        var user = buildUser();
+
+        mockMvc.perform(post("/api/v1/users/me/email-change")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new RequestEmailChangeRequest("not-an-email", "password123"))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void requestEmailChange_shouldReturn409ForAccountWithoutPassword() throws Exception {
+        var user = buildUser();
+        doThrow(EmailChangeConflictException.passwordRequired())
+                .when(emailChangeService).requestChange(any(User.class), any(RequestEmailChangeRequest.class));
+
+        mockMvc.perform(post("/api/v1/users/me/email-change")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new RequestEmailChangeRequest("new@economizaai.app", "password123"))))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void requestEmailChange_shouldReturn409WhenEmailInUse() throws Exception {
+        var user = buildUser();
+        doThrow(EmailChangeConflictException.emailInUse())
+                .when(emailChangeService).requestChange(any(User.class), any(RequestEmailChangeRequest.class));
+
+        mockMvc.perform(post("/api/v1/users/me/email-change")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new RequestEmailChangeRequest("taken@economizaai.app", "password123"))))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void requestEmailChange_shouldReturn401WhenUnauthenticated() throws Exception {
+        mockMvc.perform(post("/api/v1/users/me/email-change")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new RequestEmailChangeRequest("new@economizaai.app", "password123"))))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void confirmEmailChange_shouldReturnUserWithNewEmail() throws Exception {
+        var user = buildUser();
+        user.setEmail("new@economizaai.app");
+        when(emailChangeService.confirmChange(any(User.class), any(ConfirmEmailChangeRequest.class)))
+                .thenReturn(responseFor(user, "John"));
+
+        mockMvc.perform(post("/api/v1/users/me/email-change/confirm")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"code\":\"123456\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("new@economizaai.app"))
+                .andExpect(jsonPath("$.pendingEmail").doesNotExist());
+    }
+
+    @Test
+    void confirmEmailChange_shouldReturn400ForWrongCode() throws Exception {
+        var user = buildUser();
+        when(emailChangeService.confirmChange(any(User.class), any(ConfirmEmailChangeRequest.class)))
+                .thenThrow(new InvalidEmailChangeCodeException());
+
+        mockMvc.perform(post("/api/v1/users/me/email-change/confirm")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"code\":\"000000\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void confirmEmailChange_shouldReturn400ForNonNumericCode() throws Exception {
+        var user = buildUser();
+
+        mockMvc.perform(post("/api/v1/users/me/email-change/confirm")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"code\":\"abc\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void cancelEmailChange_shouldReturn204() throws Exception {
+        var user = buildUser();
+
+        mockMvc.perform(delete("/api/v1/users/me/email-change")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isNoContent());
+
+        verify(emailChangeService).cancelChange(any(User.class));
     }
 }

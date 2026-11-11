@@ -23,6 +23,17 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID
     int revokeAllActiveForUser(User user);
 
     /**
+     * Kills every still-usable token for the user EXCEPT the given family (the session that
+     * asked for the change stays signed in). Tokens without a family are their own family.
+     */
+    @Modifying
+    @Query("UPDATE RefreshToken refreshToken SET refreshToken.revokedAt = CURRENT_TIMESTAMP "
+            + "WHERE refreshToken.user = :user AND refreshToken.revokedAt IS NULL AND refreshToken.consumedAt IS NULL "
+            + "AND refreshToken.id <> :keptFamilyId "
+            + "AND (refreshToken.familyId IS NULL OR refreshToken.familyId <> :keptFamilyId)")
+    int revokeAllActiveForUserExceptFamily(User user, UUID keptFamilyId);
+
+    /**
      * Revoga só os tokens ativos de UMA família (a cadeia de rotações de um login/dispositivo) —
      * a resposta a reuso detectado, que não deve derrubar as outras sessões do usuário.
      */

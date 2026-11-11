@@ -90,8 +90,7 @@ class AuthControllerTest {
                 null,
                 LocalDateTime.now(),
                 AuthProvider.LOCAL,
-                true
-        );
+                true, null);
     }
 
     @Test

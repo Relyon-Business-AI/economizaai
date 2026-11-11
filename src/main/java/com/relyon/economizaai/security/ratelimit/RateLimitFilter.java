@@ -166,6 +166,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
             new RateLimitPolicy("resend", 3, Duration.ofHours(1));
 
     /**
+     * 3 e-mail-change requests per hour per user: each one sends a code to an address the
+     * caller chooses, so it must not become a way to mail strangers in a loop. Confirming is
+     * capped too (the code itself also locks after 5 wrong guesses).
+     */
+    private static final RateLimitPolicy EMAIL_CHANGE_POLICY =
+            new RateLimitPolicy("email-change", 3, Duration.ofHours(1));
+    private static final RateLimitPolicy EMAIL_CHANGE_CONFIRM_POLICY =
+            new RateLimitPolicy("email-change-confirm", 15, Duration.ofHours(1));
+
+    /**
      * 10 exports per hour per user. Each export builds the full purchase
      * history in memory (XLSX/PDF) and delivery=email adds an SMTP send —
      * CPU/heap heavy on a single instance, so it can't stay unmetered just
@@ -252,6 +262,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
                     RESEND_POLICY,
                     req -> "POST".equals(req.getMethod())
                             && "/api/v1/users/me/email-verification/resend".equals(req.getRequestURI()),
+                    KeyStrategy.USER_OR_IP),
+            new Rule(
+                    EMAIL_CHANGE_POLICY,
+                    req -> "POST".equals(req.getMethod())
+                            && "/api/v1/users/me/email-change".equals(req.getRequestURI()),
+                    KeyStrategy.USER_OR_IP),
+            new Rule(
+                    EMAIL_CHANGE_CONFIRM_POLICY,
+                    req -> "POST".equals(req.getMethod())
+                            && "/api/v1/users/me/email-change/confirm".equals(req.getRequestURI()),
                     KeyStrategy.USER_OR_IP),
             new Rule(
                     EXPORT_POLICY,
