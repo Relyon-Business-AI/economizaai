@@ -51,7 +51,8 @@ public record HouseholdResponse(
                 household.getName(),
                 household.getOwner() != null ? household.getOwner().getId() : null,
                 inviteCode,
-                inviteCode == null ? null : household.getInviteCodeExpiresAt(),
+                inviteCode == null || household.getInviteCodeExpiresAt() == null
+                        ? null : BrazilClock.fromUtc(household.getInviteCodeExpiresAt()),
                 members.stream().map(HouseholdMember::from).toList(),
                 BrazilClock.fromUtc(household.getCreatedAt()),
                 canLeave

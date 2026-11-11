@@ -20,6 +20,7 @@ import com.relyon.economizaai.service.paidapi.PaidApiGuardService;
 import com.relyon.economizaai.service.sefaz.captcha.CaptchaSolveTracker;
 import com.relyon.economizaai.service.sefaz.captcha.CaptchaSolver;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService.FetchedDocument;
+import com.relyon.economizaai.exception.PaidApiBudgetExceededException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -225,6 +226,37 @@ class SefazIngestionServiceTest {
         assertEquals(httpPayload, fetched.sourceUrl());
         assertTrue(fetched.html().contains("***.***.***-**"));
         assertTrue(!fetched.html().contains("123.456.789-00"));
+    }
+
+    @Test
+    void fetch_budgetExhausted_stillScrapesACaptchaFreePortal() {
+        // The daily paid budget is gone, but an RS scrape buys nothing — it must go through.
+        var rsAdapter = mockAdapterFor(UnidadeFederativa.RS);
+        var httpPayload = "https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx?p=" + CHAVE_RS;
+        when(rsAdapter.fetchHtml(httpPayload)).thenReturn("<html>ok</html>");
+        when(paidApiGuard.isGlobalBudgetExhausted()).thenReturn(true);
+        var service = new SefazIngestionService(List.of(rsAdapter), Optional.empty(), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+
+        var fetched = service.fetch(httpPayload, null);
+
+        assertSame(rsAdapter, fetched.adapter());
+    }
+
+    @Test
+    void fetch_budgetExhausted_captchaPortalFailsWithTheBudgetReason() {
+        // The solver refuses to buy a token while the budget is exhausted; the user must be
+        // told about the daily limit, not about a captcha failure.
+        var captchaAdapter = mockAdapterFor(UnidadeFederativa.RS);
+        when(captchaAdapter.fetchHtml(anyString())).thenAnswer(invocation -> {
+            CaptchaSolveTracker.assertSpendAllowed();
+            return "<html>ok</html>";
+        });
+        when(paidApiGuard.isGlobalBudgetExhausted()).thenReturn(true);
+        var service = new SefazIngestionService(List.of(captchaAdapter), Optional.empty(), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+
+        assertThrows(PaidApiBudgetExceededException.class,
+                () -> service.fetch("https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx?p=" + CHAVE_RS, null));
+        CaptchaSolveTracker.blockSpend(false);
     }
 
     @Test

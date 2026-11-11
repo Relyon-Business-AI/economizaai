@@ -7,6 +7,10 @@
 > Status: **v1 construída (RS) — 2026-09-22.** Import por chaves/CSV da NFG com
 > reconsulta server-side de NFC-e 65 (SAT-WEB) e NF-e 55 (SVRS). Detalhes na
 > seção "Implementado" abaixo. Scan em lote e e-CPF seguem planejados.
+>
+> **Atualização (2026-11):** o import por chave deixou de ser só-RS — o gate de UF foi
+> removido e toda UF usa a cadeia by-chave (reconsulta grátis → Infosimples); ver
+> `CLAUDE.md` → "Manual-chave submit — unified fallback chain".
 
 ## Implementado (2026-09-22)
 

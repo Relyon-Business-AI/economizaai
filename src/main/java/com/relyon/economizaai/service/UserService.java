@@ -486,10 +486,22 @@ public class UserService {
         var householdId = user.getHousehold().getId();
         userRepository.delete(user);
         log.info("User account deleted: {}", LogMasker.email(user.getEmail()));
-        if (userRepository.countByHouseholdId(householdId) == 0) {
-            householdRepository.deleteById(householdId);
-            log.info("Household {} deleted (no members left after user deletion)", householdId);
+        if (userRepository.countByHouseholdId(householdId) != 0) return;
+        if (emptyHouseholdStillOwnsData(householdId)) {
+            // Same rule as leaving a household: notas an ex-member left behind (or data parked
+            // here awaiting restore) keep the household alive. Hard-deleting it hit their FKs
+            // and turned the account deletion into a 500.
+            log.info("household.keep_dormant {} has no members after user deletion but still owns data", householdId);
+            return;
         }
+        householdRepository.deleteById(householdId);
+        log.info("Household {} deleted (no members left after user deletion)", householdId);
+    }
+
+    private boolean emptyHouseholdStillOwnsData(UUID householdId) {
+        return userRepository.existsByHomeHouseholdId(householdId)
+                || receiptRepository.existsByHouseholdId(householdId)
+                || receiptRepository.existsByOriginHouseholdId(householdId);
     }
 
     /**

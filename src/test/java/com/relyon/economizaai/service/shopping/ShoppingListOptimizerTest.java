@@ -116,8 +116,8 @@ class ShoppingListOptimizerTest {
     void optimize_keepsMostRecentLocalRowPerMarketViaMergeFunction() {
         var product = product("Feijao");
         when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
-        // Two rows same CNPJ: merge function keeps the first (existing). findHouseholdHistory
-        // returns oldest-first per repo @OrderBy, so first encountered wins.
+        // Two rows same CNPJ: findHouseholdHistory returns oldest-first, so the LAST row is the
+        // most recent purchase and the one the plan must price with.
         when(receiptItemRepository.findHouseholdHistoryForProduct(eq(product.getId()), any())).thenReturn(List.of(
                 historyItem(product, "11111111111111", "Mercado A", new BigDecimal("4.50")),
                 historyItem(product, "11111111111111", "Mercado A", new BigDecimal("5.50"))
@@ -127,7 +127,7 @@ class ShoppingListOptimizerTest {
 
         assertEquals(1, plan.marketPlans().size());
         assertEquals(0, plan.marketPlans().get(0).items().get(0).estimatedUnitPrice()
-                .compareTo(new BigDecimal("4.50")));
+                .compareTo(new BigDecimal("5.50")));
     }
 
     @Test

@@ -266,11 +266,15 @@ public class SefazIngestionService {
             throw new SefazFetchException(uf.name());
         }
         // A scrape MAY solve captchas (paid, per token) — the solver tracks the
-        // actual solves and they're ledgered after the fetch. Global kill-switch
-        // first, then the per-user cap, before any potential spend.
-        paidApiGuard.assertUnderGlobalBudget();
-        paidApiGuard.assertWithinDailyCap(userId, PaidApiService.CAPTCHA_SOLVE);
+        // actual solves and they're ledgered after the fetch. The global kill-switch
+        // must NOT stop a captcha-free scrape (RS/PR/SP/GO/CE cost nothing): an
+        // exhausted budget only forbids the solver from buying a token.
+        var budgetExhausted = paidApiGuard.isGlobalBudgetExhausted();
+        if (!budgetExhausted) {
+            paidApiGuard.assertWithinDailyCap(userId, PaidApiService.CAPTCHA_SOLVE);
+        }
         CaptchaSolveTracker.drain(); // discard any stale count left on this pooled thread
+        CaptchaSolveTracker.blockSpend(budgetExhausted);
         try {
             var html = adapter.fetchHtml(qrPayload);
             recordCaptchaSolves(userId, uf, true);
@@ -282,6 +286,10 @@ public class SefazIngestionService {
             // bought during this fetch. Captcha-free scrapes and immediate throws
             // (e.g. the Infosimples-only adapter) record nothing — no breaker noise.
             recordCaptchaSolves(userId, uf, false);
+            if (budgetExhausted && primaryEx instanceof CaptchaSolveFailedException) {
+                log.warn("sefaz.fetch.captcha_blocked_by_budget uf={} chave={}", uf, abbrev(chave));
+                throw new PaidApiBudgetExceededException();
+            }
             var experimental = isExperimental(adapter);
             var qrHost = StateCoverageService.hostOf(qrPayload);
             var portalEvidence = primaryEx instanceof ExperimentalPortalEvidence evidenceCarrier

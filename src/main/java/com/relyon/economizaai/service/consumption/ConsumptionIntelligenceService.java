@@ -187,6 +187,8 @@ public class ConsumptionIntelligenceService {
         var lowOrOut = predictions.stream()
                 .filter(p -> p.status() == ConsumptionPredictionResponse.Status.RAN_OUT
                         || p.status() == ConsumptionPredictionResponse.Status.RUNNING_LOW)
+                // Closest to running out first — predict() order puts the most STALE item on top.
+                .sorted(URGENCY_ORDER)
                 .toList();
         if (!includeUpcoming) {
             return new SuggestedShoppingListResponse(lowOrOut, LocalDateTime.now());

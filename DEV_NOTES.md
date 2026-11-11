@@ -76,7 +76,9 @@ mirror entries here.
 - **Now**: depois do OOM de prod (2026-09-30 15:09 UTC, serviço ficou meio-morto até
   redeploy manual), o ENTRYPOINT do `Dockerfile` ganhou `-XX:+ExitOnOutOfMemoryError`
   (OOM mata o processo → Render reinicia na hora) e `-XX:MaxRAMPercentage=75.0` (heap
-  limitado a 75% da RAM do container; não havia `-Xmx`). Além disso, o
+  limitado a 75% da RAM do container; não havia `-Xmx`). (**Atualização:** o `Dockerfile`
+  hoje usa `-XX:MaxRAMPercentage=50.0` — a 75% o RSS estourava o container, ver o
+  comentário no próprio `Dockerfile`.) Além disso, o
   `HeapPressureMonitor` checa o heap a cada 60s e, acima de 90% por 3 ticks
   consecutivos, loga `heap.pressure` em ERROR e manda UM e-mail de alerta ao admin
   (cooldown 6h). Config em `economizaai.monitoring.*` (`HEAP_ALERT_THRESHOLD`,
@@ -93,6 +95,9 @@ mirror entries here.
   polyf morta, ninguém consegue editar o gist (o kill-switch atual é inoperante).
 - **OK for dev**: o gist segue servindo o JSON estático (gate NO-OP); o endpoint novo
   está pronto esperando o release do FE trocar a URL.
+- **Atualização (2026-11-10)**: o código do FE já aponta `APP_CONFIG_URL` para
+  `${BASE_URL}/app-config` (`src/services/appConfigService.ts`). O que segue em aberto é
+  só a base instalada antiga (builds que ainda leem o gist) — manter o gist vivo até lá.
 - **Before prod**: publicar o release do app apontando `APP_CONFIG_URL` para
   `https://api.economizaai.app/api/v1/app-config` e SÓ ENTÃO considerar o gist
   descartável — **o gist precisa continuar vivo (não deletar a conta/arquivo) até a base
@@ -160,8 +165,10 @@ mirror entries here.
   2. **reCAPTCHA da NF-e 55**: o POST do `ConsultaPublicaDfe` hoje **não exige** o captcha, mas
      ele está na página — se o SEFAZ passar a exigir, o caminho NF-e 55 quebra e precisa de
      solver (pago) ou on-device.
-  3. **Só RS**: outras UFs voltam `receipt.import.unsupported`. Estender por UF conforme
-     `docs/MULTI_STATE_RECON.md`.
+  3. ~~**Só RS**: outras UFs voltam `receipt.import.unsupported`.~~ **Resolvido (2026-11)**:
+     o gate de UF do import por chave foi removido (a chave `receipt.import.unsupported` não
+     existe mais); toda UF passa pela cadeia by-chave (reconsulta grátis → Infosimples), ver
+     CLAUDE.md "Manual-chave submit". Os itens 1 e 2 seguem valendo.
 - **Effort**: throttle+backoff pequeno; on-device fallback médio.
 
 ## E-commerce price comparison — built but INERT for dev (2026-09-22)
@@ -215,6 +222,11 @@ mirror entries here.
   reasonable v1 — revisit the definition/weighting once there's more volume.
 
 ## LLM layers — activation + follow-ups (2026-07-22)
+- **⚠️ Superseded in part (checked 2026-11-10)**: photo extraction no longer depends on
+  `OPENAI_API_KEY` — `PhotoReceiptExtractionService` calls `AiGateway` (Anthropic,
+  `economizaai.ai.photo-extract-model`, key `ANTHROPIC_API_KEY`). OpenAI is now only the
+  optional second provider of the AI layer (`economizaai.openai`, inert until its key is
+  set). The bullets below are the original 2026-07-22 text.
 - **Activation**: the whole LLM stack (enrichment, auditor, photo extraction) is
   dormant until `OPENAI_API_KEY` is set on Render — workers skip silently, the
   photo endpoint returns a localized 503. Set the key to go live.
@@ -306,12 +318,18 @@ mirror entries here.
 - **Sweep model under observation (2026-10-01):** the finance ledger (`InfosimplesFinanceService`) assumes the franquia sweeps unused saldo at month close (~06h do dia 1º) — set/2026 closed with `varrido=92.08`, but the LIVE balance on 01/10 (post-06h) still showed **R$91.84**, i.e. the saldo carried over. Either the sweep lands later or the provider changed policy. Watch the next daily snapshots; if the carryover holds, fix `closePreviousMonth` (varrido math) and correct the 2026-09 row.
 - **CE outage alerting (2026-10-01):** `InfosimplesAlertService` e-mails the admin on any failed paid consult (6h throttle), on saldo < `INFOSIMPLES_LOW_BALANCE_THRESHOLD` (default R$5) at the daily snapshot, and when the account API is unreachable — a dead account can no longer fail CE silently.
 - **Device-fetch genérico (2026-10-12, flag OFF):** `DEVICE_FETCH_GENERIC_ENABLED` (default `false` = comportamento de sempre; só PE device-fetcha, e após o Infosimples). Ligada: (1) qualquer falha de fetch recuperável (IP-block/portal fora) com cliente capaz vira `NEEDS_DEVICE_FETCH` **antes** do Infosimples (`SefazIngestionService.fetch` 3-arg + `PrefetchPolicy.isGenericEnabled`); (2) se o device-fetch falha, `ReceiptIngestionService.ingestPrefetched` continua pro Infosimples (`fetchViaInfosimplesFallback`), menos em nota de contingência (fica CONTINGENCY_PENDING, sem gasto); (3) conteúdo device-fetch de UF fora da allowlist `prefetch-allowed-ufs` grava `receipts.index_eligible=false` → só histórico pessoal, nunca o índice (checado em `PriceIndexService.isContributionBlocked`, mesmo trust-class de PHOTO). `PrefetchPolicy` separa **elegível** (device-fetch, genérico quando ON) de **confiável** (índice, sempre a allowlist). **Correção (Fase 2): o app JÁ é genérico** — `resolveDeviceFetch` (FE) busca a URL do QR on-device pra qualquer estado, sem gate de UF (só o atalho `tryDeviceFetch` upfront é PE-only). O gap real era backend: quando o device-fetch NÃO resolve (portal complexo tipo GO, ou app fechado), o `ProcessingReceiptSweeper` falhava a nota no timeout **sem tentar Infosimples** → com a flag ON, GO regrediria. **Fechado:** `sweepStaleDeviceFetchViaInfosimples` (não-transacional, gated na flag) re-enfileira `NEEDS_DEVICE_FETCH` estagnado → PROCESSING → `ReceiptIngestionService.ingestInfosimplesOnly` (reusa ingestResolved, HTTP untransacted + tx curta). Flag OFF = sweeper falha como sempre; pool rejeitado → markFailed na hora. **Com isso a flag é segura de ligar sem regressão.** Falta só a otimização opcional de generalizar o atalho `tryDeviceFetch` do app. Provado em dev. **Desistência imediata (2026-10-12):** o sweeper (15 min) é só backstop pra app que SUMIU. No caminho normal, quando o device-fetch do app não resolve ele manda `POST /receipts/{id}/device-content {"unavailable": true}` (campo novo; `rawContent` opcional) → `submitDeviceContent` passa `rawContent=null` → `ingestPrefetched(null)` → `fromClientContent` falha no chave ausente → `continueToInfosimples` **na hora** (não espera o sweeper). FE: `resolveDeviceFetch` sempre posta o desfecho e devolve true → `ReceiptsScreen` segue acompanhando (sem falso "falhou"); `DEVICE_FETCH_BUILD='df4'`. Não é flag-gated (desfecho correto da cadeia, vale pro PE também); só o build novo do app dispara.
-- **LLM parse-rescue (2026-10-12):** `HtmlReceiptRescueService` sits between the free parser and Infosimples — PARSE failures on already-fetched HTML go to the AI (`AiGateway`/Anthropic extractor model, the app's LIVE stack — NOT the dormant OpenAiClient; needs `ANTHROPIC_API_KEY`, already set dev+prod) before any R$0.24 Infosimples re-fetch. Cost ~R$0.03-0.13/rescue by note size; ledgered as `LLM_HTML_RESCUE` (cap `LLM_HTML_RESCUE_DAILY_CAP:10`/user/day, toggle `LLM_HTML_RESCUE_ENABLED:true`) + tokens in `ai_usage_log` (`RECEIPT_RESCUE`). Validated against the REAL model on all 10 state fixtures (10/10 exact totals/items — `HtmlReceiptRescueRealLlmTest`, gated on `LLM_RESCUE_REAL_TEST=true`, costs money, never in CI). It does NOT help FETCH failures (IP block, captcha wall, portal down) — those still go straight to Infosimples; CE remains Infosimples-only (no native scraper, no real CE nota to build one against — 0 CE notas in prod/90d as of 2026-10-01).
-- Both are absent from `application-prod.yaml`'s recommended-env list — add them there.
+- **LLM parse-rescue (2026-10-12):** `HtmlReceiptRescueService` sits between the free parser and Infosimples — PARSE failures on already-fetched HTML go to the AI (`AiGateway`/Anthropic extractor model, the app's LIVE stack — NOT the dormant OpenAiClient; needs `ANTHROPIC_API_KEY`, already set dev+prod) before any R$0.24 Infosimples re-fetch. Cost ~R$0.03-0.13/rescue by note size; ledgered as `LLM_HTML_RESCUE` (cap `LLM_HTML_RESCUE_DAILY_CAP:10`/user/day, toggle `LLM_HTML_RESCUE_ENABLED:true`) + tokens in `ai_usage_log` (`RECEIPT_RESCUE`). Validated against the REAL model on all 10 state fixtures (10/10 exact totals/items — `HtmlReceiptRescueRealLlmTest`, gated on `LLM_RESCUE_REAL_TEST=true`, costs money, never in CI). It does NOT help FETCH failures (IP block, captcha wall, portal down) — those still go straight to Infosimples (CE has its own native scraper since 2026-10-12, `CearaNfcePortalAdapter` — see the Infosimples bullet above).
+- CapSolver and Infosimples are both listed in `application-prod.yaml`'s header checklist.
 
 ---
 
 ## Household merge/split — shipped dark, two follow-ups before enabling
+- **⚠️ Atualização (2026-11-10)**: o merge **não está mais desligado** — o default de
+  `economizaai.households.merge-enabled` é `true` (`HOUSEHOLDS_MERGE_ENABLED:true` no
+  `application.yaml`, compartilhamento de domicílio shipado em 2026-11). O texto "gated OFF /
+  flag is off" abaixo é histórico. O follow-up da cópia só-de-cabeçalho segue no código
+  (`HouseholdMergeService.copyReceiptHeader`, marcador `TODO(prod)`); os demais itens
+  precisam ser reconferidos contra o fluxo novo de saída-com-cópia.
 - **Now**: full merge (join `bringData` + per-category), restore-on-leave by
   `origin_household_id`, and mutual data-share consent are implemented and tested
   (unit + real-DB integration), but gated OFF by `economizaai.households.merge-enabled`
@@ -482,7 +500,8 @@ The report works identically in SHADOW and ON (computed purely from
 - **MG needs captcha + JSF postback** (`portalsped.fazenda.mg.gov.br`): PrimeFaces/ViewState
   portal, reCAPTCHA, DANFE delivered via an AJAX postback — needs a real post-solve fixture
   (DevTools capture) before an adapter can be built without guessing component IDs. Infosimples
-  covers it meanwhile.
+  covers it meanwhile. **Update:** a dedicated `MgNfcePortalAdapter` (+ `MgNfceDanfeParser`)
+  now exists in `service/sefaz`, as do `DfNfcePortalAdapter` and `GoiasNfcePortalAdapter`.
 
 ### JS-anti-bot-walled portals (RJ / F5 BIG-IP) — parser-ready, needs an unlocker fetch
 - **Problem**: some SEFAZ portals sit behind a client-side **JavaScript anti-bot challenge**.
@@ -523,6 +542,11 @@ The report works identically in SHADOW and ON (computed purely from
   build its adapter (the telemetry tells you which).
 
 ## Multi-state SEFAZ coverage = 2 / 27 verified (PR added 2026-06-12; MS ready, needs solver)
+- **⚠️ Stale snapshot (checked 2026-11-10)**: this entry describes 2026-06. Today
+  `svrs.states` defaults to `RS,PR,SP`, there are dedicated adapters for MS, SC, CE, DF, GO
+  and MG, and every other UF goes through the experimental all-states chain (entry above —
+  all 27 UFs accepted at submit while `SEFAZ_EXPERIMENTAL_ENABLED` is on). Live per-UF truth:
+  `GET /admin/state-coverage`.
 - **Now**: RS + **PR** have working end-to-end ingestion. PR has its own portal
   (`www.fazenda.pr.gov.br/nfce/qrcode`) but renders the SAME responsive-DANFE
   layout as SVRS, so the shared adapter parses it unchanged — verified with a
@@ -562,6 +586,11 @@ The report works identically in SHADOW and ON (computed purely from
 ---
 
 ## Hosting / access — self-hosted (replaced Render)
+
+> ⚠️ **HISTORICAL — contradicts `INFRASTRUCTURE.md`:** that doc says the self-hosted
+> Windows box was **retired on 2026-09-22** and the app runs on Render again (dev + prod).
+> The Windows/tunnel/Dozzle details below are kept only as history; the local
+> `docker compose up -d db` + `./mvnw spring-boot:run` flow is still valid for local dev.
 
 > **2026-06-03:** Render's free Postgres was **suspended** (free DBs get reaped),
 > which took the web service down. We moved the dev server **off Render to a
@@ -720,6 +749,10 @@ Helper scripts at repo root (run each in an **Administrator** PowerShell once):
 ## Billing / subscriptions
 
 ### No payment provider wired — PRO is granted manually / via webhook only
+- **⚠️ Partly superseded** by "Billing: apps ready (RevenueCat), web built (Mercado Pago)"
+  above: the provider is chosen (Mercado Pago web + RevenueCat IAP), `POST /subscriptions/checkout`
+  exists (503 until `MP_ACCESS_TOKEN` is set) and step 6's expiry job is built
+  (`SubscriptionExpiryService`). Still true: no payments are collected until the env vars land.
 - **Now**: the PRO tier is fully **enforced** (gates in `SubscriptionGateService`, 402 on block), and a user can be made PRO two ways: (a) admin `PUT /api/v1/admin/users/{id}/subscription-tier {"tier":"PRO"}`, or (b) the provider-agnostic webhook `POST /api/v1/webhooks/subscription`. There is **no actual payment collection** — no Stripe/Mercado Pago/Pix integration, no checkout, no self-serve upgrade page.
 - **Why OK for dev**: lets us test the entire gated experience (and demo PRO) without a payment processor or merchant account. The webhook **fails closed** when its secret is blank (constant-time compare), so an unset `BILLING_WEBHOOK_SECRET` means the route just rejects everything.
 - **Before prod — to enable paid subscriptions**:

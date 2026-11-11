@@ -23,6 +23,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -61,6 +62,7 @@ public class CommunityPromoService {
 
     /** Shared (NOT per-user) cache of the viewer-independent promo list. */
     private final AtomicReference<SharedPromoCache> sharedPromoCache = new AtomicReference<>();
+    private final ReentrantLock sharedPromoRefreshLock = new ReentrantLock();
 
     // Self-reference so the no-arg overload's call to the @Transactional
     // detectAll(...) goes through the Spring proxy. Defaults to `this` for tests.
@@ -120,14 +122,28 @@ public class CommunityPromoService {
     /** Returns the shared promo list, recomputing only when the TTL expired (0 = no caching). */
     private List<CommunityPromo> cachedOrComputedSharedPromos() {
         var ttlSeconds = properties.getCollaborative().getCommunityPromoCacheSeconds();
+        if (ttlSeconds <= 0) return detectSharedPromos();
         var cached = sharedPromoCache.get();
-        if (cached != null && ttlSeconds > 0
-                && cached.computedAt().plusSeconds(ttlSeconds).isAfter(Instant.now())) {
-            return cached.promos();
+        if (isFresh(cached, ttlSeconds)) return cached.promos();
+
+        // Single-flight: the recompute scans every recent observation into the heap, so
+        // concurrent callers at TTL expiry must not each run it. One thread refreshes;
+        // the others keep serving the stale list (or wait, when there is none yet).
+        if (cached != null && !sharedPromoRefreshLock.tryLock()) return cached.promos();
+        if (cached == null) sharedPromoRefreshLock.lock();
+        try {
+            var current = sharedPromoCache.get();
+            if (isFresh(current, ttlSeconds)) return current.promos();
+            var computed = detectSharedPromos();
+            sharedPromoCache.set(new SharedPromoCache(Instant.now(), computed));
+            return computed;
+        } finally {
+            sharedPromoRefreshLock.unlock();
         }
-        var computed = detectSharedPromos();
-        sharedPromoCache.set(new SharedPromoCache(Instant.now(), computed));
-        return computed;
+    }
+
+    private static boolean isFresh(SharedPromoCache cache, long ttlSeconds) {
+        return cache != null && cache.computedAt().plusSeconds(ttlSeconds).isAfter(Instant.now());
     }
 
     /** The viewer-independent detection pass: one observation scan + ONE aggregated household-count query. */

@@ -2,7 +2,7 @@
 
 ## Project Vision
 
-economizai (GitHub: **economiz.AI**) is a collaborative price-intelligence app
+economizai (GitHub: **Relyon-Business-AI/economizaai**) is a collaborative price-intelligence app
 built around Brazilian **NFC-e** (Nota Fiscal de Consumidor Eletrônica). Users
 scan the QR code on their grocery receipts, the system parses every line item,
 and that history powers two complementary products:
@@ -605,8 +605,10 @@ See `MONETIZATION.md` for the full strategy. High-level:
 
 ### Phase 6 — Frontend
 
-Backend-only for now. When frontend lands, mirror parkhere (Next.js,
-Portuguese-first, Render deployment).
+Original plan: "Backend-only for now. When frontend lands, mirror parkhere (Next.js,
+Portuguese-first, Render deployment)." **What shipped instead:** a single Expo/React
+Native codebase (repo `Relyon-Business-AI/economiza-ai-front`) for Android, iOS and the
+web dashboard — see `docs/INFRA_MAP.md`.
 
 ---
 
@@ -828,6 +830,11 @@ docker build -t economizai .  # build production image (mirror of Render build)
 ```
 
 ### Deploying to Render
+
+> Historical walkthrough from the first sessions (single service, migrations V1–V4, "no
+> `render.yaml`"). The current two-environment setup (dev from `development`, prod from
+> `main`), the `render.yaml` blueprint and the release process are in `INFRASTRUCTURE.md`,
+> `RENDER_SETUP.md` and `DEPLOY.md`.
 
 The repo ships with a `Dockerfile` (multi-stage Eclipse Temurin 21 build →
 JRE runtime, exposes port 10000) and a `.dockerignore`. Render auto-detects
@@ -1084,6 +1091,8 @@ classify OTHER (grey) unless they carry a conveniência CNAE.
 
 ### Session (2026-11-05) — aquisição: horário dos cadastros + sync da App Store consertado (PRONTO P/ PROD, aguardando)
 
+- **Atualização:** o backend já subiu pra prod — `main` contém o merge "PORTAL_PENDING +
+  analytics byHour + asc sync fix (dev→main)" (`d5e96e48`). O handoff abaixo é histórico.
 - **Handoff de release:** tudo abaixo está em `development` (back) e `development` (FE, commit
   `dafb466`), validado e com o OK do dono pra prod. **Segurado de propósito** porque o mesmo merge
   leva o `2e9a3980` (PORTAL_PENDING), que o app ainda não trata. **A sessão do PORTAL_PENDING sobe

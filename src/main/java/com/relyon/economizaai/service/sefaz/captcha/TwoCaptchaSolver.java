@@ -61,6 +61,7 @@ public class TwoCaptchaSolver implements CaptchaSolver {
         if (!isConfigured()) {
             throw new CaptchaUnavailableException("captcha");
         }
+        CaptchaSolveTracker.assertSpendAllowed();
         var captchaId = submitAndReadId(siteKey, pageUrl);
         log.info("captcha.solve.submitted id={} siteKey={}", captchaId, siteKey);
 

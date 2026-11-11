@@ -185,7 +185,9 @@ public class ReceiptIngestionService {
         // A contingency note with no items isn't a rescuable failure — SEFAZ simply doesn't have it
         // yet. Keep it CONTINGENCY_PENDING (recoverable, no paid spend), same as the server path,
         // instead of burning an Infosimples query on a note that isn't there.
-        var clientDoc = new SefazIngestionService.FetchedDocument(null, rawContent, chave, uf, sourceUrl);
+        // Kept for review on failure — CPF-stripped like every other persisted snapshot (LGPD).
+        var clientDoc = new SefazIngestionService.FetchedDocument(
+                null, CpfMasker.strip(rawContent), chave, uf, sourceUrl);
         if (deviceFail.isNoItemsFound() && ChaveAcessoParser.isContingencyEmission(chave)) {
             persistParseFailure(receiptId, clientDoc, deviceFail);
             return null;

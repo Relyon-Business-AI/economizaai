@@ -27,7 +27,7 @@ winget may prompt for elevation).
 | Claude Code | your AI pair | `npm install -g @anthropic-ai/claude-code`, then `claude` and log in with your account |
 | GitHub CLI | push auth | `winget install GitHub.cli` |
 | Tesseract *(optional)* | chave-OCR endpoint | `winget install UB-Mannheim.TesseractOCR` — without it that one endpoint returns a clean 503, everything else works |
-| Postman *(optional)* | manual API testing | import `postman/economizaai.postman_collection.json` |
+| Postman *(optional)* | manual API testing | import `postman/economizai.postman_collection.json` |
 
 Maven is NOT needed — the repo ships the wrapper (`mvnw.cmd`).
 
@@ -54,10 +54,10 @@ Nothing secret lives in this repo. You need:
 
    ```powershell
    curl.exe -s -H "Authorization: Bearer $(Get-Content $HOME\.config\render\economizaai.key)" `
-     "https://api.render.com/v1/services/srv-d7odp50k1i2s73ep8o5g/deploys?limit=5"
+     "https://api.render.com/v1/services/srv-dbklrqnf3r2c73f93cdg/deploys?limit=5"
    ```
 
-   Service IDs: dev = `srv-d7odp50k1i2s73ep8o5g`, prod = `srv-d9p4nctbedkc73e3veb0`.
+   Service IDs: dev = `srv-dbklrqnf3r2c73f93cdg`, prod = `srv-d7odp50k1i2s73ep8o5g`.
    Not required day 1 — deploys happen automatically on push and the health
    endpoints tell you if they landed.
 3. **QA mailbox creds** (`alexandre@economizaai.app`) — only if you test email
@@ -74,7 +74,7 @@ emailed).
 gh auth login                  # log in as YOUR GitHub account (polyf) — browser flow, HTTPS
 gh auth setup-git              # makes git push use that login
 git clone https://github.com/Relyon-Business-AI/economizaai.git
-cd economiz.AI
+cd economizaai
 git checkout development
 git config user.name "Your Name"             # local to this repo
 git config user.email "your@email.com"       # the email on your polyf account
@@ -110,12 +110,12 @@ expected; use the dev environment for anything catalog-dependent.
 | Env | URL | Branch | Deploys |
 |---|---|---|---|
 | **local** | `http://localhost:8080/api/v1` | your working copy | — |
-| **dev** | `https://api-dev.economizaai.app/api/v1` | `development` | **auto on every push** |
+| **dev** | `https://api-dev.economizaai.app/api/v1` | `development` | **auto on every merge/push** (Render Free plan: sleeps after 15 min idle, first request may take ~3 min) |
 | **prod** | `https://api.economizaai.app/api/v1` | `main` | auto on push to `main` — **owner only** |
 
 > ⚠️ Use the custom domains above, NOT the `*.onrender.com` URLs — they're
-> misleadingly named: the **dev** service's onrender URL is
-> `economizai-app-prod.onrender.com` and **prod**'s is `economiz-ai.onrender.com`.
+> misleadingly named: **prod**'s is `economiz-ai.onrender.com` and the **dev**
+> service's is `economizaai-api-dev-free.onrender.com` (see `INFRASTRUCTURE.md`).
 
 Swagger and `/actuator/health` exist on dev at the same base host. Prod has
 Swagger disabled.
@@ -146,6 +146,12 @@ Example prompts that work well:
 - *"Run the tests and fix any failures you introduced."*
 
 ## 7. Daily workflow
+
+> ⚠️ **Process changed (2026-11) — `DEPLOY.md` / `CLAUDE.md` → "Git Workflow" are the
+> current rule and win over this section and section 9:** work on a task branch off
+> `development`, open **one PR** into `development` (no direct pushes), and release to
+> prod via a PR `development` → `main` merged with Alexandre's ok. The commands below
+> still show the older direct-push flow and have not been rewritten.
 
 ```powershell
 git checkout development
