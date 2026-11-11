@@ -17,6 +17,7 @@ public enum AiActivity {
     FINE_CATEGORY_CLASSIFY(AiModelTier.CURATOR), // classifies products into the fine 2-level taxonomy leaf when keywords are low-confidence
     PHOTO_EXTRACT(AiModelTier.EXTRACTOR), // vision: extracts items from a photographed printed receipt (origin=PHOTO fallback)
     TYPE_RESOLUTION(AiModelTier.EXTRACTOR), // closed-set: mapeia um nome de catálogo estrangeiro/órfão (OFF) para um generic_name_norm existente
+    VARIANT_SPLIT(AiModelTier.CURATOR), // agrupa os itens de um produto mis-merged em produtos reais distintos (resgate do long tail que o dicionário não separa)
     MODEL_BENCHMARK(AiModelTier.EXTRACTOR); // classifica o golden set com um modelo explícito pra medir acurácia pura
 
     private final AiModelTier tier;

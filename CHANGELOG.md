@@ -1,5 +1,18 @@
 # economizai — what's new
 
+## 2026-11-10 — Split de variantes assistido por IA (admin)
+
+**O que o FE precisa saber**
+- **`POST /admin/products/split-variants` ganhou `strategy`** (`DETERMINISTIC` default | `AI`). O comportamento
+  antigo é idêntico sem o parâmetro — a resposta continua `ProductVariantSplitResponse`.
+- **`strategy=AI`** roda o split assistido por IA pro long tail que o dicionário (BrandExtractor +
+  VariantDiscriminator) não separa (ex.: "CAFE MELITTA 500G" ainda misturando Pimpinela/Canecão/Melitta;
+  colisões marca×sabor como "orquídea"). Só processa o conjunto AINDA misturado após o pass determinístico
+  (>1 EAN real OU >1 assinatura), limitado por `max` (default 50 pra IA). A coesão por EAN manda sobre a IA
+  (itens com o mesmo GTIN real nunca são separados). `dryRun=true` (default) devolve os agrupamentos propostos
+  sem mutar nada. Resposta: `AiProductVariantSplitResponse` (com `aiAvailable` — `false` e no-op quando não há
+  provedor de IA com chave). Agrupamento cacheado por produto+hash dos itens, então re-rodar não re-cobra.
+
 ## 2026-11-10 — Auditoria pré-campanha: robustez, segurança e regras (sem mudança de contrato quebrando)
 
 **O que o FE precisa saber**
