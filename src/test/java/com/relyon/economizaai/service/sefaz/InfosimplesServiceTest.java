@@ -13,6 +13,8 @@ import org.springframework.web.client.RestClient;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.util.regex.Pattern;
+import java.util.List;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -446,6 +448,19 @@ class InfosimplesServiceTest {
         assertEquals(1, parsed.items().size());
         assertTrue(parsed.items().get(0).rawDescription().contains("Pipe de Vidro"));
         assertEquals(0, parsed.totalAmount().compareTo(new BigDecimal("33.94")));
+    }
+
+    /** Fixtures are committed to a public repo: the recipient of a real nota must stay fictitious. */
+    @Test
+    void nationalNfeFixture_carriesOnlyAFictitiousRecipientName() {
+        var recipientNames = Pattern.compile("\"destinatario\":\\s*\\{[^}]*?\"nome\":\\s*\"([^\"]*)\"")
+                .matcher(fixture("nfe-nacional-sp55"))
+                .results()
+                .map(match -> match.group(1))
+                .filter(name -> !name.isBlank())
+                .toList();
+
+        assertEquals(List.of("Fulano Exemplo da Silva", "Fulano Exemplo da Silva"), recipientNames);
     }
 
     private static String fixture(String name) {
