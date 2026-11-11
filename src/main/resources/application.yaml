@@ -29,6 +29,14 @@ spring:
     hibernate:
       ddl-auto: none
     open-in-view: false
+    properties:
+      hibernate:
+        # A confirm writes one observation + audit row per item: send them as JDBC batches
+        # instead of one round-trip each (ids are app-generated UUIDs, so inserts batch).
+        jdbc:
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
   task:
     scheduling:
       # Default is a SINGLE thread — one slow job (geocoding/CNPJ lookups do
