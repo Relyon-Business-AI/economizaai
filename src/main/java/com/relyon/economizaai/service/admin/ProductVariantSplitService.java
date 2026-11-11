@@ -110,6 +110,109 @@ public class ProductVariantSplitService {
         return new ProductVariantSplitResponse(dryRun, candidateIds.size(), plans.size(), newProductsCreated, plans);
     }
 
+    // ── reusable mechanics for the AI strategy (AiProductVariantSplitService) ──
+
+    /**
+     * The candidate gate, shared with the AI strategy: products whose confirmed items
+     * carry more than one distinct EAN (the cheap SQL pre-filter). The AI strategy
+     * further narrows these to the ones STILL mixed after the deterministic pass.
+     */
+    List<UUID> candidateProductIds(int maxProducts) {
+        var cap = Math.max(1, Math.min(maxProducts <= 0 ? DEFAULT_MAX_PRODUCTS : maxProducts, HARD_CAP));
+        return receiptItemRepository.findProductIdsWithMultipleItemEans(PageRequest.of(0, cap));
+    }
+
+    /** All linked items (receipt fetched) of a product — the raw material a split regroups. */
+    List<ReceiptItem> linkedItems(UUID productId) {
+        return receiptItemRepository.findAllLinkedWithReceipt(productId);
+    }
+
+    /** Number of distinct deterministic variant signatures across a product's items. */
+    int deterministicSignatureCount(List<ReceiptItem> items) {
+        return groupItemsByVariant(items).size();
+    }
+
+    /** Distinct real EANs across a product's items — the second half of the AI candidate gate. */
+    int distinctRealEanCount(List<ReceiptItem> items) {
+        return (int) items.stream()
+                .map(ReceiptItem::getEan)
+                .filter(EanAuthority::isReal)
+                .map(String::trim)
+                .distinct()
+                .count();
+    }
+
+    /**
+     * Builds a {@link ProductSplitPlan} from a pre-computed, EAN-cohesive grouping
+     * (label → items), e.g. one produced by the AI strategy. Reuses {@link #describeGroup}
+     * (brand/EAN/name summary, observation + alias tracing) so AI-planned groups report
+     * exactly like deterministic ones. The anchor is the group holding the product's own
+     * real EAN, else the largest group (ties by label). Returns null for a single group.
+     */
+    ProductSplitPlan planFromGroups(Product product, Map<String, List<ReceiptItem>> groupsByLabel) {
+        if (groupsByLabel.size() < 2) return null;
+        var anchorLabel = pickAnchorSignature(product, groupsByLabel);
+        var resulting = new ArrayList<ResultingProduct>();
+        resulting.add(describeGroup(anchorLabel, groupsByLabel.get(anchorLabel), true, null));
+        groupsByLabel.entrySet().stream()
+                .filter(entry -> !entry.getKey().equals(anchorLabel))
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> resulting.add(describeGroup(entry.getKey(), entry.getValue(), false, null)));
+        return new ProductSplitPlan(product.getId(), product.getNormalizedName(),
+                product.getGenericNameNorm(), anchorLabel, resulting);
+    }
+
+    /**
+     * Applies a pre-computed grouping: creates a product per non-anchor group and reassigns
+     * that group's items, observations and aliases. Aliases are routed by their raw-description
+     * signature to the group whose items carry that same signature (anchor keeps the rest).
+     * Returns the number of new products created. The caller must have planned the same grouping.
+     */
+    int applyGroups(Product original, ProductSplitPlan plan, Map<String, List<ReceiptItem>> groupsByLabel) {
+        var aliases = aliasRepository.findByProduct(original);
+        var anchorLabel = plan.anchorSignature();
+        var created = 0;
+        for (var group : plan.resultingProducts()) {
+            if (group.anchor()) continue;
+            var groupItems = groupsByLabel.getOrDefault(group.signature(), List.of());
+            if (groupItems.isEmpty()) continue;
+
+            var newProduct = createSplitProduct(original, group);
+            reassignItems(groupItems, newProduct);
+            reassignObservations(groupItems, newProduct);
+            reassignAliasesToGroup(aliases, groupItems, groupsByLabel.get(anchorLabel), newProduct);
+            created++;
+            log.info("admin.product.ai_split.split original={} newProduct={} group='{}' ean={} items={} observations={} aliases={}",
+                    original.getId(), newProduct.getId(), group.signature(), newProduct.getEan(),
+                    group.itemCount(), group.observationCount(), group.aliasCount());
+        }
+        return created;
+    }
+
+    /**
+     * Routes aliases to a non-anchor group when the alias's raw-description signature matches
+     * a signature present in that group's items (and NOT in the anchor's). Mirrors the
+     * signature-based alias routing of the deterministic split for AI-derived groups.
+     */
+    private void reassignAliasesToGroup(List<ProductAlias> aliases, List<ReceiptItem> groupItems,
+                                        List<ReceiptItem> anchorItems, Product target) {
+        var groupSignatures = signaturesOf(groupItems);
+        var anchorSignatures = signaturesOf(anchorItems);
+        var ids = aliases.stream()
+                .map(alias -> Map.entry(alias, signatureOf(alias.getRawDescription())))
+                .filter(entry -> groupSignatures.contains(entry.getValue()) && !anchorSignatures.contains(entry.getValue()))
+                .map(entry -> entry.getKey().getId())
+                .toList();
+        if (!ids.isEmpty()) aliasRepository.repointAliasesTo(ids, target);
+    }
+
+    private Set<String> signaturesOf(List<ReceiptItem> items) {
+        var signatures = new HashSet<String>();
+        if (items == null) return signatures;
+        for (var item : items) signatures.add(signatureOf(item.getRawDescription()));
+        return signatures;
+    }
+
     /** Groups a product's items into real variants. Returns null when there's a single variant. */
     private ProductSplitPlan planFor(UUID productId) {
         var product = productRepository.findById(productId).orElse(null);
