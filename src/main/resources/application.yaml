@@ -180,6 +180,13 @@ economizaai:
     # pra não depender de Infosimples/portal instável (ver docs/MULTI_STATE_RECON.md). Vazio = desliga.
     paused-state-probe:
       ufs: ${SEFAZ_PAUSED_STATE_PROBE_UFS:SE,TO}
+    # In-app FAQ "situação dos estados" (GET /sefaz/state-status): a verified state shows as
+    # UNSTABLE when, in the last window-hours, at least min-failures notas failed for portal
+    # reasons and they outnumber the ingested ones. The answer is cached for cache-seconds.
+    state-status:
+      window-hours: ${SEFAZ_STATE_STATUS_WINDOW_HOURS:24}
+      min-failures: ${SEFAZ_STATE_STATUS_MIN_FAILURES:3}
+      cache-seconds: ${SEFAZ_STATE_STATUS_CACHE_SECONDS:300}
     paused-state-probe-delay-ms: ${SEFAZ_PAUSED_STATE_PROBE_DELAY_MS:21600000}
     paused-state-probe-initial-delay-ms: ${SEFAZ_PAUSED_STATE_PROBE_INITIAL_DELAY_MS:60000}
     device-fetch:
