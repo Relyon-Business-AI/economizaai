@@ -14811,6 +14811,70 @@
 					]
 				},
 				{
+					"name": "COV admin: AI-assisted split of mis-merged products (admin, dry-run)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/products/split-variants?strategy=AI&dryRun=true&max=50",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"products",
+								"split-variants"
+							],
+							"query": [
+								{
+									"key": "strategy",
+									"value": "AI"
+								},
+								{
+									"key": "dryRun",
+									"value": "true"
+								},
+								{
+									"key": "max",
+									"value": "50"
+								}
+							]
+						},
+						"description": "AI-assisted split for the RESIDUAL long tail the deterministic dictionary can't disambiguate (e.g. 'CAFE MELITTA 500G' still mixing Pimpinela/Canecao/Melitta; brand x flavour collisions). Candidate gate: only products STILL mixed after the deterministic pass (>1 distinct REAL EAN OR >1 deterministic signature), capped at max (default 50). Each candidate's distinct items are clustered by the LLM; EAN cohesion is enforced OVER the AI (same real GTIN forced into one group); a single AI group => no split. Returns AiProductVariantSplitResponse (aiAvailable=false no-op when no AI provider has a key). dryRun=true (default) returns the proposed groupings and mutates nothing; set dryRun=false to apply. Grouping cached per product+item-set hash.",
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(pm.info.requestName + ' no server error (<500)', function () {",
+									"    pm.expect(pm.response.code).to.be.below(500);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
 					"name": "COV admin: LLM teacher-layer report (admin)",
 					"request": {
 						"method": "GET",

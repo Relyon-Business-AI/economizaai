@@ -159,3 +159,31 @@ single product whose linked confirmed items carry MORE THAN ONE distinct REAL EA
 inconsistent distinguishing-token signatures (the Divine case). Output = productId +
 conflicting item names/EANs/signatures. A REPORT for the owner to review and split MANUALLY
 (via the existing merge tools) — it does NOT auto-split or reassign anything.
+
+### AI-assisted split (the "later AI pass" — `AiProductVariantSplitService`)
+
+The residual long tail the deterministic dictionary CANNOT disambiguate (same-word
+brand↔flavor collisions, brands the extractor flattens to a generic — "CAFE MELITTA 500G"
+still mixing Pimpinela/Canecão/Melitta because `BrandExtractor` returns "café" for all) is
+cleaned by an AI pass, run via `POST /api/v1/admin/products/split-variants?strategy=AI`
+(ADMIN-only; `dryRun=true` default). It is NOT a second sweep over all ~7000 products:
+
+- **Candidate gate (cost bound).** Only the variant-conflict set is considered — a product
+  whose linked confirmed items carry >1 distinct REAL EAN OR >1 deterministic signature (i.e.
+  STILL mixed after the deterministic split). Capped at `max` (default 50). Candidates processed
+  are logged (`admin.product.ai_split`).
+- **The AI call.** Each candidate's distinct items (raw_description + ean) go to `AiGateway`
+  (Anthropic, CURATOR tier — a judgment call like the duplicate judge) with a structured JSON
+  schema `{"groups": [[itemId, ...], ...]}`: same brand + same flavor/variant + same size ⇒ one
+  group; different brand/flavor/variant ⇒ separate. Untransacted (never holds a DB connection
+  across the HTTP call); the grouping is cached per product + item-set hash so re-runs don't re-pay.
+- **EAN cohesion is enforced OVER the AI.** After the AI returns groups, any items sharing the
+  same real GTIN (`EanAuthority.isReal`) are merged into ONE group even if the AI split them — a
+  shared real GTIN is ground truth the AI never overrides (union-find over the AI's groups). A
+  single AI group ⇒ no split.
+- **Apply.** The AI-derived groups go through the SAME mechanics as the deterministic split
+  (`ProductVariantSplitService.applyGroups`): new products created, `receipt_items` /
+  `price_observations` / `product_aliases` repointed, `generic_name_norm` preserved. `dryRun=true`
+  returns the proposed groupings (brand/variant label per group) and mutates nothing.
+- **Inert-safe.** No AI provider with an API key ⇒ no-op reporting `aiAvailable=false` (never
+  crashes). Prod has the Anthropic key, so the pass works live; dev may not.
