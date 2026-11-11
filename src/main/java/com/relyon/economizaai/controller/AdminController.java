@@ -819,9 +819,14 @@ public class AdminController {
      * products the deterministic dictionary CANNOT disambiguate ("CAFE MELITTA 500G" still
      * mixing Pimpinela/Canecão/Melitta, brand×flavour collisions). It gates on the still-mixed
      * variant-conflict set (cap {@code max}, default 50 for AI), asks the LLM to cluster each
-     * product's items, and enforces EAN cohesion OVER the AI. Returns {@code AiProductVariantSplitResponse}
-     * ({@code aiAvailable=false} no-op when no AI provider has a key). The default strategy
-     * ({@code DETERMINISTIC}) returns {@code ProductVariantSplitResponse} as before.
+     * product's items with a CONSERVATIVE prompt, and enforces TWO cohesion guards OVER the AI
+     * (fail-closed): same real GTIN ⇒ one group, AND identical normalized name ⇒ one group — a
+     * different barcode is NOT reliable evidence of a different product. A safe-apply gate
+     * materializes a split only when it is HIGH-confidence AND the separated names are
+     * materially different; {@code dryRun=true} reports a per-product SAFE/SKIPPED verdict in
+     * {@code safety[]}. Returns {@code AiProductVariantSplitResponse} ({@code aiAvailable=false}
+     * no-op when no AI provider has a key). The default strategy ({@code DETERMINISTIC}) returns
+     * {@code ProductVariantSplitResponse} as before.
      */
     @PostMapping("/products/split-variants")
     public ResponseEntity<?> splitVariants(
