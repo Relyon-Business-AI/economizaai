@@ -146,8 +146,8 @@ economizaai:
     curator-model: ${ECONOMIZAAI_AI_CURATOR_MODEL:claude-sonnet-4-6}
     # Vision model dedicated to photo-receipt extraction — stronger OCR than the extractor tier.
     photo-extract-model: ${ECONOMIZAAI_AI_PHOTO_EXTRACT_MODEL:claude-sonnet-4-6}
-    # Hard daily cap on AI calls — a bug can never run up a surprise bill.
-    daily-request-cap: ${ECONOMIZAAI_AI_DAILY_REQUEST_CAP:300}
+    # Hard daily cap on AI calls — a secondary fence; the R$ ceilings live in paid-api.
+    daily-request-cap: ${ECONOMIZAAI_AI_DAILY_REQUEST_CAP:3000}
     timeout-seconds: ${ECONOMIZAAI_AI_TIMEOUT_SECONDS:60}
     # Prepaid credit budget in USD — shown in the spend panel as "saldo estimado".
     # Set to 0 to hide the balance indicator.
@@ -313,13 +313,25 @@ economizaai:
   # provider is failing). Caps of 0 = unlimited.
   paid-api:
     enabled: ${PAID_API_GUARD_ENABLED:true}
-    infosimples-daily-cap-per-user: ${INFOSIMPLES_DAILY_CAP:20}
-    captcha-daily-cap-per-user: ${CAPTCHA_DAILY_CAP:60}
-    twilio-daily-cap-per-user: ${TWILIO_DAILY_CAP:10}
-    llm-html-rescue-daily-cap-per-user: ${LLM_HTML_RESCUE_DAILY_CAP:10}
-    # Contado POR FOTO (nota multi-foto de 5 fotos consome 5) — 15 = ~3 notas longas/dia.
-    llm-vision-daily-cap-per-user: ${LLM_VISION_DAILY_CAP:15}
-    daily-global-budget-cents: ${PAID_API_DAILY_BUDGET_CENTS:5000}   # R$50/day kill-switch; 0 = unlimited
+    infosimples-daily-cap-per-user: ${INFOSIMPLES_DAILY_CAP:10}
+    captcha-daily-cap-per-user: ${CAPTCHA_DAILY_CAP:30}
+    twilio-daily-cap-per-user: ${TWILIO_DAILY_CAP:3}
+    llm-html-rescue-daily-cap-per-user: ${LLM_HTML_RESCUE_DAILY_CAP:5}
+    # Contado POR FOTO (nota multi-foto de 5 fotos consome 5) — 10 = ~2 notas longas/dia.
+    llm-vision-daily-cap-per-user: ${LLM_VISION_DAILY_CAP:10}
+    # IA de categorização (sugestão por nota, fallback pós-confirmação, "corrigir item").
+    llm-enrich-daily-cap-per-user: ${LLM_ENRICH_DAILY_CAP:60}
+    # Teto diário POR SERVIÇO, em centavos (0 = sem teto). Estourou → só aquele serviço para
+    # até a virada do dia (UTC); os demais (e a raspagem grátis) seguem. O admin é avisado
+    # no WhatsApp em 80% e 100% (ver cost-alerts abaixo).
+    infosimples-daily-budget-cents: ${PAID_API_BUDGET_INFOSIMPLES_CENTS:12000}
+    captcha-daily-budget-cents: ${PAID_API_BUDGET_CAPTCHA_CENTS:3000}
+    llm-vision-daily-budget-cents: ${PAID_API_BUDGET_LLM_VISION_CENTS:3000}
+    llm-html-rescue-daily-budget-cents: ${PAID_API_BUDGET_LLM_HTML_RESCUE_CENTS:1500}
+    llm-enrich-daily-budget-cents: ${PAID_API_BUDGET_LLM_CATEGORIZATION_CENTS:5000}
+    twilio-daily-budget-cents: ${PAID_API_BUDGET_TWILIO_CENTS:1500}
+    # Teto geral opcional somando todos os serviços; 0 = desligado (padrão).
+    daily-global-budget-cents: ${PAID_API_DAILY_BUDGET_CENTS:0}
     infosimples-failure-threshold: ${INFOSIMPLES_BREAKER_THRESHOLD:5}
     breaker-window-seconds: ${INFOSIMPLES_BREAKER_WINDOW_S:600}
     breaker-cooldown-seconds: ${INFOSIMPLES_BREAKER_COOLDOWN_S:300}

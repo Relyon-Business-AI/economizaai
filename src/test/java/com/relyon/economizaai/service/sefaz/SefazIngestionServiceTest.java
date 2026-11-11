@@ -234,7 +234,7 @@ class SefazIngestionServiceTest {
         var rsAdapter = mockAdapterFor(UnidadeFederativa.RS);
         var httpPayload = "https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx?p=" + CHAVE_RS;
         when(rsAdapter.fetchHtml(httpPayload)).thenReturn("<html>ok</html>");
-        when(paidApiGuard.isGlobalBudgetExhausted()).thenReturn(true);
+        when(paidApiGuard.isDailyBudgetExhausted(PaidApiService.CAPTCHA_SOLVE)).thenReturn(true);
         var service = new SefazIngestionService(List.of(rsAdapter), Optional.empty(), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
 
         var fetched = service.fetch(httpPayload, null);
@@ -251,7 +251,7 @@ class SefazIngestionServiceTest {
             CaptchaSolveTracker.assertSpendAllowed();
             return "<html>ok</html>";
         });
-        when(paidApiGuard.isGlobalBudgetExhausted()).thenReturn(true);
+        when(paidApiGuard.isDailyBudgetExhausted(PaidApiService.CAPTCHA_SOLVE)).thenReturn(true);
         var service = new SefazIngestionService(List.of(captchaAdapter), Optional.empty(), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
 
         assertThrows(PaidApiBudgetExceededException.class,

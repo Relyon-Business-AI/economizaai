@@ -46,7 +46,7 @@ public class WhatsAppDispatcher implements NotificationDispatcher {
         }
         try {
             paidApiGuardService.assertWithinDailyCap(user.getId(), PaidApiService.TWILIO_MESSAGE);
-            paidApiGuardService.assertUnderGlobalBudget();
+            paidApiGuardService.assertUnderDailyBudget(PaidApiService.TWILIO_MESSAGE);
         } catch (PaidApiQuotaExceededException | PaidApiBudgetExceededException ex) {
             log.info("notification.whatsapp.skipped user={} type={} reason=twilio_quota_exceeded",
                     LogMasker.email(user.getEmail()), payload.type());

@@ -266,10 +266,10 @@ public class SefazIngestionService {
             throw new SefazFetchException(uf.name());
         }
         // A scrape MAY solve captchas (paid, per token) — the solver tracks the
-        // actual solves and they're ledgered after the fetch. The global kill-switch
+        // actual solves and they're ledgered after the fetch. The captcha daily budget
         // must NOT stop a captcha-free scrape (RS/PR/SP/GO/CE cost nothing): an
         // exhausted budget only forbids the solver from buying a token.
-        var budgetExhausted = paidApiGuard.isGlobalBudgetExhausted();
+        var budgetExhausted = paidApiGuard.isDailyBudgetExhausted(PaidApiService.CAPTCHA_SOLVE);
         if (!budgetExhausted) {
             paidApiGuard.assertWithinDailyCap(userId, PaidApiService.CAPTCHA_SOLVE);
         }
@@ -436,7 +436,7 @@ public class SefazIngestionService {
                     uf, abbrev(chave));
             throw new ReceiptParseException("chave-corrupted");
         }
-        paidApiGuard.assertUnderGlobalBudget();
+        paidApiGuard.assertUnderDailyBudget(PaidApiService.INFOSIMPLES);
         paidApiGuard.assertCircuitClosed(PaidApiService.INFOSIMPLES);
         paidApiGuard.assertWithinDailyCap(userId, PaidApiService.INFOSIMPLES);
         try {

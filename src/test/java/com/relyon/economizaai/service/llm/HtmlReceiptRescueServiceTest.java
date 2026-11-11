@@ -96,7 +96,7 @@ class HtmlReceiptRescueServiceTest {
         assertEquals(0, new BigDecimal("6.50").compareTo(firstItem.unitPrice()));
         assertEquals(0, new BigDecimal("13.00").compareTo(firstItem.totalPrice()));
 
-        verify(paidApiGuard).assertUnderGlobalBudget();
+        verify(paidApiGuard).assertUnderDailyBudget(PaidApiService.LLM_HTML_RESCUE);
         verify(paidApiGuard).assertWithinDailyCap(USER_ID, PaidApiService.LLM_HTML_RESCUE);
         verify(paidApiGuard).recordSuccess(USER_ID, PaidApiService.LLM_HTML_RESCUE, "RS", "anthropic");
     }
@@ -151,7 +151,7 @@ class HtmlReceiptRescueServiceTest {
     @Test
     void rescue_budgetExhausted_returnsNullWithoutCallingAi() {
         when(aiGateway.isEnabled()).thenReturn(true);
-        doThrow(new PaidApiBudgetExceededException()).when(paidApiGuard).assertUnderGlobalBudget();
+        doThrow(new PaidApiBudgetExceededException()).when(paidApiGuard).assertUnderDailyBudget(PaidApiService.LLM_HTML_RESCUE);
 
         assertNull(service(true).rescue(HTML, CHAVE, UnidadeFederativa.RS, SOURCE_URL, USER_ID));
         verify(aiGateway, never()).complete(any(), anyString(), anyString(), anyString(), anyInt(), any());

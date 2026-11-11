@@ -137,7 +137,7 @@ public class PhotoReceiptExtractionService {
         // Validação determinística de TODAS as fotos + cota ANTES de criar a nota — um usuário
         // sem cota recebe 429/503 na hora, não uma nota que falha depois.
         files.forEach(photoUploadValidator::readImage);
-        paidApiGuard.assertUnderGlobalBudget();
+        paidApiGuard.assertUnderDailyBudget(PaidApiService.LLM_VISION);
         paidApiGuard.assertWithinDailyCap(user.getId(), PaidApiService.LLM_VISION);
 
         // Lê os bytes AGORA (o MultipartFile é da request, que termina ao retornarmos).
@@ -184,7 +184,7 @@ public class PhotoReceiptExtractionService {
         var anyVisionCallSucceeded = false;
         for (var photo : photos) {
             try {
-                paidApiGuard.assertUnderGlobalBudget();
+                paidApiGuard.assertUnderDailyBudget(PaidApiService.LLM_VISION);
                 paidApiGuard.assertWithinDailyCap(user.getId(), PaidApiService.LLM_VISION);
             } catch (PaidApiQuotaExceededException | PaidApiBudgetExceededException capEx) {
                 log.warn("photo_extract.cap_hit_mid_batch user={} extracted={}", user.getId(), extractions.size());
