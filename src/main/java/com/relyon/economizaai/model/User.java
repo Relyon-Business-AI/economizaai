@@ -194,6 +194,19 @@ public class User extends BaseEntity implements UserDetails {
     @Column(name = "email_verified_at")
     private LocalDateTime emailVerifiedAt;
 
+    // Password-reset guess throttle, counted per ACCOUNT across every code issued
+    // (PasswordResetService): wrong guesses in the current window, when that window
+    // started, and until when further verification is refused.
+    @Column(name = "password_reset_failed_attempts", nullable = false)
+    @Builder.Default
+    private int passwordResetFailedAttempts = 0;
+
+    @Column(name = "password_reset_failed_window_started_at")
+    private LocalDateTime passwordResetFailedWindowStartedAt;
+
+    @Column(name = "password_reset_locked_until")
+    private LocalDateTime passwordResetLockedUntil;
+
     // E.164 phone number (e.g. +5551999999999). Nullable until the user sets it.
     @Column(name = "phone_number", length = 20)
     private String phoneNumber;

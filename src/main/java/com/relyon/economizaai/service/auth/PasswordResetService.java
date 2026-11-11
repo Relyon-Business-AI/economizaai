@@ -31,6 +31,12 @@ public class PasswordResetService {
     // Wrong guesses allowed against one code before it locks — with 10^6 codes this
     // caps the success probability per issued code at 0.0005%.
     private static final int MAX_VERIFY_ATTEMPTS = 5;
+    // Per-ACCOUNT ceilings, independent of how many codes were issued: a fresh code
+    // must not come with a fresh, unlimited supply of guesses.
+    private static final int MAX_REQUESTS_PER_HOUR = 3;
+    private static final int MAX_ACCOUNT_FAILURES = 10;
+    private static final int ACCOUNT_FAILURE_WINDOW_MINUTES = 60;
+    private static final int ACCOUNT_LOCK_MINUTES = 30;
 
     private final UserRepository userRepository;
     private final PasswordResetTokenRepository tokenRepository;
@@ -52,6 +58,12 @@ public class PasswordResetService {
             return;
         }
         var user = userOpt.get();
+        if (hourlyRequestLimitReached(user)) {
+            // Silent: the response must stay identical to the success path.
+            log.warn("password_reset.request_ignored reason=hourly_limit user={} limit={}",
+                    LogMasker.email(user.getEmail()), MAX_REQUESTS_PER_HOUR);
+            return;
+        }
         // Kill any prior still-open code so only the newest one works.
         tokenRepository.consumeAllActiveForUser(user, LocalDateTime.now());
         var code = generateCode();
@@ -64,6 +76,11 @@ public class PasswordResetService {
                 LocalizedMessageService.toLocale(user.getLocale()), code, CODE_TTL_MINUTES);
         log.info("password_reset.requested user={} ttl_minutes={}",
                 LogMasker.email(user.getEmail()), CODE_TTL_MINUTES);
+    }
+
+    private boolean hourlyRequestLimitReached(User user) {
+        var issuedInLastHour = tokenRepository.countByUserAndCreatedAtAfter(user, LocalDateTime.now().minusHours(1));
+        return issuedInLastHour >= MAX_REQUESTS_PER_HOUR;
     }
 
     /**
@@ -85,6 +102,7 @@ public class PasswordResetService {
         var user = userRepository.findByEmail(request.email()).orElseThrow(InvalidAuthTokenException::new);
         var token = findValidCode(user, request.code());
         user.setPassword(passwordEncoder.encode(request.newPassword()));
+        clearAccountFailures(user);
         userRepository.save(user);
         token.setConsumedAt(LocalDateTime.now());
         tokenRepository.save(token);
@@ -99,8 +117,13 @@ public class PasswordResetService {
      * every wrong guess. After {@link #MAX_VERIFY_ATTEMPTS} failures the code is
      * dead even if subsequently guessed right — the user must request a new one.
      * Comparison is constant-time so response timing leaks nothing.
+     *
+     * <p>Wrong guesses are ALSO counted per account across codes: after
+     * {@link #MAX_ACCOUNT_FAILURES} in a window the account refuses verification
+     * for a cool-down, whatever code is presented.
      */
     private PasswordResetToken findValidCode(User user, String code) {
+        rejectWhileAccountLocked(user);
         var token = tokenRepository.findFirstByUserAndConsumedAtIsNullOrderByCreatedAtDesc(user)
                 .orElseThrow(InvalidAuthTokenException::new);
         if (token.getExpiresAt().isBefore(LocalDateTime.now()) || token.getAttempts() >= MAX_VERIFY_ATTEMPTS) {
@@ -111,9 +134,47 @@ public class PasswordResetService {
             tokenRepository.incrementAttempts(token.getId());
             log.warn("password_reset.wrong_code user={} attempts={}/{}",
                     LogMasker.email(user.getEmail()), attemptsAfterFailure, MAX_VERIFY_ATTEMPTS);
+            recordAccountFailure(user);
             throw new InvalidAuthTokenException();
         }
         return token;
+    }
+
+    private void rejectWhileAccountLocked(User user) {
+        var lockedUntil = user.getPasswordResetLockedUntil();
+        if (lockedUntil != null && lockedUntil.isAfter(LocalDateTime.now())) {
+            log.warn("password_reset.verify_refused reason=account_locked user={}", LogMasker.email(user.getEmail()));
+            throw new InvalidAuthTokenException();
+        }
+    }
+
+    /**
+     * The user is a managed entity (loaded in the caller's transaction), so these counters
+     * are flushed at commit — and the commit happens despite the thrown exception because
+     * the callers are {@code noRollbackFor = InvalidAuthTokenException}.
+     */
+    private void recordAccountFailure(User user) {
+        var now = LocalDateTime.now();
+        var windowStart = user.getPasswordResetFailedWindowStartedAt();
+        var windowExpired = windowStart == null
+                || windowStart.isBefore(now.minusMinutes(ACCOUNT_FAILURE_WINDOW_MINUTES));
+        var failures = windowExpired ? 1 : user.getPasswordResetFailedAttempts() + 1;
+        if (failures >= MAX_ACCOUNT_FAILURES) {
+            user.setPasswordResetLockedUntil(now.plusMinutes(ACCOUNT_LOCK_MINUTES));
+            user.setPasswordResetFailedAttempts(0);
+            user.setPasswordResetFailedWindowStartedAt(null);
+            log.warn("password_reset.account_locked user={} failures={} locked_for_min={}",
+                    LogMasker.email(user.getEmail()), failures, ACCOUNT_LOCK_MINUTES);
+        } else {
+            user.setPasswordResetFailedAttempts(failures);
+            user.setPasswordResetFailedWindowStartedAt(windowExpired ? now : windowStart);
+        }
+    }
+
+    private void clearAccountFailures(User user) {
+        user.setPasswordResetFailedAttempts(0);
+        user.setPasswordResetFailedWindowStartedAt(null);
+        user.setPasswordResetLockedUntil(null);
     }
 
     private String generateCode() {
