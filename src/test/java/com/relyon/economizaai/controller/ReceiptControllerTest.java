@@ -11,6 +11,7 @@ import com.relyon.economizaai.dto.response.ReceiptItemResponse;
 import com.relyon.economizaai.dto.response.ReceiptResponse;
 import com.relyon.economizaai.dto.response.ReceiptSummaryResponse;
 import com.relyon.economizaai.exception.InvalidReceiptPhotoException;
+import com.relyon.economizaai.exception.ImageDecodeBusyException;
 import com.relyon.economizaai.exception.OcrUnavailableException;
 import com.relyon.economizaai.exception.ReceiptAlreadyIngestedException;
 import com.relyon.economizaai.exception.ReceiptNotEditableException;
@@ -447,6 +448,19 @@ class ReceiptControllerTest {
         var photo = new MockMultipartFile("file", "chave.png", "image/png", new byte[]{1, 2, 3});
         when(chaveAcessoOcrService.extractChave(any(MultipartFile.class)))
                 .thenThrow(new OcrUnavailableException());
+
+        mockMvc.perform(multipart("/api/v1/receipts/chave/photo")
+                        .file(photo)
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
+    void extractChaveFromPhoto_returns503WhenTooManyPhotosAreBeingDecoded() throws Exception {
+        var user = buildUser();
+        var photo = new MockMultipartFile("file", "chave.png", "image/png", new byte[]{1, 2, 3});
+        when(chaveAcessoOcrService.extractChave(any(MultipartFile.class)))
+                .thenThrow(new ImageDecodeBusyException());
 
         mockMvc.perform(multipart("/api/v1/receipts/chave/photo")
                         .file(photo)

@@ -621,6 +621,11 @@ economizaai:
       region: ${R2_REGION:auto}
   receipt-photo:
     max-size-mb: 5            # QR-photo submit and chave-OCR uploads (multipart cap above must stay higher)
+  image-decode:
+    # Global bound on simultaneous full-image decodes/OCR passes (receipt photos, QR photos,
+    # chave OCR, profile pictures). No permit within max-wait-ms -> localized 503.
+    max-concurrent: ${IMAGE_DECODE_MAX_CONCURRENT:3}
+    max-wait-ms: ${IMAGE_DECODE_MAX_WAIT_MS:5000}
   ocr:
     # Tessdata dir for Tess4J (chave OCR). Blank = probe well-known install
     # locations (homebrew/apt). If Tesseract isn't on the host, the OCR

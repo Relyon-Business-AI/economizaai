@@ -291,6 +291,15 @@ class RateLimitFilterTest {
         assertEquals(200, invokePost("/api/v1/merchant-claims", "33.0.0.99").getStatus());
     }
 
+    @Test
+    void profilePictureUploadIsLimitedToTenPerHourPerUser() throws Exception {
+        authenticateAs("avatar@economizaai.app");
+        for (var i = 0; i < 10; i++) {
+            assertEquals(200, invokePost("/api/v1/users/me/profile-picture", "34.0.0." + i).getStatus());
+        }
+        assertEquals(429, invokePost("/api/v1/users/me/profile-picture", "34.0.0.99").getStatus());
+    }
+
     private void authenticateAs(String email) {
         var authentication = new UsernamePasswordAuthenticationToken(email, null, List.of());
         SecurityContextHolder.getContext().setAuthentication(authentication);

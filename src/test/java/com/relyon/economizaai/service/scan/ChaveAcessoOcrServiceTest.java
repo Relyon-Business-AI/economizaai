@@ -3,6 +3,7 @@ package com.relyon.economizaai.service.scan;
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.client.j2se.MatrixToImageWriter;
 import com.google.zxing.qrcode.QRCodeWriter;
+import com.relyon.economizaai.exception.ImageDecodeBusyException;
 import com.relyon.economizaai.exception.InvalidReceiptPhotoException;
 import com.relyon.economizaai.exception.OcrUnavailableException;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
@@ -20,7 +21,10 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -214,5 +218,27 @@ class ChaveAcessoOcrServiceTest {
 
         var photo = anyPhoto();
         assertThrows(OcrUnavailableException.class, () -> service.extractChave(photo));
+    }
+
+    @Test
+    void uploadIsDecodedOnlyOnceAcrossTheQrAttemptAndEveryOcrPass() throws IOException {
+        when(ocrEngine.isAvailable()).thenReturn(true);
+        when(ocrEngine.recognizeDigits(any(BufferedImage.class))).thenReturn(CHAVE_VALID_DV);
+        var photo = spy(anyPhoto());
+
+        service.extractChave(photo);
+
+        verify(photo, times(1)).getBytes();
+    }
+
+    @Test
+    void busyDecodeGateSurfacesAsBusyAndNeverReachesOcr() throws IOException {
+        var busyGate = mock(ImageDecodeGate.class);
+        when(busyGate.withPermit(any())).thenThrow(new ImageDecodeBusyException());
+        var validator = new PhotoUploadValidator(5, busyGate);
+        var busyService = new ChaveAcessoOcrService(validator, ocrEngine, new QrCodePhotoDecoder(validator));
+
+        assertThrows(ImageDecodeBusyException.class, () -> busyService.extractChave(anyPhoto()));
+        verifyNoInteractions(ocrEngine);
     }
 }

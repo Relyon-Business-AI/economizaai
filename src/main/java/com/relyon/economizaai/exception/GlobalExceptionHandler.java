@@ -190,6 +190,11 @@ public class GlobalExceptionHandler {
         return respond(ex, HttpStatus.SERVICE_UNAVAILABLE, "Photo extraction unavailable");
     }
 
+    @ExceptionHandler(ImageDecodeBusyException.class)
+    public ResponseEntity<ErrorResponse> handleImageDecodeBusy(ImageDecodeBusyException ex) {
+        return respond(ex, HttpStatus.SERVICE_UNAVAILABLE, "Image decode refused: all decode permits busy");
+    }
+
     @ExceptionHandler(OcrUnavailableException.class)
     public ResponseEntity<ErrorResponse> handleOcrUnavailable(OcrUnavailableException ex) {
         return respond(ex, HttpStatus.SERVICE_UNAVAILABLE, "OCR engine not available on this host");

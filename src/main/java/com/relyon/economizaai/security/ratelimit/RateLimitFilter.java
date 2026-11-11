@@ -193,6 +193,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     /**
+     * 10 profile-picture uploads per hour per user: each one is a full image decode +
+     * resize + a write to the object storage.
+     */
+    private static final RateLimitPolicy PROFILE_PICTURE_POLICY =
+            new RateLimitPolicy("profile-picture", 10, Duration.ofHours(1));
+
+    /**
      * 10 exports per hour per user. Each export builds the full purchase
      * history in memory (XLSX/PDF) and delivery=email adds an SMTP send —
      * CPU/heap heavy on a single instance, so it can't stay unmetered just
@@ -288,6 +295,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
                     MERCHANT_CLAIM_VERIFY_POLICY,
                     req -> "POST".equals(req.getMethod()) && isMerchantClaimVerifyPath(req.getRequestURI()),
                     List.of(KeyStrategy.USER_OR_IP, KeyStrategy.IP)),
+            new Rule(
+                    PROFILE_PICTURE_POLICY,
+                    req -> "POST".equals(req.getMethod())
+                            && "/api/v1/users/me/profile-picture".equals(req.getRequestURI()),
+                    KeyStrategy.USER_OR_IP),
             new Rule(
                     EMAIL_CHANGE_POLICY,
                     req -> "POST".equals(req.getMethod())
