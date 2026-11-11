@@ -84,7 +84,8 @@ public class CnpjActivityClient {
             var json = objectMapper.readTree(body);
             var cnaes = parseCnaes(json);
             return new CnpjLookup(segmentFromCnae(cnaes), parseIbgeCityCode(json), cnaes,
-                    parseText(json, "email"), parseText(json, "razao_social"), parseRegistryAddress(json));
+                    parseText(json, "email"), parseText(json, "razao_social"), parseRegistryAddress(json),
+                    parseText(json, "nome_fantasia"));
         } catch (Exception ex) {
             log.warn("merchant.classify.parse_failed cnpj={} {}: {}", cnpj, ex.getClass().getSimpleName(), ex.getMessage());
             return CnpjLookup.empty();
@@ -92,7 +93,13 @@ public class CnpjActivityClient {
     }
 
     public record CnpjLookup(MerchantSegment segment, String ibgeCityCode, List<String> cnaeCodes,
-                             String email, String razaoSocial, MarketAddress registryAddress) {
+                             String email, String razaoSocial, MarketAddress registryAddress,
+                             String tradeName) {
+
+        public CnpjLookup(MerchantSegment segment, String ibgeCityCode, List<String> cnaeCodes,
+                          String email, String razaoSocial, MarketAddress registryAddress) {
+            this(segment, ibgeCityCode, cnaeCodes, email, razaoSocial, registryAddress, null);
+        }
 
         public CnpjLookup(MerchantSegment segment, String ibgeCityCode, List<String> cnaeCodes,
                           String email, String razaoSocial) {
@@ -110,6 +117,11 @@ public class CnpjActivityClient {
 
         public boolean hasEmail() {
             return email != null && email.contains("@");
+        }
+
+        /** True when the registry actually answered for this CNPJ (as opposed to a failed or disabled lookup). */
+        public boolean registryAnswered() {
+            return razaoSocial != null || !cnaeCodes.isEmpty();
         }
     }
 

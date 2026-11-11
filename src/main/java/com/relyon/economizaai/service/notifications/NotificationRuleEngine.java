@@ -185,7 +185,8 @@ public class NotificationRuleEngine {
     /** The rule owner's household custom name for the market, falling back to the observation's display name. */
     private String friendlyMarketName(NotificationRule rule, PriceObservation observation, Locale locale) {
         var householdId = rule.getUser().getHousehold() != null ? rule.getUser().getHousehold().getId() : null;
-        return marketNameService.resolve(householdId, observation.getMarketCnpj(), marketName(observation, locale));
+        if (observation.getMarketName() == null) return marketName(observation, locale);
+        return marketNameService.resolve(householdId, observation.getMarketCnpj(), observation.getMarketName());
     }
 
     private Map<String, Object> baseExtras(NotificationRule rule, PriceObservation observation) {
