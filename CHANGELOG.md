@@ -1,5 +1,173 @@
 # economizai — what's new
 
+## 2026-11-11 — Release pré-campanha: custo, conta, assinatura, indicação, ofertas e capacidade
+
+**O que o FE precisa saber** (detalhes e exemplos no `API.md`)
+
+Contratos novos
+- **`AuthResponse.newAccount: boolean`** — `true` só quando ESTA chamada criou a conta (`POST /auth/register`,
+  e `/auth/google` / `/auth/apple` quando o login social cria o usuário). `false` em login, refresh e conta
+  social já existente. É o gatilho dos eventos de cadastro. `signupPromoGranted` / `signupPromoValidUntil`
+  continuam no payload por compatibilidade, sempre `false` / `null`.
+- **Troca de e-mail** (só conta com senha):
+  - `POST /users/me/email-change` `{ "newEmail", "currentPassword" }` → 204. Manda um código de 6 dígitos
+    (30 min) para o e-mail NOVO; o e-mail da conta ainda não muda. 409 `user.email-change.password-required`
+    (conta só Google/Apple — criar senha antes), 409 `user.email-change.in-use`, 409
+    `user.email-change.same-email`, 400 senha atual errada. 3 pedidos/hora.
+  - `POST /users/me/email-change/confirm` `{ "code", "refreshToken"? }` → 200 `UserResponse` já com o e-mail
+    novo (verificado). Avisa o e-mail antigo e encerra as outras sessões; mandando o `refreshToken` deste
+    aparelho ele continua logado, sem o campo TODAS as sessões caem. 400 `user.email-change.code-invalid`
+    (errado, vencido ou após 5 erros). 15 tentativas/hora.
+  - `DELETE /users/me/email-change` → 204 (cancela o pedido; idempotente).
+  - **`UserResponse.pendingEmail: string | null`** — endereço aguardando confirmação (null sem pedido ativo).
+- **`ConfirmReceiptResponse.launchPromo: { "validUntil": "2026-12-31" } | null`** — preenchido SÓ na
+  confirmação que concedeu o Premium de lançamento (1ª nota confirmada). Mostrar o aviso uma única vez.
+- **Indicação de amigos:**
+  - `referralCode?: string` em `POST /auth/register`, `/auth/google` e `/auth/apple` — aplicado só quando a
+    chamada cria a conta; inválido / próprio código / conta já existente é ignorado em silêncio.
+  - `GET /referrals/me` → `{ code, shareUrl, invitedCount, qualifiedCount, rewardedMonths, firstRewardUsed,
+    referredBy, canRedeemCode }`.
+  - `POST /referrals/redeem` `{ "code" }` → 204. Só enquanto a conta não foi indicada e não tem nota
+    confirmada. 400 `referral.code.invalid` / `referral.code.own`; 409 `referral.redeem.already_referred` /
+    `referral.redeem.too_late`. 10 tentativas/hora.
+- **`GET /sefaz/state-status`** (autenticado) → `[{ "uf", "name", "status": "WORKING" | "UNSTABLE" |
+  "VALIDATING" }]` para as 27 UFs, ordenado por UF. Fonte da "situação dos estados" do FAQ — não fixar no app.
+- **`GET /users/me/subscription`** ganhou `cancelAtPeriodEnd: boolean` (não vai renovar; o acesso segue até
+  `currentPeriodEnd`) e `rewardPremiumUntil: datetime | null` (fim do Premium ganho por indicação, quando
+  ainda está à frente).
+- **`GET /legal/terms` e `/legal/privacy-policy` agora são versão `1.1`.** Cadastro com `acceptedTermsVersion`
+  / `acceptedPrivacyVersion` `"1.0"` volta 400 — mandar a versão lida do endpoint.
+
+Mudou de comportamento
+- **`GET /deals` (`DealResponse`)**: novo `priceSource: "OWN_PURCHASE" | "COMMUNITY"`; `currentPrice` passou a
+  ser o preço MAIS RECENTE da rede (no máximo 60 dias), o mesmo número da tela de melhores preços — não é mais
+  mediana; `observedAt` é a data dessa observação (antes era a data da última compra da casa). A rede da
+  última compra da casa nunca é sugerida. Rótulos: `OWN_PURCHASE` → "Você pagou R$ X no mercado A em DD/MM";
+  `COMMUNITY` → "Visto por R$ X no mercado A em DD/MM".
+- **Melhores preços (`GET /price-index/products/{id}/best-markets`)**: a ordem e o selo "mais barato" usam o
+  `latestPrice` de cada linha (o número exibido), não a mediana.
+- **Preferências de notificação**: `PROMO_COMMUNITY` e `CHEAPER_MARKET` não são mais listados em
+  `GET /users/me/notification-preferences` nem em `GET /notification-rules`, e são ignorados no `PUT`. Tirar
+  os dois toggles da tela — o controle é o resumo de ofertas (`digest-preferences`).
+- **`GET /products`**: sem `query` → os produtos da CASA, mais comprados primeiro (paginado); 1 caractere →
+  só produtos da casa que casam; 2+ caracteres → busca no catálogo, limitada a ~200 candidatos por fonte e
+  paginada sobre esse conjunto. `hasPriceHistory` agora significa "a casa já comprou este produto".
+- **`POST /receipts/{id}/retry`** recusa com **400** (mensagem localizada dizendo o que fazer) quando a falha
+  é definitiva. Chaves de `parseErrorReason` recusadas: `receipt.parse.failed:chave-corrupted`,
+  `receipt.chave.typo`, `receipt.parse.failed:infosimples.not-found`, `receipt.contingency.unavailable`,
+  `receipt.merchant.unsupported`, `receipt.qr.invalid`, `receipt.state.unsupported`,
+  `receipt.manual-chave.unsupported`, `receipt.manual-chave.nfe-unsupported`. Esconder o botão para elas.
+  O `POST /receipts/retry` em lote pula essas notas.
+- **Reenvio de uma chave que ainda está em processamento** (`PROCESSING` / `IMPORT_QUEUED` na mesma casa):
+  `POST /receipts` devolve a nota já em andamento (mesmo `id`) em vez de apagar e recomeçar. Seguir o polling.
+- **`POST /receipts/{id}/items/{itemId}/correction`** vale só para a CASA (nome amigável + categoria); o
+  produto global não muda — a proposta vai para a fila do admin. Erros novos: **429**
+  `ai.correction.limit_reached` (limite diário de correções por IA), **503** `item.correction.unavailable`,
+  **422** `item.correction.failed`.
+- **Horário de silêncio 21h–8h (Brasília)**: nada de push/e-mail nessa janela; a notificação entra na caixa
+  na hora e o push sai depois das 8h (no máximo 3 por usuário; o resto fica só na caixa). Exceção: "nota
+  pronta / falhou / recuperada" saem na hora.
+- **Linha editada ou adicionada pelo usuário** vale para o histórico da casa mas não alimenta o índice
+  colaborativo (as linhas intocadas da mesma nota continuam contribuindo).
+
+Respostas de erro novas
+- **503 de sobrecarga** `error.overloaded` com header **`Retry-After: 5`** quando o servidor está sem conexão
+  de banco livre — em QUALQUER endpoint autenticado (antes virava 500, ou 401 que deslogava o app). Tratar
+  como "tente de novo", nunca como sessão inválida.
+- **503** `image.decode.busy` nos uploads de imagem (`/receipts/photo`, `/receipts/chave/photo`,
+  `/users/me/profile-picture`) quando há decodificações demais ao mesmo tempo.
+- **429 novos**: foto de perfil (10 uploads/hora); reivindicação de lojista (`POST /merchant-claims` 3/hora,
+  `/merchant-claims/{id}/verify` 10/hora — por usuário E por IP) e `merchant.claim.cooldown` ao reivindicar de
+  novo uma rede cuja reivindicação foi encerrada há menos de 24 h; troca de e-mail; resgate de indicação;
+  correção por IA (acima).
+- **Código de redefinição de senha**: no máximo 3 pedidos/hora por conta — o `forgot-password` continua
+  respondendo 204 (os pedidos a mais são ignorados, sem e-mail novo). Erros de código contam por CONTA: depois
+  de 10 erros em 1 h a verificação fica recusada (400) por 30 min, mesmo com um código novo.
+- **Remover a si mesmo da casa** → 400 `household.remove.self`. Erros de regra de notificação
+  (`notificationrule.invalid.*`) agora vêm localizados.
+
+Removido
+- **`POST /webhooks/subscription`** (webhook genérico de cobrança) — ninguém usava. Ficam
+  `/webhooks/revenuecat` e `/webhooks/mercadopago`.
+
+**Ingestão / custo**
+- Teto diário de gasto **por serviço** no lugar do teto global único: Infosimples R$ 120, captcha R$ 30, foto
+  (visão) R$ 30, resgate de HTML R$ 15, IA de categorização R$ 50, WhatsApp/SMS R$ 15. Estourou → só aquele
+  serviço para até a virada do dia (UTC); os demais e a raspagem grátis seguem. O teto global virou opcional
+  (desligado por padrão).
+- Limites por usuário/dia: Infosimples 10, captcha 30, foto 10, resgate de HTML 5, WhatsApp/SMS 3, IA de
+  categorização 60 (novo — sugestão por nota, fallback pós-confirmação e "corrigir item" entram no ledger).
+- Aviso no WhatsApp do admin em 80% e 100% de cada teto e do saldo pré-pago dos provedores (Infosimples,
+  CapSolver, Twilio, Anthropic), com nova tentativa até a entrega e e-mail como reserva.
+- 4xx determinístico em MG/DF/SC/GO não refaz captcha nem aciona o caminho pago; resposta do Infosimples sem
+  itens vira falha `no-items-found`; o Infosimples não é repetido para a mesma nota na cadeia de device-fetch;
+  o circuit breaker do Infosimples passou a ser por UF.
+- Portal do estado fora do ar estaciona a nota em `PORTAL_PENDING` antes de pedir a busca pelo aparelho.
+- Contingência: as novas tentativas automáticas usam só caminhos grátis; o pago entra uma única vez.
+- XML enviado pelo usuário não alimenta o índice de loja física; no índice online só entra com autenticidade
+  comprovada (reconsulta da chave que confere com o arquivo). Sem isso, só histórico pessoal.
+- Sweeper de notas em processamento reenfileira um scan encalhado uma vez antes de falhar; no deploy, o pool
+  de ingestão espera até 60 s pelas notas em andamento.
+- HTML da nota — etapa 1: o HTML passa a morar em `receipt_raw_html`; a coluna antiga sai numa release
+  seguinte.
+
+**Segurança / conta**
+- E-mail normalizado (trim + minúsculas) em cadastro, login, reset, social e buscas; índice único em
+  `lower(email)`.
+- Bootstrap de admin só promove conta com e-mail verificado.
+- Exclusão de conta apaga também a foto de perfil e as fotos de nota do armazenamento.
+- Loja de segmento desconhecido passa a exigir K=3 nos agregados; selo `verified` de promo de lojista exige
+  K casas distintas.
+- Redirecionamentos dos portais SEFAZ passam sempre pela lista de hosts permitidos.
+- Logs: e-mail, URL do QR e chave do rate limit mascarados.
+- Termos de Uso e Política de Privacidade v1.1.
+
+**Assinaturas / promoção / indicação**
+- Premium de lançamento: concedido UMA vez, na primeira nota confirmada, até 31/12/2026; nunca sobrescreve
+  assinatura paga, concessão sem data de fim ou período que já termina depois.
+- Avisos de fim do Premium grátis em D-15, D-7, D-3 e D-1 (caixa + push), só para quem não tem assinatura paga.
+- Cancelamento (RevenueCat `CANCELLATION` / `SUBSCRIPTION_PAUSED`; Mercado Pago `cancelled` / `paused`) não
+  tira mais o acesso na hora: marca `cancelAtPeriodEnd` e o Premium vale até o fim do período pago. Assinatura
+  paga que ainda renova ganha 3 dias de carência antes do downgrade. Assinatura paga que termina com a promo
+  ainda vigente volta para a promo.
+- Mercado Pago: cada cobrança mensal aprovada (`subscription_authorized_payment`) avança o período e registra
+  a receita do mês.
+- Indicação: a 1ª indicação válida rende 1 mês de Premium (uma única vez); da 2ª em diante, 1 mês por amigo
+  que assinar. Meses acumulam e começam a contar depois do fim do Premium grátis. Quem foi convidado não ganha
+  nada. A indicação vale quando o convidado confirma uma nota nova que alimenta o índice, morando em outra casa.
+- Gate por feature (`SUBSCRIPTION_FREE_OPEN_FEATURES`); push transacional (nota, casa, conta) nunca é barrado
+  pelo plano; cópias de nota do split de casa não contam no teto mensal.
+
+**Notificações**
+- Dinheiro em formato brasileiro ("R$ 1.234,50") e textos sempre em português.
+- Resumo e aviso de orçamento usam o gasto do painel, pela data da compra.
+- Aviso de reposição segue a tela de previsão (respeita "Já comprei" / "Adiar") e para após 3 lembretes sem
+  resposta; roda 1×/dia às 10h. Orçamento às 9h e 18h.
+- Resumo de ofertas: hora de envio gravada por usuário; atrasou, ainda envia no mesmo dia; contas novas
+  espalhadas entre 11h e 19h; sem oferta nova, nada é enviado e a vaga do dia não é gasta.
+- Push e e-mail saem num executor próprio, fora da thread que acabou de gravar.
+
+**Preços / ofertas**
+- "Ofertas pra você" e "Melhores preços" mostram o mesmo número (preço mais recente da rede); ver os campos
+  de `DealResponse` acima.
+- Semana da virada do ano cai num único balde nos gráficos; gasto agrupado por casa.
+
+**Capacidade**
+- Executores próprios para nota por foto (3 threads / fila 30) e categorização por IA (2 / 50).
+- Tomcat limitado a 50 threads e espera por conexão de banco de 6 s (daí o 503 de sobrecarga acima).
+- Confirmação com trava de linha, gravação em lote (JDBC batch 50) e histórico de promo numa consulta só.
+- Limite simultâneo de decodificação de imagem (3).
+- Busca de produtos paginada no banco com índice trigram; ranking global em cache de 5 min; jobs de
+  geocodificação, CNAE, auto-confirmação e convite de push com teto por rodada; pool de agendamento 8.
+- Warm-up de EAN com orçamento de 5 s e 15 códigos por nota.
+
+**Infra / limpeza**
+- Removidos os scripts `.ps1` e o `tunnel-proxy-worker/` do servidor Windows aposentado (fica só
+  `scripts/flyway-dedupe.ps1`, usado pelo hook de pre-push) e as exportações de histórico da raiz.
+- `render.yaml`, `INFRASTRUCTURE.md` e `RENDER_SETUP.md` alinhados ao que roda hoje, com a referência das
+  variáveis de ambiente novas. `BILLING_WEBHOOK_SECRET` deixou de existir.
+- E2E de prod usa o domínio oficial da API.
+
 ## 2026-11-10 — Split de variantes assistido por IA (admin)
 
 **O que o FE precisa saber**
