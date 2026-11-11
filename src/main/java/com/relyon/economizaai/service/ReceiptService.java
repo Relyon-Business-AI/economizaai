@@ -53,6 +53,7 @@ import org.springframework.data.jpa.domain.Specification;
 import com.relyon.economizaai.service.notifications.NotificationPayload;
 import com.relyon.economizaai.service.notifications.NotificationRuleService;
 import com.relyon.economizaai.service.notifications.NotificationService;
+import com.relyon.economizaai.service.notifications.NotificationTextFormatter;
 import com.relyon.economizaai.service.notifications.SavingsAttributionService;
 import com.relyon.economizaai.service.priceindex.PriceIndexService;
 import com.relyon.economizaai.service.privacy.LogMasker;
@@ -1048,7 +1049,7 @@ public class ReceiptService {
         var locale = LocalizedMessageService.toLocale(user.getLocale());
         for (var promo : promos) {
             var title = localizedMessageService.translate("notification.personal_promo.title", locale, promo.productName());
-            var paid = promo.paidPrice().setScale(2, RoundingMode.HALF_UP).toPlainString().replace('.', ',');
+            var paid = NotificationTextFormatter.amount(promo.paidPrice());
             var pct = promo.savingsPct().setScale(0, RoundingMode.HALF_UP).toPlainString();
             var body = localizedMessageService.translate("notification.personal_promo.body", locale,
                     promo.productName(), paid, receipt.getMarketName(), pct);

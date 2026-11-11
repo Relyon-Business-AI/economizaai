@@ -166,8 +166,7 @@ public class WhatsAppOptInService {
     }
 
     private Locale localeOf(User user) {
-        var locale = user.getLocale();
-        return Locale.forLanguageTag(locale == null || locale.isBlank() ? "pt" : locale);
+        return LocalizedMessageService.toLocale(user.getLocale());
     }
 
     public String waMeLink(String action, String token) {

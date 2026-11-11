@@ -49,6 +49,7 @@ class InsightsServiceTest {
     @Mock private CategoryResolver categoryResolver;
     @Mock private SubscriptionGateService subscriptionGate;
     @Mock private HouseholdProductAliasService householdProductAliasService;
+    @Mock private LocalizedMessageService messageService;
 
     @InjectMocks private InsightsService insightsService;
 

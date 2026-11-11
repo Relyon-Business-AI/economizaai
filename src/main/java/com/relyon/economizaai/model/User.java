@@ -168,6 +168,14 @@ public class User extends BaseEntity implements UserDetails {
     @Column(name = "digest_send_hour")
     private Integer digestSendHour;
 
+    /**
+     * The hour the deals digest is actually due (explicit override, else inferred from
+     * shopping habits, else a per-user default). Persisted so due users are selected in
+     * SQL; null until the digest job assigns it.
+     */
+    @Column(name = "digest_effective_send_hour")
+    private Integer digestEffectiveSendHour;
+
     @Column(name = "last_digest_sent_at")
     private OffsetDateTime lastDigestSentAt;
 

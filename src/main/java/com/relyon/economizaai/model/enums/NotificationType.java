@@ -15,10 +15,13 @@ public enum NotificationType {
     // --- System defaults: auto-seeded per user, enabled by default, user can toggle ---
     /** You paid below your own historical median on a confirmed receipt. */
     PROMO_PERSONAL(Scope.DEFAULT, false, false),
-    /** A product your household buys went on sale somewhere in the network. */
-    PROMO_COMMUNITY(Scope.DEFAULT, false, false),
-    /** The same product you buy is cheaper at a market near you. */
-    CHEAPER_MARKET(Scope.DEFAULT, false, false),
+    /**
+     * Retired toggle: its content moved to the deals digest (governed by
+     * {@code User.digestFrequency}). Kept only so old rows still deserialize.
+     */
+    PROMO_COMMUNITY(Scope.RETIRED, false, false),
+    /** Retired toggle — same as {@link #PROMO_COMMUNITY}. */
+    CHEAPER_MARKET(Scope.RETIRED, false, false),
     /** Periodic savings + watchlist digest. */
     DIGEST(Scope.DEFAULT, false, false),
 
@@ -53,7 +56,7 @@ public enum NotificationType {
     /** Someone left (or was removed from) your household (sent to every remaining member). */
     HOUSEHOLD_MEMBER_LEFT(Scope.SYSTEM, false, false);
 
-    public enum Scope { DEFAULT, USER, SYSTEM }
+    public enum Scope { DEFAULT, USER, SYSTEM, RETIRED }
 
     private final Scope scope;
     private final boolean requiresProduct;
@@ -79,6 +82,11 @@ public enum NotificationType {
 
     public boolean isDefault() {
         return scope == Scope.DEFAULT;
+    }
+
+    /** A type that no longer gates anything: never seeded, never listed. */
+    public boolean isRetired() {
+        return scope == Scope.RETIRED;
     }
 
     public boolean isUserCreatable() {

@@ -32,6 +32,7 @@ public class NotificationPreferenceService {
     @Transactional(readOnly = true)
     public List<NotificationPreferenceResponse> list(User user) {
         return preferenceRepository.findAllByUserId(user.getId()).stream()
+                .filter(preference -> !preference.getType().isRetired())
                 .map(p -> new NotificationPreferenceResponse(p.getType(), p.getChannel()))
                 .toList();
     }
@@ -42,6 +43,7 @@ public class NotificationPreferenceService {
         // mentions (multi-channel). Replace that type's rows wholesale; types not in
         // the request are left untouched.
         var channelsByType = request.preferences().stream()
+                .filter(preference -> !preference.type().isRetired())
                 .collect(Collectors.groupingBy(
                         UpdateNotificationPreferencesRequest.Preference::type,
                         LinkedHashMap::new,
@@ -68,6 +70,8 @@ public class NotificationPreferenceService {
     public DigestPreferencesResponse updateDigestPreferences(User user, UpdateDigestPreferencesRequest request) {
         user.setDigestFrequency(request.frequency());
         user.setDigestSendHour(request.sendHour());
+        // An explicit hour is the effective one; clearing it lets the digest job pick again.
+        user.setDigestEffectiveSendHour(request.sendHour());
         userRepository.save(user);
         log.info("digest.preferences.updated user={} frequency={} sendHour={}",
                 LogMasker.email(user.getEmail()), request.frequency(), request.sendHour());

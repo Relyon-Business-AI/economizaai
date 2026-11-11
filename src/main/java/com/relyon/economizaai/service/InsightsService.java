@@ -46,6 +46,7 @@ public class InsightsService {
     private final SubscriptionGateService subscriptionGate;
     private final HouseholdProductAliasService householdProductAliasService;
     private final CategoryResolver categoryResolver;
+    private final LocalizedMessageService messageService;
 
     /** Backwards-compatible entry point — every segment (ALL scope). */
     @Transactional(readOnly = true)
@@ -167,7 +168,7 @@ public class InsightsService {
                 label = globalNodeId != null ? categoryResolver.labelFor(globalNodeId, locale) : null;
                 key = slug; parentSlug = null; icon = null; color = null;
             }
-            if (key == null) { key = "outros"; slug = "outros"; label = "en".equals(locale.getLanguage()) ? "Other" : "Outros"; }
+            if (key == null) { key = "outros"; slug = "outros"; label = messageService.translate("insights.category.others", locale); }
             if (label == null) label = slug;
             var finalSlug = slug; var finalLabel = label; var finalParent = parentSlug;
             var finalIcon = icon; var finalColor = color;

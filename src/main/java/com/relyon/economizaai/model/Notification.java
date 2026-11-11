@@ -64,6 +64,14 @@ public class Notification extends BaseEntity {
     @Column(name = "read_at")
     private LocalDateTime readAt;
 
+    /**
+     * True while the outbound dispatch (push/e-mail) is being held back by the quiet
+     * hours — the row is already in the inbox; the drain job sends it and clears this.
+     */
+    @Column(name = "dispatch_deferred", nullable = false)
+    @lombok.Builder.Default
+    private boolean dispatchDeferred = false;
+
     /** Loose reference to the admin campaign that produced this row (null for
      *  organic notifications). Kept as a bare UUID — metrics only ever GROUP BY it. */
     @Column(name = "campaign_id")

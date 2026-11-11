@@ -2,6 +2,7 @@ package com.relyon.economizaai.repository;
 
 import com.relyon.economizaai.model.NotificationRule;
 import com.relyon.economizaai.model.enums.NotificationType;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -49,10 +50,25 @@ public interface NotificationRuleRepository extends JpaRepository<NotificationRu
     """)
     List<NotificationRule> findActiveByTypeFetchUserAndProduct(@Param("type") NotificationType type);
 
+    /**
+     * One page of active rules of a type, in id order, starting after {@code afterId}
+     * (keyset pagination — pass the last id of the previous page; a batch job never
+     * loads every rule at once).
+     */
+    @Query("""
+        SELECT r FROM NotificationRule r
+        JOIN FETCH r.user u
+        WHERE r.type = :type AND r.active = true AND r.id > :afterId
+        ORDER BY r.id ASC
+    """)
+    List<NotificationRule> findActivePageByTypeFetchUser(@Param("type") NotificationType type,
+                                                         @Param("afterId") UUID afterId,
+                                                         Pageable pageable);
+
     @Modifying
     @Query(nativeQuery = true, value = """
-        INSERT INTO notification_rules (id, user_id, type, is_default, active, created_at, updated_at)
-        SELECT gen_random_uuid(), u.id, :type, true, true, now(), now()
+        INSERT INTO notification_rules (id, user_id, type, is_default, active, reminder_count, created_at, updated_at)
+        SELECT gen_random_uuid(), u.id, :type, true, true, 0, now(), now()
         FROM users u
         WHERE NOT EXISTS (
             SELECT 1 FROM notification_rules nr
