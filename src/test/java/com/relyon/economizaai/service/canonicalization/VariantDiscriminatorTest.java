@@ -87,4 +87,48 @@ class VariantDiscriminatorTest {
         var signature = VariantDiscriminator.signature("REFRIGERANTE ZERO 2L");
         assertTrue(signature.contains("zero"));
     }
+
+    @Test
+    void sugarType_demeraraVsRefinado_differentVariants() {
+        // "demerara" present on one side, the refined/plain sugar carries no type marker
+        // — a variant-line token, so present-on-one-side-only splits them (unlike a flavor).
+        assertFalse(VariantDiscriminator.sameVariant(
+                "ACUCAR DEMERARA 1KG", "ACUCAR REFINADO 1KG"));
+        assertFalse(VariantDiscriminator.sameVariant(
+                "ACUCAR DEMERARA 1KG", "ACUCAR 1KG"));
+    }
+
+    @Test
+    void sameSugarType_demerara_sameVariant() {
+        assertTrue(VariantDiscriminator.sameVariant(
+                "ACUCAR DEMERARA 1KG", "ACUC DEMERARA 1 KG"));
+    }
+
+    @Test
+    void detergentLine_platinumVsFlavor_differentVariants() {
+        // Det Ypê maçã vs Det Ypê platinum: "platinum" is a line marker (present-on-one-
+        // side splits); "maca" (maçã) is a weak flavor. The line marker forces the split.
+        assertFalse(VariantDiscriminator.sameVariant(
+                "DET YPE MACA 500ML", "DET YPE PLATINUM 500ML"));
+        assertFalse(VariantDiscriminator.sameVariant(
+                "DET YPE PLATINUM 500ML", "DET YPE 500ML"));
+    }
+
+    @Test
+    void pastaShape_parafusoVsEspaguete_differentVariants() {
+        assertFalse(VariantDiscriminator.sameVariant(
+                "MAC GALO PARAFUSO 500G", "MAC GALO ESPAGUETE 500G"));
+    }
+
+    @Test
+    void tangFlavors_guaranaVsMaracuja_differentVariants() {
+        assertFalse(VariantDiscriminator.sameVariant(
+                "TANG GUARANA 25G", "TANG MARACUJA 25G"));
+    }
+
+    @Test
+    void variantLineTokenIsTaggedStrong() {
+        var signature = VariantDiscriminator.signature("ACUCAR DEMERARA 1KG");
+        assertTrue(signature.contains("line_demerara"));
+    }
 }

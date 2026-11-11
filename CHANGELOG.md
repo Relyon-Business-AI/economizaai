@@ -1,5 +1,18 @@
 # economizai — what's new
 
+## 2026-11-10 — Split de variantes: mais marcas e sabores reconhecidos
+
+- O `POST /api/v1/admin/products/split-variants` ainda deixava ~28 produtos misturando marcas/variantes
+  porque o reconhecimento de marca/sabor não as distinguia. **Marcas novas no registro** (via migration):
+  Bom Jesus, Pimpinela, Canecão, Preti/Pretinho (cafés), ODD, Minuano (detergentes), Orquídea, Emegê
+  (massas), Cemil, CCGL (laticínios), MultOvos, Mantiqueira (ovos) — antes caíam na palavra genérica
+  (ex. "café") e não separavam.
+- **Novos tokens de variante/linha** (presença de um lado só já separa, como os tokens STRONG): tipo de
+  açúcar `demerara` (vs refinado), linhas de detergente `platinum`/`titanium`, formatos de massa
+  `parafuso`/`pena`/`espaguete`/`spaghetti`/`tricolor`/`lasanha`. **Novos sabores (WEAK)**: guaraná,
+  tangerina, framboesa, cacau, maçã, proteína, lavanda, orquídea, manjericão, pizza, tomate, queijo,
+  bacon, provolone, crostini. Sem mudança de contrato de API.
+
 ## 2026-11-11 — "Ofertas pra você" mais rápido (mesmo resultado)
 
 - `GET /deals` fazia ~4 consultas POR produto que a casa já comprou (743 produtos numa casa grande ≈ 3 mil

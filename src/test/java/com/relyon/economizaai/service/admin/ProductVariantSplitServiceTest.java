@@ -371,4 +371,90 @@ class ProductVariantSplitServiceTest {
         verify(productRepository, never()).save(any(Product.class));
         verify(receiptItemRepository, never()).repointItemsTo(anyList(), any(Product.class));
     }
+
+    private static final String MELITTA_EAN = "7891020302011";
+    private static final String BOM_JESUS_EAN = "7896397200014";
+    private static final String PIMPINELA_EAN = "7898903470012";
+
+    @Test
+    void threeCoffeeBrandsUnderOneProduct_splitIntoThree() {
+        // Once Bom Jesus / Pimpinela are in the brand registry the extractor returns
+        // distinct brands, so the three coffees carry distinct signatures and split
+        // (before the seed they all resolved to the generic "café" → one group).
+        var product = Product.builder()
+                .id(UUID.randomUUID())
+                .ean(MELITTA_EAN)
+                .normalizedName("CAFE MELITTA 500G")
+                .genericName("Café")
+                .genericNameNorm("cafe")
+                .category(ProductCategory.GROCERIES)
+                .build();
+        lenient().when(brandExtractor.find("CAFE MELITTA 500G")).thenReturn("Melitta");
+        lenient().when(brandExtractor.find("CAFE BOM JESUS 500G")).thenReturn("Bom Jesus");
+        lenient().when(brandExtractor.find("CAFE PIMPINELA 500G")).thenReturn("Pimpinela");
+        var melitta = item(product, "CAFE MELITTA 500G", MELITTA_EAN, "12.90", UUID.randomUUID());
+        var bomJesus = item(product, "CAFE BOM JESUS 500G", BOM_JESUS_EAN, "9.90", UUID.randomUUID());
+        var pimpinela = item(product, "CAFE PIMPINELA 500G", PIMPINELA_EAN, "8.90", UUID.randomUUID());
+
+        when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
+        when(receiptItemRepository.findProductIdsWithMultipleItemEans(any()))
+                .thenReturn(List.of(product.getId()));
+        when(receiptItemRepository.findAllLinkedWithReceipt(product.getId()))
+                .thenReturn(List.of(melitta, bomJesus, pimpinela));
+        when(aliasRepository.findByProduct(product)).thenReturn(List.of());
+        when(priceObservationRepository.findObservationTraceByProduct(product.getId())).thenReturn(List.of());
+        when(productRepository.findByEan(any())).thenReturn(Optional.empty());
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> {
+            var toSave = invocation.getArgument(0, Product.class);
+            if (toSave.getId() == null) toSave.setId(UUID.randomUUID());
+            return toSave;
+        });
+
+        var response = service.splitVariants(500, false);
+
+        assertEquals(1, response.productsSplit());
+        assertEquals(2, response.newProductsCreated(), "three brands → anchor keeps one, two new products");
+        assertEquals(3, response.splits().get(0).resultingProducts().size());
+    }
+
+    private static final String DEMERARA_EAN = "7896005800010";
+    private static final String REFINADO_EAN = "7896005800027";
+
+    @Test
+    void sugarDemeraraVsRefinado_splitIntoTwo() {
+        // No brand on either side; "demerara" is a variant-line (strong) token, so it
+        // splits from the plain/refined sugar even though they share a base name.
+        var product = Product.builder()
+                .id(UUID.randomUUID())
+                .ean(DEMERARA_EAN)
+                .normalizedName("ACUCAR DEMERARA 1KG")
+                .genericName("Açúcar")
+                .genericNameNorm("acucar")
+                .category(ProductCategory.GROCERIES)
+                .build();
+        lenient().when(brandExtractor.find("ACUCAR DEMERARA 1KG")).thenReturn(null);
+        lenient().when(brandExtractor.find("ACUCAR REFINADO 1KG")).thenReturn(null);
+        var demerara = item(product, "ACUCAR DEMERARA 1KG", DEMERARA_EAN, "6.90", UUID.randomUUID());
+        var refinado = item(product, "ACUCAR REFINADO 1KG", REFINADO_EAN, "4.50", UUID.randomUUID());
+
+        when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
+        when(receiptItemRepository.findProductIdsWithMultipleItemEans(any()))
+                .thenReturn(List.of(product.getId()));
+        when(receiptItemRepository.findAllLinkedWithReceipt(product.getId()))
+                .thenReturn(List.of(demerara, refinado));
+        when(aliasRepository.findByProduct(product)).thenReturn(List.of());
+        when(priceObservationRepository.findObservationTraceByProduct(product.getId())).thenReturn(List.of());
+        when(productRepository.findByEan(any())).thenReturn(Optional.empty());
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> {
+            var toSave = invocation.getArgument(0, Product.class);
+            if (toSave.getId() == null) toSave.setId(UUID.randomUUID());
+            return toSave;
+        });
+
+        var response = service.splitVariants(500, false);
+
+        assertEquals(1, response.productsSplit());
+        assertEquals(1, response.newProductsCreated());
+        assertEquals(2, response.splits().get(0).resultingProducts().size());
+    }
 }

@@ -131,6 +131,20 @@ A merge is allowed when STRONG signatures are equal AND WEAK signatures don't di
 contradict. Applied at every name/metadata/fuzzy merge point in `CanonicalizationService`
 (`canMergeIntoExisting`). EXACT real-EAN match is exempt — an identical GTIN IS the product.
 
+**Variant/line tokens (2026-11-10, dictionary expansion).** A third STRONG class, tagged
+`line_*`, covers sub-lines of one brand that are (almost) never dropped from a receipt
+name, so presence-on-one-side-only IS a difference (same semantics as STRONG): sugar TYPE
+(`demerara` vs the implicit refined), detergent performance lines (`platinum`, `titanium`),
+and pasta SHAPES (`parafuso`, `pena`, `espaguete`/`spaghetti`, `tricolor`, `lasanha` —
+owner-approved split of cuts). The WEAK flavor vocabulary also grew (Tang/juice flavors
+guaraná/tangerina/framboesa/cacau/maçã, detergent perfumes proteína/lavanda/orquídea,
+sauce/biscuit lines manjericão/pizza/tomate/queijo/bacon/provolone/crostini). Brand-side
+mis-merges (coffees Bom Jesus/Pimpinela/Canecão/Preti collapsing to the generic "café",
+etc.) are fixed in the `brand_registry_entries` seed (`V144`), not here — the split
+signature is `brand (BrandExtractor) ∪ VariantDiscriminator tokens`, so a new brand splits
+on its own. Residual cases beyond a deterministic dictionary (same-word brand vs flavor
+collisions the extractor can't disambiguate from context) are left for a later AI pass.
+
 ### EAN authority (`EanAuthority`)
 
 A REAL GTIN is the primary match key. A PLACEHOLDER/internal code (`^0{6,}\d*$`, all-zeros,
