@@ -42,6 +42,7 @@ import com.relyon.economizaai.legal.LegalDocuments;
 import com.relyon.economizaai.model.HouseholdProductAlias;
 import com.relyon.economizaai.model.AccountDeletionFeedback;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.service.AccountStorageCleaner.StoredObjects;
 import com.relyon.economizaai.service.analytics.meta.MetaConversionsService;
 import com.relyon.economizaai.service.attribution.AttributionResolver;
 import com.relyon.economizaai.repository.HouseholdCustomCategoryRepository;
@@ -130,6 +131,7 @@ public class UserService {
     private final SignupAlertService signupAlertService;
     private final MetaConversionsService metaConversionsService;
     private final AttributionResolver attributionResolver;
+    private final AccountStorageCleaner accountStorageCleaner;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -486,6 +488,9 @@ public class UserService {
     @Transactional
     public void deleteAccount(User user, DeleteAccountRequest request) {
         recordDeletionFeedback(user, request);
+        // Captured before the rows go away; the objects themselves are removed after commit.
+        accountStorageCleaner.deleteAfterCommit(new StoredObjects(
+                user.getProfilePictureKey(), receiptRepository.findPhotoReceiptIdsByUserId(user.getId())));
         var householdId = user.getHousehold().getId();
         userRepository.delete(user);
         log.info("User account deleted: {}", LogMasker.email(user.getEmail()));

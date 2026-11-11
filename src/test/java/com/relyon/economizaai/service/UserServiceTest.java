@@ -57,6 +57,7 @@ import com.relyon.economizaai.repository.UserWatchedMarketRepository;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.security.ratelimit.LoginAttemptGuard;
 import com.relyon.economizaai.model.enums.Platform;
+import com.relyon.economizaai.service.AccountStorageCleaner.StoredObjects;
 import com.relyon.economizaai.service.auth.EmailVerificationService;
 import com.relyon.economizaai.service.auth.LoginActivityRecorder;
 import com.relyon.economizaai.service.auth.RefreshTokenService;
@@ -196,6 +197,9 @@ class UserServiceTest {
 
     @Mock
     private AccountDeletionFeedbackRepository accountDeletionFeedbackRepository;
+
+    @Mock
+    private AccountStorageCleaner accountStorageCleaner;
 
     @InjectMocks
     private UserService userService;
@@ -533,6 +537,20 @@ class UserServiceTest {
         userService.deleteAccount(user, null);
 
         verify(accountDeletionFeedbackRepository, never()).save(any());
+        verify(userRepository).delete(user);
+    }
+
+    @Test
+    void deleteAccount_schedulesRemovalOfProfilePictureAndReceiptPhotos() {
+        var user = buildUser();
+        user.setProfilePictureKey("pic-key");
+        var photoReceiptId = UUID.randomUUID();
+        when(receiptRepository.findPhotoReceiptIdsByUserId(user.getId())).thenReturn(List.of(photoReceiptId));
+        when(userRepository.countByHouseholdId(user.getHousehold().getId())).thenReturn(0L);
+
+        userService.deleteAccount(user);
+
+        verify(accountStorageCleaner).deleteAfterCommit(new StoredObjects("pic-key", List.of(photoReceiptId)));
         verify(userRepository).delete(user);
     }
 

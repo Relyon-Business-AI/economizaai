@@ -81,6 +81,10 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
     // Engagement proxy captured (anonymized) at account deletion.
     long countByUserId(UUID userId);
 
+    /** Ids of the user's photo-extracted receipts — the ones that may have photos kept in storage. */
+    @Query("SELECT receipt.id FROM Receipt receipt WHERE receipt.user.id = :userId AND receipt.origin = 'PHOTO'")
+    List<UUID> findPhotoReceiptIdsByUserId(UUID userId);
+
     /**
      * Users with import results newer than their completion-notification claim —
      * the candidates the worker's completion sweep checks each tick. The per-user

@@ -22,4 +22,7 @@ public interface PhotoAttemptStorage {
 
     /** Bytes of one stored photo, or null if the key is absent. */
     byte[] read(String key) throws IOException;
+
+    /** Removes every photo saved for this receipt plus its manifest. Silent when nothing is stored. */
+    void delete(String receiptId) throws IOException;
 }
