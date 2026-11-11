@@ -221,6 +221,11 @@ economizaai:
       # the host matches one of these suffixes (e.g. svrs.rs.gov.br admits
       # dfe-portal.svrs.rs.gov.br). Extend when onboarding new state portals.
       allowed-url-hosts: ${SEFAZ_ALLOWED_URL_HOSTS:svrs.rs.gov.br,sefaz.rs.gov.br,fazenda.pr.gov.br,sef.sc.gov.br,fazenda.sp.gov.br}
+      # QR codes printed by several states still point at http:// portals (some only
+      # answer there), so plain http is accepted by default; false = fetch https only.
+      # Redirects are never followed automatically: each hop is re-checked against the
+      # host allowlists above/below before it is fetched.
+      allow-plain-http: ${SEFAZ_ALLOW_PLAIN_HTTP:true}
       # UFs allowed to POST client-fetched content to /receipts/prefetched.
       # That content is client-authored (only the embedded chave ties it to
       # SEFAZ), so the endpoint is restricted to portals that block our
