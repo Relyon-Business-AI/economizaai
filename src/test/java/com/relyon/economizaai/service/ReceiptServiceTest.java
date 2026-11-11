@@ -58,6 +58,7 @@ import com.relyon.economizaai.service.sefaz.StateCoverageService;
 import com.relyon.economizaai.service.subscription.EntitlementClock;
 import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
+import com.relyon.economizaai.service.referral.ReferralService;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -124,6 +125,7 @@ class ReceiptServiceTest {
     @Mock private MarketNameService marketNameService;
     @Mock private SubscriptionGateService subscriptionGate;
     @Mock private SubscriptionService subscriptionService;
+    @Mock private ReferralService referralService;
     @Mock private SavingsAttributionService savingsAttributionService;
     @Mock private LocalizedMessageService localizedMessageService;
     @Mock private MerchantSupportGate merchantSupportGate;
@@ -1053,6 +1055,19 @@ class ReceiptServiceTest {
         var response = receiptService.confirm(user, receipt.getId(), null);
 
         assertNull(response.launchPromo());
+    }
+
+    @Test
+    void confirm_checksReferralQualificationAfterCommit() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receiptRepository.save(receipt)).thenReturn(receipt);
+        when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
+
+        receiptService.confirm(user, receipt.getId(), null);
+
+        verify(referralService).qualifyAfterCommit(user.getId(), receipt.getId());
     }
 
     @Test

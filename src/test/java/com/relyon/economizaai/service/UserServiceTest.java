@@ -50,6 +50,7 @@ import com.relyon.economizaai.repository.NotificationRuleRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.repository.ShoppingListRepository;
 import com.relyon.economizaai.repository.SubscriptionRepository;
+import com.relyon.economizaai.service.referral.ReferralService;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
 import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.repository.AccountDeletionFeedbackRepository;
@@ -182,6 +183,8 @@ class UserServiceTest {
 
     @Mock
     private SubscriptionService subscriptionService;
+    @Mock
+    private ReferralService referralService;
 
     @Mock
     private SignupAlertService signupAlertService;
@@ -642,6 +645,21 @@ class UserServiceTest {
 
         verify(userRepository).delete(user);
         verify(householdRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void register_attachesTheReferralCodeToTheNewAccount() {
+        var request = new RegisterRequest("John", "john@test.com", "password123", "1.0", "1.0", null, null, "ABC2345");
+        var household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
+        when(userRepository.existsByEmail("john@test.com")).thenReturn(false);
+        when(householdService.createSoloHousehold()).thenReturn(household);
+        when(passwordEncoder.encode("password123")).thenReturn("encoded");
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(jwtService.generateToken(any(User.class))).thenReturn("jwt-token");
+
+        userService.register(request);
+
+        verify(referralService).attachOnSignup(any(User.class), eq("ABC2345"));
     }
 
     @Test

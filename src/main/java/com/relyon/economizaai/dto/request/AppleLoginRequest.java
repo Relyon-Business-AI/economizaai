@@ -18,10 +18,19 @@ public record AppleLoginRequest(
         Platform platform,
         @Schema(description = "Optional marketing attribution from the landing URL — applied only when THIS call "
                 + "creates the account (first social login). Ignored for returning users.")
-        AttributionInfo attribution
+        AttributionInfo attribution,
+        @Schema(description = "Optional referral code of the person who invited this user. Applied only when THIS "
+                + "call creates the account; silently ignored when invalid.", example = "ABC2345")
+        String referralCode
 ) {
+
+    /** Back-compat: social login without a referral code. */
+    public AppleLoginRequest(String identityToken, String name, Platform platform, AttributionInfo attribution) {
+        this(identityToken, name, platform, attribution, null);
+    }
+
     /** Back-compat: social login without marketing attribution. */
     public AppleLoginRequest(String identityToken, String name, Platform platform) {
-        this(identityToken, name, platform, null);
+        this(identityToken, name, platform, null, null);
     }
 }

@@ -57,6 +57,7 @@ import com.relyon.economizaai.repository.SubscriptionRepository;
 import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.repository.AccountDeletionFeedbackRepository;
 import com.relyon.economizaai.repository.UserWatchedMarketRepository;
+import com.relyon.economizaai.service.referral.ReferralService;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
 import com.relyon.economizaai.repository.NotificationPreferenceRepository;
 import com.relyon.economizaai.repository.NotificationEventRepository;
@@ -129,6 +130,7 @@ public class UserService {
     private final SignupAlertService signupAlertService;
     private final MetaConversionsService metaConversionsService;
     private final AttributionResolver attributionResolver;
+    private final ReferralService referralService;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -159,6 +161,7 @@ public class UserService {
 
         var savedUser = userRepository.save(user);
         householdService.assignHost(household, savedUser);
+        referralService.attachOnSignup(savedUser, request.referralCode());
         notificationRuleService.ensureDefaults(savedUser);
         loginActivityRecorder.recordRegistration(savedUser, request.platform());
         signupAlertService.notifyNewAccount(savedUser, "e-mail/senha");

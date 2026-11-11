@@ -174,6 +174,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final RateLimitPolicy EXPORT_POLICY =
             new RateLimitPolicy("export", 10, Duration.ofHours(1));
 
+    /**
+     * 10 referral-code redemptions per hour per user. The code is short, so unthrottled
+     * attempts could be used to probe for valid codes; a real user types it once or twice.
+     */
+    private static final RateLimitPolicy REFERRAL_REDEEM_POLICY =
+            new RateLimitPolicy("referral-redeem", 10, Duration.ofHours(1));
+
     private final RateLimitRegistry registry;
     private final LocalizedMessageService messageService;
     private final ObjectMapper objectMapper;
@@ -277,6 +284,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
                     PHONE_OTP_POLICY,
                     req -> ("POST".equals(req.getMethod()) || "PATCH".equals(req.getMethod()))
                             && req.getRequestURI().startsWith("/api/v1/users/me/phone"),
+                    KeyStrategy.USER_OR_IP),
+            // --- Referral program (kept as the LAST rule) ---
+            new Rule(
+                    REFERRAL_REDEEM_POLICY,
+                    req -> "POST".equals(req.getMethod()) && "/api/v1/referrals/redeem".equals(req.getRequestURI()),
                     KeyStrategy.USER_OR_IP)
     );
 
