@@ -13,6 +13,7 @@ import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.repository.CategoryRepository;
 import com.relyon.economizaai.repository.ConsumptionSnoozeRepository;
 import com.relyon.economizaai.repository.ManualPurchaseRepository;
 import com.relyon.economizaai.repository.ProductRepository;
@@ -59,6 +60,7 @@ class ConsumptionIntelligenceServiceCoverageTest {
     @Mock private ConsumptionSnoozeRepository snoozeRepository;
     @Mock private ProductRepository productRepository;
     @Mock private HouseholdProductAliasService householdProductAliasService;
+    @Mock private CategoryRepository categoryRepository;
 
     private CollaborativeProperties properties;
     private ConsumptionIntelligenceService service;
@@ -69,8 +71,9 @@ class ConsumptionIntelligenceServiceCoverageTest {
     void setUp() {
         properties = new CollaborativeProperties();
         properties.getConsumption().setMinPurchasesForPrediction(3);
+        properties.getConsumption().setFallbackMinPurchasesForPrediction(3);
         service = new ConsumptionIntelligenceService(receiptItemRepository, manualPurchaseRepository,
-                snoozeRepository, productRepository, properties, householdProductAliasService);
+                snoozeRepository, productRepository, properties, householdProductAliasService, categoryRepository);
         household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
         user = User.builder().id(UUID.randomUUID()).email("u@economizai").household(household).build();
         lenient().when(manualPurchaseRepository.findAllByHouseholdId(any())).thenReturn(List.of());

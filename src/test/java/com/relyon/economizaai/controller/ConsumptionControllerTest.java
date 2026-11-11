@@ -1,6 +1,7 @@
 package com.relyon.economizaai.controller;
 
 import com.relyon.economizaai.config.SecurityConfig;
+import com.relyon.economizaai.dto.response.ConsumptionPredictionPageResponse;
 import com.relyon.economizaai.dto.response.ConsumptionPredictionResponse;
 import com.relyon.economizaai.dto.response.SuggestedShoppingListResponse;
 import com.relyon.economizaai.model.Household;
@@ -26,6 +27,7 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -63,6 +65,22 @@ class ConsumptionControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].productName").value("Leite"))
                 .andExpect(jsonPath("$[0].status").value("RUNNING_LOW"));
+    }
+
+    @Test
+    void predictionsPage_passesFilterAndReturnsCounts() throws Exception {
+        when(service.predictPage(any(), eq(ConsumptionPredictionResponse.Status.RAN_OUT), eq(1), eq(20)))
+                .thenReturn(new ConsumptionPredictionPageResponse(List.of(),
+                        new ConsumptionPredictionPageResponse.StatusCounts(5, 2, 9, 16), 1, 20, false));
+
+        mockMvc.perform(get("/api/v1/consumption/predictions/page")
+                        .param("status", "RAN_OUT").param("page", "1").param("size", "20")
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items").isArray())
+                .andExpect(jsonPath("$.counts.ranOut").value(5))
+                .andExpect(jsonPath("$.counts.total").value(16))
+                .andExpect(jsonPath("$.hasMore").value(false));
     }
 
     @Test

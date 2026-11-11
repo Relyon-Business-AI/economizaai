@@ -255,7 +255,9 @@ public class CollaborativeProperties {
      */
     public static class Consumption {
         private boolean enabled = true;
-        private int minPurchasesForPrediction = 2;
+        private int minPurchasesForPrediction = 3;
+        /** Used only when NO product reaches {@link #minPurchasesForPrediction}, so a new household never sees an empty screen. */
+        private int fallbackMinPurchasesForPrediction = 2;
         private int historyLookbackDays = 365;
         private int runningLowThresholdDays = 7;
         private int ranOutGraceDays = 0;
@@ -264,6 +266,8 @@ public class CollaborativeProperties {
         public void setEnabled(boolean v) { this.enabled = v; }
         public int getMinPurchasesForPrediction() { return minPurchasesForPrediction; }
         public void setMinPurchasesForPrediction(int v) { this.minPurchasesForPrediction = v; }
+        public int getFallbackMinPurchasesForPrediction() { return fallbackMinPurchasesForPrediction; }
+        public void setFallbackMinPurchasesForPrediction(int fallbackMinPurchases) { this.fallbackMinPurchasesForPrediction = fallbackMinPurchases; }
         public int getHistoryLookbackDays() { return historyLookbackDays; }
         public void setHistoryLookbackDays(int v) { this.historyLookbackDays = v; }
         public int getRunningLowThresholdDays() { return runningLowThresholdDays; }
