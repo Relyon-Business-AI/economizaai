@@ -93,6 +93,11 @@ public class AiFineCategoryClassifier {
      * pulados — nunca chutados. Uma chamada de IA por invocação.
      */
     public List<FineSuggestion> suggest(List<ClassificationInput> inputs) {
+        return suggest(inputs, null);
+    }
+
+    /** As {@link #suggest(List)} but attributes the AI call to {@code userId} (user-triggered flows). */
+    public List<FineSuggestion> suggest(List<ClassificationInput> inputs, UUID userId) {
         if (inputs == null || inputs.isEmpty()) return List.of();
         var categories = categoryRepository.findAllByActiveTrueOrderBySortOrderAsc();
         // Alvos válidos = categorias E subcategorias (o LLM pode devolver o slug de uma CATEGORIA
@@ -120,7 +125,7 @@ public class AiFineCategoryClassifier {
                 """.formatted(buildProductLines(inputs));
 
         var text = aiGateway.complete(AiActivity.FINE_CATEGORY_CLASSIFY, aiGateway.curatorModel(),
-                system, userPrompt, 4000);
+                system, userPrompt, 4000, userId);
 
         var suggestions = new ArrayList<FineSuggestion>();
         for (var node : parseArray(text)) {
