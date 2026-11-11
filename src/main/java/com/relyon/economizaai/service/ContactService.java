@@ -81,10 +81,10 @@ public class ContactService {
 
     private void deliver(String subject, String body, String replyTo, String recipient) {
         if (!smtpConfigured || recipient == null || recipient.isBlank()) {
-            // No SMTP or no recipient configured — log the whole message so support
-            // can still recover it from the logs (dev, or a misconfigured prod).
-            log.warn("[DEV-MODE] contact message NOT emailed (smtp={}, recipient set={}). from={} subject='{}'\n{}",
-                    smtpConfigured, recipient != null && !recipient.isBlank(), LogMasker.email(replyTo), subject, body);
+            // No SMTP or no recipient configured. The message carries the sender's name,
+            // e-mail, phone and free text — record that it was NOT delivered, never its content.
+            log.warn("contact.not_sent smtp={} recipient_set={} from={} body_chars={}",
+                    smtpConfigured, recipient != null && !recipient.isBlank(), LogMasker.email(replyTo), body.length());
             return;
         }
         try {

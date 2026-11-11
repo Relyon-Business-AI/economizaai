@@ -6,6 +6,7 @@ import com.relyon.economizaai.exception.InvalidQrPayloadException;
 import com.relyon.economizaai.exception.SefazFetchException;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.sefaz.captcha.CaptchaSolver;
+import com.relyon.economizaai.service.privacy.LogMasker;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.springframework.beans.factory.annotation.Value;
@@ -139,13 +140,14 @@ public class GenericQrPortalAdapter implements SefazAdapter {
                 sleep(retryDelayMs, uf);
             }
         }
-        log.warn("sefaz.experimental.exhausted uf={} attempts={} url={}", uf, maxAttempts, url);
+        log.warn("sefaz.experimental.exhausted uf={} attempts={} url={}", uf, maxAttempts, LogMasker.portalUrl(url));
         throw new ExperimentalPortalFetchException(uf.name(),
                 "transient failures exhausted " + maxAttempts + " attempts (timeouts/5xx/empty body)");
     }
 
     private String fetchOnce(String url, int attempt, UnidadeFederativa uf) {
-        log.info("sefaz.experimental.fetch uf={} attempt={}/{} url={}", uf, attempt, maxAttempts, url);
+        log.info("sefaz.experimental.fetch uf={} attempt={}/{} url={}",
+                uf, attempt, maxAttempts, LogMasker.portalUrl(url));
         try {
             var fetched = httpFetch(url);
             if (fetched.body() == null || fetched.body().isBlank()) {
@@ -240,7 +242,7 @@ public class GenericQrPortalAdapter implements SefazAdapter {
         body.set("cf-turnstile-response", token);
         body.set("g-recaptcha-response", token);
         try {
-            log.info("sefaz.experimental.form_replay uf={} action={}", uf, action);
+            log.info("sefaz.experimental.form_replay uf={} action={}", uf, LogMasker.portalUrl(action));
             return httpPostForm(action, body, fetched.cookieHeader());
         } catch (RestClientException ex) {
             log.warn("sefaz.experimental.form_replay_failed uf={} reason={}", uf, ex.getClass().getSimpleName());

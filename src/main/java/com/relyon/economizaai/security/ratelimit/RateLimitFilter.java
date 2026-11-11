@@ -3,6 +3,7 @@ package com.relyon.economizaai.security.ratelimit;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.relyon.economizaai.exception.GlobalExceptionHandler.ErrorResponse;
 import com.relyon.economizaai.service.LocalizedMessageService;
+import com.relyon.economizaai.service.privacy.LogMasker;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -359,7 +360,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             if (!probe.isConsumed()) {
                 var retryAfterSeconds = Math.max(1, probe.getNanosToWaitForRefill() / 1_000_000_000L);
                 log.warn("rate_limit.blocked policy={} key={} path={} retry_after_s={}",
-                        rule.policy.name(), key, request.getRequestURI(), retryAfterSeconds);
+                        rule.policy.name(), LogMasker.rateLimitKey(key), request.getRequestURI(), retryAfterSeconds);
                 writeTooManyRequestsResponse(response, retryAfterSeconds);
                 return;
             }

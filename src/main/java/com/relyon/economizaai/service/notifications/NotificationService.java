@@ -9,6 +9,7 @@ import com.relyon.economizaai.repository.NotificationPreferenceRepository;
 import com.relyon.economizaai.repository.NotificationRepository;
 import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
+import com.relyon.economizaai.service.privacy.LogMasker;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -96,7 +97,7 @@ public class NotificationService {
         var configured = configuredChannels(payload.user(), payload.type());
         if (configured.contains(NotificationChannel.NONE)) {
             log.debug("notification.skipped user={} type={} reason=muted",
-                    payload.user().getEmail(), payload.type());
+                    LogMasker.email(payload.user().getEmail()), payload.type());
             return null;
         }
         var outbound = outboundChannels(payload.user(), configured);
@@ -120,11 +121,11 @@ public class NotificationService {
                 || !subscriptionGate.allows(payload.user(), Feature.PUSH_AND_EMAIL_DELIVERY)) {
             if (outbound.isEmpty()) {
                 log.debug("notification.inbox_only user={} type={} reason=no_outbound_selected",
-                        payload.user().getEmail(), payload.type());
+                        LogMasker.email(payload.user().getEmail()), payload.type());
             } else {
                 notification.setFailureReason("free_tier_inbox_only");
                 log.info("notification.inbox_only user={} type={} reason=free_tier",
-                        payload.user().getEmail(), payload.type());
+                        LogMasker.email(payload.user().getEmail()), payload.type());
             }
             return new Plan(notification, outbound, false);
         }
@@ -142,7 +143,7 @@ public class NotificationService {
             if (dispatcher == null) {
                 lastFailure = "no dispatcher registered for channel " + channel;
                 log.warn("notification.no_dispatcher user={} type={} channel={}",
-                        payload.user().getEmail(), payload.type(), channel);
+                        LogMasker.email(payload.user().getEmail()), payload.type(), channel);
                 continue;
             }
             var result = dispatcher.dispatch(withNotificationId(payload, saved));
@@ -202,7 +203,7 @@ public class NotificationService {
             }
         } catch (RuntimeException ex) {
             log.warn("notification.after_commit_failed user={} type={} reason={}",
-                    payload.user().getEmail(), payload.type(), ex.getMessage());
+                    LogMasker.email(payload.user().getEmail()), payload.type(), ex.getMessage());
         }
     }
 

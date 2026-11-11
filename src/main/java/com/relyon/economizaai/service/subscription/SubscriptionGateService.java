@@ -5,6 +5,7 @@ import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.exception.PaywallException;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.SubscriptionTier;
+import com.relyon.economizaai.service.privacy.LogMasker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -47,7 +48,7 @@ public class SubscriptionGateService {
     public void require(User user, Feature feature) {
         if (!allows(user, feature)) {
             log.info("paywall.blocked user={} feature={} tier={}",
-                    user.getEmail(), feature, user.getSubscriptionTier());
+                    LogMasker.email(user.getEmail()), feature, user.getSubscriptionTier());
             throw new PaywallException(feature.name());
         }
     }

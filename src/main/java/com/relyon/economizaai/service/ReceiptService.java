@@ -968,7 +968,8 @@ public class ReceiptService {
         if (receiptRepository.countByUserIdAndStatus(user.getId(), ReceiptStatus.CONFIRMED) == 1) {
             var promoEnd = subscriptionService.grantSignupPromoIfEnabled(user);
             if (promoEnd != null) {
-                log.info("confirm first_receipt_promo_granted user={} validUntil={}", user.getEmail(), promoEnd);
+                log.info("confirm first_receipt_promo_granted user={} validUntil={}",
+                        LogMasker.email(user.getEmail()), promoEnd);
             }
         }
         attributeSavings(saved);
