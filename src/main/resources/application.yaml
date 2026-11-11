@@ -573,8 +573,7 @@ economizaai:
       drain-cron: ${NOTIFICATIONS_QUIET_HOURS_DRAIN_CRON:0 0 * * * *}
     # Background jobs that drive scheduled notification types.
     replenishment:
-      interval-ms: ${NOTIFICATIONS_REPLENISHMENT_INTERVAL_MS:21600000}   # every 6h: predict product runout
-      initial-delay-ms: 60000
+      cron: ${NOTIFICATIONS_REPLENISHMENT_CRON:0 0 10 * * *}             # daily 10:00 (America/Sao_Paulo): products running low / ran out
     budget:
       cron: ${NOTIFICATIONS_BUDGET_CRON:0 0 9,18 * * *}                  # 09:00 and 18:00 (America/Sao_Paulo): monthly spend cap check
     digest:
