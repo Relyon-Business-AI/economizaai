@@ -55,6 +55,7 @@ import com.relyon.economizaai.service.sefaz.PrefetchPolicy;
 import com.relyon.economizaai.service.sefaz.ReceiptIngestionService;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
 import com.relyon.economizaai.service.sefaz.StateCoverageService;
+import com.relyon.economizaai.service.subscription.EntitlementClock;
 import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
@@ -70,6 +71,7 @@ import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Month;
 import java.util.ArrayList;
@@ -1028,12 +1030,29 @@ class ReceiptServiceTest {
         when(receiptRepository.save(receipt)).thenReturn(receipt);
         when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
         when(receiptRepository.countByUserIdAndStatus(user.getId(), ReceiptStatus.CONFIRMED)).thenReturn(1L);
-        var promoEnd = LocalDateTime.now().plusMonths(3);
+        var promoEnd = EntitlementClock.endOfBrazilDay(LocalDate.of(2026, 12, 31));
         when(subscriptionService.grantSignupPromoIfEnabled(user)).thenReturn(promoEnd);
 
-        receiptService.confirm(user, receipt.getId(), null);
+        var response = receiptService.confirm(user, receipt.getId(), null);
 
         verify(subscriptionService).grantSignupPromoIfEnabled(user);
+        assertEquals(LocalDate.of(2026, 12, 31), response.launchPromo().validUntil());
+    }
+
+    @Test
+    void confirm_firstReceipt_withoutGrant_hasNoLaunchPromoInResponse() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(receiptRepository.save(receipt)).thenReturn(receipt);
+        when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
+        when(receiptRepository.countByUserIdAndStatus(user.getId(), ReceiptStatus.CONFIRMED)).thenReturn(1L);
+        // Already granted before, promo over, or a better entitlement kept.
+        when(subscriptionService.grantSignupPromoIfEnabled(user)).thenReturn(null);
+
+        var response = receiptService.confirm(user, receipt.getId(), null);
+
+        assertNull(response.launchPromo());
     }
 
     @Test
@@ -1045,9 +1064,10 @@ class ReceiptServiceTest {
         when(promoDetector.detectPersonalPromos(receipt)).thenReturn(List.of());
         when(receiptRepository.countByUserIdAndStatus(user.getId(), ReceiptStatus.CONFIRMED)).thenReturn(2L);
 
-        receiptService.confirm(user, receipt.getId(), null);
+        var response = receiptService.confirm(user, receipt.getId(), null);
 
         verify(subscriptionService, never()).grantSignupPromoIfEnabled(any(User.class));
+        assertNull(response.launchPromo());
     }
 
     @Test

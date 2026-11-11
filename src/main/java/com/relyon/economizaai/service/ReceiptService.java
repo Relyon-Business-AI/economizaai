@@ -65,6 +65,7 @@ import com.relyon.economizaai.service.sefaz.PrefetchPolicy;
 import com.relyon.economizaai.service.sefaz.ReceiptIngestionService;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
 import com.relyon.economizaai.service.sefaz.StateCoverageService;
+import com.relyon.economizaai.service.subscription.EntitlementClock;
 import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
@@ -962,17 +963,31 @@ public class ReceiptService {
         marketLocationService.registerMarketFromReceipt(receipt);
         notifyPersonalPromos(user, receipt, personalPromos);
         var saved = receiptRepository.save(receipt);
-        if (receiptRepository.countByUserIdAndStatus(user.getId(), ReceiptStatus.CONFIRMED) == 1) {
-            var promoEnd = subscriptionService.grantSignupPromoIfEnabled(user);
-            if (promoEnd != null) {
-                log.info("confirm first_receipt_promo_granted user={} validUntil={}", user.getEmail(), promoEnd);
-            }
-        }
+        var launchPromo = grantLaunchPromoOnFirstReceipt(user);
         attributeSavings(saved);
         householdCacheGen.bump(receipt.getHousehold().getId());
         log.info("confirm ok status=CONFIRMED personalPromos={}", personalPromos.size());
         return new ConfirmReceiptResponse(
-                withFriendlyName(user.getHousehold().getId(), saved, ReceiptResponse.from(saved)), personalPromos);
+                withFriendlyName(user.getHousehold().getId(), saved, ReceiptResponse.from(saved)), personalPromos,
+                launchPromo);
+    }
+
+    /**
+     * The launch promo (free Premium) is granted when the user confirms their FIRST receipt.
+     * Returns what the client shows, or null when this confirmation granted nothing (not the
+     * first receipt, promo over/disabled, already granted, or a better entitlement kept).
+     */
+    private ConfirmReceiptResponse.LaunchPromo grantLaunchPromoOnFirstReceipt(User user) {
+        if (receiptRepository.countByUserIdAndStatus(user.getId(), ReceiptStatus.CONFIRMED) != 1) {
+            return null;
+        }
+        var promoEnd = subscriptionService.grantSignupPromoIfEnabled(user);
+        if (promoEnd == null) {
+            return null;
+        }
+        log.info("confirm first_receipt_promo_granted user={} validUntil={}",
+                LogMasker.email(user.getEmail()), promoEnd);
+        return new ConfirmReceiptResponse.LaunchPromo(EntitlementClock.brazilDayOf(promoEnd));
     }
 
     /**
