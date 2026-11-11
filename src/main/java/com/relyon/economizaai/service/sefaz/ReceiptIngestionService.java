@@ -4,10 +4,12 @@ import com.relyon.economizaai.config.AsyncConfig;
 import com.relyon.economizaai.config.MdcContextFilter;
 import com.relyon.economizaai.exception.DomainException;
 import com.relyon.economizaai.exception.ExperimentalStateFailedException;
+import com.relyon.economizaai.exception.InfosimplesNoDataException;
 import com.relyon.economizaai.exception.ReceiptParseException;
 import com.relyon.economizaai.exception.UnsupportedMerchantException;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
+import com.relyon.economizaai.model.enums.InfosimplesOutcome;
 import com.relyon.economizaai.model.enums.ReceiptChannel;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.NotificationType;
@@ -149,6 +151,9 @@ public class ReceiptIngestionService {
             var userId = receipt.getUser().getId();
             var uf = receipt.getUf();
             var chave = receipt.getChaveAcesso();
+            // The server attempt that handed this nota to the device may already have asked the
+            // paid provider and been told "no data" — that answer is final, don't pay to hear it again.
+            var spendPolicy = spendPolicyAfterServerAttempt(receipt);
             ParsedReceipt parsed;
             boolean indexEligible;
             try {
@@ -157,7 +162,7 @@ public class ReceiptIngestionService {
                 // for UFs on the device-fetch allowlist (validated, IP-blocked by design); for any
                 // other UF (generic fallback) it's personal-history only — index_eligible=false.
                 var fetched = sefazIngestionService.fromClientContent(rawContent, chave, uf, sourceUrlOf(qrPayload));
-                parsed = sefazIngestionService.parse(fetched, userId, IngestSpendPolicy.FULL);
+                parsed = sefazIngestionService.parse(fetched, userId, spendPolicy);
                 indexEligible = prefetchPolicy.isTrustedForIndex(uf);
             } catch (ReceiptParseException deviceFail) {
                 // On-device content unusable — continue the fallback chain to the paid by-chave
@@ -165,7 +170,7 @@ public class ReceiptIngestionService {
                 // so its result IS index-eligible. If Infosimples also fails, record the ORIGINAL
                 // device failure for review (keeping the raw client content).
                 var rescued = continueToInfosimples(receiptId, chave, uf, userId, rawContent,
-                        sourceUrlOf(qrPayload), deviceFail);
+                        sourceUrlOf(qrPayload), deviceFail, spendPolicy);
                 if (rescued == null) return; // already persisted as FAILED_PARSE
                 parsed = rescued;
                 indexEligible = true;
@@ -190,10 +195,14 @@ public class ReceiptIngestionService {
      * by-chave fallback (the last chain layer). Returns the pre-parsed receipt on success,
      * or null after recording the ORIGINAL device failure as FAILED_PARSE (keeping the raw
      * client content for review) when Infosimples is unavailable or also fails.
+     *
+     * <p>The paid lookup runs AT MOST ONCE per nota in this chain: it is skipped when the server
+     * attempt already got a "no data" answer ({@code spendPolicy} without Infosimples), and when
+     * the parse step that just failed already tried it (the failure carries the outcome).
      */
     private ParsedReceipt continueToInfosimples(UUID receiptId, String chave, UnidadeFederativa uf,
                                                 UUID userId, String rawContent, String sourceUrl,
-                                                ReceiptParseException deviceFail) {
+                                                ReceiptParseException deviceFail, IngestSpendPolicy spendPolicy) {
         // A contingency note with no items isn't a rescuable failure — SEFAZ simply doesn't have it
         // yet. Keep it CONTINGENCY_PENDING (recoverable, no paid spend), same as the server path,
         // instead of burning an Infosimples query on a note that isn't there.
@@ -202,6 +211,21 @@ public class ReceiptIngestionService {
                 null, CpfMasker.strip(rawContent), chave, uf, sourceUrl);
         if (deviceFail.isNoItemsFound() && ChaveAcessoParser.isContingencyEmission(chave)) {
             persistParseFailure(receiptId, clientDoc, deviceFail);
+            return null;
+        }
+        if (!spendPolicy.infosimples()) {
+            log.info("ingest device-fetch failed, infosimples skipped uf={} reason=already_answered_no_data", uf);
+            persistParseFailure(receiptId, clientDoc, new InfosimplesNoDataException(INFOSIMPLES_NOT_FOUND_REASON));
+            return null;
+        }
+        if (deviceFail instanceof ExperimentalStateFailedException chainFail
+                && chainFail.getInfosimplesOutcome() != null) {
+            log.info("ingest device-fetch failed, infosimples skipped uf={} reason=already_tried_in_parse outcome={}",
+                    uf, chainFail.getInfosimplesOutcome());
+            persistParseFailure(receiptId, clientDoc,
+                    chainFail.getInfosimplesOutcome() == InfosimplesOutcome.NO_DATA
+                            ? new InfosimplesNoDataException(INFOSIMPLES_NOT_FOUND_REASON)
+                            : deviceFail);
             return null;
         }
         try {
@@ -239,8 +263,24 @@ public class ReceiptIngestionService {
      */
     @Async(AsyncConfig.RECEIPT_INGEST_EXECUTOR)
     public void ingestInfosimplesOnly(UUID receiptId, String chave) {
-        ingestResolved(receiptId, receipt -> sefazIngestionService.fetchViaInfosimplesFallback(
-                chave, receipt.getUf(), receipt.getUser().getId()), false, null, IngestSpendPolicy.FULL);
+        ingestResolved(receiptId, receipt -> {
+            if (receipt.getInfosimplesOutcome() == InfosimplesOutcome.NO_DATA) {
+                // The server attempt already paid for this exact answer — fail with it, don't re-ask.
+                log.info("ingest infosimples skipped uf={} reason=already_answered_no_data", receipt.getUf());
+                throw new InfosimplesNoDataException(INFOSIMPLES_NOT_FOUND_REASON);
+            }
+            return sefazIngestionService.fetchViaInfosimplesFallback(
+                    chave, receipt.getUf(), receipt.getUser().getId());
+        }, false, null, IngestSpendPolicy.FULL);
+    }
+
+    /** Reason argument of the "provider has no data for this nota" failure (final — see the i18n key). */
+    private static final String INFOSIMPLES_NOT_FOUND_REASON = "infosimples.not-found";
+
+    private static IngestSpendPolicy spendPolicyAfterServerAttempt(Receipt receipt) {
+        return receipt.getInfosimplesOutcome() == InfosimplesOutcome.NO_DATA
+                ? IngestSpendPolicy.FULL.withoutInfosimples()
+                : IngestSpendPolicy.FULL;
     }
 
     /**
@@ -588,8 +628,12 @@ public class ReceiptIngestionService {
             var receipt = loadIfProcessing(receiptId);
             if (receipt == null) return;
             receipt.setStatus(ReceiptStatus.NEEDS_DEVICE_FETCH);
+            // Remember whether the paid lookup was already spent on this nota (and how it answered),
+            // so the device-fetch steps that follow don't pay for it a second time.
+            receipt.setInfosimplesOutcome(ex.getInfosimplesOutcome());
             receiptRepository.save(receipt);
-            log.info("ingest needs-device-fetch uf={} — server blocked, app will retry on-device", ex.getMessage());
+            log.info("ingest needs-device-fetch uf={} infosimplesOutcome={} — server blocked, app will retry on-device",
+                    ex.getMessage(), ex.getInfosimplesOutcome());
         });
     }
 

@@ -16,6 +16,7 @@ import com.relyon.economizaai.exception.SefazDeterministicFetchException;
 import com.relyon.economizaai.exception.SefazFetchException;
 import com.relyon.economizaai.exception.SefazPortalRejectionException;
 import com.relyon.economizaai.exception.UnsupportedStateException;
+import com.relyon.economizaai.model.enums.InfosimplesOutcome;
 import com.relyon.economizaai.model.enums.PaidApiService;
 import com.relyon.economizaai.model.enums.StateIngestionOutcome;
 import com.relyon.economizaai.model.enums.StateIngestionStrategy;
@@ -369,7 +370,7 @@ public class SefazIngestionService {
                     throw experimentalExhausted(uf, userId, chave, sourceUrlOf(qrPayload),
                             "QR_PORTAL: " + describe(primaryEx) + "; INFOSIMPLES: " + describe(fallbackEx),
                             portalEvidence, primaryEx instanceof ExperimentalCaptchaWallException,
-                            isPortalUnavailable(fallbackEx));
+                            isPortalUnavailable(fallbackEx), infosimplesOutcomeOf(fallbackEx));
                 }
                 throw fallbackEx;
             }
@@ -586,6 +587,7 @@ public class SefazIngestionService {
                 throw parseEx;
             }
             var infosimplesNote = "desabilitado";
+            InfosimplesOutcome infosimplesOutcome = null;
             if (infosimples.isPresent()) {
                 log.warn("sefaz.parse.experimental.failed uf={} chave={} reason={} — trying infosimples fallback",
                         fetched.uf(), abbrev(fetched.chave()), parseEx.getMessageKey());
@@ -599,11 +601,12 @@ public class SefazIngestionService {
                     stateCoverage.recordFailure(fetched.uf(), StateIngestionStrategy.INFOSIMPLES,
                             StateIngestionOutcome.FETCH_FAILED, qrHost, describe(fallbackEx));
                     infosimplesNote = describe(fallbackEx);
+                    infosimplesOutcome = infosimplesOutcomeOf(fallbackEx);
                 }
             }
             throw experimentalExhausted(fetched.uf(), userId, fetched.chave(), fetched.sourceUrl(),
                     "QR_PORTAL (parse): " + describe(parseEx) + "; INFOSIMPLES: " + infosimplesNote,
-                    fetched.html(), false);
+                    fetched.html(), false, false, infosimplesOutcome);
         }
     }
 
@@ -665,19 +668,26 @@ public class SefazIngestionService {
     private ExperimentalStateFailedException experimentalExhausted(UnidadeFederativa uf, UUID userId, String chave,
                                                                    String sourceUrl, String failureSummary,
                                                                    String htmlSnippet, boolean captchaBlocked) {
-        return experimentalExhausted(uf, userId, chave, sourceUrl, failureSummary, htmlSnippet, captchaBlocked, false);
+        return experimentalExhausted(uf, userId, chave, sourceUrl, failureSummary, htmlSnippet, captchaBlocked,
+                false, null);
     }
 
+    /** {@code infosimplesOutcome}: how the paid layer answered inside this chain; null when it was not tried. */
     private ExperimentalStateFailedException experimentalExhausted(UnidadeFederativa uf, UUID userId, String chave,
                                                                    String sourceUrl, String failureSummary,
                                                                    String htmlSnippet, boolean captchaBlocked,
-                                                                   boolean portalUnavailable) {
+                                                                   boolean portalUnavailable,
+                                                                   InfosimplesOutcome infosimplesOutcome) {
         if (prefetchPolicy.isDeviceFetchUf(uf)) {
             log.info("state_coverage.exhausted_skipped uf={} reason=device_fetch_uf", uf);
         } else {
             stateCoverage.reportExhausted(uf, userId, chave, sourceUrl, failureSummary, htmlSnippet);
         }
-        return new ExperimentalStateFailedException(uf.name(), captchaBlocked, portalUnavailable);
+        return new ExperimentalStateFailedException(uf.name(), captchaBlocked, portalUnavailable, infosimplesOutcome);
+    }
+
+    private static InfosimplesOutcome infosimplesOutcomeOf(RuntimeException fallbackEx) {
+        return isDeterministicInfosimplesAnswer(fallbackEx) ? InfosimplesOutcome.NO_DATA : InfosimplesOutcome.FAILED;
     }
 
     /**

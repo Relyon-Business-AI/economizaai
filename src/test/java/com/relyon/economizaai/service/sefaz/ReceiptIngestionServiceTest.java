@@ -5,6 +5,7 @@ import com.relyon.economizaai.exception.ReceiptParseException;
 import com.relyon.economizaai.exception.SefazFetchException;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.MarketLocation;
+import com.relyon.economizaai.model.enums.InfosimplesOutcome;
 import com.relyon.economizaai.model.enums.MerchantSegment;
 import com.relyon.economizaai.service.extraction.EanCatalogEnrichmentService;
 import com.relyon.economizaai.model.Receipt;
@@ -283,6 +284,67 @@ class ReceiptIngestionServiceTest {
         service.ingestPrefetched(receipt.getId(), QR, "<xml/>");
 
         assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+    }
+
+    @Test
+    void ingest_deviceHandoff_remembersTheInfosimplesAnswerOnTheReceipt() {
+        var receipt = processingReceipt();
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fetch(eq(QR), any(), anyBoolean())).thenThrow(
+                new ExperimentalStateFailedException("PE", false, false, InfosimplesOutcome.NO_DATA));
+
+        service.ingest(receipt.getId(), QR, true);
+
+        assertEquals(ReceiptStatus.NEEDS_DEVICE_FETCH, receipt.getStatus());
+        assertEquals(InfosimplesOutcome.NO_DATA, receipt.getInfosimplesOutcome());
+    }
+
+    @Test
+    void ingestPrefetched_serverAlreadyGotNoData_neverAsksInfosimplesAgain() {
+        var receipt = processingReceipt();
+        receipt.setInfosimplesOutcome(InfosimplesOutcome.NO_DATA);
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<xml/>", CHAVE_RS, UnidadeFederativa.RS, null);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fromClientContent(any(), eq(CHAVE_RS), eq(UnidadeFederativa.RS), any()))
+                .thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any(), eq(IngestSpendPolicy.FULL.withoutInfosimples())))
+                .thenThrow(new ReceiptParseException("no items found"));
+
+        service.ingestPrefetched(receipt.getId(), QR, "<xml/>");
+
+        verify(sefazIngestionService, never()).fetchViaInfosimplesFallback(any(), any(), any());
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+        assertEquals("receipt.parse.failed:infosimples.not-found", receipt.getParseErrorReason());
+    }
+
+    @Test
+    void ingestPrefetched_parseAlreadyTriedInfosimples_doesNotCallItASecondTime() {
+        var receipt = processingReceipt();
+        var fetched = new SefazIngestionService.FetchedDocument(null, "<xml/>", CHAVE_RS, UnidadeFederativa.RS, null);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+        when(sefazIngestionService.fromClientContent(any(), eq(CHAVE_RS), eq(UnidadeFederativa.RS), any()))
+                .thenReturn(fetched);
+        when(sefazIngestionService.parse(eq(fetched), any(), eq(IngestSpendPolicy.FULL)))
+                .thenThrow(new ExperimentalStateFailedException("RS", false, true, InfosimplesOutcome.FAILED));
+
+        service.ingestPrefetched(receipt.getId(), QR, "<xml/>");
+
+        verify(sefazIngestionService, never()).fetchViaInfosimplesFallback(any(), any(), any());
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+        assertEquals("receipt.state.experimental_failed:RS", receipt.getParseErrorReason());
+    }
+
+    @Test
+    void ingestInfosimplesOnly_serverAlreadyGotNoData_failsWithoutASecondPaidCall() {
+        var receipt = processingReceipt();
+        receipt.setInfosimplesOutcome(InfosimplesOutcome.NO_DATA);
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        service.ingestInfosimplesOnly(receipt.getId(), CHAVE_RS);
+
+        verify(sefazIngestionService, never()).fetchViaInfosimplesFallback(any(), any(), any());
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+        assertEquals("receipt.parse.failed:infosimples.not-found", receipt.getParseErrorReason());
     }
 
     @Test

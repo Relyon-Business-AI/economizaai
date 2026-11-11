@@ -5,12 +5,14 @@ import com.relyon.economizaai.exception.CaptchaUnavailableException;
 import com.relyon.economizaai.exception.ExperimentalCaptchaWallException;
 import com.relyon.economizaai.exception.ExperimentalStateFailedException;
 import com.relyon.economizaai.exception.InfosimplesNoDataException;
+import com.relyon.economizaai.exception.InfosimplesProviderException;
 import com.relyon.economizaai.exception.InvalidQrPayloadException;
 import com.relyon.economizaai.exception.ReceiptParseException;
 import com.relyon.economizaai.exception.SefazDeterministicFetchException;
 import com.relyon.economizaai.exception.SefazFetchException;
 import com.relyon.economizaai.exception.SefazPortalRejectionException;
 import com.relyon.economizaai.exception.UnsupportedStateException;
+import com.relyon.economizaai.model.enums.InfosimplesOutcome;
 import com.relyon.economizaai.model.enums.PaidApiService;
 import com.relyon.economizaai.model.enums.StateIngestionOutcome;
 import com.relyon.economizaai.model.enums.StateIngestionStrategy;
@@ -38,6 +40,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -826,6 +829,44 @@ class SefazIngestionServiceTest {
                 eq(StateIngestionOutcome.FETCH_FAILED), anyString(), anyString());
         verify(stateCoverage).reportExhausted(eq(UnidadeFederativa.BA), any(), eq(CHAVE_BA), eq(QR_URL_BA),
                 anyString(), any());
+    }
+
+    @Test
+    void fetch_experimentalChain_infosimplesNoData_carriesTheAnswerOnTheFailure() {
+        var generic = genericAdapter(null); // portal unreachable
+        var infosimples = mock(InfosimplesService.class);
+        when(infosimples.fetchParsed(eq(CHAVE_BA), eq(UnidadeFederativa.BA)))
+                .thenThrow(new InfosimplesNoDataException("infosimples.not-found", 612));
+        var service = new SefazIngestionService(List.of(generic), Optional.of(infosimples), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+
+        var thrown = assertThrows(ExperimentalStateFailedException.class, () -> service.fetch(QR_URL_BA, null));
+
+        assertEquals(InfosimplesOutcome.NO_DATA, thrown.getInfosimplesOutcome());
+        assertFalse(thrown.isPortalUnavailable());
+    }
+
+    @Test
+    void fetch_experimentalChain_infosimplesUnstable_isPortalUnavailableWithFailedOutcome() {
+        var generic = genericAdapter(null); // portal unreachable
+        var infosimples = mock(InfosimplesService.class);
+        when(infosimples.fetchParsed(eq(CHAVE_BA), eq(UnidadeFederativa.BA)))
+                .thenThrow(new InfosimplesProviderException(615));
+        var service = new SefazIngestionService(List.of(generic), Optional.of(infosimples), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+
+        var thrown = assertThrows(ExperimentalStateFailedException.class, () -> service.fetch(QR_URL_BA, null));
+
+        assertEquals(InfosimplesOutcome.FAILED, thrown.getInfosimplesOutcome());
+        assertTrue(thrown.isPortalUnavailable());
+    }
+
+    @Test
+    void fetch_experimentalChain_infosimplesDisabled_leavesTheOutcomeEmpty() {
+        var generic = genericAdapter(null);
+        var service = new SefazIngestionService(List.of(generic), Optional.empty(), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+
+        var thrown = assertThrows(ExperimentalStateFailedException.class, () -> service.fetch(QR_URL_BA, null));
+
+        assertNull(thrown.getInfosimplesOutcome());
     }
 
     @Test

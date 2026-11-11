@@ -1,5 +1,6 @@
 package com.relyon.economizaai.model;
 
+import com.relyon.economizaai.model.enums.InfosimplesOutcome;
 import com.relyon.economizaai.model.enums.ReceiptChannel;
 import com.relyon.economizaai.model.enums.ReceiptEntryMethod;
 import com.relyon.economizaai.model.enums.ReceiptOrigin;
@@ -140,6 +141,13 @@ public class Receipt extends BaseEntity implements HouseholdScoped {
     // before the window closes) — every other resync attempt is free-only.
     @Column(name = "contingency_paid_attempted", nullable = false)
     private boolean contingencyPaidAttempted;
+
+    // How the paid Infosimples lookup answered in the server attempt that handed this nota to the
+    // device (NEEDS_DEVICE_FETCH); null = not tried. Read by the device-fetch steps so the same
+    // paid lookup is not repeated — never after a "no data" answer.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "infosimples_outcome", length = 20)
+    private InfosimplesOutcome infosimplesOutcome;
 
     // False ONLY for device-fetched (client-authored) content from a state that isn't on the
     // device-fetch trust allowlist — such content is personal-history only and never feeds the
