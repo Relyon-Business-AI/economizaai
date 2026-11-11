@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.merchant;
 
+import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.dto.request.MerchantPromoRequest;
 import com.relyon.economizaai.dto.response.MerchantPromoResponse;
 import com.relyon.economizaai.exception.MerchantAccessNotFoundException;
@@ -12,7 +13,7 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.MerchantPromoSource;
 import com.relyon.economizaai.repository.MerchantAccessRepository;
 import com.relyon.economizaai.repository.MerchantPromoRepository;
-import com.relyon.economizaai.repository.PriceObservationRepository;
+import com.relyon.economizaai.repository.PriceObservationAuditRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,7 +42,8 @@ public class MerchantPromoService {
     private final MerchantAccessRepository merchantAccessRepository;
     private final MerchantSubscriptionService merchantSubscriptionService;
     private final ProductRepository productRepository;
-    private final PriceObservationRepository observationRepository;
+    private final PriceObservationAuditRepository auditRepository;
+    private final CollaborativeProperties properties;
 
     @Transactional(readOnly = true)
     public Page<MerchantPromoResponse> list(User merchantUser, Pageable pageable) {
@@ -162,17 +164,22 @@ public class MerchantPromoService {
         return MerchantPromoResponse.from(promo, isVerifiedByReceipts(promo));
     }
 
-    /** A real scanned receipt at the chain, inside the window, at (or under) the announced price. */
+    /**
+     * Verified only when at least K distinct households scanned a receipt at the chain, inside
+     * the window, at (or under) the announced price. The badge is public, so it follows the same
+     * k-anonymity floor as every other disclosed fact — one household's purchase never flips it.
+     */
     public boolean isVerifiedByReceipts(MerchantPromo promo) {
         if (promo.getProduct() == null) {
             return false;
         }
         var tolerance = promo.getPromoPrice().multiply(new BigDecimal("1.01"));
-        return observationRepository.existsConfirmingObservation(
+        var confirmingHouseholds = auditRepository.countDistinctHouseholdsConfirmingPromo(
                 promo.getProduct().getId(),
                 promo.getCnpjRoot(),
                 promo.getStartsAt().atStartOfDay(),
                 promo.getEndsAt().plusDays(1).atStartOfDay(),
                 tolerance);
+        return confirmingHouseholds >= properties.getCollaborative().getMinHouseholdsForPublic();
     }
 }
