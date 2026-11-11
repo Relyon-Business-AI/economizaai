@@ -51,7 +51,12 @@ possível); data única = um evento de "pricing launch" orquestrável (anúncio 
 preço de fundador pra base atual, campanha). O Q4/2026 é a janela pra integrar o provedor
 de pagamento e medir retenção antes da virada. **Desde então o grant deixou de acontecer no
 cadastro:** conta nova ganha o PRO promocional ao confirmar a **primeira nota**
-(`ReceiptService.doConfirm` → `grantSignupPromoIfEnabled`).
+(`ReceiptService.doConfirm` → `grantSignupPromoIfEnabled`). **Regras fechadas em 2026-11-11:**
+concessão **uma única vez** por usuário (apagar notas e confirmar de novo não repete); **nunca
+sobrescreve** assinatura paga ativa, concessão sem data de fim nem período que já termina depois
+da promo; quem tem só a promo recebe aviso (caixa + push, 10h) em **D-15, D-7, D-3 e D-1** com
+convite para assinar; e uma assinatura paga que acaba com a promo ainda vigente **volta para a
+promo** em vez de cair para o gratuito.
 
 **3. Acesso antecipado como valor contínuo do PRO (novo perk):** PRO recebe features primeiro
 (exclusividade temporária), entregue pela mesma infra de flags. Reduz churn sem capar o free.
@@ -129,7 +134,9 @@ across markets, and basket-level inflation tracking."
   `InsightsService`, `InsightsQueryService`. PRO bypasses.
 - ✅ Watched-markets gate — `WatchedMarketService.watch` checks count on NEW pins.
 - ✅ Delivery gate — `NotificationService.notify` persists the inbox row for all,
-  dispatches push/email only for PRO (`PUSH_AND_EMAIL_DELIVERY`).
+  dispatches push/email only for PRO (`PUSH_AND_EMAIL_DELIVERY`) — except transactional
+  notifications (receipt ready/failed/recovered, household membership, organic system notices),
+  which always go out (`SubscriptionGateService.allowsDelivery`).
 - ✅ Basket optimization gate — `ShoppingListOptimizer.optimize` requires PRO.
 - ✅ History export gate — `ReceiptExportService` requires `CSV_EXPORT`.
 - ✅ Photo-receipt gate — `PhotoReceiptExtractionService` requires `PHOTO_EXTRACTION` (and counts toward the monthly receipt cap).
@@ -144,7 +151,12 @@ across markets, and basket-level inflation tracking."
   downgrades (3-day grace for a paid, still-renewing subscription — `SUBSCRIPTION_PAID_GRACE_DAYS`;
   none for the promo). A paid subscription that ends while the launch promo is still running
   falls back to the promo. Mercado Pago monthly charges (`subscription_authorized_payment`)
-  advance the period and record one revenue event per payment.
+  advance the period and record one revenue event per payment (deduped on the payment id), so
+  every renewed month counts as revenue, not only the first. RevenueCat `EXPIRATION` ends the
+  subscription (back to the promo when still running); `CANCELLATION` / `SUBSCRIPTION_PAUSED`
+  only stop the renewal. `GET /users/me/subscription` exposes `cancelAtPeriodEnd` and
+  `rewardPremiumUntil`. Deleting an account with an active paid subscription does not cancel it
+  at the store / provider — the admin gets an e-mail so support can reach out.
 - ✅ Launch promo granted ONCE per user (first confirmed receipt), never over a better
   entitlement; the app is told in the confirm response (`launchPromo.validUntil`). Promo holders
   without a paid subscription are warned at D-15 / D-7 / D-3 / D-1 (`LaunchPromoWarningService`).
@@ -177,6 +189,15 @@ across markets, and basket-level inflation tracking."
 - Months **accumulate**: each one queues after the inviter's current entitlement (during the
   launch promo, a month earned now runs 01/01 → 31/01; a second one 01/02 → 28/02). Reward time
   lives in `premium_grants` (its own entitlement) and never replaces or shortens a subscription.
+- **`premium_grants`** (V170): one row per earned month — `kind` `REFERRAL_FIRST` (the one-time
+  first-referral reward) or `REFERRAL_SUBSCRIPTION` (an invited friend subscribed), with its own
+  start/end. The user is PRO while a subscription is ACTIVE **or** a grant window is running; the
+  hourly expiry sweep flips the tier when a window starts or ends. An invited friend yields at
+  most one month to the inviter. "Subscribed" means money changed hands: a RevenueCat purchase /
+  renewal with a price above zero, or an approved Mercado Pago charge — a free trial or the
+  launch promo does not count.
+- Abuse guards: two accounts cannot refer each other; inviter and invited must live in different
+  households when the reward is decided; redeeming a code is rate-limited (10/hour).
 
 #### Gating sequence (which paywalls to ship first)
 1. ✅ **Watched markets cap** (3 free) — shipped.
@@ -423,15 +444,30 @@ repassable COGS.
 
 ### Spend controls (implemented — see `service/paidapi/PaidApiGuardService`)
 
-Every money-spending call (captcha solve, Infosimples query) is metered:
-- **Per-user daily caps** — Infosimples 20/day, captcha 60/day (config
-  `economizaai.paid-api.*`; tier-independent, a pure cost/abuse guard).
-- **Global daily kill-switch** — a spend ceiling across ALL users
-  (`daily-global-budget-cents`, default R$50/day). Once today's ledger total hits
-  it, every paid call fails fast until midnight UTC. This is the insurance against
-  a viral spike — the "scaled too fast" fear.
+Every money-spending call (captcha solve, Infosimples query, AI call, SMS/WhatsApp) is metered:
+- **Per-user daily caps** (owner decision 2026-11-11; config `economizaai.paid-api.*`;
+  tier-independent, a pure cost/abuse guard) and a **daily ceiling PER SERVICE**:
+
+  | Service | Per-user cap / day | Daily ceiling |
+  |---|---|---|
+  | Infosimples | 10 | R$ 120 |
+  | Captcha solve | 30 | R$ 30 |
+  | Receipt by photo (vision, per photo) | 10 | R$ 30 |
+  | HTML parse rescue (AI) | 5 | R$ 15 |
+  | AI categorization | 60 | R$ 50 |
+  | SMS / WhatsApp (Twilio) | 3 | R$ 15 |
+
+  When a service's ledger total for the day reaches its ceiling, **only that service** stops
+  until midnight UTC — the other services and the free scraping keep working. This replaced
+  the single global R$ 50/day kill-switch, which still exists as an optional overall ceiling
+  (`daily-global-budget-cents`, **off by default**). It is the insurance against a viral
+  spike — the "scaled too fast" fear.
+- **Admin alerts** — WhatsApp to the admin at 80% and 100% of each service ceiling, and of the
+  prepaid balance of each provider (Infosimples, CapSolver, Twilio, Anthropic); retried until
+  delivered, with e-mail as the fallback channel.
 - **Infosimples circuit breaker** — repeated failures open the circuit for a
-  cooldown, so we stop paying while the provider is down.
+  cooldown, per state (one state's portal outage doesn't pause the others), so we stop
+  paying while the provider is down.
 - **Ledger** — every attempt (success/failure) is written to `paid_api_call` for
   invoice reconciliation, and surfaced at **`GET /api/v1/admin/costs`** (spend
   total + breakdown by service and by state, plus today's spend vs the budget).
@@ -558,7 +594,7 @@ mora no HTTP, não no parse.
 
 > **✅ Shipado 2026-10-12:** a camada "LLM extrai do HTML quando o parser falha"
 > está LIVE (`HtmlReceiptRescueService` na stack Anthropic, ledger
-> `LLM_HTML_RESCUE` ~R$0,03-0,13, cap 10/usuário/dia; validada com nota real de
+> `LLM_HTML_RESCUE` ~R$0,03-0,13, cap 5/usuário/dia; validada com nota real de
 > 10 UFs contra o modelo real). **E o CE ganhou scraper nativo no mesmo dia**
 > (`CearaNfcePortalAdapter` — api JSON qrcodev3 escondida atrás do shell Angular,
 > chave pura, sem captcha): **nenhum estado é mais Infosimples-only**; o R$0,24
