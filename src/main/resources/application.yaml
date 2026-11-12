@@ -838,6 +838,8 @@ google:
     sa-private-key: ${GOOGLE_SC_SA_PRIVATE_KEY:}
     site-url: ${GOOGLE_SC_SITE_URL:sc-domain:economizaai.app}
     api-version: ${GOOGLE_SC_API_VERSION:v3}
+    # Minutes a built Search Console report is reused per window. The data itself lags by days.
+    cache-ttl-minutes: ${GOOGLE_SC_CACHE_TTL_MINUTES:180}
 
 springdoc:
   swagger-ui:

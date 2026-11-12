@@ -1,5 +1,23 @@
 # economizai — what's new
 
+## 2026-11-12 — Painel de Anúncios mais rápido (Search Console em cache e em paralelo)
+
+**O que o FE precisa saber**
+
+- **Nenhuma mudança de contrato.** `GET /api/v1/admin/marketing/dashboard` devolve o mesmo formato.
+- A parte orgânica (Google Search Console) agora é **guardada em cache por período** (3 h por padrão):
+  a primeira visita ainda consulta o Google; as seguintes, e a volta a um período já visto, respondem na hora.
+- Em janelas maiores que 90 dias, `organic.timeline` passa a trazer todos os dias (antes cortava em 90 linhas).
+
+**Backend**
+
+- `GoogleSearchConsoleService`: as três consultas ao Google rodam em paralelo e sobre uma conexão
+  reaproveitada (antes eram em série, cada uma abrindo conexão nova). Relatório com erro não entra no cache.
+  O log `gsc.report` ganhou `ms=`.
+- `MarketingDashboardService.dashboard` deixou de ser transacional: não prende mais uma conexão do banco
+  enquanto espera o Google.
+- Nova variável opcional `GOOGLE_SC_CACHE_TTL_MINUTES` (padrão 180).
+
 ## 2026-11-12 — Visão Geral do admin numa chamada só, com filtro de período
 
 **O que o FE precisa saber**
