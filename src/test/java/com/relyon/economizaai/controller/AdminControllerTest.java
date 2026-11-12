@@ -5,6 +5,7 @@ import com.relyon.economizaai.config.SecurityConfig;
 import com.relyon.economizaai.dto.request.MergeProductRequest;
 import com.relyon.economizaai.dto.request.SendTestNotificationRequest;
 import com.relyon.economizaai.dto.request.SetProductBrandRequest;
+import com.relyon.economizaai.dto.response.AdminDashboardResponse;
 import com.relyon.economizaai.dto.response.AdminUserDetailResponse;
 import com.relyon.economizaai.dto.response.AdminUserDetailResponse.ReceiptCounts;
 import com.relyon.economizaai.dto.response.AdminUserSummaryResponse;
@@ -22,6 +23,7 @@ import com.relyon.economizaai.dto.response.ReceiptResponse;
 import com.relyon.economizaai.dto.response.ReceiptSummaryResponse;
 import com.relyon.economizaai.dto.response.NotificationEffectivenessResponse;
 import com.relyon.economizaai.dto.response.RelevanceReportResponse;
+import com.relyon.economizaai.exception.InvalidDashboardPeriodException;
 import com.relyon.economizaai.exception.ProductNotFoundException;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
 import com.relyon.economizaai.exception.UserNotFoundException;
@@ -38,6 +40,7 @@ import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.ReceiptService;
+import com.relyon.economizaai.service.admin.AdminDashboardService;
 import com.relyon.economizaai.service.admin.AdminLlmService;
 import com.relyon.economizaai.service.admin.AdminMerchantService;
 import com.relyon.economizaai.service.admin.AdminMerchantAccessService;
@@ -141,6 +144,7 @@ class AdminControllerTest {
     @MockitoBean private InfosimplesFinanceService infosimplesFinanceService;
     @MockitoBean private IngestionHealthService ingestionHealthService;
     @MockitoBean private AdminOverviewService adminOverviewService;
+    @MockitoBean private AdminDashboardService adminDashboardService;
     @MockitoBean private MarketIntelService marketIntelService;
     @MockitoBean private AdminAnalyticsService adminAnalyticsService;
     @MockitoBean private RetentionCohortService retentionCohortService;
@@ -320,6 +324,49 @@ class AdminControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalCostReais").value(3.30))
                 .andExpect(jsonPath("$.byState[0].uf").value("CE"));
+    }
+
+    @Test
+    void dashboard_returnsTheWindowForACustomRange() throws Exception {
+        var from = LocalDate.of(2026, 10, 1);
+        var to = LocalDate.of(2026, 10, 31);
+        var dashboard = new AdminDashboardResponse(
+                new AdminDashboardResponse.Window("custom", from, to, 31),
+                new AdminDashboardResponse.UserStats(500L, 40L),
+                new AdminDashboardResponse.ReceiptStats(9000L, 300L, 0.9d),
+                new AdminDashboardResponse.SpendStats(new BigDecimal("150000.00"), new BigDecimal("4200.10")),
+                new AdminDashboardResponse.Engagement(200L, 50L, 120L, 200L, 0.25d),
+                new AdminDashboardResponse.PriceIndex(5000L, 40L),
+                new AdminDashboardResponse.SignupFunnel(40L, 30L, 10L, 0.75d, 0.25d),
+                List.of(), List.of(), List.of(), List.of());
+        when(adminDashboardService.dashboard(null, from, to, true)).thenReturn(dashboard);
+
+        mockMvc.perform(get("/api/v1/admin/dashboard")
+                        .param("from", "2026-10-01").param("to", "2026-10-31").param("includeInternal", "true")
+                        .with(SecurityMockMvcRequestPostProcessors.user(adminUser())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.window.period").value("custom"))
+                .andExpect(jsonPath("$.window.from").value("2026-10-01"))
+                .andExpect(jsonPath("$.window.days").value(31))
+                .andExpect(jsonPath("$.users.inPeriod").value(40))
+                .andExpect(jsonPath("$.spend.inPeriod").value(4200.10))
+                .andExpect(jsonPath("$.funnel.activatedRate").value(0.25));
+    }
+
+    @Test
+    void dashboard_invalidPeriodIsABadRequest() throws Exception {
+        when(adminDashboardService.dashboard("90d", null, null, false)).thenThrow(new InvalidDashboardPeriodException());
+
+        mockMvc.perform(get("/api/v1/admin/dashboard").param("period", "90d")
+                        .with(SecurityMockMvcRequestPostProcessors.user(adminUser())))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void dashboard_forbiddenForNonAdmin() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/dashboard")
+                        .with(SecurityMockMvcRequestPostProcessors.user(regularUser())))
+                .andExpect(status().isForbidden());
     }
 
     @Test
