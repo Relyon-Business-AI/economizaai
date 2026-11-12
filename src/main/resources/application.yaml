@@ -612,6 +612,10 @@ economizaai:
       interval-ms: 600000                      # how often the background classifier scans unclassified markets (10 min)
       initial-delay-ms: 45000                  # wait after startup before first scan
       max-per-run: ${MERCHANT_CLASSIFY_MAX_PER_RUN:25}   # markets classified per scheduled scan (admin backfill is uncapped)
+    trade-name:                                # nome fantasia backfill (same registry lookup; follows classify.enabled)
+      interval-ms: 600000                      # how often the backfill scans markets never asked for a trade name (10 min)
+      initial-delay-ms: 90000
+      max-per-run: ${MARKET_TRADE_NAME_MAX_PER_RUN:20}
   notifications:
     # Only ping the owner about a scanned note's outcome (ready / failed) when the scan took
     # at least this long — fast notas resolve in seconds while the user is still in the app.

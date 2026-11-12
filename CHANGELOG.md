@@ -1,5 +1,60 @@
 # economizai — what's new
 
+## 2026-11-12 — Visão Geral do admin numa chamada só, com filtro de período
+
+**O que o FE precisa saber**
+
+- **Endpoint novo: `GET /api/v1/admin/dashboard`** (ADMIN). Devolve tudo o que a tela "Visão Geral" mostra,
+  para uma janela de datas. Substitui as quatro chamadas que a tela fazia (`/admin/overview`,
+  `/admin/analytics/acquisition`, `/admin/users`, `/admin/receipts`).
+- **Parâmetros**: `period=7d` (padrão) `| 30d | all`, ou `from` + `to` (datas ISO `YYYY-MM-DD`, horário de
+  Brasília, as duas inclusivas). `from`+`to` vencem `period`. `includeInternal=false` como nos outros.
+- **Período inválido → 400** (`admin.dashboard.period.invalid`): valor de `period` desconhecido, só uma das
+  datas, `from` depois de `to`, `to` no futuro ou janela maior que 1100 dias.
+- **Resposta** (`AdminDashboardResponse`): `window{period,from,to,days}` com a janela resolvida ("all" começa
+  no dia do primeiro cadastro); `users{total,inPeriod}`; `receipts{total,inPeriod,parseRate}`;
+  `spend{total,inPeriod}`; `engagement{activeHouseholdsInPeriod,activeHouseholds1d,activeHouseholds7d,
+  activeHouseholds30d,stickiness}`; `priceIndex{priceObservations,contributingHouseholds}`;
+  `funnel{signups,verified,activated,verifiedRate,activatedRate}`; `timeline[]` (um ponto por dia, com
+  `byChannel`); `byState[]` (`uf,receipts,spend,users`); `recentUsers[]` e `recentReceipts[]` (os 6 mais
+  recentes, mesmos formatos das listagens de admin).
+- **Regras da janela**: tudo é filtrado por `createdAt` (quando o cadastro ou a nota entrou no app), em dias
+  de Brasília. `total` é sempre acumulado. DAU/WAU/MAU ficam ancorados na data final da janela. O tamanho do
+  índice de preços continua global (é anônimo de propósito). Sem números de plano PRO.
+- `/admin/overview` continua igual; nada foi removido.
+
+**Backend**
+
+- `AdminDashboardService` + consultas "entre datas" em `ReceiptRepository` e `UserRepository`.
+- `BrazilClock.startOfDayUtc`: borda do dia de Brasília convertida para o relógio UTC em que `createdAt` é
+  gravado (o `/admin/overview` compara sem converter, com até 3 h de deslocamento na borda do dia).
+- **V178**: índices em `receipts(created_at)` e `users(created_at)`, que não existiam.
+
+## 2026-11-11 — Nome de exibição dos mercados: apelido da casa → nome fantasia → razão social limpa
+
+**O que o FE precisa saber**
+
+- **Nenhum campo novo e nenhuma mudança de contrato.** O que muda é o VALOR dos campos de nome
+  amigável que o FE já exibe (`friendlyName`, `marketFriendlyName`, `lastMarketFriendlyName`).
+- **Cascata única em todas as respostas com mercado**: (1) apelido que a casa deu ao mercado;
+  (2) **nome fantasia** do cadastro público do CNPJ, em maiúsculas e minúsculas normais
+  ("Assai Atacadista"); (3) razão social sem "LTDA", "S/A", "COMERCIO DE ALIMENTOS" etc.
+  ("Companhia Zaffari"). Antes, notas, itens, dashboard, ofertas, plano de compras e notificações
+  caíam na razão social crua quando a casa não tinha apelido.
+- Onde já existia o nome da rede como degrau (insights, mercados acompanhados, comparação por
+  tipo), ele continua depois do nome fantasia e antes da razão social limpa.
+- `name` / `marketName` continuam sendo a razão social crua, sem alteração.
+
+**Backend**
+
+- `market_locations` ganhou `trade_name`, `trade_name_checked_at` e `trade_name_attempts` (V177).
+- O nome fantasia vem da mesma consulta de CNPJ que já classifica o segmento (BrasilAPI, gratuita);
+  mercados novos já saem com ele.
+- **Backfill** dos mercados existentes por job agendado: 20 por rodada a cada 10 minutos, no máximo
+  3 tentativas por mercado (`economizaai.merchant.trade-name.*`). Cadastro sem nome fantasia fica
+  marcado como consultado e não é perguntado de novo.
+- Dashboards em cache só mostram o nome novo quando o cache da casa renovar.
+
 ## 2026-11-11 — Split de variantes por IA: conservador + safe-apply gate (admin)
 
 **O que o FE precisa saber**

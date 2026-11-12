@@ -52,6 +52,8 @@ public class MarketLocationService {
     private static final int MAX_GEOCODE_ATTEMPTS = 3;
     private static final int MAX_SEGMENT_ATTEMPTS = 3;
     private static final int MAX_IBGE_BACKFILL_ATTEMPTS = 3;
+    private static final int MAX_TRADE_NAME_ATTEMPTS = 3;
+    private static final int TRADE_NAME_MAX_LENGTH = 255;
     /**
      * segmentAttempts neste valor marca uma classificação MANUAL do admin: fica no limite das duas
      * filas do classificador CNAE ({@code SegmentAttemptsLessThan}), então o job nunca re-lookup
@@ -87,6 +89,9 @@ public class MarketLocationService {
 
     @Value("${economizaai.merchant.classify.max-per-run:25}")
     private int classifyMaxPerRun = 25;
+
+    @Value("${economizaai.merchant.trade-name.max-per-run:20}")
+    private int tradeNameMaxPerRun = 20;
 
     /** Called from ReceiptService.confirm — idempotent register, never geocodes inline. */
     @Transactional
@@ -372,6 +377,59 @@ public class MarketLocationService {
                 other, unknown);
     }
 
+    /**
+     * Reads the nome fantasia of markets whose registry entry was never consulted for it (every market
+     * registered before the trade name existed, plus any whose classification lookup failed). Capped per
+     * run and per market so a registry outage can neither hold the scheduler nor be polled forever.
+     */
+    @Scheduled(fixedDelayString = "${economizaai.merchant.trade-name.interval-ms:600000}",
+               initialDelayString = "${economizaai.merchant.trade-name.initial-delay-ms:90000}")
+    public void scheduledTradeNameBackfill() {
+        backfillTradeNames(leastAttemptedFirst(tradeNameMaxPerRun, "tradeNameAttempts"));
+    }
+
+    /** One backfill pass; returns how many markets got a trade name. */
+    int backfillTradeNames(Pageable limit) {
+        if (!cnpjActivityClient.isEnabled()) return 0;
+        var pending = repository.findAllByTradeNameCheckedAtIsNullAndTradeNameAttemptsLessThan(
+                MAX_TRADE_NAME_ATTEMPTS, limit);
+        if (pending.isEmpty()) return 0;
+        var named = 0;
+        for (var market : pending) {
+            if (backfillTradeNameOne(market)) named++;
+        }
+        log.info("market.trade_name.batch.done attempted={} named={}", pending.size(), named);
+        return named;
+    }
+
+    /** The registry lookup is an outbound HTTP call, so it runs untransacted; only the result is persisted. */
+    private boolean backfillTradeNameOne(MarketLocation market) {
+        var lookup = cnpjActivityClient.lookup(market.getCnpj());
+        return self.persistTradeNameResult(market, lookup);
+    }
+
+    /** Persists one trade-name lookup in a short transaction; true when the market now has a trade name. */
+    @Transactional
+    public boolean persistTradeNameResult(MarketLocation market, CnpjLookup lookup) {
+        market.setTradeNameAttempts(market.getTradeNameAttempts() + 1);
+        applyTradeName(market, lookup);
+        repository.save(market);
+        return market.getTradeName() != null;
+    }
+
+    /** Copies the registry's nome fantasia onto the market, and marks the registry as consulted when it answered. */
+    private static void applyTradeName(MarketLocation market, CnpjLookup lookup) {
+        if (!lookup.registryAnswered()) return;
+        market.setTradeNameCheckedAt(LocalDateTime.now());
+        var tradeName = lookup.tradeName();
+        if (!MarketNameService.isUsableTradeName(tradeName)) return;
+        var trimmed = tradeName.trim();
+        market.setTradeName(trimmed.length() > TRADE_NAME_MAX_LENGTH
+                ? trimmed.substring(0, TRADE_NAME_MAX_LENGTH)
+                : trimmed);
+        log.info("market.trade_name.set cnpj={} tradeName='{}'", market.getCnpj(), market.getTradeName());
+    }
+
     /** A page of at most {@code maxPerRun} rows, never-tried first so a stubborn row can't starve the rest. */
     private static Pageable leastAttemptedFirst(int maxPerRun, String attemptsProperty) {
         return PageRequest.of(0, Math.max(1, maxPerRun),
@@ -418,6 +476,7 @@ public class MarketLocationService {
         if (market.getIbgeCityCode() == null && lookup.ibgeCityCode() != null) {
             market.setIbgeCityCode(lookup.ibgeCityCode());
         }
+        applyTradeName(market, lookup);
         var newGraySighting = segment == MerchantSegment.OTHER && market.getGraySightingNotifiedAt() == null;
         if (newGraySighting) {
             market.setGraySightingNotifiedAt(LocalDateTime.now());

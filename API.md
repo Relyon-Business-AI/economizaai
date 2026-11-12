@@ -1411,6 +1411,11 @@ so prefer it for display; `city`/`state` are new (2026-11-10, null until geocode
 has bought here, `watching` = pinned. Watched markets bypass the radius filter — useful
 for "the market on my commute is far from home but I want its promos anyway".
 
+**Display-name cascade (2026-11-11):** every `friendlyName` / `marketFriendlyName` /
+`lastMarketFriendlyName` resolves as household rename → **nome fantasia** from the public CNPJ registry
+(title-cased) → razão social with the corporate boilerplate stripped. Endpoints that already used the
+chain name keep it between the nome fantasia and the cleaned razão social. `name` / `marketName` stay raw.
+
 **Custom market name (household-only):** `PUT /markets/{cnpj}/name` saves a rename for your household. It does **not** overwrite the global name — instead every market-bearing response carries a separate **`friendlyName`** field (alongside the original `name`/`marketName`) that defaults to the original and is replaced by your rename when set. The FE should **display `friendlyName`**. It applies everywhere a market appears for your household (markets list, product-markets, receipts, items, insights, price history, notifications); the global name and other households are never affected. `DELETE` clears it (so `friendlyName` falls back to the original).
 
 ---
@@ -2095,6 +2100,7 @@ PUT    /api/v1/admin/merchants/{cnpj}/support      → SupportOverrideResult —
 PUT    /api/v1/admin/merchants/{cnpj}/classification → ClassificationResult — body {"segment":"SUPERMARKET"|"PHARMACY"|"GAS_STATION"|"OTHER"}; veredito por segmento (Mercado/Farmácia/Combustível/Bloquear). Grava o segmento como MANUAL (o classificador CNAE não sobrescreve), limpa o override p/ segmentos suportados (ou BLOCKED p/ OTHER) e faz backfill do índice. Preferir a /support — evita que um mercado promovido vaze pra lente Farmácia
 DELETE /api/v1/admin/products/{id}?force=false     → 200 ProductDeletionResponse (prune test/junk catalog rows)
 GET    /api/v1/admin/overview?includeInternal=false → AdminOverviewResponse { usersTotal, usersToday, usersThisWeek, usersPro, usersPayingActive, receiptsTotal, receiptsToday, parseRate30d, activeHouseholds1d/7d/30d, stickiness, totalSpendConfirmed, priceObservations, contributingHouseholds, byState[] } — "Visão geral" do painel
+GET    /api/v1/admin/dashboard?period=7d|30d|all&from=YYYY-MM-DD&to=YYYY-MM-DD&includeInternal=false → AdminDashboardResponse { window{period,from,to,days}, users{total,inPeriod}, receipts{total,inPeriod,parseRate}, spend{total,inPeriod}, engagement{activeHouseholdsInPeriod,activeHouseholds1d/7d/30d,stickiness}, priceIndex{priceObservations,contributingHouseholds}, funnel{signups,verified,activated,verifiedRate,activatedRate}, timeline[], byState[], recentUsers[], recentReceipts[] } — "Visão Geral" inteira numa chamada, para uma janela (padrão 7d; from+to vencem period; dias de Brasília sobre createdAt; período inválido → 400)
 GET    /api/v1/admin/market-intel?includeInternal=false → MarketIntelResponse { priceObservations, contributingHouseholds, topProducts[], topMarkets[], topMarketsByChain[], categorySpend[], byUf[] }
 GET    /api/v1/admin/analytics/acquisition?days=30&includeInternal=false → AcquisitionReportResponse (signup funnel + timeline by channel + byPlatform + campaign breakdown + Meta ad-spend / cost-per-signup)
 GET    /api/v1/admin/analytics/subscriptions?includeInternal=false       → SubscriptionReportResponse (users by tier, paying-active, promo-granted)

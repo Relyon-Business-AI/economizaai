@@ -175,6 +175,7 @@ redeploy by themselves (trigger a deploy).
 | `IMAGE_DECODE_MAX_WAIT_MS` | `5000` | Wait for a decode permit before the 503 `image.decode.busy`. |
 | `GEOCODE_MAX_PER_RUN` | `25` | Markets geocoded per scheduled scan. |
 | `MERCHANT_CLASSIFY_MAX_PER_RUN` | `25` | Markets classified (CNAE) per scheduled scan. |
+| `MARKET_TRADE_NAME_MAX_PER_RUN` | `20` | Markets whose nome fantasia is read from the CNPJ registry per scheduled backfill scan (every 10 min). |
 
 **Notifications**
 

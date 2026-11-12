@@ -233,7 +233,7 @@ public class HouseholdProductService {
         }
 
         private HouseholdProductResponse toResponse(Map<String, String> overrides, String friendlyName) {
-            var friendlyMarket = overrides.getOrDefault(lastCnpj, lastMarketName);
+            var friendlyMarket = overrides.getOrDefault(lastCnpj, MarketNameService.cleanLegalName(lastMarketName));
             return new HouseholdProductResponse(
                     product.getId(), product.getNormalizedName(), friendlyName, product.getBrand(),
                     product.getCategory() != null ? product.getCategory().name() : null,
