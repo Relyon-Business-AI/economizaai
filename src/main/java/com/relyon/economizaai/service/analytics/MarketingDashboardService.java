@@ -13,7 +13,6 @@ import com.relyon.economizaai.time.BrazilClock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -35,7 +34,10 @@ public class MarketingDashboardService {
     private final MetaAdsProperties metaAdsProperties;
     private final GoogleSearchConsoleService googleSearchConsoleService;
 
-    @Transactional(readOnly = true)
+    /**
+     * Deliberately NOT transactional: the organic half calls Google, and a transaction here would
+     * pin a pooled DB connection for as long as Google takes. The Meta half is two plain reads.
+     */
     public MarketingDashboardResponse dashboard(int days) {
         var windowDays = Math.max(1, days);
         var to = BrazilClock.today();

@@ -24,6 +24,8 @@ public class GoogleSearchConsoleProperties {
     private String saPrivateKey = "";
     private String siteUrl = "sc-domain:economizaai.app";
     private String apiVersion = "v3";
+    /** How long a built report is reused. Search Console data lags by days, so hours are safe. */
+    private int cacheTtlMinutes = 180;
 
     public boolean isConfigured() {
         return enabled && (hasServiceAccount() || hasStaticToken());
@@ -56,4 +58,7 @@ public class GoogleSearchConsoleProperties {
 
     public String getApiVersion() { return apiVersion; }
     public void setApiVersion(String apiVersion) { this.apiVersion = apiVersion; }
+
+    public int getCacheTtlMinutes() { return cacheTtlMinutes; }
+    public void setCacheTtlMinutes(int cacheTtlMinutes) { this.cacheTtlMinutes = cacheTtlMinutes; }
 }
