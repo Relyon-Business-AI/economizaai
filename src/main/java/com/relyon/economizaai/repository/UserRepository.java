@@ -216,6 +216,30 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     @Query("SELECT count(user) FROM User user WHERE user.createdAt >= :since" + INTERNAL_FILTER)
     long countSignupsSince(LocalDateTime since, boolean includeInternal);
 
+    // --- Admin dashboard: the same signup funnel, bounded to a [from, to) window ---
+
+    @Query("SELECT count(user) FROM User user WHERE user.createdAt >= :from AND user.createdAt < :to" + INTERNAL_FILTER)
+    long countSignupsBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to, boolean includeInternal);
+
+    @Query("SELECT count(user) FROM User user WHERE user.createdAt >= :from AND user.createdAt < :to "
+            + "AND user.emailVerified = true" + INTERNAL_FILTER)
+    long countVerifiedBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to, boolean includeInternal);
+
+    /** Signups in the window who have uploaded at least one receipt ("activated"). */
+    @Query("SELECT count(distinct user) FROM User user WHERE user.createdAt >= :from AND user.createdAt < :to "
+            + "AND exists (select 1 from Receipt receipt where receipt.user = user)" + INTERNAL_FILTER)
+    long countActivatedBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to, boolean includeInternal);
+
+    /** (createdAt, acquisitionChannel) for every signup in the window; bucketed into a daily series in the service. */
+    @Query("SELECT user.createdAt, user.acquisitionChannel FROM User user "
+            + "WHERE user.createdAt >= :from AND user.createdAt < :to" + INTERNAL_FILTER + " ORDER BY user.createdAt")
+    List<Object[]> signupTimelineBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to,
+                                         boolean includeInternal);
+
+    /** When the first account was created — the start of the "all time" window. Empty on a fresh database. */
+    @Query("SELECT min(user.createdAt) FROM User user")
+    Optional<LocalDateTime> findEarliestCreatedAt();
+
     /** Signups whose account was created from the web landing — the only signups the web beacon can have funneled. */
     @Query("SELECT count(user) FROM User user WHERE user.createdAt >= :since "
             + "AND user.registrationPlatform = 'WEB'" + INTERNAL_FILTER)

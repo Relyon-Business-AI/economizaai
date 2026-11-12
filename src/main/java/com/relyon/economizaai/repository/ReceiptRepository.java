@@ -242,6 +242,59 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
             + "AND lower(u.email) NOT LIKE '%@economizaai.app' "
             + "AND lower(u.email) NOT LIKE '%@cloudtestlabaccounts.com'))";
 
+    // --- Admin dashboard (same KPIs as the overview, bounded to a [from, to) window on createdAt) ---
+
+    @Query("SELECT count(receipt) FROM Receipt receipt JOIN receipt.user receiptUser "
+            + "WHERE receipt.createdAt >= :from AND receipt.createdAt < :to" + RECEIPT_INTERNAL_FILTER)
+    long countCreatedBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to, boolean includeInternal);
+
+    /** Confirmed spend of the receipts that entered the app in the window. */
+    @Query("SELECT COALESCE(sum(receipt.totalAmount), 0) FROM Receipt receipt JOIN receipt.user receiptUser "
+            + "WHERE receipt.status = 'CONFIRMED' AND receipt.createdAt >= :from AND receipt.createdAt < :to"
+            + RECEIPT_INTERNAL_FILTER)
+    BigDecimal sumConfirmedTotalCreatedBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to,
+                                               boolean includeInternal);
+
+    /** Distinct households with at least one receipt in the window. */
+    @Query("SELECT count(distinct receipt.household.id) FROM Receipt receipt JOIN receipt.user receiptUser "
+            + "WHERE receipt.createdAt >= :from AND receipt.createdAt < :to" + RECEIPT_INTERNAL_FILTER)
+    long countActiveHouseholdsBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to,
+                                      boolean includeInternal);
+
+    /** (status, count) for receipts that entered the app in the window. */
+    @Query("SELECT receipt.status, count(receipt) FROM Receipt receipt JOIN receipt.user receiptUser "
+            + "WHERE receipt.createdAt >= :from AND receipt.createdAt < :to" + RECEIPT_INTERNAL_FILTER
+            + " GROUP BY receipt.status")
+    List<Object[]> statusBreakdownBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to,
+                                          boolean includeInternal);
+
+    /** (uf, confirmed receipts, confirmed spend) for receipts that entered the app in the window. */
+    @Query("SELECT receipt.uf, count(receipt), COALESCE(sum(receipt.totalAmount), 0) "
+            + "FROM Receipt receipt JOIN receipt.user receiptUser "
+            + "WHERE receipt.status = 'CONFIRMED' AND receipt.createdAt >= :from AND receipt.createdAt < :to"
+            + RECEIPT_INTERNAL_FILTER
+            + " GROUP BY receipt.uf ORDER BY count(receipt) DESC")
+    List<Object[]> confirmedReceiptsByUfBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to,
+                                                boolean includeInternal);
+
+    /** Users by the UF they scanned most WITHIN the window: (uf, userCount). Users with no UF'd nota in it are absent. */
+    @Query(value = """
+            SELECT user_uf.uf AS uf, COUNT(*) AS users
+            FROM (
+                SELECT ranked.user_id, ranked.uf FROM (
+                    SELECT r.user_id, r.uf,
+                           ROW_NUMBER() OVER (PARTITION BY r.user_id ORDER BY COUNT(*) DESC) AS rn
+                    FROM receipts r
+                    WHERE r.uf IS NOT NULL AND r.created_at >= :from AND r.created_at < :to
+                    GROUP BY r.user_id, r.uf) ranked
+                WHERE ranked.rn = 1) user_uf
+            JOIN users u ON u.id = user_uf.user_id
+            WHERE 1 = 1""" + NATIVE_RECEIPT_INTERNAL_FILTER + """
+            GROUP BY user_uf.uf ORDER BY COUNT(*) DESC
+            """, nativeQuery = true)
+    List<Object[]> usersByPredominantUfBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to,
+                                               @Param("includeInternal") boolean includeInternal);
+
     // --- Admin overview (cross-area KPIs) ---
 
     /** Total receipts, honoring the internal-account filter. */

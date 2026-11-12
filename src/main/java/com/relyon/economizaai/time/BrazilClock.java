@@ -53,6 +53,15 @@ public final class BrazilClock {
      * DTO-MAPPING sites for timestamps the FE DISPLAYS — otherwise a fresh
      * notification renders as "3h atrás". Null-safe for optional fields.
      */
+    /**
+     * Start of a Brasília calendar day expressed as UTC wall-clock — the bound to compare
+     * against createdAt-family columns (stored as UTC wall-clock) so a date window follows
+     * the Brasília day, not the UTC one.
+     */
+    public static LocalDateTime startOfDayUtc(LocalDate brasiliaDate) {
+        return brasiliaDate.atStartOfDay(ZONE).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
+    }
+
     public static LocalDateTime fromUtc(LocalDateTime utcDateTime) {
         if (utcDateTime == null) return null;
         return utcDateTime.atOffset(ZoneOffset.UTC).atZoneSameInstant(ZONE).toLocalDateTime();

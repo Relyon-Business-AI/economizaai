@@ -1,5 +1,35 @@
 # economizai — what's new
 
+## 2026-11-12 — Visão Geral do admin numa chamada só, com filtro de período
+
+**O que o FE precisa saber**
+
+- **Endpoint novo: `GET /api/v1/admin/dashboard`** (ADMIN). Devolve tudo o que a tela "Visão Geral" mostra,
+  para uma janela de datas. Substitui as quatro chamadas que a tela fazia (`/admin/overview`,
+  `/admin/analytics/acquisition`, `/admin/users`, `/admin/receipts`).
+- **Parâmetros**: `period=7d` (padrão) `| 30d | all`, ou `from` + `to` (datas ISO `YYYY-MM-DD`, horário de
+  Brasília, as duas inclusivas). `from`+`to` vencem `period`. `includeInternal=false` como nos outros.
+- **Período inválido → 400** (`admin.dashboard.period.invalid`): valor de `period` desconhecido, só uma das
+  datas, `from` depois de `to`, `to` no futuro ou janela maior que 1100 dias.
+- **Resposta** (`AdminDashboardResponse`): `window{period,from,to,days}` com a janela resolvida ("all" começa
+  no dia do primeiro cadastro); `users{total,inPeriod}`; `receipts{total,inPeriod,parseRate}`;
+  `spend{total,inPeriod}`; `engagement{activeHouseholdsInPeriod,activeHouseholds1d,activeHouseholds7d,
+  activeHouseholds30d,stickiness}`; `priceIndex{priceObservations,contributingHouseholds}`;
+  `funnel{signups,verified,activated,verifiedRate,activatedRate}`; `timeline[]` (um ponto por dia, com
+  `byChannel`); `byState[]` (`uf,receipts,spend,users`); `recentUsers[]` e `recentReceipts[]` (os 6 mais
+  recentes, mesmos formatos das listagens de admin).
+- **Regras da janela**: tudo é filtrado por `createdAt` (quando o cadastro ou a nota entrou no app), em dias
+  de Brasília. `total` é sempre acumulado. DAU/WAU/MAU ficam ancorados na data final da janela. O tamanho do
+  índice de preços continua global (é anônimo de propósito). Sem números de plano PRO.
+- `/admin/overview` continua igual; nada foi removido.
+
+**Backend**
+
+- `AdminDashboardService` + consultas "entre datas" em `ReceiptRepository` e `UserRepository`.
+- `BrazilClock.startOfDayUtc`: borda do dia de Brasília convertida para o relógio UTC em que `createdAt` é
+  gravado (o `/admin/overview` compara sem converter, com até 3 h de deslocamento na borda do dia).
+- **V178**: índices em `receipts(created_at)` e `users(created_at)`, que não existiam.
+
 ## 2026-11-11 — Nome de exibição dos mercados: apelido da casa → nome fantasia → razão social limpa
 
 **O que o FE precisa saber**

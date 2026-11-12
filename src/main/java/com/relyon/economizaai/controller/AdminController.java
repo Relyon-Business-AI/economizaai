@@ -7,6 +7,7 @@ import com.relyon.economizaai.dto.request.MerchantSupportOverrideRequest;
 import com.relyon.economizaai.dto.request.UpdateMarketChainRequest;
 import com.relyon.economizaai.dto.request.ReceiptIdsRequest;
 import com.relyon.economizaai.dto.request.RetryByReasonRequest;
+import com.relyon.economizaai.dto.response.AdminDashboardResponse;
 import com.relyon.economizaai.dto.response.BatchResultResponse;
 import com.relyon.economizaai.dto.response.FailureReasonCount;
 import com.relyon.economizaai.dto.request.SendTestNotificationRequest;
@@ -68,6 +69,7 @@ import com.relyon.economizaai.model.enums.AcquisitionChannel;
 import com.relyon.economizaai.model.enums.Platform;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.ReceiptService;
+import com.relyon.economizaai.service.admin.AdminDashboardService;
 import com.relyon.economizaai.service.admin.AdminLlmService;
 import com.relyon.economizaai.service.admin.AdminMerchantAccessService;
 import com.relyon.economizaai.service.admin.AdminMerchantPromoService;
@@ -127,6 +129,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -163,6 +166,7 @@ public class AdminController {
     private final InfosimplesFinanceService infosimplesFinanceService;
     private final IngestionHealthService ingestionHealthService;
     private final AdminOverviewService adminOverviewService;
+    private final AdminDashboardService adminDashboardService;
     private final MarketIntelService marketIntelService;
     private final AdminAnalyticsService adminAnalyticsService;
     private final RetentionCohortService retentionCohortService;
@@ -543,6 +547,20 @@ public class AdminController {
     public ResponseEntity<AdminOverviewResponse> overview(
             @RequestParam(defaultValue = "false") boolean includeInternal) {
         return ResponseEntity.ok(adminOverviewService.overview(includeInternal));
+    }
+
+    @Operation(summary = "Admin dashboard (Visão Geral) for a date window",
+            description = "Everything the admin home shows in one call: users, receipts (with parse rate), confirmed "
+                    + "spend, active households, signup funnel + daily timeline, state breakdown and the latest "
+                    + "signups/receipts. period = 7d (default) | 30d | all; or from + to (ISO dates, Brasília, "
+                    + "inclusive), which win over period. Windows apply to createdAt.")
+    @GetMapping("/dashboard")
+    public ResponseEntity<AdminDashboardResponse> dashboard(
+            @RequestParam(required = false) String period,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(defaultValue = "false") boolean includeInternal) {
+        return ResponseEntity.ok(adminDashboardService.dashboard(period, from, to, includeInternal));
     }
 
     @Operation(summary = "Market intelligence",
