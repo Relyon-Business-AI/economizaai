@@ -5,6 +5,8 @@ import com.relyon.economizaai.model.MarketChain;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.repository.HouseholdMarketAliasRepository;
 import com.relyon.economizaai.repository.MarketChainRepository;
+import com.relyon.economizaai.repository.MarketLocationRepository;
+import com.relyon.economizaai.repository.MarketLocationRepository.MarketTradeName;
 import com.relyon.economizaai.service.cache.HouseholdCacheGen;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -23,19 +26,18 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * Resolves the market display name for a household, honoring a per-household
- * custom rename ({@link HouseholdMarketAlias}) over the global name. The
- * override is keyed by (householdId, CNPJ) and is never visible to other
- * households.
+ * Resolves the market display name for a household. Every display name follows the
+ * same cascade: the household's custom rename ({@link HouseholdMarketAlias}, keyed by
+ * (householdId, CNPJ) and never visible to other households) &rarr; the market's
+ * nome fantasia from the public CNPJ registry &rarr; the razão social with the
+ * corporate boilerplate stripped and title-cased. The raw legal name is always kept
+ * separately so the FE can still show it in detail.
  *
- * <p>Use {@link #resolveNames} to batch-load overrides for a whole response and
+ * <p>Use {@link #resolveNames} to batch-load the names for a whole response and
  * avoid N+1 lookups; use {@link #resolve} for single values.
  *
- * <p>For a FRIENDLY display name (no household rename present), the resolution
- * cascade is: household alias {@code custom_name} &rarr; the global
- * {@link MarketChain} name (keyed by CNPJ root) &rarr; a cleaning heuristic that
- * strips corporate boilerplate from the raw razão social and title-cases it. The
- * raw legal name is always kept separately so the FE can still show it in detail.
+ * <p>{@link #friendlyName} additionally tries the global {@link MarketChain} name
+ * (keyed by CNPJ root) before falling back to the cleaned razão social.
  */
 @Slf4j
 @Service
@@ -44,6 +46,7 @@ public class MarketNameService {
 
     private final HouseholdMarketAliasRepository aliasRepository;
     private final MarketChainRepository marketChainRepository;
+    private final MarketLocationRepository marketLocationRepository;
     private final HouseholdCacheGen householdCacheGen;
 
     /** Corporate boilerplate stripped from a razão social before title-casing. Longest first. */
@@ -62,27 +65,59 @@ public class MarketNameService {
     private static final Set<String> LOWERCASE_CONNECTIVES =
             Set.of("de", "da", "do", "das", "dos", "e");
 
-    /** Custom name for one market, or {@code fallback} when the household hasn't renamed it. */
+    /**
+     * Display name for one market: household rename, else nome fantasia, else {@code rawName} cleaned.
+     * {@code rawName} is the razão social as printed on the receipt.
+     */
     @Transactional(readOnly = true)
-    public String resolve(UUID householdId, String cnpj, String fallback) {
-        if (householdId == null || cnpj == null) return fallback;
-        return aliasRepository.findByHouseholdIdAndMarketCnpj(householdId, cnpj)
-                .map(HouseholdMarketAlias::getCustomName)
-                .orElse(fallback);
+    public String resolve(UUID householdId, String cnpj, String rawName) {
+        if (cnpj == null) return cleanLegalName(rawName);
+        if (householdId != null) {
+            var rename = aliasRepository.findByHouseholdIdAndMarketCnpj(householdId, cnpj)
+                    .map(HouseholdMarketAlias::getCustomName);
+            if (rename.isPresent()) return rename.get();
+        }
+        return applyOverride(tradeNamesFor(List.of(cnpj)), cnpj, rawName);
     }
 
-    /** Batch: cnpj -> custom name for the household (only renamed markets present). */
+    /**
+     * Batch: cnpj -> name that replaces the razão social, for the markets that have one. A household
+     * rename wins over the nome fantasia; a market with neither is absent from the map.
+     */
     @Transactional(readOnly = true)
     public Map<String, String> resolveNames(UUID householdId, Collection<String> cnpjs) {
-        if (householdId == null || cnpjs == null || cnpjs.isEmpty()) return Map.of();
-        return aliasRepository.findAllByHouseholdIdAndMarketCnpjIn(householdId, cnpjs).stream()
-                .collect(Collectors.toMap(HouseholdMarketAlias::getMarketCnpj, HouseholdMarketAlias::getCustomName));
+        if (cnpjs == null || cnpjs.isEmpty()) return Map.of();
+        var names = new HashMap<>(tradeNamesFor(cnpjs));
+        if (householdId != null) {
+            aliasRepository.findAllByHouseholdIdAndMarketCnpjIn(householdId, cnpjs)
+                    .forEach(alias -> names.put(alias.getMarketCnpj(), alias.getCustomName()));
+        }
+        return names;
     }
 
-    /** Apply an override map (from {@link #resolveNames}) to one name, falling back when absent. */
-    public String applyOverride(Map<String, String> overrides, String cnpj, String fallback) {
-        if (overrides == null || cnpj == null) return fallback;
-        return overrides.getOrDefault(cnpj, fallback);
+    /** Apply a name map (from {@link #resolveNames}) to one market, falling back to the cleaned razão social. */
+    public String applyOverride(Map<String, String> overrides, String cnpj, String rawName) {
+        if (overrides == null || cnpj == null) return cleanLegalName(rawName);
+        var name = overrides.get(cnpj);
+        return name != null && !name.isBlank() ? name : cleanLegalName(rawName);
+    }
+
+    /** cnpj -> nome fantasia ready for display, for the markets whose registry entry has a usable one. */
+    private Map<String, String> tradeNamesFor(Collection<String> cnpjs) {
+        return marketLocationRepository.findTradeNamesByCnpjIn(cnpjs).stream()
+                .filter(market -> isUsableTradeName(market.getTradeName()))
+                .collect(Collectors.toMap(MarketTradeName::getCnpj,
+                        market -> formatTradeName(market.getTradeName()), (first, ignored) -> first));
+    }
+
+    /** The registry sometimes carries filler ("********", "0") in the nome fantasia field; require real letters. */
+    public static boolean isUsableTradeName(String tradeName) {
+        return tradeName != null && tradeName.chars().filter(Character::isLetter).count() >= 2;
+    }
+
+    /** The registry stores the nome fantasia in upper case; title-case it for display (nothing is stripped). */
+    public static String formatTradeName(String tradeName) {
+        return titleCase(tradeName.trim());
     }
 
     /** Batch: CNPJ root -&gt; global chain name, for the full CNPJs given (only known chains present). */
@@ -101,11 +136,12 @@ public class MarketNameService {
 
     /**
      * Friendly display name using pre-loaded batch maps (no DB access — safe inside a stream).
-     * Cascade: household rename &rarr; global chain name &rarr; cleaned razão social.
+     * Cascade: household rename &rarr; nome fantasia (both already in {@code overrides}) &rarr; global
+     * chain name &rarr; cleaned razão social.
      */
     public String friendlyName(Map<String, String> overrides, Map<String, String> chainNames,
                                String cnpj, String rawName) {
-        // The household rename is user-authored — honor it verbatim, no cleaning.
+        // A household rename is user-authored and the nome fantasia is already formatted — no cleaning.
         if (cnpj != null && overrides != null) {
             var rename = overrides.get(cnpj);
             if (rename != null && !rename.isBlank()) return rename;

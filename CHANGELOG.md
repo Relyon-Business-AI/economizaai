@@ -1,5 +1,30 @@
 # economizai — what's new
 
+## 2026-11-11 — Nome de exibição dos mercados: apelido da casa → nome fantasia → razão social limpa
+
+**O que o FE precisa saber**
+
+- **Nenhum campo novo e nenhuma mudança de contrato.** O que muda é o VALOR dos campos de nome
+  amigável que o FE já exibe (`friendlyName`, `marketFriendlyName`, `lastMarketFriendlyName`).
+- **Cascata única em todas as respostas com mercado**: (1) apelido que a casa deu ao mercado;
+  (2) **nome fantasia** do cadastro público do CNPJ, em maiúsculas e minúsculas normais
+  ("Assai Atacadista"); (3) razão social sem "LTDA", "S/A", "COMERCIO DE ALIMENTOS" etc.
+  ("Companhia Zaffari"). Antes, notas, itens, dashboard, ofertas, plano de compras e notificações
+  caíam na razão social crua quando a casa não tinha apelido.
+- Onde já existia o nome da rede como degrau (insights, mercados acompanhados, comparação por
+  tipo), ele continua depois do nome fantasia e antes da razão social limpa.
+- `name` / `marketName` continuam sendo a razão social crua, sem alteração.
+
+**Backend**
+
+- `market_locations` ganhou `trade_name`, `trade_name_checked_at` e `trade_name_attempts` (V177).
+- O nome fantasia vem da mesma consulta de CNPJ que já classifica o segmento (BrasilAPI, gratuita);
+  mercados novos já saem com ele.
+- **Backfill** dos mercados existentes por job agendado: 20 por rodada a cada 10 minutos, no máximo
+  3 tentativas por mercado (`economizaai.merchant.trade-name.*`). Cadastro sem nome fantasia fica
+  marcado como consultado e não é perguntado de novo.
+- Dashboards em cache só mostram o nome novo quando o cache da casa renovar.
+
 ## 2026-11-11 — Split de variantes por IA: conservador + safe-apply gate (admin)
 
 **O que o FE precisa saber**

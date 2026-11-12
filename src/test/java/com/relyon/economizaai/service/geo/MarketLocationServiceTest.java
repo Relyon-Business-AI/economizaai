@@ -470,6 +470,92 @@ class MarketLocationServiceTest {
     }
 
     @Test
+    void classifySegmentOne_storesTradeNameFromTheSameLookup() {
+        var market = MarketLocation.builder().cnpj("c").cnpjRoot("cccccccc")
+                .segment(MerchantSegment.UNKNOWN).segmentAttempts(0).build();
+        when(cnpjActivityClient.lookup("c")).thenReturn(lookupWithTradeName("ASSAI ATACADISTA"));
+
+        service.classifySegmentOne(market);
+
+        assertThat(market.getTradeName()).isEqualTo("ASSAI ATACADISTA");
+        assertThat(market.getTradeNameCheckedAt()).isNotNull();
+    }
+
+    @Test
+    void backfillTradeNames_storesNameAndMarksRegistryConsulted() {
+        var market = MarketLocation.builder().cnpj("c").cnpjRoot("cccccccc").build();
+        when(cnpjActivityClient.isEnabled()).thenReturn(true);
+        when(repository.findAllByTradeNameCheckedAtIsNullAndTradeNameAttemptsLessThan(eq(3), any()))
+                .thenReturn(List.of(market));
+        when(cnpjActivityClient.lookup("c")).thenReturn(lookupWithTradeName("GIASSI SUPERMERCADO"));
+
+        var named = service.backfillTradeNames(Pageable.unpaged());
+
+        assertThat(named).isEqualTo(1);
+        assertThat(market.getTradeName()).isEqualTo("GIASSI SUPERMERCADO");
+        assertThat(market.getTradeNameCheckedAt()).isNotNull();
+        assertThat(market.getTradeNameAttempts()).isEqualTo(1);
+        verify(repository).save(market);
+    }
+
+    @Test
+    void backfillTradeNames_registryWithoutTradeNameIsMarkedConsultedAndNotRetried() {
+        var market = MarketLocation.builder().cnpj("c").cnpjRoot("cccccccc").build();
+        when(cnpjActivityClient.isEnabled()).thenReturn(true);
+        when(repository.findAllByTradeNameCheckedAtIsNullAndTradeNameAttemptsLessThan(eq(3), any()))
+                .thenReturn(List.of(market));
+        when(cnpjActivityClient.lookup("c")).thenReturn(lookupWithTradeName(null));
+
+        var named = service.backfillTradeNames(Pageable.unpaged());
+
+        assertThat(named).isZero();
+        assertThat(market.getTradeName()).isNull();
+        assertThat(market.getTradeNameCheckedAt()).isNotNull();
+    }
+
+    @Test
+    void backfillTradeNames_failedLookupOnlyCountsAnAttempt() {
+        var market = MarketLocation.builder().cnpj("c").cnpjRoot("cccccccc").build();
+        when(cnpjActivityClient.isEnabled()).thenReturn(true);
+        when(repository.findAllByTradeNameCheckedAtIsNullAndTradeNameAttemptsLessThan(eq(3), any()))
+                .thenReturn(List.of(market));
+        when(cnpjActivityClient.lookup("c"))
+                .thenReturn(new CnpjActivityClient.CnpjLookup(MerchantSegment.UNKNOWN, null, List.of()));
+
+        service.backfillTradeNames(Pageable.unpaged());
+
+        assertThat(market.getTradeNameCheckedAt()).isNull();
+        assertThat(market.getTradeNameAttempts()).isEqualTo(1);
+    }
+
+    @Test
+    void backfillTradeNames_ignoresFillerTradeName() {
+        var market = MarketLocation.builder().cnpj("c").cnpjRoot("cccccccc").build();
+        when(cnpjActivityClient.isEnabled()).thenReturn(true);
+        when(repository.findAllByTradeNameCheckedAtIsNullAndTradeNameAttemptsLessThan(eq(3), any()))
+                .thenReturn(List.of(market));
+        when(cnpjActivityClient.lookup("c")).thenReturn(lookupWithTradeName("********"));
+
+        service.backfillTradeNames(Pageable.unpaged());
+
+        assertThat(market.getTradeName()).isNull();
+        assertThat(market.getTradeNameCheckedAt()).isNotNull();
+    }
+
+    @Test
+    void backfillTradeNames_skipsWhenRegistryLookupIsDisabled() {
+        when(cnpjActivityClient.isEnabled()).thenReturn(false);
+
+        assertThat(service.backfillTradeNames(Pageable.unpaged())).isZero();
+        verify(repository, never()).findAllByTradeNameCheckedAtIsNullAndTradeNameAttemptsLessThan(anyInt(), any());
+    }
+
+    private static CnpjActivityClient.CnpjLookup lookupWithTradeName(String tradeName) {
+        return new CnpjActivityClient.CnpjLookup(MerchantSegment.SUPERMARKET, null, List.of("4711302"),
+                null, "RAZAO SOCIAL LTDA", null, tradeName);
+    }
+
+    @Test
     void classifySegmentOne_persistsCnaeCodes() {
         var market = MarketLocation.builder().cnpj("c").cnpjRoot("cccccccc")
                 .segment(MerchantSegment.UNKNOWN).segmentAttempts(0).build();

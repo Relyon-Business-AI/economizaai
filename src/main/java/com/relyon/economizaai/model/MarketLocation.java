@@ -89,6 +89,18 @@ public class MarketLocation extends BaseEntity {
     @Column(name = "cnae_codes", columnDefinition = "TEXT")
     private String cnaeCodes;
 
+    /** Nome fantasia from the public CNPJ registry; null when the registry has none (or was not asked yet). */
+    @Column(name = "trade_name", length = 255)
+    private String tradeName;
+
+    /** When the registry answered the trade-name lookup (even with no trade name) — null means "still to ask". */
+    @Column(name = "trade_name_checked_at")
+    private LocalDateTime tradeNameCheckedAt;
+
+    @Column(name = "trade_name_attempts", nullable = false)
+    @lombok.Builder.Default
+    private int tradeNameAttempts = 0;
+
     /** Admin verdict on a grey-zone merchant; null means "go by segment". */
     @Enumerated(EnumType.STRING)
     @Column(name = "support_override", length = 20)
