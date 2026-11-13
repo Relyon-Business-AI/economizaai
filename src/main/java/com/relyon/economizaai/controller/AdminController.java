@@ -426,9 +426,10 @@ public class AdminController {
             @RequestParam(required = false) UUID householdId,
             @RequestParam(required = false) UnidadeFederativa uf,
             @RequestParam(required = false) String userQ,
+            @RequestParam(required = false) List<ReceiptEntryMethod> entryMethod,
             @RequestParam(defaultValue = "false") boolean includeInternal) {
         return ResponseEntity.ok(adminReceiptService.failureBreakdown(
-                from, to, marketCnpj, category, q, householdId, uf, userQ, includeInternal));
+                from, to, marketCnpj, category, q, householdId, uf, userQ, entryMethod, includeInternal));
     }
 
     /** How users are entering their notas (QR scan vs typed/photographed chave vs photo vs import):

@@ -185,8 +185,23 @@ public class AdminReceiptService {
                                                      UnidadeFederativa uf,
                                                      String userQ,
                                                      boolean includeInternal) {
+        return failureBreakdown(from, to, marketCnpj, categories, search, householdId, uf, userQ, null, includeInternal);
+    }
+
+    /** As the breakdown above, narrowed to notas that entered through one of {@code entryMethods} (null/empty = any). */
+    @Transactional(readOnly = true)
+    public List<FailureReasonCount> failureBreakdown(LocalDateTime from,
+                                                     LocalDateTime to,
+                                                     String marketCnpj,
+                                                     List<ProductCategory> categories,
+                                                     String search,
+                                                     UUID householdId,
+                                                     UnidadeFederativa uf,
+                                                     String userQ,
+                                                     List<ReceiptEntryMethod> entryMethods,
+                                                     boolean includeInternal) {
         var spec = buildSearchSpec(from, to, marketCnpj, categories, search, householdId, uf,
-                ReceiptStatus.FAILED_PARSE, null, userQ, includeInternal, null);
+                ReceiptStatus.FAILED_PARSE, null, userQ, includeInternal, entryMethods);
         return receiptRepository.findAll(spec).stream()
                 .collect(Collectors.groupingBy(
                         receipt -> Optional.ofNullable(receipt.getParseErrorReason()).orElse("unknown"),
