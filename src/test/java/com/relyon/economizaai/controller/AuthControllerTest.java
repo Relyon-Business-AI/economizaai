@@ -10,13 +10,16 @@ import com.relyon.economizaai.dto.response.UserResponse;
 import com.relyon.economizaai.exception.EmailAlreadyExistsException;
 import com.relyon.economizaai.exception.InvalidCredentialsException;
 import com.relyon.economizaai.exception.SocialAccountLoginException;
+import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.AuthProvider;
+import com.relyon.economizaai.model.enums.Platform;
 import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.model.enums.SubscriptionTier;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.UserService;
 import com.relyon.economizaai.service.auth.EmailVerificationService;
+import com.relyon.economizaai.service.auth.LoginActivityRecorder;
 import com.relyon.economizaai.service.auth.PasswordResetService;
 import com.relyon.economizaai.service.auth.RefreshTokenService;
 import com.relyon.economizaai.service.auth.oauth.SocialLoginService;
@@ -33,6 +36,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -70,6 +74,42 @@ class AuthControllerTest {
 
     @MockitoBean
     private SocialLoginService socialLoginService;
+
+    @MockitoBean
+    private LoginActivityRecorder loginActivityRecorder;
+
+    @Test
+    void refresh_passesTheClientPlatformAlongAfterRotatingTheTokens() throws Exception {
+        var user = User.builder().id(UUID.randomUUID()).name("John").email("john@test.com").build();
+        var familyId = UUID.randomUUID();
+        when(refreshTokenService.rotate("old-refresh")).thenReturn(new RefreshTokenService.RotationResult(user, familyId));
+        when(refreshTokenService.issueInFamily(user, familyId)).thenReturn("new-refresh");
+        when(jwtService.generateToken(user)).thenReturn("new-jwt");
+
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"old-refresh\",\"platform\":\"ios\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.refreshToken").value("new-refresh"));
+
+        verify(loginActivityRecorder).recordSessionRenewal(user.getId(), Platform.IOS);
+    }
+
+    @Test
+    void refresh_olderClientWithoutPlatformStillRenews() throws Exception {
+        var user = User.builder().id(UUID.randomUUID()).name("John").email("john@test.com").build();
+        var familyId = UUID.randomUUID();
+        when(refreshTokenService.rotate("old-refresh")).thenReturn(new RefreshTokenService.RotationResult(user, familyId));
+        when(refreshTokenService.issueInFamily(user, familyId)).thenReturn("new-refresh");
+        when(jwtService.generateToken(user)).thenReturn("new-jwt");
+
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"old-refresh\"}"))
+                .andExpect(status().isOk());
+
+        verify(loginActivityRecorder).recordSessionRenewal(user.getId(), null);
+    }
 
     private UserResponse sampleUserResponse() {
         return new UserResponse(

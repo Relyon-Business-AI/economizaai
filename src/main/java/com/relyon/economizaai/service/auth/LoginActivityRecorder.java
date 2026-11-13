@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 /**
  * Persists the client platform (web / android / ios) a user authenticates from.
@@ -32,6 +33,32 @@ public class LoginActivityRecorder {
         stampLogin(user, platform);
         userRepository.save(user);
         log.info("login.platform_recorded user={} platform={}", LogMasker.email(user.getEmail()), platform);
+    }
+
+    /**
+     * A session renewal is not a login, but for someone who signed up before the platform was
+     * recorded and never logged out it is the only moment the client tells us where it runs.
+     * Fills the registration platform when it is still unknown (never overwrites it) and keeps the
+     * last platform current; the per-platform LOGIN times are left alone. Writes only when
+     * something changes, and never throws: the tokens were already rotated, so a failure here
+     * must not cost the user their session.
+     */
+    public void recordSessionRenewal(UUID userId, Platform platform) {
+        if (platform == null) {
+            return;
+        }
+        try {
+            userRepository.findById(userId)
+                    .filter(user -> user.getRegistrationPlatform() == null || user.getLastPlatform() != platform)
+                    .ifPresent(user -> {
+                        backfillRegistrationPlatform(user, platform);
+                        user.setLastPlatform(platform);
+                        userRepository.save(user);
+                    });
+        } catch (RuntimeException recordingFailure) {
+            log.warn("refresh.platform_record_failed platform={} reason={}",
+                    platform, recordingFailure.getClass().getSimpleName());
+        }
     }
 
     /**
