@@ -275,7 +275,11 @@ public class SefazIngestionService {
                     }
                     log.warn("sefaz.fetch.bare_chave.infosimples_failed uf={} chave={} reason={}",
                             uf, abbrev(chave), describe(infosimplesEx));
-                    alertManualChaveNoPath(uf, chave, describe(infosimplesEx));
+                    // Portal offline: the nota is parked and re-fetched on its own, so it is not a
+                    // missing path — and the failed-consult alert already told the owner about it.
+                    if (!isOriginUnavailable(infosimplesEx)) {
+                        alertManualChaveNoPath(uf, chave, describe(infosimplesEx));
+                    }
                     throw infosimplesEx;
                 }
             }
@@ -721,6 +725,10 @@ public class SefazIngestionService {
      */
     private static boolean isPortalUnavailable(RuntimeException fallbackEx) {
         return !isDeterministicInfosimplesAnswer(fallbackEx);
+    }
+
+    private static boolean isOriginUnavailable(RuntimeException infosimplesEx) {
+        return infosimplesEx instanceof InfosimplesProviderException providerFail && providerFail.isOriginUnavailable();
     }
 
     /** The provider answered and the answer is final for this nota: no data, or a nota without products. */

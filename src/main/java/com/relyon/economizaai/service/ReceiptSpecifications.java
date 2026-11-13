@@ -3,6 +3,7 @@ package com.relyon.economizaai.service;
 import com.relyon.economizaai.model.HouseholdProductAlias;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.model.enums.ReceiptEntryMethod;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
@@ -159,6 +160,16 @@ public final class ReceiptSpecifications {
                     cb.like(cb.lower(userJoin.get("email")), like),
                     cb.like(cb.lower(userJoin.get("name")), like));
         };
+    }
+
+    /** Admin-only: restricts to receipts that entered the app through one of {@code entryMethods}. */
+    public static Specification<Receipt> byEntryMethods(Collection<ReceiptEntryMethod> entryMethods) {
+        return (root, query, cb) -> root.get("entryMethod").in(entryMethods);
+    }
+
+    /** Admin-only: restricts to receipts that ARRIVED at/after {@code createdFrom}, whatever their purchase date. */
+    public static Specification<Receipt> receivedSince(LocalDateTime createdFrom) {
+        return (root, query, cb) -> cb.greaterThanOrEqualTo(root.get("createdAt"), createdFrom);
     }
 
     /**

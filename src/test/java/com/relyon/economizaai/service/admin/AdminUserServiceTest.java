@@ -8,7 +8,9 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.model.enums.PaidApiService;
+import com.relyon.economizaai.dto.response.AdminUserSummaryResponse;
 import com.relyon.economizaai.model.enums.SubscriptionTier;
+import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.InsightsRepository;
 import com.relyon.economizaai.repository.MerchantAccessRepository;
 import com.relyon.economizaai.repository.PaidApiCallRepository;
@@ -405,6 +407,35 @@ class AdminUserServiceTest {
         assertEquals(2, page.getTotalElements());
         assertEquals(1, page.getContent().size());
         assertEquals("b@test.com", page.getContent().get(0).email()); // 40 notas ranks first
+    }
+
+    @Test
+    void listSortsByPredominantStateAndKeepsUsersWithoutStateLast() {
+        var fromSaoPaulo = userInOwnHousehold("sp@test.com");
+        var fromBahia = userInOwnHousehold("ba@test.com");
+        var withoutNotes = userInOwnHousehold("none@test.com");
+        when(userRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(fromSaoPaulo, withoutNotes, fromBahia)));
+        when(receiptRepository.ufFrequencyByHouseholdIds(anyList())).thenReturn(List.<Object[]>of(
+                new Object[]{fromSaoPaulo.getHousehold().getId(), UnidadeFederativa.SP, 4L},
+                new Object[]{fromBahia.getHousehold().getId(), UnidadeFederativa.BA, 2L}));
+
+        var ascending = service.list(null, null, null, null, null, null, false,
+                PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "uf")));
+        var descending = service.list(null, null, null, null, null, null, false,
+                PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "uf")));
+
+        assertEquals(List.of("ba@test.com", "sp@test.com", "none@test.com"),
+                ascending.getContent().stream().map(AdminUserSummaryResponse::email).toList());
+        assertEquals(List.of("sp@test.com", "ba@test.com", "none@test.com"),
+                descending.getContent().stream().map(AdminUserSummaryResponse::email).toList());
+    }
+
+    private static User userInOwnHousehold(String email) {
+        var user = User.builder().id(UUID.randomUUID()).name(email).email(email)
+                .household(Household.builder().id(UUID.randomUUID()).inviteCode(email).build()).build();
+        user.setCreatedAt(LocalDateTime.now());
+        return user;
     }
 
     /** Stub the detail-view aggregates to empty/zero — for mutation tests that don't assert counts. */

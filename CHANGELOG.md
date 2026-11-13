@@ -1,5 +1,30 @@
 # economizai — what's new
 
+## 2026-11-12 — Chave digitada com portal fora fica guardada; filtros novos nas listas do admin
+
+**O que o FE precisa saber**
+
+- **Chave digitada/fotografada com o portal do estado fora do ar agora vira `PORTAL_PENDING`** (antes
+  `FAILED_PARSE` com "tente de novo em alguns minutos"). É o mesmo comportamento que o QR já tinha: a nota
+  fica guardada, `parseErrorMessage` diz que o portal está fora do ar e ela entra sozinha quando o portal
+  voltar (reconsulta a cada 6 h, por até 14 dias). Nenhum status novo.
+- **`GET /admin/users?sort=uf,asc|desc`**: ordena pelo estado predominante do usuário. Quem ainda não tem
+  estado fica sempre no fim.
+- **`GET /admin/receipts`, `/admin/receipts/stats` e `/admin/receipts/failure-breakdown`** aceitam
+  `entryMethod` (repetível): `QR_SCAN | MANUAL_CHAVE | PHOTO_CHAVE | PHOTO_RECEIPT | IMPORT`.
+- **`GET /admin/receipts?createdFrom=<ISO date-time>`**: filtra pela CHEGADA da nota. `from`/`to` filtram pela
+  data da compra, que nota com falha não tem. O detalhe de "Erros mais comuns" (Operações) vinha vazio por
+  usar `from`; deve usar `createdFrom` e não fixar `status=FAILED_PARSE` (o motivo também aparece em nota
+  guardada: contingência, portal fora).
+
+**Backend**
+
+- `ReceiptIngestionService.markFailed`: `InfosimplesProviderException` com código 615 (origem indisponível)
+  estaciona a nota em `PORTAL_PENDING`, igual à cadeia experimental do QR.
+- Alertas: consulta 615 de um estado da lista `SEFAZ_PAUSED_STATE_PROBE_UFS` não dispara mais "Infosimples:
+  consulta NFC-e falhou" (o probe é quem avisa a volta), e o 615 não dispara "Chave manual sem caminho".
+  Qualquer outro código, ou 615 de um estado fora da lista, continua alertando.
+
 ## 2026-11-12 — Painel de Anúncios mais rápido (Search Console em cache e em paralelo)
 
 **O que o FE precisa saber**

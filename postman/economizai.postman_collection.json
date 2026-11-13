@@ -13813,7 +13813,7 @@
 								}
 							]
 						},
-						"description": "Same content-search semantics as GET /receipts but cross-household. Includes FAILED_PARSE rows for parser triage.\n\nResponse: Page<AdminReceiptSummaryResponse> \u2014 cada linha = { receipt: ReceiptSummaryResponse, owner: {id,name,email}|null, uf, createdAt, parseErrorReason, parseErrorMessage } (contexto de triagem j\u00e1 na lista).",
+						"description": "Same content-search semantics as GET /receipts but cross-household. Includes FAILED_PARSE rows for parser triage.\n\nResponse: Page<AdminReceiptSummaryResponse> \u2014 cada linha = { receipt: ReceiptSummaryResponse, owner: {id,name,email}|null, uf, createdAt, parseErrorReason, parseErrorMessage } (contexto de triagem j\u00e1 na lista).\n\nFiltros extras (opcionais): entryMethod (repet\u00edvel: QR_SCAN | MANUAL_CHAVE | PHOTO_CHAVE | PHOTO_RECEIPT | IMPORT) e createdFrom (ISO date-time, filtra pela chegada da nota; from/to filtram pela data da compra, que nota com falha n\u00e3o tem).",
 						"auth": {
 							"type": "bearer",
 							"bearer": [
@@ -18369,7 +18369,7 @@
 								}
 							]
 						},
-						"description": "Same content-search semantics as GET /receipts but cross-household. Includes FAILED_PARSE rows for parser triage.\n\nResponse: Page<AdminReceiptSummaryResponse> \u2014 cada linha = { receipt: ReceiptSummaryResponse, owner: {id,name,email}|null, uf, createdAt, parseErrorReason, parseErrorMessage } (contexto de triagem j\u00e1 na lista)."
+						"description": "Same content-search semantics as GET /receipts but cross-household. Includes FAILED_PARSE rows for parser triage.\n\nResponse: Page<AdminReceiptSummaryResponse> \u2014 cada linha = { receipt: ReceiptSummaryResponse, owner: {id,name,email}|null, uf, createdAt, parseErrorReason, parseErrorMessage } (contexto de triagem j\u00e1 na lista).\n\nFiltros extras (opcionais): entryMethod (repet\u00edvel: QR_SCAN | MANUAL_CHAVE | PHOTO_CHAVE | PHOTO_RECEIPT | IMPORT) e createdFrom (ISO date-time, filtra pela chegada da nota; from/to filtram pela data da compra, que nota com falha n\u00e3o tem)."
 					},
 					"response": []
 				},

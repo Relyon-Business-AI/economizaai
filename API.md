@@ -2031,7 +2031,7 @@ Each item is **either** linked to a canonical `Product` (auto-suggestion-friendl
 ## 10d. Admin (ROLE_ADMIN only — consumed only by the FE's admin dashboard, never the consumer app)
 
 ```
-GET    /api/v1/admin/users?q=&from=&to=&platform=&channel=&uf=&includeInternal=false&page=&size=&sort=   → Page<AdminUserSummaryResponse> (sort: createdAt|name|subscriptionTier|receiptCount|totalSpend, e.g. receiptCount,desc; from/to ISO date-time; platform = registration Platform; channel = AcquisitionChannel)
+GET    /api/v1/admin/users?q=&from=&to=&platform=&channel=&uf=&includeInternal=false&page=&size=&sort=   → Page<AdminUserSummaryResponse> (sort: createdAt|name|subscriptionTier|receiptCount|totalSpend|cost|uf, e.g. receiptCount,desc; `uf` = predominant state A→Z / Z→A, users with no state always last; from/to ISO date-time; platform = registration Platform; channel = AcquisitionChannel)
 GET    /api/v1/admin/users/uf?householdIds=<uuid>&householdIds=…   → { "<householdId>": "SP", … } — predominant UF per household (lazy lookup for the user list; households with no nota are absent)
 GET    /api/v1/admin/users/cost?userIds=<uuid>&userIds=…           → { "<userId>": <cents>, … } — lifetime paid-API cost per user (absent = 0)
 GET    /api/v1/admin/users/{id}              → AdminUserDetailResponse
@@ -2048,8 +2048,10 @@ POST   /api/v1/admin/merchant-claims/{id}/approve → MerchantClaimResponse (pro
 POST   /api/v1/admin/merchant-claims/{id}/reject  → MerchantClaimResponse — body {reason?}
 GET    /api/v1/admin/merchant-promos?cnpjRoot=&page=&size= → Page<MerchantPromoResponse> (moderação das promos anunciadas)
 PATCH  /api/v1/admin/merchant-promos/{id}/active   → MerchantPromoResponse — body {"active":false} (tira de circulação sem apagar)
-GET    /api/v1/admin/receipts?from=&to=&marketCnpj=&category=&q=&householdId=&uf=&status=&parseErrorReason=&userQ=&includeInternal=false&page=&size=
+GET    /api/v1/admin/receipts?from=&to=&marketCnpj=&category=&q=&householdId=&uf=&status=&parseErrorReason=&userQ=&entryMethod=&createdFrom=&includeInternal=false&page=&size=
                                               → Page<AdminReceiptSummaryResponse> — { receipt: ReceiptSummaryResponse, owner: {id,name,email}|null, uf, createdAt, parseErrorReason, parseErrorMessage }
+                                                entryMethod (repeatable) = QR_SCAN | MANUAL_CHAVE | PHOTO_CHAVE | PHOTO_RECEIPT | IMPORT; also accepted by /stats and /failure-breakdown.
+                                                from/to filter by PURCHASE date (a failed nota has none); createdFrom (ISO date-time, list only) filters by ARRIVAL — use it to window failures.
 GET    /api/v1/admin/receipts/stats?<same filters as the list>   → AdminReceiptStatsResponse { count, totalAmount } — list header total
 GET    /api/v1/admin/receipts/failure-breakdown?<same filters, minus status/parseErrorReason> → [{ reason, count }] — FAILED_PARSE notas grouped by reason ("falhas por motivo" pie; status forced to FAILED_PARSE)
 GET    /api/v1/admin/receipts/entry-methods?days=30 → EntryMethodStatsResponse { windowDays, total, lines[] } — how notas are entered (QR scan / typed chave / photographed chave / photo / import): share + per-method failure rate

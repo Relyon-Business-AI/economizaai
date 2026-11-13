@@ -8,6 +8,9 @@ package com.relyon.economizaai.exception;
  */
 public class InfosimplesProviderException extends ReceiptParseException {
 
+    /** "Origem indisponível": the state's SEFAZ portal is offline, so the provider can't reach it either. */
+    public static final int ORIGIN_UNAVAILABLE_CODE = 615;
+
     private final int code;
 
     public InfosimplesProviderException(int code) {
@@ -17,5 +20,10 @@ public class InfosimplesProviderException extends ReceiptParseException {
 
     public int getCode() {
         return code;
+    }
+
+    /** The nota is fine and the portal is just offline: worth parking and re-fetching, not failing. */
+    public boolean isOriginUnavailable() {
+        return code == ORIGIN_UNAVAILABLE_CODE;
     }
 }
