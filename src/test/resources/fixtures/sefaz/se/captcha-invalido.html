@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="ISO-8859-15"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<HTML xmlns="http://www.w3.org/1999/xhtml" xml:lang="pt-br" lang="pt-br">
+
+<HEAD>
+<TITLE>Consulta do DANFE NFC-e via Digitação da Chave de Acesso</TITLE>
+<META content="text/html; charset=iso-8859-15" http-equiv=Content-Type>
+<META charset="utf-8" />
+<META name="viewport" content="width=device-width, initial-scale=1" />
+<META http-equiv="X-UA-Compatible" content="IE=9, IE=edge" /> 
+<META name="format-detection" content="telephone=no" />
+<META content="no-store, no-cache, must-revalidate, Post-Check=0, Pre-Check=0" http-equiv=cache-control>
+<META content=no-cache http-equiv=pragma>
+<META content=0 http-equiv=expires>
+<SCRIPT type="text/javascript" src="consultaXSLT/scripts/utils.js"></SCRIPT>
+<SCRIPT type="text/javascript" src="nfceMobile/js/jquery.js"></SCRIPT>
+<SCRIPT type="text/javascript" src="nfceMobile/js/index.js"></SCRIPT>
+<SCRIPT type="text/javascript" src="nfceMobile/js/jquery.mobile-1.4.5.min.js"></SCRIPT>
+
+<LINK type="text/css" rel="stylesheet" href="nfceMobile/css/jquery.mobile-1.4.5.min.css" />
+<LINK type="text/css" rel="stylesheet" href="nfceMobile/css/nfceMob.css" />
+<LINK type="text/css" rel="stylesheet" href="nfceMobile/css/nfceMob_ie.css" />
+
+
+
+
+
+ <!--reCaptcha-->
+
+
+
+	<div class="indentacaoConteudo" xmlns:chave="http://exslt.org/chaveacesso">
+		<input id="novaConsulta1" name="novaConsulta1" class="button" type="button"  value="Nova Consulta" onClick="novaConsultaNFCe()" />			
+	</div>	
+	<br/>	
+<div class="avisoErro">Erro na digita&ccedil;&atilde;o dos dados.</div><div id="infos" class="txtCenter" style="margin-top: -15px;">	<div data-role="collapsible" data-collapsed-icon="carat-d" data-expanded-icon="carat-u" data-collapsed="false">		<h4>Informações da consulta NFC-e</h4>		<ul data-role="listview" data-inset="false">			<li>				<table width="100%" border="0" align="center" cellspacing="0" id="taberro">			  		<tbody>					  		<tr>					    	<td><h2>Problema encontrado:</h2></td>					  	</tr>					  	<tr>				    		<td>Erro na digita&ccedil;&atilde;o dos dados.</td>						</tr>					  	<tr>				    		<td>246 - C&oacute;digo reCaptcha inv&aacute;lido.</td>						</tr>					</tbody>				</table>				<br />				<table width="100%" border="0" align="center" cellspacing="0">					<tbody>						<tr>							<td colspan="2"><h2>Dado(s) informado(s)</h2></td>						</tr>							<tr class="erro">								<td style="border-bottom: 1px dotted lightgrey;" valign="top">Chave de acesso: </td>								<td style="border-bottom: 1px dotted lightgrey;font-weight: bold;word-break: break-word;" width="60%">28261006057223040475650120002442491120227008</td>							</tr>							<tr>								<td style="border-bottom: 1px dotted lightgrey;" valign="top">Data Hora Emissão: </td>								<td style="border-bottom: 1px dotted lightgrey;font-weight: bold;word-break: break-word;" width="60%"></td>							</tr>					</tbody>				</table>			</li>		</ul>	</div>			<p id="rodape">Data/Hora da Consulta: 13/11/2026 10:22:22</p></div><script type="text/javascript">		$(function(){			$('#linkMsg').click(function(event) { 				$('#mensagem').toggle();	    	});		});</script>
+
+<FORM id="frmConsDetalheNFCe" method="post" action="/">
+	<input type="hidden" name="nrChaveAcesso" value="28261006057223040475650120002442491120227008">
+	<input type="hidden" name="nmPathFileXML" value="null">
+</FORM>
+</BODY>
+</HTML>
