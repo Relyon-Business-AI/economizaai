@@ -2296,6 +2296,11 @@ tudo é a(s) rede(s) concedida(s) por `cnpjRoot` (8 primeiros dígitos do CNPJ).
 ```
 GET    /api/v1/merchant/profile          → MerchantProfileResponse { chains: [{ cnpjRoot, stores: [{cnpj, name, address, city, state, segment, receiptCount}] }] }
 GET    /api/v1/merchant/price-comparison → MerchantPriceComparisonResponse { lookbackDays, products: [{productId, productName, state, chainMedianPrice, chainSampleCount, regionMedianPrice, regionSampleCount, deltaPercent}] }
+GET    /api/v1/merchant/category-benchmark?window= → MerchantCategoryBenchmarkResponse { lookbackDays, categories: [{categoryId, categorySlug, categoryName, state, chainMedianPrice, regionMedianPrice, deltaPercent, productCount}] }
+GET    /api/v1/merchant/brand-share?category=&window= → MerchantBrandShareResponse { lookbackDays, categorySlug, states:[uf], brands: [{brand, observations, households, sharePercent}] }
+GET    /api/v1/merchant/analytics?window= → MerchantAnalyticsResponse { lookbackDays, granularity: DAILY|WEEKLY, totalReceipts, totalRevenue, basketAverage, series: [{periodStart, receipts, revenue, basketAverage}] }
+GET    /api/v1/merchant/competitor-moves?window= → MerchantCompetitorMovesResponse { lookbackDays, recentWindowDays, moves: [{productId, productName, state, direction: DOWN|UP, magnitudePercent, approxDaysAgo}] }
+GET    /api/v1/merchant/promos/{id}/performance → MerchantPromoPerformanceResponse { promoId, cnpjRoot, ean, productId, productName, promoPrice, startsAt, endsAt, live, verified, confirmingHouseholds, exposureTracked }
 GET    /api/v1/merchant/subscription     → List<MerchantSubscriptionResponse> {cnpjRoot, plan, status: PROMO|ACTIVE|EXPIRED, freeUntil, active}
 GET    /api/v1/merchant/promos?page=&size= → Page<MerchantPromoResponse> {id, cnpjRoot, ean, productId, productName, description, promoPrice, regularPrice, startsAt, endsAt, source, active, verifiedByReceipts}
 POST   /api/v1/merchant/promos           → 201 MerchantPromoResponse — body MerchantPromoRequest {cnpjRoot? (obrigatório só com >1 rede), ean, description?, promoPrice, regularPrice?, startsAt, endsAt}
@@ -2316,6 +2321,21 @@ POST   /api/v1/merchant/promos/batch     → MerchantPromoImportResponse — bod
   o modal "conta de marketing grátis até {freeUntil}" (promo de lançamento, 31/12/2026).
 - `verifiedByReceipts` = cupons NFC-e reais da rede, dentro da janela, preço ≤ anunciado (±1%),
   vindos de pelo menos K casas distintas (um cupom só não verifica mais).
+- **Produto de dados B2B (novos reads).** `window=` = janela em dias (default = `lookbackDays` 90,
+  teto 365). **K=3 cheia e INCONDICIONAL** em todo agregado de terceiros (nunca o n=1 de mercearia):
+  - `category-benchmark`: índice de preço da rede vs. regional (mesma UF) por **grupo** da taxonomia.
+    Cada linha é roll-up SÓ de pares (produto, UF) que passaram K=3 nos dois lados; as medianas são
+    medianas-de-medianas dos produtos e `deltaPercent` = mediana dos deltas por produto.
+  - `brand-share`: demanda por marca na região da rede (UFs onde a rede foi observada). Marca só
+    aparece com ≥ K casas distintas (gate no `HAVING` do banco). `sharePercent` sobre as marcas que passaram.
+  - `analytics`: atividade das **próprias lojas** (dado próprio → sem K). Notas CONFIRMED por `cnpj_emitente`
+    das lojas da rede, agrupadas por `issued_at`; `granularity` = WEEKLY quando `window > 92` dias.
+  - `competitor-moves`: **ANONIMIZADO / antitruste** — movimentos de preço de OUTRAS lojas (fora das redes
+    do lojista) na região, para produtos que o lojista vende. NUNCA nome/CNPJ/preço do concorrente, só
+    produto + direção + magnitude% + recência aproximada. Move só sai com ≥ K casas distintas no lado
+    recente e magnitude ≥ 15%.
+  - `promos/{id}/performance`: proxy de resgate por recibo. `confirmingHouseholds` só é revelado com ≥ K
+    (senão `null`, `verified=false`). Sem sinal de exposição/impressões hoje → `exposureTracked=false`.
 
 ## 10h. Merchant claims (qualquer usuário autenticado)
 

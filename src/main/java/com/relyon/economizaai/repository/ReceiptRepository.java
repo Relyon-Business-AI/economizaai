@@ -472,6 +472,29 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
 
     List<Receipt> findAllByCnpjEmitenteAndStatus(String cnpjEmitente, ReceiptStatus status);
 
+    /**
+     * Merchant analytics (own stores): issue date + total of every CONFIRMED receipt issued at the
+     * given store CNPJs since the cutoff. Returned raw (not pre-bucketed) so the service buckets by
+     * day or week in-memory — portable (no DB date-trunc) and the merchant's own-store volume is
+     * bounded. issued_at is the shopping moment; rows without one are skipped.
+     */
+    @Query("""
+        SELECT r.issuedAt AS issuedAt, r.totalAmount AS totalAmount
+        FROM Receipt r
+        WHERE r.status = 'CONFIRMED'
+          AND r.issuedAt IS NOT NULL
+          AND r.issuedAt >= :since
+          AND r.cnpjEmitente IN :cnpjs
+    """)
+    List<ReceiptActivityRow> findConfirmedActivityForCnpjs(@Param("cnpjs") Collection<String> cnpjs,
+                                                           @Param("since") LocalDateTime since);
+
+    /** Projection for {@link #findConfirmedActivityForCnpjs}. */
+    interface ReceiptActivityRow {
+        LocalDateTime getIssuedAt();
+        BigDecimal getTotalAmount();
+    }
+
     /** Total R$ of the household's confirmed receipts confirmed at/after the given instant. */
     @Query("""
         SELECT COALESCE(SUM(r.totalAmount), 0) FROM Receipt r

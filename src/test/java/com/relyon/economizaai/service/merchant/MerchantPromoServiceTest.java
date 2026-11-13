@@ -5,8 +5,10 @@ import com.relyon.economizaai.dto.request.MerchantPromoRequest;
 import com.relyon.economizaai.exception.MerchantAccessNotFoundException;
 import com.relyon.economizaai.exception.MerchantPromoInvalidException;
 import com.relyon.economizaai.exception.MerchantPromoOverlapException;
+import com.relyon.economizaai.exception.MerchantPromoNotFoundException;
 import com.relyon.economizaai.exception.MerchantSubscriptionRequiredException;
 import com.relyon.economizaai.model.MerchantAccess;
+import com.relyon.economizaai.model.MerchantPromo;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.MerchantPromoSource;
@@ -168,5 +170,53 @@ class MerchantPromoServiceTest {
 
         assertThat(response.verifiedByReceipts()).isFalse();
         verify(auditRepository, never()).countDistinctHouseholdsConfirmingPromo(any(), any(), any(), any(), any());
+    }
+
+    private MerchantPromo ownPromo(Product product) {
+        var promo = MerchantPromo.builder()
+                .id(UUID.randomUUID()).cnpjRoot(CHAIN_ROOT).ean(EAN).product(product)
+                .promoPrice(new BigDecimal("4.99"))
+                .startsAt(LocalDate.of(2026, 10, 10)).endsAt(LocalDate.of(2026, 10, 17))
+                .source(MerchantPromoSource.MANUAL).build();
+        when(promoRepository.findByIdAndCnpjRootIn(promo.getId(), List.of(CHAIN_ROOT)))
+                .thenReturn(Optional.of(promo));
+        return promo;
+    }
+
+    @Test
+    void performance_disclosesHouseholdsOnlyWhenKReached() {
+        var product = Product.builder().id(UUID.randomUUID()).normalizedName("Leite Integral 1L").build();
+        var promo = ownPromo(product);
+        when(auditRepository.countDistinctHouseholdsConfirmingPromo(any(), any(), any(), any(), any()))
+                .thenReturn(4L);
+
+        var response = service.performance(merchantUser, promo.getId());
+
+        assertThat(response.verified()).isTrue();
+        assertThat(response.confirmingHouseholds()).isEqualTo(4);
+        assertThat(response.exposureTracked()).isFalse();
+        assertThat(response.productId()).isEqualTo(product.getId());
+    }
+
+    @Test
+    void performance_belowKAnonymityHidesTheCount() {
+        var product = Product.builder().id(UUID.randomUUID()).normalizedName("Leite Integral 1L").build();
+        var promo = ownPromo(product);
+        when(auditRepository.countDistinctHouseholdsConfirmingPromo(any(), any(), any(), any(), any()))
+                .thenReturn(2L);
+
+        var response = service.performance(merchantUser, promo.getId());
+
+        assertThat(response.verified()).isFalse();
+        assertThat(response.confirmingHouseholds()).isNull();
+    }
+
+    @Test
+    void performance_promoNotOwnedByMerchant_notFound() {
+        var promoId = UUID.randomUUID();
+        when(promoRepository.findByIdAndCnpjRootIn(promoId, List.of(CHAIN_ROOT))).thenReturn(Optional.empty());
+
+        assertThrows(MerchantPromoNotFoundException.class,
+                () -> service.performance(merchantUser, promoId));
     }
 }

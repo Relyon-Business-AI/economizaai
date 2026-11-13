@@ -252,6 +252,80 @@ public interface PriceObservationAuditRepository extends JpaRepository<PriceObse
                                                 @Param("to") LocalDateTime to,
                                                 @Param("maxPrice") BigDecimal maxPrice);
 
+    /**
+     * Merchant brand-share k-anon: demand weight (non-outlier in-store observations) and the
+     * distinct households behind it, per brand, in the merchant's region (states) over the window.
+     * {@code HAVING COUNT(DISTINCT householdId) >= :minHouseholds} applies the K-gate in the
+     * database — a brand backed by fewer than K households never reaches the service.
+     */
+    @Query("""
+        SELECT a.observation.product.brand AS brand,
+               COUNT(a) AS observations,
+               COUNT(DISTINCT a.householdId) AS households
+        FROM PriceObservationAudit a
+        WHERE a.observation.state IN :states
+          AND a.observation.channel = 'IN_STORE'
+          AND a.observation.outlier = false
+          AND a.observation.observedAt >= :since
+          AND a.observation.product.brand IS NOT NULL
+        GROUP BY a.observation.product.brand
+        HAVING COUNT(DISTINCT a.householdId) >= :minHouseholds
+    """)
+    List<BrandDemandCount> brandDemandInStates(@Param("states") List<String> states,
+                                               @Param("since") LocalDateTime since,
+                                               @Param("minHouseholds") long minHouseholds);
+
+    /** Same as {@link #brandDemandInStates} narrowed to products in the given category nodes. */
+    @Query("""
+        SELECT a.observation.product.brand AS brand,
+               COUNT(a) AS observations,
+               COUNT(DISTINCT a.householdId) AS households
+        FROM PriceObservationAudit a
+        WHERE a.observation.state IN :states
+          AND a.observation.channel = 'IN_STORE'
+          AND a.observation.outlier = false
+          AND a.observation.observedAt >= :since
+          AND a.observation.product.brand IS NOT NULL
+          AND a.observation.product.categoryId IN :categoryIds
+        GROUP BY a.observation.product.brand
+        HAVING COUNT(DISTINCT a.householdId) >= :minHouseholds
+    """)
+    List<BrandDemandCount> brandDemandInStatesForCategories(@Param("states") List<String> states,
+                                                            @Param("categoryIds") List<UUID> categoryIds,
+                                                            @Param("since") LocalDateTime since,
+                                                            @Param("minHouseholds") long minHouseholds);
+
+    /** Projection for {@link #brandDemandInStates}. */
+    interface BrandDemandCount {
+        String getBrand();
+        long getObservations();
+        long getHouseholds();
+    }
+
+    /**
+     * Merchant competitor-moves k-anon: distinct households per (product, state) that contributed
+     * recent observations at stores OUTSIDE the merchant's chains. The move for a (product, state)
+     * is disclosed only when this reaches K — so an anonymized "a nearby store dropped X" can never
+     * be a single competitor's single price.
+     */
+    @Query("""
+        SELECT a.observation.product.id AS productId, a.observation.state AS state,
+               COUNT(DISTINCT a.householdId) AS households
+        FROM PriceObservationAudit a
+        WHERE a.observation.product.id IN :productIds
+          AND a.observation.state IN :states
+          AND a.observation.marketCnpjRoot NOT IN :excludeRoots
+          AND a.observation.channel = 'IN_STORE'
+          AND a.observation.outlier = false
+          AND a.observation.observedAt >= :since
+        GROUP BY a.observation.product.id, a.observation.state
+    """)
+    List<ProductStateHouseholdCount> countDistinctHouseholdsPerProductStateExcludingChains(
+            @Param("productIds") List<UUID> productIds,
+            @Param("states") List<String> states,
+            @Param("excludeRoots") List<String> excludeRoots,
+            @Param("since") LocalDateTime since);
+
     /** Promotion backfill guard: has this receipt already contributed observations? */
     boolean existsByReceiptId(UUID receiptId);
 }
