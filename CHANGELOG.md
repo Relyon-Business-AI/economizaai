@@ -25,6 +25,31 @@
   consulta NFC-e falhou" (o probe é quem avisa a volta), e o 615 não dispara "Chave manual sem caminho".
   Qualquer outro código, ou 615 de um estado fora da lista, continua alertando.
 
+## 2026-11-12 — Dados B2B do painel do lojista (5 endpoints novos)
+
+**O que o FE precisa saber (fase do portal do lojista — role MERCHANT)**
+
+Cinco reads novos em `/api/v1/merchant/**` (403 fora da role), todos escopados às redes
+do lojista. `window=` é opcional (dias; default 90, teto 365).
+
+- **`GET /merchant/category-benchmark?window=`** → `{ lookbackDays, categories: [{categoryId,
+  categorySlug, categoryName, state, chainMedianPrice, regionMedianPrice, deltaPercent, productCount}] }`.
+  Índice de preço da rede vs. regional (mesma UF) por grupo da taxonomia.
+- **`GET /merchant/brand-share?category=&window=`** → `{ lookbackDays, categorySlug, states:[uf],
+  brands: [{brand, observations, households, sharePercent}] }`. Demanda por marca na região.
+- **`GET /merchant/analytics?window=`** → `{ lookbackDays, granularity:"DAILY"|"WEEKLY",
+  totalReceipts, totalRevenue, basketAverage, series:[{periodStart, receipts, revenue, basketAverage}] }`.
+  Atividade das próprias lojas (dado próprio).
+- **`GET /merchant/competitor-moves?window=`** → `{ lookbackDays, recentWindowDays,
+  moves:[{productId, productName, state, direction:"DOWN"|"UP", magnitudePercent, approxDaysAgo}] }`.
+  ANONIMIZADO: nunca nome/CNPJ/preço do concorrente.
+- **`GET /merchant/promos/{id}/performance`** → `{ promoId, cnpjRoot, ean, productId, productName,
+  promoPrice, startsAt, endsAt, live, verified, confirmingHouseholds, exposureTracked }`.
+  `confirmingHouseholds` vem `null` quando abaixo de K. `exposureTracked` é sempre `false` (sem impressões ainda).
+
+K=3 cheia e incondicional em todo agregado de terceiros (farmácia/saúde e tudo list-shaped mantêm K=3);
+os totais das próprias lojas no `analytics` não são gated. Pagamento segue INERTE.
+
 ## 2026-11-12 — Painel de Anúncios mais rápido (Search Console em cache e em paralelo)
 
 **O que o FE precisa saber**
