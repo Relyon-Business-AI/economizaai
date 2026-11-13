@@ -10,12 +10,18 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.Optional;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class LoginActivityRecorderTest {
@@ -116,6 +122,64 @@ class LoginActivityRecorderTest {
         assertEquals(Platform.WEB, user.getLastPlatform());
         assertNotNull(user.getLastWebLoginAt());
         verify(userRepository).save(user);
+    }
+
+    @Test
+    void recordSessionRenewal_fillsAnUnknownRegistrationPlatformWithoutStampingALogin() {
+        var user = new User();
+        var userId = UUID.randomUUID();
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        loginActivityRecorder.recordSessionRenewal(userId, Platform.IOS);
+
+        assertEquals(Platform.IOS, user.getRegistrationPlatform());
+        assertEquals(Platform.IOS, user.getLastPlatform());
+        assertEquals(AcquisitionChannel.APP_STORE, user.getAcquisitionChannel());
+        assertNull(user.getLastIosLoginAt()); // a renewal is not a login
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void recordSessionRenewal_neverOverwritesKnownRegistrationPlatform() {
+        var user = new User();
+        user.setRegistrationPlatform(Platform.ANDROID);
+        user.setLastPlatform(Platform.ANDROID);
+        var userId = UUID.randomUUID();
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        loginActivityRecorder.recordSessionRenewal(userId, Platform.WEB);
+
+        assertEquals(Platform.ANDROID, user.getRegistrationPlatform());
+        assertEquals(Platform.WEB, user.getLastPlatform());
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void recordSessionRenewal_nothingNewToRecord_doesNotWrite() {
+        var user = new User();
+        user.setRegistrationPlatform(Platform.ANDROID);
+        user.setLastPlatform(Platform.ANDROID);
+        var userId = UUID.randomUUID();
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        loginActivityRecorder.recordSessionRenewal(userId, Platform.ANDROID);
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void recordSessionRenewal_nullPlatform_doesNotEvenLoadTheUser() {
+        loginActivityRecorder.recordSessionRenewal(UUID.randomUUID(), null);
+
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void recordSessionRenewal_aFailureNeverReachesTheCaller() {
+        var userId = UUID.randomUUID();
+        when(userRepository.findById(userId)).thenThrow(new IllegalStateException("db down"));
+
+        assertDoesNotThrow(() -> loginActivityRecorder.recordSessionRenewal(userId, Platform.IOS));
     }
 
     @Test
