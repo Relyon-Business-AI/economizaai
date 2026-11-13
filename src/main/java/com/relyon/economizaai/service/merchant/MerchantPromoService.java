@@ -2,6 +2,7 @@ package com.relyon.economizaai.service.merchant;
 
 import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.dto.request.MerchantPromoRequest;
+import com.relyon.economizaai.dto.response.MerchantPromoPerformanceResponse;
 import com.relyon.economizaai.dto.response.MerchantPromoResponse;
 import com.relyon.economizaai.exception.MerchantAccessNotFoundException;
 import com.relyon.economizaai.exception.MerchantPromoInvalidException;
@@ -15,6 +16,7 @@ import com.relyon.economizaai.repository.MerchantAccessRepository;
 import com.relyon.economizaai.repository.MerchantPromoRepository;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.time.BrazilClock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -149,6 +151,29 @@ public class MerchantPromoService {
                 .map(MerchantAccess::getCnpjRoot)
                 .distinct()
                 .toList();
+    }
+
+    /**
+     * Receipt-backed performance of one of the merchant's own promos. The redemption proxy — distinct
+     * households whose scanned receipts confirm the price in-window — is k-anonymity gated: the count
+     * is disclosed only when it reaches K (otherwise null, matching {@code verified=false}), so a
+     * single shopper's purchase is never exposed. No exposure/impression signal is tracked yet.
+     */
+    @Transactional(readOnly = true)
+    public MerchantPromoPerformanceResponse performance(User merchantUser, UUID promoId) {
+        var promo = requireOwnPromo(merchantUser, promoId);
+        var minHouseholds = properties.getCollaborative().getMinHouseholdsForPublic();
+        long confirming = promo.getProduct() == null ? 0L : auditRepository.countDistinctHouseholdsConfirmingPromo(
+                promo.getProduct().getId(),
+                promo.getCnpjRoot(),
+                promo.getStartsAt().atStartOfDay(),
+                promo.getEndsAt().plusDays(1).atStartOfDay(),
+                promo.getPromoPrice().multiply(new BigDecimal("1.01")));
+        var verified = confirming >= minHouseholds;
+        var disclosedHouseholds = verified ? (int) confirming : null;
+        log.info("merchant.promo.performance promo={} cnpjRoot={} verified={}", promoId, promo.getCnpjRoot(), verified);
+        return MerchantPromoPerformanceResponse.of(promo, promo.isLiveOn(BrazilClock.today()), verified,
+                disclosedHouseholds);
     }
 
     private MerchantPromo requireOwnPromo(User merchantUser, UUID promoId) {

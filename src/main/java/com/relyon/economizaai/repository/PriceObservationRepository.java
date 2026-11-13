@@ -205,6 +205,27 @@ public interface PriceObservationRepository extends JpaRepository<PriceObservati
                                                            @Param("states") List<String> states,
                                                            @Param("since") LocalDateTime since);
 
+    /**
+     * Merchant competitor-moves (anonymized): recent IN_STORE observations for the given products
+     * in the given states at stores that are NOT part of the merchant's own chains. The caller
+     * never sees which store an observation came from — only the aggregated price move per
+     * (product, state). {@code excludeRoots} are the merchant's granted CNPJ roots.
+     */
+    @Query("""
+        SELECT po FROM PriceObservation po
+        WHERE po.product.id IN :productIds
+          AND po.state IN :states
+          AND po.marketCnpjRoot NOT IN :excludeRoots
+          AND po.channel = 'IN_STORE'
+          AND po.outlier = false
+          AND po.observedAt >= :since
+    """)
+    List<PriceObservation> findRecentByProductIdsAndStatesExcludingChains(
+            @Param("productIds") List<UUID> productIds,
+            @Param("states") List<String> states,
+            @Param("excludeRoots") List<String> excludeRoots,
+            @Param("since") LocalDateTime since);
+
     /** Generic comparison: recent IN_STORE observations across a SET of products (all states). */
     @Query("""
         SELECT po FROM PriceObservation po
