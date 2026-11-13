@@ -1149,3 +1149,18 @@ classify OTHER (grey) unless they carry a conveniência CNAE.
   de XML, regra de lifecycle do R2 em `photo-attempts/`, conferir os campos do Mercado Pago com
   payload real, calibrar o `UNSTABLE` do state-status. Itens de design (permissões, abas, telas de
   privacidade) ficam para depois, com mockups.
+
+### Session (2026-11-12) — chave digitada com portal fora, e ajustes do painel admin
+
+- **Origem:** três alertas no WhatsApp (RJ contingência, SE portal fora). SE segue pausado no
+  Infosimples (615) desde ~22/10; nada a corrigir do nosso lado, mas a chave DIGITADA de um estado
+  com portal fora caía em `FAILED_PARSE` com "tente de novo em alguns minutos", enquanto o QR do
+  mesmo estado já ficava guardado.
+- **Decisão:** 615 do Infosimples no caminho por chave também estaciona a nota em `PORTAL_PENDING`
+  (reconsulta a cada 6 h, 14 dias). A mensagem NÃO sugere foto enquanto a nota está guardada: a nota
+  por foto usa chave sintética, então a mesma compra entraria duas vezes quando o portal voltasse.
+  A sugestão de foto continua só na mensagem de desistência (`portal.unavailable.expired`).
+- **Alertas:** 615 de estado da lista do probe (`SEFAZ_PAUSED_STATE_PROBE_UFS`) não avisa mais a
+  cada reconsulta; o probe é quem avisa a volta. Estado fora da lista ainda avisa (primeira queda).
+- **Admin:** ordenação de usuários por estado; notas filtráveis por método de entrada e por data de
+  chegada (`createdFrom`), que é o que faz o detalhe de "Erros mais comuns" voltar a listar notas.
