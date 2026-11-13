@@ -216,8 +216,10 @@ user's login); `referralCode` is optional and only applied in that case.
 ### Refresh + logout
 
 ```
-POST /api/v1/auth/refresh    { "refreshToken": "..." }
+POST /api/v1/auth/refresh    { "refreshToken": "...", "platform": "WEB" | "ANDROID" | "IOS" }   (platform optional)
                               → 200 { "token": "...", "refreshToken": "...", "user": {...} }
+                              platform fills the user's registration platform when it is still unknown
+                              (never overwrites it) and keeps the last platform current.
 
 POST /api/v1/auth/logout     { "refreshToken": "..." }   → 204 (idempotent)
 ```
