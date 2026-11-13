@@ -268,6 +268,8 @@ economizaai:
         sc-max-total-ms: ${SEFAZ_SC_RETRY_MAX_TOTAL_MS:180000}
         mg-max-attempts: ${SEFAZ_MG_RETRY_MAX_ATTEMPTS:3}
         mg-max-total-ms: ${SEFAZ_MG_RETRY_MAX_TOTAL_MS:180000}
+        se-max-attempts: ${SEFAZ_SE_RETRY_MAX_ATTEMPTS:3}
+        se-max-total-ms: ${SEFAZ_SE_RETRY_MAX_TOTAL_MS:180000}
       # SSRF guard: when a QR payload carries a full URL, we only fetch it if
       # the host matches one of these suffixes (e.g. svrs.rs.gov.br admits
       # dfe-portal.svrs.rs.gov.br). Extend when onboarding new state portals.
@@ -326,10 +328,17 @@ economizaai:
       # qrcodev3 JSON api) — no state is Infosimples-ONLY anymore; the paid call
       # is a fallback everywhere. Keep the knob for a future state that needs it.
       infosimples-only-states: ${SEFAZ_INFOSIMPLES_ONLY_STATES:}
+      # Sergipe native scraper (nfce.sefaz.se.gov.br). Consults by bare chave,
+      # gated by Cloudflare Turnstile (sitekey injected via page JS). Infosimples
+      # is down for SE (615), so this is the only path that unblocks the state.
+      # Disable (SEFAZ_SE_ENABLED=false) to drop SE back to the experimental chain.
+      se:
+        enabled: ${SEFAZ_SE_ENABLED:true}
+        turnstile-sitekey: ${SEFAZ_SE_TURNSTILE_SITEKEY:0x4AAAAAADPVesX-QLrY8PWn}
       captcha:
         # UFs whose consult portal gates the DANFE behind a captcha and is
         # handled by a dedicated adapter (currently MS — www.dfe.ms.gov.br with
-        # reCAPTCHA v2; SC uses Cloudflare Turnstile in its own adapter).
+        # reCAPTCHA v2; SC and SE use Cloudflare Turnstile in their own adapters).
         # Solving needs a provider configured under
         # economizaai.captcha below; until then these states fail fast with a
         # clear 503 "coming soon". Each captcha state has its own portal, so

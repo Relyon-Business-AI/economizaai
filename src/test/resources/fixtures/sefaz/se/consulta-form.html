@@ -1,0 +1,571 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3c.org/TR/1999/REC-html401-19991224/loose.dtd">
+
+
+<HTML xmlns="http://www.w3.org/1999/xhtml" xml:lang="pt-br" lang="pt-br">
+<HEAD>
+<META content="IE=7.0000" http-equiv="X-UA-Compatible">
+<TITLE>Portal de Notcias da NFC-e:: Nota Fiscal de Consumidor Eletrnica</TITLE>
+<META content="text/html; charset=utf-8" http-equiv=Content-Type>
+<!-- CSS -->
+<LINK rel=stylesheet type=text/css href="framework/css/noticias/geral.css">
+<LINK rel=stylesheet type=text/css href="framework/css/noticias/classes.css">
+<LINK rel=stylesheet type=text/css href="framework/css/noticias/paginasInternas.css">
+<LINK rel=stylesheet type=text/css href="framework/css/noticias/estilo_visualizacao.css">
+<!-- Javascript -->
+<SCRIPT type=text/javascript src="framework/js/noticias/jquery-latest.min.js"></SCRIPT>
+<SCRIPT type=text/javascript src="framework/js/noticias/menu.js"></SCRIPT>
+<SCRIPT type=text/javascript src="framework/js/noticias/mascaras.js"></SCRIPT>
+<SCRIPT type=text/javascript src="framework/js/noticias/estatistica.js"></SCRIPT>
+
+<script
+  src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+  async
+  defer>
+</script>
+
+<META content="no-store, no-cache, must-revalidate, Post-Check=0, Pre-Check=0" http-equiv=cache-control>
+<META content=no-cache http-equiv=pragma>
+<META content=0 http-equiv=expires>
+</HEAD>
+<BODY onselectstart="return true;">
+
+<DIV id=divCentral>
+
+<DIV class=aspNetHidden>
+	<INPUT id=__EVENTTARGET type=hidden name=__EVENTTARGET>
+	<INPUT id=__EVENTARGUMENT type=hidden name=__EVENTARGUMENT>
+	<INPUT id=__VIEWSTATE value=/wEPDwUKMTUwOTAyOTA1O type=hidden name=__VIEWSTATE>
+</DIV>
+<SCRIPT type=text/javascript>
+var theForm = document.forms['form1'];
+if (!theForm) {
+    theForm = document.form1;
+}
+function __doPostBack(eventTarget, eventArgument) {
+    if (!theForm.onsubmit || (theForm.onsubmit() != false)) {
+        theForm.__EVENTTARGET.value = eventTarget;
+        theForm.__EVENTARGUMENT.value = eventArgument;
+        theForm.submit();
+    }
+}
+function abrirURL( url ){	
+	window.open(url);
+}
+$(document).ready(function(){
+	$('#rcaptcha').attr('data-sitekey', '0x4AAAAAADPVesX-QLrY8PWn');
+
+});
+</SCRIPT>
+<SCRIPT type=text/javascript src="framework/js/noticias/WebResource.axd"></SCRIPT>
+<SCRIPT type=text/javascript src="framework/js/noticias/ScriptResource.axd"></SCRIPT>
+<SCRIPT type=text/javascript src="framework/js/noticias/ScriptResource(1).axd"></SCRIPT>
+<SCRIPT type=text/javascript src="framework/js/noticias/ScriptResource(2).axd"></SCRIPT>
+<SCRIPT type=text/javascript src="framework/js/noticias/ScriptResource(3).axd"></SCRIPT>
+<SCRIPT type=text/javascript src="framework/js/noticias/ScriptResource(4).axd"></SCRIPT>
+<SCRIPT type=text/javascript src="framework/js/noticias/ScriptResource(5).axd"></SCRIPT>
+<SCRIPT type=text/javascript src="framework/js/noticias/ScriptResource(6).axd"></SCRIPT>
+<SCRIPT type=text/javascript src="framework/js/noticias/ScriptResource(7).axd"></SCRIPT>
+<SCRIPT type=text/javascript src="framework/js/noticias/ScriptResource(8).axd"></SCRIPT>
+<DIV id=tudoSemRodape class=contemFloat>
+<DIV id=cabecalho>
+<DIV id=menuAcessibilidade>
+	<A href="portalNoticias.jsp?jsp=barra-menu/conhecaNFCe/menuCon.htm">Conhea a NFC-e</A>
+	<A href="portalNoticias.jsp?jsp=barra-menu/servicos/menuSer.htm">Servios</A>
+	<A href="portalNoticias.jsp?jsp=barra-menu/legislacao/menuLeg.htm">Legislao</A>
+	<A href="portalNoticias.jsp?jsp=barra-menu/documentos/menuDoc.htm">Documentos</A>	
+</DIV>
+<DIV id=divTransparente onclick="javascript:location.href = 'portalNoticias.jsp'"></DIV>
+<DIV id=imgHome>
+	<A href="portalNoticias.jsp">
+		<IMG id=ibtHome onmouseover="javascript: trocarImagem(this)" onmouseout="javascript: trocarImagem(this)" alt="Link para a pgina inicial do Portal da NFC-e" src="framework/images/nfce/home_icon_Off.png"> 
+	</A>
+</DIV>
+<DIV id=menu><?xml version="1.0" encoding="UTF-8"?>
+	<UL class=abasMenu xmlns:chave="http://exslt.org/chaveacesso">
+	  <LI class=itemMenuPrincipal><A href="portalNoticias.jsp?jsp=barra-menu/servicos/menuSer.htm">Servios</A>
+		  <UL class=dropdown>
+			<LI><A href="portalNoticias.jsp?jsp=barra-menu/servicos/consultaDANFENFCe.htm">Consultar DANFE NFC-e</A></LI>			
+			<LI><A href="painelMonitor.jsp">Consultar Disponibilidade</A></LI>
+			<LI><A href="portalNoticias.jsp?jsp=barra-menu/servicos/validadorSHA1HEXA.htm">Validador de SHA-1 e HEXA</A></LI>
+			
+			<LI><A href="painelMonitor.jsp" target="_blank">Painel de Monitoramento</A></LI>
+			<!--LI><A href="portalNoticias.jsp?jsp=validadorSHA1HEXA">Rela&ccedil;&atilde;o de Servi&ccedil;os Web</A></LI-->			
+		   </UL>
+	   </LI>
+		
+	  <LI class=itemMenuPrincipal><A href="portalNoticias.jsp?jsp=barra-menu/legislacao/menuLeg.htm">Legislao</A>
+		  <UL class=dropdown>
+			<LI><A href="portalNoticias.jsp?jsp=barra-menu/legislacao/portarias.htm">Portarias/Decretos</A></LI>
+			<LI><A href="portalNoticias.jsp?jsp=barra-menu/legislacao/ajustes.htm">Ajustes</A></LI>
+		  </UL>
+	  </LI>
+		
+	  <LI class=itemMenuPrincipal><A href="portalNoticias.jsp?jsp=barra-menu/documentos/menuDoc.htm">Documentos</A>
+		  <UL class=dropdown>
+			<LI><A href="portalNoticias.jsp?jsp=barra-menu/documentos/manuais.htm">Manuais</A></LI>
+			<LI><A href="portalNoticias.jsp?jsp=barra-menu/documentos/esquemasXML.htm">Esquemas XML</A></LI>
+			<LI><A href="portalNoticias.jsp?jsp=barra-menu/documentos/notasTecnicas.htm">Notas Tcnicas</A></LI>
+			<LI><A href="portalNoticias.jsp?jsp=barra-menu/documentos/diversos.htm">Diversos</A></LI>
+			<LI><A href="portalNoticias.jsp?jsp=barra-menu/documentos/tabelaEnderecoConsulta.htm">Tabela de Endereos</A></LI>
+			<LI><A href="portalNoticias.jsp?jsp=barra-menu/documentos/tabelaEnderecoWebService.htm">Endereos de WebServices</A></LI>
+		  </UL>
+	  </LI>
+	  <!--LI class=itemMenuPrincipal><A onclick="javascript: window.open('webcontrol/index.htm')">Adm. Notcias</A-->
+	  <LI class=itemMenuPrincipal><A onclick="javascript: window.open('index.jsp')">Portal NFC-e</A>
+	  </LI>
+	</UL>
+</DIV> 
+</DIV>
+<DIV id=barraDireita>
+<DIV id=estatisticas>
+<H1>Estatsticas da NFC-e</H1><SPAN id=lblTituloNfeAut class=fonteCorMarro>NFC-e Autorizadas - Em Produo</SPAN> 
+<BR>
+<DIV class=valorEstatistica><SPAN id=lblTotalNfeAut>1872668720</SPAN> 
+</DIV><SPAN id=lblTituloEmissores class=fonteCorMarro>Nmero de Empresas Autorizadas</SPAN> <BR>
+<DIV class=valorEstatistica><SPAN id=lblTotalEmissores>23915</SPAN> 
+</DIV><A id=hlkInfoEstatisticas href="portalNoticias.jsp?jsp=barra-menu/saibaMais.htm">... saiba mais</A></DIV>
+
+<DIV id=linkAreaRestrita>
+	<P><A id=hlkAreaRestrita onclick="javascript: window.open('index.jsp')">rea Restrita</A> </P>
+</DIV>
+<DIV id=linkCentralNFe>
+	<P><SPAN id=lbl0800>E-mail: nfce@sefaz.se.gov.br</SPAN></P>
+</DIV>
+<DIV id=linkFAQ>
+	<P><A id=hlkFAQ href="portalNoticias.jsp?jsp=barra-menu/conhecaNFCe/perguntasFrequentes.htm">Perguntas Frequentes</A> </P>
+</DIV>
+<DIV id=linkSefaz>
+	<P><SPAN id=lblPortaisSefaz>Portais e Secretarias</SPAN></P>
+</DIV>
+<DIV id=linkBanners>
+<P><SPAN id=lblPortaisEstaduais class=fonteCorMarro>Portais Estaduais da NFC-e</SPAN> <BR><?xml version="1.0" encoding="UTF-8"?><SELECT 
+onchange="javascript: window.open(this.value)"><OPTION selected 
+  value="">Selecione</OPTION><OPTION 
+  value=http://www.sefaz.ac.gov.br/sefaz2010/>Acre</OPTION><OPTION 
+  value=http://www.sefaz.al.gov.br/nfe/>Alagoas</OPTION><OPTION 
+  value=http://sistemas.sefaz.am.gov.br/nfeweb/portal/index.do>Amazonas</OPTION><OPTION 
+  value=http://www.sefaz.ba.gov.br/nfen/portal/home.htm>Bahia</OPTION><OPTION 
+  value=http://nfe.sefaz.ce.gov.br/>Cear</OPTION><OPTION 
+  value=http://dec.fazenda.df.gov.br/>Distrito Federal</OPTION><OPTION 
+  value=http://internet.sefaz.es.gov.br/informacoes/nfe/>Espirito 
+  Santo</OPTION><OPTION value=http://nfe.sefaz.go.gov.br/>Gois</OPTION><OPTION 
+  value=http://www.sefaz.ma.gov.br/NFE/>Maranho</OPTION><OPTION 
+  value=http://www.sefaz.mt.gov.br/portal/nfe/>Mato Grosso</OPTION><OPTION 
+  value=http://www1.nfe.ms.gov.br/>Mato Grosso do Sul</OPTION><OPTION 
+  value=http://portalnfe.fazenda.mg.gov.br/>Minas Gerais</OPTION><OPTION 
+  value=http://www.sefa.pa.gov.br/site/>Par</OPTION><OPTION 
+  value=http://www.receita.pb.gov.br/portalnf-e.php>Paraba</OPTION><OPTION 
+  value=http://www.sped.fazenda.pr.gov.br/>Paran</OPTION><OPTION 
+  value=http://www.sefaz.pe.gov.br/sefaz2/asp2/mostra.asp?pai=1040>Pernambuco</OPTION><OPTION 
+  value=http://www.sefaz.pi.gov.br/conteudo_internet.php?p=nfe_home>Piau</OPTION><OPTION 
+  value=http://www.fazenda.rj.gov.br/portal/>Rio de Janeiro</OPTION><OPTION 
+  value=http://www.set.rn.gov.br/contentProducao/aplicacao/set_v2/nfe/gerados/inicio.asp>Rio 
+  Grande do Norte</OPTION><OPTION 
+  value=http://www.sefaz.rs.gov.br/SEF_ROOT/inf/SEF-NFE.htm>Rio Grande do 
+  Sul</OPTION><OPTION 
+  value=http://www.portal.sefin.ro.gov.br/site/conteudo.action?conteudo=234>Rondnia</OPTION><OPTION 
+  value=http://nfe.sef.sc.gov.br/>Santa Catarina</OPTION><OPTION 
+  value=http://www.fazenda.sp.gov.br/nfe/>So Paulo</OPTION><OPTION 
+  value=http://nfe.sefaz.se.gov.br/>Sergipe</OPTION><OPTION 
+  value=http://www.sefaz.to.gov.br/nfe/consultanfe.php>Tocantins</OPTION></SELECT> 
+</P>
+<P><SPAN id=lblLinkSefaz class=fonteCorMarro>Secretarias de Fazenda</SPAN> <BR><?xml version="1.0" encoding="UTF-8"?><SELECT 
+onchange="javascript: window.open(this.value)"><OPTION selected 
+  value="">Selecione</OPTION><OPTION 
+  value=http://www.sefaz.ac.gov.br/>Acre</OPTION><OPTION
+value=http://www.sefaz.al.gov.br/>Alagoas</OPTION><OPTION
+value=http://www.sefaz.ap.gov.br/>Amap</OPTION><OPTION
+value=http://www.sefaz.am.gov.br/>Amazonas</OPTION><OPTION
+value=http://www.sefaz.ba.gov.br/>Bahia</OPTION><OPTION
+value=http://www.sefaz.ce.gov.br/>Cear</OPTION><OPTION
+value=http://www.sefp.df.gov.br/>Distrito Federal</OPTION><OPTION
+value=http://www.sefaz.es.gov.br/>Espirito Santo</OPTION><OPTION
+value=http://www.sefaz.go.gov.br/>Gois</OPTION><OPTION
+value=http://www.sefaz.ma.gov.br/>Maranho</OPTION><OPTION
+value=http://www.sefaz.mt.gov.br/>Mato Grosso</OPTION><OPTION
+value=http://www.sefaz.ms.gov.br/>Mato Grosso do Sul</OPTION><OPTION
+value=http://www.fazenda.mg.gov.br/>Minas Gerais</OPTION><OPTION
+value=http://www.sefa.pa.gov.br/>Par</OPTION><OPTION
+value=http://www.sefin.pb.gov.br/>Paraba</OPTION><OPTION
+value=https://www.fazenda.pr.gov.br/>Paran</OPTION><OPTION
+value=http://www.sefaz.pe.gov.br/>Pernambuco</OPTION><OPTION
+value=http://www.sefaz.pi.gov.br/>Piau</OPTION><OPTION
+value=http://www.sefaz.rj.gov.br/>Rio de Janeiro</OPTION><OPTION
+value=http://www.set.rn.gov.br/>Rio Grande do Norte</OPTION><OPTION
+value=http://www.sefaz.rs.gov.br/>Rio Grande do Sul</OPTION><OPTION
+value=http://www.sefin.ro.gov.br/>Rondnia</OPTION><OPTION
+value=http://www.sefaz.rr.gov.br/>Roraima</OPTION><OPTION
+value=http://www.sef.sc.gov.br/>Santa Catarina</OPTION><OPTION
+value=http://www.fazenda.sp.gov.br/>So Paulo</OPTION><OPTION
+value=http://www.sefaz.se.gov.br/>Sergipe</OPTION><OPTION
+value=http://www.sefaz.to.gov.br/>Tocantins</OPTION></SELECT> </P><IMG 
+id=linhaDivisoria alt="Linha divisria" src="framework/images/nfce/linha_divisoria.png"> 
+<DIV>
+</FORM>
+<TABLE style="BORDER-RIGHT-WIDTH: 0px; BORDER-COLLAPSE: collapse; BORDER-TOP-WIDTH: 0px; BORDER-BOTTOM-WIDTH: 0px; BORDER-LEFT-WIDTH: 0px" id=gdvLinksDestaque rules=all cellSpacing=0>
+  <TBODY>
+  <TR>
+    <TD><INPUT id=gdvLinksDestaque_ImageButton1_00
+      onmouseover="javascript: trocarImagem(this)" title="Cdigo de Segurana do Contribuinte - Homologao" onmouseout="javascript: trocarImagem(this)" 
+      onclick="abrirURL('https://nfce.sandbox.sefaz.se.gov.br/portal/portalNoticias.jsp?jsp=barra-menu/servicos/manutencaoCSC.htm')" alt="Cdigo de Segurana do Contribuinte - Homologao" 
+      src="framework/images/nfce/banners_Visite_CSC_Off.png" type=image name=CSCHomologacao> </TD></TR>
+  <TR>
+    <TD><INPUT id=gdvLinksDestaque_ImageButton1_0
+      onmouseover="javascript: trocarImagem(this)" title="Nota Fiscal Eletrnica" onmouseout="javascript: trocarImagem(this)" 
+      onclick="abrirURL('http://www.nfe.fazenda.gov.br/')" alt="Nota Fiscal de Consumidor Eletrnica " 
+      src="framework/images/nfce/banners_Visite_Nfe_Off.png" type=image name=NFEletronico> </TD></TR>
+  <TR>
+    <TD><INPUT id=gdvLinksDestaque_ImageButton1_1
+      onmouseover="javascript: trocarImagem(this)" title="Manifesto Eletrnico de Documentos Fiscais" onmouseout="javascript: trocarImagem(this)" 
+      onclick="abrirURL('https://mdfe-portal.sefaz.rs.gov.br/')" alt="Manifesto Eletrnico de Documentos Fiscais" 
+      src="framework/images/nfce/banner_mdfe_Off.png" type=image name=manEletronico> </TD></TR>
+  <TR>
+    <TD><INPUT id=gdvLinksDestaque_ImageButton1_2 
+      onmouseover="javascript: trocarImagem(this)" title="Conhecimento de Transporte Eletrnico" onmouseout="javascript: trocarImagem(this)" 
+      onclick="abrirURL('http://www.cte.fazenda.gov.br/')" alt="Conhecimento de Transporte Eletrnica" 
+      src="framework/images/nfce/banners_Visite_CTe_Off.png" type=image name=conTransporte> </TD></TR>
+  <TR>
+    <TD><INPUT id=gdvLinksDestaque_ImageButton1_3 
+      onmouseover="javascript: trocarImagem(this)" title="Sistema P&uacute;blico de Escriturao Fiscal" onmouseout="javascript: trocarImagem(this)" 
+      onclick="abrirURL('http://www1.receita.fazenda.gov.br/')" alt="Sistema Pblico de Escriturao Fiscal" 
+      src="framework/images/nfce/banners_Visite_Sped_Off.png" type=image name=SPEF> </TD></TR>
+  <TR>
+    <TD><INPUT id=gdvLinksDestaque_ImageButton1_4 
+      onmouseover="javascript: trocarImagem(this)" title="Superintendncia da Zona Franca de Manaus" onmouseout="javascript: trocarImagem(this)" 
+      onclick="abrirURL('http://www.suframa.gov.br/')" alt="Superintendncia da Zona Franca de Manaus" 
+      src="framework/images/nfce/banners_manaus_Off.png" type=image name=SZFM> 
+</TD></TR></TBODY></TABLE></DIV></DIV></DIV>
+<DIV id=conteudo>
+	<link href="framework/css/jquery.alerts.css" rel="stylesheet" type="text/css" />
+
+<SCRIPT src="framework/js/nfce/jquery.min.js"></SCRIPT>		
+<SCRIPT src="framework/js/nfce/jquery.alerts.js" type="text/javascript"></SCRIPT>	
+<SCRIPT src="framework/js/nfce/jquery.maskedinput.js" type="text/javascript"></SCRIPT>
+<SCRIPT src="framework/js/nfce/nfc-e.js" type="text/javascript"></SCRIPT>
+<script src="https://www.google.com/recaptcha/api.js"></script>
+<script
+  src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+  async
+  defer>
+</script>
+ <script>
+   function onSubmit(token) {
+     document.getElementById("form1ExibirDANFENFCe").submit();
+   } 
+ </script>
+
+
+
+
+<div id="localizacao">
+	<div id="voceEstaAqui">Voc&ecirc; est&aacute; aqui:</div>
+	<div id="caminho"><a id="hlkPaginaPrincipao" href="portalNoticias.jsp">P&aacute;gina Principal</a>                        
+		&gt;<a href="portalNoticias.jsp?jsp=barra-menu/servicos/menuSer.htm">Servi&ccedil;os</a>&gt;
+		<span class="fonteCinza">Consultar DANFE NFC-e</span>			
+	</div>	
+</div>	
+
+<div id="zoomAcessibilidade">
+		<img src="framework/images/nfce/acessibilidade_reduzir_Off.png" id="imgZoomMenos" onmouseover="javascript: trocarImagem(this)"
+			onmouseout="javascript: trocarImagem(this)" alt="Link que permite reduzir o tamanho da fonte" />
+		<img src="framework/images/nfce/acessibilidade_ampliar_Off.png" id="imgZoomMais" onmouseover="javascript: trocarImagem(this)"
+			onmouseout="javascript: trocarImagem(this)" alt="Link que permite aumentar o tamanho da fonte" />
+	</div>
+<div class="divTituloPrincipal" xmlns="">
+	<label class="tituloPrincipal">Consultar DANFE NFC-e</label>
+</div>
+<div id="pnlInformacoesConsulta" class="divComBordas">
+	<FORM id=form1ExibirDANFENFCe method=post action="consultarNFCeDCA.jsp">
+		
+        <div id="pnlCamposEntrada" class="consultaDireita">			
+		    <div id="pnlConsultas">
+						<span id="lblInformacao" class="labelConsulta"><strong>O campo com (*) &eacute; obrigat&oacute;rio.</strong></span>
+						<br/>
+						<br/>
+                        <span id="lblChaveAcessoCompleta" class="labelConsulta">Chave de Acesso do DANFE NFC-e(*)</span>
+                        <br/>
+                        <input name="cdChaveAcesso" type="text" value="" id="cdChaveAcesso" class="txtChaveAcesso" OnKeyPress="mascara(this,soNumeros44)" onFocus="mascara(this,soNumeros44)" onBlur="mascara(this,soNumeros44)" onChange="mascara(this,soNumeros44)" />
+						<div id="pnlDataHoraPesquisa" style="display:none;">							
+							<span id="lblDataEmissao" class="labelConsulta">Data e hora de Emiss&atilde;o (dd/mm/aaaa hh:mm)</span>                        
+							<br />
+							<input name="dtEmissaoNFCe" id="dtEmissaoNFCe" type="text" value="" style="Z-INDEX: 10; WIDTH: 140px; COLOR: #414042"  />
+						</div>						
+			</div>
+            <div id="ContentPlaceHolder1_pnlBotoes" class="pnlBotoesConsulta">
+                <div id="pnlCaptcha" class="consultaEsquerda">
+					
+					<div class="cf-turnstile" id="rcaptcha" data-sitekey=""></div> <!-- local
+					<div class="g-recaptcha" id="rcaptcha" data-sitekey="6LcIg5QcAAAAAN1XgpvG83QGB2BS5jxDL3894T4-"></div> prod
+					<!--span id="captcha" style="color:red" /></span--> <!-- this will show captcha errors -->
+					<!--input name="txtCdImagemSeg" type="text" maxlength="6" value="" id="txtCdImagemSeg" class="txtCaptcha" />
+					<img id="imgCaptcha" src="face/portal/gerar-imagem.jsp" />
+					<br />
+					<a id="hlkAlterarCaptcha" href="portalNoticias.jsp?jsp=barra-menu/servicos/consultaDANFENFCe.htm" class="labelDetalhe" >Clique aqui se n&atilde;o conseguir visualizar a imagem.</a-->
+				</div>
+				<!--span id="revCaptcha" style="display:none;"></span-->
+                <br /> <!-- espacamento pro reCaptcha nao sobrepor os botoes -->
+                <br />
+                <br />
+                <br />
+                <br />
+                <br />
+                <div id="vdsErros" class="listaErro" style="display:none;"></div>
+				<!--input type="button" name="btnConsultar" value="Consultar" id="btnConsultar" onclick="consultarDANFENFCe()" class="button g-recaptcha" data-sitekey="6Le5TZccAAAAANieg34lHW0EmlV4DCrcb24ipkKe" data-callback='onSubmit' data-action='submit' /> <!-- local -->
+				<input type="button" name="btnConsultar" value="Consultar" id="btnConsultar" onclick="consultarDANFENFCe()" class="button g-recaptcha" data-callback='onSubmit' data-action='submit' />
+                <!-- <input type="button" name="btnConsultar" value="Consultar" id="btnConsultar" onclick="consultarDANFENFCe()" class="button g-recaptcha" data-sitekey="6LcIg5QcAAAAAN1XgpvG83QGB2BS5jxDL3894T4-" data-callback='onSubmit' data-action='submit' />	prod -->
+                <input type="button" name="btnLimpar" value="Limpar" onclick="limpar()" id="btnLimpar" class="button" />
+				<!--input type="button" name="btnExibirData" value="Exibir Data Hora" onclick="exibirDataHoraPesquisa()" id="btnExibirData" class="button" /-->
+			</div>
+		</div>
+	</FORM>
+</div>    
+    <br />
+<div class="indentacaoConteudo" xmlns=""><p><span class="tituloConteudoConsulta">Observa&ccedil;&otilde;es</span><ul class="marcadorDecimal">
+	<li><span><strong>Chave de Acesso:</strong> Deve ser informado o n&uacute;mero de 44 d&iacute;gitos presentes no DANFE NFC-e - Documento Auxiliar da Nota Fiscal de Consumidor Eletr&ocirc;nica.</span></li>
+	<li><span><strong>C&oacute;digo impresso ao lado:</strong> Digite os 6 caracteres da imagem. Essa informa&ccedil;&atilde;o ajuda a evitar consultas por programas autom&aacute;ticos, que dificultam a utiliza&ccedil;&atilde;o do aplicativo pelos demais contribuintes.</span></li>
+	<li><span><strong>Data e hora de Emiss&atilde;o:</strong> Digite a data e hora de emiss&atilde;o impresso no DANFE NFC-e no formato dd/mm/aaaa hh:mm</span></li></ul></p>
+</div>
+<br/>
+<SCRIPT type=text/javascript>
+function exibirDataHoraPesquisa(){	
+	if(document.getElementById("pnlDataHoraPesquisa").style.display=="none") {  
+        document.getElementById("pnlDataHoraPesquisa").style.display = "block";
+		document.getElementById("btnExibirData").value = "Ocultar Data Hora";
+    }else {
+        document.getElementById("pnlDataHoraPesquisa").style.display = "none";
+		document.getElementById("btnExibirData").value = "Exibir Data Hora";
+    }
+	var formNFCe = document.forms['form1ExibirDANFENFCe'];
+	if( document.getElementById("cdChaveAcesso").value == '' ){
+		formNFCe.elements[ 'cdChaveAcesso' ].focus();		
+	}else {/* if( document.getElementById("cdChaveAcesso").value != '' && document.getElementById("pnlDataHoraPesquisa").style.display=="block" ){*/
+		formNFCe.elements[ 'dtEmissaoNFCe' ].focus();
+	}/*else{
+		formNFCe.elements[ 'txtCdImagemSeg' ].focus();
+	}*/
+}
+function limpar(){
+	document.getElementById("cdChaveAcesso").value= '';
+	document.getElementById("dtEmissaoNFCe").value= '';
+	/*document.getElementById("txtCdImagemSeg").value= '';*/
+	document.getElementById("cdChaveAcesso").focus();
+}
+
+function consultarDANFENFCe(){
+	var formNFCe = document.forms['form1ExibirDANFENFCe'];
+	var elements = formNFCe.elements;
+	var cdChaveAcesso = elements[ 'cdChaveAcesso' ].value;
+	var processar = validarChaveAcesso( cdChaveAcesso );	
+	
+	/*
+	if( processar==true && elements[ 'txtCdImagemSeg' ].value == '' ){
+		parent.window.showAlertCall("O campo 'C?digo da imagem' ? obrigat?rio.","CAMPO OBRIGAT?RIO", 
+			function(){
+				formNFCe.elements[ 'txtCdImagemSeg' ].focus();
+			} 
+		);		
+		processar = false;
+	}
+	*/
+	if( processar ){
+		formNFCe.submit();
+	}else{
+		return processar;
+	}
+}
+
+function validarChaveAcesso( cdChaveAcesso ) { 
+        var debug = '';
+    	
+        // Vazia
+        if (cdChaveAcesso == '') { 
+			parent.window.showAlertCall("O campo 'C?digo da imagem' ? obrigat?rio.","CAMPO OBRIGAT?RIO", 
+				function(){
+					formNFCe.elements[ 'cdChaveAcesso' ].focus();
+				} 
+			);
+		   return false 
+		};
+        
+        // Num?rica
+        if (isNaN(cdChaveAcesso)) { 
+			parent.window.showAlertCall("Chave de Acesso n?o num?rica!","CARACTERES INV?LIDOS", 
+				function(){
+					formNFCe.elements[ 'cdChaveAcesso' ].focus();
+				} 
+			);
+			return false; 
+		}
+        
+        // Tamanho (44 posi??es)
+        if (cdChaveAcesso.length != 44) { 
+			parent.window.showAlertCall("O campo 'Chave de Acesso do DANFE NFC-e' est? incompleto.","ATEN??O", 
+				function(){
+					formNFCe.elements[ 'cdChaveAcesso' ].focus();
+				} 
+			);
+			return false; 
+		}
+ 
+        var vNumero, vFaixa, vTamanho, vDigito, resultado, uf, ufAux;
+        vDigito = cdChaveAcesso.substr(43, 1); uf = cdChaveAcesso.substr(0, 2);
+        
+        // D?gito Verificador (DV) da NF-e
+        vNumero = cdChaveAcesso; vFaixa = 9; vTamanho = 43;
+        var i, j, k, soma, resto; soma = 0; j = 2; k = vTamanho - vFaixa + 1;
+        for (var i = (vTamanho - 1); i >= k; i--) { soma = soma + (parseInt(vNumero.substr(i, 1)) * j); j = j + 1; }
+        j = 2; for (var i = (k - 1); i >= 0; i--) { soma = soma + (parseInt(vNumero.substr(i, 1)) * j); j = j + 1; if (j > vFaixa) j = 2; } resto = soma % 11;
+        if (resto < 2) { resultado = 0; } else { resultado = 11 - resto; }
+        if (resultado != vDigito) { 
+			parent.window.showAlertCall("Chave de Acesso inv?lida (d?gito de controle)","ATEN??O", 
+				function(){
+					formNFCe.elements[ 'cdChaveAcesso' ].focus();
+				} 
+			);
+			return false; 
+		}
+        
+        // UF 28=SERGIPE       
+        if ( parseInt(uf) != 28 ) {
+			parent.window.showAlertCall("Chave de Acesso inv?lida (C?digo de UF)","ATEN??O", 
+				function(){
+					formNFCe.elements[ 'cdChaveAcesso' ].focus();
+				} 
+			);
+			return false; 
+		}
+        
+        // Data de Emiss?o
+        // - m?s de emiss?o deve ser entre [1..12]
+        // - ano/m?s de emiss?o deve ser posterior ou igual a 2006/09 e inferior ou igual ao atual (p.ex. 2011/05)
+        var uf = cdChaveAcesso.substring(0,2);
+        var ano = cdChaveAcesso.substring(2,4);
+        var mes = cdChaveAcesso.substring(4,6);
+        var cmes = new Date().getMonth() + 1;
+        var cano = new Date().getFullYear().toString().slice(2);
+        
+        if ((mes == 0) || (mes > 12)) { 
+			parent.window.showAlertCall("Chave de Acesso inv?lida (Data de emiss?o)","ATEN??O", 
+				function(){
+					formNFCe.elements[ 'cdChaveAcesso' ].focus();
+				} 
+			);
+			return false; 
+		} // M?s inv?lido
+        if ((ano <= 12) && (mes < 2)) { 
+			parent.window.showAlertCall("Chave de Acesso inv?lida (Data de emiss?o)","ATEN??O", 
+				function(){
+					formNFCe.elements[ 'cdChaveAcesso' ].focus();
+				} 
+			);
+			return false; 
+		} // Antes de Fev/13
+        
+        if ((ano > cano)) { 
+			parent.window.showAlertCall("Chave de Acesso inv?lida (Data de emiss?o)","ATEN??O", 
+				function(){
+					formNFCe.elements[ 'cdChaveAcesso' ].focus();
+				} 
+			);
+			return false; 
+		} // Ano da NF-e no futuro
+        if ((ano >= cano) && (mes > cmes))  { 
+			parent.window.showAlertCall("Chave de Acesso inv?lida (Data de emiss?o)","ATEN??O", 
+				function(){
+					formNFCe.elements[ 'cdChaveAcesso' ].focus();
+				} 
+			);
+			return false; 
+		}
+        
+        // CNPJ zerado
+        var cnpj = cdChaveAcesso.substring(6,20); 
+		if (cnpj == 0) { 
+			parent.window.showAlertCall("Chave de Acesso inv?lida (CNPJ)","ATEN??O", 
+				function(){
+					formNFCe.elements[ 'cdChaveAcesso' ].focus();
+				} 
+			);
+			return false; 
+		} // cnpj zerado
+        
+        // DV (d?gito verificador) do CNPJ inv?lido
+        cnpj = cnpj.replace(".","").replace(".","").replace("-","").replace("/","");
+        var a = []; var b = new Number; var c = [6,5,4,3,2,9,8,7,6,5,4,3,2]; for (i=0; i<12; i++) { a[i] = cnpj.charAt(i); b += a[i] * c[i+1]; }
+        if ((x = b % 11) < 2) { a[12] = 0; } else { a[12] = 11-x; } b = 0; for (y=0; y<13; y++) { b += (a[y] * c[y]); }
+        if ((x = b % 11) < 2) { a[13] = 0; } else { a[13] = 11-x; }
+        if ((cnpj.charAt(12) != a[12]) || (cnpj.charAt(13) != a[13])) { 
+			parent.window.showAlertCall("Chave de Acesso inv?lida (CNPJ)","ATEN??O", 
+				function(){
+					formNFCe.elements[ 'cdChaveAcesso' ].focus();
+				} 
+			);
+			return false; 
+		}
+        // Modelo da NFC-e deve ser 65
+        var modelo = cdChaveAcesso.substring(20,22);
+        if ( modelo != 65 ) { 
+			parent.window.showAlertCall("Chave de Acesso inv?lida (Modelo)","ATEN??O", 
+				function(){
+					formNFCe.elements[ 'cdChaveAcesso' ].focus();
+				} 
+			);
+			return false; 
+		}
+        
+        // N?mero da NF-e, deve ser diferente de 0
+        var numero = cdChaveAcesso.substring(24,34);
+        if (numero == 0) { 
+			parent.window.showAlertCall("Chave de Acesso inv?lida (N?mero)","ATEN??O", 
+				function(){
+					formNFCe.elements[ 'cdChaveAcesso' ].focus();
+				} 
+			);
+			return false; 
+		}
+		
+		// Tipo de emiss?o (1,2,3,4,5,6,7 e 9)
+        var tpEmis = cdChaveAcesso.substring(34,35);
+        if( (tpEmis < 1 || tpEmis > 9) || tpEmis == 8 ) { 
+			parent.window.showAlertCall("Tipo de emiss?o da chave de Acesso inv?lida (Tipo de Emiss?o)","ATEN??O", 
+				function(){
+					formNFCe.elements[ 'cdChaveAcesso' ].focus();
+				} 
+			);
+			return false; 
+		}
+		
+        return true;
+}
+
+onInitialize = function(){
+	NFCe.setMaskField('dtEmissaoNFCe','99/99/9999 99:99', true);	
+	//NFCe.setValueField('dtEmissaoNFCe', '08/03/2013 17:19');
+	NFCe.setFocus('cdChaveAcesso');		
+}
+window.onload = onInitialize;
+
+</SCRIPT>	
+</DIV>
+</DIV>
+<DIV id=rodape>
+	<DIV id=sombraRodape></DIV>
+	<DIV id=conteudoRodape>
+		<DIV id=menuRodape>
+			<?xml version="1.0" encoding="UTF-8"?>
+			<A href="portalNoticias.jsp?jsp=barra-menu/conhecaNFCe/menuCon.htm">Conhea a NFC-e</A>
+			<A href="portalNoticias.jsp?jsp=barra-menu/servicos/menuSer.htm">Servios</A>
+			<A href="portalNoticias.jsp?jsp=barra-menu/legislacao/menuLeg.htm">Legislao</A>
+			<A href="portalNoticias.jsp?jsp=barra-menu/documentos/menuDoc.htm">Documentos</A>
+			<A href="portalNoticias.jsp?jsp=barra-menu/downloads/menuDow.htm">Downloads</A>
+			<A href="https://www1.sped.fazenda.gov.br/spednfeacesso/ARNFe/Inicial/Default.aspx">rea Restrita</A> 
+			<SPAN id=lblPortalRodape class=labelPortalRodape>Portal de Notcias da NFC-e:: Nota Fiscal de Consumidor Eletrnica</SPAN> 
+		</DIV>
+		<DIV id=marcaReceita>
+			<A class=imgReceita href="http://www.sefaz.se.gov.br/" target=_blank>Secretaria de Estado da Fazenda de Sergipe</A>
+		</DIV>
+	</DIV>
+</DIV>
+</DIV>
+</BODY>
+</HTML>

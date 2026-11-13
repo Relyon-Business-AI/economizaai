@@ -10,6 +10,26 @@ mirror entries here.
 
 ---
 
+## Release 2026-11-13 — Sergipe: adapter nativo com layout do DANFE ainda não verificado
+
+### SE: fetch verificado ao vivo, DANFE parseado provisoriamente pelo parser responsivo
+- **Now**: `SergipeNfcePortalAdapter` foi construído e verificado AO VIVO contra o portal
+  `nfce.sefaz.se.gov.br` até o POST: forma de consulta, sessão (JSESSIONID), Cloudflare Turnstile
+  (sitekey `0x4AAAAAADPVesX-QLrY8PWn`), e o endpoint `consultarNFCeDCA.jsp` rejeitando "Captcha inválido"
+  sem token (data de emissão confirmada OPCIONAL). O que NÃO foi possível fechar: renderizar o DANFE real
+  pós-Turnstile — a chave do CapSolver é segredo só no Render e não é acessível neste ambiente de build, e
+  as 3 chaves de teste não têm `issued_at`/data no banco. Então `parseHtml` usa provisoriamente
+  `ResponsiveDanfeParser` (mesmo parser de RS/PR/SP/BA), que pode não bater com o layout específico de SE.
+- **Por que OK por ora**: a cadeia de ingestão tem rede de segurança — um DANFE de SE que o parser não leia
+  cai no resgate por LLM (lê o HTML cru) e, se existir, no Infosimples. Pior caso é `FAILED_PARSE`
+  honesto, não pior que o status atual (SE estava 100% quebrado com Infosimples 615). Há fixtures reais do
+  FORMULÁRIO e da página de rejeição em `src/test/resources/fixtures/sefaz/se/` cobrindo a camada de fetch.
+- **Antes de confiar em SE**: pegar UMA NFC-e real de SE, resolver o Turnstile com a chave do CapSolver
+  (no Render), salvar o DANFE renderizado como `src/test/resources/fixtures/sefaz/se/danfe.html`, escrever
+  o teste de parser (padrão `RealSantaCatarinaFixtureTest`) e, se o layout diferir do responsivo, criar um
+  parser dedicado de SE. Kill switch enquanto isso: `SEFAZ_SE_ENABLED=false`.
+- **Esforço**: ~1–2 h depois de ter uma nota real + solver ligado.
+
 ## Release 2026-11-11 — lacunas conhecidas, enviadas de propósito
 
 ### XML de NF-e: verificação de assinatura DESLIGADA até existir o bundle de certificados
