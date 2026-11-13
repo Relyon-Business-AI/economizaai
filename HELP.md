@@ -1164,3 +1164,21 @@ classify OTHER (grey) unless they carry a conveniência CNAE.
   cada reconsulta; o probe é quem avisa a volta. Estado fora da lista ainda avisa (primeira queda).
 - **Admin:** ordenação de usuários por estado; notas filtráveis por método de entrada e por data de
   chegada (`createdFrom`), que é o que faz o detalhe de "Erros mais comuns" voltar a listar notas.
+
+### Session (2026-11-13) — Sergipe (SE) com scraper nativo
+
+- **Origem:** SE estava quebrado porque o Infosimples está fora para o estado (615), mas o portal
+  `nfce.sefaz.se.gov.br` está no ar. Objetivo: adapter nativo que busque a nota direto no SEFAZ-SE,
+  independente do Infosimples.
+- **Mapeamento ao vivo:** o portal é ASP.NET-sob-.jsp e o formulário antigo de captcha de imagem
+  (`txtCdImagemSeg`) está TODO comentado no HTML. O formulário ATIVO consulta por **chave pura**
+  (data de emissão opcional, confirmado) e é gated por **Cloudflare Turnstile** (sitekey injetado por
+  JS em `#rcaptcha`: `0x4AAAAAADPVesX-QLrY8PWn`), postando em `consultarNFCeDCA.jsp`. QR de SE =
+  `http://www.nfce.se.gov.br/nfce/qrcode?p=<chave>|3|1` (sem assinatura nem data).
+- **Entrega:** `SergipeNfcePortalAdapter` (modelado no de SC/Turnstile), `requiresQrSignature=false`
+  (chave digitada/foto também passa), laço de retry que re-resolve o token, gating de gasto pela cadeia
+  existente, config `SEFAZ_SE_*`. Auto-wire como estado verificado. Testes de fetch + fixtures reais do
+  formulário e da página de rejeição. Suite completa verde (3714).
+- **Pendência (DEV_NOTES):** não deu pra renderizar o DANFE real (chave do CapSolver só no Render) — o
+  parser usa provisoriamente o `ResponsiveDanfeParser`; precisa de UMA nota real de SE pra confirmar o
+  layout e, se preciso, parser dedicado. Rede de segurança: LLM-rescue lê o HTML cru.

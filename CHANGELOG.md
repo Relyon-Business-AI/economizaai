@@ -1,5 +1,30 @@
 # economizai — what's new
 
+## 2026-11-13 — Sergipe (SE) com scraper nativo no SEFAZ-SE
+
+**O que o FE precisa saber**
+
+- **SE agora é estado SUPORTADO por adapter nativo** (antes dependia do Infosimples, que está fora para SE
+  — código 615). Nota de SE, por QR escaneado OU chave digitada/fotografada, passa a ser buscada direto no
+  portal `nfce.sefaz.se.gov.br`. Nenhum endpoint ou status novo; SE só sai da lista de "experimental" e
+  entra na de verificados em `GET /supported-states`.
+- Infosimples segue como fallback de SE quando/ se voltar.
+
+**Backend**
+
+- `SergipeNfcePortalAdapter`: consulta por chave pura (`requiresQrSignature=false`) no portal de SE, gated
+  por Cloudflare Turnstile (sitekey injetado por JS na página). Fluxo: GET do formulário de consulta →
+  resolve o Turnstile pelo solver configurado → POST `consultarNFCeDCA.jsp` com `cdChaveAcesso` +
+  `cf-turnstile-response` (campo de data é opcional, confirmado no portal). Laço de retry re-resolve um
+  token novo quando o portal rejeita (`se-max-attempts`, padrão 3; `se-max-total-ms`, 180 s).
+- Metragem/gating de gasto do captcha reaproveita a cadeia existente (`PaidApiGuardService` +
+  `CaptchaSolveTracker` + `IngestSpendPolicy`): retry `FREE_ONLY` não compra token.
+- Config: `SEFAZ_SE_ENABLED` (kill switch → cai na cadeia experimental), `SEFAZ_SE_TURNSTILE_SITEKEY`,
+  `SEFAZ_SE_RETRY_MAX_ATTEMPTS`, `SEFAZ_SE_RETRY_MAX_TOTAL_MS`.
+- **Pendência de verificação**: o layout do DANFE pós-Turnstile ainda não foi renderizado (a chave do
+  CapSolver é segredo só no Render, não acessível no build) — o parser usa provisoriamente o
+  `ResponsiveDanfeParser` e precisa de UMA nota real de SE pra confirmar/ajustar (ver DEV_NOTES).
+
 ## 2026-11-13 — Renovação de sessão informa a plataforma (identifica cadastros antigos)
 
 **O que o FE precisa saber**
