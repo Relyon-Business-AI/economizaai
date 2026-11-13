@@ -71,7 +71,7 @@ public class AdminUserService {
     private final PaidApiCallRepository paidApiCallRepository;
 
     /** Sort keys that rank by a per-household/per-user aggregate (not a User column) — handled in memory. */
-    private static final Set<String> AGGREGATE_SORTS = Set.of("receiptCount", "totalSpend", "cost");
+    private static final Set<String> AGGREGATE_SORTS = Set.of("receiptCount", "totalSpend", "cost", "uf");
     private static final int AGGREGATE_SORT_CAP = 5000;
 
     /** Filtros da listagem de usuários — agrupados pra não estourar a assinatura. ufUserIds:
@@ -115,23 +115,36 @@ public class AdminUserService {
         var context = enrich(all);
         var summaries = new ArrayList<>(all.stream().map(user -> summaryFor(user, context)).toList());
 
+        var comparator = "uf".equals(order.getProperty())
+                ? predominantUfComparator(all, order.isDescending())
+                : aggregateValueComparator(all, order);
+        summaries.sort(comparator.thenComparing(AdminUserSummaryResponse::createdAt, Comparator.reverseOrder()));
+
+        var from = (int) Math.min((long) pageable.getPageNumber() * pageable.getPageSize(), summaries.size());
+        var to = Math.min(from + pageable.getPageSize(), summaries.size());
+        return new PageImpl<>(summaries.subList(from, to), pageable, summaries.size());
+    }
+
+    private Comparator<AdminUserSummaryResponse> aggregateValueComparator(List<User> users, Sort.Order order) {
         Comparator<AdminUserSummaryResponse> comparator;
         if ("cost".equals(order.getProperty())) {
-            var costByUser = totalCostCentsByUserIds(all.stream().map(User::getId).toList());
+            var costByUser = totalCostCentsByUserIds(users.stream().map(User::getId).toList());
             comparator = Comparator.comparingLong(summary -> costByUser.getOrDefault(summary.id(), 0L));
         } else if ("totalSpend".equals(order.getProperty())) {
             comparator = Comparator.comparing(AdminUserSummaryResponse::totalSpend);
         } else {
             comparator = Comparator.comparingLong(AdminUserSummaryResponse::receiptCount);
         }
-        if (order.isDescending()) {
-            comparator = comparator.reversed();
-        }
-        summaries.sort(comparator.thenComparing(AdminUserSummaryResponse::createdAt, Comparator.reverseOrder()));
+        return order.isDescending() ? comparator.reversed() : comparator;
+    }
 
-        var from = (int) Math.min((long) pageable.getPageNumber() * pageable.getPageSize(), summaries.size());
-        var to = Math.min(from + pageable.getPageSize(), summaries.size());
-        return new PageImpl<>(summaries.subList(from, to), pageable, summaries.size());
+    /** By the state the user scans most notes from (A→Z or Z→A); users with no state yet always come last. */
+    private Comparator<AdminUserSummaryResponse> predominantUfComparator(List<User> users, boolean descending) {
+        var ufByHousehold = predominantUfByHouseholdIds(householdIdsOf(users));
+        Comparator<String> ufOrder = descending ? Comparator.reverseOrder() : Comparator.naturalOrder();
+        return Comparator.comparing(
+                summary -> Optional.ofNullable(ufByHousehold.get(summary.householdId())).map(Enum::name).orElse(null),
+                Comparator.nullsLast(ufOrder));
     }
 
     /**

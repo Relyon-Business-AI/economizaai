@@ -33,6 +33,7 @@ import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.model.enums.Platform;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.model.enums.ReceiptEntryMethod;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.model.enums.SubscriptionTier;
@@ -495,11 +496,15 @@ class AdminControllerTest {
         var row = new AdminReceiptSummaryResponse(summary, owner, UnidadeFederativa.RS, LocalDateTime.now(),
                 "receipt.parse.failed:no-items-found", "Não foi possível extrair os dados da NFC-e.");
         Page<AdminReceiptSummaryResponse> page = new PageImpl<>(List.of(row));
-        when(adminReceiptService.list(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(Pageable.class)))
+        when(adminReceiptService.list(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                eq(List.of(ReceiptEntryMethod.MANUAL_CHAVE, ReceiptEntryMethod.PHOTO_CHAVE)),
+                eq(LocalDateTime.of(2026, 11, 5, 0, 0)), anyBoolean(), any(Pageable.class)))
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/v1/admin/receipts")
                         .param("q", "arroz")
+                        .param("entryMethod", "MANUAL_CHAVE", "PHOTO_CHAVE")
+                        .param("createdFrom", "2026-11-05T00:00:00")
                         .with(SecurityMockMvcRequestPostProcessors.user(adminUser())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].receipt.marketName").value("Mercado X"))
@@ -517,7 +522,7 @@ class AdminControllerTest {
 
     @Test
     void receiptStats_returnsCountAndTotal() throws Exception {
-        when(adminReceiptService.stats(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), eq(false)))
+        when(adminReceiptService.stats(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), eq(false)))
                 .thenReturn(new AdminReceiptStatsResponse(12, new BigDecimal("3456.78")));
 
         mockMvc.perform(get("/api/v1/admin/receipts/stats")
