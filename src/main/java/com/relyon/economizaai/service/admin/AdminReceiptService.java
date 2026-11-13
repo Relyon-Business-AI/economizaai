@@ -9,6 +9,7 @@ import com.relyon.economizaai.dto.response.ReceiptResponse;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.model.enums.ReceiptEntryMethod;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
@@ -68,11 +69,37 @@ public class AdminReceiptService {
                                              String userQ,
                                              boolean includeInternal,
                                              Pageable pageable) {
+        return list(from, to, marketCnpj, categories, search, householdId, uf, status, parseErrorReason, userQ,
+                null, null, includeInternal, pageable);
+    }
+
+    /**
+     * As the list above, with the two filters only the admin panel uses: notas that entered through
+     * one of {@code entryMethods} (null/empty = any), and notas RECEIVED since {@code createdFrom}.
+     * {@code from}/{@code to} go by the purchase date, which a nota that never parsed does not have,
+     * so the ops drill-down into a failure reason has to window by arrival instead.
+     */
+    @Transactional(readOnly = true)
+    public Page<AdminReceiptSummaryResponse> list(LocalDateTime from,
+                                             LocalDateTime to,
+                                             String marketCnpj,
+                                             List<ProductCategory> categories,
+                                             String search,
+                                             UUID householdId,
+                                             UnidadeFederativa uf,
+                                             ReceiptStatus status,
+                                             String parseErrorReason,
+                                             String userQ,
+                                             List<ReceiptEntryMethod> entryMethods,
+                                             LocalDateTime createdFrom,
+                                             boolean includeInternal,
+                                             Pageable pageable) {
         var sortedPageable = pageable.getSort().isUnsorted()
                 ? PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by(Sort.Direction.DESC, "issuedAt"))
                 : pageable;
         var spec = buildSearchSpec(from, to, marketCnpj, categories, search, householdId, uf, status,
-                parseErrorReason, userQ, includeInternal);
+                parseErrorReason, userQ, includeInternal, entryMethods);
+        if (createdFrom != null) spec = spec.and(ReceiptSpecifications.receivedSince(createdFrom));
         return receiptRepository.findAll(spec, sortedPageable)
                 .map(receipt -> AdminReceiptSummaryResponse.of(receipt, localizedParseError(receipt)));
     }
@@ -119,8 +146,26 @@ public class AdminReceiptService {
                                            String parseErrorReason,
                                            String userQ,
                                            boolean includeInternal) {
+        return stats(from, to, marketCnpj, categories, search, householdId, uf, status, parseErrorReason, userQ,
+                null, includeInternal);
+    }
+
+    /** As the stats above, narrowed to notas that entered through one of {@code entryMethods} (null/empty = any). */
+    @Transactional(readOnly = true)
+    public AdminReceiptStatsResponse stats(LocalDateTime from,
+                                           LocalDateTime to,
+                                           String marketCnpj,
+                                           List<ProductCategory> categories,
+                                           String search,
+                                           UUID householdId,
+                                           UnidadeFederativa uf,
+                                           ReceiptStatus status,
+                                           String parseErrorReason,
+                                           String userQ,
+                                           List<ReceiptEntryMethod> entryMethods,
+                                           boolean includeInternal) {
         var spec = buildSearchSpec(from, to, marketCnpj, categories, search, householdId, uf, status,
-                parseErrorReason, userQ, includeInternal);
+                parseErrorReason, userQ, includeInternal, entryMethods);
         return new AdminReceiptStatsResponse(receiptRepository.count(spec), receiptRepository.sumTotalAmount(spec));
     }
 
@@ -140,8 +185,23 @@ public class AdminReceiptService {
                                                      UnidadeFederativa uf,
                                                      String userQ,
                                                      boolean includeInternal) {
+        return failureBreakdown(from, to, marketCnpj, categories, search, householdId, uf, userQ, null, includeInternal);
+    }
+
+    /** As the breakdown above, narrowed to notas that entered through one of {@code entryMethods} (null/empty = any). */
+    @Transactional(readOnly = true)
+    public List<FailureReasonCount> failureBreakdown(LocalDateTime from,
+                                                     LocalDateTime to,
+                                                     String marketCnpj,
+                                                     List<ProductCategory> categories,
+                                                     String search,
+                                                     UUID householdId,
+                                                     UnidadeFederativa uf,
+                                                     String userQ,
+                                                     List<ReceiptEntryMethod> entryMethods,
+                                                     boolean includeInternal) {
         var spec = buildSearchSpec(from, to, marketCnpj, categories, search, householdId, uf,
-                ReceiptStatus.FAILED_PARSE, null, userQ, includeInternal);
+                ReceiptStatus.FAILED_PARSE, null, userQ, includeInternal, entryMethods);
         return receiptRepository.findAll(spec).stream()
                 .collect(Collectors.groupingBy(
                         receipt -> Optional.ofNullable(receipt.getParseErrorReason()).orElse("unknown"),
@@ -155,7 +215,8 @@ public class AdminReceiptService {
     private Specification<Receipt> buildSearchSpec(LocalDateTime from, LocalDateTime to, String marketCnpj,
                                                    List<ProductCategory> categories, String search, UUID householdId,
                                                    UnidadeFederativa uf, ReceiptStatus status, String parseErrorReason,
-                                                   String userQ, boolean includeInternal) {
+                                                   String userQ, boolean includeInternal,
+                                                   List<ReceiptEntryMethod> entryMethods) {
         var trimmedCnpj = Optional.ofNullable(marketCnpj).map(String::trim).filter(trimmed -> !trimmed.isBlank()).orElse(null);
         var trimmedSearch = Optional.ofNullable(search).map(String::trim).filter(trimmed -> !trimmed.isBlank()).orElse(null);
         var trimmedError = Optional.ofNullable(parseErrorReason).map(String::trim).filter(trimmed -> !trimmed.isBlank()).orElse(null);
@@ -167,6 +228,7 @@ public class AdminReceiptService {
         // Off by default: hide receipts from admin/test accounts so a bulk import doesn't flood the list.
         if (!includeInternal) spec = spec.and(ReceiptSpecifications.excludeInternal());
         if (trimmedUserQ != null) spec = spec.and(ReceiptSpecifications.byUserQ(trimmedUserQ));
+        if (entryMethods != null && !entryMethods.isEmpty()) spec = spec.and(ReceiptSpecifications.byEntryMethods(entryMethods));
         return spec;
     }
 

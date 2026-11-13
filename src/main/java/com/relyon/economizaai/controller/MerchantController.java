@@ -2,9 +2,14 @@ package com.relyon.economizaai.controller;
 
 import com.relyon.economizaai.dto.request.MerchantPromoBatchRequest;
 import com.relyon.economizaai.dto.request.MerchantPromoRequest;
+import com.relyon.economizaai.dto.response.MerchantAnalyticsResponse;
+import com.relyon.economizaai.dto.response.MerchantBrandShareResponse;
+import com.relyon.economizaai.dto.response.MerchantCategoryBenchmarkResponse;
+import com.relyon.economizaai.dto.response.MerchantCompetitorMovesResponse;
 import com.relyon.economizaai.dto.response.MerchantPriceComparisonResponse;
 import com.relyon.economizaai.dto.response.MerchantProfileResponse;
 import com.relyon.economizaai.dto.response.MerchantPromoImportResponse;
+import com.relyon.economizaai.dto.response.MerchantPromoPerformanceResponse;
 import com.relyon.economizaai.dto.response.MerchantPromoResponse;
 import com.relyon.economizaai.dto.response.MerchantSubscriptionResponse;
 import com.relyon.economizaai.model.User;
@@ -61,6 +66,59 @@ public class MerchantController {
     @GetMapping("/price-comparison")
     public ResponseEntity<MerchantPriceComparisonResponse> priceComparison(@AuthenticationPrincipal User user) {
         return ResponseEntity.ok(merchantPanelService.priceComparison(user));
+    }
+
+    @Operation(summary = "Category price benchmark",
+            description = "Per taxonomy group: the chain's median price index vs. the regional "
+                    + "(same-state) median + delta%. K=3 on both sides (rolled up only from "
+                    + "K-passing (product, state) rows).")
+    @GetMapping("/category-benchmark")
+    public ResponseEntity<MerchantCategoryBenchmarkResponse> categoryBenchmark(
+            @AuthenticationPrincipal User user,
+            @RequestParam(required = false) Integer window) {
+        return ResponseEntity.ok(merchantPanelService.categoryBenchmark(user, window));
+    }
+
+    @Operation(summary = "Anonymized brand demand share",
+            description = "Share of scanned demand by brand in the merchant's region (same-state) over "
+                    + "the window, optionally narrowed by category slug. K=3: a brand appears only when "
+                    + "at least 3 distinct households contributed.")
+    @GetMapping("/brand-share")
+    public ResponseEntity<MerchantBrandShareResponse> brandShare(
+            @AuthenticationPrincipal User user,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) Integer window) {
+        return ResponseEntity.ok(merchantPanelService.brandShare(user, category, window));
+    }
+
+    @Operation(summary = "Own-store activity over time",
+            description = "The merchant's own stores' confirmed receipts, revenue and basket-average, "
+                    + "bucketed daily/weekly. Own data — not K-gated.")
+    @GetMapping("/analytics")
+    public ResponseEntity<MerchantAnalyticsResponse> analytics(
+            @AuthenticationPrincipal User user,
+            @RequestParam(required = false) Integer window) {
+        return ResponseEntity.ok(merchantPanelService.analytics(user, window));
+    }
+
+    @Operation(summary = "Anonymized competitor price moves",
+            description = "Notable price moves by OTHER stores in the region for products the merchant "
+                    + "sells. ANONYMIZED: never the competitor's name/CNPJ/price — only product, "
+                    + "direction, magnitude% and approximate recency. K=3.")
+    @GetMapping("/competitor-moves")
+    public ResponseEntity<MerchantCompetitorMovesResponse> competitorMoves(
+            @AuthenticationPrincipal User user,
+            @RequestParam(required = false) Integer window) {
+        return ResponseEntity.ok(merchantPanelService.competitorMoves(user, window));
+    }
+
+    @Operation(summary = "Per-promo receipt-backed performance",
+            description = "Redemption proxy (distinct households confirming the price in-window, K=3), "
+                    + "the verified badge and promo status. No exposure/impression tracking exists yet.")
+    @GetMapping("/promos/{id}/performance")
+    public ResponseEntity<MerchantPromoPerformanceResponse> promoPerformance(
+            @AuthenticationPrincipal User user, @PathVariable UUID id) {
+        return ResponseEntity.ok(merchantPromoService.performance(user, id));
     }
 
     /** Marketing-account standing per chain — powers the "grátis até {freeUntil}" modal. */

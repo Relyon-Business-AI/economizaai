@@ -907,7 +907,7 @@
 								"confirm"
 							]
 						},
-						"description": "Switches the account to the new (verified) e-mail and returns the UserResponse. The old address is notified and every other session is revoked; send this device's refreshToken (optional) to keep it signed in — without it all sessions are revoked. 400 user.email-change.code-invalid = wrong / expired code, or locked after 5 wrong guesses. 15 attempts/hour."
+						"description": "Switches the account to the new (verified) e-mail and returns the UserResponse. The old address is notified and every other session is revoked; send this device's refreshToken (optional) to keep it signed in \u2014 without it all sessions are revoked. 400 user.email-change.code-invalid = wrong / expired code, or locked after 5 wrong guesses. 15 attempts/hour."
 					},
 					"response": []
 				},
@@ -1584,7 +1584,7 @@
 					"response": []
 				},
 				{
-					"name": "WhatsApp — toggle weekly report",
+					"name": "WhatsApp \u2014 toggle weekly report",
 					"request": {
 						"method": "PATCH",
 						"header": [
@@ -5333,12 +5333,12 @@
 								"ufs"
 							]
 						},
-						"description": "[ADMIN] UFs onde o produto/descrição do achado foi escaneado — ajuda a identificar marcas regionais."
+						"description": "[ADMIN] UFs onde o produto/descri\u00e7\u00e3o do achado foi escaneado \u2014 ajuda a identificar marcas regionais."
 					},
 					"response": []
 				},
 				{
-					"name": "AI: reprocessar fallback (diagnóstico)",
+					"name": "AI: reprocessar fallback (diagn\u00f3stico)",
 					"request": {
 						"method": "POST",
 						"header": [],
@@ -5361,12 +5361,12 @@
 								}
 							]
 						},
-						"description": "[ADMIN] Re-roda o fallback em tempo real sobre notas com itens não casados e devolve o placar {receipts, matched, alreadyMatched, parseFailed, blankName, gone, callError}."
+						"description": "[ADMIN] Re-roda o fallback em tempo real sobre notas com itens n\u00e3o casados e devolve o placar {receipts, matched, alreadyMatched, parseFailed, blankName, gone, callError}."
 					},
 					"response": []
 				},
 				{
-					"name": "AI: comparação entre modelos",
+					"name": "AI: compara\u00e7\u00e3o entre modelos",
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -5389,12 +5389,12 @@
 								}
 							]
 						},
-						"description": "[ADMIN] Por modelo no período: custo, volume, confiabilidade, latência e taxa de aceitação dos achados (days=0 → tudo)."
+						"description": "[ADMIN] Por modelo no per\u00edodo: custo, volume, confiabilidade, lat\u00eancia e taxa de aceita\u00e7\u00e3o dos achados (days=0 \u2192 tudo)."
 					},
 					"response": []
 				},
 				{
-					"name": "AI: benchmark de acurácia de um modelo",
+					"name": "AI: benchmark de acur\u00e1cia de um modelo",
 					"request": {
 						"method": "POST",
 						"header": [],
@@ -5417,12 +5417,12 @@
 								}
 							]
 						},
-						"description": "[ADMIN] Dispara (assíncrono, amostrado) o benchmark de acurácia de um modelo contra o golden set. 202 {runId, status, model}. Param sample opcional. GASTA créditos de IA."
+						"description": "[ADMIN] Dispara (ass\u00edncrono, amostrado) o benchmark de acur\u00e1cia de um modelo contra o golden set. 202 {runId, status, model}. Param sample opcional. GASTA cr\u00e9ditos de IA."
 					},
 					"response": []
 				},
 				{
-					"name": "AI: histórico de benchmarks",
+					"name": "AI: hist\u00f3rico de benchmarks",
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -5440,7 +5440,7 @@
 								"runs"
 							]
 						},
-						"description": "[ADMIN] Histórico de rodadas de benchmark — compara a acurácia de cada modelo lado a lado."
+						"description": "[ADMIN] Hist\u00f3rico de rodadas de benchmark \u2014 compara a acur\u00e1cia de cada modelo lado a lado."
 					},
 					"response": []
 				},
@@ -5462,7 +5462,7 @@
 								"providers"
 							]
 						},
-						"description": "[ADMIN] Provedor/modelo atual de cada tier + catálogo de opções e quais provedores têm credencial."
+						"description": "[ADMIN] Provedor/modelo atual de cada tier + cat\u00e1logo de op\u00e7\u00f5es e quais provedores t\u00eam credencial."
 					},
 					"response": []
 				},
@@ -5494,7 +5494,7 @@
 							"mode": "raw",
 							"raw": "{\n  \"provider\": \"ANTHROPIC\",\n  \"model\": \"\"\n}"
 						},
-						"description": "[ADMIN] Troca o provedor/modelo de um tier (EXTRACTOR | CURATOR) — efeito imediato, sem redeploy. provider: ANTHROPIC | OPENAI."
+						"description": "[ADMIN] Troca o provedor/modelo de um tier (EXTRACTOR | CURATOR) \u2014 efeito imediato, sem redeploy. provider: ANTHROPIC | OPENAI."
 					},
 					"response": []
 				},
@@ -5515,12 +5515,12 @@
 								"recategorize-taxonomy"
 							]
 						},
-						"description": "[ADMIN] Recategoriza os produtos na taxonomia de 2 níveis. Returns {keywordUpdated, llmUpdated, eansScanned, catalogRowsEnriched, productsUpdated}. MUTATES the catalog and may spend AI credits."
+						"description": "[ADMIN] Recategoriza os produtos na taxonomia de 2 n\u00edveis. Returns {keywordUpdated, llmUpdated, eansScanned, catalogRowsEnriched, productsUpdated}. MUTATES the catalog and may spend AI credits."
 					},
 					"response": []
 				},
 				{
-					"name": "Recategorize taxonomy — calibrate (dry-run)",
+					"name": "Recategorize taxonomy \u2014 calibrate (dry-run)",
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -5543,7 +5543,7 @@
 								}
 							]
 						},
-						"description": "[ADMIN] Amostra de calibração: {sample, keywordHigh, keywordLow, keywordNone, llmPlaced, agree, precisionPct, disagreements[]}."
+						"description": "[ADMIN] Amostra de calibra\u00e7\u00e3o: {sample, keywordHigh, keywordLow, keywordNone, llmPlaced, agree, precisionPct, disagreements[]}."
 					},
 					"response": []
 				}
@@ -13813,7 +13813,7 @@
 								}
 							]
 						},
-						"description": "Same content-search semantics as GET /receipts but cross-household. Includes FAILED_PARSE rows for parser triage.\n\nResponse: Page<AdminReceiptSummaryResponse> \u2014 cada linha = { receipt: ReceiptSummaryResponse, owner: {id,name,email}|null, uf, createdAt, parseErrorReason, parseErrorMessage } (contexto de triagem j\u00e1 na lista).",
+						"description": "Same content-search semantics as GET /receipts but cross-household. Includes FAILED_PARSE rows for parser triage.\n\nResponse: Page<AdminReceiptSummaryResponse> \u2014 cada linha = { receipt: ReceiptSummaryResponse, owner: {id,name,email}|null, uf, createdAt, parseErrorReason, parseErrorMessage } (contexto de triagem j\u00e1 na lista).\n\nFiltros extras (opcionais): entryMethod (repet\u00edvel: QR_SCAN | MANUAL_CHAVE | PHOTO_CHAVE | PHOTO_RECEIPT | IMPORT) e createdFrom (ISO date-time, filtra pela chegada da nota; from/to filtram pela data da compra, que nota com falha n\u00e3o tem).",
 						"auth": {
 							"type": "bearer",
 							"bearer": [
@@ -17085,6 +17085,249 @@
 					]
 				},
 				{
+					"name": "49b15i. Merchant: category-benchmark responde 200 (k-anon)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{merchantToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merchant/category-benchmark?window=90",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"merchant",
+								"category-benchmark"
+							],
+							"query": [
+								{
+									"key": "window",
+									"value": "90"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.variables.get('adminToken')) { pm.test.skip('Sem adminToken - pulando fluxo merchant'); return; }",
+									"pm.test('Category benchmark 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Tem categories (array) e lookbackDays', function () {",
+									"    var d = pm.response.json();",
+									"    pm.expect(d.categories).to.be.an('array');",
+									"    pm.expect(d.lookbackDays).to.be.a('number');",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "49b15j. Merchant: brand-share responde 200 (k-anon)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{merchantToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merchant/brand-share?window=90",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"merchant",
+								"brand-share"
+							],
+							"query": [
+								{
+									"key": "window",
+									"value": "90"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.variables.get('adminToken')) { pm.test.skip('Sem adminToken - pulando fluxo merchant'); return; }",
+									"pm.test('Brand share 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Tem brands (array) e states (array)', function () {",
+									"    var d = pm.response.json();",
+									"    pm.expect(d.brands).to.be.an('array');",
+									"    pm.expect(d.states).to.be.an('array');",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "49b15k. Merchant: analytics das proprias lojas responde 200",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{merchantToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merchant/analytics?window=90",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"merchant",
+								"analytics"
+							],
+							"query": [
+								{
+									"key": "window",
+									"value": "90"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.variables.get('adminToken')) { pm.test.skip('Sem adminToken - pulando fluxo merchant'); return; }",
+									"pm.test('Analytics 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Tem totais e series (array) + granularity', function () {",
+									"    var d = pm.response.json();",
+									"    pm.expect(d.series).to.be.an('array');",
+									"    pm.expect(d.granularity).to.be.a('string');",
+									"    pm.expect(d.totalReceipts).to.be.a('number');",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "49b15l. Merchant: competitor-moves anonimo responde 200 (sem identidade)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{merchantToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merchant/competitor-moves?window=90",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"merchant",
+								"competitor-moves"
+							],
+							"query": [
+								{
+									"key": "window",
+									"value": "90"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.variables.get('adminToken')) { pm.test.skip('Sem adminToken - pulando fluxo merchant'); return; }",
+									"pm.test('Competitor moves 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Tem moves (array) e nunca identidade do concorrente', function () {",
+									"    var d = pm.response.json();",
+									"    pm.expect(d.moves).to.be.an('array');",
+									"    var raw = JSON.stringify(d);",
+									"    pm.expect(raw).to.not.match(/cnpj|marketName|storeName/i);",
+									"    d.moves.forEach(function (m) {",
+									"        pm.expect(m).to.not.have.property('cnpj');",
+									"        pm.expect(m).to.not.have.property('cnpjRoot');",
+									"        pm.expect(['DOWN','UP']).to.include(m.direction);",
+									"    });",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "49b15m. Merchant: performance da promo responde 200 (k-anon)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{merchantToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merchant/promos/{{merchantPromoId}}/performance",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"merchant",
+								"promos",
+								"{{merchantPromoId}}",
+								"performance"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.variables.get('adminToken') || !pm.variables.get('merchantPromoId')) { pm.test.skip('Sem adminToken/promo - pulando'); return; }",
+									"pm.test('Performance 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Tem verified (bool) e exposureTracked=false', function () {",
+									"    var d = pm.response.json();",
+									"    pm.expect(d.verified).to.be.a('boolean');",
+									"    pm.expect(d.exposureTracked).to.eql(false);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
 					"name": "49b15b. Merchant: assinatura tem promo de lancamento (PROMO + freeUntil)",
 					"request": {
 						"method": "GET",
@@ -18369,7 +18612,7 @@
 								}
 							]
 						},
-						"description": "Same content-search semantics as GET /receipts but cross-household. Includes FAILED_PARSE rows for parser triage.\n\nResponse: Page<AdminReceiptSummaryResponse> \u2014 cada linha = { receipt: ReceiptSummaryResponse, owner: {id,name,email}|null, uf, createdAt, parseErrorReason, parseErrorMessage } (contexto de triagem j\u00e1 na lista)."
+						"description": "Same content-search semantics as GET /receipts but cross-household. Includes FAILED_PARSE rows for parser triage.\n\nResponse: Page<AdminReceiptSummaryResponse> \u2014 cada linha = { receipt: ReceiptSummaryResponse, owner: {id,name,email}|null, uf, createdAt, parseErrorReason, parseErrorMessage } (contexto de triagem j\u00e1 na lista).\n\nFiltros extras (opcionais): entryMethod (repet\u00edvel: QR_SCAN | MANUAL_CHAVE | PHOTO_CHAVE | PHOTO_RECEIPT | IMPORT) e createdFrom (ISO date-time, filtra pela chegada da nota; from/to filtram pela data da compra, que nota com falha n\u00e3o tem)."
 					},
 					"response": []
 				},
@@ -20019,7 +20262,7 @@
 					"response": []
 				},
 				{
-					"name": "Users — predominant UF per household",
+					"name": "Users \u2014 predominant UF per household",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -20047,12 +20290,12 @@
 								}
 							]
 						},
-						"description": "Lazy lookup for the user list: householdId → UF the household scans most notas from. Repeat householdIds for several. Households with no nota are absent. ADMIN only."
+						"description": "Lazy lookup for the user list: householdId \u2192 UF the household scans most notas from. Repeat householdIds for several. Households with no nota are absent. ADMIN only."
 					},
 					"response": []
 				},
 				{
-					"name": "Users — lifetime paid-API cost",
+					"name": "Users \u2014 lifetime paid-API cost",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -20080,7 +20323,7 @@
 								}
 							]
 						},
-						"description": "Lazy lookup for the user list: userId → lifetime paid-API cost in cents. Repeat userIds for several. Users with no paid call are absent (treat as 0). ADMIN only."
+						"description": "Lazy lookup for the user list: userId \u2192 lifetime paid-API cost in cents. Repeat userIds for several. Users with no paid call are absent (treat as 0). ADMIN only."
 					},
 					"response": []
 				},
@@ -20108,7 +20351,7 @@
 								"cost"
 							]
 						},
-						"description": "UserCostResponse {totalCents, byService[], byMonth[]} — where one user's paid-API cost comes from (lifetime). ADMIN only."
+						"description": "UserCostResponse {totalCents, byService[], byMonth[]} \u2014 where one user's paid-API cost comes from (lifetime). ADMIN only."
 					},
 					"response": []
 				},
@@ -20208,7 +20451,7 @@
 								}
 							]
 						},
-						"description": "Funil iOS pré-instalação (impressões, page views, installs por fonte) da App Store Connect. ADMIN only."
+						"description": "Funil iOS pr\u00e9-instala\u00e7\u00e3o (impress\u00f5es, page views, installs por fonte) da App Store Connect. ADMIN only."
 					},
 					"response": []
 				},
@@ -20237,12 +20480,12 @@
 								"sync"
 							]
 						},
-						"description": "Força a sincronização imediata dos dados da App Store Connect. Returns {rowsSynced}. ADMIN only."
+						"description": "For\u00e7a a sincroniza\u00e7\u00e3o imediata dos dados da App Store Connect. Returns {rowsSynced}. ADMIN only."
 					},
 					"response": []
 				},
 				{
-					"name": "Chains — list",
+					"name": "Chains \u2014 list",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -20278,7 +20521,7 @@
 					"response": []
 				},
 				{
-					"name": "Chains — states",
+					"name": "Chains \u2014 states",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -20305,7 +20548,7 @@
 					"response": []
 				},
 				{
-					"name": "Chains — cities",
+					"name": "Chains \u2014 cities",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -20338,7 +20581,7 @@
 					"response": []
 				},
 				{
-					"name": "Chains — create",
+					"name": "Chains \u2014 create",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -20372,7 +20615,7 @@
 					"response": []
 				},
 				{
-					"name": "Chains — rename",
+					"name": "Chains \u2014 rename",
 					"request": {
 						"method": "PUT",
 						"header": [
@@ -20407,7 +20650,7 @@
 					"response": []
 				},
 				{
-					"name": "Chains — upload logo",
+					"name": "Chains \u2014 upload logo",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -20445,7 +20688,7 @@
 					"response": []
 				},
 				{
-					"name": "Chains — delete logo",
+					"name": "Chains \u2014 delete logo",
 					"request": {
 						"method": "DELETE",
 						"header": [
@@ -20495,7 +20738,7 @@
 					"response": []
 				},
 				{
-					"name": "Photo attempts — settings",
+					"name": "Photo attempts \u2014 settings",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -20517,12 +20760,12 @@
 								"settings"
 							]
 						},
-						"description": "Estado do toggle de retenção de fotos (temporário). Returns {enabled}. ADMIN only."
+						"description": "Estado do toggle de reten\u00e7\u00e3o de fotos (tempor\u00e1rio). Returns {enabled}. ADMIN only."
 					},
 					"response": []
 				},
 				{
-					"name": "Photo attempts — update settings",
+					"name": "Photo attempts \u2014 update settings",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -20552,12 +20795,12 @@
 							"mode": "raw",
 							"raw": "{\n  \"enabled\": false\n}"
 						},
-						"description": "Liga/desliga a retenção de fotos ao vivo (em memória, até reiniciar). Returns {enabled}. ADMIN only."
+						"description": "Liga/desliga a reten\u00e7\u00e3o de fotos ao vivo (em mem\u00f3ria, at\u00e9 reiniciar). Returns {enabled}. ADMIN only."
 					},
 					"response": []
 				},
 				{
-					"name": "Photo attempts — list photos of a receipt",
+					"name": "Photo attempts \u2014 list photos of a receipt",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -20579,12 +20822,12 @@
 								"{{receiptId}}"
 							]
 						},
-						"description": "Lista as fotos guardadas de uma tentativa de extração: {receiptId, count, photos[{index, mediaType, downloadPath}]}. ADMIN only."
+						"description": "Lista as fotos guardadas de uma tentativa de extra\u00e7\u00e3o: {receiptId, count, photos[{index, mediaType, downloadPath}]}. ADMIN only."
 					},
 					"response": []
 				},
 				{
-					"name": "Photo attempts — download photo",
+					"name": "Photo attempts \u2014 download photo",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -20607,7 +20850,7 @@
 								"0"
 							]
 						},
-						"description": "Baixa uma foto guardada da tentativa (bytes) pelo index; 404 se não existir. ADMIN only."
+						"description": "Baixa uma foto guardada da tentativa (bytes) pelo index; 404 se n\u00e3o existir. ADMIN only."
 					},
 					"response": []
 				}
@@ -21215,6 +21458,166 @@
 							]
 						},
 						"description": "Por produto observado na rede: mediana da rede vs. mediana da regi\u00e3o (mesmo estado). S\u00f3 linhas que passam k-anonimato (K=3 households) + m\u00ednimo de amostras nos DOIS lados."
+					},
+					"response": []
+				},
+				{
+					"name": "Get category benchmark (chain vs region, k-anon)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{merchantToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merchant/category-benchmark?window=90",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"merchant",
+								"category-benchmark"
+							],
+							"query": [
+								{
+									"key": "window",
+									"value": "90"
+								}
+							]
+						},
+						"description": "Por grupo da taxonomia: indice de preco da rede vs. regional (mesma UF) + delta%. Roll-up SO de pares (produto, UF) que passaram K=3 nos dois lados. window= opcional (dias)."
+					},
+					"response": []
+				},
+				{
+					"name": "Get brand demand share (anonymized, k-anon)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{merchantToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merchant/brand-share?category=&window=90",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"merchant",
+								"brand-share"
+							],
+							"query": [
+								{
+									"key": "category",
+									"value": ""
+								},
+								{
+									"key": "window",
+									"value": "90"
+								}
+							]
+						},
+						"description": "Sinal de demanda por marca na regiao da rede (mesma UF). Marca so aparece com >=3 households distintos (K=3). category= (slug) e window= opcionais."
+					},
+					"response": []
+				},
+				{
+					"name": "Get own-store analytics (time series, own data)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{merchantToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merchant/analytics?window=90",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"merchant",
+								"analytics"
+							],
+							"query": [
+								{
+									"key": "window",
+									"value": "90"
+								}
+							]
+						},
+						"description": "Atividade das PROPRIAS lojas: notas confirmadas + faturamento + ticket medio, serie diaria/semanal. Dado proprio -> sem k-anon. window= opcional."
+					},
+					"response": []
+				},
+				{
+					"name": "Get competitor moves (anonymized, antitrust-safe)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{merchantToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merchant/competitor-moves?window=90",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"merchant",
+								"competitor-moves"
+							],
+							"query": [
+								{
+									"key": "window",
+									"value": "90"
+								}
+							]
+						},
+						"description": "Movimentos de preco de OUTRAS lojas da regiao para produtos que o lojista vende. ANONIMIZADO: so produto + direcao + magnitude% + recencia. Nunca nome/CNPJ/preco do concorrente. K=3."
+					},
+					"response": []
+				},
+				{
+					"name": "Get promo performance (receipt-backed, k-anon)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{merchantToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/merchant/promos/{{merchantPromoId}}/performance",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"merchant",
+								"promos",
+								"{{merchantPromoId}}",
+								"performance"
+							]
+						},
+						"description": "Proxy de resgate por recibo (households distintos confirmando o preco na janela, K=3) + selo verificado + status. confirmingHouseholds vem null abaixo de K. Sem tracking de exposicao hoje (exposureTracked=false)."
 					},
 					"response": []
 				},

@@ -64,6 +64,7 @@ import com.relyon.economizaai.dto.response.ReceiptResponse;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.CategorizationSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.model.enums.ReceiptEntryMethod;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.AcquisitionChannel;
 import com.relyon.economizaai.model.enums.Platform;
@@ -381,10 +382,13 @@ public class AdminController {
             @RequestParam(required = false) ReceiptStatus status,
             @RequestParam(required = false) String parseErrorReason,
             @RequestParam(required = false) String userQ,
+            @RequestParam(required = false) List<ReceiptEntryMethod> entryMethod,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime createdFrom,
             @RequestParam(defaultValue = "false") boolean includeInternal,
             @PageableDefault(size = 20) Pageable pageable) {
         return ResponseEntity.ok(adminReceiptService.list(
-                from, to, marketCnpj, category, q, householdId, uf, status, parseErrorReason, userQ, includeInternal, pageable));
+                from, to, marketCnpj, category, q, householdId, uf, status, parseErrorReason, userQ, entryMethod,
+                createdFrom, includeInternal, pageable));
     }
 
     /** Count + total value of the notes matching the given filters (list header total). */
@@ -400,9 +404,11 @@ public class AdminController {
             @RequestParam(required = false) ReceiptStatus status,
             @RequestParam(required = false) String parseErrorReason,
             @RequestParam(required = false) String userQ,
+            @RequestParam(required = false) List<ReceiptEntryMethod> entryMethod,
             @RequestParam(defaultValue = "false") boolean includeInternal) {
         return ResponseEntity.ok(adminReceiptService.stats(
-                from, to, marketCnpj, category, q, householdId, uf, status, parseErrorReason, userQ, includeInternal));
+                from, to, marketCnpj, category, q, householdId, uf, status, parseErrorReason, userQ, entryMethod,
+                includeInternal));
     }
 
     /**
@@ -420,9 +426,10 @@ public class AdminController {
             @RequestParam(required = false) UUID householdId,
             @RequestParam(required = false) UnidadeFederativa uf,
             @RequestParam(required = false) String userQ,
+            @RequestParam(required = false) List<ReceiptEntryMethod> entryMethod,
             @RequestParam(defaultValue = "false") boolean includeInternal) {
         return ResponseEntity.ok(adminReceiptService.failureBreakdown(
-                from, to, marketCnpj, category, q, householdId, uf, userQ, includeInternal));
+                from, to, marketCnpj, category, q, householdId, uf, userQ, entryMethod, includeInternal));
     }
 
     /** How users are entering their notas (QR scan vs typed/photographed chave vs photo vs import):

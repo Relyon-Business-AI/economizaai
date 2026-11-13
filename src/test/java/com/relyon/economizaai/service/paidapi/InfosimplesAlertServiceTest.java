@@ -22,7 +22,31 @@ class InfosimplesAlertServiceTest {
     @Mock private OperationalAlertService operationalAlertService;
 
     private InfosimplesAlertService service() {
-        return new InfosimplesAlertService(operationalAlertService, new BigDecimal("5.00"));
+        return new InfosimplesAlertService(operationalAlertService, new BigDecimal("5.00"), "SE, to");
+    }
+
+    @Test
+    void originUnavailableOnAKnownOfflineStateIsNotNews() {
+        var alertService = service();
+
+        alertService.alertConsultFailure("se", 615, "origem indisponível");
+        alertService.alertConsultFailure("TO", 615, "origem indisponível");
+
+        verify(operationalAlertService, never()).alertAdmin(anyString(), anyString());
+    }
+
+    @Test
+    void originUnavailableOnAStateNotKnownToBeOfflineStillAlerts() {
+        service().alertConsultFailure("rj", 615, "origem indisponível");
+
+        verify(operationalAlertService).alertAdmin(contains("uf=rj"), anyString());
+    }
+
+    @Test
+    void anyOtherFailureOnAKnownOfflineStateStillAlerts() {
+        service().alertConsultFailure("se", 603, "sem saldo");
+
+        verify(operationalAlertService).alertAdmin(contains("uf=se"), anyString());
     }
 
     @Test

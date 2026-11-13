@@ -5,6 +5,7 @@ import com.relyon.economizaai.config.MdcContextFilter;
 import com.relyon.economizaai.exception.DomainException;
 import com.relyon.economizaai.exception.ExperimentalStateFailedException;
 import com.relyon.economizaai.exception.InfosimplesNoDataException;
+import com.relyon.economizaai.exception.InfosimplesProviderException;
 import com.relyon.economizaai.exception.PaidApiUnavailableException;
 import com.relyon.economizaai.exception.ReceiptParseException;
 import com.relyon.economizaai.exception.UnsupportedMerchantException;
@@ -716,13 +717,19 @@ public class ReceiptIngestionService {
     }
 
     /**
-     * The chain reported the portal/origin as unavailable — or this is a nota already parked for
-     * that reason whose re-attempt was stopped by the paid-API breaker (open precisely because
-     * the portal keeps failing). Either way it stays parked for the next recovery pass.
+     * The chain (or the paid provider itself) reported the portal/origin as unavailable — or this
+     * is a nota already parked for that reason whose re-attempt was stopped by the paid-API breaker
+     * (open precisely because the portal keeps failing). Either way it stays parked for the next
+     * recovery pass.
      */
     private static boolean isPortalStillUnavailable(Receipt receipt, RuntimeException ex) {
         if (ex instanceof ExperimentalStateFailedException chainFail) {
             return chainFail.isPortalUnavailable();
+        }
+        // The by-chave chain (typed/photographed chave) ends at the paid provider: when IT reports
+        // the origin offline, the nota is parked exactly like a QR scan of the same state.
+        if (ex instanceof InfosimplesProviderException providerFail) {
+            return providerFail.isOriginUnavailable();
         }
         return ex instanceof PaidApiUnavailableException
                 && receipt.getParseErrorReason() != null
