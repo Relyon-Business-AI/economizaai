@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.sefaz;
 
 import com.relyon.economizaai.exception.ExperimentalStateFailedException;
+import com.relyon.economizaai.exception.InfosimplesProviderException;
 import com.relyon.economizaai.exception.PaidApiUnavailableException;
 import com.relyon.economizaai.exception.ReceiptParseException;
 import com.relyon.economizaai.exception.SefazFetchException;
@@ -793,6 +794,33 @@ class ReceiptIngestionServiceTest {
         assertTrue(receipt.getParseErrorReason().startsWith("receipt.portal.unavailable"));
         assertTrue(receipt.isResyncingFromContingency()); // so recovery pings the owner
         verify(notificationService, never()).notifyAfterCommit(any());
+    }
+
+    @Test
+    void markFailed_typedChaveWithThePortalOffline_parksPortalPending_withoutOwnerPing() {
+        // A typed chave ends at the paid provider; its "origem indisponível" (615) parks the nota
+        // just like a QR scan of the same state, instead of a "try again in a few minutes" failure.
+        var receipt = processingReceipt();
+        receipt.setCreatedAt(LocalDateTime.now().minusMinutes(5));
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        service.markFailed(receipt.getId(), new InfosimplesProviderException(615));
+
+        assertEquals(ReceiptStatus.PORTAL_PENDING, receipt.getStatus());
+        assertTrue(receipt.getParseErrorReason().startsWith("receipt.portal.unavailable"));
+        assertTrue(receipt.isResyncingFromContingency());
+        verify(notificationService, never()).notifyAfterCommit(any());
+    }
+
+    @Test
+    void markFailed_providerUnstableButPortalNotReportedOffline_staysFailedParse() {
+        var receipt = processingReceipt();
+        when(receiptRepository.findById(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        service.markFailed(receipt.getId(), new InfosimplesProviderException(609));
+
+        assertEquals(ReceiptStatus.FAILED_PARSE, receipt.getStatus());
+        assertEquals("receipt.parse.failed:infosimples.error", receipt.getParseErrorReason());
     }
 
     @Test

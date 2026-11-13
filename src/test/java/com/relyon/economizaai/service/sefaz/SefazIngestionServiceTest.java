@@ -1050,6 +1050,36 @@ class SefazIngestionServiceTest {
     }
 
     @Test
+    void fetch_bareChavePortalOffline_propagatesTheProviderVerdictWithoutTheNoPathAlert() {
+        // 615: o portal do estado está fora. A nota fica guardada pra reconsulta, não é "sem caminho".
+        var spAdapter = mockAdapterFor(UnidadeFederativa.SP);
+        when(spAdapter.requiresQrSignature()).thenReturn(true);
+        var infosimples = mock(InfosimplesService.class);
+        when(infosimples.fetchParsed(eq(CHAVE_SP), eq(UnidadeFederativa.SP)))
+                .thenThrow(new InfosimplesProviderException(615));
+        var service = new SefazIngestionService(List.of(spAdapter), Optional.of(infosimples), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+
+        var thrown = assertThrows(InfosimplesProviderException.class, () -> service.fetch(CHAVE_SP, null));
+
+        assertTrue(thrown.isOriginUnavailable());
+        verifyNoInteractions(operationalAlert);
+    }
+
+    @Test
+    void fetch_bareChaveProviderUnstable_stillRaisesTheNoPathAlert() {
+        var spAdapter = mockAdapterFor(UnidadeFederativa.SP);
+        when(spAdapter.requiresQrSignature()).thenReturn(true);
+        var infosimples = mock(InfosimplesService.class);
+        when(infosimples.fetchParsed(eq(CHAVE_SP), eq(UnidadeFederativa.SP)))
+                .thenThrow(new InfosimplesProviderException(609));
+        var service = new SefazIngestionService(List.of(spAdapter), Optional.of(infosimples), paidApiGuard, stateCoverage, rsChaveReconsult, chaveReconsult, operationalAlert, prefetchPolicy, htmlReceiptRescue);
+
+        assertThrows(InfosimplesProviderException.class, () -> service.fetch(CHAVE_SP, null));
+
+        verify(operationalAlert).alertAdmin(contains("SP"), anyString());
+    }
+
+    @Test
     void fetch_bareChaveNoPath_alertsAdminAndFails() {
         // SP: QR-only, não reconsultável, Infosimples desabilitado → alerta admin + falha.
         var spAdapter = mockAdapterFor(UnidadeFederativa.SP);

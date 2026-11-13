@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.paidapi;
 
+import com.relyon.economizaai.exception.InfosimplesProviderException;
 import com.relyon.economizaai.service.notifications.OperationalAlertService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -9,7 +10,11 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.Arrays;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 /**
  * Admin alerts for the Infosimples prepaid account — the owner must KNOW when
@@ -20,6 +25,10 @@ import java.util.concurrent.atomic.AtomicReference;
  * <p>Consult alerts are throttled in-memory (single-instance deploy) so a burst
  * of failing receipts sends ONE e-mail, not one per nota. Alert dispatch must
  * never break the ingestion flow — failures are logged and swallowed.
+ *
+ * <p>A state the owner already knows is offline (the paused-state probe watch-list) keeps
+ * answering "origem indisponível" on every re-fetch of its parked notas. That is not news:
+ * those consults are silenced, and the probe is the one that reports when the state is back.
  */
 @Slf4j
 @Service
@@ -29,12 +38,18 @@ public class InfosimplesAlertService {
 
     private final OperationalAlertService operationalAlertService;
     private final BigDecimal lowBalanceThreshold;
+    private final Set<String> knownOfflineUfs;
     private final AtomicReference<Instant> lastConsultAlert = new AtomicReference<>();
 
     public InfosimplesAlertService(OperationalAlertService operationalAlertService,
-                                   @Value("${economizaai.infosimples.low-balance-threshold:5.00}") BigDecimal lowBalanceThreshold) {
+                                   @Value("${economizaai.infosimples.low-balance-threshold:5.00}") BigDecimal lowBalanceThreshold,
+                                   @Value("${economizaai.ingestion.paused-state-probe.ufs:SE}") String knownOfflineUfsCsv) {
         this.operationalAlertService = operationalAlertService;
         this.lowBalanceThreshold = lowBalanceThreshold;
+        this.knownOfflineUfs = Arrays.stream(knownOfflineUfsCsv.split(","))
+                .map(ufToken -> ufToken.trim().toLowerCase(Locale.ROOT))
+                .filter(ufToken -> !ufToken.isEmpty())
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     /** Daily snapshot hook: alerts when the saldo crossed below the configured threshold. */
@@ -47,6 +62,10 @@ public class InfosimplesAlertService {
 
     /** A paid NFC-e consult failed (CE or fallback) — throttled to one e-mail per window. */
     public void alertConsultFailure(String uf, int providerCode, String providerMessage) {
+        if (isKnownOutage(uf, providerCode)) {
+            log.debug("infosimples.alert.known_outage uf={} code={}", uf, providerCode);
+            return;
+        }
         var now = Instant.now();
         var last = lastConsultAlert.get();
         if (last != null && Duration.between(last, now).compareTo(CONSULT_ALERT_THROTTLE) < 0) {
@@ -70,6 +89,12 @@ public class InfosimplesAlertService {
                 """.formatted(uf, providerCode,
                 providerMessage == null ? "(sem mensagem)" : providerMessage,
                 OffsetDateTime.now(), CONSULT_ALERT_THROTTLE.toHours()));
+    }
+
+    private boolean isKnownOutage(String uf, int providerCode) {
+        return providerCode == InfosimplesProviderException.ORIGIN_UNAVAILABLE_CODE
+                && uf != null
+                && knownOfflineUfs.contains(uf.toLowerCase(Locale.ROOT));
     }
 
     private void alertLowBalance(BigDecimal saldo) {
