@@ -1,5 +1,21 @@
 # economizai — what's new
 
+## 2026-11-13 — Renovação de sessão informa a plataforma (identifica cadastros antigos)
+
+**O que o FE precisa saber**
+
+- **`POST /api/v1/auth/refresh` aceita `platform`** (`WEB | ANDROID | IOS`, opcional) no corpo, ao lado de
+  `refreshToken`. Cliente antigo, que não manda, continua funcionando igual.
+- Para que serve: quem se cadastrou antes de a plataforma ser gravada e nunca saiu da conta só renova a
+  sessão, então aparecia como "Desconhecido" em "Por plataforma de cadastro". Com o campo, a plataforma de
+  cadastro é preenchida **só quando ainda está vazia** (nunca sobrescreve) e a última plataforma fica em dia.
+  As datas de último LOGIN por plataforma não mudam (renovar não é logar).
+
+**Backend**
+
+- `LoginActivityRecorder.recordSessionRenewal`: recarrega o usuário, só escreve quando algo muda e nunca
+  propaga erro (os tokens já foram trocados; uma falha aqui não pode derrubar a sessão).
+
 ## 2026-11-12 — Chave digitada com portal fora fica guardada; filtros novos nas listas do admin
 
 **O que o FE precisa saber**

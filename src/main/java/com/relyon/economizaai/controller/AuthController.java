@@ -14,6 +14,7 @@ import com.relyon.economizaai.dto.response.UserResponse;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.UserService;
 import com.relyon.economizaai.service.auth.EmailVerificationService;
+import com.relyon.economizaai.service.auth.LoginActivityRecorder;
 import com.relyon.economizaai.service.auth.PasswordResetService;
 import com.relyon.economizaai.service.auth.RefreshTokenService;
 import com.relyon.economizaai.service.auth.oauth.SocialLoginService;
@@ -40,6 +41,7 @@ public class AuthController {
     private final RefreshTokenService refreshTokenService;
     private final JwtService jwtService;
     private final SocialLoginService socialLoginService;
+    private final LoginActivityRecorder loginActivityRecorder;
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
@@ -104,6 +106,7 @@ public class AuthController {
         var rotation = refreshTokenService.rotate(request.refreshToken());
         var accessToken = jwtService.generateToken(rotation.user());
         var newRefresh = refreshTokenService.issueInFamily(rotation.user(), rotation.familyId());
+        loginActivityRecorder.recordSessionRenewal(rotation.user().getId(), request.platform());
         return ResponseEntity.ok(new AuthResponse(accessToken, newRefresh, UserResponse.from(rotation.user()), false, null));
     }
 

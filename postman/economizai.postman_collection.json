@@ -675,7 +675,7 @@
 							"mode": "raw",
 							"raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
 						},
-						"description": "Single-use rotation. Returns a new (token, refreshToken) pair; the presented refresh token is consumed. Replay \u2192 400 auth.token.invalid."
+						"description": "Single-use rotation. Returns a new (token, refreshToken) pair; the presented refresh token is consumed. Replay \u2192 400 auth.token.invalid.\n\nOptional body field `platform` (WEB | ANDROID | IOS): fills the user's registration platform when it is still unknown (never overwrites it) and keeps the last platform current."
 					},
 					"response": []
 				},
