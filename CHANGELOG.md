@@ -1,5 +1,36 @@
 # economizai — what's new
 
+## 2026-11-14 — `GET /markets/{cnpj}/prices`: preços registrados pela comunidade em um mercado
+
+- Endpoint novo para a tela do mercado: o preço mais recente de cada produto observado naquela loja, uma linha
+  por produto. Parâmetros opcionais: `query` (nome do produto), `category` (enum `ProductCategory`), `days`
+  (janela, padrão 30, de 1 a 180), `sort` (`RECENT` padrão, `CHEAPEST`, `NAME`), `page` e `size` (padrão 30,
+  máximo 100).
+- Resposta paginada padrão (`content`, `totalPages`, `totalElements`, `number`). Cada linha:
+  `{ productId, productName, category, latestPrice, observedOn }`. `observedOn` é só o dia (`"2026-11-10"`).
+- Privacidade igual à do best-markets, aplicada na consulta: produto de mercearia em loja de varejo alimentar
+  aparece com 1 casa; produto de saúde, ou qualquer produto em farmácia ou loja sem segmento classificado, só
+  aparece com 3 casas distintas. Lista vazia em farmácia é esperado: o FE deve mostrar estado vazio.
+- `404` quando o CNPJ não tem mercado cadastrado, `400` quando o CNPJ não tem 14 dígitos.
+
+## 2026-11-14 — `GET /subscriptions/usage`: uso real ao lado dos limites do plano gratuito
+
+- Endpoint novo para a tela do Premium: notas enviadas no mês, categorias personalizadas da casa, mercados
+  acompanhados e a data da compra confirmada mais antiga, cada um com o limite do plano gratuito
+  (`freeMonthlyReceipts`, `freeCustomCategories`, `freeWatchedMarkets`, `freeHistoryDays`). As contagens são as
+  mesmas que os paywalls usam. `oldestPurchaseDate` vem `null` sem nota confirmada.
+- Não existe limite gratuito de alertas de preço: o FE não deve mostrar um.
+
+## 2026-11-14 — Localização da casa guardada com cerca de 110 m de precisão
+
+- `PUT /users/me/location` passa a guardar latitude e longitude com **3 casas decimais** (grade de ~110 m), e a
+  resposta devolve o valor já arredondado. A migration `V179` arredonda o que estava salvo com precisão de GPS.
+  Distâncias e o raio de 20 km seguem funcionando; a diferença máxima é de dezenas de metros.
+- O log deixou de registrar as coordenadas (`home_location.set user=…`) e o CEP consultado sai mascarado
+  (`90010-***`).
+- `GET /users/me/location/cep`: o `label` agora traz o bairro quando o CEP tem um ("Centro, Porto Alegre - RS").
+  CEP sem bairro (cidade pequena de CEP único) traz o próprio CEP: "CEP 95166-000, Picada Café - RS".
+
 ## 2026-11-14 — Mensagem própria para o limite de categorias personalizadas
 
 - `POST /categories` acima do limite do gratuito continua respondendo **402**, mas agora com mensagem própria

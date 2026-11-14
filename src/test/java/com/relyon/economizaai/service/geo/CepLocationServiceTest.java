@@ -41,8 +41,20 @@ class CepLocationServiceTest {
         assertTrue(result.isPresent());
         assertEquals(0, new BigDecimal("-27.59").compareTo(result.get().latitude()));
         assertEquals(0, new BigDecimal("-48.55").compareTo(result.get().longitude()));
-        assertEquals("Florianópolis - SC", result.get().label());
+        assertEquals("Centro, Florianópolis - SC", result.get().label());
         verifyNoInteractions(geocoder); // não precisou do geocoder
+    }
+
+    @Test
+    void labelShowsTheCepWhenThereIsNoNeighborhood() {
+        var geocoder = mock(NominatimGeocoder.class);
+        var body = "{\"city\":\"Picada Café\",\"state\":\"RS\","
+                + "\"location\":{\"type\":\"Point\",\"coordinates\":{\"longitude\":\"-51.13\",\"latitude\":\"-29.44\"}}}";
+
+        var result = serviceReturning(body, geocoder).resolve("95166-000");
+
+        assertTrue(result.isPresent());
+        assertEquals("CEP 95166-000, Picada Café - RS", result.get().label());
     }
 
     @Test
@@ -56,7 +68,7 @@ class CepLocationServiceTest {
 
         assertTrue(result.isPresent());
         assertEquals(0, new BigDecimal("-30.03").compareTo(result.get().latitude()));
-        assertEquals("Porto Alegre - RS", result.get().label());
+        assertEquals("Centro, Porto Alegre - RS", result.get().label());
     }
 
     @Test

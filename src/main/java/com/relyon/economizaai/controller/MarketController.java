@@ -1,14 +1,19 @@
 package com.relyon.economizaai.controller;
 
 import com.relyon.economizaai.dto.request.SetMarketNameRequest;
+import com.relyon.economizaai.dto.response.MarketProductPriceResponse;
 import com.relyon.economizaai.dto.response.MarketResponse;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.service.geo.MarketNameService;
 import com.relyon.economizaai.service.geo.WatchedMarketService;
 import com.relyon.economizaai.service.geo.WatchedMarketService.MarketScope;
+import com.relyon.economizaai.service.priceindex.MarketPricesService;
+import com.relyon.economizaai.service.priceindex.MarketPricesSort;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -38,6 +43,7 @@ public class MarketController {
 
     private final WatchedMarketService watchedMarketService;
     private final MarketNameService marketNameService;
+    private final MarketPricesService marketPricesService;
 
     /**
      * "Mercados" screen. {@code scope=ALL} (default) returns markets within 20 km of the
@@ -69,6 +75,25 @@ public class MarketController {
     public ResponseEntity<Void> unpin(@AuthenticationPrincipal User user, @PathVariable String cnpj) {
         watchedMarketService.unwatch(user, cnpj);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * "Tela do mercado": the latest price the community registered for each product at this
+     * store, one row per product. K-anonymity by tier is enforced in the query (grocery product
+     * at a grocery store: 1 household; health product or non-grocery/unclassified store: K=3),
+     * and rows carry only product, price and the DAY it was observed.
+     */
+    @GetMapping("/{cnpj}/prices")
+    public ResponseEntity<Page<MarketProductPriceResponse>> prices(
+            @PathVariable String cnpj,
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false) ProductCategory category,
+            @RequestParam(required = false) Integer days,
+            @RequestParam(defaultValue = "RECENT") MarketPricesSort sort,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "30") int size) {
+        return ResponseEntity.ok(marketPricesService.latestPrices(cnpj,
+                new MarketPricesService.Filter(query, category, days, sort, page, size)));
     }
 
     /** Set a household-only custom name for a market. */

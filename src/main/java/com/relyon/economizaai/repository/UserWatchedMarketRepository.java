@@ -11,6 +11,8 @@ public interface UserWatchedMarketRepository extends JpaRepository<UserWatchedMa
 
     List<UserWatchedMarket> findAllByUserId(UUID userId);
 
+    long countByUserId(UUID userId);
+
     Optional<UserWatchedMarket> findByUserIdAndMarketCnpj(UUID userId, String marketCnpj);
 
     void deleteByUserIdAndMarketCnpj(UUID userId, String marketCnpj);
