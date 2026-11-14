@@ -70,7 +70,7 @@ public class CepLocationService {
         var city = text(body, "city");
         var state = text(body, "state");
         var neighborhood = text(body, "neighborhood");
-        var label = buildLabel(neighborhood, city, state);
+        var label = buildLabel(neighborhood, cep, city, state);
 
         var fromBrasilApi = coordinatesFrom(body.get("location"));
         if (fromBrasilApi.isPresent()) {
@@ -116,11 +116,16 @@ public class CepLocationService {
         return parts.toString();
     }
 
-    /** "Bairro, Cidade - UF"; the neighbourhood is left out when the CEP has none (single-CEP towns). */
-    private String buildLabel(String neighborhood, String city, String state) {
+    /**
+     * Most specific first: "Bairro, Cidade - UF"; a CEP without a neighbourhood (single-CEP towns)
+     * shows the CEP itself, "CEP 00000-000, Cidade - UF".
+     */
+    private String buildLabel(String neighborhood, String cep, String city, String state) {
         var cityAndState = city != null && state != null ? city + " - " + state : city != null ? city : state;
-        if (neighborhood == null || cityAndState == null || neighborhood.equalsIgnoreCase(city)) return cityAndState;
-        return neighborhood + ", " + cityAndState;
+        if (cityAndState == null) return null;
+        var hasNeighborhood = neighborhood != null && !neighborhood.equalsIgnoreCase(city);
+        var mostSpecific = hasNeighborhood ? neighborhood : "CEP " + cep.substring(0, 5) + "-" + cep.substring(5);
+        return mostSpecific + ", " + cityAndState;
     }
 
     /** A full CEP narrows down to a street; the log keeps only the 5-digit region prefix. */

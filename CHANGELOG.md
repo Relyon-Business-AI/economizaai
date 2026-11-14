@@ -8,7 +8,7 @@
 - O log deixou de registrar as coordenadas (`home_location.set user=…`) e o CEP consultado sai mascarado
   (`90010-***`).
 - `GET /users/me/location/cep`: o `label` agora traz o bairro quando o CEP tem um ("Centro, Porto Alegre - RS").
-  CEP único de cidade pequena continua só com cidade e UF.
+  CEP sem bairro (cidade pequena de CEP único) traz o próprio CEP: "CEP 95166-000, Picada Café - RS".
 
 ## 2026-11-14 — Mensagem própria para o limite de categorias personalizadas
 
