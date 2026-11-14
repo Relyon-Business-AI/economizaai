@@ -9,6 +9,7 @@ import com.relyon.economizaai.dto.request.UpdateContributionRequest;
 import com.relyon.economizaai.dto.request.UpdateDigestPreferencesRequest;
 import com.relyon.economizaai.dto.request.UpdateHomeLocationRequest;
 import com.relyon.economizaai.dto.request.UpdateNotificationPreferencesRequest;
+import com.relyon.economizaai.dto.request.UpdateNotificationSettingsRequest;
 import com.relyon.economizaai.dto.request.UpdatePhoneRequest;
 import com.relyon.economizaai.dto.request.UpdatePushTokenRequest;
 import com.relyon.economizaai.dto.request.UpdateUserRequest;
@@ -17,6 +18,7 @@ import com.relyon.economizaai.dto.request.VerifyPhoneRequest;
 import com.relyon.economizaai.dto.response.CepLocationResponse;
 import com.relyon.economizaai.dto.response.DigestPreferencesResponse;
 import com.relyon.economizaai.dto.response.NotificationPreferenceResponse;
+import com.relyon.economizaai.dto.response.NotificationSettingsResponse;
 import com.relyon.economizaai.dto.response.SavingsSummaryResponse;
 import com.relyon.economizaai.dto.response.StoreReviewPromptResponse;
 import com.relyon.economizaai.dto.response.SubscriptionStatusResponse;
@@ -33,6 +35,7 @@ import com.relyon.economizaai.service.auth.EmailVerificationService;
 import com.relyon.economizaai.service.auth.PhoneVerificationService;
 import com.relyon.economizaai.service.notifications.NotificationPreferenceService;
 import com.relyon.economizaai.service.notifications.SavingsService;
+import com.relyon.economizaai.service.notifications.UserNotificationSettingsService;
 import com.relyon.economizaai.service.notifications.WhatsAppOptInService;
 import com.relyon.economizaai.service.profile.ProfilePictureService;
 import com.relyon.economizaai.service.profile.StoreReviewPromptService;
@@ -68,6 +71,7 @@ public class UserController {
     private final UserService userService;
     private final LocalizedMessageService messageService;
     private final NotificationPreferenceService notificationPreferenceService;
+    private final UserNotificationSettingsService userNotificationSettingsService;
     private final ProfilePictureService profilePictureService;
     private final EmailVerificationService emailVerificationService;
     private final EmailChangeService emailChangeService;
@@ -155,6 +159,18 @@ public class UserController {
             @AuthenticationPrincipal User user,
             @Valid @RequestBody UpdateNotificationPreferencesRequest request) {
         return ResponseEntity.ok(notificationPreferenceService.update(user, request));
+    }
+
+    @GetMapping("/me/notification-settings")
+    public ResponseEntity<NotificationSettingsResponse> notificationSettings(@AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(userNotificationSettingsService.openSettings(user));
+    }
+
+    @PatchMapping("/me/notification-settings")
+    public ResponseEntity<NotificationSettingsResponse> updateNotificationSettings(
+            @AuthenticationPrincipal User user,
+            @RequestBody UpdateNotificationSettingsRequest request) {
+        return ResponseEntity.ok(userNotificationSettingsService.update(user, request));
     }
 
     @GetMapping("/me/digest-preferences")

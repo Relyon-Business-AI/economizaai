@@ -3,6 +3,7 @@ package com.relyon.economizaai.service.notifications;
 import com.relyon.economizaai.dto.response.WhatsAppStatusResponse;
 import com.relyon.economizaai.exception.PaidApiBudgetExceededException;
 import com.relyon.economizaai.exception.PaidApiQuotaExceededException;
+import com.relyon.economizaai.exception.UserNotFoundException;
 import com.relyon.economizaai.exception.WhatsAppOptInRequiredException;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.PaidApiService;
@@ -81,15 +82,35 @@ public class WhatsAppOptInService {
                 waMeLink("RELATORIO", token));
     }
 
-    /** Flips the weekly-report toggle. Requires a prior opt-in (linked WhatsApp). */
+    /**
+     * Flips the weekly-report toggle — the WhatsApp option of the WEEKLY_REPORT notice.
+     * Requires a prior opt-in (linked WhatsApp). The authenticated user is a detached
+     * snapshot, so the change is made on a fresh, managed load.
+     */
     @Transactional
     public WhatsAppStatusResponse updateWeeklyReport(User user, boolean enabled) {
-        if (!user.isWhatsAppOptIn()) {
+        var managedUser = userRepository.findById(user.getId())
+                .orElseThrow(() -> new UserNotFoundException(user.getId().toString()));
+        if (!managedUser.isWhatsAppOptIn()) {
             throw new WhatsAppOptInRequiredException();
         }
-        user.setWhatsAppWeeklyReportEnabled(enabled);
-        userRepository.save(user);
-        return status(user);
+        managedUser.setWhatsAppWeeklyReportEnabled(enabled);
+        userRepository.save(managedUser);
+        return status(managedUser);
+    }
+
+    /**
+     * The wa.me link that connects the user's WhatsApp ("CONFIRMAR-<token>"). Issuing it
+     * persists the user's link token on first use, so pass a managed user.
+     */
+    @Transactional
+    public String issueConfirmLink(User managedUser) {
+        return waMeLink("CONFIRMAR", ensureLinkToken(managedUser));
+    }
+
+    /** "****1234", or null when the user has no linked WhatsApp number. */
+    public String maskedWhatsAppNumber(User user) {
+        return user.getWhatsAppNumber() == null ? null : maskNumber(user.getWhatsAppNumber());
     }
 
     /** Ensures the user has a stable deep-link token; generates + persists one on first use. */
