@@ -6128,6 +6128,66 @@
 					"response": []
 				},
 				{
+					"name": "Market prices (tela do mercado)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/markets/93015006005182/prices?days=30&sort=RECENT&page=0&size=30",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"markets",
+								"93015006005182",
+								"prices"
+							],
+							"query": [
+								{
+									"key": "days",
+									"value": "30",
+									"description": "Lookback window in days (default 30, clamped to 1..180)"
+								},
+								{
+									"key": "sort",
+									"value": "RECENT",
+									"description": "RECENT (default) | CHEAPEST | NAME"
+								},
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "30",
+									"description": "Default 30, max 100"
+								},
+								{
+									"key": "query",
+									"value": "arroz",
+									"description": "Product name contains (case-insensitive)",
+									"disabled": true
+								},
+								{
+									"key": "category",
+									"value": "GROCERIES",
+									"description": "ProductCategory enum",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Latest community price of each product at one store (one row per product). K-anonymity by tier is enforced in the query: grocery product at a grocery store = 1 household; health product or non-grocery/unclassified store = 3 households. Rows: productId, productName, category, latestPrice, observedOn (day only)."
+					},
+					"response": []
+				},
+				{
 					"name": "Pin market to watchlist",
 					"request": {
 						"method": "POST",
@@ -10384,6 +10444,70 @@
 									"pm.test('Returns an array', function () { pm.expect(pm.response.json()).to.be.an('array'); });",
 									"var rows = pm.response.json();",
 									"if (rows.length > 0) { pm.collectionVariables.set('e2eMarketCnpj', rows[0].cnpj); }"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "30b. Market prices (uses first market from catalogue)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/markets/{{e2eMarketCnpj}}/prices?days=180&sort=RECENT&size=30",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"markets",
+								"{{e2eMarketCnpj}}",
+								"prices"
+							],
+							"query": [
+								{
+									"key": "days",
+									"value": "180"
+								},
+								{
+									"key": "sort",
+									"value": "RECENT"
+								},
+								{
+									"key": "size",
+									"value": "30"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eMarketCnpj')) { pm.test.skip('No market available — skipping'); return; }",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Returns a page', function () {",
+									"    var page = pm.response.json();",
+									"    pm.expect(page.content).to.be.an('array');",
+									"    pm.expect(page).to.have.property('totalElements');",
+									"    pm.expect(page).to.have.property('totalPages');",
+									"});",
+									"pm.test('Rows carry only product, price and day', function () {",
+									"    pm.response.json().content.forEach(function (row) {",
+									"        pm.expect(Object.keys(row).sort()).to.eql(['category', 'latestPrice', 'observedOn', 'productId', 'productName']);",
+									"        pm.expect(row.observedOn).to.match(/^\\d{4}-\\d{2}-\\d{2}$/);",
+									"    });",
+									"});"
 								]
 							}
 						}

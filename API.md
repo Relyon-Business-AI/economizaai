@@ -1403,7 +1403,32 @@ POST   /api/v1/markets/watched/{cnpj}                → pin
 DELETE /api/v1/markets/watched/{cnpj}                → unpin
 PUT    /api/v1/markets/{cnpj}/name                   { "name": "Zaffari de casa" } → set a household-only custom name
 DELETE /api/v1/markets/{cnpj}/name                   → revert to the global name
+GET    /api/v1/markets/{cnpj}/prices[?query=&category=&days=30&sort=RECENT|CHEAPEST|NAME&page=0&size=30]
+                                                     → market screen: latest community price per product
 ```
+
+**`GET /markets/{cnpj}/prices` (2026-11-14) — market screen.** The latest price the community registered
+for each product at this store, **one row per product** (its most recent in-store observation inside the
+window). All params optional:
+
+| Param | Meaning |
+|---|---|
+| `query` | product name contains (case-insensitive) |
+| `category` | `ProductCategory` enum (`GROCERIES`, `BEVERAGES`, `PRODUCE`, `MEAT_DAIRY`, `BAKERY`, `CLEANING`, `PERSONAL_CARE`, `HEALTH`, `PET_SUPPLIES`, `OTHER`) |
+| `days` | lookback window, default `30`, clamped to `1..180` |
+| `sort` | `RECENT` (default, newest observation first) · `CHEAPEST` (price asc) · `NAME` (product name asc) |
+| `page` / `size` | zero-based page, `size` default `30`, max `100` |
+
+Response is the standard Spring page (`content`, `totalElements`, `totalPages`, `number`, `size`, …). Each row:
+`{ productId, productName, category, latestPrice, observedOn }` — `productName` is the product's
+`normalizedName` (same as product search), `category` the `ProductCategory` enum or `null`, `observedOn` a
+**day** (`"2026-11-10"`), never a time. Nothing else is exposed (no counts, quantities or contributor data).
+`404 market.not.found` when the CNPJ has no market row; `400 market.cnpj.invalid` when it isn't 14 digits.
+
+**Privacy (same tier rule as best-markets, see §7):** a grocery product at a grocery-retail store shows up with
+1 contributing household; a **health** product, or **any** product at a store that isn't classified as grocery
+retail (pharmacy, unknown segment), only shows up once **3 distinct households** observed it at that store in
+the window. So an empty/short list at a pharmacy is expected — show an empty state, not an error.
 
 `GET /markets` (2026-11-10): `scope=ALL` (default) returns markets within **20 km**
 (`best-markets-nearby-radius-km`) of the resolved origin UNION the household's watched

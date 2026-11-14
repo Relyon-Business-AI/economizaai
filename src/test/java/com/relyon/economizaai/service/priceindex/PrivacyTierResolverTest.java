@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -125,6 +126,18 @@ class PrivacyTierResolverTest {
                 .thenReturn(Optional.of(Product.builder().id(uncategorizedId).build()));
 
         assertFalse(resolver.isSensitiveProduct(uncategorizedId));
+    }
+
+    @Test
+    void sensitiveCategoryIdsCoverEveryNodeOfTheSensitiveGroups() {
+        var healthGroup = UUID.randomUUID();
+        var medicines = UUID.randomUUID();
+        var hygieneGroup = UUID.randomUUID();
+        properties.getCollaborative().setSensitiveCategoryGroups(List.of("saude", "higiene"));
+        when(categoryResolver.nodeAndDescendantIds("saude")).thenReturn(Set.of(healthGroup, medicines));
+        when(categoryResolver.nodeAndDescendantIds("higiene")).thenReturn(Set.of(hygieneGroup));
+
+        assertEquals(Set.of(healthGroup, medicines, hygieneGroup), resolver.sensitiveCategoryIds());
     }
 
     @Test

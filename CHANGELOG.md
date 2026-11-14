@@ -1,5 +1,18 @@
 # economizai — what's new
 
+## 2026-11-14 — `GET /markets/{cnpj}/prices`: preços registrados pela comunidade em um mercado
+
+- Endpoint novo para a tela do mercado: o preço mais recente de cada produto observado naquela loja, uma linha
+  por produto. Parâmetros opcionais: `query` (nome do produto), `category` (enum `ProductCategory`), `days`
+  (janela, padrão 30, de 1 a 180), `sort` (`RECENT` padrão, `CHEAPEST`, `NAME`), `page` e `size` (padrão 30,
+  máximo 100).
+- Resposta paginada padrão (`content`, `totalPages`, `totalElements`, `number`). Cada linha:
+  `{ productId, productName, category, latestPrice, observedOn }`. `observedOn` é só o dia (`"2026-11-10"`).
+- Privacidade igual à do best-markets, aplicada na consulta: produto de mercearia em loja de varejo alimentar
+  aparece com 1 casa; produto de saúde, ou qualquer produto em farmácia ou loja sem segmento classificado, só
+  aparece com 3 casas distintas. Lista vazia em farmácia é esperado: o FE deve mostrar estado vazio.
+- `404` quando o CNPJ não tem mercado cadastrado, `400` quando o CNPJ não tem 14 dígitos.
+
 ## 2026-11-14 — `GET /subscriptions/usage`: uso real ao lado dos limites do plano gratuito
 
 - Endpoint novo para a tela do Premium: notas enviadas no mês, categorias personalizadas da casa, mercados
