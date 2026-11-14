@@ -173,6 +173,12 @@ public class User extends BaseEntity implements UserDetails {
     @Column(name = "digest_send_hour")
     private Integer digestSendHour;
 
+    // The DAILY/WEEKLY choice kept while the digest is switched off (digestFrequency = OFF),
+    // so switching a DEALS_DIGEST option back on resumes at the frequency the user had.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "digest_frequency_choice", length = 10)
+    private DigestFrequency digestFrequencyChoice;
+
     /**
      * The hour the deals digest is actually due (explicit override, else inferred from
      * shopping habits, else a per-user default). Persisted so due users are selected in
@@ -261,7 +267,8 @@ public class User extends BaseEntity implements UserDetails {
     @Column(name = "whatsapp_link_token", length = 64)
     private String whatsAppLinkToken;
 
-    // User toggle for the weekly spending report on WhatsApp (requires whatsAppOptIn).
+    // The WhatsApp option of the WEEKLY_REPORT notice (requires whatsAppOptIn). Every other
+    // notice option lives in notification_notice_options.
     @Column(name = "whatsapp_weekly_report_enabled", nullable = false)
     @Builder.Default
     private boolean whatsAppWeeklyReportEnabled = false;
