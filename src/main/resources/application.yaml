@@ -469,8 +469,9 @@ economizaai:
     free:
       watched-markets: 3                       # FREE: max pinned markets (PRO unlimited)
       history-days: 90                         # FREE: rolling analytics/history window (PRO unlimited)
-      monthly-receipts: 5                      # FREE: max receipt submissions per calendar month (PRO unlimited)
+      monthly-receipts: 3                      # FREE: max receipt submissions per calendar month (PRO unlimited)
       household-members: 2                     # FREE: household size when no member is PRO (any PRO member lifts it to the max)
+      custom-categories: 1                     # FREE: max custom categories per household; only creation is blocked (PRO unlimited)
       # PRO features left OPEN to FREE while enforcement is on (comma-separated Feature names,
       # e.g. PUSH_AND_EMAIL_DELIVERY,PHOTO_EXTRACTION) — switch paywalls on one at a time.
       open-features: ${SUBSCRIPTION_FREE_OPEN_FEATURES:}

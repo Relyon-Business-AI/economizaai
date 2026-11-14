@@ -958,12 +958,12 @@ class ReceiptServiceTest {
     @Test
     void submit_throwsPaywallWhenFreeUserAtMonthlyCap() {
         var user = buildUser();
-        when(subscriptionGate.monthlyReceiptLimit(any())).thenReturn(5);
+        when(subscriptionGate.monthlyReceiptLimit(any())).thenReturn(3);
         // Only receipts the user SUBMITTED count — household-split copies are excluded by the query.
         when(receiptRepository.countByUserIdAndSplitCopyFalseAndCreatedAtGreaterThanEqual(eq(user.getId()), any()))
-                .thenReturn(5L);
+                .thenReturn(3L);
         doThrow(new PaywallException(Feature.RECEIPT_UPLOAD_UNLIMITED.name()))
-                .when(subscriptionGate).requireWithinLimit(user, Feature.RECEIPT_UPLOAD_UNLIMITED, 5L);
+                .when(subscriptionGate).requireWithinLimit(user, Feature.RECEIPT_UPLOAD_UNLIMITED, 3L);
 
         var request = new SubmitReceiptRequest(QR_RS);
         assertThrows(PaywallException.class,
@@ -976,7 +976,7 @@ class ReceiptServiceTest {
     @Test
     void submit_allowsWhenFreeUserUnderMonthlyCap() {
         var user = buildUser();
-        when(subscriptionGate.monthlyReceiptLimit(any())).thenReturn(5);
+        when(subscriptionGate.monthlyReceiptLimit(any())).thenReturn(3);
         when(receiptRepository.countByUserIdAndSplitCopyFalseAndCreatedAtGreaterThanEqual(eq(user.getId()), any()))
                 .thenReturn(2L);
         when(receiptRepository.findByHouseholdIdAndChaveAcesso(any(), eq(CHAVE_RS))).thenReturn(Optional.empty());

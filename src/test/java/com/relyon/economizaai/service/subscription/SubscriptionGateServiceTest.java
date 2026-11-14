@@ -28,7 +28,8 @@ class SubscriptionGateServiceTest {
     void setUp() {
         var properties = new CollaborativeProperties();
         // Enforcement is OFF by default (paywall dormant); these tests exercise the
-        // ENFORCED behavior, so turn it on. free defaults: watchedMarkets=3, historyDays=90, monthlyReceipts=5
+        // ENFORCED behavior, so turn it on. free defaults: watchedMarkets=3, historyDays=90, monthlyReceipts=3,
+        // customCategories=1
         properties.getSubscription().setEnforce(true);
         gate = new SubscriptionGateService(properties);
     }
@@ -44,6 +45,7 @@ class SubscriptionGateServiceTest {
         }
         assertEquals(Integer.MAX_VALUE, dormant.watchedMarketLimit(free));
         assertEquals(Integer.MAX_VALUE, dormant.monthlyReceiptLimit(free));
+        assertEquals(Integer.MAX_VALUE, dormant.customCategoryLimit(free));
         assertNull(dormant.freeHistoryWindowDays(free));
         var old = LocalDateTime.now().minusYears(3);
         assertEquals(old, dormant.clampFrom(free, old));
@@ -87,8 +89,23 @@ class SubscriptionGateServiceTest {
 
     @Test
     void monthlyReceiptLimit_freeUsesConfigProUnlimited() {
-        assertEquals(5, gate.monthlyReceiptLimit(user(SubscriptionTier.FREE)));
+        assertEquals(3, gate.monthlyReceiptLimit(user(SubscriptionTier.FREE)));
         assertEquals(Integer.MAX_VALUE, gate.monthlyReceiptLimit(user(SubscriptionTier.PRO)));
+    }
+
+    @Test
+    void customCategoryLimit_freeUsesConfigProUnlimited() {
+        assertEquals(1, gate.customCategoryLimit(user(SubscriptionTier.FREE)));
+        assertEquals(Integer.MAX_VALUE, gate.customCategoryLimit(user(SubscriptionTier.PRO)));
+    }
+
+    @Test
+    void customCategoryLimit_readsConfiguredCap() {
+        var properties = new CollaborativeProperties();
+        properties.getSubscription().setEnforce(true);
+        properties.getSubscription().getFree().setCustomCategories(4);
+
+        assertEquals(4, new SubscriptionGateService(properties).customCategoryLimit(user(SubscriptionTier.FREE)));
     }
 
     @Test
@@ -154,15 +171,29 @@ class SubscriptionGateServiceTest {
         gate.requireWithinLimit(free, Feature.WATCHED_MARKETS_UNLIMITED, 2); // third pin is fine
         assertThrows(PaywallException.class,
                 () -> gate.requireWithinLimit(free, Feature.WATCHED_MARKETS_UNLIMITED, 3));
-        gate.requireWithinLimit(free, Feature.RECEIPT_UPLOAD_UNLIMITED, 4);
+        gate.requireWithinLimit(free, Feature.RECEIPT_UPLOAD_UNLIMITED, 2); // third receipt of the month is fine
         var blocked = assertThrows(PaywallException.class,
-                () -> gate.requireWithinLimit(free, Feature.RECEIPT_UPLOAD_UNLIMITED, 5));
+                () -> gate.requireWithinLimit(free, Feature.RECEIPT_UPLOAD_UNLIMITED, 3));
         assertEquals("RECEIPT_UPLOAD_UNLIMITED", blocked.getFeatureName());
+    }
+
+    @Test
+    void requireWithinLimit_freeMayCreateOneCustomCategoryThenIsBlocked() {
+        var free = user(SubscriptionTier.FREE);
+
+        gate.requireWithinLimit(free, Feature.CUSTOM_CATEGORIES_UNLIMITED, 0); // the first one is fine
+        var blocked = assertThrows(PaywallException.class,
+                () -> gate.requireWithinLimit(free, Feature.CUSTOM_CATEGORIES_UNLIMITED, 1));
+        assertEquals("CUSTOM_CATEGORIES_UNLIMITED", blocked.getFeatureName());
+        assertEquals("subscription.upgrade_required", blocked.getMessageKey());
     }
 
     @Test
     void requireWithinLimit_neverBlocksProOrDormantGate() {
         gate.requireWithinLimit(user(SubscriptionTier.PRO), Feature.RECEIPT_UPLOAD_UNLIMITED, 10_000);
+        gate.requireWithinLimit(user(SubscriptionTier.PRO), Feature.CUSTOM_CATEGORIES_UNLIMITED, 10_000);
+        new SubscriptionGateService(new CollaborativeProperties())
+                .requireWithinLimit(user(SubscriptionTier.FREE), Feature.CUSTOM_CATEGORIES_UNLIMITED, 10_000);
         new SubscriptionGateService(new CollaborativeProperties())
                 .requireWithinLimit(user(SubscriptionTier.FREE), Feature.WATCHED_MARKETS_UNLIMITED, 10_000);
     }

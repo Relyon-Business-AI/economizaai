@@ -19,5 +19,7 @@ public enum Feature {
     /** CSV export of the household's purchase history (power users / accounting). */
     CSV_EXPORT,
     /** Vision extraction of a photographed receipt (LLM cost per use). */
-    PHOTO_EXTRACTION
+    PHOTO_EXTRACTION,
+    /** Create more than the FREE cap of household custom categories. */
+    CUSTOM_CATEGORIES_UNLIMITED
 }
