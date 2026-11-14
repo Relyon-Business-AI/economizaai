@@ -1,5 +1,15 @@
 # economizai — what's new
 
+## 2026-11-14 — Localização da casa guardada com cerca de 110 m de precisão
+
+- `PUT /users/me/location` passa a guardar latitude e longitude com **3 casas decimais** (grade de ~110 m), e a
+  resposta devolve o valor já arredondado. A migration `V179` arredonda o que estava salvo com precisão de GPS.
+  Distâncias e o raio de 20 km seguem funcionando; a diferença máxima é de dezenas de metros.
+- O log deixou de registrar as coordenadas (`home_location.set user=…`) e o CEP consultado sai mascarado
+  (`90010-***`).
+- `GET /users/me/location/cep`: o `label` agora traz o bairro quando o CEP tem um ("Centro, Porto Alegre - RS").
+  CEP único de cidade pequena continua só com cidade e UF.
+
 ## 2026-11-14 — Mensagem própria para o limite de categorias personalizadas
 
 - `POST /categories` acima do limite do gratuito continua respondendo **402**, mas agora com mensagem própria

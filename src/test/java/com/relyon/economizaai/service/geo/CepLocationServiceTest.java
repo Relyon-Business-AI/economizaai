@@ -41,7 +41,7 @@ class CepLocationServiceTest {
         assertTrue(result.isPresent());
         assertEquals(0, new BigDecimal("-27.59").compareTo(result.get().latitude()));
         assertEquals(0, new BigDecimal("-48.55").compareTo(result.get().longitude()));
-        assertEquals("Florianópolis - SC", result.get().label());
+        assertEquals("Centro, Florianópolis - SC", result.get().label());
         verifyNoInteractions(geocoder); // não precisou do geocoder
     }
 
@@ -56,7 +56,7 @@ class CepLocationServiceTest {
 
         assertTrue(result.isPresent());
         assertEquals(0, new BigDecimal("-30.03").compareTo(result.get().latitude()));
-        assertEquals("Porto Alegre - RS", result.get().label());
+        assertEquals("Centro, Porto Alegre - RS", result.get().label());
     }
 
     @Test
