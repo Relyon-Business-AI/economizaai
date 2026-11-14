@@ -1,5 +1,27 @@
 # economizai — what's new
 
+## 2026-11-14 — Limites do plano gratuito: 3 notas por mês e 1 categoria personalizada
+
+**O que o FE precisa saber**
+
+- Nada muda hoje: os limites só valem com `SUBSCRIPTION_ENFORCE=true`, que continua **desligado**. Quem é
+  Premium nunca é limitado.
+- **Notas por mês no gratuito: 3** (era 5). Mesma resposta de antes ao passar do limite: **402** em
+  `POST /receipts`.
+- **Categorias personalizadas no gratuito: 1 por casa** (limite novo). `POST /categories` com a casa já no
+  limite responde **402** com a mensagem padrão de upgrade (`subscription.upgrade_required`), igual aos
+  outros paywalls. Só a CRIAÇÃO é bloqueada: nenhuma categoria existente é apagada ou escondida, e
+  editar / excluir / migrar seguem funcionando. Tratar o 402 mostrando o convite pro Premium.
+- A resposta de erro não traz chave de máquina nem os números dos limites, e `GET /users/me/subscription`
+  não os expõe — como já era nos outros limites.
+
+**Backend**
+
+- `Feature.CUSTOM_CATEGORIES_UNLIMITED` + `SubscriptionGateService.customCategoryLimit`; a checagem fica em
+  `CustomCategoryService.create` (conta as categorias da casa só quando há limite).
+- Config: `economizaai.subscription.free.monthly-receipts: 3` e o novo
+  `economizaai.subscription.free.custom-categories: 1`. Sem migration.
+
 ## 2026-11-13 — Sergipe (SE) com scraper nativo no SEFAZ-SE
 
 **O que o FE precisa saber**
