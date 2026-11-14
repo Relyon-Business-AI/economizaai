@@ -73,6 +73,15 @@ A rollback looks like:
 
 <!-- AUTONOMOUS ENTRIES BELOW - newest first. The watchdog inserts here. -->
 
+### [2026-11-14 15:02:52] [NEEDS-HUMAN] NO-TESTREF - java.net.SocketTimeoutException: Connect timed out — message
+- **Detected:**
+```
+java.net.SocketTimeoutException: Connect timed out — message was:
+```
+- **Claude:** Failed to authenticate. API Error: 401 OAuth access token has been revoked.
+Ignoring 25 permissions.allow entries from .claude/settings.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog, or set projects["/home/runner/work/economizaai/economizaai"].hasTrustDialogAccepted: true in /home/runner/.claude.json.
+- **Outcome:** reply lacked a verifiable test reference; changes discarded.
+
 ### [2026-11-14 12:45:44] [NEEDS-HUMAN] NO-TESTREF - E2E: 9b. Poll receipt until parsed
 - **Detected:**
 ```
