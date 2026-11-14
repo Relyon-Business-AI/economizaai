@@ -266,17 +266,25 @@ PATCH  /api/v1/users/me/whatsapp        { "weeklyReportEnabled": true|false }  �
        ← toggles the weekly report; requires a prior opt-in (linked number), error otherwise
 GET    /api/v1/users/me/savings         → SavingsSummaryResponse (see §7b "Savings")
 GET    /api/v1/users/me/subscription    → SubscriptionStatusResponse (see §7b "Subscription status")
-GET    /api/v1/users/me/notification-preferences
-PUT    /api/v1/users/me/notification-preferences
+GET    /api/v1/users/me/notification-settings   → NotificationSettings (see "Notification settings" below)
+PATCH  /api/v1/users/me/notification-settings   { "options": [ { key, channel, enabled } ], "digestFrequency": "DAILY|WEEKLY" }
+       ← the notification settings screen: one switch per notice AND per channel. Use these two;
+         the three older pairs below (notification-preferences, digest-preferences, whatsapp) keep
+         working for app versions already in the stores and read/write the same storage.
+
+GET    /api/v1/users/me/notification-preferences      (LEGACY — one channel per type)
+PUT    /api/v1/users/me/notification-preferences      (LEGACY)
        { "preferences": [ { "type": "PROMO_PERSONAL", "channel": "PUSH" }, ... ] }
        ← PROMO_COMMUNITY and CHEAPER_MARKET are retired toggles: no longer listed by the GET and ignored
          in the PUT (their content lives in the deals digest — see digest-preferences below)
+       ← mapped onto the notice options — see "Notification settings › Legacy endpoints"
 
-GET    /api/v1/users/me/digest-preferences   → { "frequency": "DAILY", "sendHour": 17 }
+GET    /api/v1/users/me/digest-preferences   → { "frequency": "DAILY", "sendHour": 17 }      (LEGACY for frequency)
 PUT    /api/v1/users/me/digest-preferences
        { "frequency": "DAILY|WEEKLY|OFF", "sendHour": 0-23 | null }
        ← frequency required; sendHour optional override (null = infer it).
-         sendHour out of 0-23 → 400. frequency=OFF disables the digest entirely.
+         sendHour out of 0-23 → 400. frequency=OFF disables the digest entirely
+         (= every DEALS_DIGEST option off). sendHour is still only settable here.
 
 POST   /api/v1/users/me/profile-picture   ← multipart form, field name "file"
                                             JPG/PNG/WEBP, max 5MB
@@ -284,6 +292,80 @@ GET    /api/v1/users/me/profile-picture   ← returns the bytes (Content-Type ma
                                              Cache-Control private/5min; send If-None-Match → 304 without bytes.
 DELETE /api/v1/users/me/profile-picture
 ```
+
+**Notification settings** (2026-11-14): every notice lists the channels that exist for it and the user switches each
+one on or off independently. Several can be on; with none on the notice is not delivered at all.
+
+`GET /api/v1/users/me/notification-settings` →
+
+```json
+{
+  "email": "maria@economizaai.app",
+  "whatsApp": { "available": false, "connected": false, "maskedNumber": null, "confirmLink": null },
+  "digestFrequency": "DAILY",
+  "notices": [
+    { "key": "RECEIPT_READY",   "options": [ { "channel": "PUSH", "enabled": true, "locked": false } ] },
+    { "key": "PERSONAL_OFFERS", "options": [ { "channel": "PUSH", "enabled": true, "locked": false } ] },
+    { "key": "STOCKOUT",        "options": [ { "channel": "PUSH", "enabled": true, "locked": false } ] },
+    { "key": "PRICE_ALERTS",    "options": [
+        { "channel": "PUSH",     "enabled": true,  "locked": false },
+        { "channel": "EMAIL",    "enabled": false, "locked": false },
+        { "channel": "WHATSAPP", "enabled": false, "locked": false } ] },
+    { "key": "DEALS_DIGEST",    "options": [ PUSH, EMAIL, WHATSAPP — same shape ] },
+    { "key": "WEEKLY_REPORT",   "options": [ EMAIL, WHATSAPP ] },
+    { "key": "ACCOUNT",         "options": [
+        { "channel": "PUSH",  "enabled": true, "locked": false },
+        { "channel": "EMAIL", "enabled": true, "locked": true } ] }
+  ]
+}
+```
+
+- `notices` always has the seven keys in this order; `options` in this order. Render what comes back.
+- `email` is the same address `GET /users/me` returns.
+- `whatsApp.available` is true only for an `ADMIN` account while the WhatsApp sender is configured (it becomes a paid
+  channel later). When false: `connected=false`, `maskedNumber=null`, `confirmLink=null` and **no notice has a
+  `WHATSAPP` option** — the example above shows it only to document the shape.
+- `whatsApp.confirmLink` is the wa.me link that connects the user's WhatsApp (same reverse opt-in as
+  `GET /users/me/whatsapp`); present only while available and not yet connected. `maskedNumber` (`"****3229"`) is
+  present once connected. A WhatsApp option reads `enabled=false` until the user is connected.
+- `locked: true` (only `ACCOUNT`/`EMAIL`): always on, cannot be switched off.
+- `digestFrequency` is `DAILY` or `WEEKLY`, never `OFF`: it keeps the last choice while every `DEALS_DIGEST` option is off.
+- Defaults (user who never touched an option): every `PUSH` on, every `EMAIL` off except the locked `ACCOUNT` one,
+  every `WHATSAPP` off.
+
+`PATCH /api/v1/users/me/notification-settings` — every field optional, only what is sent changes, returns the full
+object above:
+
+```json
+{ "options": [ { "key": "PRICE_ALERTS", "channel": "EMAIL", "enabled": true } ], "digestFrequency": "WEEKLY" }
+```
+
+The whole request is validated before anything is saved. Errors (`{ status, message }`, `message` localized):
+
+| Case | Status |
+|---|---|
+| `enabled: false` on a locked option (`ACCOUNT`/`EMAIL`) | 400 |
+| a channel that does not exist for that notice (e.g. `STOCKOUT`/`EMAIL`) | 400 |
+| `WHATSAPP` (on or off) when `whatsApp.available` is false | 400 |
+| `WHATSAPP` on when not connected | 409 |
+| unknown `key` or `channel`, or an option without `enabled` | 400 |
+| `digestFrequency` other than `DAILY`/`WEEKLY` (`OFF` included — switch the options off instead) | 400 |
+
+Which notifications each notice covers: `RECEIPT_READY` — nota pronta / falhou / recuperada; `PERSONAL_OFFERS` —
+`PROMO_PERSONAL`; `STOCKOUT`; `PRICE_ALERTS` — `PRICE_DROP` and `BUDGET`; `DEALS_DIGEST`; `WEEKLY_REPORT` — weekly
+spending report; `ACCOUNT` — `SYSTEM` (terms, security, billing, referral, import finished). Household membership
+notices (`HOUSEHOLD_MEMBER_JOINED`/`LEFT`) and the spending `DIGEST` are not on this screen and behave as before.
+
+*Legacy endpoints* (app versions already published keep using them; same storage):
+
+- `GET /users/me/notification-preferences` now always lists one entry per type that belongs to a notice, answered
+  from the options: `PUSH` when the notice's push is on, else `EMAIL` when its e-mail is on, else `NONE`.
+- `PUT /users/me/notification-preferences`: `PUSH` ⇒ push on, e-mail off; `EMAIL` ⇒ e-mail on, push off — except on a
+  notice with no e-mail channel, where push stays on (the response then reads `PUSH`); `NONE` ⇒ every option of the
+  notice off. `SYSTEM`=`NONE` only switches the push off (the account e-mail is locked) and reads back `EMAIL`.
+- `digest-preferences`: `frequency=OFF` ⇄ every `DEALS_DIGEST` option off; `DAILY`/`WEEKLY` when nothing was on
+  switches the push option back on.
+- `/users/me/whatsapp` `weeklyReportEnabled` ⇄ the `WEEKLY_REPORT`/`WHATSAPP` option.
 
 **Set password (social accounts)**: a Google/Apple user has no local password. `POST /users/me/password` (authenticated) creates one, enabling email+password login **in addition to** the social login (which keeps working). Returns `200 { "message": ... }`; `409 user.password.already.set` when the account already has a password (use the `PUT` instead). `UserResponse` exposes `authProvider` (`LOCAL|GOOGLE|APPLE`) and `hasPassword` so the FE can decide between "create password" and "change password" UI. After setting one, `forgot-password` also works for that account.
 
