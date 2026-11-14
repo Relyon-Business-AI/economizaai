@@ -216,6 +216,11 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
     /** Receipts the user submitted since the cutoff — household-split copies excluded (monthly cap). */
     long countByUserIdAndSplitCopyFalseAndCreatedAtGreaterThanEqual(UUID userId, LocalDateTime since);
 
+    /** Issue date of the household's oldest confirmed receipt; empty without confirmed receipts. */
+    @Query("SELECT MIN(receipt.issuedAt) FROM Receipt receipt "
+            + "WHERE receipt.household.id = :householdId AND receipt.status = 'CONFIRMED'")
+    Optional<LocalDateTime> findOldestConfirmedIssuedAt(@Param("householdId") UUID householdId);
+
     long countByUserIdAndStatus(UUID userId, ReceiptStatus status);
 
     long countByUserIdAndStatusInAndUpdatedAtGreaterThanEqual(UUID userId, Collection<ReceiptStatus> statuses,

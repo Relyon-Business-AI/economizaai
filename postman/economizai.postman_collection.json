@@ -1649,6 +1649,35 @@
 					"response": []
 				},
 				{
+					"name": "Subscription usage (free caps vs real usage)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/subscriptions/usage",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"subscriptions",
+								"usage"
+							]
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "Create web checkout (Mercado Pago)",
 					"request": {
 						"method": "POST",
@@ -8120,6 +8149,52 @@
 									"  pm.expect(plan.monthlyAmount).to.be.a('number');",
 									"  pm.expect(plan.currency).to.eql('BRL');",
 									"  pm.expect(plan.webCheckoutAvailable).to.be.a('boolean');",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Subscription usage (free caps vs real usage)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/subscriptions/usage",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"subscriptions",
+								"usage"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Usage returns real usage next to the free caps', function () {",
+									"  pm.response.to.have.status(200);",
+									"  const usage = pm.response.json();",
+									"  pm.expect(usage.receiptsThisMonth).to.be.a('number');",
+									"  pm.expect(usage.freeMonthlyReceipts).to.be.a('number');",
+									"  pm.expect(usage.freeHistoryDays).to.be.a('number');",
 									"});"
 								]
 							}

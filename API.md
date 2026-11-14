@@ -330,6 +330,12 @@ decoded at once (retry in a few seconds).
 
 ```
 GET  /api/v1/subscriptions/plan            → 200 { "monthlyAmount": 9.90, "currency": "BRL", "webCheckoutAvailable": false }
+GET  /api/v1/subscriptions/usage           → 200 { "receiptsThisMonth": 12, "freeMonthlyReceipts": 3,
+                                                   "customCategories": 2, "freeCustomCategories": 1,
+                                                   "watchedMarkets": 4, "freeWatchedMarkets": 3,
+                                                   "oldestPurchaseDate": "2026-03-09", "freeHistoryDays": 90 }
+                                             (uso real ao lado de cada limite do plano gratuito; os limites vêm
+                                              da configuração, seja qual for o plano de quem pergunta)
 POST /api/v1/subscriptions/checkout        → 200 { "checkoutUrl": "<Mercado Pago init_point>" }
                                              503 billing.not.configured (provider not credentialed yet)
                                              502 billing.checkout.failed (MP API down/refused)

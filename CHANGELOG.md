@@ -1,5 +1,13 @@
 # economizai — what's new
 
+## 2026-11-14 — `GET /subscriptions/usage`: uso real ao lado dos limites do plano gratuito
+
+- Endpoint novo para a tela do Premium: notas enviadas no mês, categorias personalizadas da casa, mercados
+  acompanhados e a data da compra confirmada mais antiga, cada um com o limite do plano gratuito
+  (`freeMonthlyReceipts`, `freeCustomCategories`, `freeWatchedMarkets`, `freeHistoryDays`). As contagens são as
+  mesmas que os paywalls usam. `oldestPurchaseDate` vem `null` sem nota confirmada.
+- Não existe limite gratuito de alertas de preço: o FE não deve mostrar um.
+
 ## 2026-11-14 — Localização da casa guardada com cerca de 110 m de precisão
 
 - `PUT /users/me/location` passa a guardar latitude e longitude com **3 casas decimais** (grade de ~110 m), e a
