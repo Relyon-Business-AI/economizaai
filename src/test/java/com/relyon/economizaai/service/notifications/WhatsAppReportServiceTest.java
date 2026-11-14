@@ -81,4 +81,28 @@ class WhatsAppReportServiceTest {
                 .startsWith("R$ ")
                 .endsWith("em 1 compra(s) essa semana.");
     }
+
+    @Test
+    void weeklyReportNotice_isPlainTextForEmailWithAOneLineSummary() {
+        stubReport(2, List.of(new CategorySpend("BEVERAGES", new BigDecimal("50.00"))),
+                List.of(new MarketSpend("Mercado X", "12345678000190", new BigDecimal("150.00"), 2)));
+
+        var notice = service.buildWeeklyReportNotice(userWithLocale("pt"));
+
+        assertThat(notice.hasPurchases()).isTrue();
+        assertThat(notice.body()).startsWith("Seus gastos de ")
+                .contains("R$ 150,00", "2 compras", "Onde foi:", "Bebidas", "Mercados:", "Mercado X")
+                .doesNotContain("*");
+        assertThat(notice.summaryLine()).isEqualTo("R$ 150,00 em 2 compra(s) essa semana.").doesNotContain("\n");
+    }
+
+    @Test
+    void weeklyReportNotice_ofAWeekWithoutReceiptsHasNothingToSend() {
+        stubReport(0, List.of(), List.of());
+
+        var notice = service.buildWeeklyReportNotice(userWithLocale("pt"));
+
+        assertThat(notice.hasPurchases()).isFalse();
+        assertThat(notice.summaryLine()).isEqualTo("Nenhuma nota essa semana.");
+    }
 }
