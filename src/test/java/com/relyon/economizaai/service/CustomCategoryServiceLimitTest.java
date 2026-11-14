@@ -67,7 +67,8 @@ class CustomCategoryServiceLimitTest {
                 () -> serviceWithEnforcement(true).create(user, NEW_CATEGORY));
 
         assertEquals("CUSTOM_CATEGORIES_UNLIMITED", refusal.getFeatureName());
-        assertEquals("subscription.upgrade_required", refusal.getMessageKey());
+        assertEquals("subscription.limit.custom_categories", refusal.getMessageKey());
+        assertEquals("1", refusal.getArguments()[0]);
         verify(customCategoryRepository, never()).save(any());
         verify(customCategoryRepository, never()).delete(any());
     }

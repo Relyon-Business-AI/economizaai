@@ -1,5 +1,14 @@
 # economizai — what's new
 
+## 2026-11-14 — Mensagem própria para o limite de categorias personalizadas
+
+- `POST /categories` acima do limite do gratuito continua respondendo **402**, mas agora com mensagem própria
+  que cita o limite (`subscription.limit.custom_categories`): "Você chegou ao limite de categorias
+  personalizadas do plano gratuito (1). Com o Premium não há limite." Os outros paywalls seguem com a mensagem
+  genérica. O FE não precisa mudar: já mostra a `message` do erro.
+- Decisões do dono registradas: o limite vale por USUÁRIO (plano de quem cria), e juntar ou separar casas não
+  considera os limites do Premium.
+
 ## 2026-11-14 — Limites do plano gratuito: 3 notas por mês e 1 categoria personalizada
 
 **O que o FE precisa saber**
