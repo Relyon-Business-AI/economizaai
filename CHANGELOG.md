@@ -1,5 +1,36 @@
 # economizai — what's new
 
+## 2026-11-14 — Mensagem própria para o limite de categorias personalizadas
+
+- `POST /categories` acima do limite do gratuito continua respondendo **402**, mas agora com mensagem própria
+  que cita o limite (`subscription.limit.custom_categories`): "Você chegou ao limite de categorias
+  personalizadas do plano gratuito (1). Com o Premium não há limite." Os outros paywalls seguem com a mensagem
+  genérica. O FE não precisa mudar: já mostra a `message` do erro.
+- Decisões do dono registradas: o limite vale por USUÁRIO (plano de quem cria), e juntar ou separar casas não
+  considera os limites do Premium.
+
+## 2026-11-14 — Limites do plano gratuito: 3 notas por mês e 1 categoria personalizada
+
+**O que o FE precisa saber**
+
+- Nada muda hoje: os limites só valem com `SUBSCRIPTION_ENFORCE=true`, que continua **desligado**. Quem é
+  Premium nunca é limitado.
+- **Notas por mês no gratuito: 3** (era 5). Mesma resposta de antes ao passar do limite: **402** em
+  `POST /receipts`.
+- **Categorias personalizadas no gratuito: 1 por casa** (limite novo). `POST /categories` com a casa já no
+  limite responde **402** com a mensagem padrão de upgrade (`subscription.upgrade_required`), igual aos
+  outros paywalls. Só a CRIAÇÃO é bloqueada: nenhuma categoria existente é apagada ou escondida, e
+  editar / excluir / migrar seguem funcionando. Tratar o 402 mostrando o convite pro Premium.
+- A resposta de erro não traz chave de máquina nem os números dos limites, e `GET /users/me/subscription`
+  não os expõe — como já era nos outros limites.
+
+**Backend**
+
+- `Feature.CUSTOM_CATEGORIES_UNLIMITED` + `SubscriptionGateService.customCategoryLimit`; a checagem fica em
+  `CustomCategoryService.create` (conta as categorias da casa só quando há limite).
+- Config: `economizaai.subscription.free.monthly-receipts: 3` e o novo
+  `economizaai.subscription.free.custom-categories: 1`. Sem migration.
+
 ## 2026-11-13 — Sergipe (SE) com scraper nativo no SEFAZ-SE
 
 **O que o FE precisa saber**

@@ -1293,6 +1293,9 @@ categoria embutida (não subcategoria), senão `400`.
 > categoria editada não pode ter subcategorias próprias; violar (profundidade >2, ciclo,
 > auto-pai) → **`400` `customcategory.nesting.invalid`**.
 
+> **Plan limit (only when enforcement is on — see §13):** a FREE user may create a custom category only
+> while the household has none; the next `POST /categories` answers **402**. Existing categories are untouched.
+
 `GET /categories` returns the 9 global enums **and** the household's custom ones. Buckets
 custom carregam o visual + o grupo-pai (`icon`/`color`/`parentSlug`/`parentName`); nos enums
 esses campos vêm null:
@@ -2496,17 +2499,18 @@ gating service.
 | Capability | FREE | PRO | Enforcement |
 | --- | --- | --- | --- |
 | Watched markets (`POST /markets/watched/{cnpj}`) | 3 pins | unlimited | New pin over the cap → **402**. Unpin / re-pin existing is always fine. |
-| Receipt uploads (`POST /receipts`) — `RECEIPT_UPLOAD_UNLIMITED` | 5 / calendar month | unlimited | Over the cap → **402**. Counts ALL statuses of receipts the user SUBMITTED (reject/resubmit can't game it); copies created by a household split are not usage. |
+| Receipt uploads (`POST /receipts`) — `RECEIPT_UPLOAD_UNLIMITED` | 3 / calendar month | unlimited | Over the cap → **402**. Counts ALL statuses of receipts the user SUBMITTED (reject/resubmit can't game it); copies created by a household split are not usage. |
 | History window (`/insights/*`, `/items`) — `HISTORY_FULL_RANGE` | last 90 days | full range | `from` older than 90d (or omitted) is silently clamped. No error — just windowed. |
 | Notification delivery — `PUSH_AND_EMAIL_DELIVERY` | in-app inbox only | inbox + push/email | FREE inbox row is always saved (`delivered=false`, `failureReason=free_tier_inbox_only`); push/email skipped. **Transactional notifications are never held back, whatever the plan:** `RECEIPT_READY` / `RECEIPT_FAILED` / `RECEIPT_RECOVERED`, `HOUSEHOLD_MEMBER_JOINED` / `HOUSEHOLD_MEMBER_LEFT`, and `SYSTEM` notices not sent by an admin campaign (account, billing, consent). |
 | Basket optimization (`POST /shopping-list/optimize`) | — | ✅ | FREE → **402**. |
 | History export (`GET /receipts/export`) | — | ✅ | FREE → **402** (`CSV_EXPORT`). |
 | Receipt by photo (`POST /receipts/items-photo`) | — | ✅ | FREE → **402** (`PHOTO_EXTRACTION`); also counts toward the monthly receipt cap. |
+| Custom categories (`POST /categories`) — `CUSTOM_CATEGORIES_UNLIMITED` | 1 per household | unlimited | Creating one past the cap → **402** with its own message (`subscription.limit.custom_categories`, states the cap). Only creation is blocked: categories the household already has are never removed or hidden, and edit / delete / migrate keep working. The check uses the plan of the user who is creating. |
 | Household size (join) | 2 people | 6 people | One PRO member lifts the whole household to the max. Over the cap → localized `household.full.free` / `household.full.max`. The absolute max (6) applies even with enforcement off. |
 
 The gate is **per feature** (`Feature` enum: `WATCHED_MARKETS_UNLIMITED`,
 `HISTORY_FULL_RANGE`, `PUSH_AND_EMAIL_DELIVERY`, `RECEIPT_UPLOAD_UNLIMITED`,
-`BASKET_OPTIMIZATION`, `CSV_EXPORT`, `PHOTO_EXTRACTION`). With enforcement on, the
+`BASKET_OPTIMIZATION`, `CSV_EXPORT`, `PHOTO_EXTRACTION`, `CUSTOM_CATEGORIES_UNLIMITED`). With enforcement on, the
 server can still leave chosen features open to FREE
 (`SUBSCRIPTION_FREE_OPEN_FEATURES`, comma-separated feature names) so paywalls can be
 switched on one at a time — so don't assume "FREE ⇒ every row above is blocked";

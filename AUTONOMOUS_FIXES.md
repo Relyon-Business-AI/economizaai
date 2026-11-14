@@ -73,6 +73,39 @@ A rollback looks like:
 
 <!-- AUTONOMOUS ENTRIES BELOW - newest first. The watchdog inserts here. -->
 
+### [2026-11-14 15:02:52] [NEEDS-HUMAN] NO-TESTREF - java.net.SocketTimeoutException: Connect timed out — message
+- **Detected:**
+```
+java.net.SocketTimeoutException: Connect timed out — message was:
+```
+- **Claude:** Failed to authenticate. API Error: 401 OAuth access token has been revoked.
+Ignoring 25 permissions.allow entries from .claude/settings.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog, or set projects["/home/runner/work/economizaai/economizaai"].hasTrustDialogAccepted: true in /home/runner/.claude.json.
+- **Outcome:** reply lacked a verifiable test reference; changes discarded.
+
+### [2026-11-14 12:45:44] [NEEDS-HUMAN] NO-TESTREF - E2E: 9b. Poll receipt until parsed
+- **Detected:**
+```
+A daily E2E run against the live dev server FAILED (39/304 assertions).
+Failing steps:
+- 9b. Poll receipt until parsed: AssertionError: expected 'PORTAL_PENDING' to deeply equal 'PENDING_CONFIRMATION'
+- 9b. Poll receipt until parsed: AssertionError: expected +0 to be at least 1
+- 9b. Poll receipt until parsed: TypeError: Cannot read properties of undefined (reading 'id')
+- 13. Confirm receipt (returns receipt + personalPromos): AssertionError: expected response to have status code 200 but got 400
+- 13. Confirm receipt (returns receipt + personalPromos): TypeError: Cannot read properties of undefined (reading 'status')
+- 13. Confirm receipt (returns receipt + personalPromos): TypeError: Cannot read properties of undefined (reading 'confirmedAt')
+- 13. Confirm receipt (returns receipt + personalPromos): AssertionError: expected undefined to be an array
+- 13b. Export purchase history CSV: AssertionError: expected 'Data;Mercado;CNPJ do mercado;Números …' to include 'Chave de acesso'
+
+Server-side errors during the run (the likely root cause):
+```
+2026-11-14 12:44:23.000 WARN  [req=c1b347fd user=a***@economizaai.app ip=20.57.215.245 rcpt= item=] c.r.e.e.GlobalExceptionHandler - Bad request: CNPJ inválido: deve conter exatamente 14 dígitos.
+2026-11-14 12:44:23.146 WARN  [req=cd58b7f8 user=a***@economizaai.app ip=20.57.215.245 rcpt= item=] c.r.e.e.GlobalExceptionHandler - Bad request: CNPJ inválido: deve conter exatamente 14 dígitos.
+2026-11-14 12:44:23.440 WARN  [req=156f70b1 user=a
+```
+- **Claude:** Failed to authenticate. API Error: 401 OAuth access token has been revoked.
+Ignoring 25 permissions.allow entries from .claude/settings.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog, or set projects["/home/runner/work/economizaai/economizaai"].hasTrustDialogAccepted: true in /home/runner/.claude.json.
+- **Outcome:** reply lacked a verifiable test reference; changes discarded.
+
 ### [2026-11-13 13:38:10] [NEEDS-HUMAN] NO-TESTREF - E2E: 13b. Export purchase history CSV
 - **Detected:**
 ```

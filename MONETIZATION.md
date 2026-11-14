@@ -83,7 +83,8 @@ This maps what's *already shipped* to where it should live. Anything in the
 
 | Capability | FREE | PRO | Notes |
 |---|---|---|---|
-| Submit NFC-e receipt | ✅ (5/month) | ✅ unlimited | Counter middleware, easy gate. Heavy users hit 5 in a week. |
+| Submit NFC-e receipt | ✅ (3/month) | ✅ unlimited | Counter middleware, easy gate. Owner decision 2026-11-14: 3 (was 5). |
+| Custom categories | **1** per household | unlimited | Owner decision 2026-11-14. Blocks creation only — nothing existing is removed or hidden. |
 | Receipt history | last **90 days** | unlimited | Query-layer gate on `issuedAt`. Cheap to implement, painful to discover (user opens app, sees their old data is gone). |
 | Spend dashboard `/insights/spend` | current month only | full range | Same gate as history. |
 | Top markets / categories | top 3 | top 10+ | Hard cap on `?limit` for FREE. |
@@ -114,7 +115,7 @@ push alerts when your usual stuff is on sale, automatic shopping lists optimized
 across markets, and basket-level inflation tracking."
 
 **Why these gates work for grocery shoppers specifically:**
-- A weekly grocery shopper hits the 5-receipt cap in week 1 → forced to choose.
+- A weekly grocery shopper hits the 3-receipt cap within the month → forced to choose.
 - A new user signs up, scans a receipt, sees "you usually pay R$28 for this, you
   paid R$22 today — save R$6/mo on average if you keep coming here" → magic
   moment. That stays free; everything that compounds it is paid.
@@ -125,11 +126,13 @@ across markets, and basket-level inflation tracking."
 #### Implementation status
 - ✅ `User.subscriptionTier` (FREE/PRO) — on entity **and now enforced**.
 - ✅ Single `SubscriptionGateService` (`service/subscription`) — `allows`/`require`
-  + typed limit helpers (`watchedMarketLimit`, `monthlyReceiptLimit`,
+  + typed limit helpers (`watchedMarketLimit`, `monthlyReceiptLimit`, `customCategoryLimit`,
   `freeHistoryWindowDays`, `clampFrom`). No inline tier checks anywhere.
-  Limits tunable via `economizaai.subscription.free.{watched-markets,history-days,monthly-receipts}`.
+  Limits tunable via `economizaai.subscription.free.{watched-markets,history-days,monthly-receipts,custom-categories}`.
 - ✅ `PaywallException` → **HTTP 402** (`subscription.upgrade_required`).
-- ✅ Receipt upload counter — `ReceiptService.submit`, counts all statuses this calendar month.
+- ✅ Receipt upload counter — `ReceiptService.submit`, counts all statuses this calendar month (FREE: 3).
+- ✅ Custom-category gate — `CustomCategoryService.create` checks the household's count on creation
+  (`CUSTOM_CATEGORIES_UNLIMITED`, FREE: 1); existing categories are never removed.
 - ✅ Query-layer date-range cap — `clampFrom` applied in `ItemQueryService`,
   `InsightsService`, `InsightsQueryService`. PRO bypasses.
 - ✅ Watched-markets gate — `WatchedMarketService.watch` checks count on NEW pins.

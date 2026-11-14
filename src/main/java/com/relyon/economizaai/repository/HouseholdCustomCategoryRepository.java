@@ -11,6 +11,8 @@ public interface HouseholdCustomCategoryRepository extends JpaRepository<Househo
 
     List<HouseholdCustomCategory> findAllByHouseholdId(UUID householdId);
 
+    long countByHouseholdId(UUID householdId);
+
     List<HouseholdCustomCategory> findAllByOriginHouseholdId(UUID householdId);
 
     List<HouseholdCustomCategory> findByHouseholdIdOrderByName(UUID householdId);

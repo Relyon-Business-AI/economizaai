@@ -149,9 +149,11 @@ public class CollaborativeProperties {
             /** Rolling history/analytics window (days) for FREE users. */
             private int historyDays = 90;
             /** Max receipts a FREE user may submit per calendar month. */
-            private int monthlyReceipts = 5;
+            private int monthlyReceipts = 3;
             /** Max members of a household with no PRO member (a couple). */
             private int householdMembers = 2;
+            /** Max custom categories a FREE user's household may hold (creation is blocked past it). */
+            private int customCategories = 1;
             /**
              * PRO features left OPEN to FREE users while enforcement is on (names of
              * {@code Feature}) — lets paywalls be switched on one at a time. Empty = every
@@ -169,6 +171,8 @@ public class CollaborativeProperties {
             public void setHistoryDays(int v) { this.historyDays = v; }
             public int getMonthlyReceipts() { return monthlyReceipts; }
             public void setMonthlyReceipts(int v) { this.monthlyReceipts = v; }
+            public int getCustomCategories() { return customCategories; }
+            public void setCustomCategories(int v) { this.customCategories = v; }
         }
     }
 
