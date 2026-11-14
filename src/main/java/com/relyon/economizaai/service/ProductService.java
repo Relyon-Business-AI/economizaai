@@ -150,7 +150,7 @@ public class ProductService {
     }
 
     /** {@code %term%} lowercased, with LIKE wildcards in the term escaped by '!' (the queries' ESCAPE char). */
-    static String containsPattern(String query) {
+    public static String containsPattern(String query) {
         var escaped = query.toLowerCase(Locale.ROOT)
                 .replace("!", "!!")
                 .replace("%", "!%")

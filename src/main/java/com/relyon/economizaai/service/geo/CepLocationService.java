@@ -63,18 +63,18 @@ public class CepLocationService {
             if (raw == null || raw.isBlank()) return Optional.empty();
             body = objectMapper.readTree(raw);
         } catch (Exception ex) {
-            log.warn("cep.lookup.failed cep={} {}: {}", cep, ex.getClass().getSimpleName(), ex.getMessage());
+            log.warn("cep.lookup.failed cep={} {}: {}", maskedCep(cep), ex.getClass().getSimpleName(), ex.getMessage());
             return Optional.empty();
         }
 
         var city = text(body, "city");
         var state = text(body, "state");
         var neighborhood = text(body, "neighborhood");
-        var label = buildLabel(city, state);
+        var label = buildLabel(neighborhood, cep, city, state);
 
         var fromBrasilApi = coordinatesFrom(body.get("location"));
         if (fromBrasilApi.isPresent()) {
-            log.info("cep.lookup.ok cep={} source=brasilapi city={} state={}", cep, city, state);
+            log.info("cep.lookup.ok cep={} source=brasilapi city={} state={}", maskedCep(cep), city, state);
             return Optional.of(new CepLocation(fromBrasilApi.get()[0], fromBrasilApi.get()[1], label));
         }
 
@@ -83,7 +83,7 @@ public class CepLocationService {
         if (address == null) return Optional.empty();
         return geocoder.geocode(address)
                 .map(result -> {
-                    log.info("cep.lookup.ok cep={} source=nominatim city={} state={}", cep, city, state);
+                    log.info("cep.lookup.ok cep={} source=nominatim city={} state={}", maskedCep(cep), city, state);
                     return new CepLocation(result.latitude(), result.longitude(), label);
                 });
     }
@@ -116,10 +116,21 @@ public class CepLocationService {
         return parts.toString();
     }
 
-    private String buildLabel(String city, String state) {
-        if (city != null && state != null) return city + " - " + state;
-        if (city != null) return city;
-        return state;
+    /**
+     * Most specific first: "Bairro, Cidade - UF"; a CEP without a neighbourhood (single-CEP towns)
+     * shows the CEP itself, "CEP 00000-000, Cidade - UF".
+     */
+    private String buildLabel(String neighborhood, String cep, String city, String state) {
+        var cityAndState = city != null && state != null ? city + " - " + state : city != null ? city : state;
+        if (cityAndState == null) return null;
+        var hasNeighborhood = neighborhood != null && !neighborhood.equalsIgnoreCase(city);
+        var mostSpecific = hasNeighborhood ? neighborhood : "CEP " + cep.substring(0, 5) + "-" + cep.substring(5);
+        return mostSpecific + ", " + cityAndState;
+    }
+
+    /** A full CEP narrows down to a street; the log keeps only the 5-digit region prefix. */
+    private String maskedCep(String cep) {
+        return cep.substring(0, 5) + "-***";
     }
 
     private String text(JsonNode node, String field) {

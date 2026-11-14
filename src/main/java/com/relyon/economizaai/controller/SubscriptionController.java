@@ -2,9 +2,11 @@ package com.relyon.economizaai.controller;
 
 import com.relyon.economizaai.dto.response.CheckoutResponse;
 import com.relyon.economizaai.dto.response.SubscriptionPlanResponse;
+import com.relyon.economizaai.dto.response.SubscriptionUsageResponse;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.service.subscription.MercadoPagoCheckoutService;
 import com.relyon.economizaai.service.subscription.MercadoPagoProperties;
+import com.relyon.economizaai.service.subscription.SubscriptionUsageService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +24,7 @@ public class SubscriptionController {
 
     private final MercadoPagoCheckoutService checkoutService;
     private final MercadoPagoProperties mercadoPagoProperties;
+    private final SubscriptionUsageService usageService;
 
     @GetMapping("/plan")
     public ResponseEntity<SubscriptionPlanResponse> plan() {
@@ -29,6 +32,11 @@ public class SubscriptionController {
                 mercadoPagoProperties.getPlanAmount(),
                 "BRL",
                 mercadoPagoProperties.isCheckoutConfigured()));
+    }
+
+    @GetMapping("/usage")
+    public ResponseEntity<SubscriptionUsageResponse> usage(@AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(usageService.usageOf(user));
     }
 
     @PostMapping("/checkout")

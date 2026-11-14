@@ -77,6 +77,7 @@ import com.relyon.economizaai.service.auth.LoginActivityRecorder;
 import com.relyon.economizaai.service.auth.SignupAlertService;
 import com.relyon.economizaai.service.auth.RefreshTokenService;
 import com.relyon.economizaai.service.notifications.NotificationRuleService;
+import com.relyon.economizaai.service.geo.HomeLocationPrecision;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -271,11 +272,11 @@ public class UserService {
 
     @Transactional
     public UserResponse updateHomeLocation(User user, UpdateHomeLocationRequest request) {
-        user.setHomeLatitude(request.latitude());
-        user.setHomeLongitude(request.longitude());
+        user.setHomeLatitude(HomeLocationPrecision.coarsen(request.latitude()));
+        user.setHomeLongitude(HomeLocationPrecision.coarsen(request.longitude()));
         user.setHomeSetAt(LocalDateTime.now());
         var saved = userRepository.save(user);
-        log.info("User {} home location set ({}, {})", LogMasker.email(saved.getEmail()), saved.getHomeLatitude(), saved.getHomeLongitude());
+        log.info("home_location.set user={}", LogMasker.email(saved.getEmail()));
         return UserResponse.from(saved);
     }
 

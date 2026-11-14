@@ -2,6 +2,9 @@ package com.relyon.economizaai.repository;
 
 import com.relyon.economizaai.model.PriceObservation;
 import com.relyon.economizaai.model.Product;
+import com.relyon.economizaai.model.enums.ProductCategory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -293,4 +296,87 @@ public interface PriceObservationRepository extends JpaRepository<PriceObservati
           AND ml.longitude IS NOT NULL
     """)
     List<ProductMarketCoordinates> findProductMarketCoordinates(@Param("productIds") List<UUID> productIds);
+
+    /** One product's latest disclosable price at a store — see {@link #findLatestDisclosablePricesAtMarket}. */
+    interface MarketProductLatestPrice {
+        UUID getProductId();
+        String getProductName();
+        ProductCategory getCategory();
+        BigDecimal getLatestPrice();
+        LocalDateTime getObservedAt();
+    }
+
+    String LATEST_DISCLOSABLE_AT_MARKET = """
+        FROM PriceObservation po
+        JOIN po.product product
+        WHERE po.marketCnpj = :marketCnpj
+          AND po.channel = 'IN_STORE'
+          AND po.outlier = false
+          AND po.observedAt >= :since
+          AND LOWER(product.normalizedName) LIKE :namePattern ESCAPE '!'
+          AND (:anyCategory = true OR product.category = :category)
+          AND NOT EXISTS (
+              SELECT newer.id FROM PriceObservation newer
+              WHERE newer.product = po.product
+                AND newer.marketCnpj = po.marketCnpj
+                AND newer.channel = 'IN_STORE'
+                AND newer.outlier = false
+                AND (newer.observedAt > po.observedAt
+                     OR (newer.observedAt = po.observedAt AND newer.createdAt > po.createdAt)
+                     OR (newer.observedAt = po.observedAt AND newer.createdAt = po.createdAt
+                         AND newer.unitPrice > po.unitPrice)
+                     OR (newer.observedAt = po.observedAt AND newer.createdAt = po.createdAt
+                         AND newer.unitPrice = po.unitPrice AND newer.id > po.id))
+          )
+          AND product.id IN (
+              SELECT gatedProduct.id
+              FROM PriceObservationAudit audit
+              JOIN audit.observation contributed
+              JOIN contributed.product gatedProduct
+              WHERE contributed.marketCnpj = :marketCnpj
+                AND contributed.channel = 'IN_STORE'
+                AND contributed.outlier = false
+                AND contributed.observedAt >= :since
+              GROUP BY gatedProduct.id, gatedProduct.categoryId, gatedProduct.category
+              HAVING COUNT(DISTINCT audit.householdId) >= :minHouseholds
+                 AND COUNT(DISTINCT contributed.id) >= :minObservations
+                 AND ((COUNT(DISTINCT audit.householdId) >= :sensitiveMinHouseholds
+                       AND COUNT(DISTINCT contributed.id) >= :sensitiveMinObservations)
+                      OR ((gatedProduct.categoryId IS NULL OR gatedProduct.categoryId NOT IN :sensitiveCategoryIds)
+                          AND (gatedProduct.category IS NULL OR gatedProduct.category <> 'HEALTH')))
+          )
+    """;
+
+    /**
+     * "Tela do mercado": the most recent IN_STORE observation of each product at ONE store inside
+     * the window (same tie-break as the best-markets ranking: latest day, then last contributed,
+     * then the higher price), one row per product.
+     *
+     * <p>K-anonymity by tier is applied HERE, per product, in the {@code HAVING} of the audit
+     * subquery — a product below its threshold never reaches the service. Every product needs
+     * {@code minHouseholds}/{@code minObservations} (the STORE's tier: relaxed for grocery retail,
+     * full K otherwise); a sensitive product (category node in {@code sensitiveCategoryIds}, or
+     * legacy enum HEALTH) additionally needs the full K ({@code sensitiveMin*}). Observations
+     * whose audit row was cascaded away count for nobody (fail-closed).
+     *
+     * <p>{@code sensitiveCategoryIds} must not be empty and {@code category} must not be null
+     * (pass any value with {@code anyCategory = true}) — null/empty binds are not portable.
+     */
+    @Query(value = """
+        SELECT product.id AS productId, product.normalizedName AS productName, product.category AS category,
+               po.unitPrice AS latestPrice, po.observedAt AS observedAt
+        """ + LATEST_DISCLOSABLE_AT_MARKET,
+            countQuery = "SELECT COUNT(po) " + LATEST_DISCLOSABLE_AT_MARKET)
+    Page<MarketProductLatestPrice> findLatestDisclosablePricesAtMarket(
+            @Param("marketCnpj") String marketCnpj,
+            @Param("since") LocalDateTime since,
+            @Param("namePattern") String namePattern,
+            @Param("anyCategory") boolean anyCategory,
+            @Param("category") ProductCategory category,
+            @Param("minHouseholds") long minHouseholds,
+            @Param("minObservations") long minObservations,
+            @Param("sensitiveMinHouseholds") long sensitiveMinHouseholds,
+            @Param("sensitiveMinObservations") long sensitiveMinObservations,
+            @Param("sensitiveCategoryIds") Collection<UUID> sensitiveCategoryIds,
+            Pageable pageable);
 }

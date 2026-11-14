@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import java.util.Collection;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Decides which k-anonymity thresholds an aggregate read must honor.
@@ -59,6 +60,17 @@ public class PrivacyTierResolver {
             return properties.getCollaborative().getSensitiveCategoryGroups().contains(groupSlug);
         }
         return product.getCategory() == ProductCategory.HEALTH;
+    }
+
+    /**
+     * Every category node (group + its subcategories) of the sensitive groups — the node half of
+     * {@link #isSensitiveProduct}, for reads that apply the gate inside a query. Such a query must
+     * ALSO treat the legacy enum {@code HEALTH} as sensitive (the fallback above).
+     */
+    public Set<UUID> sensitiveCategoryIds() {
+        return properties.getCollaborative().getSensitiveCategoryGroups().stream()
+                .flatMap(groupSlug -> categoryResolver.nodeAndDescendantIds(groupSlug).stream())
+                .collect(Collectors.toSet());
     }
 
     /**

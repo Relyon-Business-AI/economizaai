@@ -64,17 +64,17 @@ class UserServiceCoverageTest {
     }
 
     @Test
-    void updateHomeLocation_setsCoordinatesAndTimestamp() {
+    void updateHomeLocation_setsCoarsenedCoordinatesAndTimestamp() {
         var user = buildUser();
-        var request = new UpdateHomeLocationRequest(new BigDecimal("-30.0277"), new BigDecimal("-51.2287"));
+        var request = new UpdateHomeLocationRequest(new BigDecimal("-30.0277431"), new BigDecimal("-51.2287219"));
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         var response = userService.updateHomeLocation(user, request);
 
-        assertEquals(0, response.homeLatitude().compareTo(new BigDecimal("-30.0277")));
-        assertEquals(0, response.homeLongitude().compareTo(new BigDecimal("-51.2287")));
-        assertEquals(0, user.getHomeLatitude().compareTo(new BigDecimal("-30.0277")));
-        assertEquals(0, user.getHomeLongitude().compareTo(new BigDecimal("-51.2287")));
+        assertEquals(0, response.homeLatitude().compareTo(new BigDecimal("-30.028")));
+        assertEquals(0, response.homeLongitude().compareTo(new BigDecimal("-51.229")));
+        assertEquals(0, user.getHomeLatitude().compareTo(new BigDecimal("-30.028")));
+        assertEquals(0, user.getHomeLongitude().compareTo(new BigDecimal("-51.229")));
         assertNotNull(user.getHomeSetAt());
         verify(userRepository).save(user);
     }
