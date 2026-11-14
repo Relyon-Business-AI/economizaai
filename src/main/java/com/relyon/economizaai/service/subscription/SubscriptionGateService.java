@@ -78,8 +78,16 @@ public class SubscriptionGateService {
         if (currentUsage >= limit) {
             log.info("paywall.blocked user={} feature={} tier={} usage={} limit={}",
                     LogMasker.email(user.getEmail()), feature, user.getSubscriptionTier(), currentUsage, limit);
-            throw new PaywallException(feature.name());
+            throw paywallFor(feature, limit);
         }
+    }
+
+    /** Custom categories state the FREE cap in the message; the other metered features use the generic upsell. */
+    private PaywallException paywallFor(Feature feature, int limit) {
+        if (feature == Feature.CUSTOM_CATEGORIES_UNLIMITED) {
+            return new PaywallException(feature.name(), "subscription.limit.custom_categories", String.valueOf(limit));
+        }
+        return new PaywallException(feature.name());
     }
 
     private int limitFor(User user, Feature feature) {

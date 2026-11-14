@@ -185,7 +185,7 @@ class SubscriptionGateServiceTest {
         var blocked = assertThrows(PaywallException.class,
                 () -> gate.requireWithinLimit(free, Feature.CUSTOM_CATEGORIES_UNLIMITED, 1));
         assertEquals("CUSTOM_CATEGORIES_UNLIMITED", blocked.getFeatureName());
-        assertEquals("subscription.upgrade_required", blocked.getMessageKey());
+        assertEquals("subscription.limit.custom_categories", blocked.getMessageKey());
     }
 
     @Test

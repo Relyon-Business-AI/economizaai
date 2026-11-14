@@ -17,4 +17,10 @@ public class PaywallException extends DomainException {
         super("subscription.upgrade_required");
         this.featureName = featureName;
     }
+
+    /** A paywall with its own user-facing message (e.g. a FREE cap that states the number). */
+    public PaywallException(String featureName, String messageKey, String... arguments) {
+        super(messageKey, arguments);
+        this.featureName = featureName;
+    }
 }
