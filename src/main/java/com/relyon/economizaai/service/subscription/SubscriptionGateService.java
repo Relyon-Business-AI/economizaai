@@ -24,7 +24,7 @@ import java.util.Set;
  * <p>PRO allows everything. For FREE the policy is PER FEATURE: a gated feature is
  * PRO-only unless it is listed in {@code economizaai.subscription.free.open-features}
  * (so paywalls can be switched on one at a time). Two features are METERED rather
- * than on/off — watched markets and monthly receipts — FREE may use them up to a
+ * than on/off — watched markets, monthly receipts and custom categories — FREE may use them up to a
  * numeric cap ({@link #requireWithinLimit}). Notification DELIVERY has its own rule:
  * transactional notifications are never held back ({@link #allowsDelivery}).
  *
@@ -86,6 +86,7 @@ public class SubscriptionGateService {
         return switch (feature) {
             case WATCHED_MARKETS_UNLIMITED -> watchedMarketLimit(user);
             case RECEIPT_UPLOAD_UNLIMITED -> monthlyReceiptLimit(user);
+            case CUSTOM_CATEGORIES_UNLIMITED -> customCategoryLimit(user);
             case HISTORY_FULL_RANGE, PUSH_AND_EMAIL_DELIVERY, BASKET_OPTIMIZATION, CSV_EXPORT, PHOTO_EXTRACTION ->
                     throw new IllegalArgumentException(feature + " is not a metered feature");
         };
@@ -119,6 +120,14 @@ public class SubscriptionGateService {
      */
     public int monthlyReceiptLimit(User user) {
         return allows(user, Feature.RECEIPT_UPLOAD_UNLIMITED) ? Integer.MAX_VALUE : free().getMonthlyReceipts();
+    }
+
+    /**
+     * Max custom categories a household may hold: FREE = config, PRO/enforcement-off = unlimited.
+     * Only creation is capped — categories already there are never removed or hidden.
+     */
+    public int customCategoryLimit(User user) {
+        return allows(user, Feature.CUSTOM_CATEGORIES_UNLIMITED) ? Integer.MAX_VALUE : free().getCustomCategories();
     }
 
     /**

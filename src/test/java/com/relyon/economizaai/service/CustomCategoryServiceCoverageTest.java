@@ -10,6 +10,8 @@ import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.CategoryRepository;
 import com.relyon.economizaai.repository.HouseholdCustomCategoryRepository;
 import com.relyon.economizaai.repository.ProductRepository;
+import com.relyon.economizaai.service.subscription.SubscriptionGateService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -24,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -37,7 +40,13 @@ class CustomCategoryServiceCoverageTest {
     @Mock private HouseholdProductCategoryOverrideService overrideService;
     @Mock private CategoryRepository categoryRepository;
     @Mock private HouseholdCacheGen householdCacheGen;
+    @Mock private SubscriptionGateService subscriptionGate;
     @InjectMocks private CustomCategoryService service;
+
+    @BeforeEach
+    void customCategoriesUncapped() {
+        lenient().when(subscriptionGate.customCategoryLimit(any())).thenReturn(Integer.MAX_VALUE);
+    }
 
     private User user() {
         return User.builder().id(UUID.randomUUID()).email("u@e")

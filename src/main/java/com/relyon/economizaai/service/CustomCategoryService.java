@@ -17,6 +17,8 @@ import com.relyon.economizaai.repository.CategoryRepository;
 import com.relyon.economizaai.repository.HouseholdCustomCategoryRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.service.cache.HouseholdCacheGen;
+import com.relyon.economizaai.service.subscription.Feature;
+import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.i18n.LocaleContextHolder;
@@ -47,6 +49,7 @@ public class CustomCategoryService {
     private final HouseholdProductCategoryOverrideService overrideService;
     private final CategoryRepository categoryRepository;
     private final HouseholdCacheGen householdCacheGen;
+    private final SubscriptionGateService subscriptionGate;
 
     /** The active two-level taxonomy tree (categories + subcategories), localized, for the FE. */
     @Transactional(readOnly = true)
@@ -98,7 +101,8 @@ public class CustomCategoryService {
      * Create a new custom category for the household. The name must be unique (case-insensitive)
      * within the household AND must not collide with a built-in taxonomy name. Optional visual
      * (icon/color) and nesting under a taxonomy category OR another TOP-LEVEL custom are applied.
-     * Editing an existing one is done via {@link #update}.
+     * Editing an existing one is done via {@link #update}. FREE households are capped in how many
+     * they may hold ({@link #enforceCustomCategoryCap}).
      */
     @Transactional
     public CategoryResponse create(User user, CreateCategoryRequest request) {
@@ -106,6 +110,7 @@ public class CustomCategoryService {
         var name = request.name().trim();
         var householdId = user.getHousehold().getId();
         requireNameAvailable(householdId, name, null);
+        enforceCustomCategoryCap(user, householdId);
 
         var category = HouseholdCustomCategory.builder().household(user.getHousehold()).name(name).build();
         category.setIcon(request.icon());
@@ -149,6 +154,18 @@ public class CustomCategoryService {
         var saved = customCategoryRepository.save(category);
         log.info("custom_category.update household={} id={} name='{}'", householdId, saved.getId(), saved.getName());
         return toResponse(saved);
+    }
+
+    /**
+     * FREE plan caps how many custom categories the household holds. Only creation is blocked —
+     * the ones already there stay, editable and deletable. PRO (limit MAX_VALUE) bypasses entirely.
+     */
+    private void enforceCustomCategoryCap(User user, UUID householdId) {
+        if (subscriptionGate.customCategoryLimit(user) == Integer.MAX_VALUE) {
+            return;
+        }
+        var existingCustomCategories = customCategoryRepository.countByHouseholdId(householdId);
+        subscriptionGate.requireWithinLimit(user, Feature.CUSTOM_CATEGORIES_UNLIMITED, existingCustomCategories);
     }
 
     private void requireAtMostOneParent(String parentGroupSlug, UUID parentCustomCategoryId) {
