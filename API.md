@@ -2505,7 +2505,7 @@ gating service.
 | Basket optimization (`POST /shopping-list/optimize`) | — | ✅ | FREE → **402**. |
 | History export (`GET /receipts/export`) | — | ✅ | FREE → **402** (`CSV_EXPORT`). |
 | Receipt by photo (`POST /receipts/items-photo`) | — | ✅ | FREE → **402** (`PHOTO_EXTRACTION`); also counts toward the monthly receipt cap. |
-| Custom categories (`POST /categories`) — `CUSTOM_CATEGORIES_UNLIMITED` | 1 per household | unlimited | Creating one past the cap → **402**. Only creation is blocked: categories the household already has are never removed or hidden, and edit / delete / migrate keep working. The check uses the plan of the user who is creating. |
+| Custom categories (`POST /categories`) — `CUSTOM_CATEGORIES_UNLIMITED` | 1 per household | unlimited | Creating one past the cap → **402** with its own message (`subscription.limit.custom_categories`, states the cap). Only creation is blocked: categories the household already has are never removed or hidden, and edit / delete / migrate keep working. The check uses the plan of the user who is creating. |
 | Household size (join) | 2 people | 6 people | One PRO member lifts the whole household to the max. Over the cap → localized `household.full.free` / `household.full.max`. The absolute max (6) applies even with enforcement off. |
 
 The gate is **per feature** (`Feature` enum: `WATCHED_MARKETS_UNLIMITED`,
