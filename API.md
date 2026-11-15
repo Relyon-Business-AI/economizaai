@@ -1526,7 +1526,10 @@ the window. So an empty/short list at a pharmacy is expected — show an empty s
 
 `GET /markets` (2026-11-10): `scope=ALL` (default) returns markets within **20 km**
 (`best-markets-nearby-radius-km`) of the resolved origin UNION the household's watched
-markets; `scope=MINE` returns only the watched ones. Pass `lat`/`lng` (all-or-nothing)
+markets; `scope=MINE` returns only the watched ones. Since 2026-11-15 the nearby part of
+`ALL` lists **only grocery and pharmacy merchants** (supermarket, pharmacy, food retail, or
+admin-approved) — restaurants and other shops a nota came from are left out; a watched
+market is always listed, whatever its kind. Pass `lat`/`lng` (all-or-nothing)
 to measure from the device's current position; otherwise the origin follows the
 "perto de você" cascade (see §7: device → profile → receipts-median → UF). **Sorted by
 `distanceKm` ascending, nulls last** — a market from a receipt scanned far away (another

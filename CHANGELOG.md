@@ -1,5 +1,11 @@
 # economizai — what's new
 
+## 2026-11-15 — `GET /markets?scope=ALL` lista só mercados e farmácias
+
+A parte "perto de você" de `scope=ALL` deixava passar qualquer estabelecimento de onde veio uma nota (restaurante,
+joalheria, loja). Agora só entram supermercado, farmácia, varejo de alimentos e os aprovados pelo admin. Mercado
+marcado pela casa continua aparecendo sempre, seja qual for o tipo. `scope=MINE` não mudou. Sem mudança de contrato.
+
 ## 2026-11-15 — Novidades no app: card na tela Início (`/announcements`)
 
 Os donos publicam, de vez em quando, uma novidade, uma dica ou um aviso. O app mostra como um card na tela Início
