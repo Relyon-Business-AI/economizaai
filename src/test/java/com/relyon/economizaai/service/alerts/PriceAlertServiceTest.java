@@ -43,10 +43,24 @@ class PriceAlertServiceTest {
 
     private static final UUID PRODUCT_ID = UUID.randomUUID();
 
+    private static final Household HOUSEHOLD = Household.builder().id(UUID.randomUUID()).build();
+
+    /** A member of the one household these tests use. */
     private User user() {
         return User.builder().id(UUID.randomUUID()).email("user@example.com")
-                .household(Household.builder().id(UUID.randomUUID()).build())
+                .household(HOUSEHOLD)
                 .build();
+    }
+
+    private NotificationRule alert(User owner, Product product, String thresholdPrice) {
+        return NotificationRule.builder().id(UUID.randomUUID())
+                .user(owner).type(NotificationType.PRICE_DROP).product(product)
+                .thresholdPrice(new BigDecimal(thresholdPrice)).radiusKm(20.0).active(true).build();
+    }
+
+    private void householdHasAlerts(NotificationRule... newestFirst) {
+        when(ruleRepository.findAllByHouseholdIdAndTypeFetchProduct(HOUSEHOLD.getId(), NotificationType.PRICE_DROP))
+                .thenReturn(List.of(newestFirst));
     }
 
     private Product product() {
@@ -59,8 +73,7 @@ class PriceAlertServiceTest {
     void create_persistsNewPriceDropRule() {
         var owner = user();
         when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(product()));
-        when(ruleRepository.findByUserIdAndTypeAndProductId(owner.getId(), NotificationType.PRICE_DROP, PRODUCT_ID))
-                .thenReturn(Optional.empty());
+        householdHasAlerts();
         when(ruleRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         var response = service.create(owner,
@@ -74,12 +87,9 @@ class PriceAlertServiceTest {
     @Test
     void create_updatesExistingRuleInPlace() {
         var owner = user();
-        var existing = NotificationRule.builder().id(UUID.randomUUID())
-                .user(owner).type(NotificationType.PRICE_DROP).product(product())
-                .thresholdPrice(new BigDecimal("9.99")).radiusKm(20.0).active(true).build();
+        var existing = alert(owner, product(), "9.99");
         when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(product()));
-        when(ruleRepository.findByUserIdAndTypeAndProductId(owner.getId(), NotificationType.PRICE_DROP, PRODUCT_ID))
-                .thenReturn(Optional.of(existing));
+        householdHasAlerts(existing);
         when(ruleRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         var response = service.create(owner,
@@ -89,6 +99,33 @@ class PriceAlertServiceTest {
         assertEquals(3.0, existing.getRadiusKm());
         assertFalse(existing.isActive());
         assertFalse(response.active());
+    }
+
+    @Test
+    void create_updatesTheAlertAnotherMemberCreatedInsteadOfAddingASecondOne() {
+        var otherMembersAlert = alert(user(), product(), "9.99");
+        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(product()));
+        householdHasAlerts(otherMembersAlert);
+        when(ruleRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.create(user(), new CreatePriceAlertRequest(PRODUCT_ID, new BigDecimal("6.00"), 3.0, null));
+
+        verify(ruleRepository).save(otherMembersAlert);
+        assertEquals(new BigDecimal("6.00"), otherMembersAlert.getThresholdPrice());
+    }
+
+    @Test
+    void create_leavesOneAlertWhenTwoMembersHadOneOnTheSameProduct() {
+        var newestAlert = alert(user(), product(), "9.99");
+        var olderAlert = alert(user(), product(), "8.00");
+        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(product()));
+        householdHasAlerts(newestAlert, olderAlert);
+        when(ruleRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.create(user(), new CreatePriceAlertRequest(PRODUCT_ID, new BigDecimal("6.00"), null, null));
+
+        verify(ruleRepository).save(newestAlert);
+        verify(ruleRepository).deleteAll(List.of(olderAlert));
     }
 
     @Test
@@ -103,21 +140,39 @@ class PriceAlertServiceTest {
     // ---- list ----
 
     @Test
-    void list_returnsOnlyPriceDropRules() {
-        var owner = user();
-        var priceDrop = NotificationRule.builder().id(UUID.randomUUID())
-                .user(owner).type(NotificationType.PRICE_DROP).product(product())
-                .thresholdPrice(new BigDecimal("4.00")).active(true).build();
-        var budget = NotificationRule.builder().id(UUID.randomUUID())
-                .user(owner).type(NotificationType.BUDGET)
-                .thresholdPrice(new BigDecimal("500.00")).active(true).build();
-        when(ruleRepository.findAllByUserIdFetchProduct(owner.getId()))
-                .thenReturn(List.of(priceDrop, budget));
+    void list_showsTheAlertsOfEveryMemberOfTheHousehold() {
+        var otherProduct = Product.builder().id(UUID.randomUUID()).normalizedName("Arroz 5kg").build();
+        householdHasAlerts(alert(user(), product(), "4.00"), alert(user(), otherProduct, "20.00"));
 
-        var responses = service.list(owner);
+        var responses = service.list(user());
+
+        assertEquals(2, responses.size());
+        assertEquals(new BigDecimal("4.00"), responses.get(0).thresholdPrice());
+        assertEquals(new BigDecimal("20.00"), responses.get(1).thresholdPrice());
+    }
+
+    @Test
+    void list_showsOneAlertPerProductKeepingTheMostRecentlyChanged() {
+        householdHasAlerts(alert(user(), product(), "4.00"), alert(user(), product(), "5.50"));
+
+        var responses = service.list(user());
 
         assertEquals(1, responses.size());
         assertEquals(new BigDecimal("4.00"), responses.get(0).thresholdPrice());
+    }
+
+    @Test
+    void list_carriesHouseholdFriendlyName() {
+        var user = user();
+        var product = Product.builder().id(UUID.randomUUID()).normalizedName("ARROZ 5KG").build();
+        householdHasAlerts(alert(user, product, "20.00"));
+        when(householdProductAliasService.friendlyNamesFor(eq(HOUSEHOLD.getId()), any()))
+                .thenReturn(Map.of(product.getId(), "Arroz de todo dia"));
+
+        var alerts = service.list(user);
+
+        assertEquals("ARROZ 5KG", alerts.get(0).productName());
+        assertEquals("Arroz de todo dia", alerts.get(0).friendlyDescription());
     }
 
     // ---- delete ----
@@ -125,50 +180,34 @@ class PriceAlertServiceTest {
     @Test
     void delete_removesPriceDropRuleWhenFound() {
         var owner = user();
-        var ruleId = UUID.randomUUID();
-        var existing = NotificationRule.builder().id(ruleId)
-                .user(owner).type(NotificationType.PRICE_DROP).product(product()).active(true).build();
-        when(ruleRepository.findByIdAndUserId(ruleId, owner.getId())).thenReturn(Optional.of(existing));
+        var existing = alert(owner, product(), "4.00");
+        householdHasAlerts(existing);
 
-        service.delete(owner, ruleId);
+        service.delete(owner, existing.getId());
 
-        verify(ruleRepository).delete(existing);
+        verify(ruleRepository).deleteAll(List.of(existing));
     }
 
     @Test
-    void delete_nonPriceDropRuleThrows() {
-        var owner = user();
-        var ruleId = UUID.randomUUID();
-        var budget = NotificationRule.builder().id(ruleId)
-                .user(owner).type(NotificationType.BUDGET).active(true).build();
-        when(ruleRepository.findByIdAndUserId(ruleId, owner.getId())).thenReturn(Optional.of(budget));
+    void delete_removesAnAlertAnotherMemberCreatedAndItsRepeatsOnTheSameProduct() {
+        var otherProduct = Product.builder().id(UUID.randomUUID()).normalizedName("Arroz 5kg").build();
+        var otherMembersAlert = alert(user(), product(), "4.00");
+        var repeatedAlert = alert(user(), product(), "5.50");
+        var alertOnOtherProduct = alert(user(), otherProduct, "20.00");
+        householdHasAlerts(otherMembersAlert, repeatedAlert, alertOnOtherProduct);
 
-        assertThrows(PriceAlertNotFoundException.class, () -> service.delete(owner, ruleId));
-        verify(ruleRepository, never()).delete(any());
+        service.delete(user(), otherMembersAlert.getId());
+
+        verify(ruleRepository).deleteAll(List.of(otherMembersAlert, repeatedAlert));
     }
 
     @Test
     void delete_unknownAlertThrows() {
         var owner = user();
-        var ruleId = UUID.randomUUID();
-        when(ruleRepository.findByIdAndUserId(ruleId, owner.getId())).thenReturn(Optional.empty());
+        householdHasAlerts(alert(owner, product(), "4.00"));
+        var unknownAlertId = UUID.randomUUID();
 
-        assertThrows(PriceAlertNotFoundException.class, () -> service.delete(owner, ruleId));
-    }
-
-    @Test
-    void list_carriesHouseholdFriendlyName() {
-        var user = user();
-        var product = Product.builder().id(UUID.randomUUID()).normalizedName("ARROZ 5KG").build();
-        var rule = NotificationRule.builder().id(UUID.randomUUID()).user(user)
-                .type(NotificationType.PRICE_DROP).product(product).active(true).build();
-        when(ruleRepository.findAllByUserIdFetchProduct(user.getId())).thenReturn(List.of(rule));
-        when(householdProductAliasService.friendlyNamesFor(eq(user.getHousehold().getId()), any()))
-                .thenReturn(Map.of(product.getId(), "Arroz de todo dia"));
-
-        var alerts = service.list(user);
-
-        assertEquals("ARROZ 5KG", alerts.get(0).productName());
-        assertEquals("Arroz de todo dia", alerts.get(0).friendlyDescription());
+        assertThrows(PriceAlertNotFoundException.class, () -> service.delete(owner, unknownAlertId));
+        verify(ruleRepository, never()).deleteAll(any());
     }
 }

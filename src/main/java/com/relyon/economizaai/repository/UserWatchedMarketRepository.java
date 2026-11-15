@@ -4,16 +4,15 @@ import com.relyon.economizaai.model.UserWatchedMarket;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 public interface UserWatchedMarketRepository extends JpaRepository<UserWatchedMarket, UUID> {
 
     List<UserWatchedMarket> findAllByUserId(UUID userId);
 
-    long countByUserId(UUID userId);
+    /** Every pin made by any member of the household — the watchlist is shared by the household. */
+    List<UserWatchedMarket> findAllByUserHouseholdId(UUID householdId);
 
-    Optional<UserWatchedMarket> findByUserIdAndMarketCnpj(UUID userId, String marketCnpj);
-
-    void deleteByUserIdAndMarketCnpj(UUID userId, String marketCnpj);
+    /** Removes the market from the household's watchlist, whichever member pinned it. */
+    void deleteByUserHouseholdIdAndMarketCnpj(UUID householdId, String marketCnpj);
 }

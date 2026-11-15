@@ -183,7 +183,7 @@ public class NotificationService {
         var extras = new HashMap<String, Object>(payload.extras() != null ? payload.extras() : Map.of());
         extras.put("notificationId", saved.getId().toString());
         return new NotificationPayload(payload.user(), payload.type(), payload.title(),
-                payload.body(), extras, payload.campaignId());
+                payload.body(), extras, payload.campaignId(), payload.pushBody());
     }
 
     /**

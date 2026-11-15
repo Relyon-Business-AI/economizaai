@@ -28,8 +28,10 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * Manages the user's "watched markets" list — pinned CNPJs that should
- * surface in price intelligence regardless of distance from home.
+ * Manages the household's "watched markets" list — pinned CNPJs that should
+ * surface in price intelligence regardless of distance from home. A pin is stored
+ * under the member who made it, but the list is the household's: every member sees
+ * and can remove every pin.
  *
  * <p>Markets get into the system organically: every time a household
  * confirms a receipt, {@link MarketLocationService#registerMarketFromReceipt}
@@ -52,16 +54,16 @@ public class WatchedMarketService {
     /** Scope da listagem de mercados: ALL = raio ∪ seguidos; MINE = só os seguidos. */
     public enum MarketScope { ALL, MINE }
 
-    /** CNPJs the user is watching. Cheap helper for query-layer joins. */
+    /** CNPJs the user's household is watching. Cheap helper for query-layer joins. */
     @Transactional(readOnly = true)
     public Set<String> watchedCnpjs(User user) {
-        return watchedRepository.findAllByUserId(user.getId()).stream()
+        return watchedRepository.findAllByUserHouseholdId(user.getHousehold().getId()).stream()
                 .map(UserWatchedMarket::getMarketCnpj)
                 .collect(Collectors.toSet());
     }
 
     /**
-     * Just the user's own watchlist, hydrated with location data when we
+     * Just the household's watchlist, hydrated with location data when we
      * have it. Used by the FE for the "Meus mercados" screen — separate
      * from the picker so we don't pay the picker's joins on every fetch.
      * Distance is from the viewer's resolved origin (device → profile →
@@ -162,11 +164,12 @@ public class WatchedMarketService {
     public MarketResponse watch(User user, String cnpj) {
         var normalized = CnpjNormalizer.normalize(cnpj);
         var location = marketRepository.findByCnpj(normalized).orElseThrow(() -> new MarketNotFoundException(normalized));
-        var existing = watchedRepository.findByUserIdAndMarketCnpj(user.getId(), normalized);
-        if (existing.isEmpty()) {
-            // Cap only NEW pins — re-pinning an existing one is always allowed.
-            var current = watchedRepository.findAllByUserId(user.getId()).size();
-            subscriptionGate.requireWithinLimit(user, Feature.WATCHED_MARKETS_UNLIMITED, current);
+        var householdWatchedCnpjs = watchedCnpjs(user);
+        if (!householdWatchedCnpjs.contains(normalized)) {
+            // Cap only NEW pins — re-pinning an existing one is always allowed. The count is the
+            // household's list; the plan that decides the cap is the one of the member pinning.
+            subscriptionGate.requireWithinLimit(user, Feature.WATCHED_MARKETS_UNLIMITED,
+                    householdWatchedCnpjs.size());
             watchedRepository.save(UserWatchedMarket.builder()
                     .user(user)
                     .marketCnpj(normalized)
@@ -199,7 +202,7 @@ public class WatchedMarketService {
     @Transactional
     public void unwatch(User user, String cnpj) {
         var normalized = CnpjNormalizer.normalize(cnpj);
-        watchedRepository.deleteByUserIdAndMarketCnpj(user.getId(), normalized);
+        watchedRepository.deleteByUserHouseholdIdAndMarketCnpj(user.getHousehold().getId(), normalized);
         log.info("watched_market.removed user={} cnpj={}", LogMasker.email(user.getEmail()), normalized);
     }
 

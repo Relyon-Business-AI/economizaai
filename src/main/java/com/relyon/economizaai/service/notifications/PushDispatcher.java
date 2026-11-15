@@ -54,11 +54,12 @@ public class PushDispatcher implements NotificationDispatcher {
                     LogMasker.email(payload.user().getEmail()), LogMasker.token(trimmed));
             return DispatchResult.failed("token is not an Expo push token (expected ExponentPushToken[...])");
         }
+        var pushBody = payload.effectivePushBody();
         if (payload.title() == null || payload.title().isBlank()
-                || payload.body() == null || payload.body().isBlank()) {
+                || pushBody == null || pushBody.isBlank()) {
             return DispatchResult.failed("title and body are required");
         }
-        var result = expoPushClient.send(trimmed, payload.title(), payload.body(), buildData(payload));
+        var result = expoPushClient.send(trimmed, payload.title(), pushBody, buildData(payload));
         if (result.ok()) {
             log.info("notification.push.sent user={} type={} ticket={}",
                     LogMasker.email(payload.user().getEmail()), payload.type(), result.ticketId());

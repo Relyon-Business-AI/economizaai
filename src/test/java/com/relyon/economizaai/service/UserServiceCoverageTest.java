@@ -43,6 +43,7 @@ class UserServiceCoverageTest {
     @Mock private EmailVerificationService emailVerificationService;
     @Mock private RefreshTokenService refreshTokenService;
 
+    @Mock private HouseholdSharedSettingsService householdSharedSettingsService;
     @InjectMocks private UserService userService;
 
     private User buildUser() {
@@ -64,19 +65,19 @@ class UserServiceCoverageTest {
     }
 
     @Test
-    void updateHomeLocation_setsCoarsenedCoordinatesAndTimestamp() {
+    void updateHomeLocation_savesThePointForTheWholeHouseholdAndReturnsTheSavedUser() {
         var user = buildUser();
         var request = new UpdateHomeLocationRequest(new BigDecimal("-30.0277431"), new BigDecimal("-51.2287219"));
-        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        var savedUser = buildUser();
+        savedUser.setHomeLatitude(new BigDecimal("-30.028"));
+        savedUser.setHomeLongitude(new BigDecimal("-51.229"));
+        when(householdSharedSettingsService.saveHomeLocationForHousehold(
+                user, request.latitude(), request.longitude())).thenReturn(savedUser);
 
         var response = userService.updateHomeLocation(user, request);
 
         assertEquals(0, response.homeLatitude().compareTo(new BigDecimal("-30.028")));
         assertEquals(0, response.homeLongitude().compareTo(new BigDecimal("-51.229")));
-        assertEquals(0, user.getHomeLatitude().compareTo(new BigDecimal("-30.028")));
-        assertEquals(0, user.getHomeLongitude().compareTo(new BigDecimal("-51.229")));
-        assertNotNull(user.getHomeSetAt());
-        verify(userRepository).save(user);
     }
 
     @Test

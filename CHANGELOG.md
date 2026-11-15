@@ -1,5 +1,22 @@
 # economizai — what's new
 
+## 2026-11-15 — Da casa, não de cada pessoa: mercados marcados, alertas de preço, aviso de orçamento e localização
+
+Nenhum endpoint ou formato mudou; mudou **de quem é o dado**. O app não precisa de alteração.
+
+- **Mercados marcados** (`/markets`, `/markets/watched`): a lista é da casa. O que um membro marca aparece para
+  todos (`watching: true`), e qualquer membro desmarca. Vale também para onde a lista é usada (ofertas, melhores
+  mercados, alertas). O limite do plano grátis conta a lista da casa e olha o plano de quem está marcando.
+- **Alertas de preço** (`/alerts`): a lista é da casa, um alerta por produto. Criar em produto que já tem alerta
+  atualiza o existente, de quem quer que seja; qualquer membro apaga. Quando dispara, **todos os membros** são
+  avisados (as opções de aviso de cada um continuam valendo).
+- **Aviso de orçamento do mês**: um limite por casa (vale o alterado por último) e o aviso vai para todos os
+  membros, uma vez por mês.
+- **Localização do "perto de você"** (`PATCH /users/me/location`): um ponto por casa. Salvar grava para todos os
+  membros; quem entra numa casa fica com o ponto mais recente dela. Migration `V184` alinha as casas existentes.
+- **Sair da casa**: quem sai leva uma cópia dos mercados marcados e dos alertas da casa, e mantém a localização.
+- Continua individual: Premium, limite mensal de notas, compartilhar preços, dispensar oferta, opções de aviso.
+
 ## 2026-11-15 — Relatório de gastos também mensal: `reportFrequencies` em `/users/me/notification-settings`
 
 - **`GET /users/me/notification-settings`** ganhou `reportFrequencies`: lista com `"WEEKLY"` e/ou `"MONTHLY"`, nessa
@@ -14,6 +31,16 @@
 - **Envio**: o mensal cobre o mês civil anterior inteiro e sai no dia 1 às 10h (Brasília); o semanal segue na segunda
   às 10h, agora só para quem tem `WEEKLY` escolhido. Período sem compra não envia nada. O envio continua desligado no
   servidor (`WHATSAPP_REPORTS_ENABLED`, que passa a valer para os dois). Migration `V182`.
+
+## 2026-11-15 — Aviso "não conseguimos ler sua nota": texto do push separado do texto no app
+
+- O aviso de nota que falhou tinha **um único texto** com "Abra o app pra tentar de novo" — certo no
+  push, mas estranho na **tela de detalhe do aviso dentro do app** (o usuário já está no app).
+- Agora o **corpo gravado** (o que a tela de detalhe mostra) é neutro — "Não foi possível ler a nota do
+  {mercado}. Você pode tentar de novo." — e o **push** carrega a chamada "Abra o app pra tentar de novo".
+- Mecanismo genérico no backend (`NotificationPayload.pushBody`, opcional, com fallback pro corpo do
+  inbox): qualquer aviso pode ter um texto de push distinto do texto no app. Nenhuma mudança de contrato
+  para o FE — a tela de detalhe segue lendo `body`.
 
 ## 2026-11-14 — Configurações de avisos: uma chave por aviso E por canal (`/users/me/notification-settings`)
 
