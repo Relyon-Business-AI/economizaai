@@ -273,6 +273,16 @@ public class User extends BaseEntity implements UserDetails {
     @Builder.Default
     private boolean whatsAppWeeklyReportEnabled = false;
 
+    // Which periods the spending report (the WEEKLY_REPORT notice) covers. Independent of each
+    // other: weekly, monthly or both. The notice options decide the channels it goes out on.
+    @Column(name = "spending_report_weekly", nullable = false)
+    @Builder.Default
+    private boolean spendingReportWeekly = true;
+
+    @Column(name = "spending_report_monthly", nullable = false)
+    @Builder.Default
+    private boolean spendingReportMonthly = false;
+
     // Platform used when the account was first created (immutable once set).
     @Enumerated(EnumType.STRING)
     @Column(name = "registration_platform", length = 10)

@@ -11,6 +11,7 @@ import com.relyon.economizaai.model.enums.DigestFrequency;
 import com.relyon.economizaai.model.enums.NotificationChannel;
 import com.relyon.economizaai.model.enums.NotificationNotice;
 import com.relyon.economizaai.model.enums.Role;
+import com.relyon.economizaai.model.enums.SpendingReportFrequency;
 import com.relyon.economizaai.model.enums.SubscriptionTier;
 import com.relyon.economizaai.repository.NotificationNoticeOptionRepository;
 import com.relyon.economizaai.repository.UserRepository;
@@ -22,6 +23,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -96,7 +98,7 @@ class UserNotificationSettingsServiceTest {
     }
 
     private static UpdateNotificationSettingsRequest change(String key, String channel, Boolean enabled) {
-        return new UpdateNotificationSettingsRequest(List.of(new OptionChange(key, channel, enabled)), null);
+        return new UpdateNotificationSettingsRequest(List.of(new OptionChange(key, channel, enabled)), null, null);
     }
 
     private static NotificationSettingsResponse.Option optionOf(NotificationSettingsResponse settings,
@@ -237,7 +239,7 @@ class UserNotificationSettingsServiceTest {
     void updateWithAnEmptyBodyChangesNothing() {
         var stored = storedUser(Role.USER);
 
-        var settings = settingsService.update(principalOf(stored), new UpdateNotificationSettingsRequest(null, null));
+        var settings = settingsService.update(principalOf(stored), new UpdateNotificationSettingsRequest(null, null, null));
 
         assertTrue(storedOptions.isEmpty());
         assertEquals(DigestFrequency.DAILY, settings.digestFrequency());
@@ -271,7 +273,7 @@ class UserNotificationSettingsServiceTest {
         var stored = storedUser(Role.USER);
 
         var settings = settingsService.update(principalOf(stored),
-                new UpdateNotificationSettingsRequest(null, "WEEKLY"));
+                new UpdateNotificationSettingsRequest(null, "WEEKLY", null));
 
         assertEquals(DigestFrequency.WEEKLY, stored.getDigestFrequency());
         assertEquals(DigestFrequency.WEEKLY, settings.digestFrequency());
@@ -284,7 +286,7 @@ class UserNotificationSettingsServiceTest {
         stored(NotificationNotice.DEALS_DIGEST, NotificationChannel.PUSH, false);
 
         var settings = settingsService.update(principalOf(stored),
-                new UpdateNotificationSettingsRequest(null, "WEEKLY"));
+                new UpdateNotificationSettingsRequest(null, "WEEKLY", null));
 
         assertEquals(DigestFrequency.OFF, stored.getDigestFrequency());
         assertEquals(DigestFrequency.WEEKLY, settings.digestFrequency());
@@ -296,7 +298,7 @@ class UserNotificationSettingsServiceTest {
 
         var settings = settingsService.update(principalOf(admin), new UpdateNotificationSettingsRequest(List.of(
                 new OptionChange("PRICE_ALERTS", "WHATSAPP", true),
-                new OptionChange("WEEKLY_REPORT", "WHATSAPP", true)), null));
+                new OptionChange("WEEKLY_REPORT", "WHATSAPP", true)), null, null));
 
         assertTrue(optionOf(settings, NotificationNotice.PRICE_ALERTS, NotificationChannel.WHATSAPP).enabled());
         assertTrue(optionOf(settings, NotificationNotice.WEEKLY_REPORT, NotificationChannel.WHATSAPP).enabled());
@@ -376,9 +378,9 @@ class UserNotificationSettingsServiceTest {
 
     @Test
     void rejectsAnInvalidDigestFrequencyIncludingOff() {
-        assertRejected(storedUser(Role.USER), new UpdateNotificationSettingsRequest(null, "OFF"),
+        assertRejected(storedUser(Role.USER), new UpdateNotificationSettingsRequest(null, "OFF", null),
                 "notification.settings.digest-frequency.invalid");
-        assertRejected(storedUser(Role.USER), new UpdateNotificationSettingsRequest(null, "MONTHLY"),
+        assertRejected(storedUser(Role.USER), new UpdateNotificationSettingsRequest(null, "MONTHLY", null),
                 "notification.settings.digest-frequency.invalid");
     }
 
@@ -387,9 +389,112 @@ class UserNotificationSettingsServiceTest {
         var stored = storedUser(Role.USER);
         var request = new UpdateNotificationSettingsRequest(List.of(
                 new OptionChange("PRICE_ALERTS", "EMAIL", true),
-                new OptionChange("STOCKOUT", "EMAIL", true)), "WEEKLY");
+                new OptionChange("STOCKOUT", "EMAIL", true)), "WEEKLY", List.of("MONTHLY"));
 
         assertRejected(stored, request, "notification.settings.channel.not-offered");
         assertEquals(DigestFrequency.DAILY, stored.getDigestFrequency());
+        assertFalse(stored.isSpendingReportMonthly());
+    }
+
+    // ---- spending report frequencies ----
+
+    private static UpdateNotificationSettingsRequest reportFrequencies(List<String> frequencyNames) {
+        return new UpdateNotificationSettingsRequest(null, null, frequencyNames);
+    }
+
+    @Test
+    void reportIsWeeklyOnlyForAUserWhoNeverChose() {
+        var stored = storedUser(Role.USER);
+
+        var settings = settingsService.openSettings(principalOf(stored));
+
+        assertEquals(List.of(SpendingReportFrequency.WEEKLY), settings.reportFrequencies());
+    }
+
+    @Test
+    void reportCanBeBothWeeklyAndMonthlyListedInThatOrder() {
+        var stored = storedUser(Role.USER);
+
+        var settings = settingsService.update(principalOf(stored), reportFrequencies(List.of("MONTHLY", "WEEKLY")));
+
+        assertTrue(stored.isSpendingReportWeekly());
+        assertTrue(stored.isSpendingReportMonthly());
+        assertEquals(List.of(SpendingReportFrequency.WEEKLY, SpendingReportFrequency.MONTHLY),
+                settings.reportFrequencies());
+        verify(userRepository).save(stored);
+    }
+
+    @Test
+    void reportFrequenciesReplaceTheSelection() {
+        var stored = storedUser(Role.USER);
+
+        var settings = settingsService.update(principalOf(stored), reportFrequencies(List.of("MONTHLY")));
+
+        assertFalse(stored.isSpendingReportWeekly());
+        assertTrue(stored.isSpendingReportMonthly());
+        assertEquals(List.of(SpendingReportFrequency.MONTHLY), settings.reportFrequencies());
+    }
+
+    @Test
+    void aRepeatedReportFrequencyCountsOnce() {
+        var stored = storedUser(Role.USER);
+        stored.setSpendingReportMonthly(true);
+
+        var settings = settingsService.update(principalOf(stored), reportFrequencies(List.of("WEEKLY", "WEEKLY")));
+
+        assertEquals(List.of(SpendingReportFrequency.WEEKLY), settings.reportFrequencies());
+        assertFalse(stored.isSpendingReportMonthly());
+    }
+
+    @Test
+    void anUpdateWithoutReportFrequenciesKeepsTheSelection() {
+        var stored = storedUser(Role.USER);
+        stored.setSpendingReportWeekly(false);
+        stored.setSpendingReportMonthly(true);
+
+        var settings = settingsService.update(principalOf(stored), change("PRICE_ALERTS", "EMAIL", true));
+
+        assertEquals(List.of(SpendingReportFrequency.MONTHLY), settings.reportFrequencies());
+    }
+
+    @Test
+    void aRowWithNoReportFrequencyStillReadsAsWeekly() {
+        var stored = storedUser(Role.USER);
+        stored.setSpendingReportWeekly(false);
+
+        var settings = settingsService.openSettings(principalOf(stored));
+
+        assertEquals(List.of(SpendingReportFrequency.WEEKLY), settings.reportFrequencies());
+    }
+
+    @Test
+    void rejectsAnEmptyReportFrequencySelectionAndSavesNothing() {
+        var stored = storedUser(Role.USER);
+
+        assertRejected(stored, reportFrequencies(List.of()), "notification.settings.report-frequencies.invalid");
+
+        assertTrue(stored.isSpendingReportWeekly());
+        assertFalse(stored.isSpendingReportMonthly());
+    }
+
+    @Test
+    void rejectsUnknownReportFrequencies() {
+        assertRejected(storedUser(Role.USER), reportFrequencies(List.of("DAILY")),
+                "notification.settings.report-frequencies.invalid");
+        assertRejected(storedUser(Role.USER), reportFrequencies(List.of("WEEKLY", "YEARLY")),
+                "notification.settings.report-frequencies.invalid");
+        assertRejected(storedUser(Role.USER), reportFrequencies(Arrays.asList("MONTHLY", null)),
+                "notification.settings.report-frequencies.invalid");
+        assertRejected(storedUser(Role.USER), reportFrequencies(List.of("", "")),
+                "notification.settings.report-frequencies.invalid");
+    }
+
+    @Test
+    void anInvalidReportFrequencyRejectsTheOptionChangesSentWithIt() {
+        var stored = storedUser(Role.USER);
+        var request = new UpdateNotificationSettingsRequest(
+                List.of(new OptionChange("WEEKLY_REPORT", "EMAIL", true)), null, List.of());
+
+        assertRejected(stored, request, "notification.settings.report-frequencies.invalid");
     }
 }

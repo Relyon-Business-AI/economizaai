@@ -74,4 +74,52 @@ class NotificationNoticeOptionRepositoryTest {
                 .contains(byEmail.getId(), byWhatsApp.getId())
                 .doesNotContain(emailSwitchedOff.getId(), otherNoticeByEmail.getId());
     }
+
+    private User savedUserWithReportByEmail(String localPart, boolean weekly, boolean monthly) {
+        var user = savedUser(localPart, false);
+        user.setSpendingReportWeekly(weekly);
+        user.setSpendingReportMonthly(monthly);
+        var saved = userRepository.save(user);
+        savedOption(saved, NotificationNotice.WEEKLY_REPORT, NotificationChannel.EMAIL, true);
+        return saved;
+    }
+
+    @Test
+    void aNewUserHasTheReportWeeklyAndNotMonthly() {
+        var user = savedUser("freq0", false);
+
+        assertThat(user.isSpendingReportWeekly()).isTrue();
+        assertThat(user.isSpendingReportMonthly()).isFalse();
+    }
+
+    @Test
+    void reportCandidatesFollowTheFrequenciesEachUserChose() {
+        var weeklyOnly = savedUserWithReportByEmail("freq1", true, false);
+        var monthlyOnly = savedUserWithReportByEmail("freq2", false, true);
+        var both = savedUserWithReportByEmail("freq3", true, true);
+
+        assertThat(userRepository.findWeeklyReportCandidates())
+                .extracting(User::getId)
+                .contains(weeklyOnly.getId(), both.getId())
+                .doesNotContain(monthlyOnly.getId());
+        assertThat(userRepository.findMonthlyReportCandidates())
+                .extracting(User::getId)
+                .contains(monthlyOnly.getId(), both.getId())
+                .doesNotContain(weeklyOnly.getId());
+    }
+
+    @Test
+    void monthlyReportCandidatesNeedAReportOptionOn() {
+        var monthlyWithoutAnyOption = savedUser("freq4", false);
+        monthlyWithoutAnyOption.setSpendingReportMonthly(true);
+        userRepository.save(monthlyWithoutAnyOption);
+        var monthlyByWhatsApp = savedUser("freq5", true);
+        monthlyByWhatsApp.setSpendingReportMonthly(true);
+        userRepository.save(monthlyByWhatsApp);
+
+        assertThat(userRepository.findMonthlyReportCandidates())
+                .extracting(User::getId)
+                .contains(monthlyByWhatsApp.getId())
+                .doesNotContain(monthlyWithoutAnyOption.getId());
+    }
 }

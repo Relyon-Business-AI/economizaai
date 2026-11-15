@@ -202,17 +202,18 @@ public class InfosimplesService {
             var errors = response == null ? null : response.errors();
             log.warn("infosimples.fetch.failed chave={} uf={} code={} message='{}' errors={}",
                     abbrev(chave), ufCode, code, message, errors);
-            // The owner must hear about a failing paid consult (esp. sem saldo) —
-            // throttled inside, never breaks the flow.
-            alertService.alertConsultFailure(ufCode, code, message);
             // Deterministic per-nota outcomes (no data / bad chave / wrong service) are NOT
-            // provider health signals — they must not count toward the circuit breaker, AND
+            // provider health signals — they must not count toward the circuit breaker, must
+            // NOT page the owner (a nota que não existe no portal não é falha de infra), AND
             // the user must be told it's FINAL (não adianta retentar), not transient. The
             // reason key splits the user message: "infosimples.not-found" (final) vs
             // "infosimples.error" (provider instável → tente de novo mais tarde).
             if (DETERMINISTIC_NO_DATA_CODES.contains(code)) {
                 throw new InfosimplesNoDataException("infosimples.not-found", code);
             }
+            // The owner must hear about a failing paid consult (esp. sem saldo / portal fora) —
+            // throttled inside, never breaks the flow. Skipped above for deterministic no-data.
+            alertService.alertConsultFailure(ufCode, code, message);
             throw new InfosimplesProviderException(code);
         }
         if (response.data() == null || response.data().isEmpty()) {

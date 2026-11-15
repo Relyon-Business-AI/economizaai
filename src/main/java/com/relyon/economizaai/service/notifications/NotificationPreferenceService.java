@@ -61,9 +61,9 @@ public class NotificationPreferenceService {
         return Stream.concat(noticeTypes, typesOutsideTheNoticeModel).toList();
     }
 
-    /** The weekly report type did not exist when the one-channel-per-type view was designed. */
+    /** The spending report types did not exist when the one-channel-per-type view was designed. */
     private static boolean isKnownToOlderApps(NotificationType type) {
-        return type != NotificationType.WEEKLY_REPORT;
+        return type != NotificationType.WEEKLY_REPORT && type != NotificationType.MONTHLY_REPORT;
     }
 
     private static NotificationChannel legacyChannel(NoticeOptions options, NotificationNotice notice) {

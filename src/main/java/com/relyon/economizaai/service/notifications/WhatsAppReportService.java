@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.notifications;
 
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.SpendingReportFrequency;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.report.PurchaseReportAssembler;
 import com.relyon.economizaai.service.report.PurchaseReportData;
@@ -11,12 +12,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.format.DateTimeFormatter;
+import java.time.format.TextStyle;
 import java.util.Locale;
 
 /**
- * Renders a household's last-7-days spending into a short WhatsApp-friendly text
- * (header + totals + top categories + top markets). Used both for the on-demand
- * "pull" reply and as the body of the proactive weekly report.
+ * Renders a household's spending into a short WhatsApp-friendly text (header + totals + top
+ * categories + top markets). The last 7 days serve the on-demand "pull" reply and the
+ * proactive weekly report; the previous calendar month serves the monthly report.
  */
 @Service
 @RequiredArgsConstructor
@@ -46,20 +48,64 @@ public class WhatsAppReportService {
 
     @Transactional(readOnly = true)
     public WeeklyReportNotice buildWeeklyReportNotice(User user) {
+        var notice = lastSevenDaysNotice(user);
+        return new WeeklyReportNotice(notice.body(), notice.summaryLine(), notice.hasPurchases());
+    }
+
+    /**
+     * The spending report of one period as a notice: the title, a plain-text body for the inbox
+     * and the e-mail, plus the one-line summary a WhatsApp template variable can carry. Every
+     * text names the period it covers. {@code hasPurchases} is false for a period without
+     * receipts — there is nothing worth sending then.
+     */
+    public record SpendingReportNotice(String title, String body, String summaryLine, boolean hasPurchases) {}
+
+    /** WEEKLY covers the last seven days; MONTHLY the previous full calendar month (Brasília time). */
+    @Transactional(readOnly = true)
+    public SpendingReportNotice buildSpendingReportNotice(User user, SpendingReportFrequency frequency) {
+        return switch (frequency) {
+            case WEEKLY -> lastSevenDaysNotice(user);
+            case MONTHLY -> previousMonthNotice(user);
+        };
+    }
+
+    private SpendingReportNotice lastSevenDaysNotice(User user) {
         var locale = LocalizedMessageService.toLocale(user.getLocale());
         var to = BrazilClock.nowDateTime();
         var from = to.minusDays(7);
         var data = reportAssembler.assemble(user, from, to);
         var kpis = data.kpis();
+        var title = messageService.translate("notification.weekly_report.title", locale);
         if (kpis.receiptCount() == 0) {
-            return new WeeklyReportNotice(messageService.translate("whatsapp.report.empty", locale),
+            return new SpendingReportNotice(title, messageService.translate("whatsapp.report.empty", locale),
                     messageService.translate("whatsapp.report.summary.empty", locale), false);
         }
         var period = messageService.translate("notification.weekly_report.period", locale,
                 from.format(DAY_MONTH), to.format(DAY_MONTH));
         var summaryLine = messageService.translate("whatsapp.report.summary", locale,
                 amount(kpis.totalSpent()), String.valueOf(kpis.receiptCount()));
-        return new WeeklyReportNotice(period + "\n\n" + spendingBreakdown(data, locale), summaryLine, true);
+        return new SpendingReportNotice(title, period + "\n\n" + spendingBreakdown(data, locale), summaryLine, true);
+    }
+
+    private SpendingReportNotice previousMonthNotice(User user) {
+        var locale = LocalizedMessageService.toLocale(user.getLocale());
+        var month = BrazilClock.currentYearMonth().minusMonths(1);
+        var from = month.atDay(1).atStartOfDay();
+        var to = month.plusMonths(1).atDay(1).atStartOfDay().minusNanos(1);
+        var data = reportAssembler.assemble(user, from, to);
+        var kpis = data.kpis();
+        var monthName = month.getMonth().getDisplayName(TextStyle.FULL, locale);
+        var title = messageService.translate("notification.monthly_report.title", locale, monthName);
+        if (kpis.receiptCount() == 0) {
+            return new SpendingReportNotice(title,
+                    messageService.translate("whatsapp.report.monthly.empty", locale, monthName),
+                    messageService.translate("whatsapp.report.monthly.summary.empty", locale, monthName), false);
+        }
+        var period = messageService.translate("notification.monthly_report.period", locale,
+                monthName, String.valueOf(month.getYear()));
+        var summaryLine = messageService.translate("whatsapp.report.monthly.summary", locale,
+                amount(kpis.totalSpent()), String.valueOf(kpis.receiptCount()), monthName);
+        return new SpendingReportNotice(title, period + "\n\n" + spendingBreakdown(data, locale), summaryLine, true);
     }
 
     @Transactional(readOnly = true)
@@ -78,7 +124,7 @@ public class WhatsAppReportService {
         return new WeeklyReport(header + "\n\n" + spendingBreakdown(data, locale), !data.categoryBreakdown().isEmpty());
     }
 
-    /** Total, top categories and top markets of a week that has purchases. */
+    /** Total, top categories and top markets of a period that has purchases. */
     private String spendingBreakdown(PurchaseReportData data, Locale locale) {
         var kpis = data.kpis();
         var text = new StringBuilder();

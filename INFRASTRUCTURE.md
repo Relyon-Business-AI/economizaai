@@ -155,8 +155,10 @@ are offered to `ADMIN` accounts only for now, and need `TWILIO_FROM_WHATSAPP` se
 |---|---|---|
 | `TWILIO_WHATSAPP_PRICE_ALERT_TEMPLATE_SID` | _(blank)_ | Template of the `PRICE_ALERTS` notice (price alerts, budget alert). |
 | `TWILIO_WHATSAPP_DEALS_DIGEST_TEMPLATE_SID` | _(blank)_ | Template of the `DEALS_DIGEST` notice. |
-| `TWILIO_WHATSAPP_REPORT_TEMPLATE_SID` | _(blank)_ | Template of the `WEEKLY_REPORT` notice (already existed; `{{1}}` = one-line weekly summary). |
-| `WHATSAPP_REPORTS_ENABLED` | `false` | Turns the weekly report job on — it now sends the report by e-mail and/or WhatsApp, per the user's `WEEKLY_REPORT` options. |
+| `TWILIO_WHATSAPP_REPORT_TEMPLATE_SID` | _(blank)_ | Template of the `WEEKLY_REPORT` notice — used by the weekly AND the monthly report (already existed; `{{1}}` = one-line summary of the period). |
+| `WHATSAPP_REPORTS_ENABLED` | `false` | Turns the spending report job on — BOTH the weekly and the monthly run. Each sends the report by e-mail and/or WhatsApp, per the user's `WEEKLY_REPORT` options, to whoever chose that frequency (`reportFrequencies`). |
+| `WHATSAPP_WEEKLY_REPORT_CRON` | `0 0 10 ? * MON` | When the weekly report runs (America/Sao_Paulo): Monday 10:00, covering the last 7 days. |
+| `WHATSAPP_MONTHLY_REPORT_CRON` | `0 0 10 1 * ?` | When the monthly report runs (America/Sao_Paulo): day 1 at 10:00, covering the previous calendar month. |
 
 **Ingestion**
 

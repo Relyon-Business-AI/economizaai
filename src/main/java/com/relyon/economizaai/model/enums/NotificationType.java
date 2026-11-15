@@ -45,6 +45,11 @@ public enum NotificationType {
      * scheduler; governed by the WEEKLY_REPORT notice options, not a rule row.
      */
     WEEKLY_REPORT(Scope.SYSTEM, false, false),
+    /**
+     * The same spending report covering the previous calendar month. Server-emitted by the
+     * report scheduler; governed by the WEEKLY_REPORT notice options, like the weekly one.
+     */
+    MONTHLY_REPORT(Scope.SYSTEM, false, false),
 
     // --- Transactional / one-off ---
     SYSTEM(Scope.SYSTEM, false, false),
@@ -111,7 +116,7 @@ public enum NotificationType {
             // (DEALS_DIGEST) é um rollup de várias ofertas → abre a lista.
             case PROMO_PERSONAL, PROMO_COMMUNITY, CHEAPER_MARKET -> NotificationDestination.PRODUCT;
             case DEALS_DIGEST -> NotificationDestination.DEALS;
-            case DIGEST, WEEKLY_REPORT -> NotificationDestination.SPENDING;
+            case DIGEST, WEEKLY_REPORT, MONTHLY_REPORT -> NotificationDestination.SPENDING;
             case STOCKOUT -> NotificationDestination.REPLENISHMENT;
             case PRICE_DROP -> NotificationDestination.PRODUCT;
             case BUDGET -> NotificationDestination.BUDGET;

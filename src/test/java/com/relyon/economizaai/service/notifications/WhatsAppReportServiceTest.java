@@ -1,22 +1,29 @@
 package com.relyon.economizaai.service.notifications;
 
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.SpendingReportFrequency;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.report.PurchaseReportAssembler;
 import com.relyon.economizaai.service.report.PurchaseReportData;
 import com.relyon.economizaai.service.report.PurchaseReportData.CategorySpend;
 import com.relyon.economizaai.service.report.PurchaseReportData.Kpis;
 import com.relyon.economizaai.service.report.PurchaseReportData.MarketSpend;
+import com.relyon.economizaai.time.BrazilClock;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.context.support.ResourceBundleMessageSource;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.TextStyle;
 import java.util.List;
+import java.util.Locale;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** The WhatsApp report text is fully localized in the RECIPIENT's stored locale. */
@@ -94,6 +101,54 @@ class WhatsAppReportServiceTest {
                 .contains("R$ 150,00", "2 compras", "Onde foi:", "Bebidas", "Mercados:", "Mercado X")
                 .doesNotContain("*");
         assertThat(notice.summaryLine()).isEqualTo("R$ 150,00 em 2 compra(s) essa semana.").doesNotContain("\n");
+    }
+
+    @Test
+    void weeklySpendingReportNotice_matchesTheWeeklyNoticeAndCarriesTheTitle() {
+        stubReport(2, List.of(), List.of());
+        var user = userWithLocale("pt");
+
+        var notice = service.buildSpendingReportNotice(user, SpendingReportFrequency.WEEKLY);
+        var weeklyNotice = service.buildWeeklyReportNotice(user);
+
+        assertThat(notice.title()).isEqualTo("Seu resumo da semana");
+        assertThat(notice.summaryLine()).isEqualTo(weeklyNotice.summaryLine());
+        assertThat(notice.hasPurchases()).isTrue();
+        assertThat(notice.body()).startsWith("Seus gastos de ").contains(" a ");
+    }
+
+    @Test
+    void monthlySpendingReportNotice_coversThePreviousFullCalendarMonthAndNamesIt() {
+        stubReport(2, List.of(new CategorySpend("BEVERAGES", new BigDecimal("50.00"))),
+                List.of(new MarketSpend("Mercado X", "12345678000190", new BigDecimal("150.00"), 2)));
+        var previousMonth = BrazilClock.currentYearMonth().minusMonths(1);
+        var monthName = previousMonth.getMonth().getDisplayName(TextStyle.FULL, Locale.forLanguageTag("pt-BR"));
+
+        var notice = service.buildSpendingReportNotice(userWithLocale("pt"), SpendingReportFrequency.MONTHLY);
+
+        var from = ArgumentCaptor.forClass(LocalDateTime.class);
+        var to = ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(reportAssembler).assemble(any(), from.capture(), to.capture());
+        assertThat(from.getValue()).isEqualTo(previousMonth.atDay(1).atStartOfDay());
+        assertThat(to.getValue()).isEqualTo(previousMonth.atEndOfMonth().atTime(LocalTime.MAX));
+        assertThat(notice.hasPurchases()).isTrue();
+        assertThat(notice.title()).isEqualTo("Seu resumo de " + monthName);
+        assertThat(notice.body())
+                .startsWith("Seus gastos de " + monthName + " de " + previousMonth.getYear())
+                .contains("R$ 150,00", "2 compras", "Onde foi:", "Bebidas", "Mercados:", "Mercado X")
+                .doesNotContain("*", "semana");
+        assertThat(notice.summaryLine()).isEqualTo("R$ 150,00 em 2 compra(s) em " + monthName + ".")
+                .doesNotContain("\n");
+    }
+
+    @Test
+    void monthlySpendingReportNotice_ofAMonthWithoutReceiptsHasNothingToSend() {
+        stubReport(0, List.of(), List.of());
+
+        var notice = service.buildSpendingReportNotice(userWithLocale("pt"), SpendingReportFrequency.MONTHLY);
+
+        assertThat(notice.hasPurchases()).isFalse();
+        assertThat(notice.summaryLine()).startsWith("Nenhuma nota em ").doesNotContain("semana");
     }
 
     @Test

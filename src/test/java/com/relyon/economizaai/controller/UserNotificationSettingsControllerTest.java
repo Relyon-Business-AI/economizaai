@@ -15,6 +15,7 @@ import com.relyon.economizaai.model.enums.DigestFrequency;
 import com.relyon.economizaai.model.enums.NotificationChannel;
 import com.relyon.economizaai.model.enums.NotificationNotice;
 import com.relyon.economizaai.model.enums.Role;
+import com.relyon.economizaai.model.enums.SpendingReportFrequency;
 import com.relyon.economizaai.model.enums.SubscriptionTier;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.LocalizedMessageService;
@@ -46,6 +47,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
@@ -97,6 +99,7 @@ class UserNotificationSettingsControllerTest {
                 "maria@economizaai.app",
                 new WhatsApp(false, false, null, null),
                 DigestFrequency.DAILY,
+                List.of(SpendingReportFrequency.WEEKLY),
                 List.of(
                         new Notice(NotificationNotice.RECEIPT_READY, List.of(new Option(NotificationChannel.PUSH, true))),
                         new Notice(NotificationNotice.PRICE_ALERTS, List.of(
@@ -135,6 +138,7 @@ class UserNotificationSettingsControllerTest {
                 .andExpect(jsonPath("$.whatsApp.confirmLink").value(nullValue()))
                 .andExpect(jsonPath("$.whatsApp.length()").value(4))
                 .andExpect(jsonPath("$.digestFrequency").value("DAILY"))
+                .andExpect(jsonPath("$.reportFrequencies", contains("WEEKLY")))
                 .andExpect(jsonPath("$.notices", hasSize(3)))
                 .andExpect(jsonPath("$.notices[0].key").value("RECEIPT_READY"))
                 .andExpect(jsonPath("$.notices[0].options", hasSize(1)))
@@ -155,6 +159,7 @@ class UserNotificationSettingsControllerTest {
                 "admin@economizaai.app",
                 new WhatsApp(true, false, null, "https://wa.me/14063448189?text=CONFIRMAR-tok"),
                 DigestFrequency.WEEKLY,
+                List.of(SpendingReportFrequency.WEEKLY, SpendingReportFrequency.MONTHLY),
                 List.of(new Notice(NotificationNotice.WEEKLY_REPORT, List.of(
                         new Option(NotificationChannel.EMAIL, false),
                         new Option(NotificationChannel.WHATSAPP, false))))));
@@ -165,6 +170,7 @@ class UserNotificationSettingsControllerTest {
                 .andExpect(jsonPath("$.whatsApp.connected").value(false))
                 .andExpect(jsonPath("$.whatsApp.confirmLink").value("https://wa.me/14063448189?text=CONFIRMAR-tok"))
                 .andExpect(jsonPath("$.digestFrequency").value("WEEKLY"))
+                .andExpect(jsonPath("$.reportFrequencies", contains("WEEKLY", "MONTHLY")))
                 .andExpect(jsonPath("$.notices[0].options[1].channel").value("WHATSAPP"));
     }
 
@@ -184,15 +190,18 @@ class UserNotificationSettingsControllerTest {
 
         patchSettings("""
                 { "options": [ { "key": "PRICE_ALERTS", "channel": "EMAIL", "enabled": true } ],
-                  "digestFrequency": "WEEKLY" }
+                  "digestFrequency": "WEEKLY",
+                  "reportFrequencies": ["WEEKLY", "MONTHLY"] }
                 """)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value("maria@economizaai.app"))
+                .andExpect(jsonPath("$.reportFrequencies", contains("WEEKLY")))
                 .andExpect(jsonPath("$.notices", hasSize(3)));
 
         var sent = ArgumentCaptor.forClass(UpdateNotificationSettingsRequest.class);
         verify(userNotificationSettingsService).update(any(User.class), sent.capture());
         assertThat(sent.getValue().digestFrequency()).isEqualTo("WEEKLY");
+        assertThat(sent.getValue().reportFrequencies()).containsExactly("WEEKLY", "MONTHLY");
         assertThat(sent.getValue().options()).containsExactly(
                 new UpdateNotificationSettingsRequest.OptionChange("PRICE_ALERTS", "EMAIL", true));
     }
@@ -208,6 +217,33 @@ class UserNotificationSettingsControllerTest {
         verify(userNotificationSettingsService).update(any(User.class), sent.capture());
         assertThat(sent.getValue().options()).isNull();
         assertThat(sent.getValue().digestFrequency()).isNull();
+        assertThat(sent.getValue().reportFrequencies()).isNull();
+    }
+
+    @Test
+    void patchPassesAnUnknownReportFrequencyOnAsTextAndAnswers400() throws Exception {
+        updateIsRejectedWith(InvalidNotificationSettingsException.invalidReportFrequencies(),
+                "Escolha pelo menos uma frequência para o relatório: semanal ou mensal.");
+
+        patchSettings("{ \"reportFrequencies\": [\"YEARLY\"] }")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message")
+                        .value("Escolha pelo menos uma frequência para o relatório: semanal ou mensal."));
+    }
+
+    @Test
+    void patchWithAnEmptyReportFrequencySelectionIs400() throws Exception {
+        updateIsRejectedWith(InvalidNotificationSettingsException.invalidReportFrequencies(),
+                "Escolha pelo menos uma frequência para o relatório: semanal ou mensal.");
+
+        patchSettings("{ \"reportFrequencies\": [] }")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message")
+                        .value("Escolha pelo menos uma frequência para o relatório: semanal ou mensal."));
+
+        var sent = ArgumentCaptor.forClass(UpdateNotificationSettingsRequest.class);
+        verify(userNotificationSettingsService).update(any(User.class), sent.capture());
+        assertThat(sent.getValue().reportFrequencies()).isEmpty();
     }
 
     @Test
