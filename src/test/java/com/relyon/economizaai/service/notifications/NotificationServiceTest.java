@@ -430,25 +430,12 @@ class NotificationServiceTest {
     // ---- notice options ----
 
     @Test
-    void accountNoticeGoesOutOnPushAndOnTheLockedEmail() {
+    void neverConfiguredAccountNoticeGoesOutOnPushOnly() {
         var user = userWithPushToken();
         when(pushDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.ok());
-        when(emailDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.ok());
         var svc = service(true, true);
 
         svc.notify(payload(user, NotificationType.SYSTEM));
-
-        verify(pushDispatcher).dispatch(any());
-        verify(emailDispatcher).dispatch(any());
-    }
-
-    @Test
-    void campaignDoesNotRideTheLockedAccountEmail() {
-        var user = userWithPushToken();
-        when(pushDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.ok());
-        var svc = service(true, true);
-
-        svc.notify(new NotificationPayload(user, NotificationType.SYSTEM, "Title", "Body", Map.of(), UUID.randomUUID()));
 
         verify(pushDispatcher).dispatch(any());
         verify(emailDispatcher, never()).dispatch(any());

@@ -1,6 +1,6 @@
 package com.relyon.economizaai.exception;
 
-/** A notification-settings change that can never be applied (unknown notice or channel, locked option, bad value). */
+/** A notification-settings change that can never be applied (unknown notice or channel, bad value). */
 public class InvalidNotificationSettingsException extends DomainException {
 
     private InvalidNotificationSettingsException(String messageKey, String... arguments) {
@@ -21,10 +21,6 @@ public class InvalidNotificationSettingsException extends DomainException {
 
     public static InvalidNotificationSettingsException missingEnabled() {
         return new InvalidNotificationSettingsException("notification.settings.option.enabled-required");
-    }
-
-    public static InvalidNotificationSettingsException lockedOption() {
-        return new InvalidNotificationSettingsException("notification.settings.option.locked");
     }
 
     public static InvalidNotificationSettingsException invalidDigestFrequency() {

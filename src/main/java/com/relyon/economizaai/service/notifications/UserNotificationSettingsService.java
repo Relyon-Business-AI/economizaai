@@ -79,7 +79,6 @@ public class UserNotificationSettingsService {
         var channel = channelNamed(change.channel());
         if (!notice.offers(channel)) throw InvalidNotificationSettingsException.channelNotOffered();
         if (change.enabled() == null) throw InvalidNotificationSettingsException.missingEnabled();
-        if (notice.isLocked(channel) && !change.enabled()) throw InvalidNotificationSettingsException.lockedOption();
         if (channel == NotificationChannel.WHATSAPP) requireWhatsAppCanBeSet(user, change.enabled());
         return new ValidOptionChange(notice, channel, change.enabled());
     }
@@ -146,8 +145,7 @@ public class UserNotificationSettingsService {
                 .map(channel -> new NotificationSettingsResponse.Option(
                         channel,
                         options.isEnabled(notice, channel)
-                                && (channel != NotificationChannel.WHATSAPP || whatsAppConnected),
-                        notice.isLocked(channel)))
+                                && (channel != NotificationChannel.WHATSAPP || whatsAppConnected)))
                 .toList();
         return new NotificationSettingsResponse.Notice(notice, noticeOptions);
     }

@@ -14,20 +14,18 @@ import java.util.Optional;
  */
 public enum NotificationNotice {
 
-    RECEIPT_READY(null, NotificationChannel.PUSH),
-    PERSONAL_OFFERS(null, NotificationChannel.PUSH),
-    STOCKOUT(null, NotificationChannel.PUSH),
-    PRICE_ALERTS(null, NotificationChannel.PUSH, NotificationChannel.EMAIL, NotificationChannel.WHATSAPP),
-    DEALS_DIGEST(null, NotificationChannel.PUSH, NotificationChannel.EMAIL, NotificationChannel.WHATSAPP),
-    WEEKLY_REPORT(null, NotificationChannel.EMAIL, NotificationChannel.WHATSAPP),
-    /** Terms, security, billing: the e-mail cannot be switched off. */
-    ACCOUNT(NotificationChannel.EMAIL, NotificationChannel.PUSH, NotificationChannel.EMAIL);
+    RECEIPT_READY(NotificationChannel.PUSH),
+    PERSONAL_OFFERS(NotificationChannel.PUSH),
+    STOCKOUT(NotificationChannel.PUSH),
+    PRICE_ALERTS(NotificationChannel.PUSH, NotificationChannel.EMAIL, NotificationChannel.WHATSAPP),
+    DEALS_DIGEST(NotificationChannel.PUSH, NotificationChannel.EMAIL, NotificationChannel.WHATSAPP),
+    WEEKLY_REPORT(NotificationChannel.EMAIL, NotificationChannel.WHATSAPP),
+    /** Terms, security, billing. */
+    ACCOUNT(NotificationChannel.PUSH, NotificationChannel.EMAIL);
 
-    private final NotificationChannel lockedChannel;
     private final List<NotificationChannel> channels;
 
-    NotificationNotice(NotificationChannel lockedChannel, NotificationChannel... channels) {
-        this.lockedChannel = lockedChannel;
+    NotificationNotice(NotificationChannel... channels) {
         this.channels = List.of(channels);
     }
 
@@ -40,14 +38,9 @@ public enum NotificationNotice {
         return channels.contains(channel);
     }
 
-    /** A locked option is always on and cannot be switched off. */
-    public boolean isLocked(NotificationChannel channel) {
-        return channel == lockedChannel;
-    }
-
-    /** Whether the option is on for a user who never touched it. */
+    /** Whether the option is on for a user who never touched it: only the push is. */
     public boolean isOnByDefault(NotificationChannel channel) {
-        return channel == NotificationChannel.PUSH || isLocked(channel);
+        return channel == NotificationChannel.PUSH;
     }
 
     /** Every notification type that belongs to this notice. */

@@ -304,18 +304,18 @@ one on or off independently. Several can be on; with none on the notice is not d
   "whatsApp": { "available": false, "connected": false, "maskedNumber": null, "confirmLink": null },
   "digestFrequency": "DAILY",
   "notices": [
-    { "key": "RECEIPT_READY",   "options": [ { "channel": "PUSH", "enabled": true, "locked": false } ] },
-    { "key": "PERSONAL_OFFERS", "options": [ { "channel": "PUSH", "enabled": true, "locked": false } ] },
-    { "key": "STOCKOUT",        "options": [ { "channel": "PUSH", "enabled": true, "locked": false } ] },
+    { "key": "RECEIPT_READY",   "options": [ { "channel": "PUSH", "enabled": true } ] },
+    { "key": "PERSONAL_OFFERS", "options": [ { "channel": "PUSH", "enabled": true } ] },
+    { "key": "STOCKOUT",        "options": [ { "channel": "PUSH", "enabled": true } ] },
     { "key": "PRICE_ALERTS",    "options": [
-        { "channel": "PUSH",     "enabled": true,  "locked": false },
-        { "channel": "EMAIL",    "enabled": false, "locked": false },
-        { "channel": "WHATSAPP", "enabled": false, "locked": false } ] },
+        { "channel": "PUSH",     "enabled": true },
+        { "channel": "EMAIL",    "enabled": false },
+        { "channel": "WHATSAPP", "enabled": false } ] },
     { "key": "DEALS_DIGEST",    "options": [ PUSH, EMAIL, WHATSAPP — same shape ] },
     { "key": "WEEKLY_REPORT",   "options": [ EMAIL, WHATSAPP ] },
     { "key": "ACCOUNT",         "options": [
-        { "channel": "PUSH",  "enabled": true, "locked": false },
-        { "channel": "EMAIL", "enabled": true, "locked": true } ] }
+        { "channel": "PUSH",  "enabled": true },
+        { "channel": "EMAIL", "enabled": false } ] }
   ]
 }
 ```
@@ -328,10 +328,10 @@ one on or off independently. Several can be on; with none on the notice is not d
 - `whatsApp.confirmLink` is the wa.me link that connects the user's WhatsApp (same reverse opt-in as
   `GET /users/me/whatsapp`); present only while available and not yet connected. `maskedNumber` (`"****3229"`) is
   present once connected. A WhatsApp option reads `enabled=false` until the user is connected.
-- `locked: true` (only `ACCOUNT`/`EMAIL`): always on, cannot be switched off.
 - `digestFrequency` is `DAILY` or `WEEKLY`, never `OFF`: it keeps the last choice while every `DEALS_DIGEST` option is off.
-- Defaults (user who never touched an option): every `PUSH` on, every `EMAIL` off except the locked `ACCOUNT` one,
-  every `WHATSAPP` off.
+- Defaults (user who never touched an option): every `PUSH` on, every `EMAIL` and every `WHATSAPP` off
+  (the `ACCOUNT` e-mail included). An account with no push token that never configured a notice still gets it by
+  e-mail instead of the push that cannot reach it.
 
 `PATCH /api/v1/users/me/notification-settings` — every field optional, only what is sent changes, returns the full
 object above:
@@ -344,7 +344,6 @@ The whole request is validated before anything is saved. Errors (`{ status, mess
 
 | Case | Status |
 |---|---|
-| `enabled: false` on a locked option (`ACCOUNT`/`EMAIL`) | 400 |
 | a channel that does not exist for that notice (e.g. `STOCKOUT`/`EMAIL`) | 400 |
 | `WHATSAPP` (on or off) when `whatsApp.available` is false | 400 |
 | `WHATSAPP` on when not connected | 409 |
@@ -362,7 +361,7 @@ notices (`HOUSEHOLD_MEMBER_JOINED`/`LEFT`) and the spending `DIGEST` are not on 
   from the options: `PUSH` when the notice's push is on, else `EMAIL` when its e-mail is on, else `NONE`.
 - `PUT /users/me/notification-preferences`: `PUSH` ⇒ push on, e-mail off; `EMAIL` ⇒ e-mail on, push off — except on a
   notice with no e-mail channel, where push stays on (the response then reads `PUSH`); `NONE` ⇒ every option of the
-  notice off. `SYSTEM`=`NONE` only switches the push off (the account e-mail is locked) and reads back `EMAIL`.
+  notice off.
 - `digest-preferences`: `frequency=OFF` ⇄ every `DEALS_DIGEST` option off; `DAILY`/`WEEKLY` when nothing was on
   switches the push option back on.
 - `/users/me/whatsapp` `weeklyReportEnabled` ⇄ the `WEEKLY_REPORT`/`WHATSAPP` option.

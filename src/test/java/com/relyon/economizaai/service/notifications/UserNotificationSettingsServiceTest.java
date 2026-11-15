@@ -135,13 +135,13 @@ class UserNotificationSettingsServiceTest {
         assertEquals(List.of(NotificationChannel.PUSH, NotificationChannel.EMAIL),
                 channelsOf(settings, NotificationNotice.DEALS_DIGEST));
         assertEquals(List.of(NotificationChannel.EMAIL), channelsOf(settings, NotificationNotice.WEEKLY_REPORT));
-        assertEquals(new NotificationSettingsResponse.Option(NotificationChannel.PUSH, true, false),
+        assertEquals(new NotificationSettingsResponse.Option(NotificationChannel.PUSH, true),
                 optionOf(settings, NotificationNotice.PRICE_ALERTS, NotificationChannel.PUSH));
-        assertEquals(new NotificationSettingsResponse.Option(NotificationChannel.EMAIL, false, false),
+        assertEquals(new NotificationSettingsResponse.Option(NotificationChannel.EMAIL, false),
                 optionOf(settings, NotificationNotice.PRICE_ALERTS, NotificationChannel.EMAIL));
-        assertEquals(new NotificationSettingsResponse.Option(NotificationChannel.EMAIL, true, true),
+        assertEquals(new NotificationSettingsResponse.Option(NotificationChannel.EMAIL, false),
                 optionOf(settings, NotificationNotice.ACCOUNT, NotificationChannel.EMAIL));
-        assertEquals(new NotificationSettingsResponse.Option(NotificationChannel.PUSH, true, false),
+        assertEquals(new NotificationSettingsResponse.Option(NotificationChannel.PUSH, true),
                 optionOf(settings, NotificationNotice.ACCOUNT, NotificationChannel.PUSH));
         verify(whatsAppOptInService, never()).issueConfirmLink(any());
     }
@@ -304,13 +304,15 @@ class UserNotificationSettingsServiceTest {
     }
 
     @Test
-    void switchingTheLockedAccountEmailOnIsAcceptedAsANoOp() {
+    void accountEmailIsSwitchedOnAndOffLikeAnyOtherOption() {
         var stored = storedUser(Role.USER);
 
-        var settings = settingsService.update(principalOf(stored), change("ACCOUNT", "EMAIL", true));
+        var switchedOn = settingsService.update(principalOf(stored), change("ACCOUNT", "EMAIL", true));
+        assertTrue(optionOf(switchedOn, NotificationNotice.ACCOUNT, NotificationChannel.EMAIL).enabled());
 
-        assertTrue(optionOf(settings, NotificationNotice.ACCOUNT, NotificationChannel.EMAIL).enabled());
-        assertTrue(storedOptions.isEmpty());
+        var switchedOff = settingsService.update(principalOf(stored), change("ACCOUNT", "EMAIL", false));
+        assertEquals(new NotificationSettingsResponse.Option(NotificationChannel.EMAIL, false),
+                optionOf(switchedOff, NotificationNotice.ACCOUNT, NotificationChannel.EMAIL));
     }
 
     // ---- validation: nothing is applied when any part of the request is invalid ----
@@ -321,12 +323,6 @@ class UserNotificationSettingsServiceTest {
         assertEquals(messageKey, rejection.getMessageKey());
         assertTrue(storedOptions.isEmpty());
         verify(userRepository, never()).save(any());
-    }
-
-    @Test
-    void rejectsSwitchingTheLockedAccountEmailOff() {
-        assertRejected(storedUser(Role.USER), change("ACCOUNT", "EMAIL", false),
-                "notification.settings.option.locked");
     }
 
     @Test
@@ -391,9 +387,9 @@ class UserNotificationSettingsServiceTest {
         var stored = storedUser(Role.USER);
         var request = new UpdateNotificationSettingsRequest(List.of(
                 new OptionChange("PRICE_ALERTS", "EMAIL", true),
-                new OptionChange("ACCOUNT", "EMAIL", false)), "WEEKLY");
+                new OptionChange("STOCKOUT", "EMAIL", true)), "WEEKLY");
 
-        assertRejected(stored, request, "notification.settings.option.locked");
+        assertRejected(stored, request, "notification.settings.channel.not-offered");
         assertEquals(DigestFrequency.DAILY, stored.getDigestFrequency());
     }
 }

@@ -9,8 +9,7 @@ import java.util.List;
 
 /**
  * The switches one user has stored, read as "is this channel of this notice on?". An option
- * the user never touched follows the notice's default (push on, e-mail and WhatsApp off, the
- * locked account e-mail on). A locked option is on whatever is stored.
+ * the user never touched follows the notice's default (push on, e-mail and WhatsApp off).
  *
  * <p>The WhatsApp option of the weekly report is the one switch kept on the {@link User} row
  * ({@code whatsAppWeeklyReportEnabled}) — the WhatsApp opt-in flow and the older
@@ -28,7 +27,6 @@ public final class NoticeOptions {
 
     public boolean isEnabled(NotificationNotice notice, NotificationChannel channel) {
         if (!notice.offers(channel)) return false;
-        if (notice.isLocked(channel)) return true;
         if (isKeptOnTheUserRow(notice, channel)) return user.isWhatsAppWeeklyReportEnabled();
         return storedOptions.stream()
                 .filter(option -> option.getNotice() == notice && option.getChannel() == channel)

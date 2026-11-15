@@ -98,13 +98,13 @@ class UserNotificationSettingsControllerTest {
                 new WhatsApp(false, false, null, null),
                 DigestFrequency.DAILY,
                 List.of(
-                        new Notice(NotificationNotice.RECEIPT_READY, List.of(new Option(NotificationChannel.PUSH, true, false))),
+                        new Notice(NotificationNotice.RECEIPT_READY, List.of(new Option(NotificationChannel.PUSH, true))),
                         new Notice(NotificationNotice.PRICE_ALERTS, List.of(
-                                new Option(NotificationChannel.PUSH, true, false),
-                                new Option(NotificationChannel.EMAIL, false, false))),
+                                new Option(NotificationChannel.PUSH, true),
+                                new Option(NotificationChannel.EMAIL, false))),
                         new Notice(NotificationNotice.ACCOUNT, List.of(
-                                new Option(NotificationChannel.PUSH, true, false),
-                                new Option(NotificationChannel.EMAIL, true, true)))));
+                                new Option(NotificationChannel.PUSH, true),
+                                new Option(NotificationChannel.EMAIL, false)))));
     }
 
     private ResultActions patchSettings(String body) throws Exception {
@@ -140,14 +140,13 @@ class UserNotificationSettingsControllerTest {
                 .andExpect(jsonPath("$.notices[0].options", hasSize(1)))
                 .andExpect(jsonPath("$.notices[0].options[0].channel").value("PUSH"))
                 .andExpect(jsonPath("$.notices[0].options[0].enabled").value(true))
-                .andExpect(jsonPath("$.notices[0].options[0].locked").value(false))
+                .andExpect(jsonPath("$.notices[0].options[0].length()").value(2))
                 .andExpect(jsonPath("$.notices[1].key").value("PRICE_ALERTS"))
                 .andExpect(jsonPath("$.notices[1].options[1].channel").value("EMAIL"))
                 .andExpect(jsonPath("$.notices[1].options[1].enabled").value(false))
                 .andExpect(jsonPath("$.notices[2].key").value("ACCOUNT"))
                 .andExpect(jsonPath("$.notices[2].options[1].channel").value("EMAIL"))
-                .andExpect(jsonPath("$.notices[2].options[1].enabled").value(true))
-                .andExpect(jsonPath("$.notices[2].options[1].locked").value(true));
+                .andExpect(jsonPath("$.notices[2].options[1].enabled").value(false));
     }
 
     @Test
@@ -157,8 +156,8 @@ class UserNotificationSettingsControllerTest {
                 new WhatsApp(true, false, null, "https://wa.me/14063448189?text=CONFIRMAR-tok"),
                 DigestFrequency.WEEKLY,
                 List.of(new Notice(NotificationNotice.WEEKLY_REPORT, List.of(
-                        new Option(NotificationChannel.EMAIL, false, false),
-                        new Option(NotificationChannel.WHATSAPP, false, false))))));
+                        new Option(NotificationChannel.EMAIL, false),
+                        new Option(NotificationChannel.WHATSAPP, false))))));
 
         mockMvc.perform(get(SETTINGS_URL).with(SecurityMockMvcRequestPostProcessors.user(principal())))
                 .andExpect(status().isOk())
@@ -209,18 +208,6 @@ class UserNotificationSettingsControllerTest {
         verify(userNotificationSettingsService).update(any(User.class), sent.capture());
         assertThat(sent.getValue().options()).isNull();
         assertThat(sent.getValue().digestFrequency()).isNull();
-    }
-
-    @Test
-    void patchTurningALockedOptionOffIs400WithTheLocalizedMessage() throws Exception {
-        updateIsRejectedWith(InvalidNotificationSettingsException.lockedOption(),
-                "Os avisos da conta sempre vão por e-mail. Essa opção não pode ser desligada.");
-
-        patchSettings("{ \"options\": [ { \"key\": \"ACCOUNT\", \"channel\": \"EMAIL\", \"enabled\": false } ] }")
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value(400))
-                .andExpect(jsonPath("$.message")
-                        .value("Os avisos da conta sempre vão por e-mail. Essa opção não pode ser desligada."));
     }
 
     @Test

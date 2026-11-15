@@ -30,9 +30,9 @@ public class NoticeOptionStore {
         return new NoticeOptions(user, optionRepository.findAllByUserIdAndNotice(user.getId(), notice));
     }
 
-    /** Stores one switch. A channel the notice does not offer and a locked option are left alone. */
+    /** Stores one switch. A channel the notice does not offer is left alone. */
     public void saveOption(User managedUser, NotificationNotice notice, NotificationChannel channel, boolean enabled) {
-        if (!notice.offers(channel) || notice.isLocked(channel)) return;
+        if (!notice.offers(channel)) return;
         if (NoticeOptions.isKeptOnTheUserRow(notice, channel)) {
             managedUser.setWhatsAppWeeklyReportEnabled(enabled);
             return;
@@ -46,7 +46,7 @@ public class NoticeOptionStore {
         optionRepository.save(option);
     }
 
-    /** Switches every option of the notice off (a locked option stays on). */
+    /** Switches every option of the notice off. */
     public void saveAllOptionsOff(User managedUser, NotificationNotice notice) {
         notice.channels().forEach(channel -> saveOption(managedUser, notice, channel, false));
     }

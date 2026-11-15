@@ -113,8 +113,7 @@ public class NotificationPreferenceService {
     /**
      * PUSH ⇒ push on, e-mail off. EMAIL ⇒ e-mail on, push off — unless the notice has no
      * e-mail channel, in which case push stays on (an old EMAIL choice must not silently
-     * stop the delivery). Both ⇒ both on. NONE (or anything else) ⇒ every option off; a
-     * locked option stays on.
+     * stop the delivery). Both ⇒ both on. NONE (or anything else) ⇒ every option off.
      */
     private void applyLegacyChoice(User managedUser, NotificationNotice notice, Set<NotificationChannel> channels) {
         var pushAsked = channels.contains(NotificationChannel.PUSH);
