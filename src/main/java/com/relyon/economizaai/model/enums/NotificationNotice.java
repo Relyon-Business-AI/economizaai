@@ -19,6 +19,10 @@ public enum NotificationNotice {
     STOCKOUT(NotificationChannel.PUSH),
     PRICE_ALERTS(NotificationChannel.PUSH, NotificationChannel.EMAIL, NotificationChannel.WHATSAPP),
     DEALS_DIGEST(NotificationChannel.PUSH, NotificationChannel.EMAIL, NotificationChannel.WHATSAPP),
+    /**
+     * The spending report, weekly and/or monthly ({@link SpendingReportFrequency}). The key
+     * still says "weekly" because the published app indexes the notices by it.
+     */
     WEEKLY_REPORT(NotificationChannel.EMAIL, NotificationChannel.WHATSAPP),
     /** Terms, security, billing. */
     ACCOUNT(NotificationChannel.PUSH, NotificationChannel.EMAIL);
@@ -63,7 +67,7 @@ public enum NotificationNotice {
             case STOCKOUT -> Optional.of(STOCKOUT);
             case PRICE_DROP, BUDGET -> Optional.of(PRICE_ALERTS);
             case DEALS_DIGEST -> Optional.of(DEALS_DIGEST);
-            case WEEKLY_REPORT -> Optional.of(WEEKLY_REPORT);
+            case WEEKLY_REPORT, MONTHLY_REPORT -> Optional.of(WEEKLY_REPORT);
             case SYSTEM -> Optional.of(ACCOUNT);
             case PROMO_COMMUNITY, CHEAPER_MARKET, DIGEST, PUSH_OPTIN,
                  HOUSEHOLD_MEMBER_JOINED, HOUSEHOLD_MEMBER_LEFT -> Optional.empty();

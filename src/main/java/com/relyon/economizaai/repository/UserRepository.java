@@ -157,12 +157,10 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     /** Resolves the user behind a WhatsApp opt-in deep-link token (from "CONFIRMAR-<token>"). */
     Optional<User> findByWhatsAppLinkToken(String whatsAppLinkToken);
 
-    /**
-     * Active users with a weekly report option on (the WhatsApp one lives on the user row, the
-     * e-mail one in the notice options) — the proactive send list. Which channels each one
-     * actually gets it on is resolved per user at dispatch time.
-     */
-    @Query("""
+    // Active users with a spending report option on: the WhatsApp one lives on the user row,
+    // the e-mail one in the notice options. Repeated per query because JPQL has no shared
+    // predicate.
+    String SPENDING_REPORT_OPTION_ON = """
         SELECT user FROM User user
         JOIN FETCH user.household
         WHERE user.active = true
@@ -172,8 +170,19 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
                             AND noticeOption.notice = 'WEEKLY_REPORT'
                             AND noticeOption.channel = 'EMAIL'
                             AND noticeOption.enabled = true))
-    """)
+        """;
+
+    /**
+     * The proactive send list of the WEEKLY spending report: a report option on and the weekly
+     * frequency chosen. Which channels each one actually gets it on is resolved per user at
+     * dispatch time.
+     */
+    @Query(SPENDING_REPORT_OPTION_ON + " AND user.spendingReportWeekly = true")
     List<User> findWeeklyReportCandidates();
+
+    /** Same as {@link #findWeeklyReportCandidates()}, for whoever chose the MONTHLY frequency. */
+    @Query(SPENDING_REPORT_OPTION_ON + " AND user.spendingReportMonthly = true")
+    List<User> findMonthlyReportCandidates();
 
     // --- Acquisition analytics (admin dashboard) ---
     // `:includeInternal = false` (the dashboard default) excludes admins and test
