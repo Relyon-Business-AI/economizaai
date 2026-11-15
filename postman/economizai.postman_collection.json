@@ -1364,9 +1364,9 @@
 						},
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"options\": [\n    { \"key\": \"PRICE_ALERTS\", \"channel\": \"EMAIL\", \"enabled\": true }\n  ],\n  \"digestFrequency\": \"WEEKLY\"\n}"
+							"raw": "{\n  \"options\": [\n    { \"key\": \"PRICE_ALERTS\", \"channel\": \"EMAIL\", \"enabled\": true }\n  ],\n  \"digestFrequency\": \"WEEKLY\",\n  \"reportFrequencies\": [\"WEEKLY\", \"MONTHLY\"]\n}"
 						},
-						"description": "Partial update: only the options sent change; digestFrequency is DAILY or WEEKLY. Returns the full settings. 400: channel not offered by the notice, WHATSAPP when not available, unknown key/channel, invalid digestFrequency. 409: WHATSAPP on before connecting WhatsApp."
+						"description": "Partial update: only the options sent change; digestFrequency is DAILY or WEEKLY; reportFrequencies (WEEKLY and/or MONTHLY, at least one) replaces the periods the spending report covers. Returns the full settings. 400: channel not offered by the notice, WHATSAPP when not available, unknown key/channel, invalid digestFrequency, empty or unknown reportFrequencies. 409: WHATSAPP on before connecting WhatsApp."
 					},
 					"response": []
 				},
@@ -10162,6 +10162,7 @@
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"var settings = pm.response.json();",
 									"pm.test('Has e-mail and digest frequency', function () { pm.expect(settings.email).to.be.a('string'); pm.expect(['DAILY','WEEKLY']).to.include(settings.digestFrequency); });",
+									"pm.test('Spending report starts weekly only', function () { pm.expect(settings.reportFrequencies).to.eql(['WEEKLY']); });",
 									"pm.test('Lists the seven notices in order', function () { pm.expect(settings.notices.map(function (notice) { return notice.key; })).to.eql(['RECEIPT_READY','PERSONAL_OFFERS','STOCKOUT','PRICE_ALERTS','DEALS_DIGEST','WEEKLY_REPORT','ACCOUNT']); });",
 									"pm.test('WhatsApp unavailable for a regular account', function () { pm.expect(settings.whatsApp.available).to.eql(false); pm.expect(JSON.stringify(settings.notices)).to.not.include('WHATSAPP'); });",
 									"pm.test('ACCOUNT e-mail starts off', function () { var account = settings.notices[6]; var email = account.options.filter(function (option) { return option.channel === 'EMAIL'; })[0]; pm.expect(email.enabled).to.eql(false); });"
@@ -10199,7 +10200,7 @@
 						},
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"options\": [\n    { \"key\": \"PRICE_ALERTS\", \"channel\": \"EMAIL\", \"enabled\": true }\n  ],\n  \"digestFrequency\": \"DAILY\"\n}"
+							"raw": "{\n  \"options\": [\n    { \"key\": \"PRICE_ALERTS\", \"channel\": \"EMAIL\", \"enabled\": true }\n  ],\n  \"digestFrequency\": \"DAILY\",\n  \"reportFrequencies\": [\"MONTHLY\", \"WEEKLY\"]\n}"
 						}
 					},
 					"response": [],
@@ -10212,7 +10213,8 @@
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"var settings = pm.response.json();",
 									"pm.test('PRICE_ALERTS e-mail is on', function () { var priceAlerts = settings.notices.filter(function (notice) { return notice.key === 'PRICE_ALERTS'; })[0]; var email = priceAlerts.options.filter(function (option) { return option.channel === 'EMAIL'; })[0]; pm.expect(email.enabled).to.eql(true); });",
-									"pm.test('Keeps digest frequency', function () { pm.expect(settings.digestFrequency).to.eql('DAILY'); });"
+									"pm.test('Keeps digest frequency', function () { pm.expect(settings.digestFrequency).to.eql('DAILY'); });",
+									"pm.test('Spending report is weekly and monthly, in that order', function () { pm.expect(settings.reportFrequencies).to.eql(['WEEKLY','MONTHLY']); });"
 								]
 							}
 						}
