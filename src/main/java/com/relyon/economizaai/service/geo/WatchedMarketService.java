@@ -9,6 +9,7 @@ import com.relyon.economizaai.model.UserWatchedMarket;
 import com.relyon.economizaai.repository.MarketLocationRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.repository.UserWatchedMarketRepository;
+import com.relyon.economizaai.service.geo.MerchantSupportGate.SupportStatus;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
@@ -50,6 +51,7 @@ public class WatchedMarketService {
     private final SubscriptionGateService subscriptionGate;
     private final ViewerLocationService viewerLocationService;
     private final CollaborativeProperties properties;
+    private final MerchantSupportGate merchantSupportGate;
 
     /** Scope da listagem de mercados: ALL = raio ∪ seguidos; MINE = só os seguidos. */
     public enum MarketScope { ALL, MINE }
@@ -75,9 +77,10 @@ public class WatchedMarketService {
     }
 
     /**
-     * Markets for the "Mercados" screen. {@code scope=ALL} returns every market within
-     * {@code bestMarketsNearbyRadiusKm} (20 km) of the viewer's resolved origin UNION the
-     * household's watched markets; {@code scope=MINE} returns only the watched ones.
+     * Markets for the "Mercados" screen. {@code scope=ALL} returns every grocery or pharmacy
+     * merchant within {@code bestMarketsNearbyRadiusKm} (20 km) of the viewer's resolved origin
+     * UNION the household's watched markets (whatever their kind); {@code scope=MINE} returns
+     * only the watched ones.
      *
      * <p>Rows are sorted by distance ascending, nulls last — so watched-but-far markets
      * (a receipt scanned 3 000 km away on a trip) sink to the end instead of flooding the
@@ -131,11 +134,17 @@ public class WatchedMarketService {
         var nearby = origin.hasCoordinates()
                 ? marketRepository.findAll().stream()
                     .filter(MarketLocation::hasCoordinates)
+                    .filter(this::isGroceryOrPharmacy)
                     .filter(market -> DistanceCalculator.kmBetween(
                             origin.latitude(), origin.longitude(),
                             market.getLatitude(), market.getLongitude()) <= radiusKm)
                 : Stream.<MarketLocation>empty();
         return byCnpj(Stream.concat(nearby, watched.stream()));
+    }
+
+    /** Restaurants, shops and other merchants a nota came from are not markets to browse. */
+    private boolean isGroceryOrPharmacy(MarketLocation market) {
+        return merchantSupportGate.statusOf(market) == SupportStatus.SUPPORTED;
     }
 
     private Map<String, MarketLocation> byCnpj(Stream<MarketLocation> markets) {
