@@ -11,6 +11,7 @@ import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.repository.NotificationRuleRepository;
+import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.geo.MarketNameService;
 import com.relyon.economizaai.service.geo.NearbyScope;
@@ -27,6 +28,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -37,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -48,6 +51,8 @@ class NotificationRuleEngineTest {
     @Mock private MarketNameService marketNameService;
     @Mock private NotificationService notificationService;
     @Mock private NearbyScopeService nearbyScopeService;
+    @Mock private UserRepository userRepository;
+    private final List<User> ownerHouseholdMembers = new ArrayList<>();
     private static LocalizedMessageService realMessageService() {
         var source = new ResourceBundleMessageSource();
         source.setBasename("i18n/messages");
@@ -64,6 +69,8 @@ class NotificationRuleEngineTest {
                 .thenAnswer(invocation -> invocation.getArgument(2));
         lenient().when(nearbyScopeService.forUser(any())).thenAnswer(invocation ->
                 scopeFromHome(invocation.getArgument(0), null, Set.of()));
+        lenient().when(userRepository.findAllByHouseholdId(OWNER_HOUSEHOLD))
+                .thenAnswer(invocation -> List.copyOf(ownerHouseholdMembers));
     }
 
     /** Explicit home when set, else unlocated; {@code uf} null = no state known (national). */
@@ -82,11 +89,14 @@ class NotificationRuleEngineTest {
         return Product.builder().id(PRODUCT_ID).normalizedName("Leite").build();
     }
 
+    /** A member of the alert owner's household (registered as one of its members). */
     private User owner(BigDecimal latitude, BigDecimal longitude) {
-        return User.builder().id(UUID.randomUUID()).email("owner@example.com")
+        var member = User.builder().id(UUID.randomUUID()).email("owner@example.com")
                 .household(Household.builder().id(OWNER_HOUSEHOLD).build())
                 .homeLatitude(latitude).homeLongitude(longitude)
                 .build();
+        ownerHouseholdMembers.add(member);
+        return member;
     }
 
     private NotificationRule priceRule(NotificationType type, BigDecimal threshold,
@@ -129,6 +139,36 @@ class NotificationRuleEngineTest {
         // localized to the recipient's default (pt) locale
         assertTrue(captor.getValue().title().startsWith("Preço baixou:"), captor.getValue().title());
         verify(ruleRepository).saveAll(any());
+    }
+
+    @Test
+    void priceDrop_notifiesEveryMemberOfTheAlertOwnersHousehold() {
+        var alertOwner = owner(null, null);
+        var otherMember = owner(null, null);
+        var rule = priceRule(NotificationType.PRICE_DROP, new BigDecimal("6.00"), null, null, alertOwner);
+        when(ruleRepository.findActiveProductRules(any(), any())).thenReturn(List.of(rule));
+        lenient().when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
+
+        engine.evaluate(List.of(observation(new BigDecimal("5.49"))), CONTRIBUTOR_HOUSEHOLD);
+
+        var captor = ArgumentCaptor.forClass(NotificationPayload.class);
+        verify(notificationService, times(2)).notifyAfterCommit(captor.capture());
+        var recipients = captor.getAllValues().stream().map(NotificationPayload::user).toList();
+        assertEquals(List.of(alertOwner, otherMember), recipients);
+    }
+
+    @Test
+    void priceDrop_twoMembersAlertsOnTheSameProductNotifyEachMemberOnce() {
+        var firstMember = owner(null, null);
+        var secondMember = owner(null, null);
+        var firstAlert = priceRule(NotificationType.PRICE_DROP, new BigDecimal("6.00"), null, null, firstMember);
+        var secondAlert = priceRule(NotificationType.PRICE_DROP, new BigDecimal("7.00"), null, null, secondMember);
+        when(ruleRepository.findActiveProductRules(any(), any())).thenReturn(List.of(firstAlert, secondAlert));
+        lenient().when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of());
+
+        engine.evaluate(List.of(observation(new BigDecimal("5.49"))), CONTRIBUTOR_HOUSEHOLD);
+
+        verify(notificationService, times(2)).notifyAfterCommit(any());
     }
 
     @Test

@@ -11,6 +11,7 @@ import com.relyon.economizaai.model.enums.NotificationJob;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.repository.NotificationRuleRepository;
 import com.relyon.economizaai.repository.InsightsRepository;
+import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.notifications.NotificationPayload;
 import com.relyon.economizaai.service.notifications.NotificationService;
 import com.relyon.economizaai.service.notifications.NotificationSettingsService;
@@ -25,6 +26,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -34,6 +36,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
@@ -53,19 +56,26 @@ class BudgetMonitorServiceTest {
 
     @Spy private LocalizedMessageService messageService = realMessageService();
     @Mock private NotificationSettingsService settingsService;
+    @Mock private UserRepository userRepository;
+    private final List<User> householdMembers = new ArrayList<>();
     @InjectMocks private BudgetMonitorService service;
 
     @BeforeEach
     void enableJobSetting() {
         lenient().when(settingsService.isEnabled(NotificationJob.BUDGET_ALERT)).thenReturn(true);
+        lenient().when(userRepository.findAllByHouseholdId(HOUSEHOLD_ID))
+                .thenAnswer(invocation -> List.copyOf(householdMembers));
     }
 
     private static final UUID HOUSEHOLD_ID = UUID.randomUUID();
 
+    /** A member of the household (registered as one of its members). */
     private User user() {
-        return User.builder().id(UUID.randomUUID()).email("user@example.com")
+        var member = User.builder().id(UUID.randomUUID()).email("user@example.com")
                 .household(Household.builder().id(HOUSEHOLD_ID).build())
                 .build();
+        householdMembers.add(member);
+        return member;
     }
 
     private NotificationRule budgetRule(BigDecimal threshold, LocalDateTime lastFired) {
@@ -153,5 +163,50 @@ class BudgetMonitorServiceTest {
 
         verify(notificationService, never()).notify(any());
         verify(insightsRepository, never()).totalSpendAllSegments(any(), any(), any());
+    }
+
+    @Test
+    void run_notifiesEveryMemberOfTheHousehold() {
+        var rule = budgetRule(new BigDecimal("500.00"), null);
+        var otherMember = user();
+        when(ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.BUDGET))
+                .thenReturn(List.of(rule));
+        when(insightsRepository.totalSpendAllSegments(eq(HOUSEHOLD_ID), any(), any()))
+                .thenReturn(new BigDecimal("620.00"));
+
+        service.run();
+
+        var captor = ArgumentCaptor.forClass(NotificationPayload.class);
+        verify(notificationService, times(2)).notify(captor.capture());
+        var recipients = captor.getAllValues().stream().map(NotificationPayload::user).toList();
+        assertEquals(List.of(rule.getUser(), otherMember), recipients);
+    }
+
+    @Test
+    void run_theMostRecentlyChangedLimitIsTheOneInForceForTheHousehold() {
+        var olderLimit = budgetRule(new BigDecimal("300.00"), null);
+        olderLimit.setUpdatedAt(LocalDateTime.now().minusDays(10));
+        var newerLimit = budgetRule(new BigDecimal("900.00"), null);
+        newerLimit.setUpdatedAt(LocalDateTime.now().minusDays(1));
+        when(ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.BUDGET))
+                .thenReturn(List.of(olderLimit, newerLimit));
+        when(insightsRepository.totalSpendAllSegments(eq(HOUSEHOLD_ID), any(), any()))
+                .thenReturn(new BigDecimal("620.00"));
+
+        service.run();
+
+        verify(notificationService, never()).notify(any());
+    }
+
+    @Test
+    void run_aHouseholdAlreadyNotifiedThisMonthIsNotNotifiedAgainByAnotherMembersLimit() {
+        var firedLimit = budgetRule(new BigDecimal("500.00"), LocalDateTime.now());
+        var otherMembersLimit = budgetRule(new BigDecimal("400.00"), null);
+        when(ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.BUDGET))
+                .thenReturn(List.of(firedLimit, otherMembersLimit));
+
+        service.run();
+
+        verify(notificationService, never()).notify(any());
     }
 }

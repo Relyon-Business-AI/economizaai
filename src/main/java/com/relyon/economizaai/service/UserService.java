@@ -77,7 +77,6 @@ import com.relyon.economizaai.service.auth.LoginActivityRecorder;
 import com.relyon.economizaai.service.auth.SignupAlertService;
 import com.relyon.economizaai.service.auth.RefreshTokenService;
 import com.relyon.economizaai.service.notifications.NotificationRuleService;
-import com.relyon.economizaai.service.geo.HomeLocationPrecision;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -106,6 +105,7 @@ public class UserService {
     private final AccountDeletionFeedbackRepository accountDeletionFeedbackRepository;
     private final NotificationRuleRepository notificationRuleRepository;
     private final UserWatchedMarketRepository userWatchedMarketRepository;
+    private final HouseholdSharedSettingsService householdSharedSettingsService;
     private final SubscriptionRepository subscriptionRepository;
     private final HouseholdMarketAliasRepository householdMarketAliasRepository;
     private final HouseholdCustomCategoryRepository householdCustomCategoryRepository;
@@ -272,11 +272,8 @@ public class UserService {
 
     @Transactional
     public UserResponse updateHomeLocation(User user, UpdateHomeLocationRequest request) {
-        user.setHomeLatitude(HomeLocationPrecision.coarsen(request.latitude()));
-        user.setHomeLongitude(HomeLocationPrecision.coarsen(request.longitude()));
-        user.setHomeSetAt(LocalDateTime.now());
-        var saved = userRepository.save(user);
-        log.info("home_location.set user={}", LogMasker.email(saved.getEmail()));
+        var saved = householdSharedSettingsService.saveHomeLocationForHousehold(
+                user, request.latitude(), request.longitude());
         return UserResponse.from(saved);
     }
 

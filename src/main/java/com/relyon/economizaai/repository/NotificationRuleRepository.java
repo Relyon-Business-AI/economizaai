@@ -31,6 +31,20 @@ public interface NotificationRuleRepository extends JpaRepository<NotificationRu
 
     List<NotificationRule> findAllByUserId(UUID userId);
 
+    /**
+     * Rules of one type created by any member of the household, most recently changed first —
+     * price alerts and the budget limit belong to the household, whoever created them.
+     */
+    @Query("""
+        SELECT rule FROM NotificationRule rule
+        JOIN FETCH rule.user owner
+        LEFT JOIN FETCH rule.product
+        WHERE owner.household.id = :householdId AND rule.type = :type
+        ORDER BY rule.updatedAt DESC
+    """)
+    List<NotificationRule> findAllByHouseholdIdAndTypeFetchProduct(@Param("householdId") UUID householdId,
+                                                                   @Param("type") NotificationType type);
+
     /** Active product-scoped rules of the given types matching any product — write-path price evaluation. */
     @Query("""
         SELECT r FROM NotificationRule r
