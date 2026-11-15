@@ -108,6 +108,34 @@ class PushDispatcherTest {
     }
 
     @Test
+    void usesDedicatedPushBodyWhenSet() {
+        when(expoPushClient.send(eq(VALID_EXPO_TOKEN), eq("T"), eq("PUSH"), any()))
+                .thenReturn(ExpoPushClient.Result.ok("ticket-push"));
+        var dispatcher = new PushDispatcher(expoPushClient);
+        var user = User.builder().id(UUID.randomUUID()).email("u@e").pushDeviceToken(VALID_EXPO_TOKEN).build();
+        // Inbox body "INBOX" stays for the in-app detail; the push carries "PUSH".
+        var payload = new NotificationPayload(user, NotificationType.SYSTEM, "T", "INBOX", Map.of(), null, "PUSH");
+
+        var result = dispatcher.dispatch(payload);
+
+        assertTrue(result.delivered());
+        verify(expoPushClient).send(eq(VALID_EXPO_TOKEN), eq("T"), eq("PUSH"), any());
+        verify(expoPushClient, never()).send(anyString(), anyString(), eq("INBOX"), any());
+    }
+
+    @Test
+    void fallsBackToInboxBodyWhenPushBodyAbsent() {
+        when(expoPushClient.send(eq(VALID_EXPO_TOKEN), eq("T"), eq("B"), any()))
+                .thenReturn(ExpoPushClient.Result.ok("ticket-fb"));
+        var dispatcher = new PushDispatcher(expoPushClient);
+
+        var result = dispatcher.dispatch(payload(VALID_EXPO_TOKEN));
+
+        assertTrue(result.delivered());
+        verify(expoPushClient).send(eq(VALID_EXPO_TOKEN), eq("T"), eq("B"), any());
+    }
+
+    @Test
     void recordsFailureWhenExpoReturnsError() {
         when(expoPushClient.send(eq(VALID_EXPO_TOKEN), anyString(), anyString(), any()))
                 .thenReturn(ExpoPushClient.Result.error("DeviceNotRegistered", "token expired"));

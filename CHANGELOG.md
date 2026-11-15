@@ -15,6 +15,16 @@
   às 10h, agora só para quem tem `WEEKLY` escolhido. Período sem compra não envia nada. O envio continua desligado no
   servidor (`WHATSAPP_REPORTS_ENABLED`, que passa a valer para os dois). Migration `V182`.
 
+## 2026-11-15 — Aviso "não conseguimos ler sua nota": texto do push separado do texto no app
+
+- O aviso de nota que falhou tinha **um único texto** com "Abra o app pra tentar de novo" — certo no
+  push, mas estranho na **tela de detalhe do aviso dentro do app** (o usuário já está no app).
+- Agora o **corpo gravado** (o que a tela de detalhe mostra) é neutro — "Não foi possível ler a nota do
+  {mercado}. Você pode tentar de novo." — e o **push** carrega a chamada "Abra o app pra tentar de novo".
+- Mecanismo genérico no backend (`NotificationPayload.pushBody`, opcional, com fallback pro corpo do
+  inbox): qualquer aviso pode ter um texto de push distinto do texto no app. Nenhuma mudança de contrato
+  para o FE — a tela de detalhe segue lendo `body`.
+
 ## 2026-11-14 — Configurações de avisos: uma chave por aviso E por canal (`/users/me/notification-settings`)
 
 - **Endpoints novos** para a tela de avisos: `GET /users/me/notification-settings` devolve
