@@ -8,6 +8,7 @@ import com.relyon.economizaai.service.notifications.twilio.TwilioMessageClient;
 import com.relyon.economizaai.service.paidapi.PaidApiGuardService;
 import com.relyon.economizaai.exception.PaidApiBudgetExceededException;
 import com.relyon.economizaai.exception.PaidApiQuotaExceededException;
+import com.relyon.economizaai.exception.WhatsAppOptInRequiredException;
 import com.relyon.economizaai.model.enums.PaidApiService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -219,5 +222,51 @@ class WhatsAppOptInServiceTest {
     @Test
     void waMeLink_buildsDeepLinkWithDigitsAndEncodedText() {
         assertEquals("https://wa.me/14063448189?text=CONFIRMAR-abc", service.waMeLink("CONFIRMAR", "abc"));
+    }
+
+    @Test
+    void updateWeeklyReport_changesTheFreshRowNotTheStaleRequestPrincipal() {
+        var principal = User.builder().id(UUID.randomUUID()).email("u@economizaai.app").build();
+        var stored = User.builder().id(principal.getId()).email("u@economizaai.app")
+                .whatsAppOptIn(true).whatsAppNumber("+5551997513229").whatsAppLinkToken("tok123").build();
+        when(userRepository.findById(principal.getId())).thenReturn(Optional.of(stored));
+
+        var status = service.updateWeeklyReport(principal, true);
+
+        assertTrue(stored.isWhatsAppWeeklyReportEnabled());
+        assertTrue(status.weeklyReportEnabled());
+        assertTrue(status.optIn());
+        assertEquals("****3229", status.maskedNumber());
+        verify(userRepository).save(stored);
+        verify(userRepository, never()).save(principal);
+    }
+
+    @Test
+    void updateWeeklyReport_requiresTheOptIn() {
+        var principal = User.builder().id(UUID.randomUUID()).email("u@economizaai.app").build();
+        var stored = User.builder().id(principal.getId()).email("u@economizaai.app").build();
+        when(userRepository.findById(principal.getId())).thenReturn(Optional.of(stored));
+
+        assertThrows(WhatsAppOptInRequiredException.class, () -> service.updateWeeklyReport(principal, true));
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void issueConfirmLink_persistsTheTokenOnFirstUseAndBuildsTheConfirmLink() {
+        var managedUser = userWithToken(null);
+
+        var link = service.issueConfirmLink(managedUser);
+
+        assertNotNull(managedUser.getWhatsAppLinkToken());
+        assertEquals("https://wa.me/14063448189?text=CONFIRMAR-" + managedUser.getWhatsAppLinkToken(), link);
+        verify(userRepository).save(managedUser);
+    }
+
+    @Test
+    void maskedWhatsAppNumber_isNullWithoutANumber() {
+        assertNull(service.maskedWhatsAppNumber(userWithToken("tok")));
+        var connected = User.builder().email("u@economizaai.app").whatsAppNumber("+5551997513229").build();
+        assertEquals("****3229", service.maskedWhatsAppNumber(connected));
     }
 }

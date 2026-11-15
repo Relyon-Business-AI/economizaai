@@ -22,6 +22,7 @@ import com.relyon.economizaai.service.auth.EmailVerificationService;
 import com.relyon.economizaai.service.auth.PhoneVerificationService;
 import com.relyon.economizaai.service.notifications.NotificationPreferenceService;
 import com.relyon.economizaai.service.notifications.SavingsService;
+import com.relyon.economizaai.service.notifications.UserNotificationSettingsService;
 import com.relyon.economizaai.service.profile.ProfilePictureService;
 import com.relyon.economizaai.service.geo.CepLocationService;
 import com.relyon.economizaai.service.profile.StoreReviewPromptService;
@@ -68,6 +69,7 @@ class UserControllerCoverageTest {
     @MockitoBean private UserService userService;
     @MockitoBean private LocalizedMessageService localizedMessageService;
     @MockitoBean private NotificationPreferenceService notificationPreferenceService;
+    @MockitoBean private UserNotificationSettingsService userNotificationSettingsService;
     @MockitoBean private ProfilePictureService profilePictureService;
     @MockitoBean private StoreReviewPromptService storeReviewPromptService;
     @MockitoBean private CepLocationService cepLocationService;

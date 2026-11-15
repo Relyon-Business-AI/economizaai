@@ -145,6 +145,19 @@ redeploy by themselves (trigger a deploy).
 | `COST_ALERT_EMAIL_FALLBACK_AFTER` | `3` | Failed WhatsApp attempts before the alert is also e-mailed. |
 | `COST_ALERT_MAX_WHATSAPP_ATTEMPTS` | `8` | WhatsApp attempts before falling back to the slow retry (delivery is abandoned 24 h after the alert was raised). |
 
+**WhatsApp notice templates** (`economizaai.notifications.twilio.*` — Twilio Content template SID, `HX…`, of each
+WhatsApp-capable notice; each template has a single `{{1}}` variable carrying the notice in one line. Business-initiated
+WhatsApp is only accepted as a Meta-approved template, so while a SID is blank that notice has no WhatsApp leg — the
+dispatch logs `notification.whatsapp.skipped … reason=template_not_configured` and nothing is sent. WhatsApp notices
+are offered to `ADMIN` accounts only for now, and need `TWILIO_FROM_WHATSAPP` set.)
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `TWILIO_WHATSAPP_PRICE_ALERT_TEMPLATE_SID` | _(blank)_ | Template of the `PRICE_ALERTS` notice (price alerts, budget alert). |
+| `TWILIO_WHATSAPP_DEALS_DIGEST_TEMPLATE_SID` | _(blank)_ | Template of the `DEALS_DIGEST` notice. |
+| `TWILIO_WHATSAPP_REPORT_TEMPLATE_SID` | _(blank)_ | Template of the `WEEKLY_REPORT` notice (already existed; `{{1}}` = one-line weekly summary). |
+| `WHATSAPP_REPORTS_ENABLED` | `false` | Turns the weekly report job on — it now sends the report by e-mail and/or WhatsApp, per the user's `WEEKLY_REPORT` options. |
+
 **Ingestion**
 
 | Variable | Default | Meaning |

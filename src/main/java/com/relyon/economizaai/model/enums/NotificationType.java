@@ -40,6 +40,11 @@ public enum NotificationType {
      * so it's a SYSTEM-scope type (no auto-seeded toggle).
      */
     DEALS_DIGEST(Scope.SYSTEM, false, false),
+    /**
+     * Weekly spending report (e-mail / WhatsApp). Server-emitted by the weekly report
+     * scheduler; governed by the WEEKLY_REPORT notice options, not a rule row.
+     */
+    WEEKLY_REPORT(Scope.SYSTEM, false, false),
 
     // --- Transactional / one-off ---
     SYSTEM(Scope.SYSTEM, false, false),
@@ -106,7 +111,7 @@ public enum NotificationType {
             // (DEALS_DIGEST) é um rollup de várias ofertas → abre a lista.
             case PROMO_PERSONAL, PROMO_COMMUNITY, CHEAPER_MARKET -> NotificationDestination.PRODUCT;
             case DEALS_DIGEST -> NotificationDestination.DEALS;
-            case DIGEST -> NotificationDestination.SPENDING;
+            case DIGEST, WEEKLY_REPORT -> NotificationDestination.SPENDING;
             case STOCKOUT -> NotificationDestination.REPLENISHMENT;
             case PRICE_DROP -> NotificationDestination.PRODUCT;
             case BUDGET -> NotificationDestination.BUDGET;

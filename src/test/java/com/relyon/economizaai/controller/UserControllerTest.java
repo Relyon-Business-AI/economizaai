@@ -37,6 +37,7 @@ import com.relyon.economizaai.exception.InvalidPhoneNumberException;
 import com.relyon.economizaai.exception.InvalidPhoneVerificationException;
 import com.relyon.economizaai.service.notifications.NotificationPreferenceService;
 import com.relyon.economizaai.service.notifications.SavingsService;
+import com.relyon.economizaai.service.notifications.UserNotificationSettingsService;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
 import com.relyon.economizaai.service.auth.EmailChangeService;
 import com.relyon.economizaai.service.auth.EmailVerificationService;
@@ -101,6 +102,9 @@ class UserControllerTest {
 
     @MockitoBean
     private NotificationPreferenceService notificationPreferenceService;
+
+    @MockitoBean
+    private UserNotificationSettingsService userNotificationSettingsService;
 
     @MockitoBean
     private ProfilePictureService profilePictureService;
