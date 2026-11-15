@@ -9,6 +9,7 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.DigestFrequency;
 import com.relyon.economizaai.model.enums.NotificationChannel;
 import com.relyon.economizaai.model.enums.NotificationNotice;
+import com.relyon.economizaai.model.enums.SpendingReportFrequency;
 import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import lombok.RequiredArgsConstructor;
@@ -17,8 +18,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * The user's notification settings screen: every notice with the channels that exist for it,
@@ -52,16 +55,48 @@ public class UserNotificationSettingsService {
         var managedUser = reload(principal);
         var optionChanges = validatedOptionChanges(managedUser, request.options());
         var digestFrequency = validatedDigestFrequency(request.digestFrequency());
+        var reportFrequencies = validatedReportFrequencies(request.reportFrequencies());
 
         optionChanges.forEach(change ->
                 optionStore.saveOption(managedUser, change.notice(), change.channel(), change.enabled()));
         digestFrequency.ifPresent(frequency -> chooseDigestFrequency(managedUser, frequency));
+        reportFrequencies.ifPresent(frequencies -> chooseReportFrequencies(managedUser, frequencies));
         optionStore.alignDigestFrequencyWithOptions(managedUser);
         userRepository.save(managedUser);
 
-        log.info("notification.settings.updated user={} options={} digestFrequency={}",
-                LogMasker.email(managedUser.getEmail()), optionChanges.size(), digestFrequency.orElse(null));
+        log.info("notification.settings.updated user={} options={} digestFrequency={} reportFrequencies={}",
+                LogMasker.email(managedUser.getEmail()), optionChanges.size(), digestFrequency.orElse(null),
+                reportFrequencies.orElse(null));
         return describe(managedUser);
+    }
+
+    /** Absent = untouched. Sent = the whole selection: at least one period, every value a known one. */
+    private static Optional<Set<SpendingReportFrequency>> validatedReportFrequencies(List<String> frequencyNames) {
+        if (frequencyNames == null) return Optional.empty();
+        if (frequencyNames.isEmpty()) throw InvalidNotificationSettingsException.invalidReportFrequencies();
+        var chosen = EnumSet.noneOf(SpendingReportFrequency.class);
+        frequencyNames.forEach(frequencyName -> chosen.add(reportFrequencyNamed(frequencyName)));
+        return Optional.of(chosen);
+    }
+
+    private static SpendingReportFrequency reportFrequencyNamed(String frequencyName) {
+        return Arrays.stream(SpendingReportFrequency.values())
+                .filter(frequency -> frequency.name().equals(frequencyName))
+                .findFirst()
+                .orElseThrow(InvalidNotificationSettingsException::invalidReportFrequencies);
+    }
+
+    private static void chooseReportFrequencies(User managedUser, Set<SpendingReportFrequency> frequencies) {
+        managedUser.setSpendingReportWeekly(frequencies.contains(SpendingReportFrequency.WEEKLY));
+        managedUser.setSpendingReportMonthly(frequencies.contains(SpendingReportFrequency.MONTHLY));
+    }
+
+    /** WEEKLY then MONTHLY. A row with neither (never written by this service) reads as weekly. */
+    private static List<SpendingReportFrequency> reportFrequenciesOf(User user) {
+        if (user.isSpendingReportWeekly() && user.isSpendingReportMonthly()) {
+            return List.of(SpendingReportFrequency.WEEKLY, SpendingReportFrequency.MONTHLY);
+        }
+        return List.of(user.isSpendingReportMonthly() ? SpendingReportFrequency.MONTHLY : SpendingReportFrequency.WEEKLY);
     }
 
     private record ValidOptionChange(NotificationNotice notice, NotificationChannel channel, boolean enabled) {}
@@ -123,6 +158,7 @@ public class UserNotificationSettingsService {
                 managedUser.getEmail(),
                 describeWhatsApp(managedUser, whatsAppAvailable, whatsAppConnected),
                 NoticeOptionStore.chosenDigestFrequency(managedUser),
+                reportFrequenciesOf(managedUser),
                 notices);
     }
 

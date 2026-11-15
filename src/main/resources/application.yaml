@@ -662,13 +662,16 @@ economizaai:
     # PLUS WhatsApp to these E.164 numbers when the Twilio WhatsApp sender + template are set.
     admin-phone-numbers: ${ADMIN_PHONE_NUMBERS:}           # CSV, e.g. +5551999999999,+5551888888888
     admin-whatsapp-enabled: ${ADMIN_WHATSAPP_ENABLED:true} # master off-switch for admin WhatsApp alerts
-    # Weekly spending report (the WEEKLY_REPORT notice: e-mail and/or WhatsApp). Opt-in (reverse
-    # flow) + options are ALWAYS active; the proactive weekly SEND is INERT until
-    # weekly-report.enabled=true. Its WhatsApp leg also needs the report template SID.
+    # Spending report (the WEEKLY_REPORT notice: e-mail and/or WhatsApp), weekly and/or monthly
+    # per user. Opt-in (reverse flow) + options are ALWAYS active; the proactive SEND — both the
+    # weekly and the monthly run — is INERT until weekly-report.enabled=true. Its WhatsApp leg
+    # also needs the report template SID.
     whatsapp:
       weekly-report:
-        enabled: ${WHATSAPP_REPORTS_ENABLED:false}
+        enabled: ${WHATSAPP_REPORTS_ENABLED:false}           # one flag for the weekly AND the monthly run
         cron: ${WHATSAPP_WEEKLY_REPORT_CRON:0 0 10 ? * MON}  # Monday 10:00 America/Sao_Paulo
+      monthly-report:
+        cron: ${WHATSAPP_MONTHLY_REPORT_CRON:0 0 10 1 * ?}   # day 1 of each month, 10:00 America/Sao_Paulo
     # Alexa remains a stub — structure only, dispatch records a "not implemented" failure.
     alexa:
       enabled: ${NOTIFICATIONS_ALEXA_ENABLED:false}     # Alexa Skill Messaging / Proactive Events

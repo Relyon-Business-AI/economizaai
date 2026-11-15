@@ -62,6 +62,14 @@ class NotificationNoticeTest {
     }
 
     @Test
+    void theMonthlyReportBelongsToTheSameNoticeAsTheWeeklyOne() {
+        assertEquals(Optional.of(NotificationNotice.WEEKLY_REPORT), NotificationNotice.of(NotificationType.MONTHLY_REPORT));
+        assertEquals(List.of(NotificationType.WEEKLY_REPORT, NotificationType.MONTHLY_REPORT),
+                NotificationNotice.WEEKLY_REPORT.types());
+        assertEquals(NotificationDestination.SPENDING, NotificationType.MONTHLY_REPORT.destination());
+    }
+
+    @Test
     void typesOutsideTheNoticeModelHaveNoNotice() {
         var outside = List.of(NotificationType.PROMO_COMMUNITY, NotificationType.CHEAPER_MARKET,
                 NotificationType.DIGEST, NotificationType.PUSH_OPTIN,

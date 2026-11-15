@@ -27,6 +27,10 @@ public class InvalidNotificationSettingsException extends DomainException {
         return new InvalidNotificationSettingsException("notification.settings.digest-frequency.invalid");
     }
 
+    public static InvalidNotificationSettingsException invalidReportFrequencies() {
+        return new InvalidNotificationSettingsException("notification.settings.report-frequencies.invalid");
+    }
+
     public static InvalidNotificationSettingsException whatsAppUnavailable() {
         return new InvalidNotificationSettingsException("notification.settings.whatsapp.unavailable");
     }

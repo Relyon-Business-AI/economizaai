@@ -267,7 +267,8 @@ PATCH  /api/v1/users/me/whatsapp        { "weeklyReportEnabled": true|false }  �
 GET    /api/v1/users/me/savings         → SavingsSummaryResponse (see §7b "Savings")
 GET    /api/v1/users/me/subscription    → SubscriptionStatusResponse (see §7b "Subscription status")
 GET    /api/v1/users/me/notification-settings   → NotificationSettings (see "Notification settings" below)
-PATCH  /api/v1/users/me/notification-settings   { "options": [ { key, channel, enabled } ], "digestFrequency": "DAILY|WEEKLY" }
+PATCH  /api/v1/users/me/notification-settings   { "options": [ { key, channel, enabled } ], "digestFrequency": "DAILY|WEEKLY",
+                                                  "reportFrequencies": [ "WEEKLY", "MONTHLY" ] }
        ← the notification settings screen: one switch per notice AND per channel. Use these two;
          the three older pairs below (notification-preferences, digest-preferences, whatsapp) keep
          working for app versions already in the stores and read/write the same storage.
@@ -303,6 +304,7 @@ one on or off independently. Several can be on; with none on the notice is not d
   "email": "maria@economizaai.app",
   "whatsApp": { "available": false, "connected": false, "maskedNumber": null, "confirmLink": null },
   "digestFrequency": "DAILY",
+  "reportFrequencies": ["WEEKLY"],
   "notices": [
     { "key": "RECEIPT_READY",   "options": [ { "channel": "PUSH", "enabled": true } ] },
     { "key": "PERSONAL_OFFERS", "options": [ { "channel": "PUSH", "enabled": true } ] },
@@ -329,6 +331,10 @@ one on or off independently. Several can be on; with none on the notice is not d
   `GET /users/me/whatsapp`); present only while available and not yet connected. `maskedNumber` (`"****3229"`) is
   present once connected. A WhatsApp option reads `enabled=false` until the user is connected.
 - `digestFrequency` is `DAILY` or `WEEKLY`, never `OFF`: it keeps the last choice while every `DEALS_DIGEST` option is off.
+- `reportFrequencies` (2026-11-15) are the periods the spending report (the `WEEKLY_REPORT` notice) covers:
+  `"WEEKLY"` and/or `"MONTHLY"`, always in that order, never empty. They are NOT exclusive — a user can get the
+  weekly report (last 7 days, Mondays), the monthly one (previous calendar month, day 1) or both. Default
+  `["WEEKLY"]`. The notice key stays `WEEKLY_REPORT` even though it now covers both periods.
 - Defaults (user who never touched an option): every `PUSH` on, every `EMAIL` and every `WHATSAPP` off
   (the `ACCOUNT` e-mail included). An account with no push token that never configured a notice still gets it by
   e-mail instead of the push that cannot reach it.
@@ -337,8 +343,12 @@ one on or off independently. Several can be on; with none on the notice is not d
 object above:
 
 ```json
-{ "options": [ { "key": "PRICE_ALERTS", "channel": "EMAIL", "enabled": true } ], "digestFrequency": "WEEKLY" }
+{ "options": [ { "key": "PRICE_ALERTS", "channel": "EMAIL", "enabled": true } ], "digestFrequency": "WEEKLY",
+  "reportFrequencies": ["WEEKLY", "MONTHLY"] }
 ```
+
+`reportFrequencies` replaces the whole selection (send `["MONTHLY"]` to stop the weekly one and keep the monthly). It
+does not switch the report on or off — that is still the `WEEKLY_REPORT` options.
 
 The whole request is validated before anything is saved. Errors (`{ status, message }`, `message` localized):
 
@@ -349,10 +359,12 @@ The whole request is validated before anything is saved. Errors (`{ status, mess
 | `WHATSAPP` on when not connected | 409 |
 | unknown `key` or `channel`, or an option without `enabled` | 400 |
 | `digestFrequency` other than `DAILY`/`WEEKLY` (`OFF` included — switch the options off instead) | 400 |
+| `reportFrequencies` empty, or with any value other than `WEEKLY`/`MONTHLY` (to stop the report switch the `WEEKLY_REPORT` options off instead) | 400 |
 
 Which notifications each notice covers: `RECEIPT_READY` — nota pronta / falhou / recuperada; `PERSONAL_OFFERS` —
-`PROMO_PERSONAL`; `STOCKOUT`; `PRICE_ALERTS` — `PRICE_DROP` and `BUDGET`; `DEALS_DIGEST`; `WEEKLY_REPORT` — weekly
-spending report; `ACCOUNT` — `SYSTEM` (terms, security, billing, referral, import finished). Household membership
+`PROMO_PERSONAL`; `STOCKOUT`; `PRICE_ALERTS` — `PRICE_DROP` and `BUDGET`; `DEALS_DIGEST`; `WEEKLY_REPORT` — the spending
+report, weekly (`WEEKLY_REPORT`) and monthly (`MONTHLY_REPORT`, new inbox type, opens the spending screen like the
+weekly one); `ACCOUNT` — `SYSTEM` (terms, security, billing, referral, import finished). Household membership
 notices (`HOUSEHOLD_MEMBER_JOINED`/`LEFT`) and the spending `DIGEST` are not on this screen and behave as before.
 
 *Legacy endpoints* (app versions already published keep using them; same storage):

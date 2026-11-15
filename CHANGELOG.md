@@ -1,5 +1,20 @@
 # economizai — what's new
 
+## 2026-11-15 — Relatório de gastos também mensal: `reportFrequencies` em `/users/me/notification-settings`
+
+- **`GET /users/me/notification-settings`** ganhou `reportFrequencies`: lista com `"WEEKLY"` e/ou `"MONTHLY"`, nessa
+  ordem, nunca vazia. Padrão `["WEEKLY"]` (nada muda para quem já usa).
+- **`PATCH`** aceita `reportFrequencies` (opcional) e **substitui a seleção**. Não é exclusivo: semanal, mensal ou os
+  dois. Lista vazia ou valor desconhecido dá `400` com mensagem localizada ("Escolha pelo menos uma frequência para o
+  relatório: semanal ou mensal."). Para parar o relatório, desligue as opções do aviso `WEEKLY_REPORT` (mesma regra do
+  `digestFrequency`).
+- **A chave do aviso continua `WEEKLY_REPORT`**, agora valendo para o relatório semanal e o mensal.
+- **Tipo novo de notificação `MONTHLY_REPORT`** na caixa de entrada (destino `SPENDING`, igual ao `WEEKLY_REPORT`). Não
+  aparece no `GET notification-preferences` antigo.
+- **Envio**: o mensal cobre o mês civil anterior inteiro e sai no dia 1 às 10h (Brasília); o semanal segue na segunda
+  às 10h, agora só para quem tem `WEEKLY` escolhido. Período sem compra não envia nada. O envio continua desligado no
+  servidor (`WHATSAPP_REPORTS_ENABLED`, que passa a valer para os dois). Migration `V182`.
+
 ## 2026-11-14 — Configurações de avisos: uma chave por aviso E por canal (`/users/me/notification-settings`)
 
 - **Endpoints novos** para a tela de avisos: `GET /users/me/notification-settings` devolve
