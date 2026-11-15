@@ -145,6 +145,12 @@
 			"value": "",
 			"type": "string",
 			"description": "Id de uma rede de mercado (GET /admin/chains)"
+		},
+		{
+			"key": "announcementId",
+			"value": "",
+			"type": "string",
+			"description": "Id de uma novidade (GET /admin/announcements)"
 		}
 	],
 	"item": [
@@ -7715,6 +7721,65 @@
 			]
 		},
 		{
+			"name": "Announcements (card da Home)",
+			"description": "Card de novidade/dica/aviso na Home. Um por vez: o de startsAt mais antigo que o usuário ainda não dispensou.",
+			"item": [
+				{
+					"name": "Current announcement (200 or 204)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/announcements/current",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"announcements",
+								"current"
+							]
+						},
+						"description": "200 com { id, kind (NEWS|TIP|NOTICE), title, body, actionLabel, destination } ou 204 (sem corpo) quando não há nada para mostrar. actionLabel e destination vêm juntos ou os dois null."
+					},
+					"response": []
+				},
+				{
+					"name": "Dismiss an announcement",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/announcements/{{announcementId}}/dismissal",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"announcements",
+								"{{announcementId}}",
+								"dismissal"
+							]
+						},
+						"description": "204. Idempotente: dispensar duas vezes continua 204. Id desconhecido → 404 localizado."
+					},
+					"response": []
+				}
+			]
+		},
+		{
 			"name": "Dashboard",
 			"description": "App-open snapshot \u2014 bundles spend + recent receipts + suggested list + community promos + unread count.",
 			"item": [
@@ -15046,6 +15111,508 @@
 					]
 				},
 				{
+					"name": "COV: novidades do admin sao ADMIN-only (403 pra user comum)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/announcements",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"announcements"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('403 para usuario comum', function () { pm.response.to.have.status(403); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV admin: Criar novidade desligada (201 INACTIVE)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/announcements",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"announcements"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"kind\": \"NOTICE\",\n  \"title\": \"E2E: novidade de teste\",\n  \"body\": \"Fluxo E2E, pode ignorar.\",\n  \"actionLabel\": \"Ver ofertas\",\n  \"destination\": \"DEALS\",\n  \"active\": false\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test('skipped (sem adminToken)', function () { pm.expect(true).to.be.true; }); return; }",
+									"pm.test('201 INACTIVE', function () {",
+									"    pm.response.to.have.status(201);",
+									"    var announcement = pm.response.json();",
+									"    pm.expect(announcement.status).to.eql('INACTIVE');",
+									"    pm.expect(announcement.dismissalCount).to.eql(0);",
+									"    pm.expect(announcement.startsAt).to.be.a('string');",
+									"    pm.collectionVariables.set('e2eAnnouncementId', announcement.id);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV admin: Novidade com botao sem destino e rejeitada (400)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/announcements",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"announcements"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"kind\": \"NEWS\",\n  \"title\": \"E2E: botao sem destino\",\n  \"actionLabel\": \"Abrir\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test('skipped (sem adminToken)', function () { pm.expect(true).to.be.true; }); return; }",
+									"pm.test('400 com mensagem localizada', function () {",
+									"    pm.response.to.have.status(400);",
+									"    pm.expect(pm.response.json().message).to.be.a('string');",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV admin: Novidade com fim antes do inicio e rejeitada (400)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/announcements",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"announcements"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"kind\": \"NEWS\",\n  \"title\": \"E2E: janela invertida\",\n  \"startsAt\": \"2026-11-20T09:00:00\",\n  \"endsAt\": \"2026-11-19T09:00:00\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test('skipped (sem adminToken)', function () { pm.expect(true).to.be.true; }); return; }",
+									"pm.test('400', function () { pm.response.to.have.status(400); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV: Novidade atual responde 200 ou 204",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/announcements/current",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"announcements",
+								"current"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200 com card ou 204 sem corpo', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 204]);",
+									"    if (pm.response.code === 200) {",
+									"        var card = pm.response.json();",
+									"        pm.expect(card.id).to.be.a('string');",
+									"        pm.expect(card.kind).to.be.oneOf(['NEWS', 'TIP', 'NOTICE']);",
+									"        pm.expect(card.title).to.be.a('string');",
+									"    }",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV: Dispensar novidade (204)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/announcements/{{e2eAnnouncementId}}/dismissal",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"announcements",
+								"{{e2eAnnouncementId}}",
+								"dismissal"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test('skipped (sem adminToken)', function () { pm.expect(true).to.be.true; }); return; }",
+									"pm.test('204 no content', function () { pm.response.to.have.status(204); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV: Dispensar de novo continua 204 (idempotente)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/announcements/{{e2eAnnouncementId}}/dismissal",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"announcements",
+								"{{e2eAnnouncementId}}",
+								"dismissal"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test('skipped (sem adminToken)', function () { pm.expect(true).to.be.true; }); return; }",
+									"pm.test('204 no content', function () { pm.response.to.have.status(204); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV: Dispensar novidade inexistente e 404",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/announcements/00000000-0000-0000-0000-000000000000/dismissal",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"announcements",
+								"00000000-0000-0000-0000-000000000000",
+								"dismissal"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('404 com mensagem localizada', function () {",
+									"    pm.response.to.have.status(404);",
+									"    pm.expect(pm.response.json().message).to.be.a('string');",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV admin: Atualizar novidade (200, conta a dispensa)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/announcements/{{e2eAnnouncementId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"announcements",
+								"{{e2eAnnouncementId}}"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"kind\": \"TIP\",\n  \"title\": \"E2E: novidade editada\",\n  \"active\": false\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test('skipped (sem adminToken)', function () { pm.expect(true).to.be.true; }); return; }",
+									"pm.test('200 com os campos substituidos', function () {",
+									"    pm.response.to.have.status(200);",
+									"    var announcement = pm.response.json();",
+									"    pm.expect(announcement.kind).to.eql('TIP');",
+									"    pm.expect(announcement.actionLabel).to.eql(null);",
+									"    pm.expect(announcement.destination).to.eql(null);",
+									"    pm.expect(announcement.status).to.eql('INACTIVE');",
+									"    pm.expect(announcement.dismissalCount).to.eql(1);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV admin: Lista de novidades inclui a criada",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/announcements",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"announcements"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test('skipped (sem adminToken)', function () { pm.expect(true).to.be.true; }); return; }",
+									"pm.test('200 e contem a novidade do fluxo', function () {",
+									"    pm.response.to.have.status(200);",
+									"    var ids = pm.response.json().map(function (announcement) { return announcement.id; });",
+									"    pm.expect(ids).to.include(pm.collectionVariables.get('e2eAnnouncementId'));",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "COV admin: Deletar novidade (204)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/announcements/{{e2eAnnouncementId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"announcements",
+								"{{e2eAnnouncementId}}"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('adminToken')) { pm.test('skipped (sem adminToken)', function () { pm.expect(true).to.be.true; }); return; }",
+									"pm.test('204 no content', function () { pm.response.to.have.status(204); });"
+								]
+							}
+						}
+					]
+				},
+				{
 					"name": "COV admin: Cost report (paid-API spend)",
 					"request": {
 						"method": "GET",
@@ -21250,6 +21817,144 @@
 							]
 						},
 						"description": "Baixa uma foto guardada da tentativa (bytes) pelo index; 404 se n\u00e3o existir. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Announcements — list",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/announcements",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"announcements"
+							]
+						},
+						"description": "Mais novo primeiro (createdAt). Cada linha traz status (SCHEDULED | LIVE | ENDED | INACTIVE) e dismissalCount. Datas em horário de Brasília, ISO sem offset. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Announcements — create",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/announcements",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"announcements"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"kind\": \"NEWS\",\n  \"title\": \"Novo: compare mercados\",\n  \"body\": \"Veja onde a sua lista sai mais barata.\",\n  \"actionLabel\": \"Ver mercados\",\n  \"destination\": \"MARKETS\",\n  \"startsAt\": \"2026-11-20T09:00:00\",\n  \"endsAt\": \"2026-11-30T18:00:00\",\n  \"active\": true\n}"
+						},
+						"description": "201. kind e title obrigatórios (title até 80); body até 160; actionLabel até 30. actionLabel e destination vêm juntos (ou nenhum) → 400. endsAt precisa ser depois de startsAt → 400. startsAt ausente = agora; endsAt ausente = sem fim; active ausente = true. destination: MARKETS, DEALS, SHOPPING_LIST, FORECAST, CATEGORIES, PRICE_ALERTS, NOTIFICATION_SETTINGS, HOUSEHOLD, PREMIUM, SCANNER. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Announcements — update (full replace)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/announcements/{{announcementId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"announcements",
+								"{{announcementId}}"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"kind\": \"NEWS\",\n  \"title\": \"Novo: compare mercados\",\n  \"body\": \"Veja onde a sua lista sai mais barata.\",\n  \"actionLabel\": \"Ver mercados\",\n  \"destination\": \"MARKETS\",\n  \"startsAt\": \"2026-11-20T09:00:00\",\n  \"endsAt\": \"2026-11-30T18:00:00\",\n  \"active\": true\n}"
+						},
+						"description": "200. Mesmo corpo do create; substitui todos os campos (campo ausente volta ao padrão). 404 se não existir. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Announcements — delete",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/announcements/{{announcementId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"announcements",
+								"{{announcementId}}"
+							]
+						},
+						"description": "204. As dispensas do aviso vão junto. 404 se não existir. ADMIN only."
 					},
 					"response": []
 				}
