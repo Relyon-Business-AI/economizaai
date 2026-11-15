@@ -508,9 +508,13 @@ public class ReceiptIngestionService {
         var locale = LocalizedMessageService.toLocale(user.getLocale());
         var marketName = marketNameOrFallback(receipt, locale);
         var title = messageService.translate("receipt.processing.failed.title", locale);
+        // Inbox/in-app detail text (neutral); the push carries the "abra o app" call to action,
+        // which would read wrong in the detail screen (the user is already in the app there).
         var body = messageService.translate("receipt.processing.failed.body", locale, marketName);
+        var pushBody = messageService.translate("receipt.processing.failed.push", locale, marketName);
         notificationService.notifyAfterCommit(new NotificationPayload(
-                user, NotificationType.RECEIPT_FAILED, title, body, Map.of("receiptId", receipt.getId().toString())));
+                user, NotificationType.RECEIPT_FAILED, title, body,
+                Map.of("receiptId", receipt.getId().toString()), null, pushBody));
         log.info("receipt.failed.notified user={} receipt={}",
                 LogMasker.email(user.getEmail()), abbrev(receipt.getId()));
     }
