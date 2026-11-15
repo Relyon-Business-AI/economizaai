@@ -37,6 +37,31 @@ public class WhatsAppReportService {
         return buildWeeklyReport(user).text();
     }
 
+    /**
+     * The weekly report as a notice: a plain-text body for the inbox and the e-mail, plus the
+     * one-line summary a WhatsApp template variable can carry. {@code hasPurchases} is false
+     * for a week without receipts — there is nothing worth sending then.
+     */
+    public record WeeklyReportNotice(String body, String summaryLine, boolean hasPurchases) {}
+
+    @Transactional(readOnly = true)
+    public WeeklyReportNotice buildWeeklyReportNotice(User user) {
+        var locale = LocalizedMessageService.toLocale(user.getLocale());
+        var to = BrazilClock.nowDateTime();
+        var from = to.minusDays(7);
+        var data = reportAssembler.assemble(user, from, to);
+        var kpis = data.kpis();
+        if (kpis.receiptCount() == 0) {
+            return new WeeklyReportNotice(messageService.translate("whatsapp.report.empty", locale),
+                    messageService.translate("whatsapp.report.summary.empty", locale), false);
+        }
+        var period = messageService.translate("notification.weekly_report.period", locale,
+                from.format(DAY_MONTH), to.format(DAY_MONTH));
+        var summaryLine = messageService.translate("whatsapp.report.summary", locale,
+                amount(kpis.totalSpent()), String.valueOf(kpis.receiptCount()));
+        return new WeeklyReportNotice(period + "\n\n" + spendingBreakdown(data, locale), summaryLine, true);
+    }
+
     @Transactional(readOnly = true)
     public WeeklyReport buildWeeklyReport(User user) {
         var locale = LocalizedMessageService.toLocale(user.getLocale());
@@ -50,9 +75,13 @@ public class WhatsAppReportService {
         if (kpis.receiptCount() == 0) {
             return new WeeklyReport(header + "\n\n" + messageService.translate("whatsapp.report.empty", locale), false);
         }
+        return new WeeklyReport(header + "\n\n" + spendingBreakdown(data, locale), !data.categoryBreakdown().isEmpty());
+    }
 
+    /** Total, top categories and top markets of a week that has purchases. */
+    private String spendingBreakdown(PurchaseReportData data, Locale locale) {
+        var kpis = data.kpis();
         var text = new StringBuilder();
-        text.append(header).append("\n\n");
         text.append("💰 ").append(messageService.translate("whatsapp.report.total", locale,
                 money(kpis.totalSpent()), String.valueOf(kpis.receiptCount()),
                 purchaseWord(kpis.receiptCount(), locale))).append("\n");
@@ -73,7 +102,7 @@ public class WhatsAppReportService {
                             .append(": ").append(money(market.total())).append("\n"));
         }
 
-        return new WeeklyReport(text.toString().trim(), !categories.isEmpty());
+        return text.toString().trim();
     }
 
     /**

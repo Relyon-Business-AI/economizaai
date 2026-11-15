@@ -1,5 +1,33 @@
 # economizai — what's new
 
+## 2026-11-14 — Configurações de avisos: uma chave por aviso E por canal (`/users/me/notification-settings`)
+
+- **Endpoints novos** para a tela de avisos: `GET /users/me/notification-settings` devolve
+  `{ email, whatsApp { available, connected, maskedNumber, confirmLink }, digestFrequency, notices[] }`; cada aviso
+  traz `{ key, options: [ { channel, enabled } ] }`. `PATCH` no mesmo caminho recebe
+  `{ options: [ { key, channel, enabled } ], digestFrequency }` (tudo opcional, só muda o que vier) e devolve o
+  objeto inteiro. Contrato completo e tabela de erros no `API.md` ("Notification settings").
+- **Avisos e canais** (fixos, nesta ordem): `RECEIPT_READY`, `PERSONAL_OFFERS` e `STOCKOUT` só push;
+  `PRICE_ALERTS` e `DEALS_DIGEST` push, e-mail e WhatsApp; `WEEKLY_REPORT` e-mail e WhatsApp; `ACCOUNT` push e
+  e-mail. Padrão de quem nunca mexeu: push ligado, e-mail e WhatsApp desligados (inclusive o e-mail do
+  `ACCOUNT`, que é uma opção como as outras). O aviso sai por todos os canais ligados; com nenhum
+  ligado, não sai.
+- **WhatsApp**: por enquanto só aparece para contas `ADMIN` (e com o remetente configurado). Para as demais,
+  `whatsApp.available=false` e nenhum aviso lista a opção `WHATSAPP`. Só dá para ligar depois de conectar o
+  WhatsApp pelo `confirmLink` (senão `409`).
+- **`digestFrequency`** agora é só `DAILY` ou `WEEKLY`: desligar o resumo é desligar as opções do `DEALS_DIGEST`
+  (a frequência escolhida fica guardada).
+- **Erros** (`message` já localizada): canal que o aviso não tem, `WHATSAPP` indisponível,
+  chave ou canal desconhecido e frequência inválida dão `400`.
+- **Endpoints antigos continuam funcionando** e leem/gravam o mesmo lugar: `notification-preferences`,
+  `digest-preferences` e `/users/me/whatsapp`. Mudança visível neles: o `GET notification-preferences` passa a
+  listar sempre os tipos (antes vinha vazio para quem nunca salvou) com o canal real; escolher `EMAIL` num aviso
+  que só tem push mantém o push e a resposta volta `PUSH`.
+- **Comportamento**: ninguém passa a receber e-mail novo; quem tinha escolhido e-mail para `SYSTEM` continua
+  recebendo. O relatório semanal
+  ganhou versão por e-mail (texto), mas o envio segue desligado no servidor. Notificações de entrada/saída da
+  casa não mudaram. Migrations `V180` e `V181`.
+
 ## 2026-11-14 — `GET /markets/{cnpj}/prices`: preços registrados pela comunidade em um mercado
 
 - Endpoint novo para a tela do mercado: o preço mais recente de cada produto observado naquela loja, uma linha

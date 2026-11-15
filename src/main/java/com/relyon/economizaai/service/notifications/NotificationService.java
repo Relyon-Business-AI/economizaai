@@ -4,10 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.relyon.economizaai.config.AsyncConfig;
 import com.relyon.economizaai.model.Notification;
-import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.NotificationChannel;
-import com.relyon.economizaai.model.enums.NotificationType;
-import com.relyon.economizaai.repository.NotificationPreferenceRepository;
 import com.relyon.economizaai.repository.NotificationRepository;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import com.relyon.economizaai.service.privacy.LogMasker;
@@ -23,7 +20,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.EnumMap;
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,9 +29,9 @@ import java.util.concurrent.RejectedExecutionException;
 
 /**
  * Orchestrates notification delivery:
- *  1. Resolves the user's preferred channel for the given type
- *     (default: PUSH if user has a push token, else EMAIL).
- *  2. Picks the matching dispatcher (or no-ops gracefully).
+ *  1. Resolves where it goes out ({@link NotificationChannelResolver}): every channel of
+ *     the type's notice that the user has switched on — or nothing when none is.
+ *  2. Fans out to the matching dispatchers (or no-ops gracefully).
  *  3. Persists a Notification row with the dispatch outcome — gives us
  *     an audit trail and a basis for a future user-facing inbox endpoint.
  *
@@ -48,7 +44,7 @@ import java.util.concurrent.RejectedExecutionException;
 @Service
 public class NotificationService {
 
-    private final NotificationPreferenceRepository preferenceRepository;
+    private final NotificationChannelResolver channelResolver;
     private final NotificationRepository notificationRepository;
     private final SubscriptionGateService subscriptionGate;
     private final Map<NotificationChannel, NotificationDispatcher> dispatchersByChannel;
@@ -68,14 +64,14 @@ public class NotificationService {
     static final String REASON_POOL_REJECTED = "dispatch_pool_rejected";
     static final String REASON_FREE_TIER = "free_tier_inbox_only";
 
-    public NotificationService(NotificationPreferenceRepository preferenceRepository,
+    public NotificationService(NotificationChannelResolver channelResolver,
                                NotificationRepository notificationRepository,
                                SubscriptionGateService subscriptionGate,
                                PlatformTransactionManager transactionManager,
                                List<NotificationDispatcher> dispatchers,
                                QuietHoursPolicy quietHours,
                                @Qualifier(AsyncConfig.NOTIFICATION_DISPATCH_EXECUTOR) Executor dispatchExecutor) {
-        this.preferenceRepository = preferenceRepository;
+        this.channelResolver = channelResolver;
         this.notificationRepository = notificationRepository;
         this.subscriptionGate = subscriptionGate;
         this.quietHours = quietHours;
@@ -90,7 +86,7 @@ public class NotificationService {
     /**
      * Persist + dispatch one notification. Returns the saved {@link Notification}
      * (with id) so callers can attach telemetry to it, or {@code null} when the
-     * user has opted out of this type (NONE channel) and nothing was created.
+     * user switched every channel of this notice off and nothing was created.
      *
      * <p>Deliberately NOT {@code @Transactional}: dispatch is an outbound HTTP
      * call (SMTP/Expo/Twilio, multi-second timeouts) and a transaction spanning
@@ -113,13 +109,13 @@ public class NotificationService {
 
     /** Resolve channels and build the (unsaved) row for a payload, or null when muted. */
     private Plan planDelivery(NotificationPayload payload) {
-        var configured = configuredChannels(payload.user(), payload.type());
-        if (configured.contains(NotificationChannel.NONE)) {
+        var resolution = channelResolver.resolve(payload.user(), payload.type());
+        if (resolution.muted()) {
             log.debug("notification.skipped user={} type={} reason=muted",
                     LogMasker.email(payload.user().getEmail()), payload.type());
             return null;
         }
-        var outbound = outboundChannels(payload.user(), configured);
+        var outbound = resolution.outbound();
         var primary = outbound.stream().findFirst().orElse(NotificationChannel.INBOX);
 
         var notification = Notification.builder()
@@ -266,10 +262,7 @@ public class NotificationService {
     void dispatchHeldBack(Notification heldBack) {
         var payload = new NotificationPayload(heldBack.getUser(), heldBack.getType(), heldBack.getTitle(),
                 heldBack.getBody(), deserialize(heldBack.getPayload()), heldBack.getCampaignId());
-        var configured = configuredChannels(heldBack.getUser(), heldBack.getType());
-        var outbound = configured.contains(NotificationChannel.NONE)
-                ? EnumSet.noneOf(NotificationChannel.class)
-                : outboundChannels(heldBack.getUser(), configured);
+        var outbound = channelResolver.resolve(heldBack.getUser(), heldBack.getType()).outbound();
         heldBack.setDispatchDeferred(false);
         if (outbound.isEmpty()) {
             notificationRepository.save(heldBack);
@@ -309,32 +302,6 @@ public class NotificationService {
             log.warn("notification.after_commit_failed user={} type={} reason={}",
                     LogMasker.email(payload.user().getEmail()), payload.type(), ex.getMessage());
         }
-    }
-
-    /** The raw set of channels the user configured for this type (empty = never configured). */
-    private Set<NotificationChannel> configuredChannels(User user, NotificationType type) {
-        var configured = EnumSet.noneOf(NotificationChannel.class);
-        preferenceRepository.findAllByUserIdAndType(user.getId(), type)
-                .forEach(preference -> configured.add(preference.getChannel()));
-        return configured;
-    }
-
-    /**
-     * The outbound channels to dispatch to (inbox is implicit/always). When the user never
-     * configured this type, default to push if they have a token, else email. Only PUSH/EMAIL
-     * are honored here — WhatsApp lives in the digest flow, not the per-type matrix.
-     */
-    private Set<NotificationChannel> outboundChannels(User user, Set<NotificationChannel> configured) {
-        if (configured.isEmpty()) {
-            return EnumSet.of(hasPushToken(user) ? NotificationChannel.PUSH : NotificationChannel.EMAIL);
-        }
-        var outbound = EnumSet.copyOf(configured);
-        outbound.retainAll(EnumSet.of(NotificationChannel.PUSH, NotificationChannel.EMAIL));
-        return outbound;
-    }
-
-    private static boolean hasPushToken(User user) {
-        return user.getPushDeviceToken() != null && !user.getPushDeviceToken().isBlank();
     }
 
     private Map<String, Object> deserialize(String extrasJson) {

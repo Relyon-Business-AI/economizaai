@@ -1309,6 +1309,68 @@
 					"response": []
 				},
 				{
+					"name": "Get notification settings",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/notification-settings",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"notification-settings"
+							]
+						},
+						"description": "Notification settings screen: every notice with the channels that exist for it, each one switched on/off independently. WHATSAPP options (and whatsApp.available=true) only appear for ADMIN accounts while the Twilio WhatsApp sender is configured. Defaults: every PUSH on, every EMAIL and WHATSAPP off (ACCOUNT/EMAIL included)."
+					},
+					"response": []
+				},
+				{
+					"name": "Update notification settings",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/notification-settings",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"notification-settings"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"options\": [\n    { \"key\": \"PRICE_ALERTS\", \"channel\": \"EMAIL\", \"enabled\": true }\n  ],\n  \"digestFrequency\": \"WEEKLY\"\n}"
+						},
+						"description": "Partial update: only the options sent change; digestFrequency is DAILY or WEEKLY. Returns the full settings. 400: channel not offered by the notice, WHATSAPP when not available, unknown key/channel, invalid digestFrequency. 409: WHATSAPP on before connecting WhatsApp."
+					},
+					"response": []
+				},
+				{
 					"name": "Update collaborative contribution (LGPD opt-in/out)",
 					"request": {
 						"method": "PATCH",
@@ -10061,6 +10123,142 @@
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"pm.test('Echoes frequency', function () { pm.expect(pm.response.json().frequency).to.eql('DAILY'); });",
 									"pm.test('Echoes sendHour', function () { pm.expect(pm.response.json().sendHour).to.eql(17); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "27e. Get notification settings",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/notification-settings",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"notification-settings"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"var settings = pm.response.json();",
+									"pm.test('Has e-mail and digest frequency', function () { pm.expect(settings.email).to.be.a('string'); pm.expect(['DAILY','WEEKLY']).to.include(settings.digestFrequency); });",
+									"pm.test('Lists the seven notices in order', function () { pm.expect(settings.notices.map(function (notice) { return notice.key; })).to.eql(['RECEIPT_READY','PERSONAL_OFFERS','STOCKOUT','PRICE_ALERTS','DEALS_DIGEST','WEEKLY_REPORT','ACCOUNT']); });",
+									"pm.test('WhatsApp unavailable for a regular account', function () { pm.expect(settings.whatsApp.available).to.eql(false); pm.expect(JSON.stringify(settings.notices)).to.not.include('WHATSAPP'); });",
+									"pm.test('ACCOUNT e-mail starts off', function () { var account = settings.notices[6]; var email = account.options.filter(function (option) { return option.channel === 'EMAIL'; })[0]; pm.expect(email.enabled).to.eql(false); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "27f. Update notification settings",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/notification-settings",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"notification-settings"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"options\": [\n    { \"key\": \"PRICE_ALERTS\", \"channel\": \"EMAIL\", \"enabled\": true }\n  ],\n  \"digestFrequency\": \"DAILY\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"var settings = pm.response.json();",
+									"pm.test('PRICE_ALERTS e-mail is on', function () { var priceAlerts = settings.notices.filter(function (notice) { return notice.key === 'PRICE_ALERTS'; })[0]; var email = priceAlerts.options.filter(function (option) { return option.channel === 'EMAIL'; })[0]; pm.expect(email.enabled).to.eql(true); });",
+									"pm.test('Keeps digest frequency', function () { pm.expect(settings.digestFrequency).to.eql('DAILY'); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "27g. Notification settings reject a channel the notice does not have",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me/notification-settings",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me",
+								"notification-settings"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"options\": [\n    { \"key\": \"STOCKOUT\", \"channel\": \"EMAIL\", \"enabled\": true }\n  ]\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 400', function () { pm.response.to.have.status(400); });",
+									"pm.test('Has a localized message', function () { pm.expect(pm.response.json().message).to.be.a('string'); });"
 								]
 							}
 						}

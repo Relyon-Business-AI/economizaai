@@ -3,31 +3,40 @@ package com.relyon.economizaai.service.notifications;
 import com.relyon.economizaai.dto.request.UpdateDigestPreferencesRequest;
 import com.relyon.economizaai.dto.request.UpdateNotificationPreferencesRequest;
 import com.relyon.economizaai.dto.request.UpdatePushTokenRequest;
+import com.relyon.economizaai.dto.response.NotificationPreferenceResponse;
+import com.relyon.economizaai.model.NotificationNoticeOption;
 import com.relyon.economizaai.model.NotificationPreference;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.DigestFrequency;
 import com.relyon.economizaai.model.enums.NotificationChannel;
+import com.relyon.economizaai.model.enums.NotificationNotice;
+import com.relyon.economizaai.model.enums.Role;
 import com.relyon.economizaai.model.enums.SubscriptionTier;
 import com.relyon.economizaai.model.enums.NotificationType;
+import com.relyon.economizaai.repository.NotificationNoticeOptionRepository;
 import com.relyon.economizaai.repository.NotificationPreferenceRepository;
 import com.relyon.economizaai.repository.UserRepository;
+import com.relyon.economizaai.service.notifications.twilio.TwilioMessageClient;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -37,121 +46,300 @@ class NotificationPreferenceServiceTest {
 
     @Mock private NotificationPreferenceRepository preferenceRepository;
     @Mock private UserRepository userRepository;
+    @Mock private NotificationNoticeOptionRepository optionRepository;
+    @Mock private TwilioMessageClient twilioMessageClient;
 
-    @InjectMocks private NotificationPreferenceService preferenceService;
+    private NotificationPreferenceService preferenceService;
+
+    /** What the option table holds — the mocked repository reads and writes this list. */
+    private final List<NotificationNoticeOption> storedOptions = new ArrayList<>();
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(optionRepository.findAllByUserId(any())).thenAnswer(invocation -> List.copyOf(storedOptions));
+        lenient().when(optionRepository.findAllByUserIdAndNotice(any(), any())).thenAnswer(invocation ->
+                storedOptions.stream()
+                        .filter(option -> option.getNotice() == invocation.getArgument(1))
+                        .toList());
+        lenient().when(optionRepository.save(any())).thenAnswer(invocation -> {
+            NotificationNoticeOption option = invocation.getArgument(0);
+            if (!storedOptions.contains(option)) storedOptions.add(option);
+            return option;
+        });
+        var optionStore = new NoticeOptionStore(optionRepository, new WhatsAppChannelPolicy(twilioMessageClient));
+        preferenceService = new NotificationPreferenceService(preferenceRepository, userRepository, optionStore);
+    }
 
     private User user() {
-        return User.builder().id(UUID.randomUUID()).email("maria@example.com").build();
+        return User.builder().id(UUID.randomUUID()).email("maria@example.com").role(Role.USER).build();
+    }
+
+    private void stored(NotificationNotice notice, NotificationChannel channel, boolean enabled) {
+        storedOptions.add(NotificationNoticeOption.builder().notice(notice).channel(channel).enabled(enabled).build());
+    }
+
+    private boolean isOn(User user, NotificationNotice notice, NotificationChannel channel) {
+        return new NoticeOptions(user, storedOptions).isEnabled(notice, channel);
+    }
+
+    private static UpdateNotificationPreferencesRequest legacyWrite(NotificationType type,
+                                                                    NotificationChannel... channels) {
+        return new UpdateNotificationPreferencesRequest(Arrays.stream(channels)
+                .map(channel -> new UpdateNotificationPreferencesRequest.Preference(type, channel))
+                .toList());
+    }
+
+    private static NotificationChannel channelOf(List<NotificationPreferenceResponse> preferences,
+                                                 NotificationType type) {
+        return preferences.stream().filter(preference -> preference.type() == type)
+                .map(NotificationPreferenceResponse::channel).findFirst().orElseThrow();
+    }
+
+    // ---- legacy read: one channel per type, answered from the notice options ----
+
+    @Test
+    void listShowsPushForEveryNoticeTypeOfAUserWhoNeverConfiguredAnything() {
+        var result = preferenceService.list(user());
+
+        var listedTypes = result.stream().map(NotificationPreferenceResponse::type).toList();
+        assertEquals(List.of(NotificationType.PROMO_PERSONAL, NotificationType.PRICE_DROP, NotificationType.STOCKOUT,
+                NotificationType.BUDGET, NotificationType.DEALS_DIGEST, NotificationType.SYSTEM,
+                NotificationType.RECEIPT_RECOVERED, NotificationType.RECEIPT_READY, NotificationType.RECEIPT_FAILED),
+                listedTypes);
+        result.forEach(preference -> assertEquals(NotificationChannel.PUSH, preference.channel()));
     }
 
     @Test
-    void listReturnsEmptyWhenUserHasNoPreferences() {
-        var user = user();
-        when(preferenceRepository.findAllByUserId(user.getId())).thenReturn(List.of());
+    void listReadsPushThenEmailThenNone() {
+        stored(NotificationNotice.PRICE_ALERTS, NotificationChannel.PUSH, false);
+        stored(NotificationNotice.PRICE_ALERTS, NotificationChannel.EMAIL, true);
+        stored(NotificationNotice.STOCKOUT, NotificationChannel.PUSH, false);
+        stored(NotificationNotice.DEALS_DIGEST, NotificationChannel.EMAIL, true);
 
-        var result = preferenceService.list(user);
+        var result = preferenceService.list(user());
 
-        assertTrue(result.isEmpty());
+        assertEquals(NotificationChannel.EMAIL, channelOf(result, NotificationType.PRICE_DROP));
+        assertEquals(NotificationChannel.EMAIL, channelOf(result, NotificationType.BUDGET));
+        assertEquals(NotificationChannel.NONE, channelOf(result, NotificationType.STOCKOUT));
+        assertEquals(NotificationChannel.PUSH, channelOf(result, NotificationType.DEALS_DIGEST));
     }
 
     @Test
-    void listMapsEveryPreferenceToResponse() {
-        var user = user();
-        var promo = NotificationPreference.builder().user(user)
-                .type(NotificationType.PROMO_PERSONAL).channel(NotificationChannel.PUSH).build();
-        var priceDrop = NotificationPreference.builder().user(user)
-                .type(NotificationType.PRICE_DROP).channel(NotificationChannel.EMAIL).build();
-        when(preferenceRepository.findAllByUserId(user.getId())).thenReturn(List.of(promo, priceDrop));
+    void listReadsNoneForAnAccountNoticeWithPushOffAndEmailNeverSwitchedOn() {
+        stored(NotificationNotice.ACCOUNT, NotificationChannel.PUSH, false);
 
-        var result = preferenceService.list(user);
-
-        assertEquals(2, result.size());
-        assertEquals(NotificationType.PROMO_PERSONAL, result.get(0).type());
-        assertEquals(NotificationChannel.PUSH, result.get(0).channel());
-        assertEquals(NotificationType.PRICE_DROP, result.get(1).type());
-        assertEquals(NotificationChannel.EMAIL, result.get(1).channel());
+        assertEquals(NotificationChannel.NONE, channelOf(preferenceService.list(user()), NotificationType.SYSTEM));
     }
 
     @Test
-    void listHidesTheRetiredToggles() {
-        var user = user();
-        var retired = NotificationPreference.builder().user(user)
-                .type(NotificationType.PROMO_COMMUNITY).channel(NotificationChannel.PUSH).build();
-        var alsoRetired = NotificationPreference.builder().user(user)
-                .type(NotificationType.CHEAPER_MARKET).channel(NotificationChannel.PUSH).build();
-        var live = NotificationPreference.builder().user(user)
-                .type(NotificationType.PRICE_DROP).channel(NotificationChannel.EMAIL).build();
-        when(preferenceRepository.findAllByUserId(user.getId())).thenReturn(List.of(retired, alsoRetired, live));
+    void listNeverShowsTheWeeklyReportTypeOlderAppsDoNotKnow() {
+        stored(NotificationNotice.WEEKLY_REPORT, NotificationChannel.EMAIL, true);
 
-        var result = preferenceService.list(user);
-
-        assertEquals(1, result.size());
-        assertEquals(NotificationType.PRICE_DROP, result.get(0).type());
+        assertTrue(preferenceService.list(user()).stream()
+                .noneMatch(preference -> preference.type() == NotificationType.WEEKLY_REPORT));
     }
 
     @Test
-    void updateCreatesPreferenceRowForType() {
+    void listKeepsTheStoredRowsOfTypesOutsideTheNoticeModelAndHidesTheRetiredOnes() {
         var user = user();
-        var request = new UpdateNotificationPreferencesRequest(List.of(
-                new UpdateNotificationPreferencesRequest.Preference(
-                        NotificationType.PRICE_DROP, NotificationChannel.EMAIL)));
-        when(preferenceRepository.findAllByUserId(user.getId())).thenReturn(List.of());
-
-        preferenceService.update(user, request);
-
-        verify(preferenceRepository).deleteByUserIdAndType(user.getId(), NotificationType.PRICE_DROP);
-        var captor = ArgumentCaptor.forClass(NotificationPreference.class);
-        verify(preferenceRepository).save(captor.capture());
-        var saved = captor.getValue();
-        assertEquals(user, saved.getUser());
-        assertEquals(NotificationType.PRICE_DROP, saved.getType());
-        assertEquals(NotificationChannel.EMAIL, saved.getChannel());
-    }
-
-    @Test
-    void updateReplacesTheWholeChannelSetForAType() {
-        var user = user();
-        // user mutes the type → request carries a single NONE for it
-        var request = new UpdateNotificationPreferencesRequest(List.of(
-                new UpdateNotificationPreferencesRequest.Preference(
-                        NotificationType.PROMO_PERSONAL, NotificationChannel.NONE)));
         when(preferenceRepository.findAllByUserId(user.getId())).thenReturn(List.of(
-                NotificationPreference.builder().user(user)
-                        .type(NotificationType.PROMO_PERSONAL).channel(NotificationChannel.NONE).build()));
+                NotificationPreference.builder().type(NotificationType.PROMO_COMMUNITY).channel(NotificationChannel.PUSH).build(),
+                NotificationPreference.builder().type(NotificationType.DIGEST).channel(NotificationChannel.EMAIL).build(),
+                // a stale per-type row of a notice type is no longer what decides
+                NotificationPreference.builder().type(NotificationType.STOCKOUT).channel(NotificationChannel.NONE).build()));
 
-        var result = preferenceService.update(user, request);
+        var result = preferenceService.list(user);
 
-        verify(preferenceRepository).deleteByUserIdAndType(user.getId(), NotificationType.PROMO_PERSONAL);
-        var captor = ArgumentCaptor.forClass(NotificationPreference.class);
-        verify(preferenceRepository).save(captor.capture());
-        assertEquals(NotificationChannel.NONE, captor.getValue().getChannel());
-        assertEquals(1, result.size());
+        assertEquals(NotificationChannel.EMAIL, channelOf(result, NotificationType.DIGEST));
+        assertEquals(NotificationChannel.PUSH, channelOf(result, NotificationType.STOCKOUT));
+        assertTrue(result.stream().noneMatch(preference -> preference.type() == NotificationType.PROMO_COMMUNITY));
+        assertEquals(1, result.stream().filter(preference -> preference.type() == NotificationType.STOCKOUT).count());
+    }
+
+    // ---- legacy write: translated to the notice options ----
+
+    @Test
+    void legacyPushWriteTurnsPushOnAndEmailOff() {
+        var principal = user();
+        storedVersionOf(principal);
+        stored(NotificationNotice.PRICE_ALERTS, NotificationChannel.PUSH, false);
+        stored(NotificationNotice.PRICE_ALERTS, NotificationChannel.EMAIL, true);
+
+        var result = preferenceService.update(principal, legacyWrite(NotificationType.PRICE_DROP, NotificationChannel.PUSH));
+
+        assertTrue(isOn(principal, NotificationNotice.PRICE_ALERTS, NotificationChannel.PUSH));
+        assertFalse(isOn(principal, NotificationNotice.PRICE_ALERTS, NotificationChannel.EMAIL));
+        assertEquals(NotificationChannel.PUSH, channelOf(result, NotificationType.PRICE_DROP));
+        verify(preferenceRepository, never()).save(any());
     }
 
     @Test
-    void updatePersistsMultipleChannelsPerTypeAndAcrossTypes() {
-        var user = user();
-        // multi-channel for one type (push + email) + another type
-        var request = new UpdateNotificationPreferencesRequest(List.of(
-                new UpdateNotificationPreferencesRequest.Preference(
-                        NotificationType.PROMO_PERSONAL, NotificationChannel.PUSH),
-                new UpdateNotificationPreferencesRequest.Preference(
-                        NotificationType.PROMO_PERSONAL, NotificationChannel.EMAIL),
-                new UpdateNotificationPreferencesRequest.Preference(
-                        NotificationType.PRICE_DROP, NotificationChannel.EMAIL)));
-        when(preferenceRepository.findAllByUserId(user.getId())).thenReturn(List.of());
+    void legacyEmailWriteTurnsEmailOnAndPushOff() {
+        var principal = user();
+        storedVersionOf(principal);
 
-        preferenceService.update(user, request);
+        var result = preferenceService.update(principal, legacyWrite(NotificationType.PRICE_DROP, NotificationChannel.EMAIL));
 
-        verify(preferenceRepository).deleteByUserIdAndType(user.getId(), NotificationType.PROMO_PERSONAL);
-        verify(preferenceRepository).deleteByUserIdAndType(user.getId(), NotificationType.PRICE_DROP);
-        verify(preferenceRepository, times(3)).save(any()); // push+email for promo, email for price_drop
+        assertFalse(isOn(principal, NotificationNotice.PRICE_ALERTS, NotificationChannel.PUSH));
+        assertTrue(isOn(principal, NotificationNotice.PRICE_ALERTS, NotificationChannel.EMAIL));
+        assertEquals(NotificationChannel.EMAIL, channelOf(result, NotificationType.PRICE_DROP));
+    }
+
+    @Test
+    void legacyEmailWriteOnANoticeWithoutEmailKeepsPushOnInsteadOfSilencingIt() {
+        var principal = user();
+        storedVersionOf(principal);
+        stored(NotificationNotice.PERSONAL_OFFERS, NotificationChannel.PUSH, false);
+
+        var result = preferenceService.update(principal,
+                legacyWrite(NotificationType.PROMO_PERSONAL, NotificationChannel.EMAIL));
+
+        assertTrue(isOn(principal, NotificationNotice.PERSONAL_OFFERS, NotificationChannel.PUSH));
+        assertEquals(NotificationChannel.PUSH, channelOf(result, NotificationType.PROMO_PERSONAL));
+    }
+
+    @Test
+    void legacyNoneWriteTurnsEveryOptionOff() {
+        var principal = user();
+        storedVersionOf(principal);
+        stored(NotificationNotice.PRICE_ALERTS, NotificationChannel.EMAIL, true);
+        stored(NotificationNotice.PRICE_ALERTS, NotificationChannel.WHATSAPP, true);
+
+        var result = preferenceService.update(principal, legacyWrite(NotificationType.PRICE_DROP, NotificationChannel.NONE));
+
+        assertFalse(isOn(principal, NotificationNotice.PRICE_ALERTS, NotificationChannel.PUSH));
+        assertFalse(isOn(principal, NotificationNotice.PRICE_ALERTS, NotificationChannel.EMAIL));
+        assertFalse(isOn(principal, NotificationNotice.PRICE_ALERTS, NotificationChannel.WHATSAPP));
+        assertEquals(NotificationChannel.NONE, channelOf(result, NotificationType.PRICE_DROP));
+    }
+
+    @Test
+    void legacyNoneWriteOnTheAccountNoticeTurnsPushAndEmailOff() {
+        var principal = user();
+        storedVersionOf(principal);
+
+        var result = preferenceService.update(principal, legacyWrite(NotificationType.SYSTEM, NotificationChannel.NONE));
+
+        assertFalse(isOn(principal, NotificationNotice.ACCOUNT, NotificationChannel.PUSH));
+        assertFalse(isOn(principal, NotificationNotice.ACCOUNT, NotificationChannel.EMAIL));
+        assertEquals(NotificationChannel.NONE, channelOf(result, NotificationType.SYSTEM));
+    }
+
+    @Test
+    void legacyWriteWithBothChannelsTurnsBothOn() {
+        var principal = user();
+        storedVersionOf(principal);
+
+        preferenceService.update(principal,
+                legacyWrite(NotificationType.PRICE_DROP, NotificationChannel.PUSH, NotificationChannel.EMAIL));
+
+        assertTrue(isOn(principal, NotificationNotice.PRICE_ALERTS, NotificationChannel.PUSH));
+        assertTrue(isOn(principal, NotificationNotice.PRICE_ALERTS, NotificationChannel.EMAIL));
+    }
+
+    @Test
+    void legacyWriteLeavesTheNoticesItDoesNotMentionUntouched() {
+        var principal = user();
+        storedVersionOf(principal);
+        stored(NotificationNotice.STOCKOUT, NotificationChannel.PUSH, false);
+
+        preferenceService.update(principal, legacyWrite(NotificationType.PROMO_PERSONAL, NotificationChannel.PUSH));
+
+        assertFalse(isOn(principal, NotificationNotice.STOCKOUT, NotificationChannel.PUSH));
+    }
+
+    @Test
+    void legacyMuteOfTheDealsDigestTypeSwitchesTheDigestOff() {
+        var principal = user();
+        var stored = storedVersionOf(principal);
+        stored.setDigestFrequency(DigestFrequency.WEEKLY);
+
+        preferenceService.update(principal, legacyWrite(NotificationType.DEALS_DIGEST, NotificationChannel.NONE));
+
+        assertEquals(DigestFrequency.OFF, stored.getDigestFrequency());
+        assertEquals(DigestFrequency.WEEKLY, stored.getDigestFrequencyChoice());
+        verify(userRepository).save(stored);
+    }
+
+    @Test
+    void legacyWriteOfATypeOutsideTheNoticeModelStillReplacesItsRows() {
+        var principal = user();
+        var stored = storedVersionOf(principal);
+
+        preferenceService.update(principal, legacyWrite(NotificationType.DIGEST, NotificationChannel.EMAIL));
+
+        verify(preferenceRepository).deleteByUserIdAndType(principal.getId(), NotificationType.DIGEST);
+        var captor = ArgumentCaptor.forClass(NotificationPreference.class);
+        verify(preferenceRepository).save(captor.capture());
+        assertEquals(stored, captor.getValue().getUser());
+        assertEquals(NotificationType.DIGEST, captor.getValue().getType());
+        assertEquals(NotificationChannel.EMAIL, captor.getValue().getChannel());
+        assertTrue(storedOptions.isEmpty());
+    }
+
+    @Test
+    void legacyWriteIgnoresTheRetiredToggles() {
+        var principal = user();
+        storedVersionOf(principal);
+
+        preferenceService.update(principal, legacyWrite(NotificationType.PROMO_COMMUNITY, NotificationChannel.NONE));
+
+        verify(preferenceRepository, never()).save(any());
+        assertTrue(storedOptions.isEmpty());
+    }
+
+    // ---- legacy digest endpoints ----
+
+    @Test
+    void legacyDigestOffTurnsEveryDigestOptionOffAndRemembersTheFrequency() {
+        var principal = user();
+        var stored = storedVersionOf(principal);
+        stored.setDigestFrequency(DigestFrequency.WEEKLY);
+        stored(NotificationNotice.DEALS_DIGEST, NotificationChannel.EMAIL, true);
+
+        var result = preferenceService.updateDigestPreferences(principal,
+                new UpdateDigestPreferencesRequest(DigestFrequency.OFF, null));
+
+        assertEquals(DigestFrequency.OFF, result.frequency());
+        assertEquals(DigestFrequency.OFF, stored.getDigestFrequency());
+        assertEquals(DigestFrequency.WEEKLY, stored.getDigestFrequencyChoice());
+        assertFalse(isOn(stored, NotificationNotice.DEALS_DIGEST, NotificationChannel.PUSH));
+        assertFalse(isOn(stored, NotificationNotice.DEALS_DIGEST, NotificationChannel.EMAIL));
+    }
+
+    @Test
+    void legacyDigestBackOnSwitchesPushOnWhenNothingWasOn() {
+        var principal = user();
+        var stored = storedVersionOf(principal);
+        stored.setDigestFrequency(DigestFrequency.OFF);
+        stored(NotificationNotice.DEALS_DIGEST, NotificationChannel.PUSH, false);
+
+        var result = preferenceService.updateDigestPreferences(principal,
+                new UpdateDigestPreferencesRequest(DigestFrequency.DAILY, null));
+
+        assertEquals(DigestFrequency.DAILY, result.frequency());
+        assertTrue(isOn(stored, NotificationNotice.DEALS_DIGEST, NotificationChannel.PUSH));
+    }
+
+    @Test
+    void legacyDigestFrequencyChangeKeepsTheOptionsThatWereOn() {
+        var principal = user();
+        var stored = storedVersionOf(principal);
+        stored(NotificationNotice.DEALS_DIGEST, NotificationChannel.PUSH, false);
+        stored(NotificationNotice.DEALS_DIGEST, NotificationChannel.EMAIL, true);
+
+        preferenceService.updateDigestPreferences(principal,
+                new UpdateDigestPreferencesRequest(DigestFrequency.WEEKLY, null));
+
+        assertEquals(DigestFrequency.WEEKLY, stored.getDigestFrequency());
+        assertFalse(isOn(stored, NotificationNotice.DEALS_DIGEST, NotificationChannel.PUSH));
+        assertTrue(isOn(stored, NotificationNotice.DEALS_DIGEST, NotificationChannel.EMAIL));
     }
 
     /** The row as the database has it now — newer than the request principal (tier changed meanwhile). */
     private User storedVersionOf(User principal) {
         var stored = User.builder().id(principal.getId()).email(principal.getEmail())
-                .subscriptionTier(SubscriptionTier.PRO)
+                .subscriptionTier(SubscriptionTier.PRO).role(Role.USER)
                 .pushDeviceToken(principal.getPushDeviceToken())
                 .digestSendHour(principal.getDigestSendHour())
                 .build();

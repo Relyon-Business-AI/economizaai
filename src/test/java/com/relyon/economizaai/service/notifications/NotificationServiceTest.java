@@ -1,13 +1,17 @@
 package com.relyon.economizaai.service.notifications;
 
 import com.relyon.economizaai.model.Notification;
+import com.relyon.economizaai.model.NotificationNoticeOption;
 import com.relyon.economizaai.model.NotificationPreference;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.NotificationChannel;
+import com.relyon.economizaai.model.enums.NotificationNotice;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.model.enums.SubscriptionTier;
+import com.relyon.economizaai.repository.NotificationNoticeOptionRepository;
 import com.relyon.economizaai.repository.NotificationPreferenceRepository;
 import com.relyon.economizaai.repository.NotificationRepository;
+import com.relyon.economizaai.service.notifications.twilio.TwilioMessageClient;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,6 +49,8 @@ import static org.mockito.Mockito.when;
 class NotificationServiceTest {
 
     @Mock private NotificationPreferenceRepository preferenceRepository;
+    @Mock private NotificationNoticeOptionRepository optionRepository;
+    @Mock private TwilioMessageClient twilioMessageClient;
     @Mock private NotificationRepository notificationRepository;
     @Mock private SubscriptionGateService subscriptionGate;
     @Mock private NotificationDispatcher emailDispatcher;
@@ -91,8 +97,24 @@ class NotificationServiceTest {
             lenient().when(pushDispatcher.channel()).thenReturn(NotificationChannel.PUSH);
             dispatchers.add(pushDispatcher);
         }
-        return new NotificationService(preferenceRepository, notificationRepository, subscriptionGate,
+        return new NotificationService(channelResolver(), notificationRepository, subscriptionGate,
                 transactionManager, dispatchers, quietHours, dispatchExecutor);
+    }
+
+    /** The real resolver over mocked repositories: an unstubbed repository holds no stored choice. */
+    private NotificationChannelResolver channelResolver() {
+        var whatsAppPolicy = new WhatsAppChannelPolicy(twilioMessageClient);
+        return new NotificationChannelResolver(
+                new NoticeOptionStore(optionRepository, whatsAppPolicy), preferenceRepository, whatsAppPolicy);
+    }
+
+    private void storedOptions(NotificationNotice notice, NotificationNoticeOption... options) {
+        when(optionRepository.findAllByUserIdAndNotice(any(), eq(notice))).thenReturn(List.of(options));
+    }
+
+    private static NotificationNoticeOption option(NotificationNotice notice, NotificationChannel channel,
+                                                   boolean enabled) {
+        return NotificationNoticeOption.builder().notice(notice).channel(channel).enabled(enabled).build();
     }
 
     private NotificationPayload payload(User user, NotificationType type) {
@@ -102,7 +124,6 @@ class NotificationServiceTest {
     @Test
     void preferencesPushWhenUserHasTokenAndNoExplicitPreference() {
         var user = userWithPushToken();
-        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
         when(pushDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.ok());
         var svc = service(true, true);
 
@@ -119,7 +140,6 @@ class NotificationServiceTest {
     @Test
     void fallsBackToEmailWhenNoPushToken() {
         var user = userWithoutPushToken();
-        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
         when(emailDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.ok());
         var svc = service(true, true);
 
@@ -130,11 +150,10 @@ class NotificationServiceTest {
     }
 
     @Test
-    void respectsExplicitNonePreferenceAndDoesNotDispatch() {
+    void noticeWithEveryOptionOffIsMutedAndDoesNotDispatch() {
         var user = userWithPushToken();
-        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of(
-                NotificationPreference.builder().user(user).type(NotificationType.PROMO_PERSONAL)
-                        .channel(NotificationChannel.NONE).build()));
+        storedOptions(NotificationNotice.PERSONAL_OFFERS,
+                option(NotificationNotice.PERSONAL_OFFERS, NotificationChannel.PUSH, false));
         var svc = service(true, true);
 
         svc.notify(payload(user, NotificationType.PROMO_PERSONAL));
@@ -147,7 +166,6 @@ class NotificationServiceTest {
     @Test
     void persistsFailureWhenDispatchFails() {
         var user = userWithPushToken();
-        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
         when(pushDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.failed("no token"));
         var svc = service(true, true);
 
@@ -164,9 +182,8 @@ class NotificationServiceTest {
         var user = freeUserWithPushToken();
         when(emailDispatcher.channel()).thenReturn(NotificationChannel.EMAIL);
         when(pushDispatcher.channel()).thenReturn(NotificationChannel.PUSH);
-        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
         when(subscriptionGate.allowsDelivery(any(), eq(NotificationType.PROMO_PERSONAL), eq(false))).thenReturn(false);
-        var svc = new NotificationService(preferenceRepository, notificationRepository, subscriptionGate,
+        var svc = new NotificationService(channelResolver(), notificationRepository, subscriptionGate,
                 transactionManager, List.of(emailDispatcher, pushDispatcher), quietHours, dispatchExecutor);
 
         svc.notify(payload(user, NotificationType.PROMO_PERSONAL));
@@ -183,7 +200,6 @@ class NotificationServiceTest {
     @Test
     void notifyAfterCommit_withoutActiveTransaction_dispatchesImmediately() {
         var user = userWithPushToken();
-        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
         when(pushDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.ok());
         var svc = service(true, true);
 
@@ -203,7 +219,6 @@ class NotificationServiceTest {
             verify(pushDispatcher, never()).dispatch(any());
             verify(notificationRepository, never()).save(any());
 
-            when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
             when(pushDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.ok());
             TransactionSynchronizationManager.getSynchronizations()
                     .forEach(TransactionSynchronization::afterCommit);
@@ -218,7 +233,6 @@ class NotificationServiceTest {
     @Test
     void notifyAfterCommit_dispatchFailureIsSwallowed() {
         var user = userWithPushToken();
-        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
         when(pushDispatcher.dispatch(any())).thenThrow(new IllegalStateException("expo down"));
         var svc = service(true, true);
 
@@ -228,12 +242,12 @@ class NotificationServiceTest {
     @Test
     void persistsFailureWhenNoDispatcherForRequestedChannel() {
         var user = userWithPushToken();
-        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of(
-                NotificationPreference.builder().user(user).type(NotificationType.PROMO_PERSONAL)
-                        .channel(NotificationChannel.EMAIL).build()));
+        storedOptions(NotificationNotice.PRICE_ALERTS,
+                option(NotificationNotice.PRICE_ALERTS, NotificationChannel.PUSH, false),
+                option(NotificationNotice.PRICE_ALERTS, NotificationChannel.EMAIL, true));
         var svc = service(false, true); // no email dispatcher (e.g., SMTP not configured)
 
-        svc.notify(payload(user, NotificationType.PROMO_PERSONAL));
+        svc.notify(payload(user, NotificationType.PRICE_DROP));
 
         // persisted before dispatch + again after (aggregate outcome) → 2 saves
         var captor = ArgumentCaptor.forClass(Notification.class);
@@ -245,18 +259,13 @@ class NotificationServiceTest {
     @Test
     void multiChannel_dispatchesToBothPushAndEmail() {
         var user = userWithPushToken();
-        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of(
-                NotificationPreference.builder().user(user).type(NotificationType.PROMO_PERSONAL)
-                        .channel(NotificationChannel.INBOX).build(),
-                NotificationPreference.builder().user(user).type(NotificationType.PROMO_PERSONAL)
-                        .channel(NotificationChannel.PUSH).build(),
-                NotificationPreference.builder().user(user).type(NotificationType.PROMO_PERSONAL)
-                        .channel(NotificationChannel.EMAIL).build()));
+        storedOptions(NotificationNotice.PRICE_ALERTS,
+                option(NotificationNotice.PRICE_ALERTS, NotificationChannel.EMAIL, true));
         when(pushDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.ok());
         when(emailDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.ok());
         var svc = service(true, true);
 
-        svc.notify(payload(user, NotificationType.PROMO_PERSONAL));
+        svc.notify(payload(user, NotificationType.PRICE_DROP));
 
         verify(pushDispatcher).dispatch(any());
         verify(emailDispatcher).dispatch(any());
@@ -266,11 +275,11 @@ class NotificationServiceTest {
     void inboxOnlySelection_persistsRowButNoDispatch() {
         var user = userWithPushToken();
         when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of(
-                NotificationPreference.builder().user(user).type(NotificationType.PROMO_PERSONAL)
+                NotificationPreference.builder().user(user).type(NotificationType.DIGEST)
                         .channel(NotificationChannel.INBOX).build()));
         var svc = service(true, true);
 
-        svc.notify(payload(user, NotificationType.PROMO_PERSONAL));
+        svc.notify(payload(user, NotificationType.DIGEST));
 
         verify(pushDispatcher, never()).dispatch(any());
         verify(emailDispatcher, never()).dispatch(any());
@@ -284,7 +293,6 @@ class NotificationServiceTest {
     @Test
     void quietHours_writesTheInboxRowButHoldsTheDispatchBack() {
         var user = userWithPushToken();
-        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
         when(quietHours.holdsBackNow(NotificationType.PRICE_DROP)).thenReturn(true);
         var svc = service(true, true);
 
@@ -301,7 +309,6 @@ class NotificationServiceTest {
     @Test
     void quietHours_exemptTypeIsDispatchedAtOnce() {
         var user = userWithPushToken();
-        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
         when(quietHours.holdsBackNow(NotificationType.RECEIPT_READY)).thenReturn(false);
         when(pushDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.ok());
         var svc = service(true, true);
@@ -316,7 +323,6 @@ class NotificationServiceTest {
     @Test
     void quietHours_afterCommitPathAlsoHoldsTheDispatchBack() {
         var user = userWithPushToken();
-        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
         when(quietHours.holdsBackNow(NotificationType.PRICE_DROP)).thenReturn(true);
         var svc = service(true, true);
 
@@ -331,7 +337,6 @@ class NotificationServiceTest {
     @Test
     void quietHours_freeTierRowIsNeverMarkedDeferred() {
         var user = freeUserWithPushToken();
-        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
         lenient().when(quietHours.holdsBackNow(any())).thenReturn(true);
         var svc = service(true, true);
         when(subscriptionGate.allowsDelivery(any(), any(), anyBoolean())).thenReturn(false);
@@ -345,7 +350,6 @@ class NotificationServiceTest {
     @Test
     void dispatchHeldBack_sendsWithTheNotificationIdAndClearsTheFlag() {
         var user = userWithPushToken();
-        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
         when(pushDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.ok());
         var svc = service(true, true);
         var heldBack = Notification.builder().id(UUID.randomUUID()).user(user)
@@ -368,9 +372,8 @@ class NotificationServiceTest {
     @Test
     void dispatchHeldBack_userMutedTheTypeOvernight_settlesWithoutSending() {
         var user = userWithPushToken();
-        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of(
-                NotificationPreference.builder().user(user).type(NotificationType.PRICE_DROP)
-                        .channel(NotificationChannel.NONE).build()));
+        storedOptions(NotificationNotice.PRICE_ALERTS,
+                option(NotificationNotice.PRICE_ALERTS, NotificationChannel.PUSH, false));
         var svc = service(true, true);
         var heldBack = Notification.builder().id(UUID.randomUUID()).user(user)
                 .type(NotificationType.PRICE_DROP).channel(NotificationChannel.PUSH)
@@ -399,7 +402,6 @@ class NotificationServiceTest {
         verify(pushDispatcher, never()).dispatch(any());
         assertEquals(1, queued.size());
 
-        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
         when(pushDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.ok());
         queued.get(0).run();
 
@@ -410,7 +412,6 @@ class NotificationServiceTest {
     @Test
     void notifyAfterCommit_poolRejection_keepsTheInboxRowAndRecordsWhy() {
         var user = userWithPushToken();
-        when(preferenceRepository.findAllByUserIdAndType(any(), any())).thenReturn(List.of());
         dispatchExecutor = task -> {
             throw new RejectedExecutionException("queue full");
         };
@@ -424,5 +425,32 @@ class NotificationServiceTest {
         assertEquals("dispatch_pool_rejected", captor.getValue().getFailureReason());
         assertFalse(captor.getValue().isDelivered());
         assertFalse(captor.getValue().isDispatchDeferred());
+    }
+
+    // ---- notice options ----
+
+    @Test
+    void neverConfiguredAccountNoticeGoesOutOnPushOnly() {
+        var user = userWithPushToken();
+        when(pushDispatcher.dispatch(any())).thenReturn(NotificationDispatcher.DispatchResult.ok());
+        var svc = service(true, true);
+
+        svc.notify(payload(user, NotificationType.SYSTEM));
+
+        verify(pushDispatcher).dispatch(any());
+        verify(emailDispatcher, never()).dispatch(any());
+    }
+
+    @Test
+    void typeOutsideTheNoticeModelStillHonoursItsMutedRow() {
+        var user = userWithPushToken();
+        when(preferenceRepository.findAllByUserIdAndType(any(), eq(NotificationType.HOUSEHOLD_MEMBER_JOINED)))
+                .thenReturn(List.of(NotificationPreference.builder().user(user)
+                        .type(NotificationType.HOUSEHOLD_MEMBER_JOINED).channel(NotificationChannel.NONE).build()));
+        var svc = service(true, true);
+
+        assertNull(svc.notify(payload(user, NotificationType.HOUSEHOLD_MEMBER_JOINED)));
+
+        verify(notificationRepository, never()).save(any());
     }
 }
