@@ -4,8 +4,10 @@ import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.model.MarketLocation;
 import com.relyon.economizaai.model.NotificationRule;
 import com.relyon.economizaai.model.PriceObservation;
+import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.repository.NotificationRuleRepository;
+import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.geo.MarketLocationService;
 import com.relyon.economizaai.service.geo.MarketNameService;
 import com.relyon.economizaai.service.geo.NearbyScope;
@@ -33,6 +35,10 @@ import java.util.stream.Collectors;
  * product alerts — runs on the collaborative-index write path so one household's
  * confirmed receipt can fire another household's notification.
  *
+ * <p>An alert belongs to the household of whoever created it: when it fires, every member
+ * is notified (each one's own notice options still decide what actually reaches them), and
+ * two members' alerts on the same product fire as one.
+ *
  * <p>Handles only the explicit user alert:
  * <ul>
  *   <li><b>PRICE_DROP</b> — user rule, fire when observed price ≤ threshold AND the market is
@@ -59,6 +65,7 @@ public class NotificationRuleEngine {
     private final MarketNameService marketNameService;
     private final NotificationService notificationService;
     private final NearbyScopeService nearbyScopeService;
+    private final UserRepository userRepository;
 
     @Transactional
     public void evaluate(List<PriceObservation> observations, UUID contributingHouseholdId) {
@@ -90,8 +97,10 @@ public class NotificationRuleEngine {
 
         var rulesByProduct = rules.stream().collect(Collectors.groupingBy(rule -> rule.getProduct().getId()));
         var firedIds = new HashSet<UUID>();
+        var notifiedHouseholdProducts = new HashSet<String>();
         var fired = new ArrayList<NotificationRule>();
         var scopesByUser = new HashMap<UUID, NearbyScope>();
+        var recipientsByHousehold = new HashMap<UUID, List<User>>();
 
         for (var observation : observations) {
             var candidates = rulesByProduct.get(observation.getProduct().getId());
@@ -100,7 +109,9 @@ public class NotificationRuleEngine {
                 if (firedIds.contains(rule.getId())) continue;
                 if (!priceRuleShouldFire(rule, observation, contributingHouseholdId, locations, scopesByUser, now)) continue;
 
-                notifyPriceRule(rule, observation);
+                if (notifiedHouseholdProducts.add(householdProductKey(rule))) {
+                    notifyPriceRule(rule, observation, recipientsOf(rule, recipientsByHousehold));
+                }
                 rule.setLastFiredAt(now);
                 firedIds.add(rule.getId());
                 fired.add(rule);
@@ -144,16 +155,34 @@ public class NotificationRuleEngine {
      * contribution must not fire another household's alert, and the Expo/SMTP
      * round-trip must never pin the write transaction's connection.
      */
-    private void notifyPriceRule(NotificationRule rule, PriceObservation observation) {
+    private void notifyPriceRule(NotificationRule rule, PriceObservation observation, List<User> recipients) {
+        recipients.forEach(recipient -> notifyRecipient(rule, observation, recipient));
+    }
+
+    private void notifyRecipient(NotificationRule rule, PriceObservation observation, User recipient) {
         var productName = observation.getProduct().getNormalizedName();
-        var locale = LocalizedMessageService.toLocale(rule.getUser().getLocale());
+        var locale = LocalizedMessageService.toLocale(recipient.getLocale());
         var marketName = friendlyMarketName(rule, observation, locale);
         var title = messageService.translate("notification.price_drop.title", locale, productName);
         var body = messageService.translate("notification.price_drop.body", locale,
                 productName, NotificationTextFormatter.amount(observation.getUnitPrice()), marketName,
                 NotificationTextFormatter.amount(rule.getThresholdPrice()));
         notificationService.notifyAfterCommit(new NotificationPayload(
-                rule.getUser(), rule.getType(), title, body, baseExtras(rule, observation)));
+                recipient, rule.getType(), title, body, baseExtras(rule, observation)));
+    }
+
+    /** Every member of the alert owner's household (loaded once per household per evaluation). */
+    private List<User> recipientsOf(NotificationRule rule, Map<UUID, List<User>> recipientsByHousehold) {
+        var household = rule.getUser().getHousehold();
+        if (household == null) return List.of(rule.getUser());
+        return recipientsByHousehold.computeIfAbsent(household.getId(), userRepository::findAllByHouseholdId);
+    }
+
+    /** Two members' alerts on the same product are one alert of the household. */
+    private String householdProductKey(NotificationRule rule) {
+        var household = rule.getUser().getHousehold();
+        var ownerKey = household != null ? household.getId() : rule.getUser().getId();
+        return ownerKey + ":" + rule.getProduct().getId();
     }
 
     // ---- shared helpers ----

@@ -65,6 +65,7 @@ public class HouseholdService {
     private final SubscriptionGateService subscriptionGate;
     private final NotificationService notificationService;
     private final LocalizedMessageService messageService;
+    private final HouseholdSharedSettingsService sharedSettingsService;
     private final SecureRandom random = new SecureRandom();
 
     // Merge/restore: ON since household sharing launched (2026-11). Joining MOVES the
@@ -227,6 +228,7 @@ public class HouseholdService {
             log.info("join.merge user={} categories={} moved={} shadowed={}",
                     LogMasker.email(user.getEmail()), categories, result.moved(), result.shadowed());
         }
+        sharedSettingsService.shareMostRecentHomeLocation(target.getId());
         householdCacheGen.bump(previous.getId());
         householdCacheGen.bump(target.getId());
 
@@ -275,6 +277,7 @@ public class HouseholdService {
      * household with a COPY of everything, including what guests brought.
      */
     private Household moveOut(User user, Household shared) {
+        sharedSettingsService.copySharedSettingsToLeavingMember(user, shared.getId());
         return isAwayFromHome(user) ? returnGuestHome(user, shared) : startOwnHousehold(user, shared);
     }
 

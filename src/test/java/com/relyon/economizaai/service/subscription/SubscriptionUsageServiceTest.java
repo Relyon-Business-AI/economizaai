@@ -3,6 +3,7 @@ package com.relyon.economizaai.service.subscription;
 import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.UserWatchedMarket;
 import com.relyon.economizaai.repository.HouseholdCustomCategoryRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.repository.UserWatchedMarketRepository;
@@ -14,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -43,12 +45,18 @@ class SubscriptionUsageServiceTest {
                 .household(Household.builder().id(householdId).build()).build();
     }
 
+    private static UserWatchedMarket pinOf(String marketCnpj) {
+        return UserWatchedMarket.builder().marketCnpj(marketCnpj).build();
+    }
+
     @Test
     void usageOf_pairsEachCountWithItsFreeCap() {
         when(receiptRepository.countByUserIdAndSplitCopyFalseAndCreatedAtGreaterThanEqual(eq(user.getId()), any()))
                 .thenReturn(12L);
         when(customCategoryRepository.countByHouseholdId(householdId)).thenReturn(2L);
-        when(watchedMarketRepository.countByUserId(user.getId())).thenReturn(4L);
+        when(watchedMarketRepository.findAllByUserHouseholdId(householdId)).thenReturn(List.of(
+                pinOf("11111111000111"), pinOf("22222222000122"), pinOf("33333333000133"),
+                pinOf("44444444000144"), pinOf("11111111000111")));
         when(receiptRepository.findOldestConfirmedIssuedAt(householdId))
                 .thenReturn(Optional.of(LocalDateTime.of(2026, 3, 9, 18, 30)));
 

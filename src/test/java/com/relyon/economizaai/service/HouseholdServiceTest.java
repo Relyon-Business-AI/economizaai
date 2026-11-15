@@ -81,6 +81,9 @@ class HouseholdServiceTest {
     @Mock
     private LocalizedMessageService messageService;
 
+    @Mock
+    private HouseholdSharedSettingsService sharedSettingsService;
+
     @InjectMocks
     private HouseholdService householdService;
 
@@ -305,6 +308,7 @@ class HouseholdServiceTest {
         verify(mergeService).merge(previous, target, Set.of(MergeCategory.values()));
         verify(householdCacheGen).bump(previous.getId());
         verify(householdCacheGen).bump(target.getId());
+        verify(sharedSettingsService).shareMostRecentHomeLocation(target.getId());
         verify(householdRepository, never()).delete(previous);
     }
 
@@ -494,6 +498,7 @@ class HouseholdServiceTest {
         assertEquals(leaver.getId(), response.hostId(), "leaver hosts the home they return to");
         assertEquals(stayer, shared.getOwner(), "the shared household keeps its host");
         verify(mergeService).restoreOriginals(home);
+        verify(sharedSettingsService).copySharedSettingsToLeavingMember(leaver, shared.getId());
         verify(splitService).copyInto(shared, home, joinedAt);
         verify(householdCacheGen).bump(shared.getId());
         verify(householdCacheGen).bump(home.getId());

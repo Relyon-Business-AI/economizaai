@@ -4,10 +4,12 @@ import com.relyon.economizaai.dto.request.JoinHouseholdRequest;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.UserWatchedMarket;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.service.HouseholdMergeService;
 import com.relyon.economizaai.service.HouseholdService;
+import com.relyon.economizaai.service.HouseholdSharedSettingsService;
 import com.relyon.economizaai.service.HouseholdSplitService;
 import com.relyon.economizaai.service.ReceiptRawHtmlService;
 import com.relyon.economizaai.service.LocalizedMessageService;
@@ -48,13 +50,14 @@ import static org.mockito.Mockito.when;
 @DataJpaTest
 @ActiveProfiles("test")
 @Import({HouseholdService.class, HouseholdMergeService.class, HouseholdSplitService.class,
-        ReceiptRawHtmlService.class})
+        ReceiptRawHtmlService.class, HouseholdSharedSettingsService.class})
 class HouseholdMembershipIntegrationTest {
 
     @Autowired private HouseholdService householdService;
     @Autowired private HouseholdRepository householdRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private ReceiptRepository receiptRepository;
+    @Autowired private UserWatchedMarketRepository watchedMarketRepository;
     @Autowired private TestEntityManager entityManager;
 
     @MockitoBean private HouseholdCacheGen householdCacheGen;
@@ -135,6 +138,39 @@ class HouseholdMembershipIntegrationTest {
         assertEquals(2, receiptRepository.findAllByHouseholdId(sharedHouseholdId).size());
         assertFalse(householdRepository.findById(guestHomeId).orElseThrow()
                 .getInviteCodeExpiresAt().isAfter(LocalDateTime.now()));
+    }
+
+    @Test
+    void join_givesTheNewcomerTheHomeLocationOfTheHousehold() {
+        var host = userRepository.findById(hostId).orElseThrow();
+        host.setHomeLatitude(new BigDecimal("-30.028"));
+        host.setHomeLongitude(new BigDecimal("-51.229"));
+        host.setHomeSetAt(LocalDateTime.of(2026, Month.NOVEMBER, 2, 9, 0));
+        userRepository.save(host);
+        detachEverything();
+
+        guestJoins(true);
+
+        var guest = userRepository.findById(guestId).orElseThrow();
+        assertEquals(0, guest.getHomeLatitude().compareTo(new BigDecimal("-30.028")));
+        assertEquals(0, guest.getHomeLongitude().compareTo(new BigDecimal("-51.229")));
+    }
+
+    @Test
+    void guestLeaves_takesACopyOfTheMarketsTheHouseholdWatches() {
+        guestJoins(true);
+        watchedMarketRepository.save(UserWatchedMarket.builder()
+                .user(userRepository.findById(hostId).orElseThrow()).marketCnpj("12345678000190").build());
+        detachEverything();
+
+        householdService.leave(principal(guestId));
+        detachEverything();
+
+        var guestPins = watchedMarketRepository.findAllByUserId(guestId).stream()
+                .map(UserWatchedMarket::getMarketCnpj).toList();
+        assertEquals(List.of("12345678000190"), guestPins);
+        assertEquals(1, watchedMarketRepository.findAllByUserHouseholdId(sharedHouseholdId).size(),
+                "the household keeps its own");
     }
 
     @Test

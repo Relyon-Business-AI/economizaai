@@ -243,6 +243,7 @@ DELETE /api/v1/users/me                 → LGPD account deletion (cascades all 
 GET    /api/v1/users/me/export          → LGPD data export (ALL personal data: user + accountExtras + household + receipts + notificationRules + watchedMarketCnpjs + subscription + marketAliases + customCategories + categoryOverrides + manualPurchases + shoppingLists + notifications)
 PATCH  /api/v1/users/me/contribution    { "contributionOptIn": false }   ← LGPD opt-out from collaborative panel
 PATCH  /api/v1/users/me/location        { "latitude": -30.0277, "longitude": -51.2287 }
+       ← one point per HOUSEHOLD: saving sets it for every member; a member who joins gets the household's latest point
 GET    /api/v1/users/me/location/cep?cep=90010000  → { latitude, longitude, label }  ← resolve-only, não salva
        ← alternativa ao GPS (funciona na web, sem permissão): CEP → coordenada aproximada
          (BrasilAPI CEP v2; fallback geocoding). 404 quando o CEP não resolve. Para SALVAR,
@@ -1491,9 +1492,9 @@ automatically backfilled to all matching items.
 
 ```
 GET    /api/v1/markets[?scope=ALL|MINE&lat=&lng=]    → "Mercados" screen (20 km ∪ watched)
-GET    /api/v1/markets/watched                       → "Meus mercados" (= scope=MINE)
-POST   /api/v1/markets/watched/{cnpj}                → pin
-DELETE /api/v1/markets/watched/{cnpj}                → unpin
+GET    /api/v1/markets/watched                       → "Meus mercados" (= scope=MINE) — the HOUSEHOLD's list
+POST   /api/v1/markets/watched/{cnpj}                → pin (for the whole household)
+DELETE /api/v1/markets/watched/{cnpj}                → unpin (for the whole household, whoever pinned it)
 PUT    /api/v1/markets/{cnpj}/name                   { "name": "Zaffari de casa" } → set a household-only custom name
 DELETE /api/v1/markets/{cnpj}/name                   → revert to the global name
 GET    /api/v1/markets/{cnpj}/prices[?query=&category=&days=30&sort=RECENT|CHEAPEST|NAME&page=0&size=30]
@@ -2361,9 +2362,13 @@ User-curated price-drop rules. A rule fires when **any** household's confirmed r
 ```
 POST   /api/v1/alerts          → 201 PriceAlertResponse
        { "productId": "<uuid>", "thresholdPrice": 5.99, "radiusKm"?: 5, "active"?: true }
-GET    /api/v1/alerts          → 200 List<PriceAlertResponse> (newest first)
-DELETE /api/v1/alerts/{id}     → 204 (404 if not the caller's)
+GET    /api/v1/alerts          → 200 List<PriceAlertResponse> (most recently changed first)
+DELETE /api/v1/alerts/{id}     → 204 (404 if not the caller's household's)
 ```
+
+Alerts belong to the **household**: every member sees, edits and deletes them (one per product — a `POST` on a
+product that already has one updates it, whoever created it), and when one fires **every member** is notified
+(each member's own notice options still decide what reaches them).
 
 `PriceAlertResponse`: `{ id, productId, productName, friendlyDescription, thresholdPrice, radiusKm, active, lastFiredAt, createdAt }` — `friendlyDescription` is the household's rename of the product (null when never renamed), prefer it for display.
 
@@ -2622,7 +2627,7 @@ gating service.
 
 | Capability | FREE | PRO | Enforcement |
 | --- | --- | --- | --- |
-| Watched markets (`POST /markets/watched/{cnpj}`) | 3 pins | unlimited | New pin over the cap → **402**. Unpin / re-pin existing is always fine. |
+| Watched markets (`POST /markets/watched/{cnpj}`) | 3 pins | unlimited | New pin over the cap → **402**. Unpin / re-pin existing is always fine. The count is the household's list; the plan checked is the one of the member pinning. |
 | Receipt uploads (`POST /receipts`) — `RECEIPT_UPLOAD_UNLIMITED` | 3 / calendar month | unlimited | Over the cap → **402**. Counts ALL statuses of receipts the user SUBMITTED (reject/resubmit can't game it); copies created by a household split are not usage. |
 | History window (`/insights/*`, `/items`) — `HISTORY_FULL_RANGE` | last 90 days | full range | `from` older than 90d (or omitted) is silently clamped. No error — just windowed. |
 | Notification delivery — `PUSH_AND_EMAIL_DELIVERY` | in-app inbox only | inbox + push/email | FREE inbox row is always saved (`delivered=false`, `failureReason=free_tier_inbox_only`); push/email skipped. **Transactional notifications are never held back, whatever the plan:** `RECEIPT_READY` / `RECEIPT_FAILED` / `RECEIPT_RECOVERED`, `HOUSEHOLD_MEMBER_JOINED` / `HOUSEHOLD_MEMBER_LEFT`, and `SYSTEM` notices not sent by an admin campaign (account, billing, consent). |

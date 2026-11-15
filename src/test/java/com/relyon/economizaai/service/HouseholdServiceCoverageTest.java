@@ -76,6 +76,9 @@ class HouseholdServiceCoverageTest {
     @Mock
     private LocalizedMessageService messageService;
 
+    @Mock
+    private HouseholdSharedSettingsService sharedSettingsService;
+
     @InjectMocks
     private HouseholdService householdService;
 
