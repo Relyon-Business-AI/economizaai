@@ -2208,6 +2208,10 @@ POST   /api/v1/admin/notifications/campaigns/{id}/send     → 202 CampaignRespo
 POST   /api/v1/admin/notifications/campaigns/{id}/cancel   → CampaignResponse (só DRAFT/SCHEDULED)
 POST   /api/v1/admin/notifications/campaigns/{id}/test     → 202 (manda só pro admin chamador, fora das métricas)
 DELETE /api/v1/admin/notifications/campaigns/{id}          → 204 (só DRAFT/CANCELLED/FAILED)
+GET    /api/v1/admin/announcements                         → List<AdminAnnouncementResponse> (card de novidade da Home; contrato completo em §10i)
+POST   /api/v1/admin/announcements                         → 201 AdminAnnouncementResponse
+PUT    /api/v1/admin/announcements/{id}                    → AdminAnnouncementResponse (substitui tudo)
+DELETE /api/v1/admin/announcements/{id}                    → 204
 GET    /api/v1/admin/notifications/campaigns/{id}/metrics  → CampaignMetricsResponse (funil + engajamento + conversão)
 GET    /api/v1/admin/notifications/settings                → List<NotificationSettingResponse> (notificações de sistema: enabled/agenda/templates + defaults)
 PUT    /api/v1/admin/notifications/settings/{job}          → NotificationSettingResponse (job ∈ WEEKLY_DIGEST|MONTHLY_DIGEST|DEALS_DIGEST|BUDGET_ALERT|REPLENISHMENT; efeito imediato)
@@ -2502,6 +2506,90 @@ GET /api/v1/price-index/sponsored-promos → List<SponsoredPromoResponse> {promo
   `/price-index/promos` orgânico DE PROPÓSITO: promo anunciada por lojista pagante
   nunca entra no ranking orgânico. FE renderiza SEMPRE com selo "Patrocinado";
   `verified` = cupons reais confirmam o preço.
+
+---
+
+## 10i. Announcements (the news / tip / notice card on Home)
+
+The owners occasionally publish one announcement. The app shows it as a card on Home until the user dismisses it or
+it ends. Any authenticated user.
+
+```
+GET  /api/v1/announcements/current          → 200 AnnouncementResponse, or 204 (no body) when there is nothing to show
+POST /api/v1/announcements/{id}/dismissal   → 204
+```
+
+```json
+{
+  "id": "uuid",
+  "kind": "NEWS",
+  "title": "Novo: compare mercados",
+  "body": "Veja onde a sua lista sai mais barata.",
+  "actionLabel": "Ver mercados",
+  "destination": "MARKETS"
+}
+```
+
+- `kind`: `NEWS` | `TIP` | `NOTICE`. `title` is always present (up to 80 chars); `body` (up to 160) may be `null`.
+- `actionLabel` (up to 30 chars) and `destination` come **together or both `null`**. No action = a card with no button.
+- `destination` is the screen the button opens: `MARKETS`, `DEALS`, `SHOPPING_LIST`, `FORECAST`, `CATEGORIES`,
+  `PRICE_ALERTS`, `NOTIFICATION_SETTINGS`, `HOUSEHOLD`, `PREMIUM`, `SCANNER`. Treat an unknown value as "no button"
+  (new destinations may be added).
+- **Which one comes back:** switched on, already started, not ended, and not dismissed by this user. When several
+  qualify, the one that started first — so the next one shows up after the current one is dismissed. The answer is
+  per user, not per household.
+- **Dismissal is idempotent:** dismissing twice (or from two devices at once) is still `204`. It works for any
+  existing announcement, even one that already ended. Unknown id → `404` with a localized `message`.
+
+**Admin side** (`ROLE_ADMIN`, FE admin dashboard only):
+
+```
+GET    /api/v1/admin/announcements        → List<AdminAnnouncementResponse>, newest createdAt first (not paginated)
+POST   /api/v1/admin/announcements        → 201 AdminAnnouncementResponse
+PUT    /api/v1/admin/announcements/{id}   → 200 AdminAnnouncementResponse (full replace)
+DELETE /api/v1/admin/announcements/{id}   → 204 (its dismissals go with it)
+```
+
+Request body (create and update):
+
+```json
+{
+  "kind": "NEWS",
+  "title": "Novo: compare mercados",
+  "body": "Veja onde a sua lista sai mais barata.",
+  "actionLabel": "Ver mercados",
+  "destination": "MARKETS",
+  "startsAt": "2026-11-20T09:00:00",
+  "endsAt": "2026-11-30T18:00:00",
+  "active": true
+}
+```
+
+| field | rule |
+|---|---|
+| `kind` | required |
+| `title` | required, up to 80 chars |
+| `body` | optional, up to 160 chars |
+| `actionLabel` | optional, up to 30 chars; only together with `destination` |
+| `destination` | optional; only together with `actionLabel` |
+| `startsAt` | optional, defaults to now |
+| `endsAt` | optional (`null` = runs until switched off); must be after `startsAt` |
+| `active` | optional, defaults to `true` |
+
+Response: the same fields plus `id`, `status`, `dismissalCount` and `createdAt`.
+
+- **Date-time format:** `startsAt`, `endsAt` and `createdAt` are **Brasília local time, ISO-8601 without offset**
+  (`"2026-11-20T09:00:00"`), in requests and responses. Don't send a `Z` or an offset. `createdAt` may carry
+  fractional seconds.
+- `status` is computed at read time: `INACTIVE` (`active=false`, whatever the dates), `ENDED` (`endsAt` reached),
+  `SCHEDULED` (starts in the future), `LIVE` (showing now).
+- `dismissalCount`: how many users dismissed it.
+- **PUT replaces every field**: an omitted optional field goes back to its default (`body`/action/`endsAt` → `null`,
+  `active` → `true`, `startsAt` → now). Send the full object.
+- Blank `body` / `actionLabel` are stored as `null`; texts are trimmed.
+- Errors (`400`, localized `message`): `actionLabel` without `destination` or the reverse; `endsAt` not after
+  `startsAt`; missing/oversized fields or an unknown `kind`/`destination` (generic validation message, per-field
+  detail in `errors` when available). Unknown id on PUT/DELETE → `404`. Non-admin → `403`.
 
 ---
 

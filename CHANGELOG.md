@@ -1,5 +1,26 @@
 # economizai — what's new
 
+## 2026-11-15 — Novidades no app: card na tela Início (`/announcements`)
+
+Os donos publicam, de vez em quando, uma novidade, uma dica ou um aviso. O app mostra como um card na tela Início
+até a pessoa dispensar ou o prazo acabar. Hoje não há nenhuma publicada, então nada aparece.
+
+- **`GET /announcements/current`** → `200` com `{ id, kind, title, body, actionLabel, destination }` ou **`204` sem
+  corpo** quando não há nada para mostrar. `kind` é `NEWS`, `TIP` ou `NOTICE`. `body` pode vir `null`.
+  `actionLabel` e `destination` vêm juntos ou os dois `null` (card sem botão).
+- **`destination`** (tela que o botão abre): `MARKETS`, `DEALS`, `SHOPPING_LIST`, `FORECAST`, `CATEGORIES`,
+  `PRICE_ALERTS`, `NOTIFICATION_SETTINGS`, `HOUSEHOLD`, `PREMIUM`, `SCANNER`.
+- **`POST /announcements/{id}/dismissal`** → `204`. Pode repetir sem erro. Id que não existe → `404` com mensagem
+  localizada. Depois de dispensar, o `current` passa a devolver a próxima (a que começou primeiro) ou `204`.
+  A dispensa é por pessoa, não por casa.
+- **Admin** (`ROLE_ADMIN`): `GET /admin/announcements` (mais nova primeiro, com `status` `SCHEDULED`, `LIVE`, `ENDED`
+  ou `INACTIVE` e `dismissalCount`), `POST` (`201`), `PUT /{id}` (substitui todos os campos) e `DELETE /{id}` (`204`).
+  Corpo: `kind` e `title` (até 80) obrigatórios; `body` (até 160), `actionLabel` (até 30), `destination`, `startsAt`
+  (padrão agora), `endsAt` e `active` (padrão `true`) opcionais. `400` localizado se vier botão sem destino (ou o
+  contrário) ou se `endsAt` não for depois de `startsAt`.
+- **Datas** (`startsAt`, `endsAt`, `createdAt`): horário de Brasília, ISO sem offset (`"2026-11-20T09:00:00"`).
+- Contrato completo no `API.md` (§10i). Migration `V185`.
+
 ## 2026-11-15 — Da casa, não de cada pessoa: mercados marcados, alertas de preço, aviso de orçamento e localização
 
 Nenhum endpoint ou formato mudou; mudou **de quem é o dado**. O app não precisa de alteração.
