@@ -25,8 +25,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
@@ -249,6 +252,8 @@ class InfosimplesServiceTest {
                 () -> service.fetchParsed(CHAVE, UnidadeFederativa.MS));
         // Final per-nota outcome → user message says "não adianta tentar".
         assertEquals("infosimples.not-found", thrown.getArguments()[0]);
+        // A nota que não existe no portal NÃO é falha de infra → o dono não deve ser alertado.
+        verify(alertService, never()).alertConsultFailure(anyString(), anyInt(), any());
     }
 
     @Test
