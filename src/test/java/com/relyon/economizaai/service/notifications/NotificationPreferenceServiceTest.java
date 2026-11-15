@@ -125,10 +125,10 @@ class NotificationPreferenceServiceTest {
     }
 
     @Test
-    void listReadsEmailForAnAccountNoticeWithPushOffBecauseItsEmailIsLocked() {
+    void listReadsNoneForAnAccountNoticeWithPushOffAndEmailNeverSwitchedOn() {
         stored(NotificationNotice.ACCOUNT, NotificationChannel.PUSH, false);
 
-        assertEquals(NotificationChannel.EMAIL, channelOf(preferenceService.list(user()), NotificationType.SYSTEM));
+        assertEquals(NotificationChannel.NONE, channelOf(preferenceService.list(user()), NotificationType.SYSTEM));
     }
 
     @Test
@@ -214,15 +214,15 @@ class NotificationPreferenceServiceTest {
     }
 
     @Test
-    void legacyNoneWriteOnTheAccountNoticeOnlyTurnsPushOffTheEmailStaysLocked() {
+    void legacyNoneWriteOnTheAccountNoticeTurnsPushAndEmailOff() {
         var principal = user();
         storedVersionOf(principal);
 
         var result = preferenceService.update(principal, legacyWrite(NotificationType.SYSTEM, NotificationChannel.NONE));
 
         assertFalse(isOn(principal, NotificationNotice.ACCOUNT, NotificationChannel.PUSH));
-        assertTrue(isOn(principal, NotificationNotice.ACCOUNT, NotificationChannel.EMAIL));
-        assertEquals(NotificationChannel.EMAIL, channelOf(result, NotificationType.SYSTEM));
+        assertFalse(isOn(principal, NotificationNotice.ACCOUNT, NotificationChannel.EMAIL));
+        assertEquals(NotificationChannel.NONE, channelOf(result, NotificationType.SYSTEM));
     }
 
     @Test

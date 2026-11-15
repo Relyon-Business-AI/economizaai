@@ -1331,7 +1331,7 @@
 								"notification-settings"
 							]
 						},
-						"description": "Notification settings screen: every notice with the channels that exist for it, each one switched on/off independently. WHATSAPP options (and whatsApp.available=true) only appear for ADMIN accounts while the Twilio WhatsApp sender is configured. ACCOUNT/EMAIL is locked on."
+						"description": "Notification settings screen: every notice with the channels that exist for it, each one switched on/off independently. WHATSAPP options (and whatsApp.available=true) only appear for ADMIN accounts while the Twilio WhatsApp sender is configured. Defaults: every PUSH on, every EMAIL and WHATSAPP off (ACCOUNT/EMAIL included)."
 					},
 					"response": []
 				},
@@ -1366,7 +1366,7 @@
 							"mode": "raw",
 							"raw": "{\n  \"options\": [\n    { \"key\": \"PRICE_ALERTS\", \"channel\": \"EMAIL\", \"enabled\": true }\n  ],\n  \"digestFrequency\": \"WEEKLY\"\n}"
 						},
-						"description": "Partial update: only the options sent change; digestFrequency is DAILY or WEEKLY. Returns the full settings. 400: locked option off, channel not offered by the notice, WHATSAPP when not available, unknown key/channel, invalid digestFrequency. 409: WHATSAPP on before connecting WhatsApp."
+						"description": "Partial update: only the options sent change; digestFrequency is DAILY or WEEKLY. Returns the full settings. 400: channel not offered by the notice, WHATSAPP when not available, unknown key/channel, invalid digestFrequency. 409: WHATSAPP on before connecting WhatsApp."
 					},
 					"response": []
 				},
@@ -10164,7 +10164,7 @@
 									"pm.test('Has e-mail and digest frequency', function () { pm.expect(settings.email).to.be.a('string'); pm.expect(['DAILY','WEEKLY']).to.include(settings.digestFrequency); });",
 									"pm.test('Lists the seven notices in order', function () { pm.expect(settings.notices.map(function (notice) { return notice.key; })).to.eql(['RECEIPT_READY','PERSONAL_OFFERS','STOCKOUT','PRICE_ALERTS','DEALS_DIGEST','WEEKLY_REPORT','ACCOUNT']); });",
 									"pm.test('WhatsApp unavailable for a regular account', function () { pm.expect(settings.whatsApp.available).to.eql(false); pm.expect(JSON.stringify(settings.notices)).to.not.include('WHATSAPP'); });",
-									"pm.test('ACCOUNT e-mail is locked on', function () { var account = settings.notices[6]; var email = account.options.filter(function (option) { return option.channel === 'EMAIL'; })[0]; pm.expect(email.enabled).to.eql(true); pm.expect(email.locked).to.eql(true); });"
+									"pm.test('ACCOUNT e-mail starts off', function () { var account = settings.notices[6]; var email = account.options.filter(function (option) { return option.channel === 'EMAIL'; })[0]; pm.expect(email.enabled).to.eql(false); });"
 								]
 							}
 						}
@@ -10219,7 +10219,7 @@
 					]
 				},
 				{
-					"name": "27g. Notification settings reject switching the locked ACCOUNT e-mail off",
+					"name": "27g. Notification settings reject a channel the notice does not have",
 					"request": {
 						"method": "PATCH",
 						"header": [
@@ -10247,7 +10247,7 @@
 						},
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"options\": [\n    { \"key\": \"ACCOUNT\", \"channel\": \"EMAIL\", \"enabled\": false }\n  ]\n}"
+							"raw": "{\n  \"options\": [\n    { \"key\": \"STOCKOUT\", \"channel\": \"EMAIL\", \"enabled\": true }\n  ]\n}"
 						}
 					},
 					"response": [],

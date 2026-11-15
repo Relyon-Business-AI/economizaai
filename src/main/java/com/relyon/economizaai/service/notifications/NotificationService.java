@@ -109,7 +109,7 @@ public class NotificationService {
 
     /** Resolve channels and build the (unsaved) row for a payload, or null when muted. */
     private Plan planDelivery(NotificationPayload payload) {
-        var resolution = channelResolver.resolve(payload.user(), payload.type(), payload.campaignId() != null);
+        var resolution = channelResolver.resolve(payload.user(), payload.type());
         if (resolution.muted()) {
             log.debug("notification.skipped user={} type={} reason=muted",
                     LogMasker.email(payload.user().getEmail()), payload.type());
@@ -262,9 +262,7 @@ public class NotificationService {
     void dispatchHeldBack(Notification heldBack) {
         var payload = new NotificationPayload(heldBack.getUser(), heldBack.getType(), heldBack.getTitle(),
                 heldBack.getBody(), deserialize(heldBack.getPayload()), heldBack.getCampaignId());
-        var outbound = channelResolver
-                .resolve(heldBack.getUser(), heldBack.getType(), heldBack.getCampaignId() != null)
-                .outbound();
+        var outbound = channelResolver.resolve(heldBack.getUser(), heldBack.getType()).outbound();
         heldBack.setDispatchDeferred(false);
         if (outbound.isEmpty()) {
             notificationRepository.save(heldBack);

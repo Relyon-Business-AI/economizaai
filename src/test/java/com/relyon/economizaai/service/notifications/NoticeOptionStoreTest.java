@@ -62,7 +62,8 @@ class NoticeOptionStoreTest {
         assertFalse(options.isEnabled(NotificationNotice.DEALS_DIGEST, NotificationChannel.WHATSAPP));
         assertFalse(options.isEnabled(NotificationNotice.WEEKLY_REPORT, NotificationChannel.EMAIL));
         assertFalse(options.isEnabled(NotificationNotice.WEEKLY_REPORT, NotificationChannel.WHATSAPP));
-        assertTrue(options.isEnabled(NotificationNotice.ACCOUNT, NotificationChannel.EMAIL));
+        assertTrue(options.isEnabled(NotificationNotice.ACCOUNT, NotificationChannel.PUSH));
+        assertFalse(options.isEnabled(NotificationNotice.ACCOUNT, NotificationChannel.EMAIL));
         assertFalse(options.isConfigured(NotificationNotice.DEALS_DIGEST));
     }
 
@@ -91,10 +92,10 @@ class NoticeOptionStoreTest {
     }
 
     @Test
-    void lockedAccountEmailIsOnWhateverIsStored() {
+    void accountEmailFollowsWhatIsStored() {
         var user = user();
         when(optionRepository.findAllByUserId(user.getId())).thenReturn(List.of(
-                option(NotificationNotice.ACCOUNT, NotificationChannel.EMAIL, false)));
+                option(NotificationNotice.ACCOUNT, NotificationChannel.EMAIL, true)));
 
         assertTrue(store.optionsOf(user).isEnabled(NotificationNotice.ACCOUNT, NotificationChannel.EMAIL));
     }
@@ -137,10 +138,9 @@ class NoticeOptionStoreTest {
     }
 
     @Test
-    void saveOptionIgnoresALockedOptionAndAChannelNotOffered() {
+    void saveOptionIgnoresAChannelNotOffered() {
         var user = user();
 
-        store.saveOption(user, NotificationNotice.ACCOUNT, NotificationChannel.EMAIL, false);
         store.saveOption(user, NotificationNotice.STOCKOUT, NotificationChannel.WHATSAPP, true);
 
         verify(optionRepository, never()).save(any());
@@ -157,15 +157,16 @@ class NoticeOptionStoreTest {
     }
 
     @Test
-    void saveAllOptionsOffSwitchesEveryChannelOffButKeepsTheLockedOne() {
+    void saveAllOptionsOffSwitchesEveryChannelOff() {
         var user = user();
 
         store.saveAllOptionsOff(user, NotificationNotice.ACCOUNT);
 
         var saved = ArgumentCaptor.forClass(NotificationNoticeOption.class);
-        verify(optionRepository, times(1)).save(saved.capture());
-        assertEquals(NotificationChannel.PUSH, saved.getValue().getChannel());
-        assertFalse(saved.getValue().isEnabled());
+        verify(optionRepository, times(2)).save(saved.capture());
+        assertEquals(List.of(NotificationChannel.PUSH, NotificationChannel.EMAIL),
+                saved.getAllValues().stream().map(NotificationNoticeOption::getChannel).toList());
+        assertTrue(saved.getAllValues().stream().noneMatch(NotificationNoticeOption::isEnabled));
     }
 
     // ---- digest frequency kept in step with the DEALS_DIGEST options ----

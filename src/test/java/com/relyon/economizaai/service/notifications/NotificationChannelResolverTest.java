@@ -73,7 +73,7 @@ class NotificationChannelResolverTest {
 
     @Test
     void neverConfiguredNoticeGoesOutOnPushOnly() {
-        var resolution = resolver.resolve(userWithPushToken().build(), NotificationType.PRICE_DROP, false);
+        var resolution = resolver.resolve(userWithPushToken().build(), NotificationType.PRICE_DROP);
 
         assertFalse(resolution.muted());
         assertEquals(Set.of(NotificationChannel.PUSH), resolution.outbound());
@@ -81,7 +81,7 @@ class NotificationChannelResolverTest {
 
     @Test
     void neverConfiguredNoticeWithoutPushTokenStillFallsBackToEmail() {
-        var resolution = resolver.resolve(userWithoutPushToken().build(), NotificationType.PROMO_PERSONAL, false);
+        var resolution = resolver.resolve(userWithoutPushToken().build(), NotificationType.PROMO_PERSONAL);
 
         assertEquals(Set.of(NotificationChannel.EMAIL), resolution.outbound());
     }
@@ -91,7 +91,7 @@ class NotificationChannelResolverTest {
         stored(NotificationNotice.PERSONAL_OFFERS,
                 option(NotificationNotice.PERSONAL_OFFERS, NotificationChannel.PUSH, true));
 
-        var resolution = resolver.resolve(userWithoutPushToken().build(), NotificationType.PROMO_PERSONAL, false);
+        var resolution = resolver.resolve(userWithoutPushToken().build(), NotificationType.PROMO_PERSONAL);
 
         assertEquals(Set.of(NotificationChannel.PUSH), resolution.outbound());
     }
@@ -102,9 +102,9 @@ class NotificationChannelResolverTest {
                 option(NotificationNotice.RECEIPT_READY, NotificationChannel.PUSH, false));
         var user = userWithPushToken().build();
 
-        assertTrue(resolver.resolve(user, NotificationType.RECEIPT_READY, false).muted());
-        assertTrue(resolver.resolve(user, NotificationType.RECEIPT_FAILED, false).muted());
-        assertTrue(resolver.resolve(user, NotificationType.RECEIPT_RECOVERED, false).muted());
+        assertTrue(resolver.resolve(user, NotificationType.RECEIPT_READY).muted());
+        assertTrue(resolver.resolve(user, NotificationType.RECEIPT_FAILED).muted());
+        assertTrue(resolver.resolve(user, NotificationType.RECEIPT_RECOVERED).muted());
     }
 
     // ---- per notice, per channel ----
@@ -114,7 +114,7 @@ class NotificationChannelResolverTest {
         stored(NotificationNotice.PRICE_ALERTS,
                 option(NotificationNotice.PRICE_ALERTS, NotificationChannel.EMAIL, true));
 
-        var resolution = resolver.resolve(userWithPushToken().build(), NotificationType.PRICE_DROP, false);
+        var resolution = resolver.resolve(userWithPushToken().build(), NotificationType.PRICE_DROP);
 
         assertEquals(Set.of(NotificationChannel.PUSH, NotificationChannel.EMAIL), resolution.outbound());
     }
@@ -125,7 +125,7 @@ class NotificationChannelResolverTest {
                 option(NotificationNotice.DEALS_DIGEST, NotificationChannel.PUSH, false),
                 option(NotificationNotice.DEALS_DIGEST, NotificationChannel.EMAIL, true));
 
-        var resolution = resolver.resolve(userWithPushToken().build(), NotificationType.DEALS_DIGEST, false);
+        var resolution = resolver.resolve(userWithPushToken().build(), NotificationType.DEALS_DIGEST);
 
         assertEquals(Set.of(NotificationChannel.EMAIL), resolution.outbound());
     }
@@ -134,7 +134,7 @@ class NotificationChannelResolverTest {
     void noticeWithNothingOnIsMuted() {
         stored(NotificationNotice.STOCKOUT, option(NotificationNotice.STOCKOUT, NotificationChannel.PUSH, false));
 
-        var resolution = resolver.resolve(userWithPushToken().build(), NotificationType.STOCKOUT, false);
+        var resolution = resolver.resolve(userWithPushToken().build(), NotificationType.STOCKOUT);
 
         assertTrue(resolution.muted());
         assertTrue(resolution.outbound().isEmpty());
@@ -144,42 +144,43 @@ class NotificationChannelResolverTest {
     void aChannelTheNoticeDoesNotOfferIsNeverUsedEvenIfStored() {
         stored(NotificationNotice.STOCKOUT, option(NotificationNotice.STOCKOUT, NotificationChannel.EMAIL, true));
 
-        var resolution = resolver.resolve(userWithPushToken().build(), NotificationType.STOCKOUT, false);
+        var resolution = resolver.resolve(userWithPushToken().build(), NotificationType.STOCKOUT);
 
         assertEquals(Set.of(NotificationChannel.PUSH), resolution.outbound());
     }
 
-    // ---- locked ACCOUNT e-mail ----
+    // ---- ACCOUNT e-mail: an option like the others, off until switched on ----
 
     @Test
-    void accountNoticeAlwaysGoesByEmail() {
-        var resolution = resolver.resolve(userWithPushToken().build(), NotificationType.SYSTEM, false);
+    void neverConfiguredAccountNoticeGoesOutOnPushOnly() {
+        var resolution = resolver.resolve(userWithPushToken().build(), NotificationType.SYSTEM);
+
+        assertEquals(Set.of(NotificationChannel.PUSH), resolution.outbound());
+    }
+
+    @Test
+    void accountNoticeGoesByEmailTooOnceSwitchedOn() {
+        stored(NotificationNotice.ACCOUNT, option(NotificationNotice.ACCOUNT, NotificationChannel.EMAIL, true));
+
+        var resolution = resolver.resolve(userWithPushToken().build(), NotificationType.SYSTEM);
 
         assertEquals(Set.of(NotificationChannel.PUSH, NotificationChannel.EMAIL), resolution.outbound());
     }
 
     @Test
-    void accountEmailStaysOnEvenWhenStoredOffAndPushIsOff() {
+    void accountNoticeWithEveryOptionOffIsMuted() {
         stored(NotificationNotice.ACCOUNT,
                 option(NotificationNotice.ACCOUNT, NotificationChannel.PUSH, false),
                 option(NotificationNotice.ACCOUNT, NotificationChannel.EMAIL, false));
 
-        var resolution = resolver.resolve(userWithPushToken().build(), NotificationType.SYSTEM, false);
+        var resolution = resolver.resolve(userWithPushToken().build(), NotificationType.SYSTEM);
 
-        assertFalse(resolution.muted());
-        assertEquals(Set.of(NotificationChannel.EMAIL), resolution.outbound());
+        assertTrue(resolution.muted());
     }
 
     @Test
-    void campaignNeverRidesTheLockedAccountEmail() {
-        var resolution = resolver.resolve(userWithPushToken().build(), NotificationType.SYSTEM, true);
-
-        assertEquals(Set.of(NotificationChannel.PUSH), resolution.outbound());
-    }
-
-    @Test
-    void campaignToAnUnconfiguredUserWithoutPushTokenKeepsTheEmailFallback() {
-        var resolution = resolver.resolve(userWithoutPushToken().build(), NotificationType.SYSTEM, true);
+    void neverConfiguredAccountNoticeWithoutPushTokenKeepsTheEmailFallback() {
+        var resolution = resolver.resolve(userWithoutPushToken().build(), NotificationType.SYSTEM);
 
         assertEquals(Set.of(NotificationChannel.EMAIL), resolution.outbound());
     }
@@ -192,7 +193,7 @@ class NotificationChannelResolverTest {
         stored(NotificationNotice.PRICE_ALERTS,
                 option(NotificationNotice.PRICE_ALERTS, NotificationChannel.WHATSAPP, true));
 
-        var resolution = resolver.resolve(connectedAdmin(), NotificationType.PRICE_DROP, false);
+        var resolution = resolver.resolve(connectedAdmin(), NotificationType.PRICE_DROP);
 
         assertEquals(Set.of(NotificationChannel.PUSH, NotificationChannel.WHATSAPP), resolution.outbound());
     }
@@ -204,7 +205,7 @@ class NotificationChannelResolverTest {
                 option(NotificationNotice.PRICE_ALERTS, NotificationChannel.WHATSAPP, true));
         var optedInRegularUser = userWithPushToken().whatsAppOptIn(true).whatsAppNumber("+5551999990000").build();
 
-        var resolution = resolver.resolve(optedInRegularUser, NotificationType.PRICE_DROP, false);
+        var resolution = resolver.resolve(optedInRegularUser, NotificationType.PRICE_DROP);
 
         assertEquals(Set.of(NotificationChannel.PUSH), resolution.outbound());
     }
@@ -215,7 +216,7 @@ class NotificationChannelResolverTest {
         stored(NotificationNotice.PRICE_ALERTS,
                 option(NotificationNotice.PRICE_ALERTS, NotificationChannel.WHATSAPP, true));
 
-        var resolution = resolver.resolve(connectedAdmin(), NotificationType.PRICE_DROP, false);
+        var resolution = resolver.resolve(connectedAdmin(), NotificationType.PRICE_DROP);
 
         assertEquals(Set.of(NotificationChannel.PUSH), resolution.outbound());
     }
@@ -227,7 +228,7 @@ class NotificationChannelResolverTest {
                 option(NotificationNotice.PRICE_ALERTS, NotificationChannel.WHATSAPP, true));
         var adminWithoutOptIn = userWithPushToken().role(Role.ADMIN).build();
 
-        var resolution = resolver.resolve(adminWithoutOptIn, NotificationType.PRICE_DROP, false);
+        var resolution = resolver.resolve(adminWithoutOptIn, NotificationType.PRICE_DROP);
 
         assertEquals(Set.of(NotificationChannel.PUSH), resolution.outbound());
     }
@@ -236,7 +237,7 @@ class NotificationChannelResolverTest {
 
     @Test
     void weeklyReportIsMutedByDefault() {
-        assertTrue(resolver.resolve(userWithPushToken().build(), NotificationType.WEEKLY_REPORT, false).muted());
+        assertTrue(resolver.resolve(userWithPushToken().build(), NotificationType.WEEKLY_REPORT).muted());
     }
 
     @Test
@@ -244,7 +245,7 @@ class NotificationChannelResolverTest {
         stored(NotificationNotice.WEEKLY_REPORT,
                 option(NotificationNotice.WEEKLY_REPORT, NotificationChannel.EMAIL, true));
 
-        var resolution = resolver.resolve(userWithPushToken().build(), NotificationType.WEEKLY_REPORT, false);
+        var resolution = resolver.resolve(userWithPushToken().build(), NotificationType.WEEKLY_REPORT);
 
         assertEquals(Set.of(NotificationChannel.EMAIL), resolution.outbound());
     }
@@ -255,7 +256,7 @@ class NotificationChannelResolverTest {
         var admin = connectedAdmin();
         admin.setWhatsAppWeeklyReportEnabled(true);
 
-        var resolution = resolver.resolve(admin, NotificationType.WEEKLY_REPORT, false);
+        var resolution = resolver.resolve(admin, NotificationType.WEEKLY_REPORT);
 
         assertEquals(Set.of(NotificationChannel.WHATSAPP), resolution.outbound());
     }
@@ -266,7 +267,7 @@ class NotificationChannelResolverTest {
         var regularUser = userWithPushToken().whatsAppOptIn(true).whatsAppNumber("+5551999990000").build();
         regularUser.setWhatsAppWeeklyReportEnabled(true);
 
-        assertTrue(resolver.resolve(regularUser, NotificationType.WEEKLY_REPORT, false).muted());
+        assertTrue(resolver.resolve(regularUser, NotificationType.WEEKLY_REPORT).muted());
     }
 
     // ---- types outside the notice model keep their per-type rows ----
@@ -274,9 +275,9 @@ class NotificationChannelResolverTest {
     @Test
     void typeOutsideTheNoticeModelDefaultsToPushWithTokenElseEmail() {
         assertEquals(Set.of(NotificationChannel.PUSH), resolver
-                .resolve(userWithPushToken().build(), NotificationType.HOUSEHOLD_MEMBER_JOINED, false).outbound());
+                .resolve(userWithPushToken().build(), NotificationType.HOUSEHOLD_MEMBER_JOINED).outbound());
         assertEquals(Set.of(NotificationChannel.EMAIL), resolver
-                .resolve(userWithoutPushToken().build(), NotificationType.DIGEST, false).outbound());
+                .resolve(userWithoutPushToken().build(), NotificationType.DIGEST).outbound());
     }
 
     @Test
@@ -291,8 +292,8 @@ class NotificationChannelResolverTest {
                         NotificationPreference.builder().type(NotificationType.HOUSEHOLD_MEMBER_LEFT)
                                 .channel(NotificationChannel.EMAIL).build()));
 
-        assertTrue(resolver.resolve(user, NotificationType.DIGEST, false).muted());
+        assertTrue(resolver.resolve(user, NotificationType.DIGEST).muted());
         assertEquals(Set.of(NotificationChannel.EMAIL),
-                resolver.resolve(user, NotificationType.HOUSEHOLD_MEMBER_LEFT, false).outbound());
+                resolver.resolve(user, NotificationType.HOUSEHOLD_MEMBER_LEFT).outbound());
     }
 }

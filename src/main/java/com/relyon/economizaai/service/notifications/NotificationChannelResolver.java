@@ -17,12 +17,9 @@ import java.util.Set;
  * with none on it is muted (no inbox row, no dispatch). The few types outside the notice
  * model keep the per-type channel rows ({@code notification_preferences}) they always had.
  *
- * <p>Two rules from before the notice model are kept as they were:
- * <ul>
- *   <li>a user who never configured the notice and has no push token gets it by e-mail
- *       instead of the push that cannot reach them;</li>
- *   <li>an admin campaign never rides the locked account e-mail.</li>
- * </ul>
+ * <p>One rule from before the notice model is kept as it was: a user who never configured
+ * the notice and has no push token gets it by e-mail instead of the push that cannot reach
+ * them.
  */
 @Component
 @RequiredArgsConstructor
@@ -47,14 +44,13 @@ public class NotificationChannelResolver {
         }
     }
 
-    /** @param fromCampaign sent by an admin campaign */
-    public Resolution resolve(User user, NotificationType type, boolean fromCampaign) {
+    public Resolution resolve(User user, NotificationType type) {
         return NotificationNotice.of(type)
-                .map(notice -> resolveNotice(user, notice, fromCampaign))
+                .map(notice -> resolveNotice(user, notice))
                 .orElseGet(() -> resolveTypeOutsideTheNoticeModel(user, type));
     }
 
-    private Resolution resolveNotice(User user, NotificationNotice notice, boolean fromCampaign) {
+    private Resolution resolveNotice(User user, NotificationNotice notice) {
         var options = optionStore.optionsOf(user, notice);
         var switchedOn = EnumSet.noneOf(NotificationChannel.class);
         notice.channels().stream()
@@ -63,9 +59,6 @@ public class NotificationChannelResolver {
                 .forEach(switchedOn::add);
         if (switchedOn.isEmpty()) return Resolution.silenced();
 
-        if (fromCampaign && notice.isLocked(NotificationChannel.EMAIL)) {
-            switchedOn.remove(NotificationChannel.EMAIL);
-        }
         var pushCannotReachAnUnconfiguredUser = switchedOn.contains(NotificationChannel.PUSH)
                 && !hasPushToken(user) && !options.isConfigured(notice);
         if (pushCannotReachAnUnconfiguredUser) {

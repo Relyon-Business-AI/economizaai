@@ -39,22 +39,12 @@ class NotificationNoticeTest {
     }
 
     @Test
-    void onlyTheAccountEmailIsLocked() {
+    void defaultsArePushOnEmailAndWhatsAppOff() {
         for (var notice : NotificationNotice.values()) {
             for (var channel : NotificationChannel.values()) {
-                var expectedLocked = notice == NotificationNotice.ACCOUNT && channel == NotificationChannel.EMAIL;
-                assertEquals(expectedLocked, notice.isLocked(channel), notice + "/" + channel);
+                assertEquals(channel == NotificationChannel.PUSH, notice.isOnByDefault(channel), notice + "/" + channel);
             }
         }
-    }
-
-    @Test
-    void defaultsArePushOnEmailAndWhatsAppOffExceptTheLockedEmail() {
-        assertTrue(NotificationNotice.PRICE_ALERTS.isOnByDefault(NotificationChannel.PUSH));
-        assertFalse(NotificationNotice.PRICE_ALERTS.isOnByDefault(NotificationChannel.EMAIL));
-        assertFalse(NotificationNotice.PRICE_ALERTS.isOnByDefault(NotificationChannel.WHATSAPP));
-        assertFalse(NotificationNotice.WEEKLY_REPORT.isOnByDefault(NotificationChannel.EMAIL));
-        assertTrue(NotificationNotice.ACCOUNT.isOnByDefault(NotificationChannel.EMAIL));
     }
 
     @Test

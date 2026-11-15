@@ -34,6 +34,5 @@ public record NotificationSettingsResponse(
 
     public record Notice(NotificationNotice key, List<Option> options) {}
 
-    /** {@code locked}: always on, cannot be switched off. */
-    public record Option(NotificationChannel channel, boolean enabled, boolean locked) {}
+    public record Option(NotificationChannel channel, boolean enabled) {}
 }
