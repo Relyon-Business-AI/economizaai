@@ -257,6 +257,20 @@ class InfosimplesServiceTest {
     }
 
     @Test
+    void fetchParsed_persistentOriginErrorCode620_treatedAsDeterministic() {
+        // 620 "o portal de origem emitiu um erro que provavelmente não mudará em breve para esta
+        // consulta" é determinístico por nota: não conta pro breaker, não alerta o dono e o
+        // usuário é avisado que é final (retentar não resolve).
+        server.expect(requestTo(BASE_URL + "/api/v2/consultas/sefaz/ms/nfce?token=test-key&nfce=" + CHAVE))
+                .andRespond(withSuccess("{\"code\":620,\"code_message\":\"O site de origem emitiu um erro\",\"data\":[]}", MediaType.APPLICATION_JSON));
+
+        var thrown = assertThrows(InfosimplesNoDataException.class,
+                () -> service.fetchParsed(CHAVE, UnidadeFederativa.MS));
+        assertEquals("infosimples.not-found", thrown.getArguments()[0]);
+        verify(alertService, never()).alertConsultFailure(anyString(), anyInt(), any());
+    }
+
+    @Test
     void fetchParsed_transientCode_doesNotUseNoDataSubtype() {
         // 609 "tentativas de consulta falharam" e instabilidade do provedor - deve continuar
         // contando pro breaker (excecao generica, nao o subtipo deterministico).

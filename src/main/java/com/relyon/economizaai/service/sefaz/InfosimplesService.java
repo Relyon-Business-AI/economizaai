@@ -65,8 +65,10 @@ public class InfosimplesService {
 
     // Respostas determinísticas por nota (não são saúde do provedor): 602 serviço errado na URL,
     // 607 parâmetro inválido (chave corrompida), 612 consulta não retornou dados (nota fora da
-    // retenção do portal / nunca transmitida). Não contam pro circuit breaker.
-    private static final Set<Integer> DETERMINISTIC_NO_DATA_CODES = Set.of(602, 607, 612);
+    // retenção do portal / nunca transmitida), 620 o portal de origem devolveu um erro que
+    // "provavelmente não mudará em breve para esta consulta" (nota que o portal rejeita de forma
+    // persistente). Não contam pro circuit breaker nem alertam o dono — retentar não resolve.
+    private static final Set<Integer> DETERMINISTIC_NO_DATA_CODES = Set.of(602, 607, 612, 620);
 
     // Rota NFC-e autoritativa por UF, conferida contra api.infosimples.com/consultas/status
     // (2026-10-27). A maioria das UFs expõe .../sefaz/{uf}/nfce; algumas NÃO têm o slug
