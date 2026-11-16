@@ -34,6 +34,24 @@ public interface NotificationEventRepository extends JpaRepository<NotificationE
     SavingsRollup sumConvertedSavings(@Param("userIds") Collection<UUID> userIds,
                                       @Param("since") OffsetDateTime since);
 
+    /**
+     * The {@code CONVERTED} events (purchases that came out cheaper after the app showed the
+     * price) of a household's users in a window. {@code since} null means no lower bound.
+     */
+    @Query("""
+        SELECT event
+        FROM NotificationEvent event
+        WHERE event.user.id IN :userIds
+          AND event.eventType = 'CONVERTED'
+          AND event.savingsAmount IS NOT NULL
+          AND event.productId IS NOT NULL
+          AND (CAST(:since AS java.time.OffsetDateTime) IS NULL OR event.occurredAt >= :since)
+          AND event.occurredAt <= :until
+    """)
+    List<NotificationEvent> findConvertedBetween(@Param("userIds") Collection<UUID> userIds,
+                                                 @Param("since") OffsetDateTime since,
+                                                 @Param("until") OffsetDateTime until);
+
     /** Projection for {@link #sumConvertedSavings}. */
     interface SavingsRollup {
         BigDecimal getTotalSavings();
