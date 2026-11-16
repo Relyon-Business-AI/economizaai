@@ -2,6 +2,9 @@ package com.relyon.economizaai.controller;
 
 import com.relyon.economizaai.dto.response.DealResponse;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.PriceExposureSurface;
+import com.relyon.economizaai.service.exposure.PriceExposureService;
+import com.relyon.economizaai.service.exposure.ShownPrice;
 import com.relyon.economizaai.service.priceindex.DealsService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -20,9 +23,9 @@ import java.util.List;
  * authenticated user's household. Built on the collaborative price index and
  * fully k-anonymity guarded (no sub-K community price is ever disclosed).
  *
- * <p>Read-only: this endpoint emits no telemetry. The app reports
- * SCREEN_OPENED on open and DEAL_VIEWED / DEAL_TAPPED on interaction itself,
- * via {@code POST /api/v1/notifications/events}.
+ * <p>The app reports SCREEN_OPENED on open and DEAL_VIEWED / DEAL_TAPPED on
+ * interaction itself, via {@code POST /api/v1/notifications/events}. The prices
+ * served here are also logged as shown ({@link PriceExposureService}).
  */
 @RestController
 @RequestMapping("/api/v1/deals")
@@ -31,6 +34,7 @@ import java.util.List;
 public class DealsController {
 
     private final DealsService dealsService;
+    private final PriceExposureService priceExposureService;
 
     @GetMapping
     public ResponseEntity<List<DealResponse>> deals(
@@ -40,6 +44,8 @@ public class DealsController {
             @RequestParam(defaultValue = "20") int limit,
             @RequestParam(required = false) BigDecimal lat,
             @RequestParam(required = false) BigDecimal lng) {
-        return ResponseEntity.ok(dealsService.findDeals(user, includeNearby, radiusKm, limit, lat, lng));
+        var deals = dealsService.findDeals(user, includeNearby, radiusKm, limit, lat, lng);
+        priceExposureService.recordShown(user, PriceExposureSurface.DEALS, ShownPrice.ofDeals(deals));
+        return ResponseEntity.ok(deals);
     }
 }

@@ -11,6 +11,7 @@ import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.LocalizedMessageService;
+import com.relyon.economizaai.service.exposure.PriceExposureService;
 import com.relyon.economizaai.service.geo.ViewerLocationService;
 import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import com.relyon.economizaai.service.geo.WatchedMarketService;
@@ -59,6 +60,7 @@ class PriceIndexControllerTest {
     @MockitoBean private GenericComparisonService genericComparisonService;
     @MockitoBean private ScanHistoryService scanHistoryService;
     @MockitoBean private JwtService jwtService;
+    @MockitoBean private PriceExposureService priceExposureService;
     @MockitoBean private UserDetailsService userDetailsService;
     @MockitoBean private LocalizedMessageService localizedMessageService;
 

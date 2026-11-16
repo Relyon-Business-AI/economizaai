@@ -4,7 +4,10 @@ import com.relyon.economizaai.dto.request.SetMarketNameRequest;
 import com.relyon.economizaai.dto.response.MarketProductPriceResponse;
 import com.relyon.economizaai.dto.response.MarketResponse;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.PriceExposureSurface;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.service.exposure.PriceExposureService;
+import com.relyon.economizaai.service.exposure.ShownPrice;
 import com.relyon.economizaai.service.geo.MarketNameService;
 import com.relyon.economizaai.service.geo.WatchedMarketService;
 import com.relyon.economizaai.service.geo.WatchedMarketService.MarketScope;
@@ -44,6 +47,7 @@ public class MarketController {
     private final WatchedMarketService watchedMarketService;
     private final MarketNameService marketNameService;
     private final MarketPricesService marketPricesService;
+    private final PriceExposureService priceExposureService;
 
     /**
      * "Mercados" screen. {@code scope=ALL} (default) returns markets within 20 km of the
@@ -85,6 +89,7 @@ public class MarketController {
      */
     @GetMapping("/{cnpj}/prices")
     public ResponseEntity<Page<MarketProductPriceResponse>> prices(
+            @AuthenticationPrincipal User user,
             @PathVariable String cnpj,
             @RequestParam(required = false) String query,
             @RequestParam(required = false) ProductCategory category,
@@ -92,8 +97,11 @@ public class MarketController {
             @RequestParam(defaultValue = "RECENT") MarketPricesSort sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "30") int size) {
-        return ResponseEntity.ok(marketPricesService.latestPrices(cnpj,
-                new MarketPricesService.Filter(query, category, days, sort, page, size)));
+        var productPrices = marketPricesService.latestPrices(cnpj,
+                new MarketPricesService.Filter(query, category, days, sort, page, size));
+        priceExposureService.recordShown(user, PriceExposureSurface.MARKET_PRICES,
+                ShownPrice.ofMarketPrices(cnpj, productPrices.getContent()));
+        return ResponseEntity.ok(productPrices);
     }
 
     /** Set a household-only custom name for a market. */
