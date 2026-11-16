@@ -1,4 +1,7 @@
 package com.relyon.economizaai.service.notifications;
+import com.relyon.economizaai.model.enums.PriceExposureSurface;
+import com.relyon.economizaai.service.exposure.PriceExposureService;
+import com.relyon.economizaai.service.exposure.ShownPrice;
 import com.relyon.economizaai.service.LocalizedMessageService;
 
 import com.relyon.economizaai.model.MarketLocation;
@@ -66,6 +69,7 @@ public class NotificationRuleEngine {
     private final NotificationService notificationService;
     private final NearbyScopeService nearbyScopeService;
     private final UserRepository userRepository;
+    private final PriceExposureService priceExposureService;
 
     @Transactional
     public void evaluate(List<PriceObservation> observations, UUID contributingHouseholdId) {
@@ -168,7 +172,8 @@ public class NotificationRuleEngine {
                 productName, NotificationTextFormatter.amount(observation.getUnitPrice()), marketName,
                 NotificationTextFormatter.amount(rule.getThresholdPrice()));
         notificationService.notifyAfterCommit(new NotificationPayload(
-                recipient, rule.getType(), title, body, baseExtras(rule, observation)));
+                recipient, rule.getType(), title, body, baseExtras(rule, observation)));        priceExposureService.recordShownAfterCommit(recipient, PriceExposureSurface.PRICE_ALERT,
+                List.of(new ShownPrice(observation.getProduct().getId(), observation.getMarketCnpj(), observation.getUnitPrice())));
     }
 
     /** Every member of the alert owner's household (loaded once per household per evaluation). */

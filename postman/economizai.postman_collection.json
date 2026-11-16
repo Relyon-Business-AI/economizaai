@@ -3883,6 +3883,87 @@
 					"response": []
 				},
 				{
+					"name": "App savings (date range)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/insights/app-savings?from=2026-11-01T00:00:00&to=2026-11-30T23:59:59",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"insights",
+								"app-savings"
+							],
+							"query": [
+								{
+									"key": "from",
+									"value": "2026-11-01T00:00:00"
+								},
+								{
+									"key": "to",
+									"value": "2026-11-30T23:59:59"
+								}
+							]
+						},
+						"description": "Com a ajuda do app: total economizado em compras que sairam mais baratas depois de a pessoa ver o preco no app. Sem from, tudo o que ha registrado."
+					},
+					"response": []
+				},
+				{
+					"name": "App savings purchases (page)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/insights/app-savings/purchases?from=2026-11-01T00:00:00&to=2026-11-30T23:59:59&page=0&size=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"insights",
+								"app-savings",
+								"purchases"
+							],
+							"query": [
+								{
+									"key": "from",
+									"value": "2026-11-01T00:00:00"
+								},
+								{
+									"key": "to",
+									"value": "2026-11-30T23:59:59"
+								},
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "10"
+								}
+							]
+						},
+						"description": "As compras por tras do total, da maior economia para a menor (empate: maior porcentagem). Paginado."
+					},
+					"response": []
+				},
+				{
 					"name": "Price history for product",
 					"request": {
 						"method": "GET",
@@ -9730,6 +9811,92 @@
 									"    pm.expect(body.couldHaveSaved).to.be.a('number');",
 									"    pm.expect(body.comparedLineCount).to.be.at.most(body.purchasedLineCount);",
 									"    pm.expect(body.markets).to.be.an('array');",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "20d. App savings",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/insights/app-savings",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"insights",
+								"app-savings"
+							]
+						},
+						"description": "Com a ajuda do app: total economizado em compras que sairam mais baratas depois de a pessoa ver o preco no app. Sem from, tudo o que ha registrado."
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Has the app savings summary', function () {",
+									"    var body = pm.response.json();",
+									"    pm.expect(body.saved).to.be.a('number');",
+									"    pm.expect(body.purchaseCount).to.be.a('number');",
+									"    pm.expect(body.largestSaving).to.be.at.most(body.saved);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "20e. App savings purchases",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/insights/app-savings/purchases",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"insights",
+								"app-savings",
+								"purchases"
+							]
+						},
+						"description": "As compras por tras do total, da maior economia para a menor (empate: maior porcentagem). Paginado."
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Is a page of purchases', function () {",
+									"    var body = pm.response.json();",
+									"    pm.expect(body.content).to.be.an('array');",
+									"    pm.expect(body.totalElements).to.be.a('number');",
 									"});"
 								]
 							}

@@ -3,6 +3,9 @@ package com.relyon.economizaai.controller;
 import com.relyon.economizaai.dto.request.OptimizeShoppingListRequest;
 import com.relyon.economizaai.dto.response.ShoppingPlanResponse;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.PriceExposureSurface;
+import com.relyon.economizaai.service.exposure.PriceExposureService;
+import com.relyon.economizaai.service.exposure.ShownPrice;
 import com.relyon.economizaai.service.shopping.ShoppingListOptimizer;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -24,10 +27,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class ShoppingListOptimizerController {
 
     private final ShoppingListOptimizer optimizer;
+    private final PriceExposureService priceExposureService;
 
     @PostMapping("/optimize")
     public ResponseEntity<ShoppingPlanResponse> optimize(@AuthenticationPrincipal User user,
                                                          @Valid @RequestBody OptimizeShoppingListRequest request) {
-        return ResponseEntity.ok(optimizer.optimize(user, request));
+        var plan = optimizer.optimize(user, request);
+        priceExposureService.recordShown(user, PriceExposureSurface.SHOPPING_PLAN, ShownPrice.ofShoppingPlan(plan));
+        return ResponseEntity.ok(plan);
     }
 }

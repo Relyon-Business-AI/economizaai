@@ -6,6 +6,9 @@ import com.relyon.economizaai.dto.response.PromoFeedResponse;
 import com.relyon.economizaai.dto.response.ScannedProductResponse;
 import com.relyon.economizaai.dto.response.SponsoredPromoResponse;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.PriceExposureSurface;
+import com.relyon.economizaai.service.exposure.PriceExposureService;
+import com.relyon.economizaai.service.exposure.ShownPrice;
 import com.relyon.economizaai.service.geo.NearbyScopeService;
 import com.relyon.economizaai.service.geo.ViewerLocationService;
 import com.relyon.economizaai.service.geo.WatchedMarketService;
@@ -55,6 +58,7 @@ public class PriceIndexController {
     private final NearbyScopeService nearbyScopeService;
     private final GenericComparisonService genericComparisonService;
     private final ScanHistoryService scanHistoryService;
+    private final PriceExposureService priceExposureService;
 
     @GetMapping("/products/{productId}/markets/{marketCnpj}/reference")
     public ResponseEntity<PriceIndexService.ReferencePrice> reference(@PathVariable UUID productId,
@@ -117,6 +121,8 @@ public class PriceIndexController {
                     viewerLocationService.resolve(user, lat, lng), watched, sort);
         }
         recordBestMarketsConsult(user, productId, rows);
+        priceExposureService.recordShown(user, PriceExposureSurface.BEST_MARKETS,
+                ShownPrice.ofBestMarkets(productId, rows));
         return ResponseEntity.ok(rows);
     }
 
@@ -197,7 +203,9 @@ public class PriceIndexController {
             @RequestParam(required = false) Double radiusKm,
             @RequestParam(required = false) BigDecimal lat,
             @RequestParam(required = false) BigDecimal lng) {
-        return ResponseEntity.ok(communityPromoService.detectInScope(nearbyScopeService.forUser(user, radiusKm, lat, lng)));
+        var promos = communityPromoService.detectInScope(nearbyScopeService.forUser(user, radiusKm, lat, lng));
+        priceExposureService.recordShown(user, PriceExposureSurface.COMMUNITY_PROMOS, ShownPrice.ofCommunityPromos(promos));
+        return ResponseEntity.ok(promos);
     }
 
     /**
@@ -216,6 +224,7 @@ public class PriceIndexController {
         var promos = communityPromoService.detectAll(
                 location.latitude(), location.longitude(), radiusKm,
                 watchedMarketService.watchedCnpjs(user));
+        priceExposureService.recordShown(user, PriceExposureSurface.COMMUNITY_PROMOS, ShownPrice.ofCommunityPromos(promos));
         return ResponseEntity.ok(new PromoFeedResponse(location.source().name(), location.uf(),
                 nearbyScopeService.defaultRadiusKm(), promos));
     }

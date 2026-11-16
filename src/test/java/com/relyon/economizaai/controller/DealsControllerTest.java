@@ -6,6 +6,9 @@ import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.LocalizedMessageService;
+import com.relyon.economizaai.model.enums.PriceExposureSurface;
+import com.relyon.economizaai.service.exposure.PriceExposureService;
+import com.relyon.economizaai.service.exposure.ShownPrice;
 import com.relyon.economizaai.service.priceindex.DealsService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,6 +42,7 @@ class DealsControllerTest {
 
     @MockitoBean private DealsService dealsService;
     @MockitoBean private JwtService jwtService;
+    @MockitoBean private PriceExposureService priceExposureService;
     @MockitoBean private UserDetailsService userDetailsService;
     @MockitoBean private LocalizedMessageService localizedMessageService;
 
@@ -70,6 +74,21 @@ class DealsControllerTest {
                 .andExpect(jsonPath("$[0].isWatched").value(true));
 
         verify(dealsService).findDeals(eq(user), anyBoolean(), any(), anyInt(), any(), any());
+    }
+
+    @Test
+    void logsTheServedDealsAsShownPrices() throws Exception {
+        var user = principal();
+        var servedDeal = deal();
+        when(dealsService.findDeals(eq(user), anyBoolean(), any(), anyInt(), any(), any()))
+                .thenReturn(List.of(servedDeal));
+
+        mockMvc.perform(get("/api/v1/deals")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isOk());
+
+        verify(priceExposureService).recordShown(user, PriceExposureSurface.DEALS,
+                List.of(new ShownPrice(servedDeal.productId(), "12345678000199", new BigDecimal("7.00"))));
     }
 
     @Test

@@ -1,5 +1,7 @@
 package com.relyon.economizaai.controller;
 
+import com.relyon.economizaai.dto.response.AppSavingPurchaseResponse;
+import com.relyon.economizaai.dto.response.AppSavingsResponse;
 import com.relyon.economizaai.dto.response.HouseholdSavingsResponse;
 import com.relyon.economizaai.dto.response.InsightsQueryResponse;
 import com.relyon.economizaai.dto.response.MarketDiscountResponse;
@@ -15,9 +17,11 @@ import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.InsightsQueryService;
 import com.relyon.economizaai.service.InsightsQueryService.QueryFilters;
 import com.relyon.economizaai.service.InsightsService;
+import com.relyon.economizaai.service.savings.AppSavingsService;
 import com.relyon.economizaai.service.savings.HouseholdSavingsService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -43,6 +47,7 @@ public class InsightsController {
     private final CategoryResolver categoryResolver;
     private final ProductRepository productRepository;
     private final HouseholdSavingsService householdSavingsService;
+    private final AppSavingsService appSavingsService;
 
     @GetMapping("/spend")
     public ResponseEntity<SpendInsightsResponse> spend(
@@ -83,6 +88,29 @@ public class InsightsController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
         return ResponseEntity.ok(householdSavingsService.savings(user, from, to));
+    }
+
+    /**
+     * "Com a ajuda do app": total saved in purchases that came out cheaper after the app showed
+     * the price. Without {@code from}, everything on record. See {@link AppSavingsResponse}.
+     */
+    @GetMapping("/app-savings")
+    public ResponseEntity<AppSavingsResponse> appSavings(
+            @AuthenticationPrincipal User user,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
+        return ResponseEntity.ok(appSavingsService.summary(user, from, to));
+    }
+
+    /** The purchases behind {@code /app-savings}, biggest saving first (ties: biggest percentage). */
+    @GetMapping("/app-savings/purchases")
+    public ResponseEntity<Page<AppSavingPurchaseResponse>> appSavingPurchases(
+            @AuthenticationPrincipal User user,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(appSavingsService.purchases(user, from, to, page, size));
     }
 
     @GetMapping("/products/{productId}/price-history")
