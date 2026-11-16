@@ -25,6 +25,37 @@ public interface PriceObservationAuditRepository extends JpaRepository<PriceObse
     int reassignReceipt(@Param("fromReceiptId") UUID fromReceiptId, @Param("toReceiptId") UUID toReceiptId,
                         @Param("toHouseholdId") UUID toHouseholdId);
 
+    /**
+     * Household savings: every non-outlier IN_STORE price of the given products observed in the
+     * window, each with the household that contributed it. The household id never leaves the
+     * service — it is what lets the reference leave the viewer's own purchases out and apply the
+     * k-anonymity gate per product.
+     */
+    @Query("""
+        SELECT a.observation.product.id AS productId, a.observation.marketCnpj AS marketCnpj,
+               a.observation.state AS state, a.observation.unitPrice AS unitPrice,
+               a.observation.observedAt AS observedAt, a.householdId AS householdId
+        FROM PriceObservationAudit a
+        WHERE a.observation.product.id IN :productIds
+          AND a.observation.channel = 'IN_STORE'
+          AND a.observation.outlier = false
+          AND a.observation.observedAt >= :from
+          AND a.observation.observedAt <= :to
+    """)
+    List<ContributedPrice> findContributedPrices(@Param("productIds") Collection<UUID> productIds,
+                                                 @Param("from") LocalDateTime from,
+                                                 @Param("to") LocalDateTime to);
+
+    /** Projection for {@link #findContributedPrices}. */
+    interface ContributedPrice {
+        UUID getProductId();
+        String getMarketCnpj();
+        String getState();
+        BigDecimal getUnitPrice();
+        LocalDateTime getObservedAt();
+        UUID getHouseholdId();
+    }
+
     /** Community-scale gauge for onboarding: how many distinct households have ever
      * contributed a (non-outlier) observation. Drives the collaborative cold-start
      * lock — a coarse global signal, not a per-(product,market) k-anon guarantee. */

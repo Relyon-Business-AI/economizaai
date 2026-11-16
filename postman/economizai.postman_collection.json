@@ -3821,6 +3821,68 @@
 					"response": []
 				},
 				{
+					"name": "Household savings (last 90 days)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/insights/savings",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"insights",
+								"savings"
+							]
+						},
+						"description": "Quanto a casa economizou no periodo: cada item comprado contra o preco de referencia (o que outras casas pagaram perto, na mesma epoca; sem isso, o que a propria casa costuma pagar). Sem from, os ultimos 90 dias."
+					},
+					"response": []
+				},
+				{
+					"name": "Household savings (date range)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/insights/savings?from=2026-01-01T00:00:00&to=2026-12-31T23:59:59",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"insights",
+								"savings"
+							],
+							"query": [
+								{
+									"key": "from",
+									"value": "2026-01-01T00:00:00"
+								},
+								{
+									"key": "to",
+									"value": "2026-12-31T23:59:59"
+								}
+							]
+						},
+						"description": "Quanto a casa economizou no periodo: cada item comprado contra o preco de referencia (o que outras casas pagaram perto, na mesma epoca; sem isso, o que a propria casa costuma pagar). Sem from, os ultimos 90 dias."
+					},
+					"response": []
+				},
+				{
 					"name": "Price history for product",
 					"request": {
 						"method": "GET",
@@ -9625,6 +9687,50 @@
 								"exec": [
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"pm.test('Returns an array', function () { pm.expect(pm.response.json()).to.be.an('array'); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "20c. Household savings",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/insights/savings",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"insights",
+								"savings"
+							]
+						},
+						"description": "Quanto a casa economizou no periodo: cada item comprado contra o preco de referencia (o que outras casas pagaram perto, na mesma epoca; sem isso, o que a propria casa costuma pagar). Sem from, os ultimos 90 dias."
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Has the savings totals', function () {",
+									"    var body = pm.response.json();",
+									"    pm.expect(body.saved).to.be.a('number');",
+									"    pm.expect(body.couldHaveSaved).to.be.a('number');",
+									"    pm.expect(body.comparedLineCount).to.be.at.most(body.purchasedLineCount);",
+									"    pm.expect(body.markets).to.be.an('array');",
+									"});"
 								]
 							}
 						}

@@ -10,6 +10,9 @@ import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.MarketLocation;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.UserWatchedMarket;
+import com.relyon.economizaai.model.enums.MerchantSegment;
+import com.relyon.economizaai.model.enums.MerchantSupportOverride;
+import com.relyon.economizaai.dto.response.MarketResponse;
 import com.relyon.economizaai.exception.PaywallException;
 import com.relyon.economizaai.repository.MarketLocationRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
@@ -28,6 +31,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -51,6 +55,7 @@ class WatchedMarketServiceTest {
     @Mock private MarketNameService marketNameService;
     @Mock private SubscriptionGateService subscriptionGate;
     @Mock private ViewerLocationService viewerLocationService;
+    @Mock private CnpjActivityClient cnpjActivityClient;
 
     private WatchedMarketService service;
     private User user;
@@ -60,7 +65,8 @@ class WatchedMarketServiceTest {
         var properties = new CollaborativeProperties();
         properties.getCollaborative().setBestMarketsNearbyRadiusKm(10);
         service = new WatchedMarketService(watchedRepository, marketRepository, receiptRepository,
-                marketNameService, subscriptionGate, viewerLocationService, properties);
+                marketNameService, subscriptionGate, viewerLocationService, properties,
+                new MerchantSupportGate(marketRepository, cnpjActivityClient));
         // Default: PRO-equivalent unlimited cap so existing tests keep their intent.
         lenient().when(subscriptionGate.watchedMarketLimit(any())).thenReturn(Integer.MAX_VALUE);
         lenient().when(marketNameService.resolveNames(any(), any())).thenReturn(Map.of());
@@ -350,6 +356,47 @@ class WatchedMarketServiceTest {
     }
 
     @Test
+    void listMarkets_allLeavesOutNearbyMerchantsThatAreNotGroceryOrPharmacy() {
+        when(viewerLocationService.resolve(any(), isNull(), isNull())).thenReturn(new ViewerLocation(
+                new BigDecimal("-30.0500000"), new BigDecimal("-51.2200000"), Source.PROFILE, "RS"));
+        when(receiptRepository.findDistinctCnpjsByHousehold(user.getHousehold().getId())).thenReturn(List.of());
+        when(watchedRepository.findAllByUserHouseholdId(user.getHousehold().getId())).thenReturn(List.of());
+        var adminApprovedShop = market("77777777000111", "Emporio", MerchantSegment.OTHER);
+        adminApprovedShop.setSupportOverride(MerchantSupportOverride.SUPPORTED);
+        when(marketRepository.findAll()).thenReturn(List.of(
+                market("11111111000111", "Supermercado", MerchantSegment.SUPERMARKET),
+                market("22222222000111", "Farmacia", MerchantSegment.PHARMACY),
+                market("33333333000111", "Padaria", MerchantSegment.FOOD_RETAIL),
+                market("44444444000111", "Restaurante", MerchantSegment.FOOD_SERVICE),
+                market("55555555000111", "Joalheria", MerchantSegment.OTHER),
+                market("66666666000111", "Sem classificacao", MerchantSegment.UNKNOWN),
+                adminApprovedShop));
+
+        var listedCnpjs = service.listMarkets(user, MarketScope.ALL, null, null).stream()
+                .map(MarketResponse::cnpj)
+                .collect(Collectors.toSet());
+
+        assertEquals(Set.of("11111111000111", "22222222000111", "33333333000111", "77777777000111"), listedCnpjs);
+    }
+
+    @Test
+    void listMarkets_allKeepsWatchedMerchantThatIsNotGroceryOrPharmacy() {
+        when(viewerLocationService.resolve(any(), isNull(), isNull())).thenReturn(new ViewerLocation(
+                new BigDecimal("-30.0500000"), new BigDecimal("-51.2200000"), Source.PROFILE, "RS"));
+        when(receiptRepository.findDistinctCnpjsByHousehold(user.getHousehold().getId())).thenReturn(List.of());
+        when(watchedRepository.findAllByUserHouseholdId(user.getHousehold().getId())).thenReturn(List.of(
+                UserWatchedMarket.builder().marketCnpj("44444444000111").build()));
+        var watchedRestaurant = market("44444444000111", "Restaurante", MerchantSegment.FOOD_SERVICE);
+        when(marketRepository.findAllByCnpjIn(any())).thenReturn(List.of(watchedRestaurant));
+        when(marketRepository.findAll()).thenReturn(List.of(watchedRestaurant));
+
+        var rows = service.listMarkets(user, MarketScope.ALL, null, null);
+
+        assertEquals(1, rows.size());
+        assertTrue(rows.get(0).watching());
+    }
+
+    @Test
     void listMarkets_allUnlocatedViewerGetsOnlyWatched() {
         when(viewerLocationService.resolve(any(), isNull(), isNull()))
                 .thenReturn(new ViewerLocation(null, null, Source.NONE, "RS"));
@@ -408,8 +455,12 @@ class WatchedMarketServiceTest {
     }
 
     private MarketLocation market(String cnpj, String name) {
+        return market(cnpj, name, MerchantSegment.SUPERMARKET);
+    }
+
+    private MarketLocation market(String cnpj, String name, MerchantSegment segment) {
         return MarketLocation.builder()
-                .cnpj(cnpj).cnpjRoot(cnpj.substring(0, 8)).name(name)
+                .cnpj(cnpj).cnpjRoot(cnpj.substring(0, 8)).name(name).segment(segment)
                 .latitude(new BigDecimal("-30.0500000")).longitude(new BigDecimal("-51.2200000"))
                 .build();
     }
