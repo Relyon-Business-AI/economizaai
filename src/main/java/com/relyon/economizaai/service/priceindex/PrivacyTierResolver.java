@@ -54,7 +54,8 @@ public class PrivacyTierResolver {
                 .orElse(true);
     }
 
-    private boolean isSensitiveProduct(Product product) {
+    /** Same rule for a product already loaded (batch reads). */
+    public boolean isSensitiveProduct(Product product) {
         var groupSlug = categoryResolver.slugForId(categoryResolver.groupIdOf(product.getCategoryId()));
         if (groupSlug != null) {
             return properties.getCollaborative().getSensitiveCategoryGroups().contains(groupSlug);

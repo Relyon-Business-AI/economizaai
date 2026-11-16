@@ -303,6 +303,26 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
     """)
     List<ReceiptItem> findConfirmedHistoryForHousehold(@Param("householdId") UUID householdId);
 
+    /**
+     * Savings: every non-excluded line (matched to a product or not) of the household's confirmed
+     * in-store receipts issued in the window. Unmatched lines are needed too — a receipt-level
+     * discount is shared across all of the receipt's lines.
+     */
+    @Query("""
+        SELECT ri FROM ReceiptItem ri
+        JOIN FETCH ri.receipt r
+        LEFT JOIN FETCH ri.product
+        WHERE r.household.id = :householdId
+          AND r.status = 'CONFIRMED'
+          AND r.channel = 'IN_STORE'
+          AND r.issuedAt >= :from
+          AND r.issuedAt <= :to
+          AND ri.excluded = false
+    """)
+    List<ReceiptItem> findConfirmedInStoreLinesForHousehold(@Param("householdId") UUID householdId,
+                                                            @Param("from") LocalDateTime from,
+                                                            @Param("to") LocalDateTime to);
+
     @Query("SELECT ri FROM ReceiptItem ri WHERE ri.receipt.id = :receiptId AND ri.product IS NULL AND ri.excluded = false")
     List<ReceiptItem> findUnmatchedByReceiptId(@Param("receiptId") UUID receiptId);
 

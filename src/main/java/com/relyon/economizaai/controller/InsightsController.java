@@ -1,5 +1,6 @@
 package com.relyon.economizaai.controller;
 
+import com.relyon.economizaai.dto.response.HouseholdSavingsResponse;
 import com.relyon.economizaai.dto.response.InsightsQueryResponse;
 import com.relyon.economizaai.dto.response.MarketDiscountResponse;
 import com.relyon.economizaai.dto.response.PriceHistoryResponse;
@@ -14,6 +15,7 @@ import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.InsightsQueryService;
 import com.relyon.economizaai.service.InsightsQueryService.QueryFilters;
 import com.relyon.economizaai.service.InsightsService;
+import com.relyon.economizaai.service.savings.HouseholdSavingsService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -40,6 +42,7 @@ public class InsightsController {
     private final InsightsQueryService insightsQueryService;
     private final CategoryResolver categoryResolver;
     private final ProductRepository productRepository;
+    private final HouseholdSavingsService householdSavingsService;
 
     @GetMapping("/spend")
     public ResponseEntity<SpendInsightsResponse> spend(
@@ -68,6 +71,18 @@ public class InsightsController {
             @RequestParam(defaultValue = "5") int limit,
             @RequestParam(defaultValue = "ALL") MarketScope scope) {
         return ResponseEntity.ok(insightsService.topMarketsByDiscount(user, from, to, limit, scope));
+    }
+
+    /**
+     * How much the household saved in the period: each line bought against its reference price.
+     * Without {@code from}, the last 90 days. See {@link HouseholdSavingsResponse}.
+     */
+    @GetMapping("/savings")
+    public ResponseEntity<HouseholdSavingsResponse> savings(
+            @AuthenticationPrincipal User user,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
+        return ResponseEntity.ok(householdSavingsService.savings(user, from, to));
     }
 
     @GetMapping("/products/{productId}/price-history")

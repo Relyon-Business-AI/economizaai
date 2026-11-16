@@ -1193,6 +1193,7 @@ Returns:
 ```
 GET /api/v1/insights/markets/top?limit=5
 GET /api/v1/insights/markets/top-discounts?from=&to=&limit=5
+GET /api/v1/insights/savings?from=&to=
 GET /api/v1/insights/products/{productId}/price-history?from=&to=
 ```
 
@@ -1201,6 +1202,44 @@ GET /api/v1/insights/products/{productId}/price-history?from=&to=
 > lens `CATEGORY` do `/insights/query`.
 
 `markets/top-discounts` ranks the household's markets by **discount received** (biggest first), excluding markets that gave none. Each row: `{ cnpj, marketName, marketFriendlyName, grossTotal, discount, discountRate, receiptCount }` — `discount` in R$, `discountRate` = `discount / grossTotal` (0–1 fraction, format as %). Personal to your household, so it works even without community volume.
+
+#### Economia da casa — `GET /api/v1/insights/savings?from=&to=` (2026-11-16)
+
+Quanto a casa economizou no período. Sem `from`, os últimos 90 dias; no plano grátis o início
+respeita a janela de histórico. **Ainda sem tela** — o contrato existe para a tela vir depois.
+
+```json
+{
+  "from": "2026-08-18T10:00:00", "to": "2026-11-16T10:00:00",
+  "saved": 42.10, "couldHaveSaved": 7.30, "comparedSpend": 380.00,
+  "purchasedLineCount": 60, "comparedLineCount": 14,
+  "regionComparedLineCount": 9, "householdComparedLineCount": 5,
+  "markets": [
+    { "cnpj": "…", "marketName": "…", "marketFriendlyName": "Zaffari",
+      "saved": 30.00, "couldHaveSaved": 2.00, "comparedSpend": 210.00, "comparedLineCount": 8 }
+  ]
+}
+```
+
+Cada item comprado (nota confirmada, compra em loja, com produto identificado) é comparado com um
+**preço de referência** do mesmo produto:
+
+1. **Região** — a mediana do que *outras* casas pagaram pelo produto perto da casa (raio do "perto
+   de você"; sem localização, o estado), 30 dias antes ou depois da compra. Precisa de pelo menos
+   3 preços e passa pelo k-anonimato por faixa (mercearia 1 casa; saúde, farmácia e loja sem
+   classificação 3 casas).
+2. **Própria casa** — sem isso, a mediana do que a casa pagou pelo produto nos 90 dias anteriores
+   (pelo menos 2 compras).
+3. **Sem referência** — o item fica fora. Nunca se inventa número.
+
+- O **preço pago** já desconta: o preço promocional digitado na revisão ou, na falta dele, a parte
+  do item no desconto da nota. O desconto da nota não é somado por cima.
+- `saved` soma só o que ficou **abaixo** da referência. `couldHaveSaved` soma, à parte, o que ficou
+  **acima**. Um não abate o outro.
+- Preço mais de 3× acima ou abaixo da referência é produto ou unidade trocada: o item fica fora.
+- `comparedLineCount` de `purchasedLineCount` diz quanto do período os números cobrem — mostre junto
+  (ex.: "comparamos 14 de 60 itens"). `comparedSpend` é o gasto desses itens.
+- `markets`: os mesmos números por mercado, maior `saved` primeiro. Não há preço de referência por item.
 
 `price-history`'s top level carries `productName` **and `friendlyDescription`**
 (the household's rename, null when never renamed — prefer it for the chart
