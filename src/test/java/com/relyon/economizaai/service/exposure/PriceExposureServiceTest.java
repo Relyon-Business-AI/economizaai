@@ -15,6 +15,8 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -132,6 +134,34 @@ class PriceExposureServiceTest {
                 List.of(new ShownPrice(UUID.randomUUID(), MARKET_CNPJ, new BigDecimal("5.00"))));
 
         verifyNoInteractions(priceExposureRepository);
+    }
+
+    @Test
+    void afterCommitVariant_outsideATransaction_savesRightAway() {
+        var productId = UUID.randomUUID();
+
+        priceExposureService.recordShownAfterCommit(user, PriceExposureSurface.PRICE_ALERT,
+                List.of(new ShownPrice(productId, MARKET_CNPJ, new BigDecimal("6.90"))));
+
+        verify(priceExposureRepository).saveAll(savedExposures.capture());
+        assertEquals(PriceExposureSurface.PRICE_ALERT, savedExposures.getValue().get(0).getSurface());
+        assertEquals(productId, savedExposures.getValue().get(0).getProductId());
+    }
+
+    @Test
+    void afterCommitVariant_insideATransaction_savesOnlyWhenItCommits() {
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            priceExposureService.recordShownAfterCommit(user, PriceExposureSurface.PRICE_ALERT,
+                    List.of(new ShownPrice(UUID.randomUUID(), MARKET_CNPJ, new BigDecimal("6.90"))));
+            verifyNoInteractions(priceExposureRepository);
+
+            TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+
+        verify(priceExposureRepository).saveAll(any());
     }
 
     @Test

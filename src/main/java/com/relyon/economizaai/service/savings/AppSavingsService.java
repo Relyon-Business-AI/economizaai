@@ -5,7 +5,6 @@ import com.relyon.economizaai.dto.response.AppSavingsResponse;
 import com.relyon.economizaai.model.MarketLocation;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.User;
-import com.relyon.economizaai.model.enums.AppSavingSource;
 import com.relyon.economizaai.repository.NotificationEventRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.UserRepository;
@@ -113,12 +112,11 @@ public class AppSavingsService {
         var storesByCnpj = marketLocationService.findByCnpjs(marketCnpjs);
         var nameOverrides = marketNameService.resolveNames(householdId, marketCnpjs);
         var chainNames = marketNameService.resolveChainNames(marketCnpjs);
-        var sourceLabel = messageService.translate("savings.source." + AppSavingSource.DEALS.name());
 
         return cheaperPurchases.stream()
                 .map(cheaperPurchase -> toResponse(cheaperPurchase,
                         productNameOf(cheaperPurchase.productId(), householdProductNames, catalogProductNames),
-                        storesByCnpj.get(cheaperPurchase.marketCnpj()), nameOverrides, chainNames, sourceLabel))
+                        storesByCnpj.get(cheaperPurchase.marketCnpj()), nameOverrides, chainNames))
                 .toList();
     }
 
@@ -129,8 +127,7 @@ public class AppSavingsService {
     }
 
     private AppSavingPurchaseResponse toResponse(CheaperPurchase cheaperPurchase, String productName, MarketLocation store,
-                                                 Map<String, String> nameOverrides, Map<String, String> chainNames,
-                                                 String sourceLabel) {
+                                                 Map<String, String> nameOverrides, Map<String, String> chainNames) {
         var marketName = store != null ? store.getName() : null;
         return new AppSavingPurchaseResponse(
                 cheaperPurchase.eventId(),
@@ -139,8 +136,8 @@ public class AppSavingsService {
                 cheaperPurchase.marketCnpj(),
                 marketName,
                 marketNameService.friendlyName(nameOverrides, chainNames, cheaperPurchase.marketCnpj(), marketName),
-                AppSavingSource.DEALS,
-                sourceLabel,
+                cheaperPurchase.source(),
+                messageService.translate("savings.source." + cheaperPurchase.source().name()),
                 cheaperPurchase.paidPrice(),
                 cheaperPurchase.previousPrice(),
                 cheaperPurchase.saved(),

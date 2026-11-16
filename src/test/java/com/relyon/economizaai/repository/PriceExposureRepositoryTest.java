@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.Month;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -31,6 +32,35 @@ class PriceExposureRepositoryTest {
                 .surface(surface).subscriptionTier(SubscriptionTier.FREE)
                 .shownOn(shownOn).shownAt(OffsetDateTime.now())
                 .build();
+    }
+
+    @Test
+    void attributable_areTheHouseholdsUnconvertedExposuresOfThatProductAndMarketInTheWindowNewestFirst() {
+        var householdId = UUID.randomUUID();
+        var productId = UUID.randomUUID();
+        var purchaseInstant = OffsetDateTime.now();
+        var older = priceExposureRepository.save(attributableExposure(householdId, productId, purchaseInstant.minusDays(5)));
+        var newer = priceExposureRepository.save(attributableExposure(householdId, productId, purchaseInstant.minusDays(1)));
+        priceExposureRepository.save(attributableExposure(householdId, productId, purchaseInstant.minusDays(30)));
+        priceExposureRepository.save(attributableExposure(householdId, productId, purchaseInstant.plusDays(1)));
+        priceExposureRepository.save(attributableExposure(UUID.randomUUID(), productId, purchaseInstant.minusDays(1)));
+        priceExposureRepository.save(attributableExposure(householdId, UUID.randomUUID(), purchaseInstant.minusDays(1)));
+        var alreadyConverted = attributableExposure(householdId, productId, purchaseInstant.minusDays(2));
+        alreadyConverted.setConvertedAt(purchaseInstant.minusDays(1));
+        priceExposureRepository.save(alreadyConverted);
+
+        var found = priceExposureRepository.findAttributable(householdId, productId, "12345678000199",
+                purchaseInstant.minusDays(14), purchaseInstant);
+
+        assertEquals(List.of(newer.getId(), older.getId()), found.stream().map(PriceExposure::getId).toList());
+    }
+
+    private PriceExposure attributableExposure(UUID householdId, UUID productId, OffsetDateTime shownAt) {
+        var exposure = exposure(UUID.randomUUID(), PriceExposureSurface.BEST_MARKETS, shownAt.toLocalDate());
+        exposure.setHouseholdId(householdId);
+        exposure.setProductId(productId);
+        exposure.setShownAt(shownAt);
+        return exposure;
     }
 
     @Test

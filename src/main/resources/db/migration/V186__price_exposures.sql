@@ -11,7 +11,9 @@ CREATE TABLE price_exposures (
     surface           VARCHAR(30) NOT NULL,
     subscription_tier VARCHAR(20) NOT NULL,
     shown_on          DATE NOT NULL,
-    shown_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+    shown_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    -- Preenchido quando uma compra posterior foi atribuida a esta exibicao (no maximo uma vez).
+    converted_at      TIMESTAMP WITH TIME ZONE
 );
 
 CREATE INDEX idx_price_exposures_household_product ON price_exposures (household_id, product_id, shown_at);

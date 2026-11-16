@@ -1230,7 +1230,12 @@ economia para a menor; no empate, a maior porcentagem**. `size` máximo 50.
 
 - `paidPrice` e `previousPrice` são preços **unitários**; `saved` é a diferença vezes a quantidade.
 - `percent` é quanto o unitário ficou mais barato (0 a 100). Os três podem vir `null` em registro antigo.
-- `source` é a chave de onde o preço foi visto e `sourceLabel` o texto pronto. Hoje só existe `DEALS`.
+- `source` é a chave de onde o preço foi visto e `sourceLabel` o texto pronto: `DEALS` ("visto em Ofertas"),
+  `PRICE_ALERT` ("aviso de preço"), `BEST_MARKETS` ("visto em Melhores mercados"), `COMMUNITY_PROMOS`,
+  `SHOPPING_PLAN`, `MARKET_PRICES`.
+- **Regra:** o app mostrou o preço daquele produto naquele mercado até 14 dias antes, a casa comprou ali e pagou
+  menos que na compra anterior. Fora das ofertas, o crédito nunca passa da vantagem mostrada (preço mostrado igual
+  ou acima do que a casa já pagava não conta) e cada exibição conta uma vez.
 - O período filtra pelo momento em que a compra foi registrada (confirmação da nota).
 - `productId` vem para a linha poder abrir o produto.
 

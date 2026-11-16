@@ -11,5 +11,7 @@ public enum PriceExposureSurface {
     /** Shopping list split across markets. */
     SHOPPING_PLAN,
     /** Prices of one market (market screen). */
-    MARKET_PRICES
+    MARKET_PRICES,
+    /** A price alert the household set fired for this price. */
+    PRICE_ALERT
 }

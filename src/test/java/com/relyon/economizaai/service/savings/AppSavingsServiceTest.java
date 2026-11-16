@@ -82,6 +82,7 @@ class AppSavingsServiceTest {
         when(marketNameService.resolveChainNames(anyCollection())).thenReturn(Map.of());
         when(marketNameService.friendlyName(any(), any(), eq(MARKET_CNPJ), eq("MERCADO X LTDA"))).thenReturn("Mercado X");
         when(messageService.translate("savings.source.DEALS")).thenReturn("visto em Ofertas");
+        when(messageService.translate("savings.source.PRICE_ALERT")).thenReturn("aviso de preço");
     }
 
     private NotificationEvent converted(String saved, String paidUnitPrice, String previousLastPaid, String discountFraction) {
@@ -180,6 +181,18 @@ class AppSavingsServiceTest {
         assertThat(purchase.saved()).isEqualByComparingTo("7.20");
         assertThat(purchase.percent()).isEqualByComparingTo("16.7");
         assertThat(purchase.recordedAt()).isEqualTo(LocalDateTime.of(2026, Month.NOVEMBER, 10, 18, 30));
+    }
+
+    @Test
+    void purchases_sayWhereThePriceWasSeenWhenTheEventRecordedIt() {
+        var alertPurchase = converted("7.20", "17.90", "21.50", "0.1674");
+        alertPurchase.setMetadata(alertPurchase.getMetadata().replace("}", ",\"source\":\"PRICE_ALERT\"}"));
+        householdConverted(alertPurchase);
+
+        var purchase = service.purchases(user, FROM, TO, 0, 10).getContent().get(0);
+
+        assertThat(purchase.source()).isEqualTo(AppSavingSource.PRICE_ALERT);
+        assertThat(purchase.sourceLabel()).isEqualTo("aviso de preço");
     }
 
     @Test

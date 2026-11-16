@@ -3,12 +3,15 @@ package com.relyon.economizaai.service.notifications;
 import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.model.DealSurfaceState;
 import com.relyon.economizaai.model.Household;
+import com.relyon.economizaai.model.PriceExposure;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.NotificationEventType;
+import com.relyon.economizaai.model.enums.PriceExposureSurface;
 import com.relyon.economizaai.repository.DealSurfaceStateRepository;
+import com.relyon.economizaai.repository.PriceExposureRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.notifications.NotificationEventService.RecordContext;
@@ -45,6 +48,7 @@ class SavingsAttributionServiceTest {
     private static final String CNPJ = "12345678000190";
 
     @Mock private DealSurfaceStateRepository surfaceStateRepository;
+    @Mock private PriceExposureRepository priceExposureRepository;
     @Mock private ReceiptItemRepository receiptItemRepository;
     @Mock private UserRepository userRepository;
     @Mock private NotificationEventService eventService;
@@ -223,6 +227,108 @@ class SavingsAttributionServiceTest {
 
         verify(surfaceStateRepository, never()).findAttributable(any(), any(), any(), any(), any());
         verify(eventService, never()).record(any(), any(), any());
+    }
+
+    @Test
+    void priceShownOnAnotherScreen_isCreditedWithItsSource() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("2"));
+        var exposure = shownPrice(PriceExposureSurface.BEST_MARKETS, new BigDecimal("8.00"));
+        when(priceExposureRepository.findAttributable(any(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of(exposure));
+        when(receiptItemRepository.findHouseholdHistoryForProduct(eq(PRODUCT_ID), any()))
+                .thenReturn(List.of(priorPurchase(new BigDecimal("10.00"), LocalDateTime.now().minusDays(20))));
+
+        service.attribute(receipt);
+
+        var contextCaptor = ArgumentCaptor.forClass(RecordContext.class);
+        verify(eventService).record(eq(buyer), eq(NotificationEventType.CONVERTED), contextCaptor.capture());
+        assertEquals(0, contextCaptor.getValue().savingsAmount().compareTo(new BigDecimal("4.00")));
+        assertEquals("BEST_MARKETS", contextCaptor.getValue().metadata().get("source"));
+        verify(priceExposureRepository).save(exposure);
+        assertNotNull(exposure.getConvertedAt());
+    }
+
+    @Test
+    void priceAlert_isCreditedAsAPriceAlert() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        when(priceExposureRepository.findAttributable(any(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of(shownPrice(PriceExposureSurface.PRICE_ALERT, new BigDecimal("8.00"))));
+        when(receiptItemRepository.findHouseholdHistoryForProduct(eq(PRODUCT_ID), any()))
+                .thenReturn(List.of(priorPurchase(new BigDecimal("10.00"), LocalDateTime.now().minusDays(20))));
+
+        service.attribute(receipt);
+
+        var contextCaptor = ArgumentCaptor.forClass(RecordContext.class);
+        verify(eventService).record(eq(buyer), eq(NotificationEventType.CONVERTED), contextCaptor.capture());
+        assertEquals("PRICE_ALERT", contextCaptor.getValue().metadata().get("source"));
+    }
+
+    @Test
+    void shownPrice_creditNeverExceedsTheAdvantageTheAppShowed() {
+        // Paid 7.00, but the app had shown 9.00 against a previous 10.00: the credit is 1.00 a unit.
+        var receipt = receiptWithItem(new BigDecimal("7.00"), new BigDecimal("3"));
+        when(priceExposureRepository.findAttributable(any(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of(shownPrice(PriceExposureSurface.DEALS, new BigDecimal("9.00"))));
+        when(receiptItemRepository.findHouseholdHistoryForProduct(eq(PRODUCT_ID), any()))
+                .thenReturn(List.of(priorPurchase(new BigDecimal("10.00"), LocalDateTime.now().minusDays(20))));
+
+        service.attribute(receipt);
+
+        var contextCaptor = ArgumentCaptor.forClass(RecordContext.class);
+        verify(eventService).record(eq(buyer), eq(NotificationEventType.CONVERTED), contextCaptor.capture());
+        assertEquals(0, contextCaptor.getValue().savingsAmount().compareTo(new BigDecimal("3.00")));
+    }
+
+    @Test
+    void shownPrice_notBelowWhatTheHouseholdAlreadyPaid_recordsNothing() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        var exposure = shownPrice(PriceExposureSurface.MARKET_PRICES, new BigDecimal("10.00"));
+        when(priceExposureRepository.findAttributable(any(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of(exposure));
+        when(receiptItemRepository.findHouseholdHistoryForProduct(eq(PRODUCT_ID), any()))
+                .thenReturn(List.of(priorPurchase(new BigDecimal("10.00"), LocalDateTime.now().minusDays(20))));
+
+        service.attribute(receipt);
+
+        verify(eventService, never()).record(any(), any(), any());
+        verify(priceExposureRepository, never()).save(any());
+    }
+
+    @Test
+    void shownPrice_withoutAPreviousPurchase_recordsNothing() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        when(priceExposureRepository.findAttributable(any(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of(shownPrice(PriceExposureSurface.BEST_MARKETS, new BigDecimal("8.00"))));
+        when(receiptItemRepository.findHouseholdHistoryForProduct(eq(PRODUCT_ID), any()))
+                .thenReturn(List.of());
+
+        service.attribute(receipt);
+
+        verify(eventService, never()).record(any(), any(), any());
+    }
+
+    @Test
+    void surfacedDeal_winsOverAShownPriceAndLeavesTheExposureUntouched() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        when(surfaceStateRepository.findAttributable(anyList(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of(surfaceRow(OffsetDateTime.now().minusDays(2), new BigDecimal("10.00"))));
+        when(receiptItemRepository.findHouseholdHistoryForProduct(eq(PRODUCT_ID), any()))
+                .thenReturn(List.of(priorPurchase(new BigDecimal("10.00"), LocalDateTime.now().minusDays(20))));
+
+        service.attribute(receipt);
+
+        var contextCaptor = ArgumentCaptor.forClass(RecordContext.class);
+        verify(eventService, times(1)).record(eq(buyer), eq(NotificationEventType.CONVERTED), contextCaptor.capture());
+        assertEquals("DEALS", contextCaptor.getValue().metadata().get("source"));
+        verify(priceExposureRepository, never()).findAttributable(any(), any(), any(), any(), any());
+    }
+
+    private PriceExposure shownPrice(PriceExposureSurface surface, BigDecimal unitPrice) {
+        return PriceExposure.builder()
+                .id(UUID.randomUUID()).userId(buyer.getId()).householdId(buyer.getHousehold().getId())
+                .productId(PRODUCT_ID).marketCnpj(CNPJ).unitPrice(unitPrice).surface(surface)
+                .shownAt(OffsetDateTime.now().minusDays(2))
+                .build();
     }
 
     private Receipt receiptWithItem(BigDecimal paidUnitPrice, BigDecimal quantity) {

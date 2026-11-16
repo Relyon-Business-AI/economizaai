@@ -68,4 +68,8 @@ public class PriceExposure {
 
     @Column(name = "shown_at", nullable = false)
     private OffsetDateTime shownAt;
+
+    /** When a later purchase was attributed to this exposure; null until then, set at most once. */
+    @Column(name = "converted_at")
+    private OffsetDateTime convertedAt;
 }

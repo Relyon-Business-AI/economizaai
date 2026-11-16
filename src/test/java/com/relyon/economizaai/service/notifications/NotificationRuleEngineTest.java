@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.notifications;
 import org.mockito.Spy;
 import org.springframework.context.support.ResourceBundleMessageSource;
+import com.relyon.economizaai.service.exposure.PriceExposureService;
 import com.relyon.economizaai.service.LocalizedMessageService;
 
 import com.relyon.economizaai.model.Household;
@@ -10,6 +11,7 @@ import com.relyon.economizaai.model.PriceObservation;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.NotificationType;
+import com.relyon.economizaai.model.enums.PriceExposureSurface;
 import com.relyon.economizaai.repository.NotificationRuleRepository;
 import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.geo.MarketLocationService;
@@ -37,6 +39,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -52,6 +55,7 @@ class NotificationRuleEngineTest {
     @Mock private NotificationService notificationService;
     @Mock private NearbyScopeService nearbyScopeService;
     @Mock private UserRepository userRepository;
+    @Mock private PriceExposureService priceExposureService;
     private final List<User> ownerHouseholdMembers = new ArrayList<>();
     private static LocalizedMessageService realMessageService() {
         var source = new ResourceBundleMessageSource();
@@ -139,6 +143,9 @@ class NotificationRuleEngineTest {
         // localized to the recipient's default (pt) locale
         assertTrue(captor.getValue().title().startsWith("Preço baixou:"), captor.getValue().title());
         verify(ruleRepository).saveAll(any());
+        // The alerted price is logged as shown, so a later cheaper purchase can be credited to the alert.
+        verify(priceExposureService).recordShownAfterCommit(eq(captor.getValue().user()),
+                eq(PriceExposureSurface.PRICE_ALERT), any());
     }
 
     @Test

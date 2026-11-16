@@ -3,6 +3,7 @@ package com.relyon.economizaai.service.savings;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.relyon.economizaai.model.NotificationEvent;
+import com.relyon.economizaai.model.enums.AppSavingSource;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -13,9 +14,10 @@ import java.util.UUID;
 /**
  * A purchase attributed to the app, read from a {@code CONVERTED} telemetry event: the amount
  * saved comes from the event's own column, the unit prices and the discount from its metadata.
- * Prices and percent are null when an old event carries no readable metadata.
+ * Prices and percent are null when an old event carries no readable metadata; an event written
+ * before sources were recorded came from a surfaced deal.
  */
-record CheaperPurchase(UUID eventId, UUID productId, String marketCnpj, BigDecimal saved,
+record CheaperPurchase(UUID eventId, UUID productId, String marketCnpj, AppSavingSource source, BigDecimal saved,
                        BigDecimal paidPrice, BigDecimal previousPrice, BigDecimal percent,
                        OffsetDateTime recordedAt) {
 
@@ -35,6 +37,7 @@ record CheaperPurchase(UUID eventId, UUID productId, String marketCnpj, BigDecim
                 convertedEvent.getId(),
                 convertedEvent.getProductId(),
                 convertedEvent.getMarketCnpj(),
+                sourceOf(metadata),
                 convertedEvent.getSavingsAmount().setScale(2, RoundingMode.HALF_UP),
                 money(decimal(metadata, "paidUnitPrice")),
                 money(decimal(metadata, "previousLastPaid")),
@@ -48,6 +51,15 @@ record CheaperPurchase(UUID eventId, UUID productId, String marketCnpj, BigDecim
             return METADATA_READER.readTree(metadataJson);
         } catch (Exception unreadableMetadata) {
             return null;
+        }
+    }
+
+    private static AppSavingSource sourceOf(JsonNode metadata) {
+        if (metadata == null || !metadata.hasNonNull("source")) return AppSavingSource.DEALS;
+        try {
+            return AppSavingSource.valueOf(metadata.get("source").asText());
+        } catch (IllegalArgumentException unknownSource) {
+            return AppSavingSource.DEALS;
         }
     }
 

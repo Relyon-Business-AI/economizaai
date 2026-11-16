@@ -14,7 +14,10 @@ Para o PR do front `feat/savings-entry-point`.
   `paidAboveLineCount`. Mapa para a tela: `paidLess` = `saved`, `paidMore` = `couldHaveSaved`, itens de cada lado =
   os dois campos novos, `comparedItems` = `comparedLineCount`, `totalItems` = `purchasedLineCount`, e por mercado
   `delta` = `couldHaveSaved - saved`. Sem `from` ele usa 90 dias: mande o período da tela.
-- Hoje toda compra de "Com a ajuda do app" vem de oferta mostrada, então `source` é sempre `DEALS`.
+- **"Com a ajuda do app" agora conta todas as telas**, como diz o "Como calculamos": oferta, aviso de preço,
+  melhores mercados, promoções, plano de compras e tela do mercado. `source` diz qual foi (`DEALS`, `PRICE_ALERT`,
+  `BEST_MARKETS`, `COMMUNITY_PROMOS`, `SHOPPING_PLAN`, `MARKET_PRICES`) e `sourceLabel` traz o texto pronto.
+  Vale para compras confirmadas a partir desta versão; o servidor só começou a registrar o que mostra agora.
 
 ## 2026-11-16 — Economia da casa: `GET /insights/savings` (ainda sem tela)
 
