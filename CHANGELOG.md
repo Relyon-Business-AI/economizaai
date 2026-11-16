@@ -1,5 +1,17 @@
 # economizai — what's new
 
+## 2026-11-16 — Economia da casa: `GET /insights/savings` (ainda sem tela)
+
+Novo cálculo de quanto a casa economizou. Cada item comprado é comparado com o preço de referência do mesmo
+produto: o que outras casas pagaram perto, na mesma época; sem dados suficientes, o que a própria casa costuma
+pagar; sem nenhum dos dois, o item fica fora.
+
+- **`GET /insights/savings?from=&to=`** → `{ from, to, saved, couldHaveSaved, comparedSpend, purchasedLineCount,
+  comparedLineCount, regionComparedLineCount, householdComparedLineCount, markets[] }`. Sem `from`, 90 dias.
+- `saved` = pago abaixo da referência; `couldHaveSaved` = pago acima (à parte, um não abate o outro).
+- `comparedLineCount` de `purchasedLineCount` é a cobertura: mostre junto do número, hoje ela é baixa.
+- O "Onde você mais economizou" (`markets/top-discounts`) não mudou. Detalhes em `API.md`.
+
 ## 2026-11-15 — `GET /markets?scope=ALL` lista só mercados e farmácias
 
 A parte "perto de você" de `scope=ALL` deixava passar qualquer estabelecimento de onde veio uma nota (restaurante,

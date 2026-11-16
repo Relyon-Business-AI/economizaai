@@ -249,6 +249,32 @@ public class CollaborativeProperties {
          * list. 0 disables caching (each call recomputes).
          */
         private int communityPromoCacheSeconds = 300;
+        /**
+         * Household savings: a purchase is compared with what OTHER households paid for the same
+         * product near the buyer, this many days before and after the purchase day.
+         */
+        private int savingsRegionWindowDays = 30;
+        /** Fewer prices than this from other households is not a "typical price" — fall back to the household's own history. */
+        private int savingsMinRegionSamples = 3;
+        /** Own-history fallback: the household's earlier purchases of the product, this many days back. */
+        private int savingsOwnLookbackDays = 90;
+        private int savingsMinOwnSamples = 2;
+        /**
+         * A paid price more than this many times above or below its reference is a mismatched
+         * product or unit, not a saving — the line is left out instead of inventing a number.
+         */
+        private double savingsMaxPriceRatio = 3;
+
+        public int getSavingsRegionWindowDays() { return savingsRegionWindowDays; }
+        public void setSavingsRegionWindowDays(int v) { this.savingsRegionWindowDays = v; }
+        public int getSavingsMinRegionSamples() { return savingsMinRegionSamples; }
+        public void setSavingsMinRegionSamples(int v) { this.savingsMinRegionSamples = v; }
+        public int getSavingsOwnLookbackDays() { return savingsOwnLookbackDays; }
+        public void setSavingsOwnLookbackDays(int v) { this.savingsOwnLookbackDays = v; }
+        public int getSavingsMinOwnSamples() { return savingsMinOwnSamples; }
+        public void setSavingsMinOwnSamples(int v) { this.savingsMinOwnSamples = v; }
+        public double getSavingsMaxPriceRatio() { return savingsMaxPriceRatio; }
+        public void setSavingsMaxPriceRatio(double v) { this.savingsMaxPriceRatio = v; }
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
