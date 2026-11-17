@@ -73,6 +73,30 @@ A rollback looks like:
 
 <!-- AUTONOMOUS ENTRIES BELOW - newest first. The watchdog inserts here. -->
 
+### [2026-11-17 15:10:32] [NEEDS-HUMAN] NO-TESTREF - E2E: 13b. Export purchase history CSV
+- **Detected:**
+```
+A daily E2E run against the live dev server FAILED (78/277 assertions).
+Failing steps:
+- 13b. Export purchase history CSV: AssertionError: expected 'Data;Mercado;CNPJ do mercado;Números …' to include 'Chave de acesso'
+- 13c. Export PDF report: Error: ESOCKETTIMEDOUT
+- 13c. Export PDF report: AssertionError: expected PostmanResponse{ …(5) } to have property 'code'
+- 16. List unmatched items after confirm: Error: ESOCKETTIMEDOUT
+- 16. List unmatched items after confirm: AssertionError: expected PostmanResponse{ …(5) } to have property 'code'
+- 16. List unmatched items after confirm: JSONError: "undefined" is not valid JSON
+- 17. Create canonical product is ADMIN-only (403 for normal user): AssertionError: expected response to have status code 403 but got 502
+- 17b. Admin login (seed adminToken early; skipped without creds): AssertionError: admin login must return 200 — check E2E_ADMIN_* secrets: expected 503 to deeply equal 200
+
+Server-side errors during the run (the likely root cause):
+```
+2026-11-17 15:07:54.920 WARN  [req=11607eea user=a***@economizaai.app ip=20.171.14.108 rcpt= item=] c.r.e.e.GlobalExceptionHandler - Set-password attempt on account that already has one: Sua conta já tem senha. Pra mudar, use "Trocar senha".
+2026-11-17 15:07:55.714 WARN  [req=a1422178 user=a***@economizaai.app ip=20.171.14.108 rcpt= item=] c.r.e.e.GlobalExceptionHandler - Checkout requested but billing provider not configured: Ainda não dá pra assinar pelo site. Assine pelo app.
+2026-11-17 1
+```
+- **Claude:** Failed to authenticate. API Error: 401 OAuth access token has been revoked.
+Ignoring 25 permissions.allow entries from .claude/settings.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog, or set projects["/home/runner/work/economizaai/economizaai"].hasTrustDialogAccepted: true in /home/runner/.claude.json.
+- **Outcome:** reply lacked a verifiable test reference; changes discarded.
+
 ### [2026-11-16 14:17:48] [NEEDS-HUMAN] NO-TESTREF - E2E: 13b. Export purchase history CSV
 - **Detected:**
 ```
