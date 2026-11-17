@@ -52,6 +52,24 @@ public interface NotificationEventRepository extends JpaRepository<NotificationE
                                                  @Param("since") OffsetDateTime since,
                                                  @Param("until") OffsetDateTime until);
 
+    /**
+     * The {@code CONVERTED} events a household already has for one product at one market since a
+     * cutoff: where the attribution looks for the purchase that first came out cheaper.
+     */
+    @Query("""
+        SELECT event
+        FROM NotificationEvent event
+        WHERE event.user.id IN :userIds
+          AND event.eventType = 'CONVERTED'
+          AND event.productId = :productId
+          AND event.marketCnpj = :marketCnpj
+          AND event.occurredAt >= :since
+    """)
+    List<NotificationEvent> findConvertedForProductAtMarket(@Param("userIds") Collection<UUID> userIds,
+                                                            @Param("productId") UUID productId,
+                                                            @Param("marketCnpj") String marketCnpj,
+                                                            @Param("since") OffsetDateTime since);
+
     /** Projection for {@link #sumConvertedSavings}. */
     interface SavingsRollup {
         BigDecimal getTotalSavings();

@@ -1236,6 +1236,10 @@ economia para a menor; no empate, a maior porcentagem**. `size` máximo 50.
 - **Regra:** o app mostrou o preço daquele produto naquele mercado até 14 dias antes, a casa comprou ali e pagou
   menos que na compra anterior. Fora das ofertas, o crédito nunca passa da vantagem mostrada (preço mostrado igual
   ou acima do que a casa já pagava não conta) e cada exibição conta uma vez.
+- **Compras seguintes (2026-11-17):** depois da primeira compra creditada, as compras do mesmo produto no mesmo
+  mercado nos **60 dias** seguintes continuam contando contra o preço que a casa pagava antes de ver no app
+  (`previousPrice` é sempre esse preço). Compra pelo preço antigo ou acima conta zero e **nada é descontado**: o
+  total só cresce. O teto da vantagem mostrada continua valendo. Não muda o formato de nenhuma resposta.
 - O período filtra pelo momento em que a compra foi registrada (confirmação da nota).
 - `productId` vem para a linha poder abrir o produto.
 
