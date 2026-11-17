@@ -16,7 +16,9 @@ import java.time.Month;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -89,6 +91,26 @@ class ConvertedEventRepositoryTest {
                 List.of(buyer.getId()), productId, "12345678000199", WINDOW_START);
 
         assertEquals(List.of(recent.getId()), found.stream().map(NotificationEvent::getId).toList());
+    }
+
+    @Test
+    void findsThatHouseholdsConvertedEventsOfSomeProductsAtOneMarketWithNoTimeBound() {
+        var firstProductId = UUID.randomUUID();
+        var secondProductId = UUID.randomUUID();
+        var recent = event(buyer, NotificationEventType.CONVERTED, "7.20", firstProductId, WINDOW_START.plusDays(5));
+        var old = event(buyer, NotificationEventType.CONVERTED, "3.00", secondProductId, WINDOW_START.minusYears(2));
+        event(buyer, NotificationEventType.CONVERTED, "3.00", UUID.randomUUID(), WINDOW_START.plusDays(5));
+        event(buyer, NotificationEventType.DEAL_VIEWED, null, firstProductId, WINDOW_START.plusDays(5));
+        event(otherHouseholdBuyer, NotificationEventType.CONVERTED, "9.00", firstProductId, WINDOW_START.plusDays(5));
+        var atAnotherMarket = event(buyer, NotificationEventType.CONVERTED, "4.00", firstProductId, WINDOW_START.plusDays(6));
+        atAnotherMarket.setMarketCnpj("98765432000188");
+        eventRepository.save(atAnotherMarket);
+
+        var found = eventRepository.findConvertedForProductsAtMarket(
+                List.of(buyer.getId()), List.of(firstProductId, secondProductId), "12345678000199");
+
+        assertEquals(Set.of(recent.getId(), old.getId()),
+                found.stream().map(NotificationEvent::getId).collect(Collectors.toSet()));
     }
 
     @Test

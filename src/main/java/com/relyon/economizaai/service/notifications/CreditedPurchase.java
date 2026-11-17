@@ -19,11 +19,14 @@ import java.util.UUID;
  * <p>{@code shownUnitPrice} is null when the credit came from a surfaced deal, which has no cap.
  * {@code ownReference} is false when the household had never bought the product before, so the
  * reference was not a price it paid and later purchases are not measured against it.
+ * {@code exposureId} / {@code dealSurfaceId} name the shown price or the surfaced deal a first
+ * purchase used, so deleting its receipt can free it.
  * Events written before these fields existed read as a first purchase made when the event was
  * recorded.
  */
 record CreditedPurchase(String receiptItemId, boolean followUp, boolean ownReference, BigDecimal referenceUnitPrice,
-                        BigDecimal shownUnitPrice, AppSavingSource source, OffsetDateTime purchasedAt) {
+                        BigDecimal shownUnitPrice, AppSavingSource source, OffsetDateTime purchasedAt,
+                        UUID exposureId, UUID dealSurfaceId) {
 
     static final String RECEIPT_ITEM_ID = "receiptItemId";
     static final String FOLLOW_UP = "followUp";
@@ -32,6 +35,8 @@ record CreditedPurchase(String receiptItemId, boolean followUp, boolean ownRefer
     static final String SHOWN_UNIT_PRICE = "shownUnitPrice";
     static final String SOURCE = "source";
     static final String PURCHASED_AT = "purchasedAt";
+    static final String EXPOSURE_ID = "exposureId";
+    static final String DEAL_SURFACE_ID = "dealSurfaceId";
 
     private static final ObjectMapper METADATA_READER = new ObjectMapper();
 
@@ -44,7 +49,9 @@ record CreditedPurchase(String receiptItemId, boolean followUp, boolean ownRefer
                 decimal(metadata, REFERENCE_UNIT_PRICE),
                 decimal(metadata, SHOWN_UNIT_PRICE),
                 sourceOf(metadata),
-                purchasedAt(metadata, convertedEvent.getOccurredAt()));
+                purchasedAt(metadata, convertedEvent.getOccurredAt()),
+                identifier(metadata, EXPOSURE_ID),
+                identifier(metadata, DEAL_SURFACE_ID));
     }
 
     boolean isOf(UUID receiptItemId) {
@@ -72,6 +79,16 @@ record CreditedPurchase(String receiptItemId, boolean followUp, boolean ownRefer
 
     private static String text(JsonNode metadata, String field) {
         return metadata == null || !metadata.hasNonNull(field) ? null : metadata.get(field).asText();
+    }
+
+    private static UUID identifier(JsonNode metadata, String field) {
+        var identifier = text(metadata, field);
+        if (identifier == null) return null;
+        try {
+            return UUID.fromString(identifier);
+        } catch (IllegalArgumentException unreadableIdentifier) {
+            return null;
+        }
     }
 
     private static BigDecimal decimal(JsonNode metadata, String field) {

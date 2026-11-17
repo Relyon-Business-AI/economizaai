@@ -1,5 +1,18 @@
 # economizai — what's new
 
+## 2026-11-17 — "Com a ajuda do app": revisão do cálculo
+
+Sem mudança de contrato: os mesmos endpoints e os mesmos campos. Corrige casos em que o número saía errado.
+
+- **Preço realmente pago.** Quando a casa informou na revisão da nota que pagou menos por um item em promoção,
+  é esse preço que vale, tanto na compra de agora quanto como preço de antes. Antes valia o preço impresso, o que
+  podia contar economia que não existiu.
+- **Nota apagada sai da conta.** Apagar uma nota tira do total o que ela tinha somado. Escanear a mesma nota de
+  novo conta uma vez só (antes podia contar duas).
+- **Nota lida de foto não conta**, do mesmo jeito que já não serve de preço de antes: os preços dela não são
+  conferidos.
+- **Diferença menor que um centavo não entra** (não aparece mais compra com economia de R$ 0,00).
+
 ## 2026-11-17 — "Com a ajuda do app" continua contando as compras seguintes
 
 Sem mudança de contrato: os mesmos endpoints (`/insights/app-savings` e `/insights/app-savings/purchases`) e os

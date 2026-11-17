@@ -1045,6 +1045,43 @@ class ReceiptServiceTest {
     }
 
     @Test
+    void delete_ofAConfirmedReceipt_forgetsWhatItEarnedBeforeDeletingIt() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.CONFIRMED);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        receiptService.delete(user, receipt.getId());
+
+        var deletionOrder = inOrder(savingsAttributionService, receiptRepository);
+        deletionOrder.verify(savingsAttributionService).forget(receipt);
+        deletionOrder.verify(receiptRepository).delete(receipt);
+    }
+
+    @Test
+    void delete_ofAReceiptNeverConfirmed_hasNothingToForget() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.PENDING_CONFIRMATION);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+
+        receiptService.delete(user, receipt.getId());
+
+        verify(savingsAttributionService, never()).forget(any());
+        verify(receiptRepository).delete(receipt);
+    }
+
+    @Test
+    void delete_stillDeletesWhenForgettingTheSavingsFails() {
+        var user = buildUser();
+        var receipt = persistedReceipt(user, ReceiptStatus.CONFIRMED);
+        when(receiptRepository.findByIdWithItemsAndProducts(receipt.getId())).thenReturn(Optional.of(receipt));
+        doThrow(new RuntimeException("boom")).when(savingsAttributionService).forget(receipt);
+
+        receiptService.delete(user, receipt.getId());
+
+        verify(receiptRepository).delete(receipt);
+    }
+
+    @Test
     void delete_throwsWhenReceiptBelongsToAnotherHousehold() {
         var user = buildUser();
         var stranger = buildUser();

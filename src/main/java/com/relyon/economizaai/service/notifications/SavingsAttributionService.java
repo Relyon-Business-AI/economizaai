@@ -8,6 +8,7 @@ import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.enums.AppSavingSource;
 import com.relyon.economizaai.model.enums.NotificationEventType;
+import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.repository.DealSurfaceStateRepository;
 import com.relyon.economizaai.repository.NotificationEventRepository;
 import com.relyon.economizaai.repository.PriceExposureRepository;
@@ -27,6 +28,7 @@ import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -67,6 +69,15 @@ import java.util.UUID;
  * buying at the cheaper price keeps being credited. A purchase at the reference price or above
  * counts nothing and deducts nothing: the total only grows.
  *
+ * <p><strong>What a purchase cost.</strong> Prices are what the household really paid: the price
+ * it typed for a line bought on promotion when there is one, else the printed price. A receipt
+ * read from a photo earns nothing (its prices are not verified, and it is not a baseline for
+ * later purchases either), and a difference that rounds to zero cents is not recorded.
+ *
+ * <p><strong>Deleted receipts.</strong> {@link #forget} removes what a receipt earned when the
+ * household deletes it, and frees the deal or the shown price it used, so scanning the same
+ * receipt again credits it once instead of twice.
+ *
  * <p>Attribution is correlational, not proven causation — see DEV_NOTES.
  */
 @Slf4j
@@ -96,6 +107,10 @@ public class SavingsAttributionService {
         if (cnpj == null || cnpj.isBlank() || receipt.getIssuedAt() == null) {
             return;
         }
+        if (receipt.getOrigin() == ReceiptOrigin.PHOTO) {
+            log.debug("attribution.skipped reason=photo_origin receipt={}", abbrev(receipt));
+            return;
+        }
         var householdId = receipt.getHousehold().getId();
         var householdUserIds = userRepository.findAllByHouseholdId(householdId).stream()
                 .map(householdUser -> householdUser.getId())
@@ -119,12 +134,58 @@ public class SavingsAttributionService {
                 abbrev(receipt), conversions, savedTotal.setScale(2, RoundingMode.HALF_UP));
     }
 
+    /**
+     * Removes what a receipt earned, when the household deletes it: its {@code CONVERTED} events go
+     * away and the deal or shown price its first credited purchase used can earn credit again.
+     * Own transaction, like {@link #attribute}: the caller treats a failure here as best-effort.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void forget(Receipt receipt) {
+        var cnpj = receipt.getCnpjEmitente();
+        var receiptItemIds = receipt.getItems().stream().map(ReceiptItem::getId).filter(Objects::nonNull).toList();
+        var productIds = receipt.getItems().stream()
+                .map(ReceiptItem::getProduct).filter(Objects::nonNull)
+                .map(product -> product.getId()).distinct().toList();
+        if (cnpj == null || cnpj.isBlank() || receiptItemIds.isEmpty() || productIds.isEmpty()) return;
+        var householdUserIds = userRepository.findAllByHouseholdId(receipt.getHousehold().getId()).stream()
+                .map(householdUser -> householdUser.getId())
+                .toList();
+        if (householdUserIds.isEmpty()) return;
+
+        var forgotten = 0;
+        for (var convertedEvent : eventRepository.findConvertedForProductsAtMarket(householdUserIds, productIds, cnpj)) {
+            var credited = CreditedPurchase.of(convertedEvent);
+            if (receiptItemIds.stream().noneMatch(credited::isOf)) continue;
+            freeWhatItUsed(credited);
+            eventRepository.delete(convertedEvent);
+            forgotten++;
+        }
+        if (forgotten > 0) {
+            log.info("attribution.forgotten receipt={} conversions={}", abbrev(receipt), forgotten);
+        }
+    }
+
+    private void freeWhatItUsed(CreditedPurchase credited) {
+        if (credited.exposureId() != null) {
+            priceExposureRepository.findById(credited.exposureId()).ifPresent(exposure -> {
+                exposure.setConvertedAt(null);
+                priceExposureRepository.save(exposure);
+            });
+        }
+        if (credited.dealSurfaceId() != null) {
+            surfaceStateRepository.findById(credited.dealSurfaceId()).ifPresent(surface -> {
+                surface.setConvertedAt(null);
+                surfaceStateRepository.save(surface);
+            });
+        }
+    }
+
     /** Returns the realized savings when this item is credited to something the app showed, else null. */
     private BigDecimal attributeItem(Receipt receipt, ReceiptItem item,
                                      List<UUID> householdUserIds, OffsetDateTime windowStart,
                                      OffsetDateTime purchaseInstant) {
         if (item.isExcluded() || item.isExcludedFromPersonal() || item.getProduct() == null
-                || item.getUnitPrice() == null || item.getQuantity() == null) {
+                || paidUnitPriceOf(item) == null || item.getQuantity() == null) {
             return null;
         }
         var earlierCredits = eventRepository.findConvertedForProductAtMarket(
@@ -158,18 +219,17 @@ public class SavingsAttributionService {
         if (candidates.isEmpty()) return null;
 
         var surface = candidates.get(0); // newest qualifying surfacing
-        var paidUnitPrice = item.getUnitPrice();
+        var paidUnitPrice = paidUnitPriceOf(item);
         var householdLastPaid = lastPaidBefore(receipt, productId);
         var previousLastPaid = householdLastPaid != null ? householdLastPaid : surface.getLastUnitPrice();
         if (previousLastPaid == null || previousLastPaid.compareTo(paidUnitPrice) <= 0) {
             return null; // no provable savings
         }
 
-        var savings = previousLastPaid.subtract(paidUnitPrice)
-                .multiply(item.getQuantity())
-                .setScale(2, RoundingMode.HALF_UP);
-        recordConversion(receipt, item, purchaseInstant,
-                new Credit(savings, previousLastPaid, null, AppSavingSource.DEALS, false, householdLastPaid != null));
+        var savings = savedOn(item, previousLastPaid, paidUnitPrice);
+        if (savings == null) return null;
+        recordConversion(receipt, item, purchaseInstant, new Credit(savings, previousLastPaid, null,
+                AppSavingSource.DEALS, false, householdLastPaid != null, null, surface.getId()));
 
         surface.setConvertedAt(OffsetDateTime.now());
         surfaceStateRepository.save(surface);
@@ -189,18 +249,18 @@ public class SavingsAttributionService {
         if (exposures.isEmpty()) return null;
 
         var exposure = exposures.get(0); // newest qualifying exposure
-        var paidUnitPrice = item.getUnitPrice();
+        var paidUnitPrice = paidUnitPriceOf(item);
         var previousLastPaid = lastPaidBefore(receipt, productId);
         var creditedUnitPrice = paidUnitPrice.max(exposure.getUnitPrice());
         if (previousLastPaid == null || previousLastPaid.compareTo(creditedUnitPrice) <= 0) {
             return null; // nothing the household paid before, or the app showed no advantage
         }
 
-        var savings = previousLastPaid.subtract(creditedUnitPrice)
-                .multiply(item.getQuantity())
-                .setScale(2, RoundingMode.HALF_UP);
+        var savings = savedOn(item, previousLastPaid, creditedUnitPrice);
+        if (savings == null) return null;
         recordConversion(receipt, item, purchaseInstant, new Credit(savings, previousLastPaid,
-                exposure.getUnitPrice(), AppSavingSource.of(exposure.getSurface()), false, true));
+                exposure.getUnitPrice(), AppSavingSource.of(exposure.getSurface()), false, true,
+                exposure.getId(), null));
 
         exposure.setConvertedAt(OffsetDateTime.now());
         priceExposureRepository.save(exposure);
@@ -214,7 +274,7 @@ public class SavingsAttributionService {
      */
     private BigDecimal attributeAsFollowUp(Receipt receipt, ReceiptItem item, CreditedPurchase firstCreditedPurchase,
                                            OffsetDateTime windowStart, OffsetDateTime purchaseInstant) {
-        var paidUnitPrice = item.getUnitPrice();
+        var paidUnitPrice = paidUnitPriceOf(item);
         var shownUnitPrice = firstCreditedPurchase.shownUnitPrice() == null ? null
                 : bestShownPrice(receipt, item, firstCreditedPurchase.shownUnitPrice(), windowStart, purchaseInstant);
         var creditedUnitPrice = shownUnitPrice == null ? paidUnitPrice : paidUnitPrice.max(shownUnitPrice);
@@ -223,12 +283,24 @@ public class SavingsAttributionService {
             return null; // back at the old price or above: counts nothing, deducts nothing
         }
 
+        var savings = savedOn(item, referenceUnitPrice, creditedUnitPrice);
+        if (savings == null) return null;
+        recordConversion(receipt, item, purchaseInstant, new Credit(savings, referenceUnitPrice, shownUnitPrice,
+                firstCreditedPurchase.source(), true, true, null, null));
+        return savings;
+    }
+
+    /** The line's saving in whole cents, or null when the difference rounds to nothing. */
+    private static BigDecimal savedOn(ReceiptItem item, BigDecimal referenceUnitPrice, BigDecimal creditedUnitPrice) {
         var savings = referenceUnitPrice.subtract(creditedUnitPrice)
                 .multiply(item.getQuantity())
                 .setScale(2, RoundingMode.HALF_UP);
-        recordConversion(receipt, item, purchaseInstant,
-                new Credit(savings, referenceUnitPrice, shownUnitPrice, firstCreditedPurchase.source(), true, true));
-        return savings;
+        return savings.signum() > 0 ? savings : null;
+    }
+
+    /** What the household really paid a unit: the price it typed for a promotion, else the printed one. */
+    private static BigDecimal paidUnitPriceOf(ReceiptItem item) {
+        return item.getPaidUnitPrice() != null ? item.getPaidUnitPrice() : item.getUnitPrice();
     }
 
     private BigDecimal bestShownPrice(Receipt receipt, ReceiptItem item, BigDecimal firstShownUnitPrice,
@@ -246,12 +318,13 @@ public class SavingsAttributionService {
      * surfaced deal's baseline stood in, which is not a reference to keep for later purchases.
      */
     private record Credit(BigDecimal savings, BigDecimal referenceUnitPrice, BigDecimal shownUnitPrice,
-                          AppSavingSource source, boolean followUp, boolean ownReference) {
+                          AppSavingSource source, boolean followUp, boolean ownReference,
+                          UUID exposureId, UUID dealSurfaceId) {
     }
 
     private void recordConversion(Receipt receipt, ReceiptItem item, OffsetDateTime purchaseInstant, Credit credit) {
         var productId = item.getProduct().getId();
-        var paidUnitPrice = item.getUnitPrice();
+        var paidUnitPrice = paidUnitPriceOf(item);
         var discountFraction = credit.referenceUnitPrice().subtract(paidUnitPrice)
                 .divide(credit.referenceUnitPrice(), 4, RoundingMode.HALF_UP);
         var metadata = new LinkedHashMap<String, Object>();
@@ -265,6 +338,8 @@ public class SavingsAttributionService {
         metadata.put(CreditedPurchase.PURCHASED_AT, purchaseInstant.toString());
         if (credit.shownUnitPrice() != null) metadata.put(CreditedPurchase.SHOWN_UNIT_PRICE, credit.shownUnitPrice());
         if (item.getId() != null) metadata.put(CreditedPurchase.RECEIPT_ITEM_ID, item.getId().toString());
+        if (credit.exposureId() != null) metadata.put(CreditedPurchase.EXPOSURE_ID, credit.exposureId().toString());
+        if (credit.dealSurfaceId() != null) metadata.put(CreditedPurchase.DEAL_SURFACE_ID, credit.dealSurfaceId().toString());
         eventService.record(receipt.getUser(), NotificationEventType.CONVERTED, RecordContext.builder()
                 .productId(productId)
                 .marketCnpj(receipt.getCnpjEmitente())
@@ -289,10 +364,11 @@ public class SavingsAttributionService {
         for (var historyItem : history) {
             var issuedAt = historyItem.getReceipt().getIssuedAt();
             if (issuedAt == null || !issuedAt.isBefore(receipt.getIssuedAt())) continue;
-            if (historyItem.getUnitPrice() == null) continue;
+            var historyPaidUnitPrice = paidUnitPriceOf(historyItem);
+            if (historyPaidUnitPrice == null) continue;
             if (latestPriorIssuedAt == null || issuedAt.isAfter(latestPriorIssuedAt)) {
                 latestPriorIssuedAt = issuedAt;
-                latestPriorPrice = historyItem.getUnitPrice();
+                latestPriorPrice = historyPaidUnitPrice;
             }
         }
         return latestPriorPrice;

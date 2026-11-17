@@ -70,6 +70,22 @@ public interface NotificationEventRepository extends JpaRepository<NotificationE
                                                             @Param("marketCnpj") String marketCnpj,
                                                             @Param("since") OffsetDateTime since);
 
+    /**
+     * Every {@code CONVERTED} event a household has for some products at one market, with no time
+     * bound: where a deleted receipt's own credits are found.
+     */
+    @Query("""
+        SELECT event
+        FROM NotificationEvent event
+        WHERE event.user.id IN :userIds
+          AND event.eventType = 'CONVERTED'
+          AND event.productId IN :productIds
+          AND event.marketCnpj = :marketCnpj
+    """)
+    List<NotificationEvent> findConvertedForProductsAtMarket(@Param("userIds") Collection<UUID> userIds,
+                                                             @Param("productIds") Collection<UUID> productIds,
+                                                             @Param("marketCnpj") String marketCnpj);
+
     /** Projection for {@link #sumConvertedSavings}. */
     interface SavingsRollup {
         BigDecimal getTotalSavings();
