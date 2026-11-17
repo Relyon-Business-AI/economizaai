@@ -1123,6 +1123,19 @@ public class ReceiptService {
     }
 
     /**
+     * A deleted purchase stops counting as saved with the app. Best-effort and isolated like
+     * {@link #attributeSavings}: a failure here never blocks the delete.
+     */
+    private void forgetAttributedSavings(Receipt receipt) {
+        if (receipt.getStatus() != ReceiptStatus.CONFIRMED) return;
+        try {
+            savingsAttributionService.forget(receipt);
+        } catch (RuntimeException ex) {
+            log.warn("attribution.forget_failed receipt={} reason={}", abbrev(receipt.getId()), ex.getMessage());
+        }
+    }
+
+    /**
      * Collects the personal-promo payloads inside the confirm transaction and hands
      * them to {@link NotificationService#notifyAfterCommit} — the outbound dispatch
      * (Expo/SMTP) runs only after the confirm commits, and a rolled-back confirm
@@ -1172,6 +1185,7 @@ public class ReceiptService {
         MDC.put(MdcContextFilter.RECEIPT_ID, abbrev(receiptId));
         var receipt = loadOwned(user, receiptId);
         var householdId = receipt.getHousehold().getId();
+        forgetAttributedSavings(receipt);
         receiptRepository.delete(receipt);
         householdCacheGen.bump(householdId);
         log.info("delete ok status_was={}", receipt.getStatus());
