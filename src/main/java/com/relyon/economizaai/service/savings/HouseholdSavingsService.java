@@ -157,6 +157,8 @@ public class HouseholdSavingsService {
                 comparisons.size(),
                 countBySource(comparisons, Source.REGION),
                 countBySource(comparisons, Source.HOUSEHOLD),
+                countWithAmount(comparisons, LineComparison::saved),
+                countWithAmount(comparisons, LineComparison::paidAboveReference),
                 marketSavings(householdId, comparisons));
     }
 
@@ -189,6 +191,10 @@ public class HouseholdSavingsService {
 
     private static BigDecimal sum(List<LineComparison> comparisons, Function<LineComparison, BigDecimal> amountOf) {
         return comparisons.stream().map(amountOf).reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private static int countWithAmount(List<LineComparison> comparisons, Function<LineComparison, BigDecimal> amountOf) {
+        return (int) comparisons.stream().filter(comparison -> amountOf.apply(comparison).signum() > 0).count();
     }
 
     private static int countBySource(List<LineComparison> comparisons, Source source) {

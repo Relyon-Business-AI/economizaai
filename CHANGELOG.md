@@ -1,5 +1,37 @@
 # economizai — what's new
 
+## 2026-11-17 — "Com a ajuda do app" continua contando as compras seguintes
+
+Sem mudança de contrato: os mesmos endpoints (`/insights/app-savings` e `/insights/app-savings/purchases`) e os
+mesmos campos.
+
+- Antes só a **primeira** compra depois de ver o preço contava (a seguinte já era comparada com a compra barata).
+  Agora, por **60 dias** depois dessa primeira compra, cada compra do mesmo produto no mesmo mercado conta contra
+  o preço que a casa pagava **antes de ver no app**. Nas compras seguintes, `previousPrice` é esse preço de antes.
+- Compra pelo preço antigo ou acima: conta zero e **não desconta** do total.
+- O teto continua: por unidade, o crédito não passa da vantagem que o app mostrou.
+- Vale para compras confirmadas a partir desta versão.
+- Texto do "Como calculamos" no app deve dizer que as compras dos 60 dias seguintes também contam.
+
+## 2026-11-16 — Tela "Quanto economizei": o que faltava no servidor
+
+Para o PR do front `feat/savings-entry-point`.
+
+- **`GET /insights/app-savings?from=&to=`** → `{ from, to, saved, purchaseCount, largestSaving }`. É o bloco
+  "Com a ajuda do app" **por período** (o `/users/me/savings` só separava 30 dias do total e não mudou).
+- **`GET /insights/app-savings/purchases?from=&to=&page=&size=`** → página de compras mais baratas, já ordenada
+  (maior economia; empate, maior porcentagem). Cada uma: `id`, `productId`, `productName`, `marketCnpj`,
+  `marketName`, `marketFriendlyName`, `source`, `sourceLabel`, `paidPrice`, `previousPrice`, `saved`, `percent`,
+  `recordedAt`.
+- **"Comparado à sua região" já tem endpoint**: `GET /insights/savings`. Ganhou `savedLineCount` e
+  `paidAboveLineCount`. Mapa para a tela: `paidLess` = `saved`, `paidMore` = `couldHaveSaved`, itens de cada lado =
+  os dois campos novos, `comparedItems` = `comparedLineCount`, `totalItems` = `purchasedLineCount`, e por mercado
+  `delta` = `couldHaveSaved - saved`. Sem `from` ele usa 90 dias: mande o período da tela.
+- **"Com a ajuda do app" agora conta todas as telas**, como diz o "Como calculamos": oferta, aviso de preço,
+  melhores mercados, promoções, plano de compras e tela do mercado. `source` diz qual foi (`DEALS`, `PRICE_ALERT`,
+  `BEST_MARKETS`, `COMMUNITY_PROMOS`, `SHOPPING_PLAN`, `MARKET_PRICES`) e `sourceLabel` traz o texto pronto.
+  Vale para compras confirmadas a partir desta versão; o servidor só começou a registrar o que mostra agora.
+
 ## 2026-11-16 — Economia da casa: `GET /insights/savings` (ainda sem tela)
 
 Novo cálculo de quanto a casa economizou. Cada item comprado é comparado com o preço de referência do mesmo

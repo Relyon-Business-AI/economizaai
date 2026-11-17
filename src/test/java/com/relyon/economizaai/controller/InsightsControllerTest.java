@@ -1,6 +1,8 @@
 package com.relyon.economizaai.controller;
 
 import com.relyon.economizaai.config.SecurityConfig;
+import com.relyon.economizaai.dto.response.AppSavingPurchaseResponse;
+import com.relyon.economizaai.dto.response.AppSavingsResponse;
 import com.relyon.economizaai.dto.response.HouseholdSavingsResponse;
 import com.relyon.economizaai.dto.response.InsightsQueryResponse;
 import com.relyon.economizaai.dto.response.PriceHistoryResponse;
@@ -8,6 +10,7 @@ import com.relyon.economizaai.dto.response.MarketDiscountResponse;
 import com.relyon.economizaai.dto.response.SpendInsightsResponse;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.AppSavingSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.security.JwtService;
@@ -15,11 +18,14 @@ import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.InsightsQueryService;
 import com.relyon.economizaai.service.InsightsService;
 import com.relyon.economizaai.service.LocalizedMessageService;
+import com.relyon.economizaai.service.savings.AppSavingsService;
 import com.relyon.economizaai.service.savings.HouseholdSavingsService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -52,6 +58,7 @@ class InsightsControllerTest {
     @MockitoBean private CategoryResolver categoryResolver;
     @MockitoBean private ProductRepository productRepository;
     @MockitoBean private HouseholdSavingsService householdSavingsService;
+    @MockitoBean private AppSavingsService appSavingsService;
     @MockitoBean private JwtService jwtService;
     @MockitoBean private UserDetailsService userDetailsService;
     @MockitoBean private LocalizedMessageService localizedMessageService;
@@ -88,7 +95,7 @@ class InsightsControllerTest {
         var from = LocalDateTime.of(2026, 10, 1, 0, 0);
         var to = LocalDateTime.of(2026, 10, 31, 23, 59);
         var response = new HouseholdSavingsResponse(from, to, new BigDecimal("42.10"), new BigDecimal("7.30"),
-                new BigDecimal("380.00"), 60, 14, 9, 5,
+                new BigDecimal("380.00"), 60, 14, 9, 5, 10, 4,
                 List.of(new HouseholdSavingsResponse.MarketSavings("12345678000190", "MERCADO X LTDA", "Mercado X",
                         new BigDecimal("42.10"), new BigDecimal("7.30"), new BigDecimal("380.00"), 14)));
         when(householdSavingsService.savings(any(User.class), eq(from), eq(to))).thenReturn(response);
@@ -99,12 +106,57 @@ class InsightsControllerTest {
                 .andExpect(jsonPath("$.saved").value(42.10))
                 .andExpect(jsonPath("$.couldHaveSaved").value(7.30))
                 .andExpect(jsonPath("$.comparedLineCount").value(14))
+                .andExpect(jsonPath("$.savedLineCount").value(10))
+                .andExpect(jsonPath("$.paidAboveLineCount").value(4))
                 .andExpect(jsonPath("$.markets[0].marketFriendlyName").value("Mercado X"));
     }
 
     @Test
     void savings_requiresAuthentication() throws Exception {
         mockMvc.perform(get("/api/v1/insights/savings")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void appSavings_returnsThePeriodSummary() throws Exception {
+        var user = buildUser();
+        var from = LocalDateTime.of(2026, 11, 1, 0, 0);
+        var to = LocalDateTime.of(2026, 11, 16, 23, 59);
+        when(appSavingsService.summary(any(User.class), eq(from), eq(to)))
+                .thenReturn(new AppSavingsResponse(from, to, new BigDecimal("15.80"), 3, new BigDecimal("7.20")));
+
+        mockMvc.perform(get("/api/v1/insights/app-savings?from=2026-11-01T00:00:00&to=2026-11-16T23:59:00")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.saved").value(15.80))
+                .andExpect(jsonPath("$.purchaseCount").value(3))
+                .andExpect(jsonPath("$.largestSaving").value(7.20));
+    }
+
+    @Test
+    void appSavingPurchases_returnsAPageWithTheDefaultPaging() throws Exception {
+        var user = buildUser();
+        var purchase = new AppSavingPurchaseResponse(UUID.randomUUID(), UUID.randomUUID(), "Café torrado 500 g",
+                "12345678000190", "MERCADO X LTDA", "Mercado X", AppSavingSource.DEALS, "visto em Ofertas",
+                new BigDecimal("17.90"), new BigDecimal("21.50"), new BigDecimal("7.20"), new BigDecimal("16.7"),
+                LocalDateTime.of(2026, 11, 14, 18, 30));
+        when(appSavingsService.purchases(any(User.class), any(), any(), eq(0), eq(10)))
+                .thenReturn(new PageImpl<>(List.of(purchase), PageRequest.of(0, 10), 1));
+
+        mockMvc.perform(get("/api/v1/insights/app-savings/purchases")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].productName").value("Café torrado 500 g"))
+                .andExpect(jsonPath("$.content[0].marketFriendlyName").value("Mercado X"))
+                .andExpect(jsonPath("$.content[0].source").value("DEALS"))
+                .andExpect(jsonPath("$.content[0].sourceLabel").value("visto em Ofertas"))
+                .andExpect(jsonPath("$.content[0].saved").value(7.20))
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
+    void appSavings_requireAuthentication() throws Exception {
+        mockMvc.perform(get("/api/v1/insights/app-savings")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/insights/app-savings/purchases")).andExpect(status().isUnauthorized());
     }
 
     @Test

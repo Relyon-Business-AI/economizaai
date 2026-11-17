@@ -12,7 +12,8 @@ import java.util.List;
  * <p>{@code saved} adds only the lines bought BELOW the reference; {@code couldHaveSaved} adds,
  * separately, what was paid ABOVE it. Lines without a reference are in neither —
  * {@code comparedLineCount} out of {@code purchasedLineCount} says how much of the period the
- * numbers cover. No per-line reference price is exposed.
+ * numbers cover; {@code savedLineCount} and {@code paidAboveLineCount} say how many of the
+ * compared lines fell on each side. No per-line reference price is exposed.
  */
 public record HouseholdSavingsResponse(
         LocalDateTime from,
@@ -24,6 +25,8 @@ public record HouseholdSavingsResponse(
         int comparedLineCount,
         int regionComparedLineCount,
         int householdComparedLineCount,
+        int savedLineCount,
+        int paidAboveLineCount,
         List<MarketSavings> markets
 ) {
     /** The same numbers for one market, biggest {@code saved} first in the list. */

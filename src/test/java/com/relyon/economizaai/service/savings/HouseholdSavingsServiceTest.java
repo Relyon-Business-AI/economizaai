@@ -123,6 +123,8 @@ class HouseholdSavingsServiceTest {
         assertThat(savings.comparedLineCount()).isEqualTo(1);
         assertThat(savings.regionComparedLineCount()).isEqualTo(1);
         assertThat(savings.householdComparedLineCount()).isZero();
+        assertThat(savings.savedLineCount()).isEqualTo(1);
+        assertThat(savings.paidAboveLineCount()).isZero();
     }
 
     @Test
@@ -134,6 +136,8 @@ class HouseholdSavingsServiceTest {
 
         assertThat(savings.saved()).isEqualByComparingTo("0.00");
         assertThat(savings.couldHaveSaved()).isEqualByComparingTo("3.00");
+        assertThat(savings.savedLineCount()).isZero();
+        assertThat(savings.paidAboveLineCount()).isEqualTo(1);
     }
 
     @Test

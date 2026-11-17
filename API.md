@@ -1194,6 +1194,8 @@ Returns:
 GET /api/v1/insights/markets/top?limit=5
 GET /api/v1/insights/markets/top-discounts?from=&to=&limit=5
 GET /api/v1/insights/savings?from=&to=
+GET /api/v1/insights/app-savings?from=&to=
+GET /api/v1/insights/app-savings/purchases?from=&to=&page=0&size=10
 GET /api/v1/insights/products/{productId}/price-history?from=&to=
 ```
 
@@ -1203,10 +1205,51 @@ GET /api/v1/insights/products/{productId}/price-history?from=&to=
 
 `markets/top-discounts` ranks the household's markets by **discount received** (biggest first), excluding markets that gave none. Each row: `{ cnpj, marketName, marketFriendlyName, grossTotal, discount, discountRate, receiptCount }` — `discount` in R$, `discountRate` = `discount / grossTotal` (0–1 fraction, format as %). Personal to your household, so it works even without community volume.
 
-#### Economia da casa — `GET /api/v1/insights/savings?from=&to=` (2026-11-16)
+#### Com a ajuda do app — `GET /api/v1/insights/app-savings` (2026-11-16)
+
+Bloco "Com a ajuda do app" da tela "Quanto economizei": compras que saíram mais baratas que a compra
+anterior da casa depois de o app mostrar aquele preço. Aceita `from`/`to` (os quatro períodos da
+tela); sem `from`, tudo o que há registrado. O `GET /users/me/savings` antigo não mudou.
+
+```json
+{ "from": "2026-11-01T00:00:00", "to": "2026-11-16T23:59:00",
+  "saved": 15.80, "purchaseCount": 3, "largestSaving": 7.20 }
+```
+
+**`GET /api/v1/insights/app-savings/purchases?from=&to=&page=0&size=10`** — as compras por trás do
+total, em página do Spring (`content`, `totalElements`, `totalPages`, `number`, `size`), **da maior
+economia para a menor; no empate, a maior porcentagem**. `size` máximo 50.
+
+```json
+{ "id": "…", "productId": "…", "productName": "Café torrado 500 g",
+  "marketCnpj": "…", "marketName": "…", "marketFriendlyName": "Zaffari",
+  "source": "DEALS", "sourceLabel": "visto em Ofertas",
+  "paidPrice": 17.90, "previousPrice": 21.50, "saved": 7.20, "percent": 16.7,
+  "recordedAt": "2026-11-14T18:30:00" }
+```
+
+- `paidPrice` e `previousPrice` são preços **unitários**; `saved` é a diferença vezes a quantidade.
+- `percent` é quanto o unitário ficou mais barato (0 a 100). Os três podem vir `null` em registro antigo.
+- `source` é a chave de onde o preço foi visto e `sourceLabel` o texto pronto: `DEALS` ("visto em Ofertas"),
+  `PRICE_ALERT` ("aviso de preço"), `BEST_MARKETS` ("visto em Melhores mercados"), `COMMUNITY_PROMOS`,
+  `SHOPPING_PLAN`, `MARKET_PRICES`.
+- **Regra:** o app mostrou o preço daquele produto naquele mercado até 14 dias antes, a casa comprou ali e pagou
+  menos que na compra anterior. Fora das ofertas, o crédito nunca passa da vantagem mostrada (preço mostrado igual
+  ou acima do que a casa já pagava não conta) e cada exibição conta uma vez.
+- **Compras seguintes (2026-11-17):** depois da primeira compra creditada, as compras do mesmo produto no mesmo
+  mercado nos **60 dias** seguintes continuam contando contra o preço que a casa pagava antes de ver no app
+  (`previousPrice` é sempre esse preço). Compra pelo preço antigo ou acima conta zero e **nada é descontado**: o
+  total só cresce. O teto da vantagem mostrada continua valendo. Não muda o formato de nenhuma resposta.
+- O período filtra pelo momento em que a compra foi registrada (confirmação da nota).
+- `productId` vem para a linha poder abrir o produto.
+
+#### Comparado à sua região — `GET /api/v1/insights/savings?from=&to=` (2026-11-16)
 
 Quanto a casa economizou no período. Sem `from`, os últimos 90 dias; no plano grátis o início
-respeita a janela de histórico. **Ainda sem tela** — o contrato existe para a tela vir depois.
+respeita a janela de histórico. É a fonte da seção "Comparado à sua região": `saved` = pagou a
+menos, `couldHaveSaved` = pagou a mais, `savedLineCount` e `paidAboveLineCount` = itens de cada
+lado, `comparedLineCount` de `purchasedLineCount` = quanto pôde ser comparado. Por mercado, o saldo
+é `couldHaveSaved - saved` (negativo = pagou a menos).
 
 ```json
 {
@@ -1214,6 +1257,7 @@ respeita a janela de histórico. **Ainda sem tela** — o contrato existe para a
   "saved": 42.10, "couldHaveSaved": 7.30, "comparedSpend": 380.00,
   "purchasedLineCount": 60, "comparedLineCount": 14,
   "regionComparedLineCount": 9, "householdComparedLineCount": 5,
+  "savedLineCount": 10, "paidAboveLineCount": 4,
   "markets": [
     { "cnpj": "…", "marketName": "…", "marketFriendlyName": "Zaffari",
       "saved": 30.00, "couldHaveSaved": 2.00, "comparedSpend": 210.00, "comparedLineCount": 8 }

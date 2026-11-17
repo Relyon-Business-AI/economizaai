@@ -73,8 +73,16 @@ public class CollaborativeProperties {
         /** How recently before a purchase a deal must have been surfaced to attribute it. */
         private int windowDays = 14;
 
+        /**
+         * After a purchase is credited to the app, how long the next purchases of that product
+         * at that market keep counting against the price the household paid before.
+         */
+        private int followUpDays = 60;
+
         public int getWindowDays() { return windowDays; }
         public void setWindowDays(int v) { this.windowDays = v; }
+        public int getFollowUpDays() { return followUpDays; }
+        public void setFollowUpDays(int v) { this.followUpDays = v; }
     }
 
     /**

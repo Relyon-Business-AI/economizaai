@@ -9,6 +9,7 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.LocalizedMessageService;
+import com.relyon.economizaai.service.exposure.PriceExposureService;
 import com.relyon.economizaai.service.geo.MarketNameService;
 import com.relyon.economizaai.service.geo.WatchedMarketService;
 import com.relyon.economizaai.service.priceindex.MarketPricesService;
@@ -50,6 +51,7 @@ class MarketControllerTest {
     @MockitoBean private MarketNameService marketNameService;
     @MockitoBean private MarketPricesService marketPricesService;
     @MockitoBean private JwtService jwtService;
+    @MockitoBean private PriceExposureService priceExposureService;
     @MockitoBean private UserDetailsService userDetailsService;
     @MockitoBean private LocalizedMessageService localizedMessageService;
 
