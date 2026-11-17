@@ -3,6 +3,7 @@ package com.relyon.economizaai.service.notifications;
 import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.model.DealSurfaceState;
 import com.relyon.economizaai.model.Household;
+import com.relyon.economizaai.model.NotificationEvent;
 import com.relyon.economizaai.model.PriceExposure;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.Receipt;
@@ -11,6 +12,7 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.NotificationEventType;
 import com.relyon.economizaai.model.enums.PriceExposureSurface;
 import com.relyon.economizaai.repository.DealSurfaceStateRepository;
+import com.relyon.economizaai.repository.NotificationEventRepository;
 import com.relyon.economizaai.repository.PriceExposureRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.repository.UserRepository;
@@ -31,6 +33,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -51,6 +54,7 @@ class SavingsAttributionServiceTest {
     @Mock private PriceExposureRepository priceExposureRepository;
     @Mock private ReceiptItemRepository receiptItemRepository;
     @Mock private UserRepository userRepository;
+    @Mock private NotificationEventRepository eventRepository;
     @Mock private NotificationEventService eventService;
     @Mock private CollaborativeProperties properties;
 
@@ -64,6 +68,7 @@ class SavingsAttributionServiceTest {
         buyer = User.builder().id(UUID.randomUUID()).name("John").email("john@test.com").household(household).build();
         var attribution = new CollaborativeProperties.Attribution();
         attribution.setWindowDays(14);
+        attribution.setFollowUpDays(60);
         lenient().when(properties.getAttribution()).thenReturn(attribution);
         lenient().when(userRepository.findAllByHouseholdId(household.getId())).thenReturn(List.of(buyer));
     }
@@ -321,6 +326,198 @@ class SavingsAttributionServiceTest {
         verify(eventService, times(1)).record(eq(buyer), eq(NotificationEventType.CONVERTED), contextCaptor.capture());
         assertEquals("DEALS", contextCaptor.getValue().metadata().get("source"));
         verify(priceExposureRepository, never()).findAttributable(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void firstCreditedPurchase_recordsWhatLaterPurchasesNeed() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        when(priceExposureRepository.findAttributable(any(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of(shownPrice(PriceExposureSurface.BEST_MARKETS, new BigDecimal("8.50"))));
+        when(receiptItemRepository.findHouseholdHistoryForProduct(eq(PRODUCT_ID), any()))
+                .thenReturn(List.of(priorPurchase(new BigDecimal("10.00"), LocalDateTime.now().minusDays(20))));
+
+        service.attribute(receipt);
+
+        var metadata = recordedConversion().metadata();
+        assertEquals(false, metadata.get("followUp"));
+        assertEquals(true, metadata.get("ownReference"));
+        assertEquals(0, new BigDecimal("8.50").compareTo((BigDecimal) metadata.get("shownUnitPrice")));
+        assertEquals(receipt.getItems().get(0).getId().toString(), metadata.get("receiptItemId"));
+        assertEquals(receipt.getIssuedAt().atZone(BrazilClock.ZONE).toOffsetDateTime().toString(),
+                metadata.get("purchasedAt"));
+    }
+
+    @Test
+    void dealBoughtForTheFirstTime_isNotAReferenceForLaterPurchases() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        when(surfaceStateRepository.findAttributable(anyList(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of(surfaceRow(OffsetDateTime.now().minusDays(1), new BigDecimal("12.00"))));
+        when(receiptItemRepository.findHouseholdHistoryForProduct(eq(PRODUCT_ID), any())).thenReturn(List.of());
+
+        service.attribute(receipt);
+
+        assertEquals(false, recordedConversion().metadata().get("ownReference"));
+    }
+
+    @Test
+    void buyingAgainAtTheCheaperPrice_countsAgainstThePricePaidBeforeTheApp() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("3"));
+        creditedBefore(firstCreditedPurchase("10.00", "8.00", "BEST_MARKETS", 20));
+
+        service.attribute(receipt);
+
+        var conversion = recordedConversion();
+        assertEquals(0, conversion.savingsAmount().compareTo(new BigDecimal("6.00")));
+        assertEquals(true, conversion.metadata().get("followUp"));
+        assertEquals("BEST_MARKETS", conversion.metadata().get("source"));
+        assertEquals(0, new BigDecimal("10.00").compareTo((BigDecimal) conversion.metadata().get("previousLastPaid")));
+        verify(surfaceStateRepository, never()).findAttributable(any(), any(), any(), any(), any());
+        verify(priceExposureRepository, never()).save(any());
+    }
+
+    @Test
+    void buyingAgainBackAtTheOldPrice_recordsNothing() {
+        var receipt = receiptWithItem(new BigDecimal("10.00"), new BigDecimal("2"));
+        creditedBefore(firstCreditedPurchase("10.00", "8.00", "BEST_MARKETS", 20));
+
+        service.attribute(receipt);
+
+        verify(eventService, never()).record(any(), any(), any());
+    }
+
+    @Test
+    void buyingAgainAboveTheOldPrice_recordsNothing() {
+        var receipt = receiptWithItem(new BigDecimal("11.50"), new BigDecimal("2"));
+        creditedBefore(firstCreditedPurchase("10.00", "8.00", "BEST_MARKETS", 20));
+
+        service.attribute(receipt);
+
+        verify(eventService, never()).record(any(), any(), any());
+    }
+
+    @Test
+    void buyingAgain_creditNeverExceedsTheAdvantageTheAppShowed() {
+        // Reference 10.00, the app showed 8.00, the market dropped to 7.00 on its own: 2.00 a unit.
+        var receipt = receiptWithItem(new BigDecimal("7.00"), new BigDecimal("2"));
+        creditedBefore(firstCreditedPurchase("10.00", "8.00", "BEST_MARKETS", 20));
+
+        service.attribute(receipt);
+
+        assertEquals(0, recordedConversion().savingsAmount().compareTo(new BigDecimal("4.00")));
+    }
+
+    @Test
+    void buyingAgain_aLowerPriceTheAppShowedSinceRaisesTheCap() {
+        var receipt = receiptWithItem(new BigDecimal("7.00"), new BigDecimal("2"));
+        creditedBefore(firstCreditedPurchase("10.00", "8.00", "BEST_MARKETS", 20));
+        when(priceExposureRepository.findAttributable(any(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of(shownPrice(PriceExposureSurface.DEALS, new BigDecimal("7.00"))));
+
+        service.attribute(receipt);
+
+        assertEquals(0, recordedConversion().savingsAmount().compareTo(new BigDecimal("6.00")));
+    }
+
+    @Test
+    void buyingAgainAfterASurfacedDeal_hasNoCapLikeItsFirstPurchase() {
+        var receipt = receiptWithItem(new BigDecimal("7.00"), new BigDecimal("1"));
+        creditedBefore(firstCreditedPurchase("10.00", null, "DEALS", 20));
+
+        service.attribute(receipt);
+
+        assertEquals(0, recordedConversion().savingsAmount().compareTo(new BigDecimal("3.00")));
+    }
+
+    @Test
+    void firstCreditedPurchaseOlderThanTheFollowUpWindow_noLongerCounts() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        creditedBefore(firstCreditedPurchase("10.00", "8.00", "BEST_MARKETS", 61));
+
+        service.attribute(receipt);
+
+        verify(eventService, never()).record(any(), any(), any());
+    }
+
+    @Test
+    void aFollowUpIsNeverTheReference_theFirstCreditedPurchaseIs() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        creditedBefore(
+                firstCreditedPurchase("10.00", "8.00", "BEST_MARKETS", 30),
+                creditedPurchase("{\"followUp\":true,\"previousLastPaid\":10.00,\"shownUnitPrice\":8.00,"
+                        + "\"source\":\"BEST_MARKETS\",\"purchasedAt\":\"" + daysBeforeNow(5) + "\"}"));
+
+        service.attribute(receipt);
+
+        assertEquals(0, recordedConversion().savingsAmount().compareTo(new BigDecimal("2.00")));
+    }
+
+    @Test
+    void referenceThatWasNotAPriceTheHouseholdPaid_isNotUsedForLaterPurchases() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        creditedBefore(creditedPurchase("{\"followUp\":false,\"ownReference\":false,\"previousLastPaid\":12.00,"
+                + "\"source\":\"DEALS\",\"purchasedAt\":\"" + daysBeforeNow(10) + "\"}"));
+
+        service.attribute(receipt);
+
+        verify(eventService, never()).record(any(), any(), any());
+    }
+
+    @Test
+    void lineAlreadyCredited_recordsNothingAgain() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        var itemId = receipt.getItems().get(0).getId();
+        creditedBefore(
+                firstCreditedPurchase("10.00", "8.00", "BEST_MARKETS", 20),
+                creditedPurchase("{\"followUp\":true,\"previousLastPaid\":10.00,\"receiptItemId\":\"" + itemId + "\"}"));
+
+        service.attribute(receipt);
+
+        verify(eventService, never()).record(any(), any(), any());
+    }
+
+    @Test
+    void conversionRecordedBeforeTheseFieldsExisted_stillSetsTheReference() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        var oldEvent = creditedPurchase("{\"paidUnitPrice\":8.00,\"previousLastPaid\":10.00}");
+        oldEvent.setOccurredAt(OffsetDateTime.now().minusDays(15));
+        creditedBefore(oldEvent);
+
+        service.attribute(receipt);
+
+        var conversion = recordedConversion();
+        assertEquals(0, conversion.savingsAmount().compareTo(new BigDecimal("2.00")));
+        assertEquals("DEALS", conversion.metadata().get("source"));
+        assertFalse(conversion.metadata().containsKey("shownUnitPrice"));
+    }
+
+    private RecordContext recordedConversion() {
+        var contextCaptor = ArgumentCaptor.forClass(RecordContext.class);
+        verify(eventService).record(eq(buyer), eq(NotificationEventType.CONVERTED), contextCaptor.capture());
+        return contextCaptor.getValue();
+    }
+
+    private void creditedBefore(NotificationEvent... convertedEvents) {
+        when(eventRepository.findConvertedForProductAtMarket(anyList(), eq(PRODUCT_ID), eq(CNPJ), any()))
+                .thenReturn(List.of(convertedEvents));
+    }
+
+    private NotificationEvent firstCreditedPurchase(String referenceUnitPrice, String shownUnitPrice, String source,
+                                                    int daysAgo) {
+        var shown = shownUnitPrice == null ? "" : "\"shownUnitPrice\":" + shownUnitPrice + ",";
+        return creditedPurchase("{\"followUp\":false,\"ownReference\":true,\"previousLastPaid\":" + referenceUnitPrice
+                + "," + shown + "\"source\":\"" + source + "\",\"purchasedAt\":\"" + daysBeforeNow(daysAgo) + "\"}");
+    }
+
+    private NotificationEvent creditedPurchase(String metadataJson) {
+        return NotificationEvent.builder()
+                .id(UUID.randomUUID()).user(buyer).eventType(NotificationEventType.CONVERTED)
+                .productId(PRODUCT_ID).marketCnpj(CNPJ).metadata(metadataJson)
+                .occurredAt(OffsetDateTime.now())
+                .build();
+    }
+
+    private static String daysBeforeNow(int days) {
+        return OffsetDateTime.now().minusDays(days).toString();
     }
 
     private PriceExposure shownPrice(PriceExposureSurface surface, BigDecimal unitPrice) {

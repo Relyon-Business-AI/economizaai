@@ -1,5 +1,18 @@
 # economizai — what's new
 
+## 2026-11-17 — "Com a ajuda do app" continua contando as compras seguintes
+
+Sem mudança de contrato: os mesmos endpoints (`/insights/app-savings` e `/insights/app-savings/purchases`) e os
+mesmos campos.
+
+- Antes só a **primeira** compra depois de ver o preço contava (a seguinte já era comparada com a compra barata).
+  Agora, por **60 dias** depois dessa primeira compra, cada compra do mesmo produto no mesmo mercado conta contra
+  o preço que a casa pagava **antes de ver no app**. Nas compras seguintes, `previousPrice` é esse preço de antes.
+- Compra pelo preço antigo ou acima: conta zero e **não desconta** do total.
+- O teto continua: por unidade, o crédito não passa da vantagem que o app mostrou.
+- Vale para compras confirmadas a partir desta versão.
+- Texto do "Como calculamos" no app deve dizer que as compras dos 60 dias seguintes também contam.
+
 ## 2026-11-16 — Tela "Quanto economizei": o que faltava no servidor
 
 Para o PR do front `feat/savings-entry-point`.

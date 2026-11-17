@@ -74,6 +74,24 @@ class ConvertedEventRepositoryTest {
     }
 
     @Test
+    void findsThatHouseholdsConvertedEventsOfOneProductAtOneMarketSinceTheCutoff() {
+        var productId = UUID.randomUUID();
+        var recent = event(buyer, NotificationEventType.CONVERTED, "7.20", productId, WINDOW_START.plusDays(5));
+        event(buyer, NotificationEventType.CONVERTED, "3.00", productId, WINDOW_START.minusDays(1));
+        event(buyer, NotificationEventType.CONVERTED, "3.00", UUID.randomUUID(), WINDOW_START.plusDays(5));
+        event(buyer, NotificationEventType.DEAL_VIEWED, null, productId, WINDOW_START.plusDays(5));
+        event(otherHouseholdBuyer, NotificationEventType.CONVERTED, "9.00", productId, WINDOW_START.plusDays(5));
+        var atAnotherMarket = event(buyer, NotificationEventType.CONVERTED, "4.00", productId, WINDOW_START.plusDays(6));
+        atAnotherMarket.setMarketCnpj("98765432000188");
+        eventRepository.save(atAnotherMarket);
+
+        var found = eventRepository.findConvertedForProductAtMarket(
+                List.of(buyer.getId()), productId, "12345678000199", WINDOW_START);
+
+        assertEquals(List.of(recent.getId()), found.stream().map(NotificationEvent::getId).toList());
+    }
+
+    @Test
     void withoutAStart_goesBackToTheFirstConvertedEvent() {
         event(buyer, NotificationEventType.CONVERTED, "7.20", UUID.randomUUID(), WINDOW_START.plusDays(5));
         event(buyer, NotificationEventType.CONVERTED, "3.00", UUID.randomUUID(), WINDOW_START.minusYears(1));
