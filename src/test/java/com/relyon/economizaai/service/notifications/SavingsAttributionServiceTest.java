@@ -11,6 +11,7 @@ import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.NotificationEventType;
 import com.relyon.economizaai.model.enums.PriceExposureSurface;
+import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.repository.DealSurfaceStateRepository;
 import com.relyon.economizaai.repository.NotificationEventRepository;
 import com.relyon.economizaai.repository.PriceExposureRepository;
@@ -30,6 +31,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -488,6 +490,373 @@ class SavingsAttributionServiceTest {
         assertEquals(0, conversion.savingsAmount().compareTo(new BigDecimal("2.00")));
         assertEquals("DEALS", conversion.metadata().get("source"));
         assertFalse(conversion.metadata().containsKey("shownUnitPrice"));
+    }
+
+    @Test
+    void firstCreditedPurchaseExactlyAtTheEdgeOfTheFollowUpWindow_stillCounts() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        var purchaseInstant = receipt.getIssuedAt().atZone(BrazilClock.ZONE).toOffsetDateTime();
+        creditedBefore(creditedPurchase("{\"followUp\":false,\"ownReference\":true,\"previousLastPaid\":10.00,"
+                + "\"shownUnitPrice\":8.00,\"source\":\"BEST_MARKETS\",\"purchasedAt\":\""
+                + purchaseInstant.minusDays(60) + "\"}"));
+
+        service.attribute(receipt);
+
+        assertEquals(0, recordedConversion().savingsAmount().compareTo(new BigDecimal("2.00")));
+    }
+
+    @Test
+    void followUpWindowIsAskedFromThePurchaseDate_notFromToday() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        receipt.setIssuedAt(LocalDateTime.now().minusDays(100));
+
+        service.attribute(receipt);
+
+        var sinceCaptor = ArgumentCaptor.forClass(OffsetDateTime.class);
+        verify(eventRepository).findConvertedForProductAtMarket(anyList(), eq(PRODUCT_ID), eq(CNPJ), sinceCaptor.capture());
+        assertEquals(receipt.getIssuedAt().atZone(BrazilClock.ZONE).toOffsetDateTime().minusDays(60), sinceCaptor.getValue());
+    }
+
+    @Test
+    void creditedPurchaseMadeAfterThisOne_isNotItsReference() {
+        // Receipts scanned out of order: the purchase credited first happened later than this one.
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        receipt.setIssuedAt(LocalDateTime.now().minusDays(5));
+        creditedBefore(firstCreditedPurchase("10.00", "8.00", "BEST_MARKETS", 1));
+
+        service.attribute(receipt);
+
+        verify(eventService, never()).record(any(), any(), any());
+        verify(surfaceStateRepository).findAttributable(anyList(), eq(PRODUCT_ID), eq(CNPJ), any(), any());
+    }
+
+    @Test
+    void twoFirstCreditedPurchases_theNewestOneIsTheReference() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        creditedBefore(
+                firstCreditedPurchase("12.00", "8.00", "BEST_MARKETS", 40),
+                firstCreditedPurchase("9.50", "8.00", "DEALS", 10));
+
+        service.attribute(receipt);
+
+        var conversion = recordedConversion();
+        assertEquals(0, conversion.savingsAmount().compareTo(new BigDecimal("1.50")));
+        assertEquals("DEALS", conversion.metadata().get("source"));
+    }
+
+    @Test
+    void buyingAgain_aHigherPriceTheAppShowedSinceDoesNotLowerTheCap() {
+        var receipt = receiptWithItem(new BigDecimal("7.00"), new BigDecimal("1"));
+        creditedBefore(firstCreditedPurchase("10.00", "8.00", "BEST_MARKETS", 20));
+        when(priceExposureRepository.findAttributable(any(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of(shownPrice(PriceExposureSurface.DEALS, new BigDecimal("9.00"))));
+
+        service.attribute(receipt);
+
+        assertEquals(0, recordedConversion().savingsAmount().compareTo(new BigDecimal("2.00")));
+    }
+
+    @Test
+    void buyingAgain_isAskedForEveryMemberOfTheHousehold() {
+        var partner = User.builder().id(UUID.randomUUID()).name("Mary").email("mary@test.com")
+                .household(buyer.getHousehold()).build();
+        when(userRepository.findAllByHouseholdId(buyer.getHousehold().getId())).thenReturn(List.of(buyer, partner));
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+
+        service.attribute(receipt);
+
+        verify(eventRepository).findConvertedForProductAtMarket(
+                eq(List.of(buyer.getId(), partner.getId())), eq(PRODUCT_ID), eq(CNPJ), any());
+    }
+
+    @Test
+    void buyingAgain_doesNotUseUpTheNewerShownPrice() {
+        var receipt = receiptWithItem(new BigDecimal("7.00"), new BigDecimal("1"));
+        var newerExposure = shownPrice(PriceExposureSurface.DEALS, new BigDecimal("7.00"));
+        creditedBefore(firstCreditedPurchase("10.00", "8.00", "BEST_MARKETS", 20));
+        when(priceExposureRepository.findAttributable(any(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of(newerExposure));
+
+        service.attribute(receipt);
+
+        verify(priceExposureRepository, never()).save(any());
+        assertEquals(null, newerExposure.getConvertedAt());
+    }
+
+    @Test
+    void soldByWeight_savingIsRoundedToCents() {
+        // (10.00 - 8.00) * 0.537 kg = 1.074 -> 1.07
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("0.537"));
+        when(priceExposureRepository.findAttributable(any(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of(shownPrice(PriceExposureSurface.BEST_MARKETS, new BigDecimal("8.00"))));
+        when(receiptItemRepository.findHouseholdHistoryForProduct(eq(PRODUCT_ID), any()))
+                .thenReturn(List.of(priorPurchase(new BigDecimal("10.00"), LocalDateTime.now().minusDays(20))));
+
+        service.attribute(receipt);
+
+        assertEquals(new BigDecimal("1.07"), recordedConversion().savingsAmount());
+    }
+
+    @Test
+    void differenceThatRoundsToZeroCents_recordsNothingAndUsesUpNothing() {
+        var receipt = receiptWithItem(new BigDecimal("9.9960"), new BigDecimal("1"));
+        var exposure = shownPrice(PriceExposureSurface.BEST_MARKETS, new BigDecimal("9.99"));
+        when(priceExposureRepository.findAttributable(any(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of(exposure));
+        when(receiptItemRepository.findHouseholdHistoryForProduct(eq(PRODUCT_ID), any()))
+                .thenReturn(List.of(priorPurchase(new BigDecimal("10.0000"), LocalDateTime.now().minusDays(20))));
+
+        service.attribute(receipt);
+
+        verify(eventService, never()).record(any(), any(), any());
+        verify(priceExposureRepository, never()).save(any());
+    }
+
+    @Test
+    void surfacedDeal_differenceThatRoundsToZeroCents_recordsNothing() {
+        var receipt = receiptWithItem(new BigDecimal("9.9960"), new BigDecimal("1"));
+        when(surfaceStateRepository.findAttributable(anyList(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of(surfaceRow(OffsetDateTime.now().minusDays(1), new BigDecimal("10.00"))));
+        when(receiptItemRepository.findHouseholdHistoryForProduct(eq(PRODUCT_ID), any()))
+                .thenReturn(List.of(priorPurchase(new BigDecimal("10.0000"), LocalDateTime.now().minusDays(20))));
+
+        service.attribute(receipt);
+
+        verify(eventService, never()).record(any(), any(), any());
+        verify(surfaceStateRepository, never()).save(any());
+    }
+
+    @Test
+    void buyingAgain_differenceThatRoundsToZeroCents_recordsNothing() {
+        var receipt = receiptWithItem(new BigDecimal("9.9960"), new BigDecimal("1"));
+        creditedBefore(firstCreditedPurchase("10.00", null, "DEALS", 20));
+
+        service.attribute(receipt);
+
+        verify(eventService, never()).record(any(), any(), any());
+    }
+
+    @Test
+    void pricePaidOnPromotion_isWhatCounts_notThePrintedPrice() {
+        // Printed 9.50, the household typed that it paid 8.00: 10.00 before -> 2.00 a unit.
+        var receipt = receiptWithItem(new BigDecimal("9.50"), new BigDecimal("2"));
+        receipt.getItems().get(0).setPaidUnitPrice(new BigDecimal("8.00"));
+        when(priceExposureRepository.findAttributable(any(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of(shownPrice(PriceExposureSurface.BEST_MARKETS, new BigDecimal("8.00"))));
+        when(receiptItemRepository.findHouseholdHistoryForProduct(eq(PRODUCT_ID), any()))
+                .thenReturn(List.of(priorPurchase(new BigDecimal("10.00"), LocalDateTime.now().minusDays(20))));
+
+        service.attribute(receipt);
+
+        var conversion = recordedConversion();
+        assertEquals(0, conversion.savingsAmount().compareTo(new BigDecimal("4.00")));
+        assertEquals(0, new BigDecimal("8.00").compareTo((BigDecimal) conversion.metadata().get("paidUnitPrice")));
+    }
+
+    @Test
+    void previousPurchaseOnPromotion_theBaselineIsWhatWasReallyPaid() {
+        // Before: printed 10.00 but paid 8.00. Paying 8.00 again saved nothing.
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        var previousOnPromotion = priorPurchase(new BigDecimal("10.00"), LocalDateTime.now().minusDays(20));
+        previousOnPromotion.setPaidUnitPrice(new BigDecimal("8.00"));
+        when(priceExposureRepository.findAttributable(any(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of(shownPrice(PriceExposureSurface.BEST_MARKETS, new BigDecimal("8.00"))));
+        when(surfaceStateRepository.findAttributable(anyList(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of(surfaceRow(OffsetDateTime.now().minusDays(1), new BigDecimal("10.00"))));
+        when(receiptItemRepository.findHouseholdHistoryForProduct(eq(PRODUCT_ID), any()))
+                .thenReturn(List.of(previousOnPromotion));
+
+        service.attribute(receipt);
+
+        verify(eventService, never()).record(any(), any(), any());
+    }
+
+    @Test
+    void buyingAgainOnPromotion_countsWhatWasReallyPaid() {
+        var receipt = receiptWithItem(new BigDecimal("10.00"), new BigDecimal("1"));
+        receipt.getItems().get(0).setPaidUnitPrice(new BigDecimal("8.50"));
+        creditedBefore(firstCreditedPurchase("10.00", "8.00", "BEST_MARKETS", 20));
+
+        service.attribute(receipt);
+
+        assertEquals(0, recordedConversion().savingsAmount().compareTo(new BigDecimal("1.50")));
+    }
+
+    @Test
+    void receiptReadFromAPhoto_earnsNothing() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        receipt.setOrigin(ReceiptOrigin.PHOTO);
+
+        service.attribute(receipt);
+
+        verify(eventRepository, never()).findConvertedForProductAtMarket(any(), any(), any(), any());
+        verify(eventService, never()).record(any(), any(), any());
+    }
+
+    @Test
+    void receiptWithoutMarketOrDate_earnsNothing() {
+        var withoutMarket = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        withoutMarket.setCnpjEmitente(" ");
+        var withoutDate = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        withoutDate.setIssuedAt(null);
+
+        service.attribute(withoutMarket);
+        service.attribute(withoutDate);
+
+        verify(eventService, never()).record(any(), any(), any());
+    }
+
+    @Test
+    void lineNotCountedForTheHouseholdOrWithoutProductOrPrice_earnsNothing() {
+        var notMine = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        notMine.getItems().get(0).setExcludedFromPersonal(true);
+        var withoutProduct = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        withoutProduct.getItems().get(0).setProduct(null);
+        var withoutPrice = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        withoutPrice.getItems().get(0).setUnitPrice(null);
+
+        service.attribute(notMine);
+        service.attribute(withoutProduct);
+        service.attribute(withoutPrice);
+
+        verify(eventRepository, never()).findConvertedForProductAtMarket(any(), any(), any(), any());
+        verify(eventService, never()).record(any(), any(), any());
+    }
+
+    @Test
+    void onlyTheLinesThatCameOutCheaperAreCredited() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        var otherProductId = UUID.randomUUID();
+        receipt.addItem(ReceiptItem.builder()
+                .id(UUID.randomUUID()).lineNumber(2).rawDescription("FEIJAO 1KG")
+                .product(Product.builder().id(otherProductId).normalizedName("FEIJAO 1KG").build())
+                .quantity(BigDecimal.ONE).unit("UN")
+                .unitPrice(new BigDecimal("6.00")).totalPrice(new BigDecimal("6.00")).build());
+        when(priceExposureRepository.findAttributable(any(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of(shownPrice(PriceExposureSurface.BEST_MARKETS, new BigDecimal("8.00"))));
+        when(receiptItemRepository.findHouseholdHistoryForProduct(eq(PRODUCT_ID), any()))
+                .thenReturn(List.of(priorPurchase(new BigDecimal("10.00"), LocalDateTime.now().minusDays(20))));
+
+        service.attribute(receipt);
+
+        var conversion = recordedConversion();
+        assertEquals(PRODUCT_ID, conversion.productId());
+        assertEquals(0, conversion.savingsAmount().compareTo(new BigDecimal("2.00")));
+    }
+
+    @Test
+    void firstCreditedPurchase_namesTheShownPriceItUsed() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        var exposure = shownPrice(PriceExposureSurface.BEST_MARKETS, new BigDecimal("8.00"));
+        when(priceExposureRepository.findAttributable(any(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of(exposure));
+        when(receiptItemRepository.findHouseholdHistoryForProduct(eq(PRODUCT_ID), any()))
+                .thenReturn(List.of(priorPurchase(new BigDecimal("10.00"), LocalDateTime.now().minusDays(20))));
+
+        service.attribute(receipt);
+
+        var metadata = recordedConversion().metadata();
+        assertEquals(exposure.getId().toString(), metadata.get("exposureId"));
+        assertFalse(metadata.containsKey("dealSurfaceId"));
+    }
+
+    @Test
+    void firstCreditedPurchaseOfASurfacedDeal_namesTheDealItUsed() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        var surface = surfaceRow(OffsetDateTime.now().minusDays(2), new BigDecimal("10.00"));
+        when(surfaceStateRepository.findAttributable(anyList(), eq(PRODUCT_ID), eq(CNPJ), any(), any()))
+                .thenReturn(List.of(surface));
+        when(receiptItemRepository.findHouseholdHistoryForProduct(eq(PRODUCT_ID), any()))
+                .thenReturn(List.of(priorPurchase(new BigDecimal("10.00"), LocalDateTime.now().minusDays(20))));
+
+        service.attribute(receipt);
+
+        var metadata = recordedConversion().metadata();
+        assertEquals(surface.getId().toString(), metadata.get("dealSurfaceId"));
+        assertFalse(metadata.containsKey("exposureId"));
+    }
+
+    @Test
+    void deletedReceipt_losesItsCreditsAndFreesTheShownPrice() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        var itemId = receipt.getItems().get(0).getId();
+        var exposure = shownPrice(PriceExposureSurface.BEST_MARKETS, new BigDecimal("8.00"));
+        exposure.setConvertedAt(OffsetDateTime.now());
+        var ownCredit = creditedPurchase("{\"followUp\":false,\"previousLastPaid\":10.00,\"receiptItemId\":\"" + itemId
+                + "\",\"exposureId\":\"" + exposure.getId() + "\"}");
+        var creditOfAnotherReceipt = creditedPurchase("{\"followUp\":true,\"previousLastPaid\":10.00,"
+                + "\"receiptItemId\":\"" + UUID.randomUUID() + "\"}");
+        var creditFromBeforeLinesWereRecorded = creditedPurchase("{\"previousLastPaid\":10.00}");
+        when(eventRepository.findConvertedForProductsAtMarket(anyList(), eq(List.of(PRODUCT_ID)), eq(CNPJ)))
+                .thenReturn(List.of(ownCredit, creditOfAnotherReceipt, creditFromBeforeLinesWereRecorded));
+        when(priceExposureRepository.findById(exposure.getId())).thenReturn(Optional.of(exposure));
+
+        service.forget(receipt);
+
+        verify(eventRepository).delete(ownCredit);
+        verify(eventRepository, never()).delete(creditOfAnotherReceipt);
+        verify(eventRepository, never()).delete(creditFromBeforeLinesWereRecorded);
+        assertEquals(null, exposure.getConvertedAt());
+        verify(priceExposureRepository).save(exposure);
+    }
+
+    @Test
+    void deletedReceipt_freesTheSurfacedDealItUsed() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        var itemId = receipt.getItems().get(0).getId();
+        var surface = surfaceRow(OffsetDateTime.now().minusDays(2), new BigDecimal("10.00"));
+        surface.setConvertedAt(OffsetDateTime.now());
+        var ownCredit = creditedPurchase("{\"followUp\":false,\"previousLastPaid\":10.00,\"receiptItemId\":\"" + itemId
+                + "\",\"dealSurfaceId\":\"" + surface.getId() + "\"}");
+        when(eventRepository.findConvertedForProductsAtMarket(anyList(), eq(List.of(PRODUCT_ID)), eq(CNPJ)))
+                .thenReturn(List.of(ownCredit));
+        when(surfaceStateRepository.findById(surface.getId())).thenReturn(Optional.of(surface));
+
+        service.forget(receipt);
+
+        verify(eventRepository).delete(ownCredit);
+        assertEquals(null, surface.getConvertedAt());
+        verify(surfaceStateRepository).save(surface);
+    }
+
+    @Test
+    void deletedReceipt_followUpCreditGoesAwayWithoutFreeingAnything() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        var itemId = receipt.getItems().get(0).getId();
+        var followUpCredit = creditedPurchase("{\"followUp\":true,\"previousLastPaid\":10.00,"
+                + "\"receiptItemId\":\"" + itemId + "\"}");
+        when(eventRepository.findConvertedForProductsAtMarket(anyList(), eq(List.of(PRODUCT_ID)), eq(CNPJ)))
+                .thenReturn(List.of(followUpCredit));
+
+        service.forget(receipt);
+
+        verify(eventRepository).delete(followUpCredit);
+        verify(priceExposureRepository, never()).save(any());
+        verify(surfaceStateRepository, never()).save(any());
+    }
+
+    @Test
+    void deletedReceiptThatEarnedNothing_changesNothing() {
+        var receipt = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        when(eventRepository.findConvertedForProductsAtMarket(anyList(), eq(List.of(PRODUCT_ID)), eq(CNPJ)))
+                .thenReturn(List.of());
+
+        service.forget(receipt);
+
+        verify(eventRepository, never()).delete(any(NotificationEvent.class));
+    }
+
+    @Test
+    void deletedReceiptWithoutMarketOrProducts_isNotLookedUp() {
+        var withoutMarket = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        withoutMarket.setCnpjEmitente(null);
+        var withoutProducts = receiptWithItem(new BigDecimal("8.00"), new BigDecimal("1"));
+        withoutProducts.getItems().get(0).setProduct(null);
+
+        service.forget(withoutMarket);
+        service.forget(withoutProducts);
+
+        verify(eventRepository, never()).findConvertedForProductsAtMarket(any(), any(), any());
     }
 
     private RecordContext recordedConversion() {

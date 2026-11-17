@@ -1240,6 +1240,11 @@ economia para a menor; no empate, a maior porcentagem**. `size` máximo 50.
   mercado nos **60 dias** seguintes continuam contando contra o preço que a casa pagava antes de ver no app
   (`previousPrice` é sempre esse preço). Compra pelo preço antigo ou acima conta zero e **nada é descontado**: o
   total só cresce. O teto da vantagem mostrada continua valendo. Não muda o formato de nenhuma resposta.
+- **Preço que vale (2026-11-17):** o que a casa realmente pagou. Se ela informou um preço menor na revisão da
+  nota (item em promoção), é esse, na compra de agora e como preço de antes. Nota lida de foto não conta.
+  Diferença que arredonda para zero centavo não entra.
+- **Nota apagada (2026-11-17):** o que ela somou sai do total e da lista. Escanear a mesma nota de novo conta uma
+  vez só.
 - O período filtra pelo momento em que a compra foi registrada (confirmação da nota).
 - `productId` vem para a linha poder abrir o produto.
 
