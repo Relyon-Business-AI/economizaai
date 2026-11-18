@@ -1625,7 +1625,12 @@ state) sinks to the end instead of flooding the top; watched-but-far markets are
 The old `radiusKm` param is gone (radius is fixed at 20 km).
 
 Each row: `{ cnpj, cnpjRoot, name, friendlyName, address, city, state, latitude,
-longitude, distanceKm, visited, watching, chainName, chainLogoUrl }`. `name` is the full
+longitude, distanceKm, visited, watching, chainName, chainLogoUrl, communityPurchaseCount,
+householdPurchaseCount, householdSpend }`.
+`communityPurchaseCount` (2026-11-18) is how many confirmed notas the community scanned at
+that store, for the map pin; **null when fewer than 3 households contributed** (k-anon).
+`householdPurchaseCount`/`householdSpend` are the viewer household's own confirmed notas there
+and their total; null when it never bought at that store. `name` is the full
 legal razão social; **`friendlyName` is the cleaned display name** (2026-11-10 — household
 rename → chain name → `cleanLegalName` heuristic, e.g. "BISTEK SUPERMERCADOS LTDA" → "Bistek"),
 so prefer it for display; `city`/`state` are new (2026-11-10, null until geocoded); `visited` =
@@ -1695,6 +1700,9 @@ GET /api/v1/price-index/scanned-products
 GET /api/v1/price-index/promos?radiusKm=5
 GET /api/v1/price-index/promos/feed[?lat=&lng=]   (lat/lng = GPS do aparelho, os dois ou nenhum; lidera a cascata)
 ```
+
+**Map position (2026-11-18):** each best-markets row carries `latitude`/`longitude` of the
+store it is shown as (null until that store is geocoded), so the app can put the price on a map.
 
 **`sort` (2026-11-10)** on best-markets + both generic-comparison endpoints (default
 `CHEAPEST`): `CHEAPEST` = price ascending (historical; best-markets keeps watched-first;
@@ -2122,37 +2130,171 @@ clears any active snooze on that product (the user just took action).
 ## 9. Shopping list optimizer (PRO-52)
 
 ```
-POST /api/v1/shopping-list/optimize      (alias: /api/v1/shopping-lists/optimize — same handler)
+POST /api/v1/shopping-lists/optimize      (alias: /api/v1/shopping-list/optimize — same handler)
 {
   "items": [
     { "productId": "<uuid-1>", "quantity": 2 },
     { "productId": "<uuid-2>", "quantity": 1 }
-  ]
+  ],
+  "maxDistanceKm": 10,        // optional
+  "maxStops": 2,              // optional, 1..10
+  "minSavingPerStop": 10.00,  // optional, R$
+  "latitude": -30.03,         // optional, device position (both or none)
+  "longitude": -51.21
 }
 → {
     "marketPlans": [
       {
         "marketCnpj": "...",
         "marketName": "...",
+        "marketFriendlyName": "...",
         "subtotal": 35.40,
         "itemCount": 2,
-        "items": [ { "productId": "...", "productName": "...", "friendlyDescription": null, "quantity": 2, "estimatedUnitPrice": 12.50, "estimatedSubtotal": 25.00, "priceSource": "LOCAL_HISTORY" } ]
+        "items": [ { "productId": "...", "productName": "...", "friendlyDescription": null, "quantity": 2, "estimatedUnitPrice": 12.50, "estimatedSubtotal": 25.00, "priceSource": "LOCAL_HISTORY" } ],
+        "latitude": -30.05, "longitude": -51.22, "distanceKm": 1.2
       }
     ],
     "estimatedTotal": 35.40,
-    "unpriced": [ { "productId": "...", "productName": "...", "friendlyDescription": null, "reason": "no observed price (local or community)" } ]
+    "unpriced": [ { "productId": "...", "productName": "...", "friendlyDescription": null, "reason": "no observed price (local or community)" } ],
+    "skippedSavings": [ { "productId": "...", "productName": "...", "friendlyDescription": null, "marketCnpj": "...", "marketName": "...", "marketFriendlyName": "...", "saving": 1.20 } ]
   }
 ```
 
-Greedy heuristic: per item, pick the cheapest known market. Price source
-priority: (1) household's own most-recent purchase, (2) community-index
-median, (3) unpriced (FE shows "preço indisponível" badge).
+Per item, the cheapest known market wins. Price source priority: (1) household's own
+most-recent purchase, (2) community-index median, (3) unpriced (FE shows "preço
+indisponível" badge).
 
-No travel-time modeling yet — V1 picks lowest-cost regardless of how many
-markets the user would have to visit.
+**Route rules (2026-11-18)** — all optional, each one independent, null = no limit. A
+request without them behaves exactly as before (apps in the field keep working):
+
+- `maxDistanceKm`: stores farther than this are not considered. A store we have not geocoded
+  is out too. Only applies when the shopper has a known position (`latitude`/`longitude`, or
+  the "perto de você" cascade: profile → receipts-median → UF).
+- `maxStops`: while the plan has more stops than this, the stop that is cheapest to give up
+  is dropped and its items move to the next cheapest remaining store. An item sold only at a
+  dropped store goes to `unpriced` with `reason: "no observed price within the route rules"`.
+- `minSavingPerStop`: a stop that saves less than this (versus buying its items at the other
+  stops) is dropped. A stop holding an item sold nowhere else in the plan is kept.
+
+`marketPlans` comes in **route order**: nearest first when the shopper's position is known,
+otherwise largest subtotal first (the old order). Each stop carries `latitude`/`longitude`
+(null until geocoded) and `distanceKm` (null when either side has no position).
+
+`skippedSavings`: items that are cheaper at a store the rules left out (within
+`maxDistanceKm`), largest saving first. `saving` is for the requested quantity. Lets the app
+say "o óleo sai R$ 1,20 mais barato no X, mas não compensa outra parada".
 
 `items[*]` and `unpriced[*]` carry `productName` **and `friendlyDescription`**
 (the household's rename, null when never renamed — prefer it for display).
+
+---
+
+## 9b. Shopping trip record (2026-11-18)
+
+```
+POST /api/v1/shopping-trips        → 201 { "id": "<uuid>" }
+{
+  "clientTripId": "k3j2-…",                 // gerado no aparelho; reenviar o mesmo devolve o mesmo id
+  "shoppingListId": "<uuid>",               // opcional
+  "startedAt": "2026-11-18T10:00:00-03:00",
+  "finishedAt": "2026-11-18T11:10:00-03:00",
+  "outcome": "COMPLETED",                   // ou ENDED_EARLY (encerrou antes da última parada)
+  "maxDistanceKm": 10, "maxStops": 2, "minSavingPerStop": 10,   // regras usadas; opcionais
+  "plannedTotal": 115.42, "plannedStopCount": 2,
+  "unpricedItemCount": 0, "skippedSavingTotal": 1.20, "priceLookupCount": 3,
+  "stops": [                                // na ordem da rota
+    {
+      "marketCnpj": "…", "marketName": "…", "distanceKm": 0.4,
+      "concluded": true, "concludedAt": "2026-11-18T10:40:00-03:00",
+      "receiptId": "<uuid>",                // nota que fechou a parada; opcional
+      "receiptPaidTotal": 30.84, "receiptPredictedTotal": 31.74,
+      "items": [
+        { "productId": "<uuid>", "quantity": 6, "plannedUnitPrice": 5.29, "priceSource": "LOCAL_HISTORY",
+          "status": "IN_CART",              // IN_CART | NOT_FOUND | PENDING
+          "inReceipt": true, "paidUnitPrice": 5.14,
+          "plannedStopPosition": 0,         // parada em que o plano punha o item; null = entrou durante a compra
+          "addedDuringTrip": false }
+      ]
+    }
+  ]
+}
+```
+
+Registro de uma compra feita pelo modo de compra: o que o plano previa e o que aconteceu em cada
+parada. **Só grava** — nenhum endpoint devolve esses dados e nada aparece para o usuário; é a base
+para medir depois previsto x pago, "não achei" por mercado e uso das regras da rota.
+
+- Idempotente por (`household`, `clientTripId`): o app reenvia até dar certo.
+- `receiptId` só é guardado quando a nota é da própria casa; senão a parada fica sem nota e os
+  campos de pago são descartados. Apagar a nota depois só desfaz o vínculo.
+- Item de produto que não existe mais é deixado de fora. O total previsto da parada é recalculado
+  no servidor a partir dos itens.
+- `plannedStopPosition` diferente da posição da parada = o item foi levado para outra pelo "não achei".
+- Junto com a compra o servidor guarda **quanto os itens comprados (`IN_CART`) custariam num único
+  mercado próximo**, para até 3 mercados (tabela `shopping_trip_alternatives`). Só entram os itens que
+  o mercado tem preço; o total da compra guardado ao lado é o desses mesmos itens. Um mercado da própria
+  rota também conta como alternativa (comprar tudo nele), a não ser que a compra tenha tido uma parada só.
+  O app não manda nada para isso. Se a comparação falhar, a compra é gravada do mesmo jeito.
+
+---
+
+## 9c. Esta compra em outros mercados (2026-11-18)
+
+```
+GET /api/v1/receipts/{id}/market-comparison
+→ {
+    "receiptId": "<uuid>",
+    "available": true,                // false = esta nota não tem (nem vai ter) comparação
+    "computedAt": "2026-11-16T18:30:00-03:00",   // quando os preços dos outros mercados foram fotografados
+    "comparableItemCount": 18,        // produtos distintos da nota que dá para comparar
+    "locationKnown": true,            // false = sem posição para medir "perto"; markets vem vazio
+    "markets": [                      // até 3, os que cobrem mais itens primeiro (empate: mais perto)
+      {
+        "cnpj": "…", "marketName": "ATACADO SUL SA", "friendlyName": "Atacado Sul",
+        "chainLogoUrl": "/chains/logo/…", "distanceKm": 1.2,
+        "matchedItemCount": 12,
+        "paidTotal": 143.20,          // o que a casa pagou por ESSES 12 itens (não a nota inteira)
+        "alternativeTotal": 131.75,   // os mesmos 12 itens neste mercado
+        "difference": -11.45,         // alternativeTotal − paidTotal; negativo = sairia mais barato lá
+        "items": [
+          { "productId": "…", "productName": "Leite integral 1 L", "quantity": 6,
+            "paidTotal": 31.74, "alternativeUnitPrice": 4.79, "alternativeTotal": 28.74,
+            "observedAt": "2026-11-15T00:00:00" }
+        ]
+      }
+    ]
+  }
+```
+
+Quanto os itens de uma nota custariam em mercados próximos.
+
+**Calculado na gravação, não na leitura (2026-11-18).** Os preços dos outros mercados são
+fotografados **uma vez**, quando a nota é confirmada, e guardados (`receipt_market_comparisons`).
+Abrir a nota depois lê o que foi guardado: o número não muda quando os preços mudam.
+
+- A captura roda em segundo plano logo depois do commit da confirmação; confirmar não espera por ela.
+- Se a nota for lida antes de a captura terminar (ou se a fila estava cheia), a própria leitura
+  captura na hora. O app nunca precisa esperar nem tentar de novo.
+- O que a casa pagou vem sempre dos itens **atuais** da nota, cruzados com os preços guardados:
+  tirar um item ou corrigir o preço pago muda a comparação sem buscar preço nenhum de novo.
+- `available: false`: a nota não está confirmada, ou foi comprada há mais de **7 dias** e não tem
+  comparação guardada (preço de hoje não diz nada sobre compra antiga).
+- Sem posição conhecida nada é guardado (`locationKnown: false`, `computedAt: null`): quando a pessoa
+  definir a localização, a próxima leitura captura.
+
+Regras da comparação:
+
+- **Só compara o que casa.** Entra o item com produto identificado, não excluído e com preço; no outro
+  mercado, só o que tem preço lá. `paidTotal` e `alternativeTotal` cobrem sempre os mesmos itens.
+- Preço pago = o informado na revisão (`paidTotalPrice`) quando existe; senão o da nota.
+- Preço no outro mercado = o mesmo do best-markets (último preço visto da rede, com o mesmo raio de
+  20 km e o mesmo k-anon). A rede onde a nota foi emitida fica de fora.
+- Um mercado só aparece se tiver preço de **pelo menos 40% dos itens comparáveis** da nota
+  (arredondado para cima: 8 de 18, 4 de 10, 2 de 5, e nunca menos de 1).
+- Nota de outra casa → 404.
+- Custo: a captura lê os preços da nota inteira em um punhado de consultas (mercados no raio,
+  observações, lojas, casas por rede, produtos), qualquer que seja o número de itens, e acontece uma
+  vez por nota. As leituras seguintes só leem o que foi guardado.
 
 ---
 

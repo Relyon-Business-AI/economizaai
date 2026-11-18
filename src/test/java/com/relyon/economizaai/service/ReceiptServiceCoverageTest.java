@@ -20,6 +20,7 @@ import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.repository.UserRepository;
+import com.relyon.economizaai.service.priceindex.ReceiptMarketComparisonService;
 import com.relyon.economizaai.service.cache.HouseholdCacheGen;
 import com.relyon.economizaai.service.canonicalization.CanonicalizationService;
 import com.relyon.economizaai.service.geo.MarketLocationService;
@@ -115,6 +116,7 @@ class ReceiptServiceCoverageTest {
     @Mock
     private ReferralService referralService;
     @Mock private SavingsAttributionService savingsAttributionService;
+    @Mock private ReceiptMarketComparisonService receiptMarketComparisonService;
     @Mock private MerchantSupportGate merchantSupportGate;
     @Mock private LocalizedMessageService localizedMessageService;
     @Mock private TransactionTemplate transactionTemplate;

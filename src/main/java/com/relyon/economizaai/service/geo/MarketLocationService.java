@@ -28,11 +28,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -533,6 +536,29 @@ public class MarketLocationService {
             productRepository.saveAll(products);
             log.info("merchant.classify.backfill cnpj={} products={}", cnpj, products.size());
         }
+    }
+
+    /** Kilometres per degree of latitude (and of longitude at the equator). */
+    private static final double KM_PER_DEGREE = 111.0;
+
+    /**
+     * Chains (CNPJ roots) with at least one geocoded store within {@code radiusKm} of a point.
+     * One indexed query over a latitude/longitude box, then the exact distance in memory.
+     */
+    @Transactional(readOnly = true)
+    public Set<String> chainRootsWithin(BigDecimal latitude, BigDecimal longitude, double radiusKm) {
+        var latitudeSpan = BigDecimal.valueOf(radiusKm / KM_PER_DEGREE);
+        // A degree of longitude shrinks with latitude; the floor keeps the box finite near the poles.
+        var kmPerLongitudeDegree = KM_PER_DEGREE * Math.max(0.1, Math.cos(Math.toRadians(latitude.doubleValue())));
+        var longitudeSpan = BigDecimal.valueOf(radiusKm / kmPerLongitudeDegree);
+        return repository.findAllByLatitudeBetweenAndLongitudeBetween(
+                        latitude.subtract(latitudeSpan), latitude.add(latitudeSpan),
+                        longitude.subtract(longitudeSpan), longitude.add(longitudeSpan)).stream()
+                .filter(market -> DistanceCalculator.kmBetween(latitude, longitude,
+                        market.getLatitude(), market.getLongitude()) <= radiusKm)
+                .map(MarketLocation::getCnpjRoot)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
     }
 
     /** Bulk lookup helper for queries that need lat/lng for many CNPJs. */

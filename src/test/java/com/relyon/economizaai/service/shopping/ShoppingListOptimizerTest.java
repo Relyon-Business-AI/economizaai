@@ -15,7 +15,11 @@ import com.relyon.economizaai.repository.PriceObservationAuditRepository;
 import com.relyon.economizaai.repository.PriceObservationRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
+import com.relyon.economizaai.model.MarketLocation;
+import com.relyon.economizaai.repository.MarketLocationRepository;
 import com.relyon.economizaai.service.geo.MarketNameService;
+import com.relyon.economizaai.service.geo.ViewerLocationService;
+import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import com.relyon.economizaai.service.HouseholdProductAliasService;
@@ -53,6 +57,8 @@ class ShoppingListOptimizerTest {
     @Mock private HouseholdProductAliasService householdProductAliasService;
     @Mock private MarketNameService marketNameService;
     @Mock private SubscriptionGateService subscriptionGate;
+    @Mock private MarketLocationRepository marketLocationRepository;
+    @Mock private ViewerLocationService viewerLocationService;
 
     private CollaborativeProperties properties;
     private ShoppingListOptimizer optimizer;
@@ -64,12 +70,15 @@ class ShoppingListOptimizerTest {
         properties = new CollaborativeProperties();
         optimizer = new ShoppingListOptimizer(receiptItemRepository, observationRepository,
                 auditRepository, productRepository, properties, marketNameService, subscriptionGate,
-                householdProductAliasService);
+                householdProductAliasService, marketLocationRepository, viewerLocationService);
         household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
         user = User.builder().id(UUID.randomUUID()).email("buyer@economizai").household(household).build();
         lenient().when(observationRepository.findRecentByProduct(any(), any())).thenReturn(List.of());
         lenient().when(receiptItemRepository.findHouseholdHistoryForProduct(any(), any())).thenReturn(List.of());
         lenient().when(marketNameService.resolveNames(any(), any())).thenReturn(Map.of());
+        lenient().when(marketLocationRepository.findAllByCnpjIn(any())).thenReturn(List.of());
+        lenient().when(viewerLocationService.resolve(any(), any(), any()))
+                .thenReturn(new ViewerLocation(null, null, ViewerLocationService.Source.NONE, null));
         lenient().when(marketNameService.applyOverride(any(), any(), any()))
                 .thenAnswer(invocation -> invocation.getArgument(2));
     }
@@ -355,5 +364,156 @@ class ShoppingListOptimizerTest {
 
         assertEquals("Arroz do mes", plan.marketPlans().get(0).items().get(0).friendlyDescription());
         assertEquals("Sabao da maquina", plan.unpriced().get(0).friendlyDescription());
+    }
+
+    private static final String NEAR_MARKET = "11111111000111";
+    private static final String MID_MARKET = "22222222000122";
+    private static final String FAR_MARKET = "33333333000133";
+
+    /** Shopper at the origin; near ≈ 1.1 km, mid ≈ 3.3 km, far ≈ 33 km away. */
+    private void placeShopperAndMarkets() {
+        when(viewerLocationService.resolve(any(), any(), any())).thenReturn(new ViewerLocation(
+                BigDecimal.ZERO, BigDecimal.ZERO, ViewerLocationService.Source.DEVICE, "RS"));
+        when(marketLocationRepository.findAllByCnpjIn(any())).thenReturn(List.of(
+                marketAt(NEAR_MARKET, "0.01"), marketAt(MID_MARKET, "0.03"), marketAt(FAR_MARKET, "0.3")));
+    }
+
+    private MarketLocation marketAt(String cnpj, String latitude) {
+        return MarketLocation.builder().cnpj(cnpj).cnpjRoot(cnpj.substring(0, 8))
+                .latitude(new BigDecimal(latitude)).longitude(BigDecimal.ZERO).build();
+    }
+
+    private Product pricedProduct(String name, Map<String, String> priceByMarket) {
+        var product = product(name);
+        when(productRepository.findById(product.getId())).thenReturn(Optional.of(product));
+        when(receiptItemRepository.findHouseholdHistoryForProduct(eq(product.getId()), any())).thenReturn(
+                priceByMarket.entrySet().stream()
+                        .map(price -> historyItem(product, price.getKey(), "Mercado " + price.getKey(),
+                                new BigDecimal(price.getValue())))
+                        .toList());
+        return product;
+    }
+
+    private OptimizeShoppingListRequest requestWithRules(BigDecimal maxDistanceKm, Integer maxStops,
+                                                         BigDecimal minSavingPerStop, Product... products) {
+        var items = List.of(products).stream()
+                .map(product -> new OptimizeShoppingListRequest.Item(product.getId(), BigDecimal.ONE))
+                .toList();
+        return new OptimizeShoppingListRequest(items, maxDistanceKm, maxStops, minSavingPerStop, null, null);
+    }
+
+    @Test
+    void optimize_maxDistanceLeavesOutFarMarketAndReportsSkippedSaving() {
+        placeShopperAndMarkets();
+        var coffee = pricedProduct("Cafe", Map.of(NEAR_MARKET, "20.00", FAR_MARKET, "10.00"));
+
+        var plan = optimizer.optimize(user, requestWithRules(new BigDecimal("10"), null, null, coffee));
+
+        assertEquals(1, plan.marketPlans().size());
+        assertEquals(NEAR_MARKET, plan.marketPlans().get(0).marketCnpj());
+        assertEquals(0, plan.estimatedTotal().compareTo(new BigDecimal("20.00")));
+        // The far market is outside the rules entirely, so it is not offered as a skipped saving either.
+        assertTrue(plan.skippedSavings().isEmpty());
+    }
+
+    @Test
+    void optimize_maxDistanceMakesItemUnpricedWhenOnlyFarMarketSellsIt() {
+        placeShopperAndMarkets();
+        var coffee = pricedProduct("Cafe", Map.of(FAR_MARKET, "10.00"));
+
+        var plan = optimizer.optimize(user, requestWithRules(new BigDecimal("10"), null, null, coffee));
+
+        assertTrue(plan.marketPlans().isEmpty());
+        assertEquals(1, plan.unpriced().size());
+        assertEquals("no observed price within the route rules", plan.unpriced().get(0).reason());
+    }
+
+    @Test
+    void optimize_minSavingDropsStopThatSavesTooLittle() {
+        placeShopperAndMarkets();
+        var coffee = pricedProduct("Cafe", Map.of(NEAR_MARKET, "30.00", MID_MARKET, "40.00"));
+        var oil = pricedProduct("Oleo", Map.of(NEAR_MARKET, "9.00", MID_MARKET, "7.80"));
+
+        var plan = optimizer.optimize(user, requestWithRules(null, null, new BigDecimal("10"), coffee, oil));
+
+        assertEquals(1, plan.marketPlans().size());
+        assertEquals(NEAR_MARKET, plan.marketPlans().get(0).marketCnpj());
+        assertEquals(0, plan.estimatedTotal().compareTo(new BigDecimal("39.00")));
+        assertEquals(1, plan.skippedSavings().size());
+        var skipped = plan.skippedSavings().get(0);
+        assertEquals(oil.getId(), skipped.productId());
+        assertEquals(MID_MARKET, skipped.marketCnpj());
+        assertEquals(0, skipped.saving().compareTo(new BigDecimal("1.20")));
+    }
+
+    @Test
+    void optimize_minSavingKeepsStopThatPaysOff() {
+        placeShopperAndMarkets();
+        var coffee = pricedProduct("Cafe", Map.of(NEAR_MARKET, "30.00", MID_MARKET, "45.00"));
+        var meat = pricedProduct("Carne", Map.of(NEAR_MARKET, "60.00", MID_MARKET, "40.00"));
+
+        var plan = optimizer.optimize(user, requestWithRules(null, null, new BigDecimal("10"), coffee, meat));
+
+        assertEquals(2, plan.marketPlans().size());
+        assertTrue(plan.skippedSavings().isEmpty());
+    }
+
+    @Test
+    void optimize_minSavingKeepsStopHoldingItemSoldNowhereElse() {
+        placeShopperAndMarkets();
+        var coffee = pricedProduct("Cafe", Map.of(NEAR_MARKET, "30.00"));
+        var salt = pricedProduct("Sal", Map.of(MID_MARKET, "2.00"));
+
+        var plan = optimizer.optimize(user, requestWithRules(null, null, new BigDecimal("10"), coffee, salt));
+
+        assertEquals(2, plan.marketPlans().size());
+        assertTrue(plan.unpriced().isEmpty());
+    }
+
+    @Test
+    void optimize_maxStopsDropsTheStopThatCostsLeastToGiveUp() {
+        placeShopperAndMarkets();
+        var coffee = pricedProduct("Cafe", Map.of(NEAR_MARKET, "30.00", MID_MARKET, "50.00", FAR_MARKET, "55.00"));
+        var meat = pricedProduct("Carne", Map.of(NEAR_MARKET, "70.00", MID_MARKET, "40.00", FAR_MARKET, "75.00"));
+        var oil = pricedProduct("Oleo", Map.of(NEAR_MARKET, "9.00", MID_MARKET, "9.50", FAR_MARKET, "7.00"));
+
+        var plan = optimizer.optimize(user, requestWithRules(null, 2, null, coffee, meat, oil));
+
+        assertEquals(2, plan.marketPlans().size());
+        assertEquals(List.of(NEAR_MARKET, MID_MARKET),
+                plan.marketPlans().stream().map(marketPlan -> marketPlan.marketCnpj()).toList());
+        // 30 (cafe) + 40 (carne) + 9 (oleo moves to the near market)
+        assertEquals(0, plan.estimatedTotal().compareTo(new BigDecimal("79.00")));
+        assertEquals(FAR_MARKET, plan.skippedSavings().get(0).marketCnpj());
+    }
+
+    @Test
+    void optimize_maxStopsSendsStrandedItemToUnpriced() {
+        placeShopperAndMarkets();
+        var coffee = pricedProduct("Cafe", Map.of(NEAR_MARKET, "30.00"));
+        var meat = pricedProduct("Carne", Map.of(NEAR_MARKET, "70.00"));
+        var salt = pricedProduct("Sal", Map.of(MID_MARKET, "2.00"));
+
+        var plan = optimizer.optimize(user, requestWithRules(null, 1, null, coffee, meat, salt));
+
+        assertEquals(1, plan.marketPlans().size());
+        assertEquals(NEAR_MARKET, plan.marketPlans().get(0).marketCnpj());
+        assertEquals(1, plan.unpriced().size());
+        assertEquals(salt.getId(), plan.unpriced().get(0).productId());
+    }
+
+    @Test
+    void optimize_ordersStopsNearestFirstAndCarriesPosition() {
+        placeShopperAndMarkets();
+        var coffee = pricedProduct("Cafe", Map.of(MID_MARKET, "30.00"));
+        var salt = pricedProduct("Sal", Map.of(NEAR_MARKET, "2.00"));
+
+        var plan = optimizer.optimize(user, requestWithRules(null, null, null, coffee, salt));
+
+        assertEquals(List.of(NEAR_MARKET, MID_MARKET),
+                plan.marketPlans().stream().map(marketPlan -> marketPlan.marketCnpj()).toList());
+        var nearest = plan.marketPlans().get(0);
+        assertEquals(0, nearest.latitude().compareTo(new BigDecimal("0.01")));
+        assertTrue(nearest.distanceKm() > 1.0 && nearest.distanceKm() < 1.2);
     }
 }

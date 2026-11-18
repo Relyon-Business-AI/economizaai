@@ -59,6 +59,7 @@ import com.relyon.economizaai.service.sefaz.StateCoverageService;
 import com.relyon.economizaai.service.subscription.EntitlementClock;
 import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
+import com.relyon.economizaai.service.priceindex.ReceiptMarketComparisonService;
 import com.relyon.economizaai.service.referral.ReferralService;
 import com.relyon.economizaai.service.subscription.SubscriptionService;
 import org.junit.jupiter.api.BeforeEach;
@@ -129,6 +130,7 @@ class ReceiptServiceTest {
     @Mock private SubscriptionGateService subscriptionGate;
     @Mock private SubscriptionService subscriptionService;
     @Mock private ReferralService referralService;
+    @Mock private ReceiptMarketComparisonService receiptMarketComparisonService;
     @Mock private SavingsAttributionService savingsAttributionService;
     @Mock private LocalizedMessageService localizedMessageService;
     @Mock private MerchantSupportGate merchantSupportGate;
@@ -1197,6 +1199,7 @@ class ReceiptServiceTest {
         receiptService.confirm(user, receipt.getId(), null);
 
         verify(referralService).qualifyAfterCommit(user.getId(), receipt.getId());
+        verify(receiptMarketComparisonService).captureAfterCommit(receipt.getId());
     }
 
     @Test
