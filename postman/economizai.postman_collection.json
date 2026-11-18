@@ -6171,6 +6171,37 @@
 					"response": []
 				},
 				{
+					"name": "Deals \u2014 s\u00f3 as ofertas de um aviso",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/deals?notificationId={{notificationId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"deals"
+							],
+							"query": [
+								{
+									"key": "notificationId",
+									"value": "{{notificationId}}"
+								}
+							]
+						},
+						"description": "S\u00f3 as ofertas que o aviso anunciou (toque em \"X mais barato e mais N ofertas\"). Lista vazia quando nenhuma continua valendo ou o aviso n\u00e3o \u00e9 de quem chama."
+					},
+					"response": []
+				},
+				{
 					"name": "Deals \u2014 Ofertas pra voc\u00ea (include nearby)",
 					"request": {
 						"method": "GET",

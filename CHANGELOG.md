@@ -1,5 +1,11 @@
 # economizai — what's new
 
+## 2026-11-18 — Ofertas de um aviso
+
+`GET /api/v1/deals` aceita `notificationId` (opcional). Com ele, a lista traz só as ofertas que aquele aviso
+anunciou ("CHUCHU mais barato e mais 1 oferta" traz as duas), na mesma ordem de sempre. Oferta que já acabou
+não aparece; aviso de outra pessoa ou sem oferta devolve lista vazia. Sem o parâmetro nada muda.
+
 ## 2026-11-17 — "Com a ajuda do app": revisão do cálculo
 
 Sem mudança de contrato: os mesmos endpoints e os mesmos campos. Corrige casos em que o número saía errado.
