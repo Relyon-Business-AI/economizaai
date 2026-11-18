@@ -73,6 +73,34 @@ A rollback looks like:
 
 <!-- AUTONOMOUS ENTRIES BELOW - newest first. The watchdog inserts here. -->
 
+### [2026-11-18 14:44:31] [NEEDS-HUMAN] NO-TESTREF - E2E: 13. Confirm receipt (returns receipt + personalPromos)
+- **Detected:**
+```
+A daily E2E run against the live dev server FAILED (83/272 assertions).
+Failing steps:
+- 13. Confirm receipt (returns receipt + personalPromos): AssertionError: expected response to have status code 200 but got 502
+- 13. Confirm receipt (returns receipt + personalPromos): JSONError: No data, empty input at 1:1
+
+^
+- 13a. Edit confirmed item — personal layer (não é meu): AssertionError: expected response to have status code 200 but got 502
+- 13a. Edit confirmed item — personal layer (não é meu): JSONError: No data, empty input at 1:1
+
+^
+- 13b. Export purchase history CSV: AssertionError: expected response to have status code 200 but got 502
+- 13b. Export purchase history CSV: AssertionError: expected '' to include 'Chave de acesso'
+- 13c. Export PDF report: AssertionError: expected response to have status code 200 but got 503
+- 14. Confirm again should 400 (already confirmed): AssertionError: expected response to have status code 400 but got 503
+
+Server-side errors during the run (the likely root cause):
+```
+2026-11-18 14:32:49.345 ERROR [req=89f323ce user= ip=189.6.247.153 rcpt= item=] c.r.e.service.ContactService - contact.failed from=c***@economizaai.app MailSendException: Mail server connection failed. Failed messages: org.eclipse.angus.mail.util.MailConnectException: Couldn't connect to host, port: smtp.gmail.com, 587; timeout 10000;
+	java.net.SocketTimeoutException: Connect timed out — message was:
+2026-11-18 14:32:49.440 WARN  [req=89f323ce user= ip=189.6.247.153 rcpt= i
+```
+- **Claude:** Failed to authenticate. API Error: 401 OAuth access token has been revoked.
+Ignoring 25 permissions.allow entries from .claude/settings.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog, or set projects["/home/runner/work/economizaai/economizaai"].hasTrustDialogAccepted: true in /home/runner/.claude.json.
+- **Outcome:** reply lacked a verifiable test reference; changes discarded.
+
 ### [2026-11-17 15:10:32] [NEEDS-HUMAN] NO-TESTREF - E2E: 13b. Export purchase history CSV
 - **Detected:**
 ```
