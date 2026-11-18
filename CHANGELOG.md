@@ -5,8 +5,10 @@
 - **`GET /receipts/{id}/market-comparison`** (novo): quanto os itens de uma nota custariam em até 3 mercados
   próximos. Cada mercado traz `matchedItemCount`, `paidTotal` (o que a casa pagou por esses mesmos itens),
   `alternativeTotal`, `difference` (negativo = mais barato lá) e a lista de itens com o preço e a data em que
-  foi visto. Só compara item que tem preço no outro mercado; mercado com menos de 3 itens em comum não
-  aparece. `locationKnown: false` quando não há posição para medir "perto". Detalhes no `API.md` (§9c).
+  foi visto. Só compara item que tem preço no outro mercado; um mercado só aparece se tiver preço de pelo
+  menos 40% dos itens comparáveis da nota. `locationKnown: false` quando não há posição para medir "perto". Detalhes no `API.md` (§9c).
+- A comparação lê os preços da nota inteira de uma vez (número fixo de consultas, não uma por produto).
+  Migration V188: índice de posição em `market_locations`.
 - **Registro da compra**: o servidor passa a guardar, junto com cada compra, quanto os itens comprados
   custariam num único mercado próximo (até 3). Nada muda no corpo do `POST /shopping-trips`.
 

@@ -2271,10 +2271,12 @@ Quanto os itens de uma nota custariam em mercados próximos. Regras:
 - Preço pago = o informado na revisão (`paidTotalPrice`) quando existe; senão o da nota.
 - Preço no outro mercado = o mesmo do best-markets (último preço visto da rede, com o mesmo raio de
   20 km e o mesmo k-anon). A rede onde a nota foi emitida fica de fora.
-- Um mercado só aparece se tiver preço de **pelo menos 3 itens** (ou de todos, em nota com menos de 3).
+- Um mercado só aparece se tiver preço de **pelo menos 40% dos itens comparáveis** da nota
+  (arredondado para cima: 8 de 18, 4 de 10, 2 de 5, e nunca menos de 1).
 - Nota de outra casa → 404. Vale para nota em qualquer status que já tenha itens.
-- Custo: uma consulta de best-markets por produto distinto da nota. Chame sob demanda (ao abrir a
-  nota), não em lista.
+- Custo fixo: os preços da nota inteira saem em um punhado de consultas (mercados no raio, observações,
+  lojas, casas por rede, produtos), qualquer que seja o número de itens. Ainda assim é para chamar sob
+  demanda (ao abrir a nota), não em lista.
 
 ---
 

@@ -757,4 +757,19 @@ class MarketLocationServiceTest {
         receipt.setMarketAddress(address);
         return receipt;
     }
+
+    @Test
+    void chainRootsWithin_keepsOnlyChainsWithAStoreInsideTheRadius() {
+        var near = MarketLocation.builder().cnpj("11111111000111").cnpjRoot("11111111")
+                .latitude(new BigDecimal("-30.0100000")).longitude(new BigDecimal("-51.2000000")).build();
+        // Inside the latitude/longitude box (a corner of it) but farther than the radius.
+        var corner = MarketLocation.builder().cnpj("22222222000111").cnpjRoot("22222222")
+                .latitude(new BigDecimal("-30.1700000")).longitude(new BigDecimal("-51.4000000")).build();
+        when(repository.findAllByLatitudeBetweenAndLongitudeBetween(any(), any(), any(), any()))
+                .thenReturn(List.of(near, corner));
+
+        var roots = service.chainRootsWithin(new BigDecimal("-30.0000000"), new BigDecimal("-51.2000000"), 20);
+
+        assertThat(roots).containsExactly("11111111");
+    }
 }

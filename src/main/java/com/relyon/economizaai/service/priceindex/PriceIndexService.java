@@ -11,6 +11,7 @@ import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository.ChainHouseholdCount;
+import com.relyon.economizaai.repository.PriceObservationAuditRepository.ProductChainHouseholdCount;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import com.relyon.economizaai.repository.PriceObservationRepository;
@@ -417,6 +418,63 @@ public class PriceIndexService {
         }
         log.debug("best_markets.scope product={} scope=NATIONAL", productId);
         return rankChains(productId, limit, unlocated, observation -> true, sort);
+    }
+
+    /**
+     * {@link #bestMarketsForViewer} for MANY products at once, for a viewer with a known position:
+     * every nearby chain that prices each product, cheapest first. Same radius, same chain pooling
+     * and same k-anonymity gates as the single-product read, but a fixed handful of queries
+     * instead of several per product — what a whole-basket comparison needs.
+     *
+     * <p>Products with no qualifying chain nearby are absent from the map. A viewer without
+     * coordinates has no "nearby", so the result is empty.
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, List<MarketPriceRow>> nearbyChainPricesForProducts(Collection<UUID> productIds,
+                                                                       ViewerLocation location) {
+        if (!properties.getCollaborative().isEnabled() || productIds.isEmpty() || !location.hasCoordinates()) {
+            return Map.of();
+        }
+        var radiusKm = properties.getCollaborative().getBestMarketsNearbyRadiusKm();
+        var nearbyChains = marketLocationService.chainRootsWithin(location.latitude(), location.longitude(), radiusKm);
+        if (nearbyChains.isEmpty()) return Map.of();
+        var since = bestMarketsSince();
+        var observations = observationRepository.findRecentByProductsInChains(productIds, nearbyChains, since);
+        if (observations.isEmpty()) return Map.of();
+
+        var storeCnpjs = observations.stream().map(PriceObservation::getMarketCnpj).distinct().toList();
+        var locations = marketLocationService.findByCnpjs(new ArrayList<>(storeCnpjs));
+        var householdsByProductChain = auditRepository
+                .countDistinctHouseholdsForProductsByChain(productIds, nearbyChains, since).stream()
+                .collect(Collectors.groupingBy(ProductChainHouseholdCount::getProductId, Collectors.toMap(
+                        ProductChainHouseholdCount::getCnpjRoot, ProductChainHouseholdCount::getHouseholds)));
+        var sensitiveProductIds = privacyTierResolver.sensitiveProductIds(productIds);
+        var viewer = new Viewer(location.latitude(), location.longitude(), radiusKm, Set.of());
+
+        return observations.stream()
+                .collect(Collectors.groupingBy(observation -> observation.getProduct().getId()))
+                .entrySet().stream()
+                .map(productObservations -> Map.entry(productObservations.getKey(), chainRows(
+                        productObservations.getValue(),
+                        householdsByProductChain.getOrDefault(productObservations.getKey(), Map.of()),
+                        sensitiveProductIds.contains(productObservations.getKey()), locations, viewer)))
+                .filter(productRows -> !productRows.getValue().isEmpty())
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    /** One product's observations turned into its qualifying chain rows, cheapest first. */
+    private List<MarketPriceRow> chainRows(List<PriceObservation> productObservations,
+                                           Map<String, Long> householdsByChain, boolean sensitiveProduct,
+                                           Map<String, MarketLocation> locations, Viewer viewer) {
+        var qualifying = productObservations.stream()
+                .collect(Collectors.groupingBy(PriceIndexService::chainKey))
+                .entrySet().stream()
+                .map(chain -> toChainRow(chain.getKey(), chain.getValue(),
+                        householdsByChain.getOrDefault(chain.getKey(), 0L), locations, viewer,
+                        chainThresholds(sensitiveProduct, chain.getValue(), locations), observation -> true))
+                .filter(Objects::nonNull)
+                .toList();
+        return markAndSortChains(qualifying, ComparisonSort.CHEAPEST);
     }
 
     /**
