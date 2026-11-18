@@ -2230,6 +2230,51 @@ para medir depois previsto x pago, "não achei" por mercado e uso das regras da 
 - Item de produto que não existe mais é deixado de fora. O total previsto da parada é recalculado
   no servidor a partir dos itens.
 - `plannedStopPosition` diferente da posição da parada = o item foi levado para outra pelo "não achei".
+- Junto com a compra o servidor guarda **quanto os itens comprados (`IN_CART`) custariam num único
+  mercado próximo**, para até 3 mercados (tabela `shopping_trip_alternatives`). Só entram os itens que
+  o mercado tem preço; o total da compra guardado ao lado é o desses mesmos itens. Um mercado da própria
+  rota também conta como alternativa (comprar tudo nele), a não ser que a compra tenha tido uma parada só.
+  O app não manda nada para isso. Se a comparação falhar, a compra é gravada do mesmo jeito.
+
+---
+
+## 9c. Esta compra em outros mercados (2026-11-18)
+
+```
+GET /api/v1/receipts/{id}/market-comparison
+→ {
+    "receiptId": "<uuid>",
+    "comparableItemCount": 18,        // produtos distintos da nota que dá para comparar
+    "locationKnown": true,            // false = sem posição para medir "perto"; markets vem vazio
+    "markets": [                      // até 3, os que cobrem mais itens primeiro (empate: mais perto)
+      {
+        "cnpj": "…", "marketName": "ATACADO SUL SA", "friendlyName": "Atacado Sul",
+        "chainLogoUrl": "/chains/logo/…", "distanceKm": 1.2,
+        "matchedItemCount": 12,
+        "paidTotal": 143.20,          // o que a casa pagou por ESSES 12 itens (não a nota inteira)
+        "alternativeTotal": 131.75,   // os mesmos 12 itens neste mercado
+        "difference": -11.45,         // alternativeTotal − paidTotal; negativo = sairia mais barato lá
+        "items": [
+          { "productId": "…", "productName": "Leite integral 1 L", "quantity": 6,
+            "paidTotal": 31.74, "alternativeUnitPrice": 4.79, "alternativeTotal": 28.74,
+            "observedAt": "2026-11-15T00:00:00" }
+        ]
+      }
+    ]
+  }
+```
+
+Quanto os itens de uma nota custariam em mercados próximos. Regras:
+
+- **Só compara o que casa.** Entra o item com produto identificado, não excluído e com preço; no outro
+  mercado, só o que tem preço lá. `paidTotal` e `alternativeTotal` cobrem sempre os mesmos itens.
+- Preço pago = o informado na revisão (`paidTotalPrice`) quando existe; senão o da nota.
+- Preço no outro mercado = o mesmo do best-markets (último preço visto da rede, com o mesmo raio de
+  20 km e o mesmo k-anon). A rede onde a nota foi emitida fica de fora.
+- Um mercado só aparece se tiver preço de **pelo menos 3 itens** (ou de todos, em nota com menos de 3).
+- Nota de outra casa → 404. Vale para nota em qualquer status que já tenha itens.
+- Custo: uma consulta de best-markets por produto distinto da nota. Chame sob demanda (ao abrir a
+  nota), não em lista.
 
 ---
 

@@ -1,5 +1,15 @@
 # economizai — what's new
 
+## 2026-11-18 — Esta compra em outros mercados
+
+- **`GET /receipts/{id}/market-comparison`** (novo): quanto os itens de uma nota custariam em até 3 mercados
+  próximos. Cada mercado traz `matchedItemCount`, `paidTotal` (o que a casa pagou por esses mesmos itens),
+  `alternativeTotal`, `difference` (negativo = mais barato lá) e a lista de itens com o preço e a data em que
+  foi visto. Só compara item que tem preço no outro mercado; mercado com menos de 3 itens em comum não
+  aparece. `locationKnown: false` quando não há posição para medir "perto". Detalhes no `API.md` (§9c).
+- **Registro da compra**: o servidor passa a guardar, junto com cada compra, quanto os itens comprados
+  custariam num único mercado próximo (até 3). Nada muda no corpo do `POST /shopping-trips`.
+
 ## 2026-11-18 — Registro da compra (modo de compra)
 
 - **`POST /shopping-trips`** (novo) → `201 { id }`. O app envia uma vez, quando a compra termina: regras
@@ -7,7 +17,8 @@
   parada e pago x previsto. Corpo completo no `API.md` (§9b).
 - Só grava: nenhum endpoint devolve esses dados e nada aparece para o usuário.
 - Reenviar o mesmo `clientTripId` devolve o mesmo `id` (o app tenta de novo até dar certo).
-- Tabelas novas `shopping_trips`, `shopping_trip_stops` e `shopping_trip_items` (migration V187).
+- Tabelas novas `shopping_trips`, `shopping_trip_stops`, `shopping_trip_items` e `shopping_trip_alternatives`
+  (migration V187). Apagar a conta apaga tudo por cascata.
 
 ## 2026-11-18 — Mapa de preços e regras da rota do rancho
 

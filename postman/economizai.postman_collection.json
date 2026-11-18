@@ -7515,6 +7515,33 @@
 						"description": "Registro de uma compra feita pelo modo de compra do app (plano x o que aconteceu). S\u00f3 grava: nenhum endpoint devolve esses dados. Reenviar o mesmo `clientTripId` devolve o mesmo id."
 					},
 					"response": []
+				},
+				{
+					"name": "Compare a receipt with nearby markets",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/receipts/{{e2eReceiptId}}/market-comparison",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"receipts",
+								"{{e2eReceiptId}}",
+								"market-comparison"
+							]
+						},
+						"description": "Quanto os itens da nota custariam em at\u00e9 3 mercados pr\u00f3ximos. S\u00f3 compara item que tem pre\u00e7o no outro mercado."
+					},
+					"response": []
 				}
 			]
 		},
@@ -11765,6 +11792,46 @@
 									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id \u2014 skipping'); return; }",
 									"pm.test('Returns 201', function () { pm.response.to.have.status(201); });",
 									"pm.test('Has the trip id', function () { pm.expect(pm.response.json().id).to.be.a('string'); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "39c. Compare a receipt with nearby markets",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/receipts/{{e2eReceiptId}}/market-comparison",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"receipts",
+								"{{e2eReceiptId}}",
+								"market-comparison"
+							]
+						},
+						"description": "Quanto os itens da nota custariam em at\u00e9 3 mercados pr\u00f3ximos. S\u00f3 compara item que tem pre\u00e7o no outro mercado."
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eReceiptId')) { pm.test.skip('No receipt id \u2014 skipping'); return; }",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Has markets', function () { pm.expect(pm.response.json().markets).to.be.an('array'); });"
 								]
 							}
 						}
