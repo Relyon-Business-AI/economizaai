@@ -2244,6 +2244,8 @@ para medir depois previsto x pago, "não achei" por mercado e uso das regras da 
 GET /api/v1/receipts/{id}/market-comparison
 → {
     "receiptId": "<uuid>",
+    "available": true,                // false = esta nota não tem (nem vai ter) comparação
+    "computedAt": "2026-11-16T18:30:00-03:00",   // quando os preços dos outros mercados foram fotografados
     "comparableItemCount": 18,        // produtos distintos da nota que dá para comparar
     "locationKnown": true,            // false = sem posição para medir "perto"; markets vem vazio
     "markets": [                      // até 3, os que cobrem mais itens primeiro (empate: mais perto)
@@ -2264,7 +2266,23 @@ GET /api/v1/receipts/{id}/market-comparison
   }
 ```
 
-Quanto os itens de uma nota custariam em mercados próximos. Regras:
+Quanto os itens de uma nota custariam em mercados próximos.
+
+**Calculado na gravação, não na leitura (2026-11-18).** Os preços dos outros mercados são
+fotografados **uma vez**, quando a nota é confirmada, e guardados (`receipt_market_comparisons`).
+Abrir a nota depois lê o que foi guardado: o número não muda quando os preços mudam.
+
+- A captura roda em segundo plano logo depois do commit da confirmação; confirmar não espera por ela.
+- Se a nota for lida antes de a captura terminar (ou se a fila estava cheia), a própria leitura
+  captura na hora. O app nunca precisa esperar nem tentar de novo.
+- O que a casa pagou vem sempre dos itens **atuais** da nota, cruzados com os preços guardados:
+  tirar um item ou corrigir o preço pago muda a comparação sem buscar preço nenhum de novo.
+- `available: false`: a nota não está confirmada, ou foi comprada há mais de **7 dias** e não tem
+  comparação guardada (preço de hoje não diz nada sobre compra antiga).
+- Sem posição conhecida nada é guardado (`locationKnown: false`, `computedAt: null`): quando a pessoa
+  definir a localização, a próxima leitura captura.
+
+Regras da comparação:
 
 - **Só compara o que casa.** Entra o item com produto identificado, não excluído e com preço; no outro
   mercado, só o que tem preço lá. `paidTotal` e `alternativeTotal` cobrem sempre os mesmos itens.
@@ -2273,10 +2291,10 @@ Quanto os itens de uma nota custariam em mercados próximos. Regras:
   20 km e o mesmo k-anon). A rede onde a nota foi emitida fica de fora.
 - Um mercado só aparece se tiver preço de **pelo menos 40% dos itens comparáveis** da nota
   (arredondado para cima: 8 de 18, 4 de 10, 2 de 5, e nunca menos de 1).
-- Nota de outra casa → 404. Vale para nota em qualquer status que já tenha itens.
-- Custo fixo: os preços da nota inteira saem em um punhado de consultas (mercados no raio, observações,
-  lojas, casas por rede, produtos), qualquer que seja o número de itens. Ainda assim é para chamar sob
-  demanda (ao abrir a nota), não em lista.
+- Nota de outra casa → 404.
+- Custo: a captura lê os preços da nota inteira em um punhado de consultas (mercados no raio,
+  observações, lojas, casas por rede, produtos), qualquer que seja o número de itens, e acontece uma
+  vez por nota. As leituras seguintes só leem o que foi guardado.
 
 ---
 

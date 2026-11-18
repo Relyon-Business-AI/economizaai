@@ -1,5 +1,17 @@
 # economizai — what's new
 
+## 2026-11-18 — Comparação da nota calculada na confirmação
+
+- "Esta compra em outros mercados" (`GET /receipts/{id}/market-comparison`) deixa de ser calculada a cada
+  leitura. Os preços dos outros mercados são guardados **uma vez**, em segundo plano, logo depois que a nota
+  é confirmada; abrir a nota depois lê o que foi guardado, então o número não muda com os preços.
+- Campos novos na resposta: `available` (false = nota não confirmada, ou comprada há mais de 7 dias sem
+  comparação guardada) e `computedAt` (quando os preços foram guardados; `null` sem localização).
+- O valor pago vem dos itens atuais da nota: tirar um item ou corrigir o preço pago muda a comparação sem
+  buscar preço de novo.
+- Se a leitura chegar antes de a captura terminar, ela captura na hora: o app não precisa esperar.
+- Migration V189: `receipt_market_comparisons` e `receipt_market_comparison_prices` (apagadas junto com a nota).
+
 ## 2026-11-18 — Esta compra em outros mercados
 
 - **`GET /receipts/{id}/market-comparison`** (novo): quanto os itens de uma nota custariam em até 3 mercados

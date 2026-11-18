@@ -107,7 +107,7 @@ public class BasketComparisonService {
     }
 
     /** One line per product: the same product on two lines of a nota is one item to compare. */
-    private List<BasketLine> mergeByProduct(Collection<BasketLine> basketLines) {
+    static List<BasketLine> mergeByProduct(Collection<BasketLine> basketLines) {
         var merged = new LinkedHashMap<UUID, BasketLine>();
         for (var line : basketLines) {
             merged.merge(line.productId(), line, (first, second) -> new BasketLine(first.productId(),

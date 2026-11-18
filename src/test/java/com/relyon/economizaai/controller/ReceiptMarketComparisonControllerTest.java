@@ -18,6 +18,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -51,11 +52,14 @@ class ReceiptMarketComparisonControllerTest {
                 null, 1.2, 1, new BigDecimal("31.74"), new BigDecimal("28.74"), new BigDecimal("-3.00"),
                 List.of(item));
         when(receiptMarketComparisonService.compare(any(User.class), eq(receiptId)))
-                .thenReturn(new ReceiptMarketComparisonResponse(receiptId, 12, true, List.of(market)));
+                .thenReturn(new ReceiptMarketComparisonResponse(receiptId, true,
+                        OffsetDateTime.parse("2026-11-16T18:30:00-03:00"), 12, true, List.of(market)));
 
         mockMvc.perform(get("/api/v1/receipts/" + receiptId + "/market-comparison")
                         .with(SecurityMockMvcRequestPostProcessors.user(user)))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.available").value(true))
+                .andExpect(jsonPath("$.computedAt").exists())
                 .andExpect(jsonPath("$.comparableItemCount").value(12))
                 .andExpect(jsonPath("$.locationKnown").value(true))
                 .andExpect(jsonPath("$.markets[0].friendlyName").value("Atacado Sul"))

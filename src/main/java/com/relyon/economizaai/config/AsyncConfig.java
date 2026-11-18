@@ -205,4 +205,41 @@ public class AsyncConfig {
             };
         };
     }
+
+    public static final String RECEIPT_COMPARISON_EXECUTOR = "receiptComparisonExecutor";
+
+    /**
+     * Background lane for "esta compra em outros mercados": the comparison is computed right after
+     * a nota is confirmed, off the request thread, so confirming never waits for it. Small and
+     * bounded; a full queue is handled by the caller (the comparison is then computed on first read).
+     */
+    @Bean(RECEIPT_COMPARISON_EXECUTOR)
+    @Profile("!test")
+    public Executor receiptComparisonExecutor() {
+        var executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(2);
+        executor.setAllowCoreThreadTimeOut(true);
+        executor.setQueueCapacity(200);
+        executor.setThreadNamePrefix("receipt-compare-");
+        executor.setTaskDecorator(runnable -> {
+            var contextMap = MDC.getCopyOfContextMap();
+            return () -> {
+                if (contextMap != null) MDC.setContextMap(contextMap);
+                try {
+                    runnable.run();
+                } finally {
+                    MDC.clear();
+                }
+            };
+        });
+        executor.initialize();
+        return executor;
+    }
+
+    @Bean(RECEIPT_COMPARISON_EXECUTOR)
+    @Profile("test")
+    public Executor receiptComparisonExecutorSync() {
+        return new SyncTaskExecutor();
+    }
 }

@@ -68,6 +68,7 @@ import com.relyon.economizaai.service.sefaz.ReceiptIngestionService;
 import com.relyon.economizaai.service.sefaz.ReceiptRetryPolicy;
 import com.relyon.economizaai.service.sefaz.SefazIngestionService;
 import com.relyon.economizaai.service.sefaz.StateCoverageService;
+import com.relyon.economizaai.service.priceindex.ReceiptMarketComparisonService;
 import com.relyon.economizaai.service.referral.ReferralService;
 import com.relyon.economizaai.service.subscription.EntitlementClock;
 import com.relyon.economizaai.service.subscription.Feature;
@@ -134,6 +135,7 @@ public class ReceiptService {
     private final SubscriptionGateService subscriptionGate;
     private final SubscriptionService subscriptionService;
     private final ReferralService referralService;
+    private final ReceiptMarketComparisonService receiptMarketComparisonService;
     private final SavingsAttributionService savingsAttributionService;
     private final ReceiptIngestionService receiptIngestionService;
     private final ReceiptRawHtmlService receiptRawHtmlService;
@@ -1041,6 +1043,7 @@ public class ReceiptService {
         var launchPromo = grantLaunchPromoOnFirstReceipt(user);
         referralService.qualifyAfterCommit(user.getId(), saved.getId());
         attributeSavings(saved);
+        receiptMarketComparisonService.captureAfterCommit(saved.getId());
         householdCacheGen.bump(receipt.getHousehold().getId());
         log.info("confirm ok status=CONFIRMED personalPromos={}", personalPromos.size());
         return new ConfirmReceiptResponse(
