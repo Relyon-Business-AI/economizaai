@@ -321,6 +321,44 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
             + "WHERE receipt.createdAt >= :since" + RECEIPT_INTERNAL_FILTER)
     long countActiveHouseholdsSince(@Param("since") LocalDateTime since, boolean includeInternal);
 
+    /**
+     * Confirmed notas per store for the markets map: (cnpj, receipts, distinct households).
+     * The household count is the k-anonymity input — callers must not expose the receipt count
+     * of a store below the public threshold.
+     */
+    @Query("SELECT receipt.cnpjEmitente AS cnpj, count(receipt) AS receiptCount, "
+            + "count(distinct receipt.household.id) AS householdCount "
+            + "FROM Receipt receipt "
+            + "WHERE receipt.status = 'CONFIRMED' AND receipt.cnpjEmitente IN :cnpjs "
+            + "GROUP BY receipt.cnpjEmitente")
+    List<MarketPurchaseCount> countConfirmedPurchasesByCnpjIn(@Param("cnpjs") Collection<String> cnpjs);
+
+    interface MarketPurchaseCount {
+        String getCnpj();
+
+        long getReceiptCount();
+
+        long getHouseholdCount();
+    }
+
+    /** One household's confirmed notas per store for the markets map: (cnpj, receipts, total spent). */
+    @Query("SELECT receipt.cnpjEmitente AS cnpj, count(receipt) AS receiptCount, "
+            + "COALESCE(sum(receipt.totalAmount), 0) AS totalSpent "
+            + "FROM Receipt receipt "
+            + "WHERE receipt.household.id = :householdId AND receipt.status = 'CONFIRMED' "
+            + "AND receipt.cnpjEmitente IN :cnpjs "
+            + "GROUP BY receipt.cnpjEmitente")
+    List<HouseholdMarketPurchases> sumHouseholdPurchasesByCnpjIn(@Param("householdId") UUID householdId,
+                                                                 @Param("cnpjs") Collection<String> cnpjs);
+
+    interface HouseholdMarketPurchases {
+        String getCnpj();
+
+        long getReceiptCount();
+
+        BigDecimal getTotalSpent();
+    }
+
     // --- Market intelligence (admin) ---
 
     /** Most-scanned markets (confirmed): (cnpj, name, scans, spend). One row per CNPJ (per store unit). */

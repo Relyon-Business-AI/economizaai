@@ -550,7 +550,7 @@ public class PriceIndexService {
         return new MarketPriceRow(displayStore.cnpj(), cnpjRoot, displayStore.name(),
                 medianForApi(prices), min(prices), mostRecent.getUnitPrice(), mostRecent.getObservedAt(),
                 rows.size(), distinctHouseholds, displayStore.distanceKm(), displayStore.watching(),
-                false, false);
+                false, false, displayStore.latitude(), displayStore.longitude());
     }
 
     /**
@@ -586,8 +586,10 @@ public class PriceIndexService {
                     viewer.latitude(), viewer.longitude(), location.getLatitude(), location.getLongitude());
         }
         var lastSeen = mostRecent(storeRows);
+        var geocoded = location != null && location.hasCoordinates();
         return new DisplayStore(cnpj, lastSeen.getMarketName(), lastSeen.getObservedAt(),
-                distanceKm, viewer.watched().contains(cnpj));
+                distanceKm, viewer.watched().contains(cnpj),
+                geocoded ? location.getLatitude() : null, geocoded ? location.getLongitude() : null);
     }
 
     /**
@@ -610,7 +612,8 @@ public class PriceIndexService {
     }
 
     private record DisplayStore(String cnpj, String name, LocalDateTime lastSeenAt,
-                                Double distanceKm, boolean watching) {}
+                                Double distanceKm, boolean watching,
+                                BigDecimal latitude, BigDecimal longitude) {}
 
     /** Median rounded to 2 decimals (R$) for API responses — mirror of DealsService. */
     private static BigDecimal medianForApi(List<BigDecimal> values) {
@@ -653,17 +656,31 @@ public class PriceIndexService {
     /** One chain in the best-markets ranking; {@code cnpj}/{@code marketName}/{@code distanceKm}
      *  describe the concrete store the chain is shown as (watched → closest → most recent).
      *  {@code isCheapest}/{@code isNearest} are persistent badges decided over the whole list,
-     *  independent of the active sort. */
+     *  independent of the active sort. {@code latitude}/{@code longitude} place that store on the
+     *  price map (null until the store is geocoded). */
     public record MarketPriceRow(String cnpj, String cnpjRoot, String marketName,
                                  BigDecimal medianPrice, BigDecimal minPrice,
                                  BigDecimal latestPrice, LocalDateTime latestObservedAt,
                                  int sampleCount, long distinctHouseholds,
                                  Double distanceKm, boolean watching,
-                                 boolean isCheapest, boolean isNearest) {
+                                 boolean isCheapest, boolean isNearest,
+                                 BigDecimal latitude, BigDecimal longitude) {
+        /** A row for a store with no known position. */
+        public MarketPriceRow(String cnpj, String cnpjRoot, String marketName,
+                              BigDecimal medianPrice, BigDecimal minPrice,
+                              BigDecimal latestPrice, LocalDateTime latestObservedAt,
+                              int sampleCount, long distinctHouseholds,
+                              Double distanceKm, boolean watching,
+                              boolean isCheapest, boolean isNearest) {
+            this(cnpj, cnpjRoot, marketName, medianPrice, minPrice, latestPrice, latestObservedAt,
+                    sampleCount, distinctHouseholds, distanceKm, watching, isCheapest, isNearest, null, null);
+        }
+
         /** Copy com os badges persistentes definidos (decididos sobre a lista inteira). */
         public MarketPriceRow withBadges(boolean cheapest, boolean nearest) {
             return new MarketPriceRow(cnpj, cnpjRoot, marketName, medianPrice, minPrice, latestPrice,
-                    latestObservedAt, sampleCount, distinctHouseholds, distanceKm, watching, cheapest, nearest);
+                    latestObservedAt, sampleCount, distinctHouseholds, distanceKm, watching, cheapest, nearest,
+                    latitude, longitude);
         }
     }
 

@@ -810,6 +810,9 @@ class PriceIndexServiceTest {
         assertEquals("AAAAAAAA000222", rows.get(0).cnpj(), "the chain row must be shown as its closest store");
         assertEquals("Loja Perto", rows.get(0).marketName());
         assertTrue(rows.get(0).distanceKm() < 1.0);
+        // The row carries the shown store's position so the app can pin it on the price map.
+        assertEquals(0, rows.get(0).latitude().compareTo(nearStore.getLatitude()));
+        assertEquals(0, rows.get(0).longitude().compareTo(nearStore.getLongitude()));
     }
 
     @Test

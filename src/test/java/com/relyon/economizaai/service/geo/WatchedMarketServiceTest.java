@@ -16,6 +16,8 @@ import com.relyon.economizaai.dto.response.MarketResponse;
 import com.relyon.economizaai.exception.PaywallException;
 import com.relyon.economizaai.repository.MarketLocationRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
+import com.relyon.economizaai.repository.ReceiptRepository.HouseholdMarketPurchases;
+import com.relyon.economizaai.repository.ReceiptRepository.MarketPurchaseCount;
 import com.relyon.economizaai.repository.UserWatchedMarketRepository;
 import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
@@ -452,6 +454,63 @@ class WatchedMarketServiceTest {
 
         assertTrue(response.watching());
         verify(watchedRepository, never()).save(any()); // existing pin → no cap check, no insert
+    }
+
+    @Test
+    void listMarkets_communityPurchaseCountRespectsKAnonymity() {
+        when(receiptRepository.findDistinctCnpjsByHousehold(user.getHousehold().getId())).thenReturn(List.of());
+        when(watchedRepository.findAllByUserHouseholdId(user.getHousehold().getId())).thenReturn(List.of(
+                UserWatchedMarket.builder().marketCnpj("11111111000111").build(),
+                UserWatchedMarket.builder().marketCnpj("22222222000111").build()
+        ));
+        when(marketRepository.findAllByCnpjIn(any())).thenReturn(List.of(
+                market("11111111000111", "Popular"), market("22222222000111", "Pouco Visitado")));
+        when(receiptRepository.countConfirmedPurchasesByCnpjIn(any())).thenReturn(List.of(
+                purchaseCount("11111111000111", 148, 3),
+                purchaseCount("22222222000111", 40, 2)));
+
+        var rows = service.listMarkets(user, MarketScope.MINE, null, null);
+
+        var countByCnpj = rows.stream().collect(Collectors.toMap(
+                row -> row.cnpj(), row -> Optional.ofNullable(row.communityPurchaseCount())));
+        assertEquals(Optional.of(148L), countByCnpj.get("11111111000111"));
+        // Two households only: below K=3, so the count stays undisclosed.
+        assertEquals(Optional.empty(), countByCnpj.get("22222222000111"));
+    }
+
+    @Test
+    void listMarkets_carriesHouseholdOwnPurchasesOnlyWhereItBought() {
+        when(receiptRepository.findDistinctCnpjsByHousehold(user.getHousehold().getId()))
+                .thenReturn(List.of("11111111000111"));
+        when(watchedRepository.findAllByUserHouseholdId(user.getHousehold().getId())).thenReturn(List.of(
+                UserWatchedMarket.builder().marketCnpj("11111111000111").build(),
+                UserWatchedMarket.builder().marketCnpj("22222222000111").build()
+        ));
+        when(marketRepository.findAllByCnpjIn(any())).thenReturn(List.of(
+                market("11111111000111", "Frequentado"), market("22222222000111", "Nunca Fui")));
+        when(receiptRepository.sumHouseholdPurchasesByCnpjIn(any(), any())).thenReturn(List.of(
+                new HouseholdMarketPurchases() {
+                    @Override public String getCnpj() { return "11111111000111"; }
+                    @Override public long getReceiptCount() { return 9; }
+                    @Override public BigDecimal getTotalSpent() { return new BigDecimal("612.4"); }
+                }));
+
+        var rows = service.listMarkets(user, MarketScope.MINE, null, null);
+
+        var visited = rows.stream().filter(row -> row.cnpj().equals("11111111000111")).findFirst().orElseThrow();
+        assertEquals(9L, visited.householdPurchaseCount());
+        assertEquals(new BigDecimal("612.40"), visited.householdSpend());
+        var neverVisited = rows.stream().filter(row -> row.cnpj().equals("22222222000111")).findFirst().orElseThrow();
+        assertNull(neverVisited.householdPurchaseCount());
+        assertNull(neverVisited.householdSpend());
+    }
+
+    private MarketPurchaseCount purchaseCount(String cnpj, long receiptCount, long householdCount) {
+        return new MarketPurchaseCount() {
+            @Override public String getCnpj() { return cnpj; }
+            @Override public long getReceiptCount() { return receiptCount; }
+            @Override public long getHouseholdCount() { return householdCount; }
+        };
     }
 
     private MarketLocation market(String cnpj, String name) {
