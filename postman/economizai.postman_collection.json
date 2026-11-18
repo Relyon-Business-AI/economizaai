@@ -7446,7 +7446,7 @@
 						},
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"items\": [\n    { \"productId\": \"{{e2eProductId}}\", \"quantity\": 1 }\n  ]\n}"
+							"raw": "{\n  \"items\": [\n    { \"productId\": \"{{e2eProductId}}\", \"quantity\": 1 }\n  ],\n  \"maxDistanceKm\": 10,\n  \"maxStops\": 2,\n  \"minSavingPerStop\": 10\n}"
 						},
 						"description": "Response inclui `friendlyDescription` (apelido que o domic\u00edlio deu ao produto; null se nunca renomeado) ao lado do nome de cat\u00e1logo."
 					},
@@ -11637,7 +11637,7 @@
 						},
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"items\": [\n    { \"productId\": \"{{e2eProductId}}\", \"quantity\": 1 }\n  ]\n}"
+							"raw": "{\n  \"items\": [\n    { \"productId\": \"{{e2eProductId}}\", \"quantity\": 1 }\n  ],\n  \"maxDistanceKm\": 10,\n  \"maxStops\": 2,\n  \"minSavingPerStop\": 10\n}"
 						}
 					},
 					"response": [],
@@ -11653,6 +11653,7 @@
 									"pm.test('Has marketPlans + estimatedTotal + unpriced', function () {",
 									"    pm.expect(d.marketPlans).to.be.an('array');",
 									"    pm.expect(d.unpriced).to.be.an('array');",
+									"    pm.expect(d.skippedSavings).to.be.an('array');",
 									"});"
 								]
 							}

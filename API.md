@@ -1625,7 +1625,12 @@ state) sinks to the end instead of flooding the top; watched-but-far markets are
 The old `radiusKm` param is gone (radius is fixed at 20 km).
 
 Each row: `{ cnpj, cnpjRoot, name, friendlyName, address, city, state, latitude,
-longitude, distanceKm, visited, watching, chainName, chainLogoUrl }`. `name` is the full
+longitude, distanceKm, visited, watching, chainName, chainLogoUrl, communityPurchaseCount,
+householdPurchaseCount, householdSpend }`.
+`communityPurchaseCount` (2026-11-18) is how many confirmed notas the community scanned at
+that store, for the map pin; **null when fewer than 3 households contributed** (k-anon).
+`householdPurchaseCount`/`householdSpend` are the viewer household's own confirmed notas there
+and their total; null when it never bought at that store. `name` is the full
 legal razão social; **`friendlyName` is the cleaned display name** (2026-11-10 — household
 rename → chain name → `cleanLegalName` heuristic, e.g. "BISTEK SUPERMERCADOS LTDA" → "Bistek"),
 so prefer it for display; `city`/`state` are new (2026-11-10, null until geocoded); `visited` =
@@ -1695,6 +1700,9 @@ GET /api/v1/price-index/scanned-products
 GET /api/v1/price-index/promos?radiusKm=5
 GET /api/v1/price-index/promos/feed[?lat=&lng=]   (lat/lng = GPS do aparelho, os dois ou nenhum; lidera a cascata)
 ```
+
+**Map position (2026-11-18):** each best-markets row carries `latitude`/`longitude` of the
+store it is shown as (null until that store is geocoded), so the app can put the price on a map.
 
 **`sort` (2026-11-10)** on best-markets + both generic-comparison endpoints (default
 `CHEAPEST`): `CHEAPEST` = price ascending (historical; best-markets keeps watched-first;
@@ -2115,34 +2123,59 @@ clears any active snooze on that product (the user just took action).
 ## 9. Shopping list optimizer (PRO-52)
 
 ```
-POST /api/v1/shopping-list/optimize      (alias: /api/v1/shopping-lists/optimize — same handler)
+POST /api/v1/shopping-lists/optimize      (alias: /api/v1/shopping-list/optimize — same handler)
 {
   "items": [
     { "productId": "<uuid-1>", "quantity": 2 },
     { "productId": "<uuid-2>", "quantity": 1 }
-  ]
+  ],
+  "maxDistanceKm": 10,        // optional
+  "maxStops": 2,              // optional, 1..10
+  "minSavingPerStop": 10.00,  // optional, R$
+  "latitude": -30.03,         // optional, device position (both or none)
+  "longitude": -51.21
 }
 → {
     "marketPlans": [
       {
         "marketCnpj": "...",
         "marketName": "...",
+        "marketFriendlyName": "...",
         "subtotal": 35.40,
         "itemCount": 2,
-        "items": [ { "productId": "...", "productName": "...", "friendlyDescription": null, "quantity": 2, "estimatedUnitPrice": 12.50, "estimatedSubtotal": 25.00, "priceSource": "LOCAL_HISTORY" } ]
+        "items": [ { "productId": "...", "productName": "...", "friendlyDescription": null, "quantity": 2, "estimatedUnitPrice": 12.50, "estimatedSubtotal": 25.00, "priceSource": "LOCAL_HISTORY" } ],
+        "latitude": -30.05, "longitude": -51.22, "distanceKm": 1.2
       }
     ],
     "estimatedTotal": 35.40,
-    "unpriced": [ { "productId": "...", "productName": "...", "friendlyDescription": null, "reason": "no observed price (local or community)" } ]
+    "unpriced": [ { "productId": "...", "productName": "...", "friendlyDescription": null, "reason": "no observed price (local or community)" } ],
+    "skippedSavings": [ { "productId": "...", "productName": "...", "friendlyDescription": null, "marketCnpj": "...", "marketName": "...", "marketFriendlyName": "...", "saving": 1.20 } ]
   }
 ```
 
-Greedy heuristic: per item, pick the cheapest known market. Price source
-priority: (1) household's own most-recent purchase, (2) community-index
-median, (3) unpriced (FE shows "preço indisponível" badge).
+Per item, the cheapest known market wins. Price source priority: (1) household's own
+most-recent purchase, (2) community-index median, (3) unpriced (FE shows "preço
+indisponível" badge).
 
-No travel-time modeling yet — V1 picks lowest-cost regardless of how many
-markets the user would have to visit.
+**Route rules (2026-11-18)** — all optional, each one independent, null = no limit. A
+request without them behaves exactly as before (apps in the field keep working):
+
+- `maxDistanceKm`: stores farther than this are not considered. A store we have not geocoded
+  is out too. Only applies when the shopper has a known position (`latitude`/`longitude`, or
+  the "perto de você" cascade: profile → receipts-median → UF).
+- `maxStops`: while the plan has more stops than this, the stop that is cheapest to give up
+  is dropped and its items move to the next cheapest remaining store. An item sold only at a
+  dropped store goes to `unpriced` with `reason: "no observed price within the route rules"`.
+- `minSavingPerStop`: a stop that saves less than this (versus buying its items at the other
+  stops) is dropped. A stop holding an item sold nowhere else in the plan is kept.
+
+`marketPlans` comes in **route order**: nearest first when the shopper's position is known,
+otherwise largest subtotal first (the old order). Each stop carries `latitude`/`longitude`
+(null until geocoded) and `distanceKm` (null when either side has no position).
+
+`skippedSavings`: items that are cheaper at a store the rules left out (within
+`maxDistanceKm`), largest saving first. `saving` is for the requested quantity. Lets the app
+say "o óleo sai R$ 1,20 mais barato no X, mas não compensa outra parada".
 
 `items[*]` and `unpriced[*]` carry `productName` **and `friendlyDescription`**
 (the household's rename, null when never renamed — prefer it for display).

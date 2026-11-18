@@ -1,5 +1,26 @@
 # economizai — what's new
 
+## 2026-11-18 — Mapa de preços e regras da rota do rancho
+
+Para o PR do front `feat/price-map`. Tudo aditivo: quem não manda os campos novos recebe o mesmo de antes.
+
+- **`GET /markets`**: cada mercado ganhou `communityPurchaseCount` (notas confirmadas da comunidade naquela
+  loja, para o pin do mapa). Vem `null` quando menos de 3 casas contribuíram.
+  Também `householdPurchaseCount` e `householdSpend`: as notas confirmadas da própria casa naquela loja e o
+  total gasto (`null` quando a casa nunca comprou lá).
+- **`GET /price-index/products/{id}/best-markets`**: cada linha ganhou `latitude` e `longitude` da loja
+  mostrada (`null` enquanto a loja não foi geocodificada).
+- **`POST /shopping-lists/optimize`** aceita as regras da rota, todas opcionais: `maxDistanceKm`, `maxStops`,
+  `minSavingPerStop`, mais `latitude`/`longitude` do aparelho (os dois ou nenhum).
+  - Cada parada (`marketPlans[*]`) ganhou `latitude`, `longitude` e `distanceKm`.
+  - `marketPlans` vem na ordem da rota: da mais perto para a mais longe quando há posição conhecida; sem
+    posição, maior subtotal primeiro (como antes).
+  - Novo `skippedSavings`: itens que saem mais baratos numa loja que as regras deixaram de fora
+    (`productId`, `productName`, `friendlyDescription`, `marketCnpj`, `marketName`, `marketFriendlyName`,
+    `saving`).
+  - Item que só existe numa loja fora das regras vai para `unpriced` com
+    `reason: "no observed price within the route rules"`.
+
 ## 2026-11-17 — "Com a ajuda do app": revisão do cálculo
 
 Sem mudança de contrato: os mesmos endpoints e os mesmos campos. Corrige casos em que o número saía errado.
