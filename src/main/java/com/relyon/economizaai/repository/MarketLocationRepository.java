@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -21,6 +22,13 @@ public interface MarketLocationRepository extends JpaRepository<MarketLocation, 
 
     /** Every known store of a chain (merchant panel — stores appear as receipts are scanned). */
     List<MarketLocation> findAllByCnpjRoot(String cnpjRoot);
+
+    /**
+     * Geocoded markets inside a latitude/longitude box. The box is a cheap pre-filter for "within
+     * N km of a point": callers still measure the real distance of each row.
+     */
+    List<MarketLocation> findAllByLatitudeBetweenAndLongitudeBetween(BigDecimal minLatitude, BigDecimal maxLatitude,
+                                                                     BigDecimal minLongitude, BigDecimal maxLongitude);
 
     /** Geocoded markets in a state — the sample for the UF-centroid fallback origin. */
     List<MarketLocation> findAllByStateAndLatitudeIsNotNull(String state);

@@ -8,6 +8,8 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.UserWatchedMarket;
 import com.relyon.economizaai.repository.MarketLocationRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
+import com.relyon.economizaai.repository.ReceiptRepository.HouseholdMarketPurchases;
+import com.relyon.economizaai.repository.ReceiptRepository.MarketPurchaseCount;
 import com.relyon.economizaai.repository.UserWatchedMarketRepository;
 import com.relyon.economizaai.service.geo.MerchantSupportGate.SupportStatus;
 import com.relyon.economizaai.service.privacy.LogMasker;
@@ -19,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -109,7 +112,8 @@ public class WatchedMarketService {
                         .comparing(MarketResponse::distanceKm, Comparator.nullsLast(Comparator.naturalOrder()))
                         .thenComparing(row -> row.name() == null ? "" : row.name()))
                 .toList();
-        var named = applyFriendlyNames(householdId, rows);
+        var named = applyHouseholdPurchases(householdId,
+                applyCommunityPurchaseCounts(applyFriendlyNames(householdId, rows)));
         log.debug("markets.list household={} scope={} source={} rows={}",
                 householdId, scope, origin.source(), named.size());
         return named;
@@ -206,6 +210,39 @@ public class WatchedMarketService {
                 .map(row -> row.withFriendlyName(
                         marketNameService.friendlyName(overrides, chainNames, row.cnpj(), row.name())))
                 .toList();
+    }
+
+    /**
+     * Set each market's community purchase count (the number on the map pin). Only stores where
+     * at least K households scanned a nota get a count; the rest stay null.
+     */
+    private List<MarketResponse> applyCommunityPurchaseCounts(List<MarketResponse> rows) {
+        if (rows.isEmpty()) return rows;
+        var minHouseholds = properties.getCollaborative().getMinHouseholdsForPublic();
+        var publicCounts = receiptRepository
+                .countConfirmedPurchasesByCnpjIn(rows.stream().map(MarketResponse::cnpj).toList()).stream()
+                .filter(purchases -> purchases.getHouseholdCount() >= minHouseholds)
+                .collect(Collectors.toMap(MarketPurchaseCount::getCnpj, MarketPurchaseCount::getReceiptCount));
+        return rows.stream()
+                .map(row -> row.withCommunityPurchaseCount(publicCounts.get(row.cnpj())))
+                .toList();
+    }
+
+    /** Set the viewer household's own purchases (notas and total spent) on the stores it bought at. */
+    private List<MarketResponse> applyHouseholdPurchases(UUID householdId, List<MarketResponse> rows) {
+        if (rows.isEmpty()) return rows;
+        var purchasesByCnpj = receiptRepository
+                .sumHouseholdPurchasesByCnpjIn(householdId, rows.stream().map(MarketResponse::cnpj).toList()).stream()
+                .collect(Collectors.toMap(HouseholdMarketPurchases::getCnpj, purchases -> purchases));
+        return rows.stream()
+                .map(row -> withHouseholdPurchases(row, purchasesByCnpj.get(row.cnpj())))
+                .toList();
+    }
+
+    private MarketResponse withHouseholdPurchases(MarketResponse row, HouseholdMarketPurchases purchases) {
+        if (purchases == null) return row;
+        return row.withHouseholdPurchases(purchases.getReceiptCount(),
+                purchases.getTotalSpent().setScale(2, RoundingMode.HALF_UP));
     }
 
     @Transactional

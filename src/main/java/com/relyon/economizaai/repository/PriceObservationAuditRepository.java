@@ -147,6 +147,33 @@ public interface PriceObservationAuditRepository extends JpaRepository<PriceObse
     List<ChainHouseholdCount> countDistinctHouseholdsForProductByChain(@Param("productId") UUID productId,
                                                                        @Param("since") LocalDateTime since);
 
+    /**
+     * {@link #countDistinctHouseholdsForProductByChain} for several products in ONE query, limited
+     * to the given chains: distinct contributing households per (product, chain).
+     */
+    @Query("""
+        SELECT a.observation.product.id AS productId, a.observation.marketCnpjRoot AS cnpjRoot,
+               COUNT(DISTINCT a.householdId) AS households
+        FROM PriceObservationAudit a
+        WHERE a.observation.product.id IN :productIds
+          AND a.observation.marketCnpjRoot IN :cnpjRoots
+          AND a.observation.channel = 'IN_STORE'
+          AND a.observation.outlier = false
+          AND a.observation.observedAt >= :since
+        GROUP BY a.observation.product.id, a.observation.marketCnpjRoot
+    """)
+    List<ProductChainHouseholdCount> countDistinctHouseholdsForProductsByChain(
+            @Param("productIds") Collection<UUID> productIds,
+            @Param("cnpjRoots") Collection<String> cnpjRoots,
+            @Param("since") LocalDateTime since);
+
+    /** Projection for {@link #countDistinctHouseholdsForProductsByChain}. */
+    interface ProductChainHouseholdCount {
+        UUID getProductId();
+        String getCnpjRoot();
+        long getHouseholds();
+    }
+
     /** Projection for {@link #countDistinctHouseholdsForProductByChain}. */
     interface ChainHouseholdCount {
         String getCnpjRoot();

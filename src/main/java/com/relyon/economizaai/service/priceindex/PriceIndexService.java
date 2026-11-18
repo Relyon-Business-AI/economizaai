@@ -11,6 +11,7 @@ import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository.ChainHouseholdCount;
+import com.relyon.economizaai.repository.PriceObservationAuditRepository.ProductChainHouseholdCount;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import com.relyon.economizaai.repository.PriceObservationRepository;
@@ -420,6 +421,63 @@ public class PriceIndexService {
     }
 
     /**
+     * {@link #bestMarketsForViewer} for MANY products at once, for a viewer with a known position:
+     * every nearby chain that prices each product, cheapest first. Same radius, same chain pooling
+     * and same k-anonymity gates as the single-product read, but a fixed handful of queries
+     * instead of several per product — what a whole-basket comparison needs.
+     *
+     * <p>Products with no qualifying chain nearby are absent from the map. A viewer without
+     * coordinates has no "nearby", so the result is empty.
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, List<MarketPriceRow>> nearbyChainPricesForProducts(Collection<UUID> productIds,
+                                                                       ViewerLocation location) {
+        if (!properties.getCollaborative().isEnabled() || productIds.isEmpty() || !location.hasCoordinates()) {
+            return Map.of();
+        }
+        var radiusKm = properties.getCollaborative().getBestMarketsNearbyRadiusKm();
+        var nearbyChains = marketLocationService.chainRootsWithin(location.latitude(), location.longitude(), radiusKm);
+        if (nearbyChains.isEmpty()) return Map.of();
+        var since = bestMarketsSince();
+        var observations = observationRepository.findRecentByProductsInChains(productIds, nearbyChains, since);
+        if (observations.isEmpty()) return Map.of();
+
+        var storeCnpjs = observations.stream().map(PriceObservation::getMarketCnpj).distinct().toList();
+        var locations = marketLocationService.findByCnpjs(new ArrayList<>(storeCnpjs));
+        var householdsByProductChain = auditRepository
+                .countDistinctHouseholdsForProductsByChain(productIds, nearbyChains, since).stream()
+                .collect(Collectors.groupingBy(ProductChainHouseholdCount::getProductId, Collectors.toMap(
+                        ProductChainHouseholdCount::getCnpjRoot, ProductChainHouseholdCount::getHouseholds)));
+        var sensitiveProductIds = privacyTierResolver.sensitiveProductIds(productIds);
+        var viewer = new Viewer(location.latitude(), location.longitude(), radiusKm, Set.of());
+
+        return observations.stream()
+                .collect(Collectors.groupingBy(observation -> observation.getProduct().getId()))
+                .entrySet().stream()
+                .map(productObservations -> Map.entry(productObservations.getKey(), chainRows(
+                        productObservations.getValue(),
+                        householdsByProductChain.getOrDefault(productObservations.getKey(), Map.of()),
+                        sensitiveProductIds.contains(productObservations.getKey()), locations, viewer)))
+                .filter(productRows -> !productRows.getValue().isEmpty())
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    /** One product's observations turned into its qualifying chain rows, cheapest first. */
+    private List<MarketPriceRow> chainRows(List<PriceObservation> productObservations,
+                                           Map<String, Long> householdsByChain, boolean sensitiveProduct,
+                                           Map<String, MarketLocation> locations, Viewer viewer) {
+        var qualifying = productObservations.stream()
+                .collect(Collectors.groupingBy(PriceIndexService::chainKey))
+                .entrySet().stream()
+                .map(chain -> toChainRow(chain.getKey(), chain.getValue(),
+                        householdsByChain.getOrDefault(chain.getKey(), 0L), locations, viewer,
+                        chainThresholds(sensitiveProduct, chain.getValue(), locations), observation -> true))
+                .filter(Objects::nonNull)
+                .toList();
+        return markAndSortChains(qualifying, ComparisonSort.CHEAPEST);
+    }
+
+    /**
      * Lowest recent in-store price per product, over the same observation window the best-markets
      * ranking uses. Products without any recent observation are absent from the map.
      */
@@ -550,7 +608,7 @@ public class PriceIndexService {
         return new MarketPriceRow(displayStore.cnpj(), cnpjRoot, displayStore.name(),
                 medianForApi(prices), min(prices), mostRecent.getUnitPrice(), mostRecent.getObservedAt(),
                 rows.size(), distinctHouseholds, displayStore.distanceKm(), displayStore.watching(),
-                false, false);
+                false, false, displayStore.latitude(), displayStore.longitude());
     }
 
     /**
@@ -586,8 +644,10 @@ public class PriceIndexService {
                     viewer.latitude(), viewer.longitude(), location.getLatitude(), location.getLongitude());
         }
         var lastSeen = mostRecent(storeRows);
+        var geocoded = location != null && location.hasCoordinates();
         return new DisplayStore(cnpj, lastSeen.getMarketName(), lastSeen.getObservedAt(),
-                distanceKm, viewer.watched().contains(cnpj));
+                distanceKm, viewer.watched().contains(cnpj),
+                geocoded ? location.getLatitude() : null, geocoded ? location.getLongitude() : null);
     }
 
     /**
@@ -610,7 +670,8 @@ public class PriceIndexService {
     }
 
     private record DisplayStore(String cnpj, String name, LocalDateTime lastSeenAt,
-                                Double distanceKm, boolean watching) {}
+                                Double distanceKm, boolean watching,
+                                BigDecimal latitude, BigDecimal longitude) {}
 
     /** Median rounded to 2 decimals (R$) for API responses — mirror of DealsService. */
     private static BigDecimal medianForApi(List<BigDecimal> values) {
@@ -653,17 +714,31 @@ public class PriceIndexService {
     /** One chain in the best-markets ranking; {@code cnpj}/{@code marketName}/{@code distanceKm}
      *  describe the concrete store the chain is shown as (watched → closest → most recent).
      *  {@code isCheapest}/{@code isNearest} are persistent badges decided over the whole list,
-     *  independent of the active sort. */
+     *  independent of the active sort. {@code latitude}/{@code longitude} place that store on the
+     *  price map (null until the store is geocoded). */
     public record MarketPriceRow(String cnpj, String cnpjRoot, String marketName,
                                  BigDecimal medianPrice, BigDecimal minPrice,
                                  BigDecimal latestPrice, LocalDateTime latestObservedAt,
                                  int sampleCount, long distinctHouseholds,
                                  Double distanceKm, boolean watching,
-                                 boolean isCheapest, boolean isNearest) {
+                                 boolean isCheapest, boolean isNearest,
+                                 BigDecimal latitude, BigDecimal longitude) {
+        /** A row for a store with no known position. */
+        public MarketPriceRow(String cnpj, String cnpjRoot, String marketName,
+                              BigDecimal medianPrice, BigDecimal minPrice,
+                              BigDecimal latestPrice, LocalDateTime latestObservedAt,
+                              int sampleCount, long distinctHouseholds,
+                              Double distanceKm, boolean watching,
+                              boolean isCheapest, boolean isNearest) {
+            this(cnpj, cnpjRoot, marketName, medianPrice, minPrice, latestPrice, latestObservedAt,
+                    sampleCount, distinctHouseholds, distanceKm, watching, isCheapest, isNearest, null, null);
+        }
+
         /** Copy com os badges persistentes definidos (decididos sobre a lista inteira). */
         public MarketPriceRow withBadges(boolean cheapest, boolean nearest) {
             return new MarketPriceRow(cnpj, cnpjRoot, marketName, medianPrice, minPrice, latestPrice,
-                    latestObservedAt, sampleCount, distinctHouseholds, distanceKm, watching, cheapest, nearest);
+                    latestObservedAt, sampleCount, distinctHouseholds, distanceKm, watching, cheapest, nearest,
+                    latitude, longitude);
         }
     }
 

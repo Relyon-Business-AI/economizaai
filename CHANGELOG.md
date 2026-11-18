@@ -1,5 +1,66 @@
 # economizai — what's new
 
+## 2026-11-18 — Comparação da nota calculada na confirmação
+
+- "Esta compra em outros mercados" (`GET /receipts/{id}/market-comparison`) deixa de ser calculada a cada
+  leitura. Os preços dos outros mercados são guardados **uma vez**, em segundo plano, logo depois que a nota
+  é confirmada; abrir a nota depois lê o que foi guardado, então o número não muda com os preços.
+- Campos novos na resposta: `available` (false = nota não confirmada, ou comprada há mais de 7 dias sem
+  comparação guardada) e `computedAt` (quando os preços foram guardados; `null` sem localização).
+- O valor pago vem dos itens atuais da nota: tirar um item ou corrigir o preço pago muda a comparação sem
+  buscar preço de novo.
+- Se a leitura chegar antes de a captura terminar, ela captura na hora: o app não precisa esperar.
+- Migration V189: `receipt_market_comparisons` e `receipt_market_comparison_prices` (apagadas junto com a nota).
+
+## 2026-11-18 — Esta compra em outros mercados
+
+- **`GET /receipts/{id}/market-comparison`** (novo): quanto os itens de uma nota custariam em até 3 mercados
+  próximos. Cada mercado traz `matchedItemCount`, `paidTotal` (o que a casa pagou por esses mesmos itens),
+  `alternativeTotal`, `difference` (negativo = mais barato lá) e a lista de itens com o preço e a data em que
+  foi visto. Só compara item que tem preço no outro mercado; um mercado só aparece se tiver preço de pelo
+  menos 40% dos itens comparáveis da nota. `locationKnown: false` quando não há posição para medir "perto". Detalhes no `API.md` (§9c).
+- A comparação lê os preços da nota inteira de uma vez (número fixo de consultas, não uma por produto).
+  Migration V188: índice de posição em `market_locations`.
+- **Registro da compra**: o servidor passa a guardar, junto com cada compra, quanto os itens comprados
+  custariam num único mercado próximo (até 3). Nada muda no corpo do `POST /shopping-trips`.
+
+## 2026-11-18 — Registro da compra (modo de compra)
+
+- **`POST /shopping-trips`** (novo) → `201 { id }`. O app envia uma vez, quando a compra termina: regras
+  usadas, total previsto e, por parada, mercado, itens (marcado, "não achei" ou pendente), nota que fechou a
+  parada e pago x previsto. Corpo completo no `API.md` (§9b).
+- Só grava: nenhum endpoint devolve esses dados e nada aparece para o usuário.
+- Reenviar o mesmo `clientTripId` devolve o mesmo `id` (o app tenta de novo até dar certo).
+- Tabelas novas `shopping_trips`, `shopping_trip_stops`, `shopping_trip_items` e `shopping_trip_alternatives`
+  (migration V187). Apagar a conta apaga tudo por cascata.
+
+## 2026-11-18 — Mapa de preços e regras da rota do rancho
+
+Para o PR do front `feat/price-map`. Tudo aditivo: quem não manda os campos novos recebe o mesmo de antes.
+
+- **`GET /markets`**: cada mercado ganhou `communityPurchaseCount` (notas confirmadas da comunidade naquela
+  loja, para o pin do mapa). Vem `null` quando menos de 3 casas contribuíram.
+  Também `householdPurchaseCount` e `householdSpend`: as notas confirmadas da própria casa naquela loja e o
+  total gasto (`null` quando a casa nunca comprou lá).
+- **`GET /price-index/products/{id}/best-markets`**: cada linha ganhou `latitude` e `longitude` da loja
+  mostrada (`null` enquanto a loja não foi geocodificada).
+- **`POST /shopping-lists/optimize`** aceita as regras da rota, todas opcionais: `maxDistanceKm`, `maxStops`,
+  `minSavingPerStop`, mais `latitude`/`longitude` do aparelho (os dois ou nenhum).
+  - Cada parada (`marketPlans[*]`) ganhou `latitude`, `longitude` e `distanceKm`.
+  - `marketPlans` vem na ordem da rota: da mais perto para a mais longe quando há posição conhecida; sem
+    posição, maior subtotal primeiro (como antes).
+  - Novo `skippedSavings`: itens que saem mais baratos numa loja que as regras deixaram de fora
+    (`productId`, `productName`, `friendlyDescription`, `marketCnpj`, `marketName`, `marketFriendlyName`,
+    `saving`).
+  - Item que só existe numa loja fora das regras vai para `unpriced` com
+    `reason: "no observed price within the route rules"`.
+
+## 2026-11-18 — Ofertas de um aviso
+
+`GET /api/v1/deals` aceita `notificationId` (opcional). Com ele, a lista traz só as ofertas que aquele aviso
+anunciou ("CHUCHU mais barato e mais 1 oferta" traz as duas), na mesma ordem de sempre. Oferta que já acabou
+não aparece; aviso de outra pessoa ou sem oferta devolve lista vazia. Sem o parâmetro nada muda.
+
 ## 2026-11-17 — "Com a ajuda do app": revisão do cálculo
 
 Sem mudança de contrato: os mesmos endpoints e os mesmos campos. Corrige casos em que o número saía errado.

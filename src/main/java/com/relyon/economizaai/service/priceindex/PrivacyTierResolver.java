@@ -54,6 +54,18 @@ public class PrivacyTierResolver {
                 .orElse(true);
     }
 
+    /**
+     * {@link #isSensitiveProduct(UUID)} for many products in ONE query: the ids that must keep the
+     * full K. A product that no longer exists counts as sensitive.
+     */
+    public Set<UUID> sensitiveProductIds(Collection<UUID> productIds) {
+        var products = productRepository.findAllById(productIds).stream()
+                .collect(Collectors.toMap(Product::getId, product -> product));
+        return productIds.stream()
+                .filter(productId -> !products.containsKey(productId) || isSensitiveProduct(products.get(productId)))
+                .collect(Collectors.toSet());
+    }
+
     /** Same rule for a product already loaded (batch reads). */
     public boolean isSensitiveProduct(Product product) {
         var groupSlug = categoryResolver.slugForId(categoryResolver.groupIdOf(product.getCategoryId()));

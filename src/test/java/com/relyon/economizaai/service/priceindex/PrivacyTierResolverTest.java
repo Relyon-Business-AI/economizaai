@@ -22,6 +22,9 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -152,5 +155,21 @@ class PrivacyTierResolverTest {
         assertTrue(new PrivacyTierResolver.Thresholds(3, 5).blocks(5, 2));
         assertTrue(new PrivacyTierResolver.Thresholds(3, 5).blocks(4, 3));
         assertFalse(new PrivacyTierResolver.Thresholds(1, 1).blocks(1, 1));
+    }
+
+    @Test
+    void sensitiveProductIdsChecksManyProductsWithOneRead() {
+        var groceryId = UUID.randomUUID();
+        var healthId = UUID.randomUUID();
+        var missingId = UUID.randomUUID();
+        when(productRepository.findAllById(any())).thenReturn(List.of(
+                Product.builder().id(groceryId).category(ProductCategory.GROCERIES).build(),
+                Product.builder().id(healthId).category(ProductCategory.HEALTH).build()));
+
+        var sensitiveIds = resolver.sensitiveProductIds(List.of(groceryId, healthId, missingId));
+
+        // A product that no longer exists is treated as sensitive, like the single-product rule.
+        assertEquals(Set.of(healthId, missingId), sensitiveIds);
+        verify(productRepository, never()).findById(any());
     }
 }

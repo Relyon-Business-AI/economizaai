@@ -1,5 +1,7 @@
 package com.relyon.economizaai.service.priceindex;
 
+import static org.mockito.ArgumentMatchers.anyDouble;
+import com.relyon.economizaai.repository.PriceObservationAuditRepository.ProductChainHouseholdCount;
 import com.relyon.economizaai.service.geo.NearbyScope;
 import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.model.Household;
@@ -810,6 +812,9 @@ class PriceIndexServiceTest {
         assertEquals("AAAAAAAA000222", rows.get(0).cnpj(), "the chain row must be shown as its closest store");
         assertEquals("Loja Perto", rows.get(0).marketName());
         assertTrue(rows.get(0).distanceKm() < 1.0);
+        // The row carries the shown store's position so the app can pin it on the price map.
+        assertEquals(0, rows.get(0).latitude().compareTo(nearStore.getLatitude()));
+        assertEquals(0, rows.get(0).longitude().compareTo(nearStore.getLongitude()));
     }
 
     @Test
@@ -977,5 +982,102 @@ class PriceIndexServiceTest {
                 .quantity(BigDecimal.ONE)
                 .observedAt(LocalDateTime.now())
                 .build();
+    }
+
+    private static final ViewerLocation HOME = new ViewerLocation(
+            new BigDecimal("-30.0000000"), new BigDecimal("-51.2000000"), ViewerLocationService.Source.PROFILE, "RS");
+
+    private ProductChainHouseholdCount productChainCount(UUID productId, String cnpjRoot, long households) {
+        return new ProductChainHouseholdCount() {
+            public UUID getProductId() { return productId; }
+            public String getCnpjRoot() { return cnpjRoot; }
+            public long getHouseholds() { return households; }
+        };
+    }
+
+    private MarketLocation storeAt(String cnpj, String latitude) {
+        return MarketLocation.builder().cnpj(cnpj).cnpjRoot(cnpj.substring(0, 8))
+                .latitude(new BigDecimal(latitude)).longitude(new BigDecimal("-51.2000000")).build();
+    }
+
+    @Test
+    void nearbyChainPricesForProducts_pricesEveryProductWithOneReadOfEachKind() {
+        var milk = UUID.randomUUID();
+        var coffee = UUID.randomUUID();
+        var observations = new ArrayList<PriceObservation>();
+        for (var index = 0; index < 3; index++) observations.add(obsAt(milk, "AAAAAAAA000111", "Atacado", new BigDecimal("4.79")));
+        for (var index = 0; index < 3; index++) observations.add(obsAt(coffee, "AAAAAAAA000111", "Atacado", new BigDecimal("16.49")));
+        for (var index = 0; index < 3; index++) observations.add(obsAt(coffee, "BBBBBBBB000111", "Hiper", new BigDecimal("17.90")));
+        when(marketLocationService.chainRootsWithin(any(), any(), anyDouble())).thenReturn(Set.of("AAAAAAAA", "BBBBBBBB"));
+        when(observationRepository.findRecentByProductsInChains(any(), any(), any())).thenReturn(observations);
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of(
+                "AAAAAAAA000111", storeAt("AAAAAAAA000111", "-30.0100000"),
+                "BBBBBBBB000111", storeAt("BBBBBBBB000111", "-30.0200000")));
+        when(auditRepository.countDistinctHouseholdsForProductsByChain(any(), any(), any())).thenReturn(List.of(
+                productChainCount(milk, "AAAAAAAA", 3), productChainCount(coffee, "AAAAAAAA", 3),
+                productChainCount(coffee, "BBBBBBBB", 3)));
+        when(privacyTierResolver.sensitiveProductIds(any())).thenReturn(Set.of());
+
+        var rowsByProduct = service.nearbyChainPricesForProducts(List.of(milk, coffee), HOME);
+
+        assertEquals(List.of("AAAAAAAA"), rowsByProduct.get(milk).stream().map(row -> row.cnpjRoot()).toList());
+        // Cheapest first, each row placed at its store.
+        assertEquals(List.of("AAAAAAAA", "BBBBBBBB"), rowsByProduct.get(coffee).stream().map(row -> row.cnpjRoot()).toList());
+        assertEquals(0, rowsByProduct.get(coffee).get(0).latestPrice().compareTo(new BigDecimal("16.49")));
+        assertTrue(rowsByProduct.get(coffee).get(0).distanceKm() < 2.0);
+        // The whole basket costs one read of each kind, however many products it has.
+        verify(observationRepository, times(1)).findRecentByProductsInChains(any(), any(), any());
+        verify(auditRepository, times(1)).countDistinctHouseholdsForProductsByChain(any(), any(), any());
+        verify(marketLocationService, times(1)).findByCnpjs(any());
+        verify(observationRepository, never()).findRecentByProduct(any(), any());
+    }
+
+    @Test
+    void nearbyChainPricesForProducts_keepsTheKAnonymityGatePerProductAndChain() {
+        var milk = UUID.randomUUID();
+        var observations = new ArrayList<PriceObservation>();
+        for (var index = 0; index < 3; index++) observations.add(obsAt(milk, "AAAAAAAA000111", "Atacado", new BigDecimal("4.79")));
+        for (var index = 0; index < 3; index++) observations.add(obsAt(milk, "BBBBBBBB000111", "Hiper", new BigDecimal("4.50")));
+        when(marketLocationService.chainRootsWithin(any(), any(), anyDouble())).thenReturn(Set.of("AAAAAAAA", "BBBBBBBB"));
+        when(observationRepository.findRecentByProductsInChains(any(), any(), any())).thenReturn(observations);
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of(
+                "AAAAAAAA000111", storeAt("AAAAAAAA000111", "-30.0100000"),
+                "BBBBBBBB000111", storeAt("BBBBBBBB000111", "-30.0200000")));
+        // Only two households contributed at the cheaper chain: below K=3, it must stay hidden.
+        when(auditRepository.countDistinctHouseholdsForProductsByChain(any(), any(), any())).thenReturn(List.of(
+                productChainCount(milk, "AAAAAAAA", 3), productChainCount(milk, "BBBBBBBB", 2)));
+        when(privacyTierResolver.sensitiveProductIds(any())).thenReturn(Set.of(milk));
+
+        var rows = service.nearbyChainPricesForProducts(List.of(milk), HOME).get(milk);
+
+        assertEquals(List.of("AAAAAAAA"), rows.stream().map(row -> row.cnpjRoot()).toList());
+    }
+
+    @Test
+    void nearbyChainPricesForProducts_leavesOutChainsWhoseStoresAreAllOutOfRange() {
+        var milk = UUID.randomUUID();
+        var observations = new ArrayList<PriceObservation>();
+        for (var index = 0; index < 3; index++) observations.add(obsAt(milk, "AAAAAAAA000999", "Atacado Longe", new BigDecimal("4.79")));
+        // The chain has a store nearby, but the only store that sells this product is ~110 km away.
+        when(marketLocationService.chainRootsWithin(any(), any(), anyDouble())).thenReturn(Set.of("AAAAAAAA"));
+        when(observationRepository.findRecentByProductsInChains(any(), any(), any())).thenReturn(observations);
+        when(marketLocationService.findByCnpjs(any())).thenReturn(Map.of(
+                "AAAAAAAA000999", storeAt("AAAAAAAA000999", "-31.0000000")));
+        when(auditRepository.countDistinctHouseholdsForProductsByChain(any(), any(), any())).thenReturn(List.of(
+                productChainCount(milk, "AAAAAAAA", 3)));
+        when(privacyTierResolver.sensitiveProductIds(any())).thenReturn(Set.of());
+
+        assertTrue(service.nearbyChainPricesForProducts(List.of(milk), HOME).isEmpty());
+    }
+
+    @Test
+    void nearbyChainPricesForProducts_readsNothingWithoutPositionOrNearbyChains() {
+        var nowhere = new ViewerLocation(null, null, ViewerLocationService.Source.NONE, "RS");
+        assertTrue(service.nearbyChainPricesForProducts(List.of(UUID.randomUUID()), nowhere).isEmpty());
+
+        when(marketLocationService.chainRootsWithin(any(), any(), anyDouble())).thenReturn(Set.of());
+        assertTrue(service.nearbyChainPricesForProducts(List.of(UUID.randomUUID()), HOME).isEmpty());
+
+        verify(observationRepository, never()).findRecentByProductsInChains(any(), any(), any());
     }
 }

@@ -109,6 +109,23 @@ public interface PriceObservationRepository extends JpaRepository<PriceObservati
     List<PriceObservation> findRecentByProduct(@Param("productId") UUID productId,
                                                @Param("since") LocalDateTime since);
 
+    /**
+     * {@link #findRecentByProduct} for several products in ONE query, limited to the given chains
+     * (CNPJ roots). Each chain keeps ALL its observations of the product — the caller prices and
+     * k-anon-checks a chain as a whole, exactly like the single-product read.
+     */
+    @Query("""
+        SELECT po FROM PriceObservation po
+        WHERE po.product.id IN :productIds
+          AND po.marketCnpjRoot IN :cnpjRoots
+          AND po.channel = 'IN_STORE'
+          AND po.outlier = false
+          AND po.observedAt >= :since
+    """)
+    List<PriceObservation> findRecentByProductsInChains(@Param("productIds") Collection<UUID> productIds,
+                                                        @Param("cnpjRoots") Collection<String> cnpjRoots,
+                                                        @Param("since") LocalDateTime since);
+
     interface ProductLowestPrice {
         UUID getProductId();
         BigDecimal getLowestPrice();
