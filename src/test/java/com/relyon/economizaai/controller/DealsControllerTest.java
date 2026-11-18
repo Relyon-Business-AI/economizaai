@@ -9,6 +9,7 @@ import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.model.enums.PriceExposureSurface;
 import com.relyon.economizaai.service.exposure.PriceExposureService;
 import com.relyon.economizaai.service.exposure.ShownPrice;
+import com.relyon.economizaai.service.notifications.NotifiedDealsService;
 import com.relyon.economizaai.service.priceindex.DealsService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -43,6 +45,7 @@ class DealsControllerTest {
     @MockitoBean private DealsService dealsService;
     @MockitoBean private JwtService jwtService;
     @MockitoBean private PriceExposureService priceExposureService;
+    @MockitoBean private NotifiedDealsService notifiedDealsService;
     @MockitoBean private UserDetailsService userDetailsService;
     @MockitoBean private LocalizedMessageService localizedMessageService;
 
@@ -101,6 +104,46 @@ class DealsControllerTest {
                 .andExpect(status().isOk());
 
         verify(dealsService).findDeals(any(), eq(true), eq(5.0), eq(50), any(), any());
+    }
+
+    @Test
+    void withANotification_returnsOnlyTheDealsItAnnounced() throws Exception {
+        var user = principal();
+        var notificationId = UUID.randomUUID();
+        var announcedDeal = deal();
+        var currentDeals = List.of(deal(), announcedDeal);
+        when(dealsService.findDeals(eq(user), eq(true), eq(null), eq(50), any(), any())).thenReturn(currentDeals);
+        when(notifiedDealsService.onlyAnnouncedBy(user, notificationId, currentDeals))
+                .thenReturn(List.of(announcedDeal));
+
+        mockMvc.perform(get("/api/v1/deals?limit=5&notificationId=" + notificationId)
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].productId").value(announcedDeal.productId().toString()));
+
+        verify(priceExposureService).recordShown(user, PriceExposureSurface.DEALS,
+                List.of(new ShownPrice(announcedDeal.productId(), "12345678000199", new BigDecimal("7.00"))));
+    }
+
+    @Test
+    void withoutANotification_doesNotFilter() throws Exception {
+        var user = principal();
+        when(dealsService.findDeals(eq(user), anyBoolean(), any(), anyInt(), any(), any()))
+                .thenReturn(List.of(deal()));
+
+        mockMvc.perform(get("/api/v1/deals")
+                        .with(SecurityMockMvcRequestPostProcessors.user(user)))
+                .andExpect(status().isOk());
+
+        verify(notifiedDealsService, never()).onlyAnnouncedBy(any(), any(), any());
+    }
+
+    @Test
+    void malformedNotificationIdIsRejected() throws Exception {
+        mockMvc.perform(get("/api/v1/deals?notificationId=not-a-uuid")
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

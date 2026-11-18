@@ -86,6 +86,21 @@ public interface NotificationEventRepository extends JpaRepository<NotificationE
                                                              @Param("productIds") Collection<UUID> productIds,
                                                              @Param("marketCnpj") String marketCnpj);
 
+    /**
+     * The {@code SENT} events one notification left for its recipient: one per deal the
+     * notification announced (product + market).
+     */
+    @Query("""
+        SELECT event
+        FROM NotificationEvent event
+        WHERE event.user.id = :userId
+          AND event.notificationId = :notificationId
+          AND event.eventType = 'SENT'
+          AND event.productId IS NOT NULL
+    """)
+    List<NotificationEvent> findSentByNotification(@Param("userId") UUID userId,
+                                                   @Param("notificationId") UUID notificationId);
+
     /** Projection for {@link #sumConvertedSavings}. */
     interface SavingsRollup {
         BigDecimal getTotalSavings();

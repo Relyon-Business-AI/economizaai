@@ -1933,6 +1933,13 @@ GET /api/v1/deals?includeNearby=false&radiusKm=5&limit=20
   ]
 ```
 
+**Only the deals of one notification (2026-11-18):** `GET /api/v1/deals?notificationId=<uuid>`
+returns just the deals that notification announced to the caller (the digest's "X mais barato e
+mais N ofertas"), same shape and ranking. `lat`/`lng` are still honoured; `includeNearby`,
+`radiusKm` and `limit` are ignored (the digest's own scope is used so none is cut off). A deal
+that is no longer valid is absent; someone else's notification, or one that announced no deal,
+returns `[]` — the app then falls back to the full list.
+
 **What the price fields mean (2026-11-11):**
 - `currentPrice` is the chain's **latest observed price**, at most 60 days old
   (`DEALS_MAX_PRICE_AGE_DAYS`) — the same number the best-markets screen shows as
