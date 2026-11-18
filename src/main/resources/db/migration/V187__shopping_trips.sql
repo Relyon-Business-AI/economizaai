@@ -76,3 +76,21 @@ CREATE TABLE shopping_trip_items (
 
 CREATE INDEX idx_shopping_trip_items_stop ON shopping_trip_items (stop_id);
 CREATE INDEX idx_shopping_trip_items_product ON shopping_trip_items (product_id);
+
+-- Quanto custariam os itens COMPRADOS (marcados) se fossem todos levados num unico mercado proximo.
+-- Ate 3 mercados por compra, calculados no servidor quando o registro chega. So entram os itens
+-- que tem preco nesse mercado: basket_total e o previsto desses mesmos itens na compra.
+CREATE TABLE shopping_trip_alternatives (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    trip_id            UUID NOT NULL REFERENCES shopping_trips (id) ON DELETE CASCADE,
+    market_cnpj        VARCHAR(14) NOT NULL,
+    market_name        VARCHAR(255),
+    distance_km        NUMERIC(8, 3),
+    -- Itens comprados que tem preco neste mercado, e quantos itens comprados havia no total.
+    matched_item_count INTEGER NOT NULL,
+    bought_item_count  INTEGER NOT NULL,
+    basket_total       NUMERIC(12, 2) NOT NULL,
+    alternative_total  NUMERIC(12, 2) NOT NULL
+);
+
+CREATE INDEX idx_shopping_trip_alternatives_trip ON shopping_trip_alternatives (trip_id);

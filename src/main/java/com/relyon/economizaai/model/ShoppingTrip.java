@@ -106,4 +106,14 @@ public class ShoppingTrip {
         stops.add(stop);
         stop.setTrip(this);
     }
+
+    @OneToMany(mappedBy = "trip", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @BatchSize(size = 50)
+    @Builder.Default
+    private List<ShoppingTripAlternative> alternatives = new ArrayList<>();
+
+    public void addAlternative(ShoppingTripAlternative alternative) {
+        alternatives.add(alternative);
+        alternative.setTrip(this);
+    }
 }

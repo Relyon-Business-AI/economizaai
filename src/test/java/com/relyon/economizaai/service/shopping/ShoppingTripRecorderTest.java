@@ -12,17 +12,27 @@ import com.relyon.economizaai.model.enums.ShoppingTripOutcome;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.repository.ShoppingTripRepository;
+import com.relyon.economizaai.service.geo.ViewerLocationService;
+import com.relyon.economizaai.service.geo.ViewerLocationService.Source;
+import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
+import com.relyon.economizaai.service.priceindex.BasketComparisonService;
+import com.relyon.economizaai.service.priceindex.BasketComparisonService.AlternativeLine;
+import com.relyon.economizaai.service.priceindex.BasketComparisonService.BasketLine;
+import com.relyon.economizaai.service.priceindex.BasketComparisonService.MarketAlternative;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -30,6 +40,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -39,10 +51,15 @@ import static org.mockito.Mockito.when;
 class ShoppingTripRecorderTest {
 
     private static final String CLIENT_TRIP_ID = "trip-from-device-1";
+    private static final ViewerLocation HOME = new ViewerLocation(
+            new BigDecimal("-30.03"), new BigDecimal("-51.21"), Source.PROFILE, "RS");
 
     @Mock private ShoppingTripRepository tripRepository;
     @Mock private ReceiptRepository receiptRepository;
     @Mock private ProductRepository productRepository;
+    @Mock private BasketComparisonService basketComparisonService;
+    @Mock private ViewerLocationService viewerLocationService;
+    @Captor private ArgumentCaptor<Collection<BasketLine>> basketCaptor;
 
     private ShoppingTripRecorder recorder;
     private Household household;
@@ -52,7 +69,8 @@ class ShoppingTripRecorderTest {
 
     @BeforeEach
     void setUp() {
-        recorder = new ShoppingTripRecorder(tripRepository, receiptRepository, productRepository);
+        recorder = new ShoppingTripRecorder(tripRepository, receiptRepository, productRepository,
+                basketComparisonService, viewerLocationService);
         household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
         user = User.builder().id(UUID.randomUUID()).email("buyer@economizai").household(household).build();
         milkId = UUID.randomUUID();
@@ -64,6 +82,8 @@ class ShoppingTripRecorderTest {
             return trip;
         });
         lenient().when(productRepository.findAllById(any())).thenReturn(List.of(product(milkId), product(bananaId)));
+        lenient().when(viewerLocationService.resolve(any())).thenReturn(HOME);
+        lenient().when(basketComparisonService.compare(any(), any(), any(), anyInt())).thenReturn(List.of());
     }
 
     @Test
@@ -137,6 +157,45 @@ class ShoppingTripRecorderTest {
         assertEquals(1, stop.getItems().size());
         assertEquals(milkId, stop.getItems().get(0).getProductId());
         assertEquals(new BigDecimal("31.74"), stop.getPlannedTotal());
+    }
+
+    @Test
+    void record_storesWhatTheBoughtItemsWouldCostAtSingleNearbyMarkets() {
+        when(basketComparisonService.compare(any(), any(), any(), anyInt())).thenReturn(List.of(
+                new MarketAlternative("22222222000122", "22222222", "Atacado Sul", 1.2,
+                        new BigDecimal("31.74"), new BigDecimal("28.74"), List.of(
+                        new AlternativeLine(milkId, null, new BigDecimal("6"), new BigDecimal("31.74"),
+                                new BigDecimal("4.79"), new BigDecimal("28.74"), null)))));
+        var request = request(null,
+                item(milkId, "6", "5.29", ShoppingTripItemStatus.IN_CART, false, null),
+                item(bananaId, "1", "6.90", ShoppingTripItemStatus.NOT_FOUND, false, null));
+
+        recorder.record(user, request);
+
+        // Only what was bought is compared, and a single-stop trip leaves its own market out.
+        verify(basketComparisonService).compare(eq(HOME), basketCaptor.capture(), eq(Set.of("11111111")), eq(3));
+        var bought = List.copyOf(basketCaptor.getValue());
+        assertEquals(1, bought.size());
+        assertEquals(milkId, bought.get(0).productId());
+        assertEquals(new BigDecimal("31.74"), bought.get(0).lineTotal());
+        var alternative = savedTrip().getAlternatives().get(0);
+        assertEquals("22222222000122", alternative.getMarketCnpj());
+        assertEquals(1, alternative.getMatchedItemCount());
+        assertEquals(1, alternative.getBoughtItemCount());
+        assertEquals(new BigDecimal("31.74"), alternative.getBasketTotal());
+        assertEquals(new BigDecimal("28.74"), alternative.getAlternativeTotal());
+        assertEquals(new BigDecimal("1.200"), alternative.getDistanceKm());
+    }
+
+    @Test
+    void record_stillStoresTheTripWhenTheComparisonFails() {
+        when(basketComparisonService.compare(any(), any(), any(), anyInt()))
+                .thenThrow(new IllegalStateException("price index unavailable"));
+
+        recorder.record(user, request(null,
+                item(milkId, "6", "5.29", ShoppingTripItemStatus.IN_CART, false, null)));
+
+        assertTrue(savedTrip().getAlternatives().isEmpty());
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.relyon.economizaai.repository;
 
 import com.relyon.economizaai.model.ShoppingTrip;
+import com.relyon.economizaai.model.ShoppingTripAlternative;
 import com.relyon.economizaai.model.ShoppingTripItem;
 import com.relyon.economizaai.model.ShoppingTripStop;
 import com.relyon.economizaai.model.enums.ShoppingTripItemStatus;
@@ -53,6 +54,13 @@ class ShoppingTripRepositoryTest {
                 .status(ShoppingTripItemStatus.IN_CART)
                 .build());
         trip.addStop(stop);
+        trip.addAlternative(ShoppingTripAlternative.builder()
+                .marketCnpj("22222222000122")
+                .matchedItemCount(1)
+                .boughtItemCount(1)
+                .basketTotal(new BigDecimal("31.74"))
+                .alternativeTotal(new BigDecimal("28.74"))
+                .build());
         tripRepository.save(trip);
         entityManager.flush();
         entityManager.clear();
@@ -61,6 +69,7 @@ class ShoppingTripRepositoryTest {
 
         assertTrue(found.isPresent());
         assertEquals(1, found.get().getStops().size());
+        assertEquals(new BigDecimal("28.74"), found.get().getAlternatives().get(0).getAlternativeTotal());
         assertEquals(ShoppingTripItemStatus.IN_CART, found.get().getStops().get(0).getItems().get(0).getStatus());
         assertTrue(tripRepository.findByHouseholdIdAndClientTripId(UUID.randomUUID(), "trip-from-device-1").isEmpty());
     }
