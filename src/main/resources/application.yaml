@@ -554,8 +554,7 @@ economizaai:
     min-observations-for-community-promo: 10   # don't flag a community promo unless this much baseline exists
     community-promo-threshold-pct: 15          # current price < (median - X%) → community promo
     community-promo-recent-window-days: 7      # last N days = "recent" sample; older rows are baseline
-    lookback-days: 90                          # observations older than this are excluded from reference + promo calcs
-    best-markets-lookback-days: 180            # wider window for the best-markets ranking + in-store typical price (dated real prices)
+    lookback-days: 90                          # one window for every community price read (plan, best-markets, typical price, promo baselines); older observations are shown nowhere
     deals-max-price-age-days: ${DEALS_MAX_PRICE_AGE_DAYS:60}   # "Ofertas pra você": a chain's latest price must be at most this old to become a deal
   categorizer:
     consensus:

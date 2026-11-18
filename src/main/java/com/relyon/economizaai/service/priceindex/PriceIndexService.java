@@ -568,7 +568,7 @@ public class PriceIndexService {
     }
 
     private LocalDateTime bestMarketsSince() {
-        return BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getBestMarketsLookbackDays());
+        return BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getLookbackDays());
     }
 
     private static String chainKey(PriceObservation observation) {

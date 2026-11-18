@@ -229,15 +229,14 @@ public class CollaborativeProperties {
          */
         private int communityPromoMinRecentObservations = 3;
         private int communityPromoThresholdPct = 15;
-        private int lookbackDays = 90;
         /**
-         * Window for the "onde está mais barato" reads (best-markets ranking + in-store
-         * typical price). Wider than {@code lookbackDays} on purpose: those screens show a
-         * dated real price (the shopper judges staleness), and a 90-day window left every
-         * (product, chain) pair below K with the current community size. Promo detection and
-         * the deals digest keep the tighter {@code lookbackDays} baseline.
+         * One window for every community price read: reference and promo baselines, the
+         * shopping plan, the best-markets ranking, the in-store typical price and the "same
+         * purchase elsewhere" comparisons. A price older than this is not shown anywhere, so a
+         * product never has a price on one screen and none on another (owner decision 2026-11-18;
+         * until then best-markets used a wider 180-day window).
          */
-        private int bestMarketsLookbackDays = 180;
+        private int lookbackDays = 90;
         /**
          * "Perto de você" radius for the best-markets ranking when the viewer has a location
          * (explicit or inferred). Same 20 km the app uses for the promos feed cascade.
@@ -304,8 +303,6 @@ public class CollaborativeProperties {
         public void setCommunityPromoThresholdPct(int v) { this.communityPromoThresholdPct = v; }
         public int getLookbackDays() { return lookbackDays; }
         public void setLookbackDays(int v) { this.lookbackDays = v; }
-        public int getBestMarketsLookbackDays() { return bestMarketsLookbackDays; }
-        public void setBestMarketsLookbackDays(int v) { this.bestMarketsLookbackDays = v; }
         public double getBestMarketsNearbyRadiusKm() { return bestMarketsNearbyRadiusKm; }
         public void setBestMarketsNearbyRadiusKm(double v) { this.bestMarketsNearbyRadiusKm = v; }
         public int getCommunityPromoRecentWindowDays() { return communityPromoRecentWindowDays; }

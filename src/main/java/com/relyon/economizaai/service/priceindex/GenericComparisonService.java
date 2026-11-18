@@ -155,7 +155,7 @@ public class GenericComparisonService {
     public PriceHistoryResponse priceHistoryForMarket(UUID productId, String marketCnpj, User user) {
         var product = productRepository.findById(productId).orElseThrow(ProductNotFoundException::new);
         var cnpj = CnpjNormalizer.normalize(marketCnpj);
-        var since = BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getBestMarketsLookbackDays());
+        var since = BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getLookbackDays());
         var observations = observationRepository.findRecentByProductAndMarket(productId, cnpj, since);
         var friendlyDescription = householdProductAliasService.findFor(user.getHousehold(), product);
         if (observations.isEmpty() || isBlockedByKanon(product, cnpj, observations, since)) {
@@ -201,7 +201,7 @@ public class GenericComparisonService {
             return new GenericComparisonResponse(typeName, scannedId, null, List.of());
         }
         var productIds = products.stream().map(Product::getId).toList();
-        var since = BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getBestMarketsLookbackDays());
+        var since = BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getLookbackDays());
         var observations = observationRepository.findRecentByProductIds(productIds, since);
         if (observations.isEmpty()) {
             log.info("generic_comparison.done type={} products={} offers=0 scope=NONE", typeKey, products.size());
@@ -331,7 +331,7 @@ public class GenericComparisonService {
             this.marketNameOverrides = marketNameService.resolveNames(user.getHousehold().getId(), cnpjs);
             this.chainNames = marketNameService.resolveChainNames(cnpjs);
             var productIds = new ArrayList<>(productsById.keySet());
-            var since = BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getBestMarketsLookbackDays());
+            var since = BrazilClock.nowDateTime().minusDays(properties.getCollaborative().getLookbackDays());
             this.householdsByPair = auditRepository.countDistinctHouseholdsForProductsByMarket(productIds, since).stream()
                     .collect(Collectors.toMap(
                             count -> new ProductMarket(count.getProductId(), count.getCnpj()),
