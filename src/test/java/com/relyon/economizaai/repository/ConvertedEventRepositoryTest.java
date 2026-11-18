@@ -114,6 +114,26 @@ class ConvertedEventRepositoryTest {
     }
 
     @Test
+    void findsTheSentEventsOfOneNotificationForItsRecipientOnly() {
+        var notificationId = UUID.randomUUID();
+        var announced = sentBy(notificationId, buyer, NotificationEventType.SENT, UUID.randomUUID());
+        sentBy(UUID.randomUUID(), buyer, NotificationEventType.SENT, UUID.randomUUID());
+        sentBy(notificationId, buyer, NotificationEventType.PUSH_OPENED, UUID.randomUUID());
+        sentBy(notificationId, buyer, NotificationEventType.SENT, null);
+        sentBy(notificationId, otherHouseholdBuyer, NotificationEventType.SENT, UUID.randomUUID());
+
+        var found = eventRepository.findSentByNotification(buyer.getId(), notificationId);
+
+        assertEquals(List.of(announced.getId()), found.stream().map(NotificationEvent::getId).toList());
+    }
+
+    private NotificationEvent sentBy(UUID notificationId, User user, NotificationEventType type, UUID productId) {
+        var sent = event(user, type, null, productId, WINDOW_START.plusDays(5));
+        sent.setNotificationId(notificationId);
+        return eventRepository.save(sent);
+    }
+
+    @Test
     void withoutAStart_goesBackToTheFirstConvertedEvent() {
         event(buyer, NotificationEventType.CONVERTED, "7.20", UUID.randomUUID(), WINDOW_START.plusDays(5));
         event(buyer, NotificationEventType.CONVERTED, "3.00", UUID.randomUUID(), WINDOW_START.minusYears(1));
