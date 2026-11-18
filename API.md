@@ -2189,6 +2189,50 @@ say "o óleo sai R$ 1,20 mais barato no X, mas não compensa outra parada".
 
 ---
 
+## 9b. Shopping trip record (2026-11-18)
+
+```
+POST /api/v1/shopping-trips        → 201 { "id": "<uuid>" }
+{
+  "clientTripId": "k3j2-…",                 // gerado no aparelho; reenviar o mesmo devolve o mesmo id
+  "shoppingListId": "<uuid>",               // opcional
+  "startedAt": "2026-11-18T10:00:00-03:00",
+  "finishedAt": "2026-11-18T11:10:00-03:00",
+  "outcome": "COMPLETED",                   // ou ENDED_EARLY (encerrou antes da última parada)
+  "maxDistanceKm": 10, "maxStops": 2, "minSavingPerStop": 10,   // regras usadas; opcionais
+  "plannedTotal": 115.42, "plannedStopCount": 2,
+  "unpricedItemCount": 0, "skippedSavingTotal": 1.20, "priceLookupCount": 3,
+  "stops": [                                // na ordem da rota
+    {
+      "marketCnpj": "…", "marketName": "…", "distanceKm": 0.4,
+      "concluded": true, "concludedAt": "2026-11-18T10:40:00-03:00",
+      "receiptId": "<uuid>",                // nota que fechou a parada; opcional
+      "receiptPaidTotal": 30.84, "receiptPredictedTotal": 31.74,
+      "items": [
+        { "productId": "<uuid>", "quantity": 6, "plannedUnitPrice": 5.29, "priceSource": "LOCAL_HISTORY",
+          "status": "IN_CART",              // IN_CART | NOT_FOUND | PENDING
+          "inReceipt": true, "paidUnitPrice": 5.14,
+          "plannedStopPosition": 0,         // parada em que o plano punha o item; null = entrou durante a compra
+          "addedDuringTrip": false }
+      ]
+    }
+  ]
+}
+```
+
+Registro de uma compra feita pelo modo de compra: o que o plano previa e o que aconteceu em cada
+parada. **Só grava** — nenhum endpoint devolve esses dados e nada aparece para o usuário; é a base
+para medir depois previsto x pago, "não achei" por mercado e uso das regras da rota.
+
+- Idempotente por (`household`, `clientTripId`): o app reenvia até dar certo.
+- `receiptId` só é guardado quando a nota é da própria casa; senão a parada fica sem nota e os
+  campos de pago são descartados. Apagar a nota depois só desfaz o vínculo.
+- Item de produto que não existe mais é deixado de fora. O total previsto da parada é recalculado
+  no servidor a partir dos itens.
+- `plannedStopPosition` diferente da posição da parada = o item foi levado para outra pelo "não achei".
+
+---
+
 ## 10. Household preferences (Phase 2.6)
 
 ```

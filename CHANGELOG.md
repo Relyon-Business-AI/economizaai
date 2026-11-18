@@ -1,5 +1,14 @@
 # economizai — what's new
 
+## 2026-11-18 — Registro da compra (modo de compra)
+
+- **`POST /shopping-trips`** (novo) → `201 { id }`. O app envia uma vez, quando a compra termina: regras
+  usadas, total previsto e, por parada, mercado, itens (marcado, "não achei" ou pendente), nota que fechou a
+  parada e pago x previsto. Corpo completo no `API.md` (§9b).
+- Só grava: nenhum endpoint devolve esses dados e nada aparece para o usuário.
+- Reenviar o mesmo `clientTripId` devolve o mesmo `id` (o app tenta de novo até dar certo).
+- Tabelas novas `shopping_trips`, `shopping_trip_stops` e `shopping_trip_items` (migration V187).
+
 ## 2026-11-18 — Mapa de preços e regras da rota do rancho
 
 Para o PR do front `feat/price-map`. Tudo aditivo: quem não manda os campos novos recebe o mesmo de antes.

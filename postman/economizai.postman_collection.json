@@ -7482,6 +7482,39 @@
 						"description": "Response inclui `friendlyDescription` (apelido que o domic\u00edlio deu ao produto; null se nunca renomeado) ao lado do nome de cat\u00e1logo."
 					},
 					"response": []
+				},
+				{
+					"name": "Record a finished shopping trip",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-trips",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-trips"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"clientTripId\": \"postman-{{$timestamp}}\",\n  \"startedAt\": \"2026-11-18T10:00:00-03:00\",\n  \"finishedAt\": \"2026-11-18T11:10:00-03:00\",\n  \"outcome\": \"COMPLETED\",\n  \"maxDistanceKm\": 10,\n  \"maxStops\": 2,\n  \"minSavingPerStop\": 10,\n  \"plannedTotal\": 31.74,\n  \"plannedStopCount\": 1,\n  \"unpricedItemCount\": 0,\n  \"skippedSavingTotal\": 0,\n  \"priceLookupCount\": 0,\n  \"stops\": [\n    {\n      \"marketCnpj\": \"11111111000111\",\n      \"marketName\": \"Mercado do Bairro\",\n      \"distanceKm\": 0.4,\n      \"concluded\": true,\n      \"concludedAt\": \"2026-11-18T10:40:00-03:00\",\n      \"items\": [\n        { \"productId\": \"{{e2eProductId}}\", \"quantity\": 6, \"plannedUnitPrice\": 5.29, \"priceSource\": \"LOCAL_HISTORY\", \"status\": \"IN_CART\", \"plannedStopPosition\": 0 }\n      ]\n    }\n  ]\n}"
+						},
+						"description": "Registro de uma compra feita pelo modo de compra do app (plano x o que aconteceu). S\u00f3 grava: nenhum endpoint devolve esses dados. Reenviar o mesmo `clientTripId` devolve o mesmo id."
+					},
+					"response": []
 				}
 			]
 		},
@@ -11686,6 +11719,52 @@
 									"    pm.expect(d.unpriced).to.be.an('array');",
 									"    pm.expect(d.skippedSavings).to.be.an('array');",
 									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "39b. Record a finished shopping trip",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-trips",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-trips"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"clientTripId\": \"postman-{{$timestamp}}\",\n  \"startedAt\": \"2026-11-18T10:00:00-03:00\",\n  \"finishedAt\": \"2026-11-18T11:10:00-03:00\",\n  \"outcome\": \"COMPLETED\",\n  \"maxDistanceKm\": 10,\n  \"maxStops\": 2,\n  \"minSavingPerStop\": 10,\n  \"plannedTotal\": 31.74,\n  \"plannedStopCount\": 1,\n  \"unpricedItemCount\": 0,\n  \"skippedSavingTotal\": 0,\n  \"priceLookupCount\": 0,\n  \"stops\": [\n    {\n      \"marketCnpj\": \"11111111000111\",\n      \"marketName\": \"Mercado do Bairro\",\n      \"distanceKm\": 0.4,\n      \"concluded\": true,\n      \"concludedAt\": \"2026-11-18T10:40:00-03:00\",\n      \"items\": [\n        { \"productId\": \"{{e2eProductId}}\", \"quantity\": 6, \"plannedUnitPrice\": 5.29, \"priceSource\": \"LOCAL_HISTORY\", \"status\": \"IN_CART\", \"plannedStopPosition\": 0 }\n      ]\n    }\n  ]\n}"
+						},
+						"description": "Registro de uma compra feita pelo modo de compra do app (plano x o que aconteceu). S\u00f3 grava: nenhum endpoint devolve esses dados. Reenviar o mesmo `clientTripId` devolve o mesmo id."
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eProductId')) { pm.test.skip('No product id \u2014 skipping'); return; }",
+									"pm.test('Returns 201', function () { pm.response.to.have.status(201); });",
+									"pm.test('Has the trip id', function () { pm.expect(pm.response.json().id).to.be.a('string'); });"
 								]
 							}
 						}
