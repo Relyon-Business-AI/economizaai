@@ -1,5 +1,17 @@
 # economizai — what's new
 
+## 2026-11-19 — Rota de compra: número que não cabe vira 400
+
+- `POST /shopping-trips`, `POST /shopping-lists` e `POST /shopping-lists/{id}/items`: um número maior do que o
+  banco guarda passa a devolver **400**, com o campo em `errors`. Antes dava 500. No registro da compra isso
+  importa: o app reenvia quando recebe 500 e descarta quando recebe 400, então um registro assim ficava preso
+  na fila do aparelho.
+- Limites: quantidade até `999999999.999`; valores em R$ até `9999999999.99`; `maxDistanceKm` até `99999.9`;
+  `distanceKm` da parada até `99999.999`. `receiptPaidTotal` e `receiptPredictedTotal` não aceitam negativo.
+- No registro da compra, a soma dos itens (preço × quantidade) também precisa caber em `9999999999.99`; quando
+  não cabe, o erro vem em `errors.itemsTotalStorable`.
+- Nada muda para valores normais; o app não precisa de alteração.
+
 ## 2026-11-18 — Uma janela só de preços: 90 dias
 
 - Todo preço da comunidade passa a valer por **90 dias** em qualquer tela. Antes, "Melhores preços", o preço
