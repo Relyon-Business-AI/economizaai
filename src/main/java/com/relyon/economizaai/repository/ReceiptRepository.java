@@ -322,7 +322,8 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
     long countActiveHouseholdsSince(@Param("since") LocalDateTime since, boolean includeInternal);
 
     /**
-     * Confirmed notas per store for the markets map: (cnpj, receipts, distinct households).
+     * Confirmed notas per store for the markets map, bought since {@code since}: (cnpj, receipts,
+     * distinct households). A nota with no purchase date counts by when it entered the app.
      * The household count is the k-anonymity input — callers must not expose the receipt count
      * of a store below the public threshold.
      */
@@ -330,8 +331,10 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
             + "count(distinct receipt.household.id) AS householdCount "
             + "FROM Receipt receipt "
             + "WHERE receipt.status = 'CONFIRMED' AND receipt.cnpjEmitente IN :cnpjs "
+            + "AND coalesce(receipt.issuedAt, receipt.createdAt) >= :since "
             + "GROUP BY receipt.cnpjEmitente")
-    List<MarketPurchaseCount> countConfirmedPurchasesByCnpjIn(@Param("cnpjs") Collection<String> cnpjs);
+    List<MarketPurchaseCount> countConfirmedPurchasesByCnpjInSince(@Param("cnpjs") Collection<String> cnpjs,
+                                                                   @Param("since") LocalDateTime since);
 
     interface MarketPurchaseCount {
         String getCnpj();
