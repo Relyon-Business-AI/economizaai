@@ -78,4 +78,13 @@ class WhatsAppChannelPolicyTest {
         assertEquals(Optional.empty(),
                 new WhatsAppTemplateRegistry(null, null, null).templateSidFor(NotificationNotice.PRICE_ALERTS));
     }
+
+    @Test
+    void availableForEveryoneOnceTheAudienceIsOpened() {
+        twilioWhatsAppSender(true);
+        policy.setAudience(WhatsAppChannelPolicy.Audience.EVERYONE);
+
+        assertTrue(policy.isAvailableFor(user(Role.USER, true, "+5551999990000")));
+        assertTrue(policy.isAvailableFor(user(Role.ADMIN, false, null)));
+    }
 }

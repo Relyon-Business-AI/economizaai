@@ -1,5 +1,7 @@
 package com.relyon.economizaai.service.notifications.schedule;
 
+import lombok.Setter;
+import lombok.Getter;
 import com.relyon.economizaai.model.SpendingReportDelivery;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.NotificationType;
@@ -46,7 +48,8 @@ public class SpendingReportScheduler {
     private final WhatsAppReportService reportService;
     private final NotificationService notificationService;
     private final SpendingReportDeliveryLedger deliveryLedger;
-    private final boolean enabled;
+    @Getter @Setter
+    private volatile boolean enabled;
 
     public SpendingReportScheduler(
             UserRepository userRepository,

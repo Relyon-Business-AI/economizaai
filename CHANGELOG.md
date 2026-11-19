@@ -1,5 +1,28 @@
 # economizai — what's new
 
+## 2026-11-19 — Configurações de negócio no admin (sem deploy)
+
+- **Novo: `GET /admin/settings`** devolve as regras de negócio agrupadas por seção (planos, preços e ofertas,
+  economia e previsão, notificações, custos, notas e estados, aplicativo, comerciantes). Cada item traz
+  `key`, `label`, `description`, `type`, `unit`, `value` (em vigor), `configuredValue` (o do ambiente),
+  `changed`, `min`/`max`, `options`, `appKey`, `changedAt`, `changedBy`.
+- **`PUT /admin/settings/{key}`** com `{ "value": "..." }` salva e passa a valer na hora, sem reiniciar.
+  **`DELETE /admin/settings/{key}`** volta ao valor configurado para o ambiente. Valor fora do tipo, da faixa
+  ou das opções devolve **400** com a mensagem pronta para mostrar; chave desconhecida, **404**.
+- **`GET /app-config` ganhou `settings`**: os valores que os apps mostram ou aplicam, pelo nome publicado
+  (`priceWindowDays`, `marketPricesDefaultDays`, `nearbyRadiusKm`, `maxItemPhotos`, `contingencyWindowHours`,
+  `householdInviteHours`, `launchPromoUntil`, `savingsFollowUpDays`, `runningLowDays`, `quietHoursStart`,
+  `quietHoursEnd`, `quietHoursMaxDeferred`). Os campos antigos (`minVersion`, `androidUrl`, `iosUrl`,
+  `message`) não mudam. O app deve ler daqui em vez de repetir o número no código ou no texto.
+- **Um valor só onde antes havia cópias:** o raio de "perto de você" (melhores mercados e busca de
+  produtos), o preço mensal do Premium (cobrança web e projeções), a lista de estados pausados (sonda,
+  situação dos estados e alertas do Infosimples) e o teto do período em `GET /markets/{cnpj}/prices`, que
+  agora acompanha a validade dos preços da comunidade.
+- **Corrigido:** `SEFAZ_PREFETCH_ALLOWED_UFS` não tinha efeito (o código lia outra chave); a receita por canal
+  de aquisição não excluía as contas de teste do Google Play como as outras métricas.
+- O canal WhatsApp deixa de ser fixo em "só admin": a configuração "WhatsApp: quem pode usar" decide.
+- Postman: pasta Admin ganhou `Settings — list / change / restore`; o "E2E Flow" ganhou `SETTINGS 01` a `06`.
+
 ## 2026-11-19 — "Comparado à sua região" só com preços da região
 
 - `GET /insights/savings` ganhou `reference=REGION`: entram só os itens comparados com o que outras casas

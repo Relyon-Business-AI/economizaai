@@ -1,5 +1,7 @@
 package com.relyon.economizaai.service.paidapi;
 
+import lombok.Setter;
+import lombok.Getter;
 import com.relyon.economizaai.exception.InfosimplesProviderException;
 import com.relyon.economizaai.service.notifications.OperationalAlertService;
 import lombok.extern.slf4j.Slf4j;
@@ -37,15 +39,21 @@ public class InfosimplesAlertService {
     private static final Duration CONSULT_ALERT_THROTTLE = Duration.ofHours(6);
 
     private final OperationalAlertService operationalAlertService;
-    private final BigDecimal lowBalanceThreshold;
-    private final Set<String> knownOfflineUfs;
+    @Getter @Setter
+    private volatile BigDecimal lowBalanceThreshold;
+    private volatile Set<String> knownOfflineUfs;
     private final AtomicReference<Instant> lastConsultAlert = new AtomicReference<>();
 
     public InfosimplesAlertService(OperationalAlertService operationalAlertService,
                                    @Value("${economizaai.infosimples.low-balance-threshold:5.00}") BigDecimal lowBalanceThreshold,
-                                   @Value("${economizaai.ingestion.paused-state-probe.ufs:SE}") String knownOfflineUfsCsv) {
+                                   @Value("${economizaai.ingestion.paused-state-probe.ufs:SE,TO}") String knownOfflineUfsCsv) {
         this.operationalAlertService = operationalAlertService;
         this.lowBalanceThreshold = lowBalanceThreshold;
+        changeKnownOfflineUfs(knownOfflineUfsCsv);
+    }
+
+    /** The states whose portal is known to be down (comma-separated UF codes). */
+    public void changeKnownOfflineUfs(String knownOfflineUfsCsv) {
         this.knownOfflineUfs = Arrays.stream(knownOfflineUfsCsv.split(","))
                 .map(ufToken -> ufToken.trim().toLowerCase(Locale.ROOT))
                 .filter(ufToken -> !ufToken.isEmpty())

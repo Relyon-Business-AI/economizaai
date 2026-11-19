@@ -184,4 +184,15 @@ class StateStatusServiceTest {
         assertThat(byUf.get("TO").status()).isEqualTo(StateHealthStatus.UNSTABLE);
         assertThat(byUf.get("PA").status()).isEqualTo(StateHealthStatus.VALIDATING);
     }
+
+    @Test
+    void pausedStatesCanChangeWhileRunning_andTheCachedAnswerIsDropped() {
+        assertThat(statusByUf().get("TO").status()).isEqualTo(StateHealthStatus.UNSTABLE);
+
+        service.changePausedStates("SC");
+
+        assertThat(service.pausedStatesCsv()).isEqualTo("SC");
+        assertThat(statusByUf().get("TO").status()).isNotEqualTo(StateHealthStatus.UNSTABLE);
+        assertThat(statusByUf().get("SC").status()).isEqualTo(StateHealthStatus.UNSTABLE);
+    }
 }

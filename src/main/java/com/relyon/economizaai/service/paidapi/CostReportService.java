@@ -1,5 +1,7 @@
 package com.relyon.economizaai.service.paidapi;
 
+import lombok.Setter;
+import lombok.Getter;
 import com.relyon.economizaai.config.PaidApiGuardProperties;
 import com.relyon.economizaai.dto.response.CostReportResponse;
 import com.relyon.economizaai.dto.response.CostReportResponse.AiCostSummary;
@@ -39,8 +41,9 @@ public class CostReportService {
     private final Clock clock = Clock.systemUTC();
 
     /** USD→BRL rate used to convert the LLM ledger (priced in USD) into R$ for the panel. */
+    @Getter @Setter
     @Value("${economizaai.costs.usd-brl-rate:5.50}")
-    private BigDecimal usdBrlRate;
+    private volatile BigDecimal usdBrlRate;
 
     public CostReportResponse report(int windowDays) {
         var days = Math.max(1, windowDays);

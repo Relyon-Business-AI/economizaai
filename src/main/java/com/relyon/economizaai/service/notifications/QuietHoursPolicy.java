@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.notifications;
 
+import lombok.Setter;
 import com.relyon.economizaai.model.enums.NotificationType;
 import com.relyon.economizaai.time.BrazilClock;
 import lombok.Getter;
@@ -24,12 +25,15 @@ public class QuietHoursPolicy {
     private static final Set<NotificationType> ALWAYS_IMMEDIATE = EnumSet.of(
             NotificationType.RECEIPT_READY, NotificationType.RECEIPT_FAILED, NotificationType.RECEIPT_RECOVERED);
 
-    private final boolean enabled;
-    private final int startHour;
-    private final int endHour;
+    @Getter @Setter
+    private volatile boolean enabled;
+    @Getter @Setter
+    private volatile int startHour;
+    @Getter @Setter
+    private volatile int endHour;
     /** How many held-back notifications one user gets pushed when the window ends; the rest stay inbox-only. */
-    @Getter
-    private final int maxDeferredPerUser;
+    @Getter @Setter
+    private volatile int maxDeferredPerUser;
 
     public QuietHoursPolicy(
             @Value("${economizaai.notifications.quiet-hours.enabled:true}") boolean enabled,

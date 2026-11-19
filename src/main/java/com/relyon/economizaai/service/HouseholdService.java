@@ -1,5 +1,7 @@
 package com.relyon.economizaai.service;
 
+import lombok.Setter;
+import lombok.Getter;
 import com.relyon.economizaai.dto.request.JoinHouseholdRequest;
 import com.relyon.economizaai.dto.response.HouseholdResponse;
 import com.relyon.economizaai.dto.response.InvitePreviewResponse;
@@ -46,7 +48,9 @@ public class HouseholdService {
     private static final String INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     private static final int INVITE_LENGTH = 6;
     private static final int MAX_INVITE_ATTEMPTS = 10;
-    private static final int INVITE_TTL_HOURS = 48;
+    @Getter @Setter
+    @Value("${economizaai.households.invite-ttl-hours:48}")
+    private volatile int inviteTtlHours = 48;
     private static final String HOUSEHOLD_MISSING_MSG = "Household missing for user ";
 
     // Who has been in the household longest: the original host (never joined — null
@@ -102,7 +106,7 @@ public class HouseholdService {
     public Household createSoloHousehold() {
         var household = Household.builder()
                 .inviteCode(generateUniqueInviteCode())
-                .inviteCodeExpiresAt(LocalDateTime.now().plusHours(INVITE_TTL_HOURS))
+                .inviteCodeExpiresAt(LocalDateTime.now().plusHours(inviteTtlHours))
                 .build();
         var saved = householdRepository.save(household);
         // Invite code is a bearer credential (grants household membership) — masked.
@@ -123,7 +127,7 @@ public class HouseholdService {
         var household = loadHouseholdOf(user);
         requireHost(user, household, membersOf(household));
         household.setInviteCode(generateUniqueInviteCode());
-        household.setInviteCodeExpiresAt(LocalDateTime.now().plusHours(INVITE_TTL_HOURS));
+        household.setInviteCodeExpiresAt(LocalDateTime.now().plusHours(inviteTtlHours));
         var saved = householdRepository.save(household);
         log.info("Household {} invite code rotated (expires {})", saved.getId(), saved.getInviteCodeExpiresAt());
         return respond(saved, user);

@@ -205,6 +205,8 @@ public class CollaborativeProperties {
         // Not a privacy control — k-anon (minHouseholdsForPublic=3) fully guards re-identification.
         // This is only a noise floor for the median; set to 3 so K (which implies >=3 observations)
         // is the sole gate: the minimum that still respects LGPD, physical and online alike.
+        // NOTE: application.yaml sets 5, which is what runs — see the "Preço de referência:
+        // observações mínimas" setting in the admin.
         private int minObservationsPerProductMarket = 3;
         /**
          * Relaxed thresholds for GROCERY aggregates (best-markets ranking, reference prices):
@@ -242,6 +244,8 @@ public class CollaborativeProperties {
          * (explicit or inferred). Same 20 km the app uses for the promos feed cascade.
          */
         private double bestMarketsNearbyRadiusKm = 20;
+        /** The period the "prices of one market" screen opens with; never wider than {@link #lookbackDays}. */
+        private int marketPricesDefaultDays = 30;
         private int communityPromoRecentWindowDays = 7;
         /**
          * "Ofertas pra você": a chain's price only becomes a deal when its most recent
@@ -305,6 +309,8 @@ public class CollaborativeProperties {
         public void setLookbackDays(int v) { this.lookbackDays = v; }
         public double getBestMarketsNearbyRadiusKm() { return bestMarketsNearbyRadiusKm; }
         public void setBestMarketsNearbyRadiusKm(double v) { this.bestMarketsNearbyRadiusKm = v; }
+        public int getMarketPricesDefaultDays() { return marketPricesDefaultDays; }
+        public void setMarketPricesDefaultDays(int v) { this.marketPricesDefaultDays = v; }
         public int getCommunityPromoRecentWindowDays() { return communityPromoRecentWindowDays; }
         public void setCommunityPromoRecentWindowDays(int v) { this.communityPromoRecentWindowDays = v; }
         public int getDealsMaxPriceAgeDays() { return dealsMaxPriceAgeDays; }

@@ -92,7 +92,7 @@ public class PaidApiBudgetMonitor {
                         .formatted(serviceLabel, CostAlertService.money(REAIS, spent),
                                 CostAlertService.money(REAIS, budget), whatStops);
         var detail = headline + "\n\nO teto zera à meia-noite UTC (21h de Brasília). "
-                + "Para mudar o valor, ajuste a variável de ambiente do teto desse serviço (0 = sem teto).";
+                + "Para mudar o valor, abra Admin → Configurações → Custos e limites de uso (0 = sem teto).";
         return costAlertService.raise(alertKey, threshold, today.toString(), headline, detail);
     }
 

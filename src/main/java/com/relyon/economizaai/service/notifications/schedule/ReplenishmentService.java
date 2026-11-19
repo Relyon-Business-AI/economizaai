@@ -1,5 +1,8 @@
 package com.relyon.economizaai.service.notifications.schedule;
 
+import org.springframework.beans.factory.annotation.Value;
+import lombok.Setter;
+import lombok.Getter;
 import com.relyon.economizaai.dto.response.ConsumptionPredictionResponse;
 import com.relyon.economizaai.model.NotificationRule;
 import com.relyon.economizaai.model.enums.NotificationJob;
@@ -39,8 +42,8 @@ import java.util.stream.Collectors;
  * ran out — the same prediction, so "Já comprei" (manual purchase) and "Adiar"
  * (snooze) silence the reminder exactly as they clear the screen.
  *
- * <p>Reminders for one purchase are spaced by {@link #COOLDOWN} and stop after
- * {@link #MAX_REMINDERS_PER_PURCHASE}: someone who never answers is not nagged
+ * <p>Reminders for one purchase are spaced by {@code reminderSpacingDays} and stop after
+ * {@code maxRemindersPerPurchase}: someone who never answers is not nagged
  * forever. A new purchase (scanned or logged) starts the count again.
  */
 @Slf4j
@@ -49,7 +52,14 @@ import java.util.stream.Collectors;
 public class ReplenishmentService {
 
     static final int MAX_REMINDERS_PER_PURCHASE = 3;
-    private static final Duration COOLDOWN = Duration.ofDays(7);
+    static final int REMINDER_SPACING_DAYS = 7;
+
+    @Getter @Setter
+    @Value("${economizaai.notifications.replenishment.max-reminders:3}")
+    private volatile int maxRemindersPerPurchase = MAX_REMINDERS_PER_PURCHASE;
+    @Getter @Setter
+    @Value("${economizaai.notifications.replenishment.reminder-spacing-days:7}")
+    private volatile int reminderSpacingDays = REMINDER_SPACING_DAYS;
 
     private final NotificationRuleRepository ruleRepository;
     private final ConsumptionIntelligenceService consumptionService;
@@ -118,7 +128,7 @@ public class ReplenishmentService {
     }
 
     private boolean mayRemind(NotificationRule rule, ConsumptionPredictionResponse prediction, LocalDateTime now) {
-        if (remindersSince(rule, prediction.lastPurchaseDate()) >= MAX_REMINDERS_PER_PURCHASE) {
+        if (remindersSince(rule, prediction.lastPurchaseDate()) >= maxRemindersPerPurchase) {
             log.debug("replenishment.silenced rule={} reason=max_reminders", rule.getId());
             return false;
         }
@@ -160,6 +170,6 @@ public class ReplenishmentService {
     }
 
     private boolean inCooldown(NotificationRule rule, LocalDateTime now) {
-        return rule.getLastFiredAt() != null && rule.getLastFiredAt().isAfter(now.minus(COOLDOWN));
+        return rule.getLastFiredAt() != null && rule.getLastFiredAt().isAfter(now.minusDays(reminderSpacingDays));
     }
 }
