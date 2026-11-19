@@ -1627,8 +1627,9 @@ The old `radiusKm` param is gone (radius is fixed at 20 km).
 Each row: `{ cnpj, cnpjRoot, name, friendlyName, address, city, state, latitude,
 longitude, distanceKm, visited, watching, chainName, chainLogoUrl, communityPurchaseCount,
 householdPurchaseCount, householdSpend }`.
-`communityPurchaseCount` (2026-11-18) is how many confirmed notas the community scanned at
-that store, for the map pin; **null when fewer than 3 households contributed** (k-anon).
+`communityPurchaseCount` (2026-11-18) is how many confirmed notas the community bought at
+that store **in the last 90 days** (same window as `/markets/{cnpj}/prices`, since 2026-11-19),
+for the map pin; **null when fewer than 3 households contributed in that window** (k-anon).
 `householdPurchaseCount`/`householdSpend` are the viewer household's own confirmed notas there
 and their total; null when it never bought at that store. `name` is the full
 legal razão social; **`friendlyName` is the cleaned display name** (2026-11-10 — household
