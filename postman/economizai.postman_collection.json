@@ -9315,7 +9315,7 @@
 									"});",
 									"pm.test('CSV tem cabecalho e a chave da nota confirmada', function () {",
 									"    var body = pm.response.text();",
-									"    pm.expect(body).to.include('Chave de acesso');",
+									"    pm.expect(body).to.include('Números da nota');",
 									"    pm.expect(body.split('\\n').length).to.be.above(1);",
 									"});"
 								]
