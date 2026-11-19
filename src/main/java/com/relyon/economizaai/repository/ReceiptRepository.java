@@ -237,15 +237,15 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
     String RECEIPT_INTERNAL_FILTER =
             " AND (:includeInternal = TRUE OR (receiptUser.role <> 'ADMIN' "
             + "AND receiptUser.excludedFromMetrics = FALSE "
-            + "AND lower(receiptUser.email) NOT LIKE '%@economizaai.app' "
-            + "AND lower(receiptUser.email) NOT LIKE '%@cloudtestlabaccounts.com'))";
+            + "AND lower(receiptUser.email) NOT LIKE '" + InternalAccounts.OWN_DOMAIN_LIKE + "' "
+            + "AND lower(receiptUser.email) NOT LIKE '" + InternalAccounts.PLAY_TEST_LAB_DOMAIN_LIKE + "'))";
 
     // Native-SQL twin of the above (joins `users u ON u.id = receipts.user_id`).
     String NATIVE_RECEIPT_INTERNAL_FILTER =
             " AND (:includeInternal = TRUE OR (u.role <> 'ADMIN' "
             + "AND u.excluded_from_metrics = FALSE "
-            + "AND lower(u.email) NOT LIKE '%@economizaai.app' "
-            + "AND lower(u.email) NOT LIKE '%@cloudtestlabaccounts.com'))";
+            + "AND lower(u.email) NOT LIKE '" + InternalAccounts.OWN_DOMAIN_LIKE + "' "
+            + "AND lower(u.email) NOT LIKE '" + InternalAccounts.PLAY_TEST_LAB_DOMAIN_LIKE + "'))";
 
     // --- Admin dashboard (same KPIs as the overview, bounded to a [from, to) window on createdAt) ---
 

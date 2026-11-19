@@ -67,8 +67,8 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, UUID
     String SUB_INTERNAL_FILTER =
             " AND (:includeInternal = TRUE OR (s.user.role <> 'ADMIN' "
             + "AND s.user.excludedFromMetrics = FALSE "
-            + "AND lower(s.user.email) NOT LIKE '%@economizaai.app' "
-            + "AND lower(s.user.email) NOT LIKE '%@cloudtestlabaccounts.com'))";
+            + "AND lower(s.user.email) NOT LIKE '" + InternalAccounts.OWN_DOMAIN_LIKE + "' "
+            + "AND lower(s.user.email) NOT LIKE '" + InternalAccounts.PLAY_TEST_LAB_DOMAIN_LIKE + "'))";
 
     /** ACTIVE subscriptions backed by a real payment provider — genuinely paying, NOT promo/manual grants. */
     @Query("SELECT count(s) FROM Subscription s WHERE s.status = :status "
