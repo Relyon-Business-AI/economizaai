@@ -1256,6 +1256,10 @@ menos, `couldHaveSaved` = pagou a mais, `savedLineCount` e `paidAboveLineCount` 
 lado, `comparedLineCount` de `purchasedLineCount` = quanto pôde ser comparado. Por mercado, o saldo
 é `couldHaveSaved - saved` (negativo = pagou a menos).
 
+**Só a região (2026-11-19):** `reference=REGION` deixa de fora os itens que só teriam o histórico da
+própria casa como comparação. É o que a seção "Comparado à sua região" pede. Sem o parâmetro
+(`ALL`), nada muda: região e, na falta dela, o histórico da casa.
+
 ```json
 {
   "from": "2026-08-18T10:00:00", "to": "2026-11-16T10:00:00",
