@@ -11,6 +11,9 @@
 - No registro da compra, a soma dos itens (preço × quantidade) também precisa caber em `9999999999.99`; quando
   não cabe, o erro vem em `errors.itemsTotalStorable`.
 - Nada muda para valores normais; o app não precisa de alteração.
+- Postman: o "E2E Flow" ganhou o bloco `ROUTE 01` a `ROUTE 103`, que percorre a rota de compra inteira (lista,
+  plano com as regras da rota, consultas do modo de compra, registro da compra, comparação da nota e
+  isolamento entre casas), com os casos de borda de cada endpoint.
 
 ## 2026-11-18 — Uma janela só de preços: 90 dias
 
