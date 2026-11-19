@@ -12,22 +12,26 @@ import org.springframework.context.annotation.Configuration;
  *   <li>APPLE_ASC_ENABLED=true</li>
  *   <li>APPLE_ASC_PRIVATE_KEY — full PEM contents of ~/.config/appstore/economizai.p8</li>
  * </ul>
- * Key ID and Issuer ID default to the project's known values (non-secret identifiers).
+ * App ID, Key ID and Issuer ID identify the account and come from the environment too.
  */
 @Configuration
 @ConfigurationProperties(prefix = "apple.asc")
 public class AppStoreConnectProperties {
 
     private boolean enabled = false;
-    private String appId = "6788025621";
-    private String issuerId = "8a41f4c7-c2b0-4afd-9dc7-0e9ee3ccd39e";
-    private String keyId = "B3SKVUKUPS";
+    private String appId = "";
+    private String issuerId = "";
+    private String keyId = "";
     /** PEM contents of the .p8 private key file (set via APPLE_ASC_PRIVATE_KEY env var). */
     private String privateKey = "";
     private int syncDays = 90;
 
     public boolean isConfigured() {
-        return enabled && privateKey != null && !privateKey.isBlank();
+        return enabled && isSet(privateKey) && isSet(appId) && isSet(issuerId) && isSet(keyId);
+    }
+
+    private static boolean isSet(String value) {
+        return value != null && !value.isBlank();
     }
 
     public boolean isEnabled() { return enabled; }
