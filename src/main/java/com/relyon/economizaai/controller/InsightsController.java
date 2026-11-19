@@ -12,6 +12,7 @@ import com.relyon.economizaai.model.enums.CategoryView;
 import com.relyon.economizaai.model.enums.InsightsGroupBy;
 import com.relyon.economizaai.model.enums.MarketScope;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.model.enums.SavingsReference;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.InsightsQueryService;
@@ -80,14 +81,16 @@ public class InsightsController {
 
     /**
      * How much the household saved in the period: each line bought against its reference price.
-     * Without {@code from}, the last 90 days. See {@link HouseholdSavingsResponse}.
+     * Without {@code from}, the last 90 days. {@code reference=REGION} keeps only the lines that
+     * could be compared with what other households paid. See {@link HouseholdSavingsResponse}.
      */
     @GetMapping("/savings")
     public ResponseEntity<HouseholdSavingsResponse> savings(
             @AuthenticationPrincipal User user,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
-        return ResponseEntity.ok(householdSavingsService.savings(user, from, to));
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
+            @RequestParam(defaultValue = "ALL") SavingsReference reference) {
+        return ResponseEntity.ok(householdSavingsService.savings(user, from, to, reference));
     }
 
     /**

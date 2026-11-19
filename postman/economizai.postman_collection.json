@@ -3875,10 +3875,16 @@
 								{
 									"key": "to",
 									"value": "2026-12-31T23:59:59"
+								},
+								{
+									"key": "reference",
+									"value": "REGION",
+									"description": "Opcional. REGION = so itens comparados com outras casas; ALL (padrao) inclui o historico da propria casa.",
+									"disabled": true
 								}
 							]
 						},
-						"description": "Quanto a casa economizou no periodo: cada item comprado contra o preco de referencia (o que outras casas pagaram perto, na mesma epoca; sem isso, o que a propria casa costuma pagar). Sem from, os ultimos 90 dias."
+						"description": "Quanto a casa economizou no periodo: cada item comprado contra o preco de referencia (o que outras casas pagaram perto, na mesma epoca; sem isso, o que a propria casa costuma pagar). Sem from, os ultimos 90 dias. reference=REGION deixa de fora os itens que so teriam o historico da propria casa."
 					},
 					"response": []
 				},

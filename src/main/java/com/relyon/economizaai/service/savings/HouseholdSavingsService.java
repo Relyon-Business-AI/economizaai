@@ -5,6 +5,7 @@ import com.relyon.economizaai.dto.response.HouseholdSavingsResponse;
 import com.relyon.economizaai.dto.response.HouseholdSavingsResponse.MarketSavings;
 import com.relyon.economizaai.model.MarketLocation;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.SavingsReference;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository.ContributedPrice;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
@@ -60,6 +61,12 @@ public class HouseholdSavingsService {
 
     @Transactional(readOnly = true)
     public HouseholdSavingsResponse savings(User user, LocalDateTime requestedFrom, LocalDateTime requestedTo) {
+        return savings(user, requestedFrom, requestedTo, SavingsReference.ALL);
+    }
+
+    @Transactional(readOnly = true)
+    public HouseholdSavingsResponse savings(User user, LocalDateTime requestedFrom, LocalDateTime requestedTo,
+                                            SavingsReference reference) {
         var to = requestedTo != null ? requestedTo : BrazilClock.nowDateTime();
         var from = periodStart(user, requestedFrom, to);
         var householdId = user.getHousehold().getId();
@@ -69,7 +76,7 @@ public class HouseholdSavingsService {
         var linesInPeriod = ownLines.stream().filter(line -> !line.purchasedAt().isBefore(from)).toList();
         var referenceBook = new ReferencePriceBook(
                 regionPricesByProduct(user, linesInPeriod, from, to),
-                ownLines.stream().collect(Collectors.groupingBy(line -> line.product().getId())),
+                ownLinesByProduct(ownLines, reference),
                 privacyTierResolver, settings());
         var comparisons = linesInPeriod.stream()
                 .map(line -> compareWithReference(line, referenceBook))
@@ -78,6 +85,12 @@ public class HouseholdSavingsService {
 
         log.debug("savings.computed household={} lines={} compared={}", householdId, linesInPeriod.size(), comparisons.size());
         return toResponse(householdId, from, to, linesInPeriod.size(), comparisons);
+    }
+
+    /** The household's own history is only a reference when the caller accepts it. */
+    private Map<UUID, List<PurchasedLine>> ownLinesByProduct(List<PurchasedLine> ownLines, SavingsReference reference) {
+        if (reference == SavingsReference.REGION) return Map.of();
+        return ownLines.stream().collect(Collectors.groupingBy(line -> line.product().getId()));
     }
 
     /** FREE history window first; with no start asked for, the last {@value #DEFAULT_PERIOD_DAYS} days. */

@@ -8,6 +8,7 @@ import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.MerchantSegment;
+import com.relyon.economizaai.model.enums.SavingsReference;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository.ContributedPrice;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
@@ -248,6 +249,30 @@ class HouseholdSavingsServiceTest {
 
         assertThat(savings.purchasedLineCount()).isEqualTo(1);
         assertThat(savings.householdComparedLineCount()).isEqualTo(1);
+        assertThat(savings.saved()).isEqualByComparingTo("2.00");
+    }
+
+    @Test
+    void regionReferenceOnly_leavesOutLinesThatOnlyHaveTheHouseholdsOwnHistory() {
+        buy(rice, "1", "10.00", PURCHASED_AT.minusDays(40));
+        buy(rice, "1", "12.00", PURCHASED_AT.minusDays(20));
+        buy(rice, "1", "9.00", PURCHASED_AT);
+
+        var savings = service.savings(user, FROM, TO, SavingsReference.REGION);
+
+        assertThat(savings.purchasedLineCount()).isEqualTo(1);
+        assertThat(savings.comparedLineCount()).isZero();
+        assertThat(savings.saved()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void regionReferenceOnly_keepsLinesComparedWithOtherHouseholds() {
+        buy(rice, "1", "8.00", PURCHASED_AT);
+        othersPaid(rice, NEARBY_SUPERMARKET, "10.00", "10.00", "10.00");
+
+        var savings = service.savings(user, FROM, TO, SavingsReference.REGION);
+
+        assertThat(savings.regionComparedLineCount()).isEqualTo(1);
         assertThat(savings.saved()).isEqualByComparingTo("2.00");
     }
 

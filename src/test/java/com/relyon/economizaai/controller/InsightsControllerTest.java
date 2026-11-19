@@ -12,6 +12,7 @@ import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.AppSavingSource;
 import com.relyon.economizaai.model.enums.ProductCategory;
+import com.relyon.economizaai.model.enums.SavingsReference;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.CategoryResolver;
@@ -90,6 +91,18 @@ class InsightsControllerTest {
     }
 
     @Test
+    void savings_passesTheRequestedReferenceOn() throws Exception {
+        var response = new HouseholdSavingsResponse(null, null, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                0, 0, 0, 0, 0, 0, List.of());
+        when(householdSavingsService.savings(any(User.class), any(), any(), eq(SavingsReference.REGION))).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/insights/savings?reference=REGION")
+                        .with(SecurityMockMvcRequestPostProcessors.user(buildUser())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.comparedLineCount").value(0));
+    }
+
+    @Test
     void savings_returnsTheHouseholdSavings() throws Exception {
         var user = buildUser();
         var from = LocalDateTime.of(2026, 10, 1, 0, 0);
@@ -98,7 +111,7 @@ class InsightsControllerTest {
                 new BigDecimal("380.00"), 60, 14, 9, 5, 10, 4,
                 List.of(new HouseholdSavingsResponse.MarketSavings("12345678000190", "MERCADO X LTDA", "Mercado X",
                         new BigDecimal("42.10"), new BigDecimal("7.30"), new BigDecimal("380.00"), 14)));
-        when(householdSavingsService.savings(any(User.class), eq(from), eq(to))).thenReturn(response);
+        when(householdSavingsService.savings(any(User.class), eq(from), eq(to), eq(SavingsReference.ALL))).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/insights/savings?from=2026-10-01T00:00:00&to=2026-10-31T23:59:00")
                         .with(SecurityMockMvcRequestPostProcessors.user(user)))

@@ -1,5 +1,11 @@
 # economizai — what's new
 
+## 2026-11-19 — "Comparado à sua região" só com preços da região
+
+- `GET /insights/savings` ganhou `reference=REGION`: entram só os itens comparados com o que outras casas
+  pagaram perto. Antes a seção "Comparado à sua região" somava também itens comparados com o histórico da
+  própria casa. Sem o parâmetro, a resposta é a mesma de antes.
+
 ## 2026-11-18 — Uma janela só de preços: 90 dias
 
 - Todo preço da comunidade passa a valer por **90 dias** em qualquer tela. Antes, "Melhores preços", o preço
