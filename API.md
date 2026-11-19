@@ -1597,7 +1597,7 @@ window). All params optional:
 |---|---|
 | `query` | product name contains (case-insensitive) |
 | `category` | `ProductCategory` enum (`GROCERIES`, `BEVERAGES`, `PRODUCE`, `MEAT_DAIRY`, `BAKERY`, `CLEANING`, `PERSONAL_CARE`, `HEALTH`, `PET_SUPPLIES`, `OTHER`) |
-| `days` | lookback window, default `30`, clamped to `1..180` |
+| `days` | lookback window, default `30`, clamped to `1..90` (the community price window, `lookback-days`) |
 | `sort` | `RECENT` (default, newest observation first) · `CHEAPEST` (price asc) · `NAME` (product name asc) |
 | `page` / `size` | zero-based page, `size` default `30`, max `100` |
 
@@ -1689,8 +1689,8 @@ first over the states the household has confirmed receipts in (`scope: STATE`,
 `states` lists them); when that slice is below K / min-sample it falls back to the
 national in-store series (`scope: NATIONAL`, `states: []`). Same hybrid disclosure
 as the other references: `reference.medianPrice` is `null` with `kAnonBlocked: true`
-and the counts visible when even the national slice is sparse. Uses the wider
-best-markets window (180 days).
+and the counts visible when even the national slice is sparse. Uses the same
+90-day community price window as every other price read (`lookback-days`).
 
 ```
 GET /api/v1/price-index/products/{productId}/best-markets?limit=10&radiusKm=5[&lat=&lng=&sort=CHEAPEST|NEAREST]
@@ -1749,8 +1749,8 @@ contributing households are pooled, and k-anonymity (≥3 households) is checked
 chain level. Each row is shown as one concrete store of the chain — `cnpj`,
 `marketName`, `distanceKm` describe that store, picked as: a watched store if any,
 else the closest to the viewer, else the most recently seen. The `cnpj` is therefore
-always a real store the FE can watch/unwatch or route to. Window: 180 days
-(`best-markets-lookback-days`), wider than the 90-day promo baseline.
+always a real store the FE can watch/unwatch or route to. Window: 90 days
+(`lookback-days`), the same one the shopping plan and the promo baseline use.
 
 **Default scope (no `lat`/`lng`/`radiusKm`) = the "perto de você" cascade (2026-11-05)**,
 same as `/promos/feed`, resolved server-side:

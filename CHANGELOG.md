@@ -1,5 +1,18 @@
 # economizai — what's new
 
+## 2026-11-18 — Uma janela só de preços: 90 dias
+
+- Todo preço da comunidade passa a valer por **90 dias** em qualquer tela. Antes, "Melhores preços", o preço
+  típico em loja e a comparação genérica olhavam 180 dias, enquanto o plano de compras olhava 90: um produto
+  podia ter preço numa tela e aparecer "sem preço" no plano.
+- Sai a configuração `best-markets-lookback-days`; fica só `lookback-days` (90).
+- Muda junto, porque usam a mesma busca: "Esta compra em outros mercados" (`/receipts/{id}/market-comparison`)
+  e os mercados alternativos guardados no registro da compra (`/shopping-trips`).
+- `GET /markets/{cnpj}/prices`: `days` passa a ser limitado a `1..90` (era `1..180`). Um app antigo que pedir
+  180 recebe 90, sem erro.
+- Efeito esperado: menos mercados em "Melhores preços" e menos itens comparáveis na nota, já que preços entre
+  91 e 180 dias deixam de aparecer.
+
 ## 2026-11-18 — Comparação da nota calculada na confirmação
 
 - "Esta compra em outros mercados" (`GET /receipts/{id}/market-comparison`) deixa de ser calculada a cada

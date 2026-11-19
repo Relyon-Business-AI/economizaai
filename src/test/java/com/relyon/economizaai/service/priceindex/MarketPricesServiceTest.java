@@ -212,7 +212,7 @@ class MarketPricesServiceTest {
         assertThat(MarketPricesService.clampDays(0)).isEqualTo(1);
         assertThat(MarketPricesService.clampDays(-5)).isEqualTo(1);
         assertThat(MarketPricesService.clampDays(90)).isEqualTo(90);
-        assertThat(MarketPricesService.clampDays(9999)).isEqualTo(180);
+        assertThat(MarketPricesService.clampDays(9999)).isEqualTo(90);
 
         marketWithSegment(MerchantSegment.SUPERMARKET);
         repositoryReturns(List.of());
@@ -220,7 +220,7 @@ class MarketPricesServiceTest {
         service.latestPrices(CNPJ, new MarketPricesService.Filter(null, null, 9999, MarketPricesSort.NAME, -3, 5000));
 
         captureQuery(true, ProductCategory.OTHER);
-        assertThat(sinceCaptor.getValue()).isEqualTo(BrazilClock.today().minusDays(180).atStartOfDay());
+        assertThat(sinceCaptor.getValue()).isEqualTo(BrazilClock.today().minusDays(90).atStartOfDay());
         assertThat(pageableCaptor.getValue().getPageNumber()).isZero();
         assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(100);
     }

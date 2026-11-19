@@ -37,7 +37,8 @@ import java.util.UUID;
 public class MarketPricesService {
 
     public static final int DEFAULT_DAYS = 30;
-    public static final int MAX_DAYS = 180;
+    /** Same ceiling as the community price window ({@code lookback-days}): older prices are shown nowhere. */
+    public static final int MAX_DAYS = 90;
     public static final int DEFAULT_PAGE_SIZE = 30;
     public static final int MAX_PAGE_SIZE = 100;
 
