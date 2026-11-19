@@ -2226,6 +2226,9 @@ parada. **Só grava** — nenhum endpoint devolve esses dados e nada aparece par
 para medir depois previsto x pago, "não achei" por mercado e uso das regras da rota.
 
 - Idempotente por (`household`, `clientTripId`): o app reenvia até dar certo.
+- Número que não cabe no banco devolve **400** (o app descarta o registro em vez de reenviar): quantidade
+  acima de `999999999.999`, valor em R$ acima de `9999999999.99`, `maxDistanceKm` acima de `99999.9`,
+  `distanceKm` acima de `99999.999`, ou itens cuja soma (preço × quantidade) passa de `9999999999.99`.
 - `receiptId` só é guardado quando a nota é da própria casa; senão a parada fica sem nota e os
   campos de pago são descartados. Apagar a nota depois só desfaz o vínculo.
 - Item de produto que não existe mais é deixado de fora. O total previsto da parada é recalculado

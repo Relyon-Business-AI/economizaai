@@ -31,6 +31,8 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -180,6 +182,35 @@ class ShoppingListsControllerTest {
                         .contentType(MediaType.APPLICATION_JSON).content(body)
                         .with(SecurityMockMvcRequestPostProcessors.user(principal())))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void addItem_withAQuantityTheListCannotHold_returns400AndDoesNotCallService() throws Exception {
+        var listId = UUID.randomUUID();
+        when(localizedMessageService.translate("validation.failed")).thenReturn("Validation failed");
+
+        var body = objectMapper.writeValueAsString(
+                new AddShoppingListItemRequest(null, "leite", new BigDecimal("1000000000")));
+        mockMvc.perform(post("/api/v1/shopping-lists/{id}/items", listId)
+                        .contentType(MediaType.APPLICATION_JSON).content(body)
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+                .andExpect(status().isBadRequest());
+
+        verify(service, never()).addItem(any(), any(), any());
+    }
+
+    @Test
+    void create_withAnItemQuantityTheListCannotHold_returns400AndDoesNotCallService() throws Exception {
+        when(localizedMessageService.translate("validation.failed")).thenReturn("Validation failed");
+
+        var body = objectMapper.writeValueAsString(new CreateShoppingListRequest("Compra da semana",
+                List.of(new CreateShoppingListRequest.Item(null, "leite", new BigDecimal("1000000000")))));
+        mockMvc.perform(post("/api/v1/shopping-lists")
+                        .contentType(MediaType.APPLICATION_JSON).content(body)
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+                .andExpect(status().isBadRequest());
+
+        verify(service, never()).create(any(), any());
     }
 
     @Test
