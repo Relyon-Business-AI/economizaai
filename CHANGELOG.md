@@ -1,5 +1,13 @@
 # economizai — what's new
 
+## 2026-11-19 — Número de compras do mapa segue a janela de 90 dias
+
+- `GET /markets`: `communityPurchaseCount` passa a contar só as notas compradas nos **últimos 90 dias**, a
+  mesma janela de `GET /markets/{cnpj}/prices`. Antes contava desde sempre, e o pino anunciava "5 compras"
+  num mercado cuja tela de preços vinha vazia.
+- O mínimo de 3 casas vale dentro da janela: mercado sem compra recente de 3 casas volta `null`.
+- `householdPurchaseCount` e `householdSpend` não mudam (continuam sendo o histórico inteiro da casa).
+
 ## 2026-11-18 — Uma janela só de preços: 90 dias
 
 - Todo preço da comunidade passa a valer por **90 dias** em qualquer tela. Antes, "Melhores preços", o preço

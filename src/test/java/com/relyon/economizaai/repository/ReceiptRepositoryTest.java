@@ -18,6 +18,7 @@ import org.springframework.test.context.ActiveProfiles;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.Month;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -79,6 +80,40 @@ class ReceiptRepositoryTest {
                 .acceptedTermsVersion("1.0").acceptedPrivacyVersion("1.0")
                 .acceptedLegalAt(LocalDateTime.of(2026, Month.JANUARY, 1, 0, 0))
                 .build());
+    }
+
+    // ---------------------------------------------------------- countConfirmedPurchasesByCnpjInSince
+
+    @Test
+    void countConfirmedPurchasesByCnpjInSince_countsOnlyConfirmedNotasBoughtInsideTheWindow() {
+        var windowStart = LocalDateTime.of(2026, Month.APRIL, 1, 0, 0);
+        var confirmedAt = LocalDateTime.of(2026, Month.MAY, 1, 10, 0);
+        // Bought on May 1st (the helper's purchase date), confirmed — counted.
+        saveReceipt(user, CNPJ_A, ReceiptStatus.CONFIRMED, confirmedAt, new BigDecimal("100.00"));
+        // No purchase date: counts by when it entered the app (now) — counted, second household.
+        var withoutPurchaseDate = saveReceipt(otherHouseholdUser(), CNPJ_A, ReceiptStatus.CONFIRMED,
+                confirmedAt, new BigDecimal("70.00"));
+        withoutPurchaseDate.setIssuedAt(null);
+        receiptRepository.save(withoutPurchaseDate);
+        // Bought the minute before the window opens — out, even though it was confirmed later.
+        var boughtBeforeTheWindow = saveReceipt(user, CNPJ_A, ReceiptStatus.CONFIRMED,
+                confirmedAt, new BigDecimal("50.00"));
+        boughtBeforeTheWindow.setIssuedAt(windowStart.minusMinutes(1));
+        receiptRepository.save(boughtBeforeTheWindow);
+        // Pending inside the window — out.
+        saveReceipt(user, CNPJ_A, ReceiptStatus.PENDING_CONFIRMATION, null, new BigDecimal("999.00"));
+        // A store whose only nota is older than the window gets no row at all.
+        var oldPurchaseAtAnotherStore = saveReceipt(user, CNPJ_B, ReceiptStatus.CONFIRMED,
+                confirmedAt, new BigDecimal("30.00"));
+        oldPurchaseAtAnotherStore.setIssuedAt(windowStart.minusDays(40));
+        receiptRepository.save(oldPurchaseAtAnotherStore);
+
+        var counts = receiptRepository.countConfirmedPurchasesByCnpjInSince(List.of(CNPJ_A, CNPJ_B), windowStart);
+
+        assertEquals(1, counts.size());
+        assertEquals(CNPJ_A, counts.get(0).getCnpj());
+        assertEquals(2, counts.get(0).getReceiptCount());
+        assertEquals(2, counts.get(0).getHouseholdCount());
     }
 
     // ---------------------------------------------------------- sumConfirmedTotalSince

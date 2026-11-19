@@ -16,9 +16,10 @@ import java.math.BigDecimal;
  * are unaffected. {@code city}/{@code state} come from the geocoded
  * {@code MarketLocation} (null until geocoded).
  *
- * <p>{@code communityPurchaseCount} is how many confirmed notas the whole community scanned at
- * this store — the number on the map pin. Null when fewer than K households contributed
- * (k-anonymity), so a single household's visits are never disclosed.
+ * <p>{@code communityPurchaseCount} is how many confirmed notas the whole community bought at
+ * this store inside the community price window (90 days) — the number on the map pin. Null when
+ * fewer than K households contributed in that window (k-anonymity), so a single household's
+ * visits are never disclosed.
  * {@code householdPurchaseCount}/{@code householdSpend} are the viewer household's own confirmed
  * notas at this store and their total (own data, exact); null when it never bought there.
  */
