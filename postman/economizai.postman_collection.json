@@ -9321,7 +9321,7 @@
 									"});",
 									"pm.test('CSV tem cabecalho e a chave da nota confirmada', function () {",
 									"    var body = pm.response.text();",
-									"    pm.expect(body).to.include('Chave de acesso');",
+									"    pm.expect(body).to.include('Números da nota');",
 									"    pm.expect(body.split('\\n').length).to.be.above(1);",
 									"});"
 								]
@@ -11838,6 +11838,5364 @@
 									"if (!pm.collectionVariables.get('e2eReceiptId')) { pm.test.skip('No receipt id \u2014 skipping'); return; }",
 									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
 									"pm.test('Has markets', function () { pm.expect(pm.response.json().markets).to.be.an('array'); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 01. Seed route products from the confirmed receipt",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/receipts/{{e2eReceiptId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"receipts",
+								"{{e2eReceiptId}}"
+							]
+						},
+						"description": "Shopping route block (list -> plan -> trip -> comparison). Picks the products the household just bought: they have a LOCAL_HISTORY price at the market of the nota, so the plan is deterministic."
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"['e2eRouteItems', 'e2eRouteBoughtIds', 'e2eRouteMarketCnpj', 'e2eRouteMarketLat', 'e2eRouteMarketLng', 'e2eRouteListId', 'e2eRouteItemId',",
+									" 'e2eRouteExtraItemId', 'e2eRouteSecondListId', 'e2eRouteOtherProductId', 'e2eRouteClientTripId', 'e2eRouteTripId',",
+									" 'e2eRouteOtherToken', 'e2eRouteCaseIndex', 'e2eRouteComparison'].forEach(function (name) { pm.collectionVariables.unset(name); });",
+									"if (!pm.collectionVariables.get('e2eReceiptId')) { pm.test.skip('No receipt id — skipping'); return; }",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"var receipt = pm.response.json();",
+									"if (receipt.status !== 'CONFIRMED') { console.log('ROUTE: receipt is ' + receipt.status + ', steps that need a price will skip'); return; }",
+									"// Local history is \"what the household paid at that market\", so a product bought on a single line has one known price.",
+									"var linesByProduct = {};",
+									"receipt.items.forEach(function (item) {",
+									"    if (!item.productId || item.excluded || !(item.unitPrice > 0)) return;",
+									"    (linesByProduct[item.productId] = linesByProduct[item.productId] || []).push(item);",
+									"});",
+									"var routeItems = Object.keys(linesByProduct)",
+									"    .filter(function (productId) { return linesByProduct[productId].length === 1; })",
+									"    .slice(0, 5)",
+									"    .map(function (productId) { return { productId: productId, unitPrice: linesByProduct[productId][0].unitPrice }; });",
+									"if (routeItems.length === 0) { console.log('ROUTE: no identified product on the receipt, steps that need a price will skip'); return; }",
+									"pm.collectionVariables.set('e2eRouteItems', JSON.stringify(routeItems));",
+									"pm.collectionVariables.set('e2eRouteBoughtIds', JSON.stringify(Object.keys(linesByProduct)));",
+									"pm.collectionVariables.set('e2eRouteMarketCnpj', receipt.cnpjEmitente);",
+									"pm.test('Receipt gives at least one product with a known price', function () { pm.expect(routeItems.length).to.be.at.least(1); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 02. Find a product the household never bought",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/products?query=a&page=0&size=50",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"products"
+							],
+							"query": [
+								{
+									"key": "query",
+									"value": "a"
+								},
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "50"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"var bought = JSON.parse(pm.collectionVariables.get('e2eRouteBoughtIds') || '[]');",
+									"var other = (pm.response.json().content || []).find(function (product) { return bought.indexOf(product.id) === -1; });",
+									"if (other) { pm.collectionVariables.set('e2eRouteOtherProductId', other.id); }"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 03. Sole list is 404 while the household has no list",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/sole",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"sole"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 404', function () { pm.response.to.have.status(404); });",
+									"pm.test('Has a localized message', function () { pm.expect(pm.response.json().message).to.be.a('string'); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 04. Create the route list (product + free text)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"var items = [{ freeText: 'pão francês' }];",
+									"if (routeItems.length > 0) { items.unshift({ productId: routeItems[0].productId, quantity: 2 }); }",
+									"pm.request.body.raw = JSON.stringify({ name: 'Rota E2E', items: items });"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 201', function () { pm.response.to.have.status(201); });",
+									"var list = pm.response.json();",
+									"pm.collectionVariables.set('e2eRouteListId', list.id);",
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"var expectedItems = routeItems.length > 0 ? 2 : 1;",
+									"pm.test('Counts and positions', function () {",
+									"    pm.expect(list.totalItems).to.eql(expectedItems);",
+									"    pm.expect(list.checkedItems).to.eql(0);",
+									"    pm.expect(list.items.map(function (item) { return item.position; })).to.eql(expectedItems === 2 ? [0, 1] : [0]);",
+									"});",
+									"var freeText = list.items[list.items.length - 1];",
+									"pm.test('Free-text item defaults to quantity 1 and shows its text', function () {",
+									"    pm.expect(freeText.productId).to.eql(null);",
+									"    pm.expect(freeText.freeText).to.eql('pão francês');",
+									"    pm.expect(freeText.displayName).to.eql('pão francês');",
+									"    pm.expect(freeText.quantity).to.eql(1);",
+									"    pm.expect(freeText.checked).to.eql(false);",
+									"});",
+									"pm.collectionVariables.set('e2eRouteItemId', freeText.id);",
+									"if (routeItems.length > 0) {",
+									"    pm.test('Product item keeps product, quantity and a display name', function () {",
+									"        pm.expect(list.items[0].productId).to.eql(routeItems[0].productId);",
+									"        pm.expect(list.items[0].quantity).to.eql(2);",
+									"        pm.expect(list.items[0].displayName).to.be.a('string').and.not.empty;",
+									"    });",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 05. Sole list returns the only list",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/sole",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"sole"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Is the route list', function () { pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('e2eRouteListId')); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 06. List of lists includes the route list",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Includes the route list with its items', function () {",
+									"    var found = pm.response.json().find(function (list) { return list.id === pm.collectionVariables.get('e2eRouteListId'); });",
+									"    pm.expect(found).to.be.an('object');",
+									"    pm.expect(found.items.length).to.eql(found.totalItems);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 07. Rename the list",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Rota E2E (renomeada)\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Name changed and items kept', function () {",
+									"    pm.expect(pm.response.json().name).to.eql('Rota E2E (renomeada)');",
+									"    pm.expect(pm.response.json().totalItems).to.be.at.least(1);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 08. Rename to a blank name is 400",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"   \"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 400', function () { pm.response.to.have.status(400); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 09. Rename to a 121-char name is 400",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 400', function () { pm.response.to.have.status(400); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 10. Add a product item with a fractional quantity",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}/items",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}",
+								"items"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"var productId = routeItems.length > 0 ? routeItems[routeItems.length - 1].productId : '00000000-0000-0000-0000-000000000000';",
+									"pm.request.body.raw = JSON.stringify({ productId: productId, quantity: 1.5 });"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eRouteItems')) { pm.test.skip('No identified product on the confirmed receipt — skipping'); return; }",
+									"pm.test('Returns 201', function () { pm.response.to.have.status(201); });",
+									"var list = pm.response.json();",
+									"var added = list.items[list.items.length - 1];",
+									"pm.test('Appended last with the quantity sent', function () {",
+									"    pm.expect(added.quantity).to.eql(1.5);",
+									"    pm.expect(added.position).to.eql(Math.max.apply(null, list.items.map(function (item) { return item.position; })));",
+									"    pm.expect(list.totalItems).to.eql(list.items.length);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 11. Add a free-text item (accents + emoji)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}/items",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}",
+								"items"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"freeText\": \"café ☕ açúcar\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 201', function () { pm.response.to.have.status(201); });",
+									"var list = pm.response.json();",
+									"var added = list.items[list.items.length - 1];",
+									"pm.test('Text kept as typed, quantity defaults to 1', function () {",
+									"    pm.expect(added.freeText).to.eql('café ☕ açúcar');",
+									"    pm.expect(added.quantity).to.eql(1);",
+									"});",
+									"pm.collectionVariables.set('e2eRouteExtraItemId', added.id);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 12. Add item with product AND free text is 400",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}/items",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}",
+								"items"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"productId\": \"00000000-0000-0000-0000-000000000000\",\n  \"freeText\": \"leite\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 400', function () { pm.response.to.have.status(400); });",
+									"pm.test('Has a message', function () { pm.expect(pm.response.json().message).to.be.a('string'); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 13. Add item with neither product nor free text is 400",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}/items",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}",
+								"items"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 400', function () { pm.response.to.have.status(400); });",
+									"pm.test('Has a message', function () { pm.expect(pm.response.json().message).to.be.a('string'); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 14. Add item with blank free text is 400",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}/items",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}",
+								"items"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"freeText\": \"   \"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 400', function () { pm.response.to.have.status(400); });",
+									"pm.test('Has a message', function () { pm.expect(pm.response.json().message).to.be.a('string'); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 15. Add item of a product that does not exist is 404",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}/items",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}",
+								"items"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"productId\": \"00000000-0000-0000-0000-000000000000\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 404', function () { pm.response.to.have.status(404); });",
+									"pm.test('Has a message', function () { pm.expect(pm.response.json().message).to.be.a('string'); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 16. Add item with quantity 0 is 400",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}/items",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}",
+								"items"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"freeText\": \"leite\",\n  \"quantity\": 0\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 400', function () { pm.response.to.have.status(400); });",
+									"pm.test('Has a message', function () { pm.expect(pm.response.json().message).to.be.a('string'); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 17. Add item with a malformed product id is 400",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}/items",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}",
+								"items"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"productId\": \"not-a-uuid\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 400', function () { pm.response.to.have.status(400); });",
+									"pm.test('Has a message', function () { pm.expect(pm.response.json().message).to.be.a('string'); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 18. Add item with 256-char free text is 400",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}/items",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}",
+								"items"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"freeText\": \"tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 400', function () { pm.response.to.have.status(400); });",
+									"pm.test('Has a message', function () { pm.expect(pm.response.json().message).to.be.a('string'); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 19. Add item with a quantity beyond what the list stores is 400",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}/items",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}",
+								"items"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"freeText\": \"leite\",\n  \"quantity\": 10000000000\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 400', function () { pm.response.to.have.status(400); });",
+									"pm.test('Has a message', function () { pm.expect(pm.response.json().message).to.be.a('string'); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 20. Rejected items left the list untouched",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"var list = pm.response.json();",
+									"pm.test('Only the accepted items are there', function () {",
+									"    var names = list.items.map(function (item) { return item.freeText; }).filter(Boolean);",
+									"    pm.expect(names).to.eql(['pão francês', 'café ☕ açúcar']);",
+									"    pm.expect(list.totalItems).to.eql(list.items.length);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 21. Check an item off",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}/items/{{e2eRouteItemId}}/toggle",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}",
+								"items",
+								"{{e2eRouteItemId}}",
+								"toggle"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"var list = pm.response.json();",
+									"var item = list.items.find(function (candidate) { return candidate.id === pm.collectionVariables.get('e2eRouteItemId'); });",
+									"pm.test('Item is checked, with the time, and counted', function () {",
+									"    pm.expect(item.checked).to.eql(true);",
+									"    pm.expect(item.checkedAt).to.be.a('string');",
+									"    pm.expect(list.checkedItems).to.eql(1);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 22. Toggle again unchecks it",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}/items/{{e2eRouteItemId}}/toggle",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}",
+								"items",
+								"{{e2eRouteItemId}}",
+								"toggle"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"var list = pm.response.json();",
+									"var item = list.items.find(function (candidate) { return candidate.id === pm.collectionVariables.get('e2eRouteItemId'); });",
+									"pm.test('Item is unchecked and the time is cleared', function () {",
+									"    pm.expect(item.checked).to.eql(false);",
+									"    pm.expect(item.checkedAt).to.eql(null);",
+									"    pm.expect(list.checkedItems).to.eql(0);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 23. Toggle an item that is not in the list is 404",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}/items/00000000-0000-0000-0000-000000000000/toggle",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}",
+								"items",
+								"00000000-0000-0000-0000-000000000000",
+								"toggle"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 404', function () { pm.response.to.have.status(404); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 24. Toggle with a malformed item id is 400",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}/items/not-a-uuid/toggle",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}",
+								"items",
+								"not-a-uuid",
+								"toggle"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 400', function () { pm.response.to.have.status(400); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 25. Remove an item",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}/items/{{e2eRouteExtraItemId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}",
+								"items",
+								"{{e2eRouteExtraItemId}}"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"var list = pm.response.json();",
+									"pm.test('Item is gone and the count follows', function () {",
+									"    pm.expect(list.items.some(function (item) { return item.id === pm.collectionVariables.get('e2eRouteExtraItemId'); })).to.eql(false);",
+									"    pm.expect(list.totalItems).to.eql(list.items.length);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 26. Remove the same item again is 404",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}/items/{{e2eRouteExtraItemId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}",
+								"items",
+								"{{e2eRouteExtraItemId}}"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 404', function () { pm.response.to.have.status(404); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 27. Get a list that does not exist is 404",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/00000000-0000-0000-0000-000000000000",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"00000000-0000-0000-0000-000000000000"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 404', function () { pm.response.to.have.status(404); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 28. Get a list with a malformed id is 400",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/not-a-uuid",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"not-a-uuid"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 400', function () { pm.response.to.have.status(400); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 29. Create a list with an invalid item is 400",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Lista que não pode nascer\",\n  \"items\": [\n    {\n      \"freeText\": \"arroz\"\n    },\n    {}\n  ]\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 400', function () { pm.response.to.have.status(400); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 30. The rejected create left no list behind",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/sole",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"sole"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Still exactly one list (200)', function () { pm.response.to.have.status(200); });",
+									"pm.test('Is the route list', function () { pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('e2eRouteListId')); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 31. Create a second list",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Churrasco\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 201', function () { pm.response.to.have.status(201); });",
+									"pm.test('Starts empty', function () { pm.expect(pm.response.json().totalItems).to.eql(0); });",
+									"pm.collectionVariables.set('e2eRouteSecondListId', pm.response.json().id);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 32. Sole list is 404 with two lists",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/sole",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"sole"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 404', function () { pm.response.to.have.status(404); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 33. Delete the second list",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteSecondListId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteSecondListId}}"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 204', function () { pm.response.to.have.status(204); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 34. Delete it again is 404",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteSecondListId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteSecondListId}}"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 404', function () { pm.response.to.have.status(404); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 35. Shopping lists need a session",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists"
+							]
+						},
+						"auth": {
+							"type": "noauth"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Refused without a token (401/403)', function () { pm.expect(pm.response.code).to.be.oneOf([401, 403]); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 40. Plan with no rules prices every product the household bought",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/optimize",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"optimize"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"var oneEach = routeItems.map(function (item) { return { productId: item.productId, quantity: 1 }; });",
+									"pm.request.body.raw = JSON.stringify({ items: oneEach });"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteItems')) { pm.test.skip('No identified product on the confirmed receipt — skipping'); return; }",
+									"",
+									"function near(a, b) { return Math.abs(Number(a) - Number(b)) < 0.011; }",
+									"function checkPlan(plan, requestedCount) {",
+									"    pm.test('Plan has marketPlans, unpriced, skippedSavings and estimatedTotal', function () {",
+									"        pm.expect(plan.marketPlans).to.be.an('array');",
+									"        pm.expect(plan.unpriced).to.be.an('array');",
+									"        pm.expect(plan.skippedSavings).to.be.an('array');",
+									"        pm.expect(plan.estimatedTotal).to.be.a('number');",
+									"    });",
+									"    pm.test('Every requested item is in exactly one stop or in unpriced', function () {",
+									"        var planned = plan.marketPlans.reduce(function (sum, stop) { return sum + stop.items.length; }, 0);",
+									"        pm.expect(planned + plan.unpriced.length).to.eql(requestedCount);",
+									"    });",
+									"    pm.test('Stops are consistent (itemCount, subtotal, item subtotal, price source)', function () {",
+									"        plan.marketPlans.forEach(function (stop) {",
+									"            pm.expect(stop.marketCnpj).to.be.a('string');",
+									"            pm.expect(stop.marketFriendlyName).to.be.a('string');",
+									"            pm.expect(stop.items.length).to.be.at.least(1);",
+									"            pm.expect(stop.itemCount).to.eql(stop.items.length);",
+									"            var sum = 0;",
+									"            stop.items.forEach(function (item) {",
+									"                pm.expect(['LOCAL_HISTORY', 'COMMUNITY_INDEX']).to.include(item.priceSource);",
+									"                pm.expect(item.estimatedUnitPrice).to.be.above(0);",
+									"                pm.expect(near(item.estimatedSubtotal, Math.round(item.estimatedUnitPrice * item.quantity * 100) / 100)).to.eql(true);",
+									"                sum += item.estimatedSubtotal;",
+									"            });",
+									"            pm.expect(near(stop.subtotal, sum)).to.eql(true);",
+									"        });",
+									"    });",
+									"    pm.test('estimatedTotal is the sum of the stops', function () {",
+									"        var sum = plan.marketPlans.reduce(function (total, stop) { return total + stop.subtotal; }, 0);",
+									"        pm.expect(near(plan.estimatedTotal, sum)).to.eql(true);",
+									"    });",
+									"    pm.test('Unpriced items carry a reason and skipped savings are positive', function () {",
+									"        plan.unpriced.forEach(function (item) { pm.expect(item.reason).to.be.a('string'); });",
+									"        plan.skippedSavings.forEach(function (skipped) { pm.expect(skipped.saving).to.be.above(0); });",
+									"    });",
+									"}",
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"var plan = pm.response.json();",
+									"checkPlan(plan, routeItems.length);",
+									"pm.test('Nothing the household bought is left unpriced', function () { pm.expect(plan.unpriced.length).to.eql(0); });",
+									"pm.test('No rule, so nothing was skipped', function () { pm.expect(plan.skippedSavings.length).to.eql(0); });",
+									"pm.test('Never costs more than what the household paid', function () {",
+									"    var paid = routeItems.reduce(function (sum, item) { return sum + item.unitPrice; }, 0);",
+									"    pm.expect(plan.estimatedTotal).to.be.at.most(paid + 0.011);",
+									"});",
+									"var ownMarket = plan.marketPlans.find(function (stop) { return stop.marketCnpj === pm.collectionVariables.get('e2eRouteMarketCnpj'); });",
+									"if (ownMarket) {",
+									"    pm.test('At the market of the nota the price is the household own history', function () {",
+									"        ownMarket.items.forEach(function (item) {",
+									"            var bought = routeItems.find(function (candidate) { return candidate.productId === item.productId; });",
+									"            pm.expect(item.priceSource).to.eql('LOCAL_HISTORY');",
+									"            pm.expect(near(item.estimatedUnitPrice, bought.unitPrice)).to.eql(true);",
+									"        });",
+									"    });",
+									"    if (ownMarket.latitude !== null && ownMarket.longitude !== null) {",
+									"        pm.collectionVariables.set('e2eRouteMarketLat', String(ownMarket.latitude));",
+									"        pm.collectionVariables.set('e2eRouteMarketLng', String(ownMarket.longitude));",
+									"    }",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 41. Fractional quantity multiplies and rounds to cents",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/optimize",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"optimize"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"var oneEach = routeItems.map(function (item) { return { productId: item.productId, quantity: 1 }; });",
+									"pm.request.body.raw = JSON.stringify({ items: [{ productId: routeItems[0].productId, quantity: 2.375 }] });"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteItems')) { pm.test.skip('No identified product on the confirmed receipt — skipping'); return; }",
+									"",
+									"function near(a, b) { return Math.abs(Number(a) - Number(b)) < 0.011; }",
+									"function checkPlan(plan, requestedCount) {",
+									"    pm.test('Plan has marketPlans, unpriced, skippedSavings and estimatedTotal', function () {",
+									"        pm.expect(plan.marketPlans).to.be.an('array');",
+									"        pm.expect(plan.unpriced).to.be.an('array');",
+									"        pm.expect(plan.skippedSavings).to.be.an('array');",
+									"        pm.expect(plan.estimatedTotal).to.be.a('number');",
+									"    });",
+									"    pm.test('Every requested item is in exactly one stop or in unpriced', function () {",
+									"        var planned = plan.marketPlans.reduce(function (sum, stop) { return sum + stop.items.length; }, 0);",
+									"        pm.expect(planned + plan.unpriced.length).to.eql(requestedCount);",
+									"    });",
+									"    pm.test('Stops are consistent (itemCount, subtotal, item subtotal, price source)', function () {",
+									"        plan.marketPlans.forEach(function (stop) {",
+									"            pm.expect(stop.marketCnpj).to.be.a('string');",
+									"            pm.expect(stop.marketFriendlyName).to.be.a('string');",
+									"            pm.expect(stop.items.length).to.be.at.least(1);",
+									"            pm.expect(stop.itemCount).to.eql(stop.items.length);",
+									"            var sum = 0;",
+									"            stop.items.forEach(function (item) {",
+									"                pm.expect(['LOCAL_HISTORY', 'COMMUNITY_INDEX']).to.include(item.priceSource);",
+									"                pm.expect(item.estimatedUnitPrice).to.be.above(0);",
+									"                pm.expect(near(item.estimatedSubtotal, Math.round(item.estimatedUnitPrice * item.quantity * 100) / 100)).to.eql(true);",
+									"                sum += item.estimatedSubtotal;",
+									"            });",
+									"            pm.expect(near(stop.subtotal, sum)).to.eql(true);",
+									"        });",
+									"    });",
+									"    pm.test('estimatedTotal is the sum of the stops', function () {",
+									"        var sum = plan.marketPlans.reduce(function (total, stop) { return total + stop.subtotal; }, 0);",
+									"        pm.expect(near(plan.estimatedTotal, sum)).to.eql(true);",
+									"    });",
+									"    pm.test('Unpriced items carry a reason and skipped savings are positive', function () {",
+									"        plan.unpriced.forEach(function (item) { pm.expect(item.reason).to.be.a('string'); });",
+									"        plan.skippedSavings.forEach(function (skipped) { pm.expect(skipped.saving).to.be.above(0); });",
+									"    });",
+									"}",
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"var plan = pm.response.json();",
+									"checkPlan(plan, 1);",
+									"pm.test('Quantity is echoed', function () { pm.expect(plan.marketPlans[0].items[0].quantity).to.eql(2.375); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 42. Standing at the market, app default rules keep it in the plan",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/optimize",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"optimize"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"var oneEach = routeItems.map(function (item) { return { productId: item.productId, quantity: 1 }; });",
+									"pm.request.body.raw = JSON.stringify({ items: oneEach, maxDistanceKm: 10, maxStops: 2, minSavingPerStop: 10, latitude: Number(pm.collectionVariables.get('e2eRouteMarketLat')), longitude: Number(pm.collectionVariables.get('e2eRouteMarketLng')) });"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteItems')) { pm.test.skip('No identified product on the confirmed receipt — skipping'); return; }",
+									"",
+									"function near(a, b) { return Math.abs(Number(a) - Number(b)) < 0.011; }",
+									"function checkPlan(plan, requestedCount) {",
+									"    pm.test('Plan has marketPlans, unpriced, skippedSavings and estimatedTotal', function () {",
+									"        pm.expect(plan.marketPlans).to.be.an('array');",
+									"        pm.expect(plan.unpriced).to.be.an('array');",
+									"        pm.expect(plan.skippedSavings).to.be.an('array');",
+									"        pm.expect(plan.estimatedTotal).to.be.a('number');",
+									"    });",
+									"    pm.test('Every requested item is in exactly one stop or in unpriced', function () {",
+									"        var planned = plan.marketPlans.reduce(function (sum, stop) { return sum + stop.items.length; }, 0);",
+									"        pm.expect(planned + plan.unpriced.length).to.eql(requestedCount);",
+									"    });",
+									"    pm.test('Stops are consistent (itemCount, subtotal, item subtotal, price source)', function () {",
+									"        plan.marketPlans.forEach(function (stop) {",
+									"            pm.expect(stop.marketCnpj).to.be.a('string');",
+									"            pm.expect(stop.marketFriendlyName).to.be.a('string');",
+									"            pm.expect(stop.items.length).to.be.at.least(1);",
+									"            pm.expect(stop.itemCount).to.eql(stop.items.length);",
+									"            var sum = 0;",
+									"            stop.items.forEach(function (item) {",
+									"                pm.expect(['LOCAL_HISTORY', 'COMMUNITY_INDEX']).to.include(item.priceSource);",
+									"                pm.expect(item.estimatedUnitPrice).to.be.above(0);",
+									"                pm.expect(near(item.estimatedSubtotal, Math.round(item.estimatedUnitPrice * item.quantity * 100) / 100)).to.eql(true);",
+									"                sum += item.estimatedSubtotal;",
+									"            });",
+									"            pm.expect(near(stop.subtotal, sum)).to.eql(true);",
+									"        });",
+									"    });",
+									"    pm.test('estimatedTotal is the sum of the stops', function () {",
+									"        var sum = plan.marketPlans.reduce(function (total, stop) { return total + stop.subtotal; }, 0);",
+									"        pm.expect(near(plan.estimatedTotal, sum)).to.eql(true);",
+									"    });",
+									"    pm.test('Unpriced items carry a reason and skipped savings are positive', function () {",
+									"        plan.unpriced.forEach(function (item) { pm.expect(item.reason).to.be.a('string'); });",
+									"        plan.skippedSavings.forEach(function (skipped) { pm.expect(skipped.saving).to.be.above(0); });",
+									"    });",
+									"}",
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"if (!pm.collectionVariables.get('e2eRouteMarketLat')) { pm.test.skip('Market of the nota has no known position — skipping'); return; }",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"var plan = pm.response.json();",
+									"checkPlan(plan, routeItems.length);",
+									"pm.test('At most 2 stops, all within 10 km, nearest first', function () {",
+									"    pm.expect(plan.marketPlans.length).to.be.within(1, 2);",
+									"    var distances = plan.marketPlans.map(function (stop) { return stop.distanceKm; });",
+									"    distances.forEach(function (distance) { pm.expect(distance).to.be.at.most(10); });",
+									"    pm.expect(distances).to.eql(distances.slice().sort(function (a, b) { return a - b; }));",
+									"});",
+									"pm.test('Nothing unpriced: the market of the nota is right here', function () { pm.expect(plan.unpriced.length).to.eql(0); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 43. Far from every store with a 100 m limit, nothing is in range",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/optimize",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"optimize"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"var oneEach = routeItems.map(function (item) { return { productId: item.productId, quantity: 1 }; });",
+									"pm.request.body.raw = JSON.stringify({ items: oneEach, maxDistanceKm: 0.1, latitude: 0, longitude: 0 });"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteItems')) { pm.test.skip('No identified product on the confirmed receipt — skipping'); return; }",
+									"",
+									"function near(a, b) { return Math.abs(Number(a) - Number(b)) < 0.011; }",
+									"function checkPlan(plan, requestedCount) {",
+									"    pm.test('Plan has marketPlans, unpriced, skippedSavings and estimatedTotal', function () {",
+									"        pm.expect(plan.marketPlans).to.be.an('array');",
+									"        pm.expect(plan.unpriced).to.be.an('array');",
+									"        pm.expect(plan.skippedSavings).to.be.an('array');",
+									"        pm.expect(plan.estimatedTotal).to.be.a('number');",
+									"    });",
+									"    pm.test('Every requested item is in exactly one stop or in unpriced', function () {",
+									"        var planned = plan.marketPlans.reduce(function (sum, stop) { return sum + stop.items.length; }, 0);",
+									"        pm.expect(planned + plan.unpriced.length).to.eql(requestedCount);",
+									"    });",
+									"    pm.test('Stops are consistent (itemCount, subtotal, item subtotal, price source)', function () {",
+									"        plan.marketPlans.forEach(function (stop) {",
+									"            pm.expect(stop.marketCnpj).to.be.a('string');",
+									"            pm.expect(stop.marketFriendlyName).to.be.a('string');",
+									"            pm.expect(stop.items.length).to.be.at.least(1);",
+									"            pm.expect(stop.itemCount).to.eql(stop.items.length);",
+									"            var sum = 0;",
+									"            stop.items.forEach(function (item) {",
+									"                pm.expect(['LOCAL_HISTORY', 'COMMUNITY_INDEX']).to.include(item.priceSource);",
+									"                pm.expect(item.estimatedUnitPrice).to.be.above(0);",
+									"                pm.expect(near(item.estimatedSubtotal, Math.round(item.estimatedUnitPrice * item.quantity * 100) / 100)).to.eql(true);",
+									"                sum += item.estimatedSubtotal;",
+									"            });",
+									"            pm.expect(near(stop.subtotal, sum)).to.eql(true);",
+									"        });",
+									"    });",
+									"    pm.test('estimatedTotal is the sum of the stops', function () {",
+									"        var sum = plan.marketPlans.reduce(function (total, stop) { return total + stop.subtotal; }, 0);",
+									"        pm.expect(near(plan.estimatedTotal, sum)).to.eql(true);",
+									"    });",
+									"    pm.test('Unpriced items carry a reason and skipped savings are positive', function () {",
+									"        plan.unpriced.forEach(function (item) { pm.expect(item.reason).to.be.a('string'); });",
+									"        plan.skippedSavings.forEach(function (skipped) { pm.expect(skipped.saving).to.be.above(0); });",
+									"    });",
+									"}",
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"var plan = pm.response.json();",
+									"checkPlan(plan, routeItems.length);",
+									"pm.test('No stop and a zero total', function () {",
+									"    pm.expect(plan.marketPlans.length).to.eql(0);",
+									"    pm.expect(plan.estimatedTotal).to.eql(0);",
+									"});",
+									"pm.test('Every item says it has a price, but outside the rules', function () {",
+									"    plan.unpriced.forEach(function (item) { pm.expect(item.reason).to.eql('no observed price within the route rules'); });",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 44. Far away with no distance limit still plans",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/optimize",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"optimize"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"var oneEach = routeItems.map(function (item) { return { productId: item.productId, quantity: 1 }; });",
+									"pm.request.body.raw = JSON.stringify({ items: oneEach, latitude: 0, longitude: 0 });"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteItems')) { pm.test.skip('No identified product on the confirmed receipt — skipping'); return; }",
+									"",
+									"function near(a, b) { return Math.abs(Number(a) - Number(b)) < 0.011; }",
+									"function checkPlan(plan, requestedCount) {",
+									"    pm.test('Plan has marketPlans, unpriced, skippedSavings and estimatedTotal', function () {",
+									"        pm.expect(plan.marketPlans).to.be.an('array');",
+									"        pm.expect(plan.unpriced).to.be.an('array');",
+									"        pm.expect(plan.skippedSavings).to.be.an('array');",
+									"        pm.expect(plan.estimatedTotal).to.be.a('number');",
+									"    });",
+									"    pm.test('Every requested item is in exactly one stop or in unpriced', function () {",
+									"        var planned = plan.marketPlans.reduce(function (sum, stop) { return sum + stop.items.length; }, 0);",
+									"        pm.expect(planned + plan.unpriced.length).to.eql(requestedCount);",
+									"    });",
+									"    pm.test('Stops are consistent (itemCount, subtotal, item subtotal, price source)', function () {",
+									"        plan.marketPlans.forEach(function (stop) {",
+									"            pm.expect(stop.marketCnpj).to.be.a('string');",
+									"            pm.expect(stop.marketFriendlyName).to.be.a('string');",
+									"            pm.expect(stop.items.length).to.be.at.least(1);",
+									"            pm.expect(stop.itemCount).to.eql(stop.items.length);",
+									"            var sum = 0;",
+									"            stop.items.forEach(function (item) {",
+									"                pm.expect(['LOCAL_HISTORY', 'COMMUNITY_INDEX']).to.include(item.priceSource);",
+									"                pm.expect(item.estimatedUnitPrice).to.be.above(0);",
+									"                pm.expect(near(item.estimatedSubtotal, Math.round(item.estimatedUnitPrice * item.quantity * 100) / 100)).to.eql(true);",
+									"                sum += item.estimatedSubtotal;",
+									"            });",
+									"            pm.expect(near(stop.subtotal, sum)).to.eql(true);",
+									"        });",
+									"    });",
+									"    pm.test('estimatedTotal is the sum of the stops', function () {",
+									"        var sum = plan.marketPlans.reduce(function (total, stop) { return total + stop.subtotal; }, 0);",
+									"        pm.expect(near(plan.estimatedTotal, sum)).to.eql(true);",
+									"    });",
+									"    pm.test('Unpriced items carry a reason and skipped savings are positive', function () {",
+									"        plan.unpriced.forEach(function (item) { pm.expect(item.reason).to.be.a('string'); });",
+									"        plan.skippedSavings.forEach(function (skipped) { pm.expect(skipped.saving).to.be.above(0); });",
+									"    });",
+									"}",
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"var plan = pm.response.json();",
+									"checkPlan(plan, routeItems.length);",
+									"pm.test('Everything priced, known distances are far', function () {",
+									"    pm.expect(plan.unpriced.length).to.eql(0);",
+									"    plan.marketPlans.forEach(function (stop) { if (stop.distanceKm !== null) pm.expect(stop.distanceKm).to.be.above(1000); });",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 45. One stop only",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/optimize",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"optimize"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"var oneEach = routeItems.map(function (item) { return { productId: item.productId, quantity: 1 }; });",
+									"pm.request.body.raw = JSON.stringify({ items: oneEach, maxStops: 1 });"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteItems')) { pm.test.skip('No identified product on the confirmed receipt — skipping'); return; }",
+									"",
+									"function near(a, b) { return Math.abs(Number(a) - Number(b)) < 0.011; }",
+									"function checkPlan(plan, requestedCount) {",
+									"    pm.test('Plan has marketPlans, unpriced, skippedSavings and estimatedTotal', function () {",
+									"        pm.expect(plan.marketPlans).to.be.an('array');",
+									"        pm.expect(plan.unpriced).to.be.an('array');",
+									"        pm.expect(plan.skippedSavings).to.be.an('array');",
+									"        pm.expect(plan.estimatedTotal).to.be.a('number');",
+									"    });",
+									"    pm.test('Every requested item is in exactly one stop or in unpriced', function () {",
+									"        var planned = plan.marketPlans.reduce(function (sum, stop) { return sum + stop.items.length; }, 0);",
+									"        pm.expect(planned + plan.unpriced.length).to.eql(requestedCount);",
+									"    });",
+									"    pm.test('Stops are consistent (itemCount, subtotal, item subtotal, price source)', function () {",
+									"        plan.marketPlans.forEach(function (stop) {",
+									"            pm.expect(stop.marketCnpj).to.be.a('string');",
+									"            pm.expect(stop.marketFriendlyName).to.be.a('string');",
+									"            pm.expect(stop.items.length).to.be.at.least(1);",
+									"            pm.expect(stop.itemCount).to.eql(stop.items.length);",
+									"            var sum = 0;",
+									"            stop.items.forEach(function (item) {",
+									"                pm.expect(['LOCAL_HISTORY', 'COMMUNITY_INDEX']).to.include(item.priceSource);",
+									"                pm.expect(item.estimatedUnitPrice).to.be.above(0);",
+									"                pm.expect(near(item.estimatedSubtotal, Math.round(item.estimatedUnitPrice * item.quantity * 100) / 100)).to.eql(true);",
+									"                sum += item.estimatedSubtotal;",
+									"            });",
+									"            pm.expect(near(stop.subtotal, sum)).to.eql(true);",
+									"        });",
+									"    });",
+									"    pm.test('estimatedTotal is the sum of the stops', function () {",
+									"        var sum = plan.marketPlans.reduce(function (total, stop) { return total + stop.subtotal; }, 0);",
+									"        pm.expect(near(plan.estimatedTotal, sum)).to.eql(true);",
+									"    });",
+									"    pm.test('Unpriced items carry a reason and skipped savings are positive', function () {",
+									"        plan.unpriced.forEach(function (item) { pm.expect(item.reason).to.be.a('string'); });",
+									"        plan.skippedSavings.forEach(function (skipped) { pm.expect(skipped.saving).to.be.above(0); });",
+									"    });",
+									"}",
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"var plan = pm.response.json();",
+									"checkPlan(plan, routeItems.length);",
+									"pm.test('Exactly one stop', function () { pm.expect(plan.marketPlans.length).to.eql(1); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 46. Rule limits at their widest (200 km, 10 stops, R$ 0)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/optimize",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"optimize"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"var oneEach = routeItems.map(function (item) { return { productId: item.productId, quantity: 1 }; });",
+									"pm.request.body.raw = JSON.stringify({ items: oneEach, maxDistanceKm: 200, maxStops: 10, minSavingPerStop: 0 });"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteItems')) { pm.test.skip('No identified product on the confirmed receipt — skipping'); return; }",
+									"",
+									"function near(a, b) { return Math.abs(Number(a) - Number(b)) < 0.011; }",
+									"function checkPlan(plan, requestedCount) {",
+									"    pm.test('Plan has marketPlans, unpriced, skippedSavings and estimatedTotal', function () {",
+									"        pm.expect(plan.marketPlans).to.be.an('array');",
+									"        pm.expect(plan.unpriced).to.be.an('array');",
+									"        pm.expect(plan.skippedSavings).to.be.an('array');",
+									"        pm.expect(plan.estimatedTotal).to.be.a('number');",
+									"    });",
+									"    pm.test('Every requested item is in exactly one stop or in unpriced', function () {",
+									"        var planned = plan.marketPlans.reduce(function (sum, stop) { return sum + stop.items.length; }, 0);",
+									"        pm.expect(planned + plan.unpriced.length).to.eql(requestedCount);",
+									"    });",
+									"    pm.test('Stops are consistent (itemCount, subtotal, item subtotal, price source)', function () {",
+									"        plan.marketPlans.forEach(function (stop) {",
+									"            pm.expect(stop.marketCnpj).to.be.a('string');",
+									"            pm.expect(stop.marketFriendlyName).to.be.a('string');",
+									"            pm.expect(stop.items.length).to.be.at.least(1);",
+									"            pm.expect(stop.itemCount).to.eql(stop.items.length);",
+									"            var sum = 0;",
+									"            stop.items.forEach(function (item) {",
+									"                pm.expect(['LOCAL_HISTORY', 'COMMUNITY_INDEX']).to.include(item.priceSource);",
+									"                pm.expect(item.estimatedUnitPrice).to.be.above(0);",
+									"                pm.expect(near(item.estimatedSubtotal, Math.round(item.estimatedUnitPrice * item.quantity * 100) / 100)).to.eql(true);",
+									"                sum += item.estimatedSubtotal;",
+									"            });",
+									"            pm.expect(near(stop.subtotal, sum)).to.eql(true);",
+									"        });",
+									"    });",
+									"    pm.test('estimatedTotal is the sum of the stops', function () {",
+									"        var sum = plan.marketPlans.reduce(function (total, stop) { return total + stop.subtotal; }, 0);",
+									"        pm.expect(near(plan.estimatedTotal, sum)).to.eql(true);",
+									"    });",
+									"    pm.test('Unpriced items carry a reason and skipped savings are positive', function () {",
+									"        plan.unpriced.forEach(function (item) { pm.expect(item.reason).to.be.a('string'); });",
+									"        plan.skippedSavings.forEach(function (skipped) { pm.expect(skipped.saving).to.be.above(0); });",
+									"    });",
+									"}",
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"checkPlan(pm.response.json(), routeItems.length);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 47. A minimum saving no stop can reach never strands an item",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/optimize",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"optimize"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"var oneEach = routeItems.map(function (item) { return { productId: item.productId, quantity: 1 }; });",
+									"pm.request.body.raw = JSON.stringify({ items: oneEach, maxStops: 10, minSavingPerStop: 999999999 });"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteItems')) { pm.test.skip('No identified product on the confirmed receipt — skipping'); return; }",
+									"",
+									"function near(a, b) { return Math.abs(Number(a) - Number(b)) < 0.011; }",
+									"function checkPlan(plan, requestedCount) {",
+									"    pm.test('Plan has marketPlans, unpriced, skippedSavings and estimatedTotal', function () {",
+									"        pm.expect(plan.marketPlans).to.be.an('array');",
+									"        pm.expect(plan.unpriced).to.be.an('array');",
+									"        pm.expect(plan.skippedSavings).to.be.an('array');",
+									"        pm.expect(plan.estimatedTotal).to.be.a('number');",
+									"    });",
+									"    pm.test('Every requested item is in exactly one stop or in unpriced', function () {",
+									"        var planned = plan.marketPlans.reduce(function (sum, stop) { return sum + stop.items.length; }, 0);",
+									"        pm.expect(planned + plan.unpriced.length).to.eql(requestedCount);",
+									"    });",
+									"    pm.test('Stops are consistent (itemCount, subtotal, item subtotal, price source)', function () {",
+									"        plan.marketPlans.forEach(function (stop) {",
+									"            pm.expect(stop.marketCnpj).to.be.a('string');",
+									"            pm.expect(stop.marketFriendlyName).to.be.a('string');",
+									"            pm.expect(stop.items.length).to.be.at.least(1);",
+									"            pm.expect(stop.itemCount).to.eql(stop.items.length);",
+									"            var sum = 0;",
+									"            stop.items.forEach(function (item) {",
+									"                pm.expect(['LOCAL_HISTORY', 'COMMUNITY_INDEX']).to.include(item.priceSource);",
+									"                pm.expect(item.estimatedUnitPrice).to.be.above(0);",
+									"                pm.expect(near(item.estimatedSubtotal, Math.round(item.estimatedUnitPrice * item.quantity * 100) / 100)).to.eql(true);",
+									"                sum += item.estimatedSubtotal;",
+									"            });",
+									"            pm.expect(near(stop.subtotal, sum)).to.eql(true);",
+									"        });",
+									"    });",
+									"    pm.test('estimatedTotal is the sum of the stops', function () {",
+									"        var sum = plan.marketPlans.reduce(function (total, stop) { return total + stop.subtotal; }, 0);",
+									"        pm.expect(near(plan.estimatedTotal, sum)).to.eql(true);",
+									"    });",
+									"    pm.test('Unpriced items carry a reason and skipped savings are positive', function () {",
+									"        plan.unpriced.forEach(function (item) { pm.expect(item.reason).to.be.a('string'); });",
+									"        plan.skippedSavings.forEach(function (skipped) { pm.expect(skipped.saving).to.be.above(0); });",
+									"    });",
+									"}",
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"var plan = pm.response.json();",
+									"checkPlan(plan, routeItems.length);",
+									"pm.test('Still everything priced', function () { pm.expect(plan.unpriced.length).to.eql(0); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 48. Latitude without longitude is ignored, not an error",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/optimize",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"optimize"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"var oneEach = routeItems.map(function (item) { return { productId: item.productId, quantity: 1 }; });",
+									"pm.request.body.raw = JSON.stringify({ items: oneEach, maxDistanceKm: 10, latitude: -16.68 });"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteItems')) { pm.test.skip('No identified product on the confirmed receipt — skipping'); return; }",
+									"",
+									"function near(a, b) { return Math.abs(Number(a) - Number(b)) < 0.011; }",
+									"function checkPlan(plan, requestedCount) {",
+									"    pm.test('Plan has marketPlans, unpriced, skippedSavings and estimatedTotal', function () {",
+									"        pm.expect(plan.marketPlans).to.be.an('array');",
+									"        pm.expect(plan.unpriced).to.be.an('array');",
+									"        pm.expect(plan.skippedSavings).to.be.an('array');",
+									"        pm.expect(plan.estimatedTotal).to.be.a('number');",
+									"    });",
+									"    pm.test('Every requested item is in exactly one stop or in unpriced', function () {",
+									"        var planned = plan.marketPlans.reduce(function (sum, stop) { return sum + stop.items.length; }, 0);",
+									"        pm.expect(planned + plan.unpriced.length).to.eql(requestedCount);",
+									"    });",
+									"    pm.test('Stops are consistent (itemCount, subtotal, item subtotal, price source)', function () {",
+									"        plan.marketPlans.forEach(function (stop) {",
+									"            pm.expect(stop.marketCnpj).to.be.a('string');",
+									"            pm.expect(stop.marketFriendlyName).to.be.a('string');",
+									"            pm.expect(stop.items.length).to.be.at.least(1);",
+									"            pm.expect(stop.itemCount).to.eql(stop.items.length);",
+									"            var sum = 0;",
+									"            stop.items.forEach(function (item) {",
+									"                pm.expect(['LOCAL_HISTORY', 'COMMUNITY_INDEX']).to.include(item.priceSource);",
+									"                pm.expect(item.estimatedUnitPrice).to.be.above(0);",
+									"                pm.expect(near(item.estimatedSubtotal, Math.round(item.estimatedUnitPrice * item.quantity * 100) / 100)).to.eql(true);",
+									"                sum += item.estimatedSubtotal;",
+									"            });",
+									"            pm.expect(near(stop.subtotal, sum)).to.eql(true);",
+									"        });",
+									"    });",
+									"    pm.test('estimatedTotal is the sum of the stops', function () {",
+									"        var sum = plan.marketPlans.reduce(function (total, stop) { return total + stop.subtotal; }, 0);",
+									"        pm.expect(near(plan.estimatedTotal, sum)).to.eql(true);",
+									"    });",
+									"    pm.test('Unpriced items carry a reason and skipped savings are positive', function () {",
+									"        plan.unpriced.forEach(function (item) { pm.expect(item.reason).to.be.a('string'); });",
+									"        plan.skippedSavings.forEach(function (skipped) { pm.expect(skipped.saving).to.be.above(0); });",
+									"    });",
+									"}",
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"checkPlan(pm.response.json(), routeItems.length);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 49. The same product twice is planned twice",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/optimize",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"optimize"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"var oneEach = routeItems.map(function (item) { return { productId: item.productId, quantity: 1 }; });",
+									"pm.request.body.raw = JSON.stringify({ items: [oneEach[0], { productId: oneEach[0].productId, quantity: 3 }] });"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteItems')) { pm.test.skip('No identified product on the confirmed receipt — skipping'); return; }",
+									"",
+									"function near(a, b) { return Math.abs(Number(a) - Number(b)) < 0.011; }",
+									"function checkPlan(plan, requestedCount) {",
+									"    pm.test('Plan has marketPlans, unpriced, skippedSavings and estimatedTotal', function () {",
+									"        pm.expect(plan.marketPlans).to.be.an('array');",
+									"        pm.expect(plan.unpriced).to.be.an('array');",
+									"        pm.expect(plan.skippedSavings).to.be.an('array');",
+									"        pm.expect(plan.estimatedTotal).to.be.a('number');",
+									"    });",
+									"    pm.test('Every requested item is in exactly one stop or in unpriced', function () {",
+									"        var planned = plan.marketPlans.reduce(function (sum, stop) { return sum + stop.items.length; }, 0);",
+									"        pm.expect(planned + plan.unpriced.length).to.eql(requestedCount);",
+									"    });",
+									"    pm.test('Stops are consistent (itemCount, subtotal, item subtotal, price source)', function () {",
+									"        plan.marketPlans.forEach(function (stop) {",
+									"            pm.expect(stop.marketCnpj).to.be.a('string');",
+									"            pm.expect(stop.marketFriendlyName).to.be.a('string');",
+									"            pm.expect(stop.items.length).to.be.at.least(1);",
+									"            pm.expect(stop.itemCount).to.eql(stop.items.length);",
+									"            var sum = 0;",
+									"            stop.items.forEach(function (item) {",
+									"                pm.expect(['LOCAL_HISTORY', 'COMMUNITY_INDEX']).to.include(item.priceSource);",
+									"                pm.expect(item.estimatedUnitPrice).to.be.above(0);",
+									"                pm.expect(near(item.estimatedSubtotal, Math.round(item.estimatedUnitPrice * item.quantity * 100) / 100)).to.eql(true);",
+									"                sum += item.estimatedSubtotal;",
+									"            });",
+									"            pm.expect(near(stop.subtotal, sum)).to.eql(true);",
+									"        });",
+									"    });",
+									"    pm.test('estimatedTotal is the sum of the stops', function () {",
+									"        var sum = plan.marketPlans.reduce(function (total, stop) { return total + stop.subtotal; }, 0);",
+									"        pm.expect(near(plan.estimatedTotal, sum)).to.eql(true);",
+									"    });",
+									"    pm.test('Unpriced items carry a reason and skipped savings are positive', function () {",
+									"        plan.unpriced.forEach(function (item) { pm.expect(item.reason).to.be.a('string'); });",
+									"        plan.skippedSavings.forEach(function (skipped) { pm.expect(skipped.saving).to.be.above(0); });",
+									"    });",
+									"}",
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"checkPlan(pm.response.json(), 2);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 50. A product never bought is planned or declared unpriced, never lost",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/optimize",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"optimize"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"var oneEach = routeItems.map(function (item) { return { productId: item.productId, quantity: 1 }; });",
+									"pm.request.body.raw = JSON.stringify({ items: oneEach.concat([{ productId: pm.collectionVariables.get('e2eRouteOtherProductId'), quantity: 1 }]) });"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteItems')) { pm.test.skip('No identified product on the confirmed receipt — skipping'); return; }",
+									"",
+									"function near(a, b) { return Math.abs(Number(a) - Number(b)) < 0.011; }",
+									"function checkPlan(plan, requestedCount) {",
+									"    pm.test('Plan has marketPlans, unpriced, skippedSavings and estimatedTotal', function () {",
+									"        pm.expect(plan.marketPlans).to.be.an('array');",
+									"        pm.expect(plan.unpriced).to.be.an('array');",
+									"        pm.expect(plan.skippedSavings).to.be.an('array');",
+									"        pm.expect(plan.estimatedTotal).to.be.a('number');",
+									"    });",
+									"    pm.test('Every requested item is in exactly one stop or in unpriced', function () {",
+									"        var planned = plan.marketPlans.reduce(function (sum, stop) { return sum + stop.items.length; }, 0);",
+									"        pm.expect(planned + plan.unpriced.length).to.eql(requestedCount);",
+									"    });",
+									"    pm.test('Stops are consistent (itemCount, subtotal, item subtotal, price source)', function () {",
+									"        plan.marketPlans.forEach(function (stop) {",
+									"            pm.expect(stop.marketCnpj).to.be.a('string');",
+									"            pm.expect(stop.marketFriendlyName).to.be.a('string');",
+									"            pm.expect(stop.items.length).to.be.at.least(1);",
+									"            pm.expect(stop.itemCount).to.eql(stop.items.length);",
+									"            var sum = 0;",
+									"            stop.items.forEach(function (item) {",
+									"                pm.expect(['LOCAL_HISTORY', 'COMMUNITY_INDEX']).to.include(item.priceSource);",
+									"                pm.expect(item.estimatedUnitPrice).to.be.above(0);",
+									"                pm.expect(near(item.estimatedSubtotal, Math.round(item.estimatedUnitPrice * item.quantity * 100) / 100)).to.eql(true);",
+									"                sum += item.estimatedSubtotal;",
+									"            });",
+									"            pm.expect(near(stop.subtotal, sum)).to.eql(true);",
+									"        });",
+									"    });",
+									"    pm.test('estimatedTotal is the sum of the stops', function () {",
+									"        var sum = plan.marketPlans.reduce(function (total, stop) { return total + stop.subtotal; }, 0);",
+									"        pm.expect(near(plan.estimatedTotal, sum)).to.eql(true);",
+									"    });",
+									"    pm.test('Unpriced items carry a reason and skipped savings are positive', function () {",
+									"        plan.unpriced.forEach(function (item) { pm.expect(item.reason).to.be.a('string'); });",
+									"        plan.skippedSavings.forEach(function (skipped) { pm.expect(skipped.saving).to.be.above(0); });",
+									"    });",
+									"}",
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"if (!pm.collectionVariables.get('e2eRouteOtherProductId')) { pm.test.skip('No other product in the catalogue — skipping'); return; }",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"var plan = pm.response.json();",
+									"checkPlan(plan, routeItems.length + 1);",
+									"var otherId = pm.collectionVariables.get('e2eRouteOtherProductId');",
+									"var unpricedOther = plan.unpriced.find(function (item) { return item.productId === otherId; });",
+									"if (unpricedOther) {",
+									"    pm.test('Unpriced for lack of any price, with name and quantity', function () {",
+									"        pm.expect(unpricedOther.reason).to.eql('no observed price (local or community)');",
+									"        pm.expect(unpricedOther.productName).to.be.a('string');",
+									"        pm.expect(unpricedOther.quantity).to.eql(1);",
+									"    });",
+									"} else {",
+									"    pm.test('Priced from the community, never from another household history', function () {",
+									"        var planned = [].concat.apply([], plan.marketPlans.map(function (stop) { return stop.items; }))",
+									"            .find(function (item) { return item.productId === otherId; });",
+									"        pm.expect(planned.priceSource).to.eql('COMMUNITY_INDEX');",
+									"    });",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 51. Old singular path (apps 1.3.x) still plans",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-list/optimize",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-list",
+								"optimize"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"var oneEach = routeItems.map(function (item) { return { productId: item.productId, quantity: 1 }; });",
+									"pm.request.body.raw = JSON.stringify({ items: oneEach });"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteItems')) { pm.test.skip('No identified product on the confirmed receipt — skipping'); return; }",
+									"",
+									"function near(a, b) { return Math.abs(Number(a) - Number(b)) < 0.011; }",
+									"function checkPlan(plan, requestedCount) {",
+									"    pm.test('Plan has marketPlans, unpriced, skippedSavings and estimatedTotal', function () {",
+									"        pm.expect(plan.marketPlans).to.be.an('array');",
+									"        pm.expect(plan.unpriced).to.be.an('array');",
+									"        pm.expect(plan.skippedSavings).to.be.an('array');",
+									"        pm.expect(plan.estimatedTotal).to.be.a('number');",
+									"    });",
+									"    pm.test('Every requested item is in exactly one stop or in unpriced', function () {",
+									"        var planned = plan.marketPlans.reduce(function (sum, stop) { return sum + stop.items.length; }, 0);",
+									"        pm.expect(planned + plan.unpriced.length).to.eql(requestedCount);",
+									"    });",
+									"    pm.test('Stops are consistent (itemCount, subtotal, item subtotal, price source)', function () {",
+									"        plan.marketPlans.forEach(function (stop) {",
+									"            pm.expect(stop.marketCnpj).to.be.a('string');",
+									"            pm.expect(stop.marketFriendlyName).to.be.a('string');",
+									"            pm.expect(stop.items.length).to.be.at.least(1);",
+									"            pm.expect(stop.itemCount).to.eql(stop.items.length);",
+									"            var sum = 0;",
+									"            stop.items.forEach(function (item) {",
+									"                pm.expect(['LOCAL_HISTORY', 'COMMUNITY_INDEX']).to.include(item.priceSource);",
+									"                pm.expect(item.estimatedUnitPrice).to.be.above(0);",
+									"                pm.expect(near(item.estimatedSubtotal, Math.round(item.estimatedUnitPrice * item.quantity * 100) / 100)).to.eql(true);",
+									"                sum += item.estimatedSubtotal;",
+									"            });",
+									"            pm.expect(near(stop.subtotal, sum)).to.eql(true);",
+									"        });",
+									"    });",
+									"    pm.test('estimatedTotal is the sum of the stops', function () {",
+									"        var sum = plan.marketPlans.reduce(function (total, stop) { return total + stop.subtotal; }, 0);",
+									"        pm.expect(near(plan.estimatedTotal, sum)).to.eql(true);",
+									"    });",
+									"    pm.test('Unpriced items carry a reason and skipped savings are positive', function () {",
+									"        plan.unpriced.forEach(function (item) { pm.expect(item.reason).to.be.a('string'); });",
+									"        plan.skippedSavings.forEach(function (skipped) { pm.expect(skipped.saving).to.be.above(0); });",
+									"    });",
+									"}",
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"checkPlan(pm.response.json(), routeItems.length);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 52. A 100-item list is planned in one call",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/optimize",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"optimize"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"var oneEach = routeItems.map(function (item) { return { productId: item.productId, quantity: 1 }; });",
+									"pm.request.body.raw = JSON.stringify({ items: Array.apply(null, Array(100)).map(function (unused, index) { return { productId: oneEach[index % oneEach.length].productId, quantity: (index % 7) + 0.5 }; }), maxStops: 3 });"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteItems')) { pm.test.skip('No identified product on the confirmed receipt — skipping'); return; }",
+									"",
+									"function near(a, b) { return Math.abs(Number(a) - Number(b)) < 0.011; }",
+									"function checkPlan(plan, requestedCount) {",
+									"    pm.test('Plan has marketPlans, unpriced, skippedSavings and estimatedTotal', function () {",
+									"        pm.expect(plan.marketPlans).to.be.an('array');",
+									"        pm.expect(plan.unpriced).to.be.an('array');",
+									"        pm.expect(plan.skippedSavings).to.be.an('array');",
+									"        pm.expect(plan.estimatedTotal).to.be.a('number');",
+									"    });",
+									"    pm.test('Every requested item is in exactly one stop or in unpriced', function () {",
+									"        var planned = plan.marketPlans.reduce(function (sum, stop) { return sum + stop.items.length; }, 0);",
+									"        pm.expect(planned + plan.unpriced.length).to.eql(requestedCount);",
+									"    });",
+									"    pm.test('Stops are consistent (itemCount, subtotal, item subtotal, price source)', function () {",
+									"        plan.marketPlans.forEach(function (stop) {",
+									"            pm.expect(stop.marketCnpj).to.be.a('string');",
+									"            pm.expect(stop.marketFriendlyName).to.be.a('string');",
+									"            pm.expect(stop.items.length).to.be.at.least(1);",
+									"            pm.expect(stop.itemCount).to.eql(stop.items.length);",
+									"            var sum = 0;",
+									"            stop.items.forEach(function (item) {",
+									"                pm.expect(['LOCAL_HISTORY', 'COMMUNITY_INDEX']).to.include(item.priceSource);",
+									"                pm.expect(item.estimatedUnitPrice).to.be.above(0);",
+									"                pm.expect(near(item.estimatedSubtotal, Math.round(item.estimatedUnitPrice * item.quantity * 100) / 100)).to.eql(true);",
+									"                sum += item.estimatedSubtotal;",
+									"            });",
+									"            pm.expect(near(stop.subtotal, sum)).to.eql(true);",
+									"        });",
+									"    });",
+									"    pm.test('estimatedTotal is the sum of the stops', function () {",
+									"        var sum = plan.marketPlans.reduce(function (total, stop) { return total + stop.subtotal; }, 0);",
+									"        pm.expect(near(plan.estimatedTotal, sum)).to.eql(true);",
+									"    });",
+									"    pm.test('Unpriced items carry a reason and skipped savings are positive', function () {",
+									"        plan.unpriced.forEach(function (item) { pm.expect(item.reason).to.be.a('string'); });",
+									"        plan.skippedSavings.forEach(function (skipped) { pm.expect(skipped.saving).to.be.above(0); });",
+									"    });",
+									"}",
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"checkPlan(pm.response.json(), 100);",
+									"pm.test('Answers in under 20 s', function () { pm.expect(pm.response.responseTime).to.be.below(20000); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 53. The largest quantity a list can hold is planned",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/optimize",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"optimize"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"var oneEach = routeItems.map(function (item) { return { productId: item.productId, quantity: 1 }; });",
+									"pm.request.body.raw = JSON.stringify({ items: [{ productId: routeItems[0].productId, quantity: 999999999.999 }] });"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteItems')) { pm.test.skip('No identified product on the confirmed receipt — skipping'); return; }",
+									"",
+									"function near(a, b) { return Math.abs(Number(a) - Number(b)) < 0.011; }",
+									"function checkPlan(plan, requestedCount) {",
+									"    pm.test('Plan has marketPlans, unpriced, skippedSavings and estimatedTotal', function () {",
+									"        pm.expect(plan.marketPlans).to.be.an('array');",
+									"        pm.expect(plan.unpriced).to.be.an('array');",
+									"        pm.expect(plan.skippedSavings).to.be.an('array');",
+									"        pm.expect(plan.estimatedTotal).to.be.a('number');",
+									"    });",
+									"    pm.test('Every requested item is in exactly one stop or in unpriced', function () {",
+									"        var planned = plan.marketPlans.reduce(function (sum, stop) { return sum + stop.items.length; }, 0);",
+									"        pm.expect(planned + plan.unpriced.length).to.eql(requestedCount);",
+									"    });",
+									"    pm.test('Stops are consistent (itemCount, subtotal, item subtotal, price source)', function () {",
+									"        plan.marketPlans.forEach(function (stop) {",
+									"            pm.expect(stop.marketCnpj).to.be.a('string');",
+									"            pm.expect(stop.marketFriendlyName).to.be.a('string');",
+									"            pm.expect(stop.items.length).to.be.at.least(1);",
+									"            pm.expect(stop.itemCount).to.eql(stop.items.length);",
+									"            var sum = 0;",
+									"            stop.items.forEach(function (item) {",
+									"                pm.expect(['LOCAL_HISTORY', 'COMMUNITY_INDEX']).to.include(item.priceSource);",
+									"                pm.expect(item.estimatedUnitPrice).to.be.above(0);",
+									"                pm.expect(near(item.estimatedSubtotal, Math.round(item.estimatedUnitPrice * item.quantity * 100) / 100)).to.eql(true);",
+									"                sum += item.estimatedSubtotal;",
+									"            });",
+									"            pm.expect(near(stop.subtotal, sum)).to.eql(true);",
+									"        });",
+									"    });",
+									"    pm.test('estimatedTotal is the sum of the stops', function () {",
+									"        var sum = plan.marketPlans.reduce(function (total, stop) { return total + stop.subtotal; }, 0);",
+									"        pm.expect(near(plan.estimatedTotal, sum)).to.eql(true);",
+									"    });",
+									"    pm.test('Unpriced items carry a reason and skipped savings are positive', function () {",
+									"        plan.unpriced.forEach(function (item) { pm.expect(item.reason).to.be.a('string'); });",
+									"        plan.skippedSavings.forEach(function (skipped) { pm.expect(skipped.saving).to.be.above(0); });",
+									"    });",
+									"}",
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"checkPlan(pm.response.json(), 1);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 54. Plan rejects invalid input (one case per run of this request)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/optimize",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"optimize"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						},
+						"description": "Data-driven: re-runs itself once per case (invalid items, quantities, rule limits, coordinates, malformed body, unknown product)."
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var productId = (JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]')[0] || {}).productId || '00000000-0000-0000-0000-000000000000';",
+									"function base() { return { items: [{ productId: productId, quantity: 1 }] }; }",
+									"var cases = [",
+									"    ['items empty', function (body) { body.items = []; }],",
+									"    ['items missing', function (body) { delete body.items; }],",
+									"    ['items null', function (body) { body.items = null; }],",
+									"    ['items is not a list', function (body) { body.items = 'arroz'; }],",
+									"    ['quantity 0', function (body) { body.items[0].quantity = 0; }],",
+									"    ['quantity negative', function (body) { body.items[0].quantity = -1; }],",
+									"    ['quantity missing', function (body) { delete body.items[0].quantity; }],",
+									"    ['quantity is text', function (body) { body.items[0].quantity = 'duas'; }],",
+									"    ['productId null', function (body) { body.items[0].productId = null; }],",
+									"    ['productId malformed', function (body) { body.items[0].productId = 'not-a-uuid'; }],",
+									"    ['maxStops 0', function (body) { body.maxStops = 0; }],",
+									"    ['maxStops 11', function (body) { body.maxStops = 11; }],",
+									"    ['maxStops is text', function (body) { body.maxStops = 'dois'; }],",
+									"    ['maxDistanceKm 0', function (body) { body.maxDistanceKm = 0; }],",
+									"    ['maxDistanceKm negative', function (body) { body.maxDistanceKm = -5; }],",
+									"    ['maxDistanceKm 200.1', function (body) { body.maxDistanceKm = 200.1; }],",
+									"    ['minSavingPerStop negative', function (body) { body.minSavingPerStop = -0.01; }],",
+									"    ['latitude 90.1', function (body) { body.latitude = 90.1; body.longitude = 0; }],",
+									"    ['longitude -180.1', function (body) { body.latitude = 0; body.longitude = -180.1; }],",
+									"    ['latitude is text', function (body) { body.latitude = 'norte'; body.longitude = 0; }],",
+									"    ['body is not JSON', function () { return '{ \"items\": [ '; }],",
+									"    ['body is a JSON list', function () { return '[]'; }],",
+									"    ['product does not exist', function (body) { body.items[0].productId = '00000000-0000-0000-0000-000000000000'; }, 404],",
+									"    ['one product of many does not exist', function (body) { body.items.push({ productId: '00000000-0000-0000-0000-000000000000', quantity: 1 }); }, 404]",
+									"];",
+									"",
+									"var caseIndex = parseInt(pm.collectionVariables.get('e2eRouteCaseIndex') || '0', 10);",
+									"var current = cases[caseIndex];",
+									"var body = base();",
+									"var replaced = current[1](body);",
+									"pm.request.body.raw = typeof replaced === 'string' ? replaced : JSON.stringify(body);",
+									"pm.variables.set('routeCaseLabel', current[0]);",
+									"pm.variables.set('routeCaseStatus', String(current[2] || 400));",
+									"pm.variables.set('routeCaseCount', String(cases.length));"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var label = pm.variables.get('routeCaseLabel');",
+									"var expected = parseInt(pm.variables.get('routeCaseStatus'), 10);",
+									"pm.test(label + ' -> ' + expected, function () { pm.response.to.have.status(expected); });",
+									"if (expected >= 400) {",
+									"    pm.test(label + ' -> has a message', function () { pm.expect(pm.response.json().message).to.be.a('string'); });",
+									"}",
+									"var nextIndex = parseInt(pm.collectionVariables.get('e2eRouteCaseIndex') || '0', 10) + 1;",
+									"if (nextIndex < parseInt(pm.variables.get('routeCaseCount'), 10)) {",
+									"    pm.collectionVariables.set('e2eRouteCaseIndex', String(nextIndex));",
+									"    postman.setNextRequest(pm.info.requestName);",
+									"} else {",
+									"    pm.collectionVariables.unset('e2eRouteCaseIndex');",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 55. Plan needs a session",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/optimize",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"optimize"
+							]
+						},
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"items\": [\n    {\n      \"productId\": \"00000000-0000-0000-0000-000000000000\",\n      \"quantity\": 1\n    }\n  ]\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Refused without a token (401/403)', function () { pm.expect(pm.response.code).to.be.oneOf([401, 403]); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 60. Price lookup during the trip (best markets from the device position)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/price-index/products/{{e2eRouteLookupProductId}}/best-markets?lat=-16.68&lng=-49.25",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"price-index",
+								"products",
+								"{{e2eRouteLookupProductId}}",
+								"best-markets"
+							],
+							"query": [
+								{
+									"key": "lat",
+									"value": "-16.68"
+								},
+								{
+									"key": "lng",
+									"value": "-49.25"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"pm.variables.set('e2eRouteLookupProductId', (routeItems[0] || {}).productId || '00000000-0000-0000-0000-000000000000');"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteItems')) { pm.test.skip('No identified product on the confirmed receipt — skipping'); return; }",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Returns an array', function () { pm.expect(pm.response.json()).to.be.an('array'); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 61. Price lookup with only half a position falls back, no error",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/price-index/products/{{e2eRouteLookupProductId}}/best-markets?lat=-16.68&limit=1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"price-index",
+								"products",
+								"{{e2eRouteLookupProductId}}",
+								"best-markets"
+							],
+							"query": [
+								{
+									"key": "lat",
+									"value": "-16.68"
+								},
+								{
+									"key": "limit",
+									"value": "1"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"pm.variables.set('e2eRouteLookupProductId', (routeItems[0] || {}).productId || '00000000-0000-0000-0000-000000000000');"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteItems')) { pm.test.skip('No identified product on the confirmed receipt — skipping'); return; }",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('At most one row', function () { pm.expect(pm.response.json().length).to.be.at.most(1); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 62. Markets near the device come nearest first",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/markets?lat=-16.68&lng=-49.25",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"markets"
+							],
+							"query": [
+								{
+									"key": "lat",
+									"value": "-16.68"
+								},
+								{
+									"key": "lng",
+									"value": "-49.25"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"var markets = pm.response.json();",
+									"pm.test('Rows carry what the map needs', function () {",
+									"    markets.forEach(function (market) {",
+									"        pm.expect(market).to.include.keys(['cnpj', 'name', 'friendlyName', 'latitude', 'longitude', 'distanceKm', 'visited', 'watching']);",
+									"    });",
+									"});",
+									"pm.test('Sorted by distance, unknown distances last', function () {",
+									"    var distances = markets.map(function (market) { return market.distanceKm; });",
+									"    var known = distances.filter(function (distance) { return distance !== null; });",
+									"    pm.expect(distances.slice(0, known.length)).to.eql(known);",
+									"    pm.expect(known).to.eql(known.slice().sort(function (a, b) { return a - b; }));",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 63. Only my markets",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/markets?scope=MINE",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"markets"
+							],
+							"query": [
+								{
+									"key": "scope",
+									"value": "MINE"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Every row is a watched market', function () {",
+									"    pm.response.json().forEach(function (market) { pm.expect(market.watching).to.eql(true); });",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 64. Markets with an unknown scope is 400",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/markets?scope=EVERYWHERE",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"markets"
+							],
+							"query": [
+								{
+									"key": "scope",
+									"value": "EVERYWHERE"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 400', function () { pm.response.to.have.status(400); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 65. Markets with a non-numeric position is 400",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/markets?lat=norte&lng=-49.25",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"markets"
+							],
+							"query": [
+								{
+									"key": "lat",
+									"value": "norte"
+								},
+								{
+									"key": "lng",
+									"value": "-49.25"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 400', function () { pm.response.to.have.status(400); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 70. Record a finished trip (list, nota and items of the plan)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-trips",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-trips"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"function isoMinutesAgo(minutes) { return new Date(Date.now() - minutes * 60000).toISOString(); }",
+									"function baseTrip(clientTripId) {",
+									"    var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"    var cnpj = pm.collectionVariables.get('e2eRouteMarketCnpj') || '11111111000111';",
+									"    var plannedTotal = routeItems.reduce(function (sum, item) { return sum + item.unitPrice; }, 0);",
+									"    return {",
+									"        clientTripId: clientTripId,",
+									"        shoppingListId: pm.collectionVariables.get('e2eRouteListId') || null,",
+									"        startedAt: isoMinutesAgo(70),",
+									"        finishedAt: isoMinutesAgo(1),",
+									"        outcome: 'COMPLETED',",
+									"        maxDistanceKm: 10,",
+									"        maxStops: 2,",
+									"        minSavingPerStop: 10,",
+									"        plannedTotal: Math.round(plannedTotal * 100) / 100,",
+									"        plannedStopCount: 1,",
+									"        unpricedItemCount: 0,",
+									"        skippedSavingTotal: 0,",
+									"        priceLookupCount: 2,",
+									"        stops: [{",
+									"            marketCnpj: cnpj,",
+									"            marketName: 'Mercado da rota E2E',",
+									"            distanceKm: 1.234,",
+									"            concluded: true,",
+									"            concludedAt: isoMinutesAgo(10),",
+									"            items: routeItems.map(function (item, index) {",
+									"                return {",
+									"                    productId: item.productId,",
+									"                    quantity: 1,",
+									"                    plannedUnitPrice: item.unitPrice,",
+									"                    priceSource: 'LOCAL_HISTORY',",
+									"                    status: index === 0 ? 'IN_CART' : (index === 1 ? 'NOT_FOUND' : 'PENDING'),",
+									"                    plannedStopPosition: 0,",
+									"                    addedDuringTrip: false",
+									"                };",
+									"            })",
+									"        }]",
+									"    };",
+									"}",
+									"",
+									"var clientTripId = 'e2e-route-' + Date.now();",
+									"pm.collectionVariables.set('e2eRouteClientTripId', clientTripId);",
+									"var trip = baseTrip(clientTripId);",
+									"var stop = trip.stops[0];",
+									"stop.receiptId = pm.collectionVariables.get('e2eReceiptId');",
+									"stop.receiptPaidTotal = trip.plannedTotal;",
+									"stop.receiptPredictedTotal = trip.plannedTotal;",
+									"stop.items[0].inReceipt = true;",
+									"stop.items[0].paidUnitPrice = stop.items[0].plannedUnitPrice;",
+									"pm.request.body.raw = JSON.stringify(trip);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteItems')) { pm.test.skip('No identified product on the confirmed receipt — skipping'); return; }",
+									"pm.test('Returns 201', function () { pm.response.to.have.status(201); });",
+									"pm.test('Has the trip id', function () { pm.expect(pm.response.json().id).to.be.a('string'); });",
+									"pm.collectionVariables.set('e2eRouteTripId', pm.response.json().id);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 71. Sending the same trip again returns the stored one",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-trips",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-trips"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"function isoMinutesAgo(minutes) { return new Date(Date.now() - minutes * 60000).toISOString(); }",
+									"function baseTrip(clientTripId) {",
+									"    var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"    var cnpj = pm.collectionVariables.get('e2eRouteMarketCnpj') || '11111111000111';",
+									"    var plannedTotal = routeItems.reduce(function (sum, item) { return sum + item.unitPrice; }, 0);",
+									"    return {",
+									"        clientTripId: clientTripId,",
+									"        shoppingListId: pm.collectionVariables.get('e2eRouteListId') || null,",
+									"        startedAt: isoMinutesAgo(70),",
+									"        finishedAt: isoMinutesAgo(1),",
+									"        outcome: 'COMPLETED',",
+									"        maxDistanceKm: 10,",
+									"        maxStops: 2,",
+									"        minSavingPerStop: 10,",
+									"        plannedTotal: Math.round(plannedTotal * 100) / 100,",
+									"        plannedStopCount: 1,",
+									"        unpricedItemCount: 0,",
+									"        skippedSavingTotal: 0,",
+									"        priceLookupCount: 2,",
+									"        stops: [{",
+									"            marketCnpj: cnpj,",
+									"            marketName: 'Mercado da rota E2E',",
+									"            distanceKm: 1.234,",
+									"            concluded: true,",
+									"            concludedAt: isoMinutesAgo(10),",
+									"            items: routeItems.map(function (item, index) {",
+									"                return {",
+									"                    productId: item.productId,",
+									"                    quantity: 1,",
+									"                    plannedUnitPrice: item.unitPrice,",
+									"                    priceSource: 'LOCAL_HISTORY',",
+									"                    status: index === 0 ? 'IN_CART' : (index === 1 ? 'NOT_FOUND' : 'PENDING'),",
+									"                    plannedStopPosition: 0,",
+									"                    addedDuringTrip: false",
+									"                };",
+									"            })",
+									"        }]",
+									"    };",
+									"}",
+									"",
+									"var trip = baseTrip(pm.collectionVariables.get('e2eRouteClientTripId'));",
+									"trip.outcome = 'ENDED_EARLY';",
+									"trip.plannedTotal = 1;",
+									"pm.request.body.raw = JSON.stringify(trip);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteItems')) { pm.test.skip('No identified product on the confirmed receipt — skipping'); return; }",
+									"pm.test('Returns 201', function () { pm.response.to.have.status(201); });",
+									"pm.test('Same id as the first send (no duplicate)', function () {",
+									"    pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('e2eRouteTripId'));",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 72. Trip ended early: two stops, one not concluded, item added on the way",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-trips",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-trips"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"function isoMinutesAgo(minutes) { return new Date(Date.now() - minutes * 60000).toISOString(); }",
+									"function baseTrip(clientTripId) {",
+									"    var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"    var cnpj = pm.collectionVariables.get('e2eRouteMarketCnpj') || '11111111000111';",
+									"    var plannedTotal = routeItems.reduce(function (sum, item) { return sum + item.unitPrice; }, 0);",
+									"    return {",
+									"        clientTripId: clientTripId,",
+									"        shoppingListId: pm.collectionVariables.get('e2eRouteListId') || null,",
+									"        startedAt: isoMinutesAgo(70),",
+									"        finishedAt: isoMinutesAgo(1),",
+									"        outcome: 'COMPLETED',",
+									"        maxDistanceKm: 10,",
+									"        maxStops: 2,",
+									"        minSavingPerStop: 10,",
+									"        plannedTotal: Math.round(plannedTotal * 100) / 100,",
+									"        plannedStopCount: 1,",
+									"        unpricedItemCount: 0,",
+									"        skippedSavingTotal: 0,",
+									"        priceLookupCount: 2,",
+									"        stops: [{",
+									"            marketCnpj: cnpj,",
+									"            marketName: 'Mercado da rota E2E',",
+									"            distanceKm: 1.234,",
+									"            concluded: true,",
+									"            concludedAt: isoMinutesAgo(10),",
+									"            items: routeItems.map(function (item, index) {",
+									"                return {",
+									"                    productId: item.productId,",
+									"                    quantity: 1,",
+									"                    plannedUnitPrice: item.unitPrice,",
+									"                    priceSource: 'LOCAL_HISTORY',",
+									"                    status: index === 0 ? 'IN_CART' : (index === 1 ? 'NOT_FOUND' : 'PENDING'),",
+									"                    plannedStopPosition: 0,",
+									"                    addedDuringTrip: false",
+									"                };",
+									"            })",
+									"        }]",
+									"    };",
+									"}",
+									"",
+									"var trip = baseTrip('e2e-route-early-' + Date.now());",
+									"trip.outcome = 'ENDED_EARLY';",
+									"trip.plannedStopCount = 2;",
+									"trip.unpricedItemCount = 1;",
+									"trip.skippedSavingTotal = 3.5;",
+									"var first = trip.stops[0];",
+									"first.items.push({ productId: first.items[0].productId, quantity: 0.5, plannedUnitPrice: null, priceSource: null, status: 'IN_CART', plannedStopPosition: null, addedDuringTrip: true });",
+									"trip.stops.push({ marketCnpj: '22222222000122', marketName: null, distanceKm: null, concluded: false, concludedAt: null,",
+									"    items: first.items.slice(0, 1).map(function (item) { return { productId: item.productId, quantity: 1, plannedUnitPrice: item.plannedUnitPrice, priceSource: 'COMMUNITY_INDEX', status: 'PENDING', plannedStopPosition: 1 }; }) });",
+									"pm.request.body.raw = JSON.stringify(trip);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteItems')) { pm.test.skip('No identified product on the confirmed receipt — skipping'); return; }",
+									"pm.test('Returns 201', function () { pm.response.to.have.status(201); });",
+									"pm.test('Is a new trip', function () { pm.expect(pm.response.json().id).to.not.eql(pm.collectionVariables.get('e2eRouteTripId')); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 73. Trip pointing at a list, a nota and a product that are gone is still recorded",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-trips",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-trips"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"function isoMinutesAgo(minutes) { return new Date(Date.now() - minutes * 60000).toISOString(); }",
+									"function baseTrip(clientTripId) {",
+									"    var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"    var cnpj = pm.collectionVariables.get('e2eRouteMarketCnpj') || '11111111000111';",
+									"    var plannedTotal = routeItems.reduce(function (sum, item) { return sum + item.unitPrice; }, 0);",
+									"    return {",
+									"        clientTripId: clientTripId,",
+									"        shoppingListId: pm.collectionVariables.get('e2eRouteListId') || null,",
+									"        startedAt: isoMinutesAgo(70),",
+									"        finishedAt: isoMinutesAgo(1),",
+									"        outcome: 'COMPLETED',",
+									"        maxDistanceKm: 10,",
+									"        maxStops: 2,",
+									"        minSavingPerStop: 10,",
+									"        plannedTotal: Math.round(plannedTotal * 100) / 100,",
+									"        plannedStopCount: 1,",
+									"        unpricedItemCount: 0,",
+									"        skippedSavingTotal: 0,",
+									"        priceLookupCount: 2,",
+									"        stops: [{",
+									"            marketCnpj: cnpj,",
+									"            marketName: 'Mercado da rota E2E',",
+									"            distanceKm: 1.234,",
+									"            concluded: true,",
+									"            concludedAt: isoMinutesAgo(10),",
+									"            items: routeItems.map(function (item, index) {",
+									"                return {",
+									"                    productId: item.productId,",
+									"                    quantity: 1,",
+									"                    plannedUnitPrice: item.unitPrice,",
+									"                    priceSource: 'LOCAL_HISTORY',",
+									"                    status: index === 0 ? 'IN_CART' : (index === 1 ? 'NOT_FOUND' : 'PENDING'),",
+									"                    plannedStopPosition: 0,",
+									"                    addedDuringTrip: false",
+									"                };",
+									"            })",
+									"        }]",
+									"    };",
+									"}",
+									"",
+									"var trip = baseTrip('e2e-route-gone-' + Date.now());",
+									"trip.shoppingListId = '00000000-0000-0000-0000-000000000000';",
+									"trip.stops[0].receiptId = '00000000-0000-0000-0000-000000000000';",
+									"trip.stops[0].receiptPaidTotal = 10;",
+									"trip.stops[0].items.push({ productId: '00000000-0000-0000-0000-000000000000', quantity: 1, plannedUnitPrice: 4.5, priceSource: 'LOCAL_HISTORY', status: 'IN_CART', inReceipt: true, paidUnitPrice: 4.5 });",
+									"pm.request.body.raw = JSON.stringify(trip);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 201', function () { pm.response.to.have.status(201); });",
+									"pm.test('Has the trip id', function () { pm.expect(pm.response.json().id).to.be.a('string'); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 74. Smallest valid trip (required fields only, a stop with no items)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-trips",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-trips"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.request.body.raw = JSON.stringify({",
+									"    clientTripId: 'e2e-route-min-' + Date.now(),",
+									"    startedAt: new Date(Date.now() - 60000).toISOString(),",
+									"    finishedAt: new Date().toISOString(),",
+									"    outcome: 'ENDED_EARLY',",
+									"    plannedTotal: 0,",
+									"    plannedStopCount: 0,",
+									"    stops: [{ marketCnpj: '11111111000111', concluded: false, items: [] }]",
+									"});"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 201', function () { pm.response.to.have.status(201); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 75. Trip at the size limits (64-char id, 20 stops, largest amounts)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-trips",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-trips"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"function isoMinutesAgo(minutes) { return new Date(Date.now() - minutes * 60000).toISOString(); }",
+									"function baseTrip(clientTripId) {",
+									"    var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"    var cnpj = pm.collectionVariables.get('e2eRouteMarketCnpj') || '11111111000111';",
+									"    var plannedTotal = routeItems.reduce(function (sum, item) { return sum + item.unitPrice; }, 0);",
+									"    return {",
+									"        clientTripId: clientTripId,",
+									"        shoppingListId: pm.collectionVariables.get('e2eRouteListId') || null,",
+									"        startedAt: isoMinutesAgo(70),",
+									"        finishedAt: isoMinutesAgo(1),",
+									"        outcome: 'COMPLETED',",
+									"        maxDistanceKm: 10,",
+									"        maxStops: 2,",
+									"        minSavingPerStop: 10,",
+									"        plannedTotal: Math.round(plannedTotal * 100) / 100,",
+									"        plannedStopCount: 1,",
+									"        unpricedItemCount: 0,",
+									"        skippedSavingTotal: 0,",
+									"        priceLookupCount: 2,",
+									"        stops: [{",
+									"            marketCnpj: cnpj,",
+									"            marketName: 'Mercado da rota E2E',",
+									"            distanceKm: 1.234,",
+									"            concluded: true,",
+									"            concludedAt: isoMinutesAgo(10),",
+									"            items: routeItems.map(function (item, index) {",
+									"                return {",
+									"                    productId: item.productId,",
+									"                    quantity: 1,",
+									"                    plannedUnitPrice: item.unitPrice,",
+									"                    priceSource: 'LOCAL_HISTORY',",
+									"                    status: index === 0 ? 'IN_CART' : (index === 1 ? 'NOT_FOUND' : 'PENDING'),",
+									"                    plannedStopPosition: 0,",
+									"                    addedDuringTrip: false",
+									"                };",
+									"            })",
+									"        }]",
+									"    };",
+									"}",
+									"",
+									"var id = 'e2e-route-max-' + Date.now() + '-';",
+									"while (id.length < 64) id += 'x';",
+									"var trip = baseTrip(id);",
+									"var item = trip.stops[0].items[0];",
+									"trip.maxDistanceKm = 99999;",
+									"trip.maxStops = 20;",
+									"trip.minSavingPerStop = 9999999999.99;",
+									"trip.plannedTotal = 9999999999.99;",
+									"trip.skippedSavingTotal = 9999999999.99;",
+									"trip.plannedStopCount = 20;",
+									"trip.unpricedItemCount = 2147483647;",
+									"trip.priceLookupCount = 2147483647;",
+									"trip.stops = [];",
+									"for (var position = 0; position < 20; position++) {",
+									"    trip.stops.push({ marketCnpj: ('00000000000000' + position).slice(-14), marketName: new Array(256).join('m'), distanceKm: 99999.999,",
+									"        concluded: true, concludedAt: new Date().toISOString(), items: item ? [{ productId: item.productId, quantity: 0.001, plannedUnitPrice: 9999999999.99, priceSource: 'COMMUNITY_INDEX', status: 'NOT_FOUND', plannedStopPosition: position }] : [] });",
+									"}",
+									"pm.request.body.raw = JSON.stringify(trip);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 201', function () { pm.response.to.have.status(201); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 75b. A trip that ends before it starts (device clock set back) is still recorded",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-trips",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-trips"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"function isoMinutesAgo(minutes) { return new Date(Date.now() - minutes * 60000).toISOString(); }",
+									"function baseTrip(clientTripId) {",
+									"    var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"    var cnpj = pm.collectionVariables.get('e2eRouteMarketCnpj') || '11111111000111';",
+									"    var plannedTotal = routeItems.reduce(function (sum, item) { return sum + item.unitPrice; }, 0);",
+									"    return {",
+									"        clientTripId: clientTripId,",
+									"        shoppingListId: pm.collectionVariables.get('e2eRouteListId') || null,",
+									"        startedAt: isoMinutesAgo(70),",
+									"        finishedAt: isoMinutesAgo(1),",
+									"        outcome: 'COMPLETED',",
+									"        maxDistanceKm: 10,",
+									"        maxStops: 2,",
+									"        minSavingPerStop: 10,",
+									"        plannedTotal: Math.round(plannedTotal * 100) / 100,",
+									"        plannedStopCount: 1,",
+									"        unpricedItemCount: 0,",
+									"        skippedSavingTotal: 0,",
+									"        priceLookupCount: 2,",
+									"        stops: [{",
+									"            marketCnpj: cnpj,",
+									"            marketName: 'Mercado da rota E2E',",
+									"            distanceKm: 1.234,",
+									"            concluded: true,",
+									"            concludedAt: isoMinutesAgo(10),",
+									"            items: routeItems.map(function (item, index) {",
+									"                return {",
+									"                    productId: item.productId,",
+									"                    quantity: 1,",
+									"                    plannedUnitPrice: item.unitPrice,",
+									"                    priceSource: 'LOCAL_HISTORY',",
+									"                    status: index === 0 ? 'IN_CART' : (index === 1 ? 'NOT_FOUND' : 'PENDING'),",
+									"                    plannedStopPosition: 0,",
+									"                    addedDuringTrip: false",
+									"                };",
+									"            })",
+									"        }]",
+									"    };",
+									"}",
+									"",
+									"var trip = baseTrip('e2e-route-clock-' + Date.now());",
+									"trip.finishedAt = new Date(Date.now() - 3 * 3600000).toISOString();",
+									"pm.request.body.raw = JSON.stringify(trip);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 201', function () { pm.response.to.have.status(201); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 76. Trip rejects invalid input (one case per run of this request)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-trips",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-trips"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						},
+						"description": "Data-driven: re-runs itself once per case (required fields, enums, negative numbers, sizes and amounts beyond what the tables store)."
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"function isoMinutesAgo(minutes) { return new Date(Date.now() - minutes * 60000).toISOString(); }",
+									"function baseTrip(clientTripId) {",
+									"    var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"    var cnpj = pm.collectionVariables.get('e2eRouteMarketCnpj') || '11111111000111';",
+									"    var plannedTotal = routeItems.reduce(function (sum, item) { return sum + item.unitPrice; }, 0);",
+									"    return {",
+									"        clientTripId: clientTripId,",
+									"        shoppingListId: pm.collectionVariables.get('e2eRouteListId') || null,",
+									"        startedAt: isoMinutesAgo(70),",
+									"        finishedAt: isoMinutesAgo(1),",
+									"        outcome: 'COMPLETED',",
+									"        maxDistanceKm: 10,",
+									"        maxStops: 2,",
+									"        minSavingPerStop: 10,",
+									"        plannedTotal: Math.round(plannedTotal * 100) / 100,",
+									"        plannedStopCount: 1,",
+									"        unpricedItemCount: 0,",
+									"        skippedSavingTotal: 0,",
+									"        priceLookupCount: 2,",
+									"        stops: [{",
+									"            marketCnpj: cnpj,",
+									"            marketName: 'Mercado da rota E2E',",
+									"            distanceKm: 1.234,",
+									"            concluded: true,",
+									"            concludedAt: isoMinutesAgo(10),",
+									"            items: routeItems.map(function (item, index) {",
+									"                return {",
+									"                    productId: item.productId,",
+									"                    quantity: 1,",
+									"                    plannedUnitPrice: item.unitPrice,",
+									"                    priceSource: 'LOCAL_HISTORY',",
+									"                    status: index === 0 ? 'IN_CART' : (index === 1 ? 'NOT_FOUND' : 'PENDING'),",
+									"                    plannedStopPosition: 0,",
+									"                    addedDuringTrip: false",
+									"                };",
+									"            })",
+									"        }]",
+									"    };",
+									"}",
+									"",
+									"function base() {",
+									"    var trip = baseTrip('e2e-route-invalid-' + Date.now());",
+									"    if (trip.stops[0].items.length === 0) {",
+									"        trip.stops[0].items.push({ productId: '00000000-0000-0000-0000-000000000000', quantity: 1, plannedUnitPrice: 1, priceSource: 'LOCAL_HISTORY', status: 'IN_CART' });",
+									"    }",
+									"    return trip;",
+									"}",
+									"var cases = [",
+									"    ['clientTripId missing', function (trip) { delete trip.clientTripId; }],",
+									"    ['clientTripId blank', function (trip) { trip.clientTripId = '   '; }],",
+									"    ['clientTripId 65 chars', function (trip) { trip.clientTripId = new Array(66).join('x'); }],",
+									"    ['shoppingListId malformed', function (trip) { trip.shoppingListId = 'not-a-uuid'; }],",
+									"    ['startedAt missing', function (trip) { delete trip.startedAt; }],",
+									"    ['finishedAt missing', function (trip) { delete trip.finishedAt; }],",
+									"    ['startedAt is not a date', function (trip) { trip.startedAt = 'ontem'; }],",
+									"    ['outcome missing', function (trip) { delete trip.outcome; }],",
+									"    ['outcome unknown', function (trip) { trip.outcome = 'ABANDONED'; }],",
+									"    ['maxDistanceKm negative', function (trip) { trip.maxDistanceKm = -1; }],",
+									"    ['maxDistanceKm beyond what is stored', function (trip) { trip.maxDistanceKm = 100000; }],",
+									"    ['maxStops 0', function (trip) { trip.maxStops = 0; }],",
+									"    ['minSavingPerStop negative', function (trip) { trip.minSavingPerStop = -1; }],",
+									"    ['plannedTotal missing', function (trip) { delete trip.plannedTotal; }],",
+									"    ['plannedTotal negative', function (trip) { trip.plannedTotal = -0.01; }],",
+									"    ['plannedTotal beyond what is stored', function (trip) { trip.plannedTotal = 10000000000; }],",
+									"    ['plannedStopCount missing', function (trip) { delete trip.plannedStopCount; }],",
+									"    ['plannedStopCount negative', function (trip) { trip.plannedStopCount = -1; }],",
+									"    ['unpricedItemCount negative', function (trip) { trip.unpricedItemCount = -1; }],",
+									"    ['skippedSavingTotal negative', function (trip) { trip.skippedSavingTotal = -1; }],",
+									"    ['skippedSavingTotal beyond what is stored', function (trip) { trip.skippedSavingTotal = 10000000000; }],",
+									"    ['priceLookupCount negative', function (trip) { trip.priceLookupCount = -1; }],",
+									"    ['priceLookupCount beyond an integer', function (trip) { trip.priceLookupCount = 3000000000; }],",
+									"    ['stops missing', function (trip) { delete trip.stops; }],",
+									"    ['stops empty', function (trip) { trip.stops = []; }],",
+									"    ['21 stops', function (trip) { for (var i = 0; i < 20; i++) trip.stops.push(trip.stops[0]); }],",
+									"    ['stop without marketCnpj', function (trip) { delete trip.stops[0].marketCnpj; }],",
+									"    ['stop with blank marketCnpj', function (trip) { trip.stops[0].marketCnpj = ' '; }],",
+									"    ['stop with 15-char marketCnpj', function (trip) { trip.stops[0].marketCnpj = '123456789012345'; }],",
+									"    ['stop with 256-char marketName', function (trip) { trip.stops[0].marketName = new Array(257).join('m'); }],",
+									"    ['stop with negative distance', function (trip) { trip.stops[0].distanceKm = -0.1; }],",
+									"    ['stop with a distance beyond what is stored', function (trip) { trip.stops[0].distanceKm = 100000; }],",
+									"    ['stop without concluded', function (trip) { delete trip.stops[0].concluded; }],",
+									"    ['stop with malformed receiptId', function (trip) { trip.stops[0].receiptId = 'not-a-uuid'; }],",
+									"    ['stop with a paid total beyond what is stored', function (trip) { trip.stops[0].receiptId = pm.collectionVariables.get('e2eReceiptId') || '00000000-0000-0000-0000-000000000000'; trip.stops[0].receiptPaidTotal = 10000000000; }],",
+									"    ['stop with a negative paid total', function (trip) { trip.stops[0].receiptPaidTotal = -1; }],",
+									"    ['stop with items null', function (trip) { trip.stops[0].items = null; }],",
+									"    ['stop with 501 items', function (trip) { var item = trip.stops[0].items[0]; trip.stops[0].items = []; for (var i = 0; i < 501; i++) trip.stops[0].items.push(item); }],",
+									"    ['item without productId', function (trip) { delete trip.stops[0].items[0].productId; }],",
+									"    ['item with malformed productId', function (trip) { trip.stops[0].items[0].productId = 'not-a-uuid'; }],",
+									"    ['item with quantity 0', function (trip) { trip.stops[0].items[0].quantity = 0; }],",
+									"    ['item without quantity', function (trip) { delete trip.stops[0].items[0].quantity; }],",
+									"    ['item with a quantity beyond what is stored', function (trip) { trip.stops[0].items[0].quantity = 1000000000; }],",
+									"    ['item with negative plannedUnitPrice', function (trip) { trip.stops[0].items[0].plannedUnitPrice = -1; }],",
+									"    ['item with a plannedUnitPrice beyond what is stored', function (trip) { trip.stops[0].items[0].plannedUnitPrice = 10000000000; }],",
+									"    ['item whose price times quantity is beyond what is stored', function (trip) { trip.stops[0].items[0].plannedUnitPrice = 9999999999; trip.stops[0].items[0].quantity = 999999999; }],",
+									"    ['item with negative paidUnitPrice', function (trip) { trip.stops[0].items[0].paidUnitPrice = -1; }],",
+									"    ['item with unknown priceSource', function (trip) { trip.stops[0].items[0].priceSource = 'GUESS'; }],",
+									"    ['item without status', function (trip) { delete trip.stops[0].items[0].status; }],",
+									"    ['item with unknown status', function (trip) { trip.stops[0].items[0].status = 'STOLEN'; }],",
+									"    ['item with negative plannedStopPosition', function (trip) { trip.stops[0].items[0].plannedStopPosition = -1; }],",
+									"    ['body is not JSON', function () { return '{ \"clientTripId\": '; }]",
+									"];",
+									"",
+									"var caseIndex = parseInt(pm.collectionVariables.get('e2eRouteCaseIndex') || '0', 10);",
+									"var current = cases[caseIndex];",
+									"var body = base();",
+									"var replaced = current[1](body);",
+									"pm.request.body.raw = typeof replaced === 'string' ? replaced : JSON.stringify(body);",
+									"pm.variables.set('routeCaseLabel', current[0]);",
+									"pm.variables.set('routeCaseStatus', String(current[2] || 400));",
+									"pm.variables.set('routeCaseCount', String(cases.length));"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var label = pm.variables.get('routeCaseLabel');",
+									"var expected = parseInt(pm.variables.get('routeCaseStatus'), 10);",
+									"pm.test(label + ' -> ' + expected, function () { pm.response.to.have.status(expected); });",
+									"if (expected >= 400) {",
+									"    pm.test(label + ' -> has a message', function () { pm.expect(pm.response.json().message).to.be.a('string'); });",
+									"}",
+									"var nextIndex = parseInt(pm.collectionVariables.get('e2eRouteCaseIndex') || '0', 10) + 1;",
+									"if (nextIndex < parseInt(pm.variables.get('routeCaseCount'), 10)) {",
+									"    pm.collectionVariables.set('e2eRouteCaseIndex', String(nextIndex));",
+									"    postman.setNextRequest(pm.info.requestName);",
+									"} else {",
+									"    pm.collectionVariables.unset('e2eRouteCaseIndex');",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 77. Trips need a session",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-trips",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-trips"
+							]
+						},
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"clientTripId\": \"e2e-route-anon\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Refused without a token (401/403)', function () { pm.expect(pm.response.code).to.be.oneOf([401, 403]); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 80. The nota of the trip compared with nearby markets",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/receipts/{{e2eReceiptId}}/market-comparison",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"receipts",
+								"{{e2eReceiptId}}",
+								"market-comparison"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eReceiptId')) { pm.test.skip('No receipt id — skipping'); return; }",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"var comparison = pm.response.json();",
+									"pm.test('Echoes the nota and has the flags', function () {",
+									"    pm.expect(comparison.receiptId).to.eql(pm.collectionVariables.get('e2eReceiptId'));",
+									"    pm.expect(comparison.available).to.be.a('boolean');",
+									"    pm.expect(comparison.locationKnown).to.be.a('boolean');",
+									"    pm.expect(comparison.comparableItemCount).to.be.at.least(0);",
+									"    pm.expect(comparison.markets).to.be.an('array');",
+									"});",
+									"pm.test('At most three markets, none when unavailable or without a position', function () {",
+									"    pm.expect(comparison.markets.length).to.be.at.most(3);",
+									"    if (!comparison.available || !comparison.locationKnown) pm.expect(comparison.markets.length).to.eql(0);",
+									"});",
+									"pm.test('Each market compares only matched items and the difference adds up', function () {",
+									"    comparison.markets.forEach(function (market) {",
+									"        pm.expect(market.matchedItemCount).to.eql(market.items.length);",
+									"        pm.expect(market.matchedItemCount).to.be.within(1, comparison.comparableItemCount);",
+									"        pm.expect(Math.abs(market.difference - (market.alternativeTotal - market.paidTotal))).to.be.below(0.011);",
+									"        var paid = market.items.reduce(function (sum, item) { return sum + item.paidTotal; }, 0);",
+									"        pm.expect(Math.abs(market.paidTotal - paid)).to.be.below(0.011);",
+									"    });",
+									"});",
+									"pm.collectionVariables.set('e2eRouteComparison', pm.response.text());"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 81. Reading the comparison again gives the same snapshot",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/receipts/{{e2eReceiptId}}/market-comparison",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"receipts",
+								"{{e2eReceiptId}}",
+								"market-comparison"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eReceiptId')) { pm.test.skip('No receipt id — skipping'); return; }",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Same content as the first read', function () {",
+									"    pm.expect(pm.response.json()).to.eql(JSON.parse(pm.collectionVariables.get('e2eRouteComparison')));",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 82. Comparison of a nota that does not exist is 404",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/receipts/00000000-0000-0000-0000-000000000000/market-comparison",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"receipts",
+								"00000000-0000-0000-0000-000000000000",
+								"market-comparison"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 404', function () { pm.response.to.have.status(404); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 83. Comparison with a malformed nota id is 400",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/receipts/not-a-uuid/market-comparison",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"receipts",
+								"not-a-uuid",
+								"market-comparison"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 400', function () { pm.response.to.have.status(400); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 84. Comparison needs a session",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/receipts/{{e2eReceiptId}}/market-comparison",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"receipts",
+								"{{e2eReceiptId}}",
+								"market-comparison"
+							]
+						},
+						"auth": {
+							"type": "noauth"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Refused without a token (401/403)', function () { pm.expect(pm.response.code).to.be.oneOf([401, 403]); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 90. Register a second household",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/register",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"register"
+							]
+						},
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var mailbox = pm.collectionVariables.get('testMailbox') || 'alexandre@economizaai.app'; var email = mailbox.replace('@', '+e2e-route-' + Date.now() + '@');",
+									"pm.request.body.raw = JSON.stringify({ name: 'E2E Route Neighbour', email: email, password: 'password123', acceptedTermsVersion: '1.1', acceptedPrivacyVersion: '1.1' });"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns 201', function () { pm.response.to.have.status(201); });",
+									"pm.collectionVariables.set('e2eRouteOtherToken', pm.response.json().token);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 91. Another household cannot read the list",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}"
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{e2eRouteOtherToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteOtherToken')) { pm.test.skip('No second household — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 404 (the list does not exist for them)', function () { pm.response.to.have.status(404); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 92. Another household cannot rename the list",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}"
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{e2eRouteOtherToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Invadida\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteOtherToken')) { pm.test.skip('No second household — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 404 (the list does not exist for them)', function () { pm.response.to.have.status(404); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 93. Another household cannot add to the list",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}/items",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}",
+								"items"
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{e2eRouteOtherToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"freeText\": \"intruso\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteOtherToken')) { pm.test.skip('No second household — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 404 (the list does not exist for them)', function () { pm.response.to.have.status(404); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 94. Another household cannot check an item off",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}/items/{{e2eRouteItemId}}/toggle",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}",
+								"items",
+								"{{e2eRouteItemId}}",
+								"toggle"
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{e2eRouteOtherToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteOtherToken')) { pm.test.skip('No second household — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 404 (the list does not exist for them)', function () { pm.response.to.have.status(404); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 95. Another household cannot remove an item",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}/items/{{e2eRouteItemId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}",
+								"items",
+								"{{e2eRouteItemId}}"
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{e2eRouteOtherToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteOtherToken')) { pm.test.skip('No second household — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 404 (the list does not exist for them)', function () { pm.response.to.have.status(404); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 96. Another household cannot delete the list",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}"
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{e2eRouteOtherToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteOtherToken')) { pm.test.skip('No second household — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 404 (the list does not exist for them)', function () { pm.response.to.have.status(404); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 97. Another household cannot compare our nota",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/receipts/{{e2eReceiptId}}/market-comparison",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"receipts",
+								"{{e2eReceiptId}}",
+								"market-comparison"
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{e2eRouteOtherToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteOtherToken')) { pm.test.skip('No second household — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eReceiptId')) { pm.test.skip('No receipt id — skipping'); return; }",
+									"pm.test('Returns 404', function () { pm.response.to.have.status(404); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 98. Another household never gets our prices as its own history",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/optimize",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"optimize"
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{e2eRouteOtherToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"var oneEach = routeItems.map(function (item) { return { productId: item.productId, quantity: 1 }; });",
+									"pm.request.body.raw = JSON.stringify({ items: oneEach });"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteOtherToken')) { pm.test.skip('No second household — skipping'); return; }",
+									"if (!pm.collectionVariables.get('e2eRouteItems')) { pm.test.skip('No identified product on the confirmed receipt — skipping'); return; }",
+									"",
+									"function near(a, b) { return Math.abs(Number(a) - Number(b)) < 0.011; }",
+									"function checkPlan(plan, requestedCount) {",
+									"    pm.test('Plan has marketPlans, unpriced, skippedSavings and estimatedTotal', function () {",
+									"        pm.expect(plan.marketPlans).to.be.an('array');",
+									"        pm.expect(plan.unpriced).to.be.an('array');",
+									"        pm.expect(plan.skippedSavings).to.be.an('array');",
+									"        pm.expect(plan.estimatedTotal).to.be.a('number');",
+									"    });",
+									"    pm.test('Every requested item is in exactly one stop or in unpriced', function () {",
+									"        var planned = plan.marketPlans.reduce(function (sum, stop) { return sum + stop.items.length; }, 0);",
+									"        pm.expect(planned + plan.unpriced.length).to.eql(requestedCount);",
+									"    });",
+									"    pm.test('Stops are consistent (itemCount, subtotal, item subtotal, price source)', function () {",
+									"        plan.marketPlans.forEach(function (stop) {",
+									"            pm.expect(stop.marketCnpj).to.be.a('string');",
+									"            pm.expect(stop.marketFriendlyName).to.be.a('string');",
+									"            pm.expect(stop.items.length).to.be.at.least(1);",
+									"            pm.expect(stop.itemCount).to.eql(stop.items.length);",
+									"            var sum = 0;",
+									"            stop.items.forEach(function (item) {",
+									"                pm.expect(['LOCAL_HISTORY', 'COMMUNITY_INDEX']).to.include(item.priceSource);",
+									"                pm.expect(item.estimatedUnitPrice).to.be.above(0);",
+									"                pm.expect(near(item.estimatedSubtotal, Math.round(item.estimatedUnitPrice * item.quantity * 100) / 100)).to.eql(true);",
+									"                sum += item.estimatedSubtotal;",
+									"            });",
+									"            pm.expect(near(stop.subtotal, sum)).to.eql(true);",
+									"        });",
+									"    });",
+									"    pm.test('estimatedTotal is the sum of the stops', function () {",
+									"        var sum = plan.marketPlans.reduce(function (total, stop) { return total + stop.subtotal; }, 0);",
+									"        pm.expect(near(plan.estimatedTotal, sum)).to.eql(true);",
+									"    });",
+									"    pm.test('Unpriced items carry a reason and skipped savings are positive', function () {",
+									"        plan.unpriced.forEach(function (item) { pm.expect(item.reason).to.be.a('string'); });",
+									"        plan.skippedSavings.forEach(function (skipped) { pm.expect(skipped.saving).to.be.above(0); });",
+									"    });",
+									"}",
+									"var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"var plan = pm.response.json();",
+									"checkPlan(plan, routeItems.length);",
+									"pm.test('No price comes from a purchase history it does not have', function () {",
+									"    plan.marketPlans.forEach(function (stop) {",
+									"        stop.items.forEach(function (item) { pm.expect(item.priceSource).to.eql('COMMUNITY_INDEX'); });",
+									"    });",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 99. A trip naming our list and nota is recorded for them without linking ours",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-trips",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-trips"
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{e2eRouteOtherToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"function isoMinutesAgo(minutes) { return new Date(Date.now() - minutes * 60000).toISOString(); }",
+									"function baseTrip(clientTripId) {",
+									"    var routeItems = JSON.parse(pm.collectionVariables.get('e2eRouteItems') || '[]');",
+									"    var cnpj = pm.collectionVariables.get('e2eRouteMarketCnpj') || '11111111000111';",
+									"    var plannedTotal = routeItems.reduce(function (sum, item) { return sum + item.unitPrice; }, 0);",
+									"    return {",
+									"        clientTripId: clientTripId,",
+									"        shoppingListId: pm.collectionVariables.get('e2eRouteListId') || null,",
+									"        startedAt: isoMinutesAgo(70),",
+									"        finishedAt: isoMinutesAgo(1),",
+									"        outcome: 'COMPLETED',",
+									"        maxDistanceKm: 10,",
+									"        maxStops: 2,",
+									"        minSavingPerStop: 10,",
+									"        plannedTotal: Math.round(plannedTotal * 100) / 100,",
+									"        plannedStopCount: 1,",
+									"        unpricedItemCount: 0,",
+									"        skippedSavingTotal: 0,",
+									"        priceLookupCount: 2,",
+									"        stops: [{",
+									"            marketCnpj: cnpj,",
+									"            marketName: 'Mercado da rota E2E',",
+									"            distanceKm: 1.234,",
+									"            concluded: true,",
+									"            concludedAt: isoMinutesAgo(10),",
+									"            items: routeItems.map(function (item, index) {",
+									"                return {",
+									"                    productId: item.productId,",
+									"                    quantity: 1,",
+									"                    plannedUnitPrice: item.unitPrice,",
+									"                    priceSource: 'LOCAL_HISTORY',",
+									"                    status: index === 0 ? 'IN_CART' : (index === 1 ? 'NOT_FOUND' : 'PENDING'),",
+									"                    plannedStopPosition: 0,",
+									"                    addedDuringTrip: false",
+									"                };",
+									"            })",
+									"        }]",
+									"    };",
+									"}",
+									"",
+									"var trip = baseTrip(pm.collectionVariables.get('e2eRouteClientTripId') || ('e2e-route-other-' + Date.now()));",
+									"trip.stops[0].receiptId = pm.collectionVariables.get('e2eReceiptId') || null;",
+									"trip.stops[0].receiptPaidTotal = 1;",
+									"pm.request.body.raw = JSON.stringify(trip);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteOtherToken')) { pm.test.skip('No second household — skipping'); return; }",
+									"pm.test('Returns 201', function () { pm.response.to.have.status(201); });",
+									"pm.test('Is their own trip, not ours', function () { pm.expect(pm.response.json().id).to.not.eql(pm.collectionVariables.get('e2eRouteTripId')); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 100. Our list is intact after all that",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"var list = pm.response.json();",
+									"pm.test('Same name, item still there and unchecked', function () {",
+									"    pm.expect(list.name).to.eql('Rota E2E (renomeada)');",
+									"    var item = list.items.find(function (candidate) { return candidate.id === pm.collectionVariables.get('e2eRouteItemId'); });",
+									"    pm.expect(item.checked).to.eql(false);",
+									"    pm.expect(list.items.some(function (candidate) { return candidate.freeText === 'intruso'; })).to.eql(false);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 101. Delete the second household",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/me",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"me"
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{e2eRouteOtherToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteOtherToken')) { pm.test.skip('No second household — skipping'); return; }",
+									"pm.test('Returns 200', function () { pm.response.to.have.status(200); });",
+									"pm.collectionVariables.unset('e2eRouteOtherToken');"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 102. Delete the route list",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 204', function () { pm.response.to.have.status(204); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "ROUTE 103. The deleted list is gone",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/shopping-lists/{{e2eRouteListId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"shopping-lists",
+								"{{e2eRouteListId}}"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('e2eRouteListId')) { pm.test.skip('No route list — skipping'); return; }",
+									"pm.test('Returns 404', function () { pm.response.to.have.status(404); });",
+									"['e2eRouteItems', 'e2eRouteBoughtIds', 'e2eRouteMarketCnpj', 'e2eRouteMarketLat', 'e2eRouteMarketLng', 'e2eRouteListId', 'e2eRouteItemId',",
+									" 'e2eRouteExtraItemId', 'e2eRouteSecondListId', 'e2eRouteOtherProductId', 'e2eRouteClientTripId', 'e2eRouteTripId',",
+									" 'e2eRouteCaseIndex', 'e2eRouteComparison'].forEach(function (name) { pm.collectionVariables.unset(name); });"
 								]
 							}
 						}

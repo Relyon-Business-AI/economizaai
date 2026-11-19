@@ -2,6 +2,7 @@ package com.relyon.economizaai.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -22,6 +23,6 @@ public record CreateShoppingListRequest(
             @Schema(description = "Free-text entry when there's no canonical product yet.", example = "papel higiênico")
             @Size(max = 255) String freeText,
             @Schema(description = "Quantity (defaults to 1).")
-            @DecimalMin(value = "0.001") BigDecimal quantity
+            @DecimalMin(value = "0.001") @DecimalMax(StorageLimits.QUANTITY) BigDecimal quantity
     ) {}
 }

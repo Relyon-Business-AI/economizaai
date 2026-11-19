@@ -15,6 +15,7 @@ import com.relyon.economizaai.service.geo.MerchantSupportGate.SupportStatus;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
+import com.relyon.economizaai.time.BrazilClock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -213,14 +214,18 @@ public class WatchedMarketService {
     }
 
     /**
-     * Set each market's community purchase count (the number on the map pin). Only stores where
-     * at least K households scanned a nota get a count; the rest stay null.
+     * Set each market's community purchase count (the number on the map pin). Counts the notas
+     * bought inside the community price window, the same one the store's price screen shows, so
+     * a pin never announces purchases whose prices are no longer shown. Only stores where at
+     * least K households scanned a nota in that window get a count; the rest stay null.
      */
     private List<MarketResponse> applyCommunityPurchaseCounts(List<MarketResponse> rows) {
         if (rows.isEmpty()) return rows;
         var minHouseholds = properties.getCollaborative().getMinHouseholdsForPublic();
+        var windowStart = BrazilClock.today().minusDays(properties.getCollaborative().getLookbackDays()).atStartOfDay();
         var publicCounts = receiptRepository
-                .countConfirmedPurchasesByCnpjIn(rows.stream().map(MarketResponse::cnpj).toList()).stream()
+                .countConfirmedPurchasesByCnpjInSince(rows.stream().map(MarketResponse::cnpj).toList(), windowStart)
+                .stream()
                 .filter(purchases -> purchases.getHouseholdCount() >= minHouseholds)
                 .collect(Collectors.toMap(MarketPurchaseCount::getCnpj, MarketPurchaseCount::getReceiptCount));
         return rows.stream()
