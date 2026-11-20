@@ -5,16 +5,22 @@ import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -78,5 +84,26 @@ class PortalRecoverySweeperTest {
         assertThat(expired.getStatus()).isEqualTo(ReceiptStatus.FAILED_PARSE);
         assertThat(expired.getParseErrorReason()).startsWith("receipt.portal.unavailable.expired");
         assertThat(expired.isResyncingFromContingency()).isFalse();
+    }
+
+    @Test
+    void theGiveUpDeadline_followsTheConfiguredWaitingTime() {
+        when(receiptRepository.findByStatusAndCreatedAtBefore(eq(ReceiptStatus.PORTAL_PENDING), any(), any()))
+                .thenReturn(List.of());
+        when(receiptRepository.findByStatusAndCreatedAtAfter(eq(ReceiptStatus.PORTAL_PENDING), any(), any()))
+                .thenReturn(List.of());
+        var sweeper = sweeper();
+        var cutoff = ArgumentCaptor.forClass(LocalDateTime.class);
+
+        sweeper.resync();
+        sweeper.setWindowHours(48);
+        sweeper.resync();
+
+        verify(receiptRepository, times(2))
+                .findByStatusAndCreatedAtBefore(eq(ReceiptStatus.PORTAL_PENDING), cutoff.capture(), any());
+        var fourteenDaysAgo = LocalDateTime.now().minusHours(336);
+        var twoDaysAgo = LocalDateTime.now().minusHours(48);
+        assertThat(cutoff.getAllValues().get(0)).isCloseTo(fourteenDaysAgo, within(1, ChronoUnit.MINUTES));
+        assertThat(cutoff.getAllValues().get(1)).isCloseTo(twoDaysAgo, within(1, ChronoUnit.MINUTES));
     }
 }

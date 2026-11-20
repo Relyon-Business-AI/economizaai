@@ -20,7 +20,6 @@ import com.relyon.economizaai.service.extraction.ProductExtractor;
 import com.relyon.economizaai.service.paidapi.PaidApiGuardService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -61,8 +60,7 @@ public class ReceiptAiCategorySuggestionService {
     private final PaidApiGuardService paidApiGuard;
 
     /** Mesmo piso do sweep de admin pra PREENCHER subcategoria vazia (ação SET). */
-    @Value("${economizaai.ai.subcategory-suggestion.set-min-confidence:0.55}")
-    private double setMinConfidence = 0.55;
+    private final AiCategoryConfidence confidence;
 
     public boolean isEnabled() {
         return classifier.isEnabled();
@@ -176,7 +174,7 @@ public class ReceiptAiCategorySuggestionService {
         for (var suggestion : suggestions) {
             var item = byId.get(suggestion.productId()); // o id ecoado é o do ITEM neste fluxo
             if (item == null) continue;
-            if (suggestion.confidence() < setMinConfidence) continue;
+            if (suggestion.confidence() < confidence.getSetMinConfidence()) continue;
             var extraction = extractionByItem.get(item.getId());
             // A IA nunca contradiz o determinístico: com categoria do dicionário presente, só
             // aceita subcategoria DENTRO dela.

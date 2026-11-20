@@ -19,6 +19,8 @@ public enum SettingSection {
             "Tetos diários das APIs pagas, por usuário e por serviço."),
     RECEIPTS("Notas e estados",
             "Estados atendidos, prazos de reprocessamento e confirmação automática."),
+    CATEGORIZATION("Categorização de produtos",
+            "Quão certa a IA precisa estar e quando o sistema aprende uma categoria sozinho."),
     APP("Aplicativo",
             "Versão mínima, avaliação na loja e fotos por nota."),
     MERCHANT("Comerciantes",

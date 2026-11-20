@@ -51,6 +51,21 @@ class RateLimitRegistryTest {
     }
 
     @Test
+    void policyWithAChangedLimit_getsAFreshBucketWithTheNewLimit() {
+        var key = "user:someone@economizaai.app";
+        var exhausted = registry.bucketFor(new RateLimitPolicy("submit", 2, Duration.ofHours(1)), key);
+        assertTrue(exhausted.tryConsume(2));
+        assertFalse(exhausted.tryConsume(1));
+
+        var raised = registry.bucketFor(new RateLimitPolicy("submit", 3, Duration.ofHours(1)), key);
+
+        assertNotSame(exhausted, raised);
+        assertTrue(raised.tryConsume(3), "the new limit is available at once");
+        assertFalse(raised.tryConsume(1));
+        assertSame(raised, registry.bucketFor(new RateLimitPolicy("submit", 3, Duration.ofHours(1)), key));
+    }
+
+    @Test
     void newBucket_carriesPolicyCapacity() {
         var policy = new RateLimitPolicy("auth", 3, Duration.ofMinutes(1));
         var bucket = registry.bucketFor(policy, "ip:1.2.3.4");

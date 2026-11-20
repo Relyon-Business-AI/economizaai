@@ -11,7 +11,9 @@ import com.relyon.economizaai.repository.LearnedDictionaryRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -70,11 +72,13 @@ public class ConsensusPromotionService {
     // Default 3 (was 2): two colluding/coinciding households were enough to
     // graduate a product to GLOBAL truth — too permissive for an irreversible
     // promotion. 3 matches the app's K-anonymity floor.
+    @Getter @Setter
     @Value("${economizaai.categorizer.consensus.min-households:3}")
-    private int minHouseholds;
+    private volatile int minHouseholds;
 
+    @Getter @Setter
     @Value("${economizaai.categorizer.consensus.min-token-products:2}")
-    private int minTokenProducts;
+    private volatile int minTokenProducts;
 
     @Scheduled(fixedDelayString = "${economizaai.categorizer.consensus.interval-ms:86400000}",
                initialDelayString = "${economizaai.categorizer.consensus.initial-delay-ms:86400000}")
