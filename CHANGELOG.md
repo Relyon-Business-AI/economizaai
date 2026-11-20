@@ -1,5 +1,11 @@
 # economizai — what's new
 
+## 2026-11-20 — Admin: campos que funcionam em conjunto vêm agrupados
+
+- Cada item de `GET /admin/settings` (e a resposta de `PUT`/`DELETE`) ganha `group`: `null` ou
+  `{ key, title, explanation, position }`. Itens com o mesmo `group.key` formam uma regra só; o painel
+  desenha como um bloco, com o título e a explicação de como os campos se combinam, na ordem de `position`.
+
 ## 2026-11-20 — Nenhuma regra de negócio fixa no código: 69 configurações novas no admin
 
 - **`GET /admin/settings`** passa de 98 para 167 itens e ganha a seção **Categorização de produtos**.
