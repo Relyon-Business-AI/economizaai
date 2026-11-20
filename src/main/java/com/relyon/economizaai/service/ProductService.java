@@ -1,5 +1,8 @@
 package com.relyon.economizaai.service;
 
+import org.springframework.beans.factory.annotation.Value;
+import lombok.Setter;
+import lombok.Getter;
 import com.relyon.economizaai.dto.request.CreateAliasRequest;
 import com.relyon.economizaai.dto.request.CreateProductRequest;
 import com.relyon.economizaai.dto.request.UpdateProductRequest;
@@ -52,7 +55,10 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ProductService {
 
-    private static final double PRODUCT_SEARCH_NEARBY_RADIUS_KM = 20.0;
+    /** "Observed near you" radius of the product search — the same "perto de você" radius used everywhere else. */
+    @Getter @Setter
+    @Value("${economizaai.collaborative.best-markets-nearby-radius-km:20}")
+    private volatile double nearbyRadiusKm = 20.0;
     private static final int MIN_CATALOG_QUERY_LENGTH = 2;
     private static final int MAX_SEARCH_CANDIDATES = 200;
 
@@ -91,7 +97,7 @@ public class ProductService {
         }
 
         var productIds = products.stream().map(Product::getId).toList();
-        var ranking = ProductSearchRanking.from(productIds, householdId, viewerLocationService.resolve(user),
+        var ranking = ProductSearchRanking.from(productIds, householdId, viewerLocationService.resolve(user), nearbyRadiusKm,
                 receiptItemRepository, priceObservationRepository);
         var friendlyByProduct = householdProductAliasService.resolvedNamesFor(householdId, productIds);
         var sorted = products.stream()
@@ -345,6 +351,7 @@ public class ProductService {
                                         Set<UUID> observedInHouseholdCities) {
 
         private static ProductSearchRanking from(List<UUID> productIds, UUID householdId, ViewerLocation viewerLocation,
+                                                 double nearbyRadiusKm,
                                                  ReceiptItemRepository receiptItemRepository,
                                                  PriceObservationRepository priceObservationRepository) {
             var bought = Set.copyOf(
@@ -353,12 +360,13 @@ public class ProductService {
                     priceObservationRepository.findProductIdsObservedAtVisitedMarkets(productIds, householdId));
             var householdCities = Set.copyOf(
                     priceObservationRepository.findProductIdsObservedInHouseholdCities(productIds, householdId));
-            var nearby = nearbyProductIds(productIds, viewerLocation, priceObservationRepository);
+            var nearby = nearbyProductIds(productIds, viewerLocation, nearbyRadiusKm, priceObservationRepository);
             return new ProductSearchRanking(bought, visitedMarkets, nearby, householdCities);
         }
 
         /** Explicit GPS/CEP or, without one, the centre inferred from the household's receipts. */
         private static Set<UUID> nearbyProductIds(List<UUID> productIds, ViewerLocation viewerLocation,
+                                                  double nearbyRadiusKm,
                                                   PriceObservationRepository priceObservationRepository) {
             if (!viewerLocation.hasCoordinates()) {
                 return Set.of();
@@ -366,7 +374,7 @@ public class ProductService {
             return priceObservationRepository.findProductMarketCoordinates(productIds).stream()
                     .filter(row -> DistanceCalculator.kmBetween(
                             viewerLocation.latitude(), viewerLocation.longitude(),
-                            row.getLatitude(), row.getLongitude()) <= PRODUCT_SEARCH_NEARBY_RADIUS_KM)
+                            row.getLatitude(), row.getLongitude()) <= nearbyRadiusKm)
                     .map(PriceObservationRepository.ProductMarketCoordinates::getProductId)
                     .collect(Collectors.toSet());
         }

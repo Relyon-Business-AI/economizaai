@@ -37,17 +37,23 @@ public class PausedStateRecoveryProbe {
     private final OperationalAlertService alertService;
     private final ReceiptRepository receiptRepository;
     private final GenericQrPortalAdapter qrPortalAdapter;
-    private final Set<UnidadeFederativa> watchedUfs;
+    private volatile Set<UnidadeFederativa> watchedUfs;
     // UFs já detectadas de volta (e já alertadas) — para de sondar até o próximo restart.
     private final Set<UnidadeFederativa> alreadyRecovered = ConcurrentHashMap.newKeySet();
 
     public PausedStateRecoveryProbe(InfosimplesService infosimples, OperationalAlertService alertService,
                                     ReceiptRepository receiptRepository, GenericQrPortalAdapter qrPortalAdapter,
-                                    @Value("${economizaai.ingestion.paused-state-probe.ufs:SE}") String ufsCsv) {
+                                    @Value("${economizaai.ingestion.paused-state-probe.ufs:SE,TO}") String ufsCsv) {
         this.infosimples = infosimples;
         this.alertService = alertService;
         this.receiptRepository = receiptRepository;
         this.qrPortalAdapter = qrPortalAdapter;
+        this.watchedUfs = parseUfs(ufsCsv);
+        log.info("paused_state.probe watched={}", watchedUfs);
+    }
+
+    /** The states to keep probing (comma-separated UF codes). */
+    public void changeWatchedUfs(String ufsCsv) {
         this.watchedUfs = parseUfs(ufsCsv);
         log.info("paused_state.probe watched={}", watchedUfs);
     }

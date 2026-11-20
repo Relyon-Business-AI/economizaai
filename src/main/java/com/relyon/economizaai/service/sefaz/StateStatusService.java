@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.sefaz;
 
+import java.util.stream.Collectors;
 import com.relyon.economizaai.dto.response.StateStatusResponse;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.StateHealthStatus;
@@ -51,7 +52,7 @@ public class StateStatusService {
     private final SefazIngestionService sefazIngestionService;
     private final ReceiptRepository receiptRepository;
     private final StateIngestionAttemptRepository attemptRepository;
-    private final Set<UnidadeFederativa> pausedStates;
+    private volatile Set<UnidadeFederativa> pausedStates;
     private final int windowHours;
     private final int minFailures;
     private final int regressionMinFailures;
@@ -63,7 +64,7 @@ public class StateStatusService {
             SefazIngestionService sefazIngestionService,
             ReceiptRepository receiptRepository,
             StateIngestionAttemptRepository attemptRepository,
-            @Value("${economizaai.ingestion.paused-state-probe.ufs:SE}") String pausedStatesCsv,
+            @Value("${economizaai.ingestion.paused-state-probe.ufs:SE,TO}") String pausedStatesCsv,
             @Value("${economizaai.ingestion.state-status.window-hours:24}") int windowHours,
             @Value("${economizaai.ingestion.state-status.min-failures:3}") int minFailures,
             @Value("${economizaai.ingestion.sefaz.regression.min-failures:5}") int regressionMinFailures,
@@ -76,6 +77,16 @@ public class StateStatusService {
         this.minFailures = Math.max(1, minFailures);
         this.regressionMinFailures = Math.max(1, regressionMinFailures);
         this.cacheSeconds = Math.max(0, cacheSeconds);
+    }
+
+    public String pausedStatesCsv() {
+        return pausedStates.stream().sorted().map(UnidadeFederativa::name).collect(Collectors.joining(","));
+    }
+
+    /** The states shown as paused (comma-separated UF codes); the cached answer is dropped. */
+    public void changePausedStates(String pausedStatesCsv) {
+        this.pausedStates = parseStates(pausedStatesCsv);
+        this.cached = null;
     }
 
     /** Test seam — drives the cache expiry deterministically. */

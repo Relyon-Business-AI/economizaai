@@ -1,5 +1,7 @@
 package com.relyon.economizaai.service.ai;
 
+import lombok.Setter;
+import lombok.Getter;
 import com.relyon.economizaai.model.AiUsageLog;
 import com.relyon.economizaai.model.enums.AiActivity;
 import com.relyon.economizaai.model.enums.AiModelTier;
@@ -55,8 +57,9 @@ public class AiGateway {
     private final AiProviderSettingsService providerSettings;
     private final AiUsageLogRepository usageRepository;
 
+    @Getter @Setter
     @Value("${economizaai.ai.daily-request-cap:3000}")
-    private int dailyRequestCap;
+    private volatile int dailyRequestCap;
 
     @Value("${economizaai.ai.budget-usd:0}")
     private double budgetUsd;

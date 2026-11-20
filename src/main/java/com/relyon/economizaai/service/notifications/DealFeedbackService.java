@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.notifications;
 
+import lombok.Setter;
 import com.relyon.economizaai.model.NotificationEvent;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.NotificationEventType;
@@ -43,14 +44,17 @@ public class DealFeedbackService {
 
     private final NotificationEventRepository eventRepository;
 
+    @Setter
     @Value("${economizaai.notifications.relevance.mode:SHADOW}")
-    private RelevanceMode mode;
+    private volatile RelevanceMode mode;
 
+    @Setter
     @Value("${economizaai.notifications.relevance.dismissed-days:14}")
-    private int dismissedDays;
+    private volatile int dismissedDays;
 
+    @Setter
     @Value("${economizaai.notifications.relevance.muted-days:180}")
-    private int mutedDays;
+    private volatile int mutedDays;
 
     public RelevanceMode mode() {
         return mode;

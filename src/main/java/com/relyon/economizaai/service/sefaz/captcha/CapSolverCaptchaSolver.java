@@ -31,7 +31,6 @@ import java.util.Map;
 @ConditionalOnProperty(prefix = "economizaai.captcha", name = "provider", havingValue = "capsolver")
 public class CapSolverCaptchaSolver implements CaptchaSolver {
 
-    private static final String API_BASE = "https://api.capsolver.com";
     private static final int POLL_INTERVAL_MS = 3_000;
     private static final int MAX_POLL_ATTEMPTS = 40; // 40 × 3 s = 2 min max per attempt
     private static final int MAX_RETRIES = 3;
@@ -46,13 +45,14 @@ public class CapSolverCaptchaSolver implements CaptchaSolver {
 
     public CapSolverCaptchaSolver(
             RestClient.Builder builder,
-            @Value("${economizaai.captcha.api-key}") String apiKey) {
+            @Value("${economizaai.captcha.api-key}") String apiKey,
+            @Value("${economizaai.captcha.capsolver-base-url:https://api.capsolver.com}") String apiBaseUrl) {
         this.apiKey = apiKey;
         // Without explicit timeouts a CapSolver brownout hangs the ingest thread forever.
         var requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(CONNECT_TIMEOUT_MS);
         requestFactory.setReadTimeout(READ_TIMEOUT_MS);
-        this.restClient = builder.baseUrl(API_BASE).requestFactory(requestFactory).build();
+        this.restClient = builder.baseUrl(apiBaseUrl).requestFactory(requestFactory).build();
         log.info("captcha.solver provider=capsolver configured=true");
     }
 

@@ -1,5 +1,9 @@
 package com.relyon.economizaai.controller;
 
+import java.util.Map;
+import static org.mockito.Mockito.when;
+import com.relyon.economizaai.config.AppConfigProperties;
+import com.relyon.economizaai.service.settings.RuntimeSettings;
 import com.relyon.economizaai.config.SecurityConfig;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.AppConfigService;
@@ -23,7 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * iosUrl, message.
  */
 @WebMvcTest(AppConfigController.class)
-@Import({SecurityConfig.class, AppConfigService.class})
+@Import({SecurityConfig.class, AppConfigService.class, AppConfigProperties.class})
 @TestPropertySource(properties = {
         "economizaai.app-config.min-version=1.4.0",
         "economizaai.app-config.android-url=market://details?id=economiza.ai",
@@ -37,6 +41,7 @@ class AppConfigControllerConfiguredTest {
     @MockitoBean private JwtService jwtService;
     @MockitoBean private UserDetailsService userDetailsService;
     @MockitoBean private LocalizedMessageService localizedMessageService;
+    @MockitoBean private RuntimeSettings runtimeSettings;
 
     @Test
     void appConfig_exposesConfiguredValuesWithTheGistFieldNames() throws Exception {
@@ -46,5 +51,15 @@ class AppConfigControllerConfiguredTest {
                 .andExpect(jsonPath("$.androidUrl").value("market://details?id=economiza.ai"))
                 .andExpect(jsonPath("$.iosUrl").value("itms-apps://apps.apple.com/app/id0000000000"))
                 .andExpect(jsonPath("$.message").value("Atualize o app para continuar."));
+    }
+
+    @Test
+    void appConfig_carriesTheBusinessSettingsTheAppsUse() throws Exception {
+        when(runtimeSettings.publishedToApps()).thenReturn(Map.of("priceWindowDays", 90L, "nearbyRadiusKm", 20));
+
+        mockMvc.perform(get("/api/v1/app-config"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.settings.priceWindowDays").value(90))
+                .andExpect(jsonPath("$.settings.nearbyRadiusKm").value(20));
     }
 }

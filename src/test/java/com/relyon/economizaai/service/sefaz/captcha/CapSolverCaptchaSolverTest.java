@@ -53,7 +53,7 @@ class CapSolverCaptchaSolverTest {
         private final List<Map<String, Object>> bodies = new ArrayList<>();
 
         TestCapSolver(List<Map<String, Object>> responses) {
-            super(RestClient.builder(), "api-key");
+            super(RestClient.builder(), "api-key", "https://api.capsolver.com");
             this.responses = new ArrayDeque<>(responses);
         }
 

@@ -328,7 +328,7 @@ public class MarketLocationService {
      * categorization carry on normally without business-type context. When a
      * market resolves to PHARMACY, OTHER products bought there are backfilled.
      */
-    @Scheduled(fixedDelayString = "${economizaai.merchant.classify.interval-ms:3600000}",
+    @Scheduled(fixedDelayString = "${economizaai.merchant.classify.interval-ms:600000}",
                initialDelayString = "${economizaai.merchant.classify.initial-delay-ms:45000}")
     public void scheduledSegmentClassification() {
         classifyPendingSegments(leastAttemptedFirst(classifyMaxPerRun, "segmentAttempts"));

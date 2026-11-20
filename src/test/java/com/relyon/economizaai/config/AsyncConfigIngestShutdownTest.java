@@ -13,7 +13,7 @@ class AsyncConfigIngestShutdownTest {
 
     @Test
     void receiptIngestExecutor_shutdownWaitsForAnInFlightIngest() throws InterruptedException {
-        var executor = (ThreadPoolTaskExecutor) new AsyncConfig().receiptIngestExecutor(30);
+        var executor = (ThreadPoolTaskExecutor) new AsyncConfig().receiptIngestExecutor(30, 8, 200);
         var ingestStarted = new CountDownLatch(1);
         var ingestFinished = new AtomicBoolean(false);
         executor.execute(() -> {
@@ -34,7 +34,7 @@ class AsyncConfigIngestShutdownTest {
 
     @Test
     void receiptIngestExecutor_shutdownAlsoDrainsQueuedIngests() {
-        var executor = (ThreadPoolTaskExecutor) new AsyncConfig().receiptIngestExecutor(30);
+        var executor = (ThreadPoolTaskExecutor) new AsyncConfig().receiptIngestExecutor(30, 8, 200);
         var completed = new CountDownLatch(12); // more tasks than the 8 threads → some wait in the queue
         for (var task = 0; task < 12; task++) {
             executor.execute(() -> {

@@ -21969,6 +21969,364 @@
 					]
 				},
 				{
+					"name": "SETTINGS 01: admin lists the business settings by section",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/settings",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"settings"
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var isAdmin = !!pm.collectionVariables.get('adminToken');",
+									"pm.test('settings list: 200 for an admin, 401/403 otherwise', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf(isAdmin ? [200] : [401, 403]);",
+									"});",
+									"pm.collectionVariables.set('settingsPriceWindowNow', '90');",
+									"pm.collectionVariables.set('settingsPriceWindowWasChanged', 'true');",
+									"if (isAdmin && pm.response.code === 200) {",
+									"    var sections = pm.response.json();",
+									"    var all = [].concat.apply([], sections.map(function (section) { return section.settings; }));",
+									"    var priceWindow = all.filter(function (setting) { return setting.key === 'economizaai.collaborative.lookback-days'; })[0];",
+									"    pm.test('settings come grouped in labelled sections', function () {",
+									"        pm.expect(sections.length).to.be.above(0);",
+									"        pm.expect(sections[0]).to.have.keys(['key', 'label', 'description', 'settings']);",
+									"    });",
+									"    pm.test('price window is listed with its type, range and app name', function () {",
+									"        pm.expect(priceWindow.type).to.eql('INTEGER');",
+									"        pm.expect(priceWindow.min).to.eql(7);",
+									"        pm.expect(priceWindow.max).to.eql(365);",
+									"        pm.expect(priceWindow.appKey).to.eql('priceWindowDays');",
+									"    });",
+									"    pm.collectionVariables.set('settingsPriceWindowNow', priceWindow.value);",
+									"    pm.collectionVariables.set('settingsPriceWindowWasChanged', String(priceWindow.changed));",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "SETTINGS 02: a value outside the range is refused (400)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\"value\":\"5000\"}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/settings/economizaai.collaborative.lookback-days",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"settings",
+								"economizaai.collaborative.lookback-days"
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var isAdmin = !!pm.collectionVariables.get('adminToken');",
+									"pm.test('out-of-range value: 400 for an admin, 401/403 otherwise', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf(isAdmin ? [400] : [401, 403]);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "SETTINGS 03: an unknown setting is 404",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\"value\":\"1\"}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/settings/economizaai.no-such-setting",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"settings",
+								"economizaai.no-such-setting"
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var isAdmin = !!pm.collectionVariables.get('adminToken');",
+									"pm.test('unknown setting: 404 for an admin, 401/403 otherwise', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf(isAdmin ? [404] : [401, 403]);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "SETTINGS 04: admin saves the price window (same value: nothing changes for users)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\"value\":\"{{settingsPriceWindowNow}}\"}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/settings/economizaai.collaborative.lookback-days",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"settings",
+								"economizaai.collaborative.lookback-days"
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var isAdmin = !!pm.collectionVariables.get('adminToken');",
+									"pm.test('change: 200 for an admin, 401/403 otherwise', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf(isAdmin ? [200] : [401, 403]);",
+									"});",
+									"if (isAdmin && pm.response.code === 200) {",
+									"    pm.test('the saved value is in effect and marked as changed in the admin', function () {",
+									"        var setting = pm.response.json();",
+									"        pm.expect(setting.value).to.eql(pm.collectionVariables.get('settingsPriceWindowNow'));",
+									"        pm.expect(setting.changed).to.eql(true);",
+									"        pm.expect(setting.changedBy).to.be.a('string');",
+									"    });",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "SETTINGS 05: the apps read the value from the public app config",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/app-config",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"app-config"
+							]
+						},
+						"auth": {
+							"type": "noauth"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var isAdmin = !!pm.collectionVariables.get('adminToken');",
+									"pm.test('app config is public and carries the settings the apps use', function () {",
+									"    pm.response.to.have.status(200);",
+									"    var settings = pm.response.json().settings;",
+									"    pm.expect(settings).to.be.an('object');",
+									"    pm.expect(settings).to.include.keys(['priceWindowDays', 'nearbyRadiusKm', 'maxItemPhotos', 'contingencyWindowHours', 'householdInviteHours']);",
+									"    if (isAdmin) { pm.expect(String(settings.priceWindowDays)).to.eql(pm.collectionVariables.get('settingsPriceWindowNow')); }",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "SETTINGS 06: admin restores the configured price window (skipped when it was already changed before the run)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/settings/economizaai.collaborative.lookback-days",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"settings",
+								"economizaai.collaborative.lookback-days"
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (!pm.collectionVariables.get('adminToken') || pm.collectionVariables.get('settingsPriceWindowWasChanged') === 'true') {",
+									"    pm.execution.skipRequest();",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('restore: the configured value is back in effect', function () {",
+									"    pm.response.to.have.status(200);",
+									"    var setting = pm.response.json();",
+									"    pm.expect(setting.changed).to.eql(false);",
+									"    pm.expect(setting.value).to.eql(setting.configuredValue);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
 					"name": "COV admin: orphaned observations count (dev-hygiene gauge)",
 					"request": {
 						"method": "GET",
@@ -27770,6 +28128,121 @@
 							]
 						},
 						"description": "204. As dispensas do aviso vão junto. 404 se não existir. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Settings \u2014 list (business settings by section)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/settings",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"settings"
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Settings \u2014 change one (takes effect at once)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\"value\":\"90\"}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/settings/economizaai.collaborative.lookback-days",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"settings",
+								"economizaai.collaborative.lookback-days"
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Settings \u2014 restore the configured value",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/settings/economizaai.collaborative.lookback-days",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"settings",
+								"economizaai.collaborative.lookback-days"
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
 					},
 					"response": []
 				}

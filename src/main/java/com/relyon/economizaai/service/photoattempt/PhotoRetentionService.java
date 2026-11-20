@@ -28,7 +28,7 @@ public class PhotoRetentionService {
     private final AtomicBoolean enabled;
 
     public PhotoRetentionService(ObjectProvider<PhotoAttemptStorage> storageProvider,
-                                 @Value("${economizaai.photo-retention.enabled:false}") boolean enabledDefault) {
+                                 @Value("${economizaai.photo-retention.enabled:true}") boolean enabledDefault) {
         this.storageProvider = storageProvider;
         this.enabled = new AtomicBoolean(enabledDefault);
     }

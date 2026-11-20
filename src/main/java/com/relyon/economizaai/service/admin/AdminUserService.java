@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.admin;
 
+import com.relyon.economizaai.repository.InternalAccounts;
 import com.relyon.economizaai.dto.response.AdminUserDetailResponse;
 import com.relyon.economizaai.dto.response.AdminUserDetailResponse.ReceiptCounts;
 import com.relyon.economizaai.dto.response.AdminUserSummaryResponse;
@@ -416,8 +417,8 @@ public class AdminUserService {
             if (!filters.includeInternal()) {
                 predicates.add(cb.notEqual(root.get("role"), Role.ADMIN));
                 predicates.add(cb.isFalse(root.get("excludedFromMetrics")));
-                predicates.add(cb.notLike(cb.lower(root.get("email")), "%@economizaai.app"));
-                predicates.add(cb.notLike(cb.lower(root.get("email")), "%@cloudtestlabaccounts.com"));
+                predicates.add(cb.notLike(cb.lower(root.get("email")), InternalAccounts.OWN_DOMAIN_LIKE));
+                predicates.add(cb.notLike(cb.lower(root.get("email")), InternalAccounts.PLAY_TEST_LAB_DOMAIN_LIKE));
             }
             return cb.and(predicates.toArray(new Predicate[0]));
         };

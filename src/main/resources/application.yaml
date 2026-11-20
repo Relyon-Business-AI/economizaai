@@ -97,7 +97,12 @@ economizaai:
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:8081}
   default-locale: pt
+  costs:
+    # USD→BRL rate used to show the AI spend (billed in USD) in R$ on the cost panel.
+    usd-brl-rate: ${USD_BRL_RATE:5.50}
   households:
+    # How long a household invite code works.
+    invite-ttl-hours: 48
     # Household sharing (2026-11): joining MOVES your data into the shared household
     # (receipts, lists, categories, aliases…) and leaving/kick restores what you brought.
     # Off = membership-only (Phase 0): data stays parked in a dormant household.
@@ -138,8 +143,11 @@ economizaai:
     # observation leftovers). DEV ONLY — on prod these are LGPD-preserved
     # anonymized aggregates. Never set true in production.
     dev-cleanup-enabled: ${DEV_CLEANUP_ENABLED:false}
-  privacy:
-    k-anonymity: 3
+  settings:
+    # Business settings changed in the admin (Admin → Configurações) are stored in the database and
+    # win over the values in this file; every value below that the admin can change is only the
+    # starting point. How often a running instance re-reads what was saved.
+    refresh-ms: ${SETTINGS_REFRESH_MS:60000}
   categorization:
     # Longest phrase (in tokens) the dictionary/brand lookup assembles and tests.
     # Raising it lets curated keys have more words (e.g. "ferm bio d benta"), at a
@@ -186,6 +194,10 @@ economizaai:
   async:
     # Background AI lanes (AsyncConfig). Fixed-size pools with a bounded queue: a full
     # queue rejects, and each dispatch site fails the nota / skips the best-effort work.
+    # Receipt ingestion lane (SEFAZ fetch + parse). Sized together with the Hikari pool.
+    receipt-ingest:
+      threads: ${ASYNC_RECEIPT_INGEST_THREADS:8}
+      queue-capacity: ${ASYNC_RECEIPT_INGEST_QUEUE:200}
     photo-extract:
       threads: ${ASYNC_PHOTO_EXTRACT_THREADS:3}
       queue-capacity: ${ASYNC_PHOTO_EXTRACT_QUEUE:30}
@@ -252,7 +264,7 @@ economizaai:
       live-fallback-timeout-ms: ${EAN_LIVE_FALLBACK_TIMEOUT_MS:2500}
     sefaz:
       timeout-ms: 30000
-      user-agent: "economizai/0.1 (+https://github.com/XandiVieira/economiz.AI)"
+      user-agent: ${OUTBOUND_USER_AGENT:economizai/0.1 (+https://economizaai.app)}
       retry:
         # SVRS portal is intermittently flaky (5xx/timeouts). Retry transient
         # failures so the user doesn't have to re-submit. Total attempts =
@@ -351,6 +363,7 @@ economizaai:
     provider: ${CAPTCHA_PROVIDER:none}          # none | capsolver
     api-key: ${CAPTCHA_API_KEY:}
     base-url: ${CAPTCHA_BASE_URL:https://2captcha.com}
+    capsolver-base-url: ${CAPSOLVER_BASE_URL:https://api.capsolver.com}
     timeout-ms: ${CAPTCHA_TIMEOUT_MS:120000}
     poll-interval-ms: ${CAPTCHA_POLL_INTERVAL_MS:5000}
   # Infosimples fallback — OFF by default. When enabled, any state whose primary
@@ -554,6 +567,14 @@ economizaai:
     min-observations-for-community-promo: 10   # don't flag a community promo unless this much baseline exists
     community-promo-threshold-pct: 15          # current price < (median - X%) → community promo
     community-promo-recent-window-days: 7      # last N days = "recent" sample; older rows are baseline
+    market-prices-default-days: 30             # period the "prices of one market" screen opens with (never above lookback-days)
+    best-markets-nearby-radius-km: 20          # "perto de você": best markets, deals, promos and product search
+    community-promo-min-recent-observations: 3 # a lone low price is not a promo — it has to repeat
+    savings-region-window-days: 30             # savings: compare with other households' prices this many days around the purchase
+    savings-min-region-samples: 3
+    savings-own-lookback-days: 90              # savings fallback: the household's own earlier purchases
+    savings-min-own-samples: 2
+    savings-max-price-ratio: 3                 # a price this many times off its reference is a mismatched product/unit
     lookback-days: 90                          # one window for every community price read (plan, best-markets, typical price, promo baselines); older observations are shown nowhere
     deals-max-price-age-days: ${DEALS_MAX_PRICE_AGE_DAYS:60}   # "Ofertas pra você": a chain's latest price must be at most this old to become a deal
   categorizer:
@@ -583,6 +604,7 @@ economizaai:
     threshold-pct: 10                          # personal promo if price < (user's own median - X%)
     min-purchases-for-baseline: 3              # need this many prior purchases to detect personal promos
   attribution:
+    follow-up-days: 60                         # after a credited purchase, the next ones of that product at that market keep counting this long
     window-days: 14                            # a surfaced deal is attributable if surfaced within this many days before the purchase
   consumption:
     enabled: true                              # master switch for Phase 3 consumption-intelligence endpoints
@@ -597,7 +619,7 @@ economizaai:
     must-have-brand-share: 0.85                # top brand >= this fraction of purchases → MUST_HAVE
     preferred-brand-share: 0.60                # top brand in [preferred, mustHave) → PREFERRED
   geo:
-    user-agent: "economizai/0.1 (xandivieira@gmail.com)"  # required by Nominatim usage policy
+    user-agent: ${GEO_USER_AGENT:economizai/0.1 (contato@economizaai.app)}  # contact required by the Nominatim usage policy
     timeout-ms: 8000
     geocode-interval-ms: 600000                # how often the background geocoder scans pending markets (10 min)
     geocode-initial-delay-ms: 30000            # wait this long after startup before first scan
@@ -615,7 +637,7 @@ economizaai:
     classify:
       enabled: ${MERCHANT_CLASSIFY_ENABLED:true}   # CNAE-based supermarket/pharmacy verification (best-effort)
       base-url: ${BRASILAPI_CNPJ_URL:https://brasilapi.com.br/api/cnpj/v1}
-      user-agent: "economizai/0.1 (+https://github.com/XandiVieira/economiz.AI)"
+      user-agent: ${OUTBOUND_USER_AGENT:economizai/0.1 (+https://economizaai.app)}
       timeout-ms: 8000
       max-attempts: 3                          # in-call retries before giving up (segment stays UNKNOWN)
       interval-ms: 600000                      # how often the background classifier scans unclassified markets (10 min)
@@ -666,14 +688,13 @@ economizaai:
     # weekly and the monthly run — is INERT until weekly-report.enabled=true. Its WhatsApp leg
     # also needs the report template SID.
     whatsapp:
+      # Who the WhatsApp channel exists for: ADMINS (owner testing) or EVERYONE.
+      audience: ${WHATSAPP_AUDIENCE:ADMINS}
       weekly-report:
         enabled: ${WHATSAPP_REPORTS_ENABLED:false}           # one flag for the weekly AND the monthly run
         cron: ${WHATSAPP_WEEKLY_REPORT_CRON:0 0 10 ? * MON}  # Monday 10:00 America/Sao_Paulo
       monthly-report:
         cron: ${WHATSAPP_MONTHLY_REPORT_CRON:0 0 10 1 * ?}   # day 1 of each month, 10:00 America/Sao_Paulo
-    # Alexa remains a stub — structure only, dispatch records a "not implemented" failure.
-    alexa:
-      enabled: ${NOTIFICATIONS_ALEXA_ENABLED:false}     # Alexa Skill Messaging / Proactive Events
     # Relevance-feedback filter: the user's own DISMISSED/MUTED telemetry
     # suppresses deals from the screen + digest. Rollout via mode:
     #   OFF    — no signal lookup at all
@@ -699,10 +720,20 @@ economizaai:
     # Background jobs that drive scheduled notification types.
     replenishment:
       cron: ${NOTIFICATIONS_REPLENISHMENT_CRON:0 0 10 * * *}             # daily 10:00 (America/Sao_Paulo): products running low / ran out
+      max-reminders: 3                                                   # reminders per purchase before giving up
+      reminder-spacing-days: 7                                           # days between reminders of the same product
+    # The same price alert fires at most once in this many hours.
+    price-alert-cooldown-hours: 24
+    # "This got cheaper" bar: a cheap item (up to low-price) needs max-drop-pct, a pricey one
+    # (from high-price) needs min-drop-pct; in between the required drop falls gradually.
+    relevance-threshold:
+      max-drop-pct: 20
+      min-drop-pct: 5
+      low-price: 1
+      high-price: 200
     budget:
       cron: ${NOTIFICATIONS_BUDGET_CRON:0 0 9,18 * * *}                  # 09:00 and 18:00 (America/Sao_Paulo): monthly spend cap check
     digest:
-      cron: ${NOTIFICATIONS_DIGEST_CRON:0 0 8 * * MON}                   # weekly Monday 08:00
       zone: ${NOTIFICATIONS_DIGEST_ZONE:America/Sao_Paulo}
     deals-digest:
       cron: ${NOTIFICATIONS_DEALS_DIGEST_CRON:0 0 * * * *}               # top of every hour: due-user deals rollup
@@ -809,12 +840,12 @@ apple:
     # App Store Connect Analytics Reports API. Fetches impressions, page views,
     # and installs by traffic source (search, browse, referral). Data has a 24-72h delay.
     # To enable: APPLE_ASC_ENABLED=true + APPLE_ASC_PRIVATE_KEY (full PEM of
-    # ~/.config/appstore/economizai.p8). Key ID and Issuer ID are non-secret and
-    # default to the project's known values — no need to set them as env vars.
+    # ~/.config/appstore/economizai.p8) + the account identifiers APPLE_ASC_APP_ID,
+    # APPLE_ASC_ISSUER_ID and APPLE_ASC_KEY_ID (not secret, but they belong to the account, not the code).
     enabled: ${APPLE_ASC_ENABLED:false}
-    app-id: ${APPLE_ASC_APP_ID:6788025621}
-    issuer-id: ${APPLE_ASC_ISSUER_ID:8a41f4c7-c2b0-4afd-9dc7-0e9ee3ccd39e}
-    key-id: ${APPLE_ASC_KEY_ID:B3SKVUKUPS}
+    app-id: ${APPLE_ASC_APP_ID:}
+    issuer-id: ${APPLE_ASC_ISSUER_ID:}
+    key-id: ${APPLE_ASC_KEY_ID:}
     private-key: ${APPLE_ASC_PRIVATE_KEY:}
     sync-days: ${APPLE_ASC_SYNC_DAYS:90}
 

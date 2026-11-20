@@ -208,11 +208,13 @@ class MarketPricesServiceTest {
 
     @Test
     void windowPageAndSizeAreClamped() {
-        assertThat(MarketPricesService.clampDays(null)).isEqualTo(30);
-        assertThat(MarketPricesService.clampDays(0)).isEqualTo(1);
-        assertThat(MarketPricesService.clampDays(-5)).isEqualTo(1);
-        assertThat(MarketPricesService.clampDays(90)).isEqualTo(90);
-        assertThat(MarketPricesService.clampDays(9999)).isEqualTo(90);
+        assertThat(MarketPricesService.clampDays(null, 30, 90)).isEqualTo(30);
+        assertThat(MarketPricesService.clampDays(0, 30, 90)).isEqualTo(1);
+        assertThat(MarketPricesService.clampDays(-5, 30, 90)).isEqualTo(1);
+        assertThat(MarketPricesService.clampDays(90, 30, 90)).isEqualTo(90);
+        assertThat(MarketPricesService.clampDays(9999, 30, 90)).isEqualTo(90);
+        assertThat(MarketPricesService.clampDays(null, 30, 14)).isEqualTo(14);
+        assertThat(MarketPricesService.clampDays(60, 30, 45)).isEqualTo(45);
 
         marketWithSegment(MerchantSegment.SUPERMARKET);
         repositoryReturns(List.of());

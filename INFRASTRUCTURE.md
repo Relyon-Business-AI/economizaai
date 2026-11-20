@@ -106,6 +106,31 @@ migration). One repo artifact it references:
 
 ---
 
+## Business settings changed in the admin (2026-11-19)
+
+Plan limits, price windows, promo thresholds, notification rules, paid-API caps and ceilings, paused
+states, the force-update lever and the merchant rules are edited in **Admin → Configurações** and stored in
+`runtime_setting_overrides`. A value saved there wins over `application.yaml` / the env var and takes effect
+at once (other instances pick it up within `SETTINGS_REFRESH_MS`, 60 s); removing it restores the configured
+value. So for those settings the env vars below are only the **starting value** of an environment — check the
+admin screen before concluding what is in effect. The list lives in `RuntimeSetting.java`.
+
+Env vars added on 2026-11-19 (all optional unless noted):
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `APPLE_ASC_APP_ID` / `APPLE_ASC_ISSUER_ID` / `APPLE_ASC_KEY_ID` | *(none)* | App Store Connect account identifiers. **Required when `APPLE_ASC_ENABLED=true`** (they used to be defaults in the code). Set on dev and prod. |
+| `GEO_USER_AGENT` | `economizai/0.1 (contato@economizaai.app)` | User-Agent sent to Nominatim / the CEP lookup (their policy asks for a contact). |
+| `OUTBOUND_USER_AGENT` | `economizai/0.1 (+https://economizaai.app)` | User-Agent sent to the SEFAZ portals and BrasilAPI. |
+| `ASYNC_RECEIPT_INGEST_THREADS` / `ASYNC_RECEIPT_INGEST_QUEUE` | `8` / `200` | Size of the receipt-ingestion pool (was fixed in code). |
+| `CAPSOLVER_BASE_URL` | `https://api.capsolver.com` | CapSolver API (was fixed in code). |
+| `WHATSAPP_AUDIENCE` | `ADMINS` | Starting value of "WhatsApp: quem pode usar" (`ADMINS` / `EVERYONE`). |
+| `USD_BRL_RATE` | `5.50` | Starting value of the USD→BRL rate of the cost panel. |
+| `SETTINGS_REFRESH_MS` | `60000` | How often an instance re-reads the settings saved in the admin. |
+
+`SEFAZ_PREFETCH_ALLOWED_UFS` now takes effect (the code used to read a different key, so only its default,
+`PE`, ever applied).
+
 ## Environment variables — added in the 2026-11-11 release
 
 Everything below has a default baked into `application.yaml`, so the app boots without any

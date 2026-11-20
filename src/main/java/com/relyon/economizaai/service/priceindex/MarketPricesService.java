@@ -36,9 +36,6 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class MarketPricesService {
 
-    public static final int DEFAULT_DAYS = 30;
-    /** Same ceiling as the community price window ({@code lookback-days}): older prices are shown nowhere. */
-    public static final int MAX_DAYS = 90;
     public static final int DEFAULT_PAGE_SIZE = 30;
     public static final int MAX_PAGE_SIZE = 100;
 
@@ -72,7 +69,8 @@ public class MarketPricesService {
         var sensitiveMarket = PrivacyTierResolver.isSensitiveMarket(market);
         var storeTier = privacyTierResolver.thresholdsFor(sensitiveMarket);
         var sensitiveTier = privacyTierResolver.thresholdsFor(true);
-        var days = clampDays(filter.days());
+        var collaborative = properties.getCollaborative();
+        var days = clampDays(filter.days(), collaborative.getMarketPricesDefaultDays(), collaborative.getLookbackDays());
         var prices = observationRepository.findLatestDisclosablePricesAtMarket(
                 marketCnpj, windowStart(days), namePattern(filter.query()),
                 filter.category() == null, filter.category() == null ? UNUSED_CATEGORY : filter.category(),
@@ -97,9 +95,13 @@ public class MarketPricesService {
         return BrazilClock.today().minusDays(days).atStartOfDay();
     }
 
-    static int clampDays(Integer days) {
-        if (days == null) return DEFAULT_DAYS;
-        return Math.clamp(days, 1, MAX_DAYS);
+    /**
+     * The ceiling is the community price window ({@code lookback-days}): older prices are shown
+     * nowhere, so neither the period asked for nor the default one may go past it.
+     */
+    static int clampDays(Integer days, int defaultDays, int priceWindowDays) {
+        var maxDays = Math.max(1, priceWindowDays);
+        return Math.clamp(days == null ? defaultDays : days, 1, maxDays);
     }
 
     private static Pageable pageableFor(Filter filter) {

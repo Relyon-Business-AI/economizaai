@@ -1,5 +1,7 @@
 package com.relyon.economizaai.service.sefaz;
 
+import lombok.Setter;
+import lombok.Getter;
 import com.relyon.economizaai.config.AsyncConfig;
 import com.relyon.economizaai.config.MdcContextFilter;
 import com.relyon.economizaai.exception.DomainException;
@@ -94,8 +96,9 @@ public class ReceiptIngestionService {
      * are exactly the cases where the user walked away and needs to come back to confirm.
      * Field-injected (not a constructor arg) so Lombok's @RequiredArgsConstructor is untouched.
      */
+    @Getter @Setter
     @Value("${economizaai.notifications.receipt-ready-threshold-minutes:2}")
-    private int readyThresholdMinutes;
+    private volatile int readyThresholdMinutes;
 
     /**
      * Fetch + parse the PROCESSING receipt, then transition it. Runs on the
