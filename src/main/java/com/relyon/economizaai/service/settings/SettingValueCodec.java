@@ -90,7 +90,8 @@ public final class SettingValueCodec {
             throw new InvalidSettingValueException("admin.settings.value.too-long",
                     setting.getLabel(), String.valueOf(maxLength));
         }
-        return typed;
+        var format = setting.getSpec().format();
+        return format == null ? typed : format.canonical(setting.getLabel(), typed);
     }
 
     private static String normalizeDate(RuntimeSetting setting, String typed) {

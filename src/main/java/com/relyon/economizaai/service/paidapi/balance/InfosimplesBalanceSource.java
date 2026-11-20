@@ -1,5 +1,7 @@
 package com.relyon.economizaai.service.paidapi.balance;
 
+import com.relyon.economizaai.model.enums.PaidApiService;
+import com.relyon.economizaai.service.paidapi.PaidApiCallCosts;
 import com.relyon.economizaai.service.sefaz.InfosimplesService;
 import com.relyon.economizaai.service.sefaz.InfosimplesService.InfosimplesAccount;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +16,7 @@ import java.util.Optional;
 public class InfosimplesBalanceSource implements ProviderBalanceSource {
 
     private final Optional<InfosimplesService> infosimples;
+    private final PaidApiCallCosts callCosts;
 
     @Override
     public String providerKey() {
@@ -42,7 +45,7 @@ public class InfosimplesBalanceSource implements ProviderBalanceSource {
 
     @Override
     public BigDecimal exhaustedAtOrBelow() {
-        return new BigDecimal("0.24");
+        return callCosts.reais(PaidApiService.INFOSIMPLES);
     }
 
     @Override

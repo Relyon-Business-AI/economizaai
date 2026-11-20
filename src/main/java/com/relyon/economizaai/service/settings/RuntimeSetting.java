@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.settings;
 
 import com.relyon.economizaai.model.enums.RelevanceMode;
+import com.relyon.economizaai.service.ai.AiModelPrices;
 import com.relyon.economizaai.service.subscription.Feature;
 import lombok.Getter;
 
@@ -21,6 +22,7 @@ import static com.relyon.economizaai.service.settings.SettingSection.RECEIPTS;
 import static com.relyon.economizaai.service.settings.SettingSection.SAVINGS;
 import static com.relyon.economizaai.service.settings.SettingSpec.date;
 import static com.relyon.economizaai.service.settings.SettingSpec.decimal;
+import static com.relyon.economizaai.service.settings.SettingSpec.formattedText;
 import static com.relyon.economizaai.service.settings.SettingSpec.integer;
 import static com.relyon.economizaai.service.settings.SettingSpec.integerList;
 import static com.relyon.economizaai.service.settings.SettingSpec.option;
@@ -151,6 +153,14 @@ public enum RuntimeSetting {
             decimal("1", "100000").unit("R$"),
             "Oferta relevante: preço alto de referência",
             "A partir desse preço vale a queda exigida de itens caros; no meio, a exigência cai aos poucos."),
+    ONLINE_OFFERS_ENABLED("economizaai.ecommerce.enabled", PRICES, toggle(),
+            "Ofertas online: buscar nas lojas online",
+            "Ligado, o app consulta as lojas online conectadas (hoje o Mercado Livre) para comparar com o preço pago. "
+                    + "Desligado, só aparecem as ofertas online cadastradas à mão. Só tem efeito com a loja já conectada."),
+    ONLINE_OFFER_MIN_SAVINGS("economizaai.ecommerce.worth-it-min-savings", PRICES, decimal("0", "10000").unit("R$"),
+            "Ofertas online: economia mínima para \"vale a pena\"",
+            "Quanto a compra online (preço mais frete) precisa sair mais barata que o valor pago para ganhar o selo "
+                    + "\"vale a pena\". Com 0, qualquer economia já vale."),
 
     // ---- Economia e previsão de consumo ----
     SAVINGS_REGION_WINDOW_DAYS("economizaai.collaborative.savings-region-window-days", SAVINGS, integer(1, 180).unit("dias"),
@@ -298,6 +308,46 @@ public enum RuntimeSetting {
     INFOSIMPLES_LOW_BALANCE("economizaai.infosimples.low-balance-threshold", COSTS, decimal("0", "10000").unit("R$"),
             "Infosimples: avisar saldo abaixo de",
             "Abaixo desse saldo os administradores são avisados."),
+    INFOSIMPLES_CALL_COST_CENTS("economizaai.paid-api.call-cost-cents.infosimples", COSTS,
+            integer(0, 100000).unit("centavos por consulta"),
+            "Infosimples: custo de cada consulta",
+            "Quanto cada consulta custa. É com esse valor que o gasto do dia é somado e comparado ao teto. "
+                    + "Vale para as próximas consultas; as já registradas não mudam."),
+    CAPTCHA_CALL_COST_CENTS("economizaai.paid-api.call-cost-cents.captcha", COSTS,
+            integer(0, 100000).unit("centavos por resolução"),
+            "Captcha: custo de cada resolução",
+            "Quanto cada captcha resolvido custa. Vale para os próximos; os já registrados não mudam."),
+    TWILIO_CALL_COST_CENTS("economizaai.paid-api.call-cost-cents.twilio", COSTS,
+            integer(0, 100000).unit("centavos por mensagem"),
+            "SMS/WhatsApp: custo de cada mensagem",
+            "Quanto cada SMS ou WhatsApp enviado custa. Vale para as próximas mensagens; as já registradas não mudam."),
+    LLM_VISION_CALL_COST_CENTS("economizaai.paid-api.call-cost-cents.llm-vision", COSTS,
+            integer(0, 100000).unit("centavos por foto"),
+            "IA de leitura de foto: custo de cada foto",
+            "Quanto cada foto de nota lida pela IA custa. Vale para as próximas; as já registradas não mudam."),
+    LLM_HTML_RESCUE_CALL_COST_CENTS("economizaai.paid-api.call-cost-cents.llm-html-rescue", COSTS,
+            integer(0, 100000).unit("centavos por uso"),
+            "IA de resgate de nota: custo de cada uso",
+            "Quanto cada resgate de nota pela IA custa. Vale para os próximos; os já registrados não mudam."),
+    LLM_ENRICH_CALL_COST_CENTS("economizaai.paid-api.call-cost-cents.llm-enrich", COSTS,
+            integer(0, 100000).unit("centavos por uso"),
+            "IA de categorização: custo de cada uso",
+            "Quanto cada uso da IA de categorização custa. Vale para os próximos; os já registrados não mudam."),
+    COST_ALERT_WARNING_PERCENT("economizaai.cost-alerts.warning-threshold-percent", COSTS, integer(1, 99).unit("%"),
+            "Aviso de custo: avisar ao atingir",
+            "Em que parte do teto diário (ou do saldo de um fornecedor) sai o primeiro aviso. "
+                    + "O segundo aviso sai sempre quando o teto é atingido (100%)."),
+    AI_CREDIT_USD("economizaai.ai.budget-usd", COSTS, decimal("0", "1000000").unit("US$"),
+            "IA: crédito comprado",
+            "Total de crédito de IA já comprado, em dólares. O painel mostra quanto resta descontando o que foi gasto. "
+                    + "Depois de uma recarga, some o valor aqui. Com 0, o saldo não é mostrado."),
+    AI_MODEL_PRICES("economizaai.ai.model-prices-usd-per-mtok", COSTS, formattedText(2000, AiModelPrices::canonicalText),
+            "IA: preço de cada modelo",
+            "Preço em dólares de cada modelo por milhão de tokens (a unidade de texto que a IA cobra), usado só para "
+                    + "estimar o gasto de IA. "
+                    + "Escreva modelo=entrada/saída e separe os modelos com ponto e vírgula; o item \"default\" é "
+                    + "obrigatório e vale para qualquer modelo fora da lista. "
+                    + "Exemplo: claude-haiku-4-5=1/5;gpt-5-mini=0.25/2;default=3/15"),
 
     // ---- Notas e estados ----
     PAUSED_STATES("economizaai.ingestion.paused-state-probe.ufs", RECEIPTS, ufList(),

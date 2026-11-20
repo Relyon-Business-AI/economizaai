@@ -70,6 +70,26 @@ class SettingValueCodecTest {
     }
 
     @Test
+    void formattedText_isTidiedUp_andRefusedWhenItBreaksTheFormat() {
+        assertThat(SettingValueCodec.normalize(RuntimeSetting.AI_MODEL_PRICES,
+                " gpt-5-mini = 0,25 / 2.00 ;\n claude-haiku-4-5=1/5; DEFAULT=3/15 ; "))
+                .isEqualTo("gpt-5-mini=0.25/2;claude-haiku-4-5=1/5;default=3/15");
+        assertRefused(RuntimeSetting.AI_MODEL_PRICES, "", "admin.settings.value.model-prices.no-default");
+        assertRefused(RuntimeSetting.AI_MODEL_PRICES, "gpt-5=1.25/10", "admin.settings.value.model-prices.no-default");
+        assertRefused(RuntimeSetting.AI_MODEL_PRICES, "gpt-5=1.25;default=3/15", "admin.settings.value.model-prices.bad-entry");
+        assertRefused(RuntimeSetting.AI_MODEL_PRICES, "gpt-5=1.25/10/2;default=3/15", "admin.settings.value.model-prices.bad-entry");
+        assertRefused(RuntimeSetting.AI_MODEL_PRICES, "gpt-5=barato/10;default=3/15", "admin.settings.value.model-prices.bad-entry");
+        assertRefused(RuntimeSetting.AI_MODEL_PRICES, "gpt-5=-1/10;default=3/15", "admin.settings.value.model-prices.bad-entry");
+        assertRefused(RuntimeSetting.AI_MODEL_PRICES, "gpt 5=1/10;default=3/15", "admin.settings.value.model-prices.bad-entry");
+        assertRefused(RuntimeSetting.AI_MODEL_PRICES, "=1/10;default=3/15", "admin.settings.value.model-prices.bad-entry");
+        assertRefused(RuntimeSetting.AI_MODEL_PRICES, "gpt-5 1/10;default=3/15", "admin.settings.value.model-prices.bad-entry");
+        assertRefused(RuntimeSetting.AI_MODEL_PRICES, "gpt-5=1/10,default=3/15", "admin.settings.value.model-prices.bad-entry");
+        assertRefused(RuntimeSetting.AI_MODEL_PRICES, "gpt-5=1/10;gpt-5=2/10;default=3/15", "admin.settings.value.model-prices.repeated");
+        assertRefused(RuntimeSetting.AI_MODEL_PRICES, "default=3/15;default=4/15", "admin.settings.value.model-prices.repeated");
+        assertRefused(RuntimeSetting.AI_MODEL_PRICES, "default=3/15;" + "m".repeat(2000) + "=1/1", "admin.settings.value.too-long");
+    }
+
+    @Test
     void jsonValue_isTypedForTheApps() {
         assertThat(SettingValueCodec.toJsonValue(RuntimeSetting.PRICE_WINDOW_DAYS, "90")).isEqualTo(90L);
         assertThat(SettingValueCodec.toJsonValue(RuntimeSetting.NEARBY_RADIUS_KM, "20.5")).isEqualTo(new BigDecimal("20.5"));

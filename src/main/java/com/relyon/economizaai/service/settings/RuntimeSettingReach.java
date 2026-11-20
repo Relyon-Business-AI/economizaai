@@ -77,6 +77,10 @@ public final class RuntimeSettingReach {
                 "Mesma regra de oferta relevante: define o que conta como item barato.");
         REFLECTS_ON.put(RuntimeSetting.DEAL_HIGH_PRICE_ANCHOR,
                 "Mesma regra de oferta relevante: define o que conta como item caro.");
+        REFLECTS_ON.put(RuntimeSetting.ONLINE_OFFERS_ENABLED,
+                "Oferta online mostrada no item da nota e a busca do Garimpo no admin, que dependem da loja online conectada.");
+        REFLECTS_ON.put(RuntimeSetting.ONLINE_OFFER_MIN_SAVINGS,
+                "Selo \"vale a pena\" da oferta online mostrada no item da nota.");
         REFLECTS_ON.put(RuntimeSetting.SAVINGS_REGION_WINDOW_DAYS,
                 "Tela Economia: seção \"Comparado à sua região\".");
         REFLECTS_ON.put(RuntimeSetting.SAVINGS_MIN_REGION_SAMPLES,
@@ -148,17 +152,17 @@ public final class RuntimeSettingReach {
         REFLECTS_ON.put(RuntimeSetting.LLM_ENRICH_DAILY_CAP_PER_USER,
                 "Sugestão de categoria por IA na nota e em \"corrigir item\".");
         REFLECTS_ON.put(RuntimeSetting.INFOSIMPLES_DAILY_BUDGET_CENTS,
-                "Caminho pago de busca de nota para todos os usuários; alerta no WhatsApp em 80% e 100%.");
+                "Caminho pago de busca de nota para todos os usuários; alerta no WhatsApp no percentual de aviso e em 100%.");
         REFLECTS_ON.put(RuntimeSetting.CAPTCHA_DAILY_BUDGET_CENTS,
-                "Notas de estados com captcha para todos os usuários; alerta em 80% e 100%.");
+                "Notas de estados com captcha para todos os usuários; alerta no percentual de aviso e em 100%.");
         REFLECTS_ON.put(RuntimeSetting.LLM_VISION_DAILY_BUDGET_CENTS,
-                "Nota por foto para todos os usuários; alerta em 80% e 100%.");
+                "Nota por foto para todos os usuários; alerta no percentual de aviso e em 100%.");
         REFLECTS_ON.put(RuntimeSetting.LLM_HTML_RESCUE_DAILY_BUDGET_CENTS,
-                "Recuperação de notas por IA para todos os usuários; alerta em 80% e 100%.");
+                "Recuperação de notas por IA para todos os usuários; alerta no percentual de aviso e em 100%.");
         REFLECTS_ON.put(RuntimeSetting.LLM_ENRICH_DAILY_BUDGET_CENTS,
-                "Categorização por IA para todos os usuários; alerta em 80% e 100%.");
+                "Categorização por IA para todos os usuários; alerta no percentual de aviso e em 100%.");
         REFLECTS_ON.put(RuntimeSetting.TWILIO_DAILY_BUDGET_CENTS,
-                "SMS e WhatsApp para todos os usuários; alerta em 80% e 100%.");
+                "SMS e WhatsApp para todos os usuários; alerta no percentual de aviso e em 100%.");
         REFLECTS_ON.put(RuntimeSetting.DAILY_GLOBAL_BUDGET_CENTS,
                 "Todos os serviços pagos de uma vez quando a soma do dia estoura.");
         REFLECTS_ON.put(RuntimeSetting.AI_DAILY_REQUEST_CAP,
@@ -167,6 +171,24 @@ public final class RuntimeSettingReach {
                 "Admin → Operações → Custos: valores de IA em reais. Não altera cobrança.");
         REFLECTS_ON.put(RuntimeSetting.INFOSIMPLES_LOW_BALANCE,
                 "Alerta de saldo baixo por e-mail e WhatsApp aos administradores.");
+        REFLECTS_ON.put(RuntimeSetting.INFOSIMPLES_CALL_COST_CENTS,
+                "Gasto do dia contra o teto do Infosimples, Admin → Operações → Custos, custo por usuário e o ponto em que o saldo do Infosimples conta como esgotado.");
+        REFLECTS_ON.put(RuntimeSetting.CAPTCHA_CALL_COST_CENTS,
+                "Gasto do dia contra o teto de captcha, Admin → Operações → Custos, custo por usuário e o ponto em que o saldo do CapSolver conta como esgotado.");
+        REFLECTS_ON.put(RuntimeSetting.TWILIO_CALL_COST_CENTS,
+                "Gasto do dia contra o teto de SMS/WhatsApp, Admin → Operações → Custos, custo por usuário e o ponto em que o saldo da Twilio conta como esgotado.");
+        REFLECTS_ON.put(RuntimeSetting.LLM_VISION_CALL_COST_CENTS,
+                "Gasto do dia contra o teto de nota por foto, Admin → Operações → Custos e custo por usuário.");
+        REFLECTS_ON.put(RuntimeSetting.LLM_HTML_RESCUE_CALL_COST_CENTS,
+                "Gasto do dia contra o teto de resgate de nota por IA, Admin → Operações → Custos e custo por usuário.");
+        REFLECTS_ON.put(RuntimeSetting.LLM_ENRICH_CALL_COST_CENTS,
+                "Gasto do dia contra o teto de categorização por IA, Admin → Operações → Custos e custo por usuário.");
+        REFLECTS_ON.put(RuntimeSetting.COST_ALERT_WARNING_PERCENT,
+                "Avisos de custo no WhatsApp e e-mail do admin: teto diário de cada serviço e saldo dos fornecedores (o texto do aviso mostra esse percentual).");
+        REFLECTS_ON.put(RuntimeSetting.AI_CREDIT_USD,
+                "Admin → IA: crédito e saldo estimado; e o aviso de saldo da IA (Anthropic) acabando.");
+        REFLECTS_ON.put(RuntimeSetting.AI_MODEL_PRICES,
+                "Admin → IA e Admin → Operações → Custos: gasto estimado das próximas chamadas de IA, e o saldo estimado da IA. Não altera cobrança.");
         REFLECTS_ON.put(RuntimeSetting.PAUSED_STATES,
                 "FAQ \"situação dos estados\" no app, sonda de retorno do portal e alertas do Infosimples.");
         REFLECTS_ON.put(RuntimeSetting.DEVICE_FETCH_TRUSTED_STATES,

@@ -179,6 +179,9 @@ economizaai:
     # Prepaid credit budget in USD — shown in the spend panel as "saldo estimado".
     # Set to 0 to hide the balance indicator.
     budget-usd: ${ECONOMIZAAI_AI_BUDGET_USD:0}
+    # Estimated price of each model in USD per 1M tokens, as model=input/output entries separated
+    # by ";" plus a mandatory default= entry for unlisted models. Only feeds the spend panel.
+    model-prices-usd-per-mtok: "${ECONOMIZAAI_AI_MODEL_PRICES:claude-haiku-4-5=1/5;claude-sonnet-4-6=3/15;claude-opus-4-8=5/25;gpt-5=1.25/10;gpt-5-mini=0.25/2;gpt-5-nano=0.05/0.4;gpt-4.1=2/8;gpt-4.1-mini=0.4/1.6;gpt-4o=2.5/10;gpt-4o-mini=0.15/0.6;o4-mini=1.1/4.4;default=3/15}"
   # Provedor OpenAI do AiChatPort (segundo provedor, selecionável por tier no admin).
   # Inerte até OPENAI_API_KEY ser setada; aí o toggle "GPT aqui, Claude ali" fica ativo.
   openai:
@@ -401,7 +404,7 @@ economizaai:
     llm-enrich-daily-cap-per-user: ${LLM_ENRICH_DAILY_CAP:60}
     # Teto diário POR SERVIÇO, em centavos (0 = sem teto). Estourou → só aquele serviço para
     # até a virada do dia (UTC); os demais (e a raspagem grátis) seguem. O admin é avisado
-    # no WhatsApp em 80% e 100% (ver cost-alerts abaixo).
+    # no WhatsApp no percentual de aviso e em 100% (ver cost-alerts abaixo).
     infosimples-daily-budget-cents: ${PAID_API_BUDGET_INFOSIMPLES_CENTS:12000}
     captcha-daily-budget-cents: ${PAID_API_BUDGET_CAPTCHA_CENTS:3000}
     llm-vision-daily-budget-cents: ${PAID_API_BUDGET_LLM_VISION_CENTS:3000}
@@ -413,13 +416,24 @@ economizaai:
     infosimples-failure-threshold: ${INFOSIMPLES_BREAKER_THRESHOLD:5}
     breaker-window-seconds: ${INFOSIMPLES_BREAKER_WINDOW_S:600}
     breaker-cooldown-seconds: ${INFOSIMPLES_BREAKER_COOLDOWN_S:300}
+    # Custo assumido de UMA chamada de cada serviço, em centavos (R$) — é o que entra no
+    # livro-caixa (paid_api_call) e portanto nos tetos diários e nos relatórios de custo.
+    call-cost-cents:
+      infosimples: ${PAID_API_COST_INFOSIMPLES_CENTS:24}
+      captcha: ${PAID_API_COST_CAPTCHA_CENTS:3}
+      twilio: ${PAID_API_COST_TWILIO_CENTS:30}
+      llm-vision: ${PAID_API_COST_LLM_VISION_CENTS:10}
+      llm-html-rescue: ${PAID_API_COST_LLM_HTML_RESCUE_CENTS:5}
+      llm-enrich: ${PAID_API_COST_LLM_CATEGORIZATION_CENTS:2}
   # Avisos de custo no WhatsApp do admin: teto diário de cada serviço e saldo pré-pago dos
-  # provedores (Infosimples, CapSolver, Twilio, Anthropic) em 80% e 100%. Um aviso por
+  # provedores (Infosimples, CapSolver, Twilio, Anthropic) no percentual de aviso e em 100%. Um aviso por
   # (serviço, limiar, dia/recarga), guardado em cost_alert. A entrega é garantida: tenta de
   # novo a cada retry-interval até o provedor aceitar; após N falhas no WhatsApp manda também
   # por e-mail e ainda tenta o WhatsApp mais algumas vezes.
   cost-alerts:
     enabled: ${COST_ALERTS_ENABLED:true}
+    # Parte do teto/saldo (em %) em que sai o primeiro aviso; o segundo sai sempre em 100%.
+    warning-threshold-percent: ${COST_ALERT_WARNING_THRESHOLD_PERCENT:80}
     budget-check-interval-ms: ${COST_ALERT_BUDGET_CHECK_INTERVAL_MS:60000}
     balance-check-cron: ${COST_ALERT_BALANCE_CHECK_CRON:0 5 * * * *}   # de hora em hora
     retry-interval-ms: ${COST_ALERT_RETRY_INTERVAL_MS:120000}

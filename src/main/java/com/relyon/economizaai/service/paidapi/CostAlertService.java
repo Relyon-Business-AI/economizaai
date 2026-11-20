@@ -4,6 +4,8 @@ import com.relyon.economizaai.model.CostAlert;
 import com.relyon.economizaai.model.enums.CostAlertStatus;
 import com.relyon.economizaai.repository.CostAlertRepository;
 import com.relyon.economizaai.service.notifications.OperationalAlertService;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -39,7 +41,6 @@ import java.util.Locale;
 @Service
 public class CostAlertService {
 
-    public static final int WARNING_THRESHOLD = 80;
     public static final int LIMIT_THRESHOLD = 100;
 
     private static final Locale BRAZIL = Locale.forLanguageTag("pt-BR");
@@ -52,6 +53,10 @@ public class CostAlertService {
     private final int emailFallbackAfterAttempts;
     private final int maxWhatsAppAttempts;
     private final Duration retryInterval;
+
+    /** Share of a limit (in %) at which the early warning goes out, before the limit itself is reached. */
+    @Getter @Setter
+    private volatile int warningThresholdPercent;
     private Clock clock = Clock.systemUTC();
 
     public CostAlertService(
@@ -60,13 +65,15 @@ public class CostAlertService {
             @Value("${economizaai.cost-alerts.enabled:true}") boolean enabled,
             @Value("${economizaai.cost-alerts.email-fallback-after-attempts:3}") int emailFallbackAfterAttempts,
             @Value("${economizaai.cost-alerts.max-whatsapp-attempts:8}") int maxWhatsAppAttempts,
-            @Value("${economizaai.cost-alerts.retry-interval-ms:120000}") long retryIntervalMs) {
+            @Value("${economizaai.cost-alerts.retry-interval-ms:120000}") long retryIntervalMs,
+            @Value("${economizaai.cost-alerts.warning-threshold-percent:80}") int warningThresholdPercent) {
         this.repository = repository;
         this.operationalAlertService = operationalAlertService;
         this.enabled = enabled;
         this.emailFallbackAfterAttempts = emailFallbackAfterAttempts;
         this.maxWhatsAppAttempts = Math.max(maxWhatsAppAttempts, emailFallbackAfterAttempts);
         this.retryInterval = Duration.ofMillis(retryIntervalMs);
+        this.warningThresholdPercent = warningThresholdPercent;
     }
 
     /** Test seam — drive retry timing deterministically. */
@@ -80,14 +87,14 @@ public class CostAlertService {
 
     /**
      * Which alert threshold a consumption has reached: {@value #LIMIT_THRESHOLD} when the
-     * limit is fully consumed, {@value #WARNING_THRESHOLD} from 80% on, 0 below that (or
-     * when there is no limit).
+     * limit is fully consumed, the warning percentage from that share of the limit on, 0 below
+     * that (or when there is no limit).
      */
-    public static int thresholdReached(BigDecimal consumed, BigDecimal limit) {
+    public static int thresholdReached(BigDecimal consumed, BigDecimal limit, int warningPercent) {
         if (limit == null || limit.signum() <= 0 || consumed == null) return 0;
         if (consumed.compareTo(limit) >= 0) return LIMIT_THRESHOLD;
-        var warningLine = limit.multiply(BigDecimal.valueOf(WARNING_THRESHOLD)).movePointLeft(2);
-        return consumed.compareTo(warningLine) >= 0 ? WARNING_THRESHOLD : 0;
+        var warningLine = limit.multiply(BigDecimal.valueOf(warningPercent)).movePointLeft(2);
+        return consumed.compareTo(warningLine) >= 0 ? warningPercent : 0;
     }
 
     /** "R$ 1.234,50" / "US$ 9,80" — Brazilian formatting for the alert wording. */

@@ -55,7 +55,7 @@ class CostAlertServiceTest {
 
     private CostAlertService newService(boolean enabled) {
         var created = new CostAlertService(repository, operationalAlertService, enabled,
-                EMAIL_FALLBACK_AFTER, MAX_WHATSAPP_ATTEMPTS, RETRY_INTERVAL_MS);
+                EMAIL_FALLBACK_AFTER, MAX_WHATSAPP_ATTEMPTS, RETRY_INTERVAL_MS, 80);
         created.useClock(Clock.fixed(T0, ZoneOffset.UTC));
         return created;
     }
@@ -81,20 +81,27 @@ class CostAlertServiceTest {
 
     @Test
     void thresholdReached_below80_isZero() {
-        assertEquals(0, CostAlertService.thresholdReached(new BigDecimal("79.99"), new BigDecimal("100")));
+        assertEquals(0, CostAlertService.thresholdReached(new BigDecimal("79.99"), new BigDecimal("100"), 80));
     }
 
     @Test
     void thresholdReached_from80_isWarning_andFrom100_isLimit() {
-        assertEquals(80, CostAlertService.thresholdReached(new BigDecimal("80.00"), new BigDecimal("100")));
-        assertEquals(80, CostAlertService.thresholdReached(new BigDecimal("99.99"), new BigDecimal("100")));
-        assertEquals(100, CostAlertService.thresholdReached(new BigDecimal("100"), new BigDecimal("100")));
-        assertEquals(100, CostAlertService.thresholdReached(new BigDecimal("130"), new BigDecimal("100")));
+        assertEquals(80, CostAlertService.thresholdReached(new BigDecimal("80.00"), new BigDecimal("100"), 80));
+        assertEquals(80, CostAlertService.thresholdReached(new BigDecimal("99.99"), new BigDecimal("100"), 80));
+        assertEquals(100, CostAlertService.thresholdReached(new BigDecimal("100"), new BigDecimal("100"), 80));
+        assertEquals(100, CostAlertService.thresholdReached(new BigDecimal("130"), new BigDecimal("100"), 80));
     }
 
     @Test
     void thresholdReached_noLimit_isZero() {
-        assertEquals(0, CostAlertService.thresholdReached(new BigDecimal("500"), BigDecimal.ZERO));
+        assertEquals(0, CostAlertService.thresholdReached(new BigDecimal("500"), BigDecimal.ZERO, 80));
+    }
+
+    @Test
+    void thresholdReached_followsTheWarningPercentageGiven() {
+        assertEquals(0, CostAlertService.thresholdReached(new BigDecimal("59.99"), new BigDecimal("100"), 60));
+        assertEquals(60, CostAlertService.thresholdReached(new BigDecimal("60"), new BigDecimal("100"), 60));
+        assertEquals(100, CostAlertService.thresholdReached(new BigDecimal("100"), new BigDecimal("100"), 60));
     }
 
     @Test

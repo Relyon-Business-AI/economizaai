@@ -46,6 +46,7 @@ public class PaidApiGuardService {
 
     private final PaidApiGuardProperties properties;
     private final PaidApiCallRepository repository;
+    private final PaidApiCallCosts callCosts;
     private Clock clock = Clock.systemUTC();
 
     /**
@@ -56,9 +57,11 @@ public class PaidApiGuardService {
     /** When the breaker (if open) reopens the circuit for a breaker key. */
     private final Map<String, Instant> openUntil = new ConcurrentHashMap<>();
 
-    public PaidApiGuardService(PaidApiGuardProperties properties, PaidApiCallRepository repository) {
+    public PaidApiGuardService(PaidApiGuardProperties properties, PaidApiCallRepository repository,
+                               PaidApiCallCosts callCosts) {
         this.properties = properties;
         this.repository = repository;
+        this.callCosts = callCosts;
     }
 
     /** Test seam — override the clock to drive the breaker window/cooldown deterministically. */
@@ -240,7 +243,7 @@ public class PaidApiGuardService {
                     .provider(provider)
                     .success(success)
                     .resultCode(resultCode)
-                    .estimatedCostCents(service.defaultCostCents())
+                    .estimatedCostCents(callCosts.cents(service))
                     .build());
         } catch (RuntimeException ex) {
             // The ledger must never break an otherwise-good ingest — a lost audit

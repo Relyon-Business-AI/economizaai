@@ -31,6 +31,10 @@ class AiGatewayTest {
     @Mock private AiProviderSettingsService providerSettings;
     @Mock private AiUsageLogRepository usageRepository;
 
+    private static final String TODAYS_PRICES = "claude-haiku-4-5=1/5;claude-sonnet-4-6=3/15;claude-opus-4-8=5/25;"
+            + "gpt-5=1.25/10;gpt-5-mini=0.25/2;gpt-5-nano=0.05/0.4;gpt-4.1=2/8;gpt-4.1-mini=0.4/1.6;"
+            + "gpt-4o=2.5/10;gpt-4o-mini=0.15/0.6;o4-mini=1.1/4.4;default=3/15";
+
     private AiGateway gateway;
 
     @BeforeEach
@@ -44,6 +48,7 @@ class AiGatewayTest {
                         com.relyon.economizaai.model.enums.AiProvider.ANTHROPIC, "claude-sonnet-4-6"));
         gateway = new AiGateway(java.util.List.of(chatAdapter), providerSettings, usageRepository);
         ReflectionTestUtils.setField(gateway, "dailyRequestCap", 10);
+        gateway.setModelPricesText(TODAYS_PRICES);
     }
 
     @Test
@@ -116,8 +121,37 @@ class AiGatewayTest {
     @Test
     void costEstimateFallsBackForUnknownModel() {
         // Unknown model → default $3/$15 pricing.
-        assertEquals(0, AiGateway.estimateCostUsd("mystery-model", 1_000_000, 0)
+        assertEquals(0, gateway.estimateCostUsd("mystery-model", 1_000_000, 0)
                 .compareTo(new BigDecimal("3.000000")));
+    }
+
+    @Test
+    void costEstimateFollowsThePriceTableInEffect() {
+        assertEquals(0, gateway.estimateCostUsd("claude-haiku-4-5", 1_000_000, 1_000_000)
+                .compareTo(new BigDecimal("6.000000")));
+
+        gateway.setModelPricesText("claude-haiku-4-5=2/8;default=4/20");
+
+        assertEquals(0, gateway.estimateCostUsd("claude-haiku-4-5", 1_000_000, 1_000_000)
+                .compareTo(new BigDecimal("10.000000")));
+        assertEquals(0, gateway.estimateCostUsd("claude-sonnet-4-6", 1_000_000, 0)
+                .compareTo(new BigDecimal("4.000000")));
+        assertEquals("claude-haiku-4-5=2/8;default=4/20", gateway.getModelPricesText());
+    }
+
+    @Test
+    void usageLogCarriesTheCostAtThePriceInEffect() {
+        when(chatAdapter.isConfigured()).thenReturn(true);
+        when(usageRepository.countByCreatedAtAfter(any(LocalDateTime.class))).thenReturn(0L);
+        when(chatAdapter.complete("claude-haiku-4-5", "sys", "user", 100))
+                .thenReturn(new AiChatPort.ChatResult("ok", 1000, 500));
+        gateway.setModelPricesText("claude-haiku-4-5=10/50;default=3/15");
+
+        gateway.complete(AiActivity.RULE_SUGGESTION, "claude-haiku-4-5", "sys", "user", 100);
+
+        var captor = ArgumentCaptor.forClass(AiUsageLog.class);
+        verify(usageRepository).save(captor.capture());
+        assertEquals(0, captor.getValue().getCostUsd().compareTo(new BigDecimal("0.035000")));
     }
 
     @Test

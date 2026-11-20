@@ -1,6 +1,9 @@
 package com.relyon.economizaai.service.paidapi.balance;
 
 import com.relyon.economizaai.config.CaptchaProperties;
+import com.relyon.economizaai.model.enums.PaidApiService;
+import com.relyon.economizaai.service.paidapi.CostReportService;
+import com.relyon.economizaai.service.paidapi.PaidApiCallCosts;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.ParameterizedTypeReference;
@@ -27,16 +30,22 @@ public class CapSolverBalanceSource implements ProviderBalanceSource {
 
     private final RestClient restClient;
     private final CaptchaProperties captchaProperties;
+    private final PaidApiCallCosts callCosts;
+    private final CostReportService costReport;
 
     @Autowired
-    public CapSolverBalanceSource(RestClient.Builder builder, CaptchaProperties captchaProperties) {
-        this(builder.requestFactory(timeoutFactory()).build(), captchaProperties);
+    public CapSolverBalanceSource(RestClient.Builder builder, CaptchaProperties captchaProperties,
+                                  PaidApiCallCosts callCosts, CostReportService costReport) {
+        this(builder.requestFactory(timeoutFactory()).build(), captchaProperties, callCosts, costReport);
     }
 
     /** Test seam: inject a pre-built (mock-bound) RestClient. */
-    CapSolverBalanceSource(RestClient restClient, CaptchaProperties captchaProperties) {
+    CapSolverBalanceSource(RestClient restClient, CaptchaProperties captchaProperties,
+                           PaidApiCallCosts callCosts, CostReportService costReport) {
         this.restClient = restClient;
         this.captchaProperties = captchaProperties;
+        this.callCosts = callCosts;
+        this.costReport = costReport;
     }
 
     private static SimpleClientHttpRequestFactory timeoutFactory() {
@@ -92,7 +101,7 @@ public class CapSolverBalanceSource implements ProviderBalanceSource {
 
     @Override
     public BigDecimal exhaustedAtOrBelow() {
-        return new BigDecimal("0.01");
+        return callCosts.dollars(PaidApiService.CAPTCHA_SOLVE, costReport.getUsdBrlRate());
     }
 
     @Override

@@ -112,4 +112,14 @@ class EcommerceOfferServiceTest {
 
         assertThat(offer.total()).isEqualByComparingTo("12.00");
     }
+
+    @Test
+    void worthItFollowsTheMinimumSavingsInEffect() {
+        when(offerRepository.findByEanAndActiveTrue("789")).thenReturn(List.of(curated("789", "15.00", "0.00")));
+        assertThat(service.bestOfferForItem(item("789", "20.00"), null).orElseThrow().worthIt()).isTrue();
+
+        properties.setWorthItMinSavings(new BigDecimal("5.01"));
+
+        assertThat(service.bestOfferForItem(item("789", "20.00"), null).orElseThrow().worthIt()).isFalse();
+    }
 }
