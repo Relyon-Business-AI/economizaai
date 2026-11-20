@@ -517,6 +517,8 @@ economizaai:
   referral:
     # Link people share to invite friends; the personal code is appended.
     share-base-url: ${REFERRAL_SHARE_BASE_URL:https://economizaai.app/?ref=}
+    # Months of Premium each referral reward is worth.
+    reward-months: 1
   monetization:
     # PRO plan price used to MODEL revenue/LTV/ROAS in the admin acquisition
     # dashboard while real payment data is still sparse (RevenueCat captures real
@@ -604,6 +606,24 @@ economizaai:
     savings-max-price-ratio: 3                 # a price this many times off its reference is a mismatched product/unit
     lookback-days: 90                          # one window for every community price read (plan, best-markets, typical price, promo baselines); older observations are shown nowhere
     deals-max-price-age-days: ${DEALS_MAX_PRICE_AGE_DAYS:60}   # "Ofertas pra você": a chain's latest price must be at most this old to become a deal
+  comparison:
+    # "Esta compra em outros mercados" (a nota) and the single-market alternatives of a shopping trip.
+    min-matched-pct: 40                        # share of the basket's items a market must price to be offered
+    receipt-max-age-days: 7                    # a nota bought longer ago than this is not compared
+    alternative-markets: 3                     # markets offered per nota and per shopping trip
+  savings:
+    default-period-days: 90                    # household savings: period shown when the app asks for no start date
+  leaderboard:
+    top-n: 20                                  # households listed in the "caçador de descontos" ranking
+    default-days: 30                           # period ranked when the app asks for none
+  data-share:
+    consent-days: 14                           # days a person has to answer a request to copy their data on leaving a household
+  app-defaults:
+    # Starting values the apps use until the person picks their own (served in GET /app-config).
+    route-max-distance-km: 10                  # shopping plan: farthest market
+    route-max-stops: 2                         # shopping plan: stops
+    route-min-saving-per-stop: 10              # shopping plan: R$ an extra stop must save
+    home-savings-min: 10                       # Home: savings below this (R$) are not highlighted
   categorizer:
     consensus:
       # User category corrections graduate to global truth (+ learned dictionary)
@@ -681,6 +701,7 @@ economizaai:
     claim-code-max-attempts: 5
     claim-cooldown-hours: ${MERCHANT_CLAIM_COOLDOWN_HOURS:24}   # wait before re-claiming a chain after a closed claim
     import-max-rows: 500
+    verified-badge-tolerance-pct: 1            # "verified by receipts" badge: a scanned price up to this % above the announced one confirms the promo
     classify:
       enabled: ${MERCHANT_CLASSIFY_ENABLED:true}   # CNAE-based supermarket/pharmacy verification (best-effort)
       base-url: ${BRASILAPI_CNPJ_URL:https://brasilapi.com.br/api/cnpj/v1}

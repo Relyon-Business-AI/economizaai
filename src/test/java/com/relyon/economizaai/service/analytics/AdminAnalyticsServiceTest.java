@@ -203,6 +203,12 @@ class AdminAnalyticsServiceTest {
         assertThat(revenue.note()).contains("modeled");
         assertThat(revenue.payingCustomers()).isZero();
         assertThat(revenue.avgTicket()).isEqualByComparingTo("0.00");         // no paying customers yet
+
+        monetizationProperties.setAssumedLifetimeMonths(6);
+
+        var shorterLifetime = service.acquisition(30, false).revenue();
+        assertThat(shorterLifetime.assumedLifetimeMonths()).isEqualTo(6);
+        assertThat(shorterLifetime.ltvPerProUser()).isEqualByComparingTo("59.40");   // 9.90 × 6
     }
 
     @Test

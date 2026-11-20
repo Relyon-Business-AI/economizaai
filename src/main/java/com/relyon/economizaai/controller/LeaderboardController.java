@@ -31,10 +31,11 @@ public class LeaderboardController {
 
     @Operation(summary = "Discount-hunters leaderboard (public)",
             description = "Households ranked by items bought below the community average. Public view lists only "
-                    + "opted-in households; the caller always sees their own standing under `me`.")
+                    + "opted-in households; the caller always sees their own standing under `me`. Without `days`, "
+                    + "the default period set in the admin.")
     @GetMapping("/leaderboard/discount-hunters")
     public ResponseEntity<LeaderboardResponse> discountHunters(@AuthenticationPrincipal User user,
-                                                               @RequestParam(defaultValue = "30") int days) {
+                                                               @RequestParam(required = false) Integer days) {
         var householdId = user.getHousehold() == null ? null : user.getHousehold().getId();
         return ResponseEntity.ok(leaderboardService.discountHunters(days, householdId));
     }
@@ -50,7 +51,7 @@ public class LeaderboardController {
     @Operation(summary = "Discount-hunters leaderboard (admin)",
             description = "All households (opted in or not), handles are emails. ADMIN only.")
     @GetMapping("/admin/leaderboard/discount-hunters")
-    public ResponseEntity<LeaderboardResponse> discountHuntersAdmin(@RequestParam(defaultValue = "30") int days) {
+    public ResponseEntity<LeaderboardResponse> discountHuntersAdmin(@RequestParam(required = false) Integer days) {
         return ResponseEntity.ok(leaderboardService.discountHuntersAdmin(days));
     }
 }

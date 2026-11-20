@@ -339,6 +339,17 @@ class HouseholdSavingsServiceTest {
                 eq(user.getHousehold().getId()), eq(TO.minusDays(180)), eq(TO));
     }
 
+    @Test
+    void withoutAStart_thePeriodFollowsTheDaysSetInTheAdmin() {
+        service.setDefaultPeriodDays(30);
+
+        var savings = service.savings(user, null, TO);
+
+        assertThat(savings.from()).isEqualTo(TO.minusDays(30));
+        verify(receiptItemRepository).findConfirmedInStoreLinesForHousehold(
+                eq(user.getHousehold().getId()), eq(TO.minusDays(120)), eq(TO));
+    }
+
     private void buy(Product product, String quantity, String totalPrice, LocalDateTime purchasedAt) {
         var receipt = Receipt.builder().id(UUID.randomUUID())
                 .cnpjEmitente(NEARBY_SUPERMARKET).marketName("MERCADO X LTDA").issuedAt(purchasedAt).build();

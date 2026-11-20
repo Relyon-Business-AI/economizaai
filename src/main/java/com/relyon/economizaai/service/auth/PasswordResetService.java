@@ -24,7 +24,7 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class PasswordResetService {
 
-    private static final int CODE_TTL_MINUTES = 60;
+    public static final int CODE_TTL_MINUTES = 60;
     // 6-digit code: short enough to type on a phone, with a TTL + single-active-code
     // + single-use to bound brute-force (10^6 space, one live code, 60-min window).
     private static final int CODE_BOUND = 1_000_000;

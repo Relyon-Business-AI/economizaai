@@ -26,7 +26,7 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class EmailVerificationService {
 
-    private static final int CODE_TTL_HOURS = 24;
+    public static final int CODE_TTL_HOURS = 24;
     private static final int CODE_BOUND = 1_000_000;
     private static final int MAX_VERIFY_ATTEMPTS = 5;
 

@@ -40,7 +40,7 @@ public class PhoneVerificationService {
 
     /** Loose E.164: a leading '+' then 8–15 digits, first digit non-zero. */
     private static final Pattern E164 = Pattern.compile("^\\+[1-9]\\d{7,14}$");
-    private static final int OTP_TTL_MINUTES = 10;
+    public static final int OTP_TTL_MINUTES = 10;
     private static final int OTP_BOUND = 1_000_000;
     private static final int MAX_VERIFY_ATTEMPTS = 5;
 

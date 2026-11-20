@@ -122,6 +122,10 @@ class RuntimeSettingsTest {
 
         assertThat(published).containsEntry("priceWindowDays", 90L);
         assertThat(published).containsEntry("launchPromoUntil", "2026-12-31");
+        assertThat(published).containsEntry("launchPromoWarningDays", List.of(15L, 7L, 3L, 1L));
+        assertThat(published).containsKeys("receiptComparisonMaxAgeDays", "savingsDefaultPeriodDays", "leaderboardTopN",
+                "leaderboardDefaultDays", "referralRewardMonths", "dataShareConsentDays", "routeDefaultMaxDistanceKm",
+                "routeDefaultMaxStops", "routeDefaultMinSavingPerStop", "homeSavingsMin");
         assertThat(published).containsKeys("nearbyRadiusKm", "maxItemPhotos", "contingencyWindowHours");
         assertThat(published).containsKeys("freeMonthlyReceipts", "freeHistoryDays", "freeWatchedMarkets",
                 "premiumMonthlyPrice", "premiumYearlyPrice");
