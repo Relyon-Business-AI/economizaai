@@ -2609,7 +2609,7 @@ PUT    /api/v1/admin/settings/{key}    body { "value": "<text>" }  → AdminSett
 DELETE /api/v1/admin/settings/{key}    → AdminSettingResponse   (back to the value configured for the environment)
 ```
 
-`AdminSettingResponse`: `{ key, label, description, type, unit?, value, configuredValue, changed, min?, max?,
+`AdminSettingResponse`: `{ key, label, description, reflectsOn, type, unit?, value, configuredValue, changed, min?, max?,
 options[], appKey?, changedAt?, changedBy? }`. `value` and `configuredValue` are always **text**:
 
 | `type` | `value` | Notes |

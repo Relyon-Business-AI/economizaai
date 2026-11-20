@@ -4,7 +4,7 @@
 
 - **Novo: `GET /admin/settings`** devolve as regras de negócio agrupadas por seção (planos, preços e ofertas,
   economia e previsão, notificações, custos, notas e estados, aplicativo, comerciantes). Cada item traz
-  `key`, `label`, `description`, `type`, `unit`, `value` (em vigor), `configuredValue` (o do ambiente),
+  `key`, `label`, `description`, `reflectsOn` (onde a mudança aparece), `type`, `unit`, `value` (em vigor), `configuredValue` (o do ambiente),
   `changed`, `min`/`max`, `options`, `appKey`, `changedAt`, `changedBy`.
 - **`PUT /admin/settings/{key}`** com `{ "value": "..." }` salva e passa a valer na hora, sem reiniciar.
   **`DELETE /admin/settings/{key}`** volta ao valor configurado para o ambiente. Valor fora do tipo, da faixa

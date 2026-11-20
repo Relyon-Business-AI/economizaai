@@ -24,6 +24,7 @@ class RuntimeSettingTest {
         assertThat(RuntimeSetting.values()).allSatisfy(setting -> {
             assertThat(setting.getLabel()).isNotBlank();
             assertThat(setting.getDescription()).isNotBlank();
+            assertThat(RuntimeSettingReach.of(setting)).as("where %s shows up", setting).isNotBlank();
         });
     }
 

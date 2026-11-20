@@ -26,6 +26,7 @@ import java.time.Month;
 import java.util.List;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -83,6 +84,8 @@ class AdminSettingsControllerTest {
                 .andExpect(jsonPath("$[1].key").value("PRICES"))
                 .andExpect(jsonPath("$[1].settings[0].key").value(PRICE_WINDOW_KEY))
                 .andExpect(jsonPath("$[1].settings[0].label").value("Validade dos preços da comunidade"))
+                .andExpect(jsonPath("$[1].settings[0].reflectsOn").value(
+                        containsString("melhores mercados")))
                 .andExpect(jsonPath("$[1].settings[0].type").value("INTEGER"))
                 .andExpect(jsonPath("$[1].settings[0].unit").value("dias"))
                 .andExpect(jsonPath("$[1].settings[0].value").value("60"))
