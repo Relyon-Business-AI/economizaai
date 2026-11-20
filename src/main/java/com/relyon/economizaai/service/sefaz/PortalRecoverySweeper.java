@@ -4,6 +4,8 @@ import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.ReceiptRepository;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
@@ -33,7 +35,8 @@ public class PortalRecoverySweeper {
     private static final int BATCH = 200;
 
     private final ReceiptRepository receiptRepository;
-    private final int windowHours;
+    @Getter @Setter
+    private volatile int windowHours;
 
     public PortalRecoverySweeper(
             ReceiptRepository receiptRepository,

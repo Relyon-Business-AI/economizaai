@@ -1,7 +1,6 @@
 package com.relyon.economizaai.exception;
 
 import com.relyon.economizaai.dto.request.BetaSignupRequest;
-import com.relyon.economizaai.dto.request.ImportChavesRequest;
 import com.relyon.economizaai.dto.request.UpdatePhoneRequest;
 import com.relyon.economizaai.dto.request.VerifyPhoneRequest;
 import com.relyon.economizaai.service.LocalizedMessageService;
@@ -14,7 +13,6 @@ import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 
-import java.util.Collections;
 import java.util.Locale;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -62,13 +60,6 @@ class CustomValidationMessageTest {
     void phoneFormat_usesTheCustomKey() throws Exception {
         assertThat(fieldErrorFor(new UpdatePhoneRequest("51999"), "phoneNumber", Locale.forLanguageTag("pt")))
                 .isEqualTo("use o código do país e o DDD, ex.: +5551999999999");
-    }
-
-    @Test
-    void importBatchSize_usesTheCustomKey() throws Exception {
-        var request = new ImportChavesRequest(Collections.nCopies(501, "1"));
-
-        assertThat(fieldErrorFor(request, "chaves", Locale.forLanguageTag("pt"))).isEqualTo("até 500 notas por vez");
     }
 
     @Test

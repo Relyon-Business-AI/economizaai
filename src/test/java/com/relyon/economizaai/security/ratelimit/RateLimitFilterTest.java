@@ -32,6 +32,7 @@ class RateLimitFilterTest {
     private FilterChain chain;
     private LocalizedMessageService messageService;
     private ObjectMapper objectMapper;
+    private ReceiptQuotas quotas;
 
     @BeforeEach
     void setUp() {
@@ -41,7 +42,8 @@ class RateLimitFilterTest {
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         objectMapper = mapper;
-        filter = new RateLimitFilter(new RateLimitRegistry(), messageService, mapper);
+        quotas = new ReceiptQuotas();
+        filter = new RateLimitFilter(new RateLimitRegistry(), messageService, mapper, quotas);
         chain = mock(FilterChain.class);
         SecurityContextHolder.clearContext();
     }
@@ -303,6 +305,77 @@ class RateLimitFilterTest {
     private void authenticateAs(String email) {
         var authentication = new UsernamePasswordAuthenticationToken(email, null, List.of());
         SecurityContextHolder.getContext().setAuthentication(authentication);
+    }
+
+    @Test
+    void receiptSubmissionsPerHour_followTheConfiguredQuota() throws Exception {
+        for (var attempt = 0; attempt < 30; attempt++) invokeSubmitRequest("6.1.1.1");
+        assertEquals(429, invokeSubmitRequest("6.1.1.1").getStatus());
+
+        quotas.setReceiptSubmitsPerHour(2);
+
+        assertEquals(200, invokeSubmitRequest("6.1.1.1").getStatus(), "a changed quota applies to the next request");
+        assertEquals(200, invokeSubmitRequest("6.1.1.1").getStatus());
+        assertEquals(429, invokeSubmitRequest("6.1.1.1").getStatus());
+    }
+
+    @Test
+    void bulkImportsPerHour_followTheConfiguredQuota() throws Exception {
+        for (var attempt = 0; attempt < 5; attempt++) {
+            assertEquals(200, invokePost("/api/v1/receipts/import", "6.2.2.2").getStatus());
+        }
+        assertEquals(429, invokePost("/api/v1/receipts/import", "6.2.2.2").getStatus());
+
+        quotas.setReceiptImportsPerHour(7);
+
+        for (var attempt = 0; attempt < 7; attempt++) {
+            assertEquals(200, invokePost("/api/v1/receipts/import", "6.2.2.2").getStatus());
+        }
+        assertEquals(429, invokePost("/api/v1/receipts/import", "6.2.2.2").getStatus());
+    }
+
+    @Test
+    void importPreviewsPerHour_followTheConfiguredQuota() throws Exception {
+        var path = "/api/v1/receipts/import/extract-chaves";
+        for (var attempt = 0; attempt < 30; attempt++) invokePost(path, "6.3.3.3");
+        assertEquals(429, invokePost(path, "6.3.3.3").getStatus());
+
+        quotas.setImportPreviewsPerHour(1);
+
+        assertEquals(200, invokePost(path, "6.3.3.3").getStatus());
+        assertEquals(429, invokePost(path, "6.3.3.3").getStatus());
+    }
+
+    @Test
+    void historyExportsPerHour_followTheConfiguredQuota() throws Exception {
+        for (var attempt = 0; attempt < 10; attempt++) {
+            assertEquals(200, invokeExportRequest("6.4.4.4").getStatus());
+        }
+        assertEquals(429, invokeExportRequest("6.4.4.4").getStatus());
+
+        quotas.setHistoryExportsPerHour(3);
+
+        for (var attempt = 0; attempt < 3; attempt++) {
+            assertEquals(200, invokeExportRequest("6.4.4.4").getStatus());
+        }
+        assertEquals(429, invokeExportRequest("6.4.4.4").getStatus());
+    }
+
+    @Test
+    void changingAReceiptQuota_leavesTheOtherLimitsAlone() throws Exception {
+        for (var attempt = 0; attempt < 15; attempt++) invokeAuthRequest("6.5.5.5");
+
+        quotas.setReceiptSubmitsPerHour(100);
+
+        assertEquals(429, invokeAuthRequest("6.5.5.5").getStatus());
+    }
+
+    private MockHttpServletResponse invokeExportRequest(String ip) throws Exception {
+        var request = new MockHttpServletRequest("GET", "/api/v1/receipts/export");
+        request.setRemoteAddr(ip);
+        var response = new MockHttpServletResponse();
+        filter.doFilterInternal(request, response, chain);
+        return response;
     }
 
     private MockHttpServletResponse invokeSubmitRequest(String ip) throws Exception {

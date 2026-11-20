@@ -12,6 +12,8 @@ import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.repository.StateIngestionAttemptRepository;
 import com.relyon.economizaai.service.ContactService;
 import com.relyon.economizaai.time.BrazilClock;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -65,11 +67,16 @@ public class StateCoverageService {
     private final StateIngestionAttemptRepository repository;
     private final ReceiptRepository receiptRepository;
     private final ContactService contactService;
-    private final int regressionMinFailures;
-    private final long regressionWindowHours;
-    private final int minEvidenceUserDays;
-    private final int minEvidenceUsers;
-    private final int minEvidenceDays;
+    @Getter @Setter
+    private volatile int regressionMinFailures;
+    @Getter @Setter
+    private volatile long regressionWindowHours;
+    @Getter @Setter
+    private volatile int minEvidenceUserDays;
+    @Getter @Setter
+    private volatile int minEvidenceUsers;
+    @Getter @Setter
+    private volatile int minEvidenceDays;
 
     public StateCoverageService(
             StateIngestionAttemptRepository repository,

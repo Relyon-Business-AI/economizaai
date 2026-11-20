@@ -179,18 +179,19 @@ economizaai:
     # Prepaid credit budget in USD — shown in the spend panel as "saldo estimado".
     # Set to 0 to hide the balance indicator.
     budget-usd: ${ECONOMIZAAI_AI_BUDGET_USD:0}
+    # Limiares de confiança das sugestões de subcategoria da IA (varredura do admin e itens de cada
+    # nota). Assimétrico: preencher subcategoria vazia é baixo risco; trocar uma existente pede mais;
+    # mudar a CATEGORIA pede o máximo.
+    subcategory-suggestion:
+      set-min-confidence: ${AI_SUBCAT_SET_MIN:0.55}
+      change-subcategory-min-confidence: ${AI_SUBCAT_CHANGE_SUB_MIN:0.80}
+      change-category-min-confidence: ${AI_SUBCAT_CHANGE_CAT_MIN:0.90}
   # Provedor OpenAI do AiChatPort (segundo provedor, selecionável por tier no admin).
   # Inerte até OPENAI_API_KEY ser setada; aí o toggle "GPT aqui, Claude ali" fica ativo.
   openai:
     api-key: ${OPENAI_API_KEY:}
     base-url: ${LLM_BASE_URL:https://api.openai.com/v1}
     timeout-ms: ${OPENAI_TIMEOUT_MS:60000}
-    # Limiares de confiança da varredura de subcategoria (sugestão da IA). Assimétrico: preencher
-    # subcategoria vazia é baixo risco; trocar uma existente pede mais; mudar a CATEGORIA pede o máximo.
-    subcategory-suggestion:
-      set-min-confidence: ${AI_SUBCAT_SET_MIN:0.55}
-      change-subcategory-min-confidence: ${AI_SUBCAT_CHANGE_SUB_MIN:0.80}
-      change-category-min-confidence: ${AI_SUBCAT_CHANGE_CAT_MIN:0.90}
   async:
     # Background AI lanes (AsyncConfig). Fixed-size pools with a bounded queue: a full
     # queue rejects, and each dispatch site fails the nota / skips the best-effort work.
@@ -205,6 +206,8 @@ economizaai:
       threads: ${ASYNC_AI_CATEGORIZATION_THREADS:2}
       queue-capacity: ${ASYNC_AI_CATEGORIZATION_QUEUE:50}
   receipts:
+    # How many receipts one bulk request may carry (import by chave, retry, confirm, delete).
+    bulk-max-receipts: ${RECEIPTS_BULK_MAX_RECEIPTS:500}
     auto-confirm:
       # Notas left PENDING are confirmed for the user after after-hours; each sweep
       # (every sweeper-delay-ms) confirms at most max-per-run, oldest first.
@@ -221,6 +224,9 @@ economizaai:
     # On shutdown (deploy) the ingest pool waits up to this long for in-flight and queued
     # ingests to finish instead of dropping them.
     shutdown-await-seconds: ${INGEST_SHUTDOWN_AWAIT_SECONDS:60}
+    # A nota parked because the state's portal was offline keeps being re-fetched for this long
+    # (336 h = 14 days) before it is given up.
+    portal-recovery-window-hours: ${INGEST_PORTAL_RECOVERY_WINDOW_HOURS:336}
     # Probe de estados "pausados" no Infosimples (portal da SEFAZ fora): sonda a cada 6h
     # e alerta o dono UMA vez quando a rota volta a responder 200, pra onboardar o estado.
     # Estados com portal caído (615) sob vigilância: SE (caiu ~22/10) e TO (caiu ~09/11), ambos
@@ -304,6 +310,11 @@ economizaai:
         enabled: ${SEFAZ_EXPERIMENTAL_ENABLED:true}
         allowed-host-suffixes: ${SEFAZ_EXPERIMENTAL_ALLOWED_HOSTS:gov.br}
         max-attempts: ${SEFAZ_EXPERIMENTAL_MAX_ATTEMPTS:3}
+        # Spend cap: an unproven UF stops being attempted once its total failures reach this
+        # many (user, day) pairs, from at least min-evidence-users users on min-evidence-days days.
+        min-evidence-user-days: ${SEFAZ_EXPERIMENTAL_MIN_EVIDENCE_USER_DAYS:5}
+        min-evidence-users: ${SEFAZ_EXPERIMENTAL_MIN_EVIDENCE_USERS:2}
+        min-evidence-days: ${SEFAZ_EXPERIMENTAL_MIN_EVIDENCE_DAYS:2}
       # Regression watch for VERIFIED states: when a portal we already support
       # changes its DANFE format, its parser starts failing. min-failures parse
       # failures within window-hours on the same UF triggers ONE admin alert
@@ -591,6 +602,21 @@ economizaai:
       min-token-products: ${CONSENSUS_MIN_TOKEN_PRODUCTS:2}
       interval-ms: ${CONSENSUS_INTERVAL_MS:86400000}
       initial-delay-ms: ${CONSENSUS_INITIAL_DELAY_MS:86400000}
+    auto-promote:
+      # A word enters the learned dictionary when at least min-samples AI-classified products
+      # contain it and min-agreement of them share one category.
+      min-samples: ${AUTO_PROMOTE_MIN_SAMPLES:7}
+      min-agreement: ${AUTO_PROMOTE_MIN_AGREEMENT:0.90}
+  canonicalization:
+    # Minimum description similarity (Jaro-Winkler, 0-1) for a receipt item to be taken as an
+    # already-known product.
+    fuzzy-match-threshold: ${CANONICALIZATION_FUZZY_MATCH_THRESHOLD:0.85}
+  rate-limit:
+    # Per-user hourly quotas enforced by RateLimitFilter.
+    receipt-submits-per-hour: ${RATE_LIMIT_RECEIPT_SUBMITS_PER_HOUR:30}
+    receipt-imports-per-hour: ${RATE_LIMIT_RECEIPT_IMPORTS_PER_HOUR:5}
+    import-previews-per-hour: ${RATE_LIMIT_IMPORT_PREVIEWS_PER_HOUR:30}
+    history-exports-per-hour: ${RATE_LIMIT_HISTORY_EXPORTS_PER_HOUR:10}
   ml:
     # Cascade applies ML category/genericName only when true. Currently OFF —
     # the model is still trained + measured (shadow) via the benchmark, but its

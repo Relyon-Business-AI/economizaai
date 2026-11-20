@@ -25,13 +25,27 @@ import java.time.Duration;
  */
 public class RateLimitRegistry {
 
-    private final Cache<String, Bucket> buckets = Caffeine.newBuilder()
+    /** A bucket and the policy it was built for. */
+    private record PolicyBucket(RateLimitPolicy policy, Bucket bucket) {}
+
+    private final Cache<String, PolicyBucket> buckets = Caffeine.newBuilder()
             .expireAfterAccess(Duration.ofHours(1))
             .maximumSize(100_000)
             .build();
 
+    /**
+     * The bucket of this policy for this key. A policy whose limit changed since the bucket was
+     * built (limits edited in the admin) gets a fresh bucket, so the new limit applies at once.
+     */
     public Bucket bucketFor(RateLimitPolicy policy, String key) {
         var compositeKey = policy.name() + ":" + key;
-        return buckets.get(compositeKey, unusedKey -> Bucket.builder().addLimit(policy.toBandwidth()).build());
+        return buckets.asMap()
+                .compute(compositeKey, (unusedKey, existing) ->
+                        existing != null && existing.policy().equals(policy) ? existing : newBucket(policy))
+                .bucket();
+    }
+
+    private static PolicyBucket newBucket(RateLimitPolicy policy) {
+        return new PolicyBucket(policy, Bucket.builder().addLimit(policy.toBandwidth()).build());
     }
 }

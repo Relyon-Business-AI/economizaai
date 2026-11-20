@@ -46,12 +46,15 @@ class AiSubcategorySuggestionServiceTest {
     @Mock private ReceiptItemRepository receiptItemRepository;
     @Mock private AiGateway aiGateway;
 
+    private AiCategoryConfidence confidence;
     private AiSubcategorySuggestionService service;
 
     @BeforeEach
     void setUp() {
+        confidence = new AiCategoryConfidence();
         service = new AiSubcategorySuggestionService(
-                productRepository, findingRepository, classifier, categoryResolver, receiptItemRepository, aiGateway);
+                productRepository, findingRepository, classifier, categoryResolver, receiptItemRepository, aiGateway,
+                confidence);
         lenient().when(classifier.isEnabled()).thenReturn(true);
         lenient().when(categoryResolver.groupIds()).thenReturn(Set.of(UUID.randomUUID()));
     }
@@ -224,5 +227,71 @@ class AiSubcategorySuggestionServiceTest {
 
         assertTrue(outcome.stopped());
         assertEquals(0, outcome.created());
+    }
+
+    @Test
+    void fillingAnEmptySubcategory_followsTheConfiguredConfidence() {
+        var queijosNode = UUID.randomUUID();
+        var product = Product.builder().id(UUID.randomUUID())
+                .normalizedName("ITEM XPTO 500").category(ProductCategory.MEAT_DAIRY).build();
+        when(productRepository.findWithoutSubcategory(any(), any(), any())).thenReturn(List.of(product));
+        when(findingRepository.findByStatusAndType(AiFindingStatus.PENDING, AiFindingType.SUSPECT_CATEGORY)).thenReturn(List.of());
+        when(classifier.suggest(anyList()))
+                .thenReturn(List.of(new FineSuggestion(product.getId(), queijosNode, "queijos", 0.50)));
+        lenient().when(categoryResolver.labelFor(any(), any(Locale.class))).thenReturn("Queijos");
+        lenient().when(receiptItemRepository.findLastPriceAndMarket(eq(product.getId()), any())).thenReturn(List.of());
+
+        assertEquals(0, service.generate(50).created(), "50% is below the 55% asked to fill a subcategory");
+
+        confidence.setSetMinConfidence(0.45);
+
+        assertEquals(1, service.generate(50).created());
+    }
+
+    @Test
+    void replacingASubcategory_followsTheConfiguredConfidence() {
+        var carnesGroup = UUID.randomUUID();
+        var avesNode = UUID.randomUUID();
+        var suinosNode = UUID.randomUUID();
+        var product = Product.builder().id(UUID.randomUUID())
+                .normalizedName("PRODUTO XPTO 500").category(ProductCategory.MEAT_DAIRY).categoryId(avesNode).build();
+        when(productRepository.findWithoutSubcategory(any(), any(), any())).thenReturn(List.of(product));
+        when(findingRepository.findByStatusAndType(AiFindingStatus.PENDING, AiFindingType.SUSPECT_CATEGORY)).thenReturn(List.of());
+        when(classifier.suggest(anyList()))
+                .thenReturn(List.of(new FineSuggestion(product.getId(), suinosNode, "suinos", 0.70)));
+        when(categoryResolver.groupIdOf(avesNode)).thenReturn(carnesGroup);
+        when(categoryResolver.groupIdOf(suinosNode)).thenReturn(carnesGroup);
+        when(categoryResolver.isLeafNode(avesNode)).thenReturn(true);
+        lenient().when(categoryResolver.labelFor(any(), any(Locale.class))).thenReturn("Carnes");
+        lenient().when(receiptItemRepository.findLastPriceAndMarket(eq(product.getId()), any())).thenReturn(List.of());
+
+        assertEquals(0, service.generate(50).created(), "70% is below the 80% asked to replace a subcategory");
+
+        confidence.setChangeSubcategoryMinConfidence(0.65);
+
+        assertEquals(1, service.generate(50).created());
+    }
+
+    @Test
+    void movingToAnotherCategory_followsTheConfiguredConfidence() {
+        var merceariaGroup = UUID.randomUUID();
+        var hortifrutiGroup = UUID.randomUUID();
+        var hortifrutiLeaf = UUID.randomUUID();
+        var product = Product.builder().id(UUID.randomUUID())
+                .normalizedName("PRODUTO XPTO 500").category(ProductCategory.GROCERIES).categoryId(merceariaGroup).build();
+        when(productRepository.findWithoutSubcategory(any(), any(), any())).thenReturn(List.of(product));
+        when(findingRepository.findByStatusAndType(AiFindingStatus.PENDING, AiFindingType.SUSPECT_CATEGORY)).thenReturn(List.of());
+        when(classifier.suggest(anyList()))
+                .thenReturn(List.of(new FineSuggestion(product.getId(), hortifrutiLeaf, "frutas", 0.70)));
+        when(categoryResolver.groupIdOf(merceariaGroup)).thenReturn(merceariaGroup);
+        when(categoryResolver.groupIdOf(hortifrutiLeaf)).thenReturn(hortifrutiGroup);
+        lenient().when(categoryResolver.labelFor(any(), any(Locale.class))).thenReturn("Hortifrúti");
+        lenient().when(receiptItemRepository.findLastPriceAndMarket(eq(product.getId()), any())).thenReturn(List.of());
+
+        assertEquals(0, service.generate(50).created(), "70% is below the 90% asked to change the category");
+
+        confidence.setChangeCategoryMinConfidence(0.65);
+
+        assertEquals(1, service.generate(50).created());
     }
 }

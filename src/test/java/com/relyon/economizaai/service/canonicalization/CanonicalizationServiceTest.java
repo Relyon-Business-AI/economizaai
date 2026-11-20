@@ -847,4 +847,35 @@ class CanonicalizationServiceTest {
         assertEquals(1, outcome.matched());
         verify(aliasRepository, never()).save(any());
     }
+
+    @Test
+    void theSimilarityNeededToBeTheSameProduct_followsTheConfiguredValue() {
+        var product = Product.builder().id(UUID.randomUUID())
+                .normalizedName("Arroz Tio Joao 5KG").genericName("Arroz")
+                .packSize(new BigDecimal("5")).packUnit("KG").build();
+        var existingAlias = ProductAlias.builder()
+                .product(product).normalizedDescription("arroz tio joao 5kg").build();
+        when(aliasRepository.findByNormalizedDescription("arroz tio j 5 kg")).thenReturn(Optional.empty());
+        when(productExtractor.extract("ARROZ TIO J 5KG")).thenReturn(
+                new ProductExtraction("Arroz", "Tio Joao", new BigDecimal("5"), "KG",
+                        ProductCategory.GROCERIES, null, CategorizationSource.DICTIONARY));
+        when(aliasRepository.findCandidatesByProductMetadata("arroz", new BigDecimal("5"), "KG"))
+                .thenReturn(List.of(existingAlias));
+        when(aliasRepository.existsByNormalizedDescription("arroz tio j 5 kg")).thenReturn(false);
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> {
+            var created = invocation.<Product>getArgument(0);
+            created.setId(UUID.randomUUID());
+            return created;
+        });
+
+        var withDefault = service.canonicalize(buildReceipt(item("ARROZ TIO J 5KG", null)));
+        assertEquals(1, withDefault.matched(), "the abbreviation clears the default 0.85");
+        verify(productRepository, never()).save(any(Product.class));
+
+        service.setFuzzyMatchThreshold(1.0);
+        var whenIdenticalIsRequired = service.canonicalize(buildReceipt(item("ARROZ TIO J 5KG", null)));
+
+        assertEquals(0, whenIdenticalIsRequired.matched());
+        assertEquals(1, whenIdenticalIsRequired.created());
+    }
 }

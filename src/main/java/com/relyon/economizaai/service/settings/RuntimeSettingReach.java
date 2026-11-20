@@ -181,6 +181,48 @@ public final class RuntimeSettingReach {
                 "Notas emitidas sem internet: por quanto tempo seguem sendo buscadas, e o prazo citado no app.");
         REFLECTS_ON.put(RuntimeSetting.MAX_ITEM_PHOTOS,
                 "Envio de nota por foto no scanner e o texto \"até N fotos\" do app.");
+        REFLECTS_ON.put(RuntimeSetting.RECEIPT_SUBMITS_PER_HOUR,
+                "Envio de nota por QR, foto, chave digitada, arquivo e \"tentar de novo\": acima do limite o app mostra \"muitas tentativas\".");
+        REFLECTS_ON.put(RuntimeSetting.RECEIPT_IMPORTS_PER_HOUR,
+                "Tela de importação de notas: botão de importar a lista ou o arquivo.");
+        REFLECTS_ON.put(RuntimeSetting.IMPORT_PREVIEWS_PER_HOUR,
+                "Tela de importação de notas: leitura do arquivo escolhido antes de importar.");
+        REFLECTS_ON.put(RuntimeSetting.HISTORY_EXPORTS_PER_HOUR,
+                "Exportação do histórico de compras (planilha ou PDF) e dos dados da conta.");
+        REFLECTS_ON.put(RuntimeSetting.BULK_MAX_RECEIPTS,
+                "Tela de importação de notas: importar, tentar de novo, confirmar e apagar em lote, e o limite citado no app e na mensagem de erro.");
+        REFLECTS_ON.put(RuntimeSetting.PORTAL_RETRY_HOURS,
+                "Notas guardadas com o portal do estado fora do ar: por quanto tempo seguem sendo buscadas, e o prazo citado no app.");
+        REFLECTS_ON.put(RuntimeSetting.STATE_UNSTABLE_WINDOW_HOURS,
+                "FAQ \"situação dos estados\" no app: quais estados aparecem como instáveis.");
+        REFLECTS_ON.put(RuntimeSetting.STATE_UNSTABLE_MIN_FAILURES,
+                "FAQ \"situação dos estados\" no app: quais estados aparecem como instáveis.");
+        REFLECTS_ON.put(RuntimeSetting.PORTAL_REGRESSION_MIN_FAILURES,
+                "Alerta por e-mail aos administradores quando um portal muda de formato e FAQ \"situação dos estados\".");
+        REFLECTS_ON.put(RuntimeSetting.PORTAL_REGRESSION_WINDOW_HOURS,
+                "Alerta por e-mail aos administradores quando um portal muda de formato.");
+        REFLECTS_ON.put(RuntimeSetting.STATE_EVIDENCE_USER_DAYS,
+                "Notas de estados em validação: quando o sistema para de tentar (e de pagar) por um estado que não funciona.");
+        REFLECTS_ON.put(RuntimeSetting.STATE_EVIDENCE_USERS,
+                "Notas de estados em validação: quando o sistema para de tentar por um estado que não funciona.");
+        REFLECTS_ON.put(RuntimeSetting.STATE_EVIDENCE_DAYS,
+                "Notas de estados em validação: quando o sistema para de tentar por um estado que não funciona.");
+        REFLECTS_ON.put(RuntimeSetting.AI_SET_MIN_CONFIDENCE,
+                "Sugestões de subcategoria da IA: na revisão do admin e nos itens de cada nota que chega.");
+        REFLECTS_ON.put(RuntimeSetting.AI_CHANGE_SUBCATEGORY_MIN_CONFIDENCE,
+                "Admin → sugestões de subcategoria da IA: trocas de subcategoria propostas.");
+        REFLECTS_ON.put(RuntimeSetting.AI_CHANGE_CATEGORY_MIN_CONFIDENCE,
+                "Admin → sugestões de subcategoria da IA: trocas de categoria propostas.");
+        REFLECTS_ON.put(RuntimeSetting.AUTO_PROMOTE_MIN_SAMPLES,
+                "Rotina diária que ensina palavras novas ao dicionário de categorias, usado em todas as notas.");
+        REFLECTS_ON.put(RuntimeSetting.AUTO_PROMOTE_MIN_AGREEMENT,
+                "Rotina diária que ensina palavras novas ao dicionário de categorias, usado em todas as notas.");
+        REFLECTS_ON.put(RuntimeSetting.CONSENSUS_MIN_HOUSEHOLDS,
+                "Correções de categoria feitas pelos usuários: quando passam a valer para todas as casas.");
+        REFLECTS_ON.put(RuntimeSetting.CONSENSUS_MIN_TOKEN_PRODUCTS,
+                "Correções de categoria feitas pelos usuários: quando ensinam uma palavra ao dicionário.");
+        REFLECTS_ON.put(RuntimeSetting.CANONICAL_MATCH_SIMILARITY,
+                "Leitura de cada nota: reconhecimento de um item como produto já conhecido, que alimenta histórico e comparação de preços.");
         REFLECTS_ON.put(RuntimeSetting.HOUSEHOLD_INVITE_HOURS,
                 "Códigos de convite gerados a partir de agora e o prazo citado na tela Casa e na FAQ.");
         REFLECTS_ON.put(RuntimeSetting.APP_MIN_VERSION,
