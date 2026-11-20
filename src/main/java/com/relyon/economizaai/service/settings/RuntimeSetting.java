@@ -140,9 +140,10 @@ public enum RuntimeSetting {
             "Um preço baixo isolado não vira promoção; precisa se repetir."),
     MIN_OBSERVATIONS_PER_PRODUCT_MARKET("economizaai.collaborative.min-observations-per-product-market", PRICES,
             integer(1, 100).unit("preços"),
-            "Preço de referência: observações mínimas",
-            "Quantos preços de um produto num mercado são necessários para mostrar o preço de referência "
-                    + "fora dos itens de mercado comuns."),
+            "Produtos sensíveis: preços mínimos para aparecer",
+            "Trava de privacidade. Quantos preços um produto de saúde, ou vendido em farmácia ou em loja ainda "
+                    + "sem classificação, precisa ter na mesma loja para o preço aparecer para outras pessoas. "
+                    + "Não vale para itens de supermercado: para eles basta 1 preço."),
     PERSONAL_PROMO_THRESHOLD_PCT("economizaai.personal-promo.threshold-pct", PRICES, integer(1, 90).unit("%"),
             "Promoção pessoal: queda mínima",
             "Quanto abaixo do que a própria casa costuma pagar."),
