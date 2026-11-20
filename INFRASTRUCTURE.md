@@ -182,8 +182,7 @@ are offered to `ADMIN` accounts only for now, and need `TWILIO_FROM_WHATSAPP` se
 | `TWILIO_WHATSAPP_DEALS_DIGEST_TEMPLATE_SID` | _(blank)_ | Template of the `DEALS_DIGEST` notice. |
 | `TWILIO_WHATSAPP_REPORT_TEMPLATE_SID` | _(blank)_ | Template of the `WEEKLY_REPORT` notice — used by the weekly AND the monthly report (already existed; `{{1}}` = one-line summary of the period). |
 | `WHATSAPP_REPORTS_ENABLED` | `false` | Turns the spending report job on — BOTH the weekly and the monthly run. Each sends the report by e-mail and/or WhatsApp, per the user's `WEEKLY_REPORT` options, to whoever chose that frequency (`reportFrequencies`). |
-| `WHATSAPP_WEEKLY_REPORT_CRON` | `0 0 10 ? * MON` | When the weekly report runs (America/Sao_Paulo): Monday 10:00, covering the last 7 days. |
-| `WHATSAPP_MONTHLY_REPORT_CRON` | `0 0 10 1 * ?` | When the monthly report runs (America/Sao_Paulo): day 1 at 10:00, covering the previous calendar month. |
+| _(admin)_ | Monday 10:00 / day 1 at 10:00 | The weekly and monthly report send times are no longer env vars (`WHATSAPP_WEEKLY_REPORT_CRON` / `WHATSAPP_MONTHLY_REPORT_CRON` were removed): set them in Admin → Configurações → Notificações. |
 
 **Ingestion**
 
@@ -225,8 +224,7 @@ are offered to `ADMIN` accounts only for now, and need `TWILIO_FROM_WHATSAPP` se
 | `NOTIFICATIONS_QUIET_HOURS_START` / `NOTIFICATIONS_QUIET_HOURS_END` | `21` / `8` | Window (Brasília hours) in which nothing is pushed or e-mailed. |
 | `NOTIFICATIONS_QUIET_HOURS_MAX_DEFERRED` | `3` | Held-back pushes sent per user when the window ends. |
 | `NOTIFICATIONS_QUIET_HOURS_DRAIN_CRON` | `0 0 * * * *` | Job that sends the held-back pushes (hourly). |
-| `NOTIFICATIONS_REPLENISHMENT_CRON` | `0 0 10 * * *` | "Running low" reminders (replaces `NOTIFICATIONS_REPLENISHMENT_INTERVAL_MS`). |
-| `NOTIFICATIONS_BUDGET_CRON` | `0 0 9,18 * * *` | Monthly budget check (replaces `NOTIFICATIONS_BUDGET_INTERVAL_MS`). |
+| _(admin)_ | 10:00 / 9:00 and 18:00 | The "running low" reminder hour and the budget check hours are no longer env vars (`NOTIFICATIONS_REPLENISHMENT_CRON` / `NOTIFICATIONS_BUDGET_CRON` were removed): set them in Admin → Configurações → Notificações. |
 | `SIGNUP_ALERT_ENABLED` | `true` | Admin alert on every signup (existing variable). **Set to `false` on prod.** |
 
 **Subscription, referral, deals, merchants**
@@ -293,3 +291,16 @@ hook to catch duplicate Flyway version numbers.
 ---
 
 _Last updated: 2026-11-11. Keep this in sync when infra changes._
+
+
+## Business rules live in the admin, not in env vars (2026-11-20)
+
+Every business rule (limits, periods, thresholds, send times, provider prices) is a setting in
+Admin → Configurações (`RuntimeSetting`). Its property key in `application.yaml` only supplies the
+starting value of an environment; a value saved in the admin wins and survives deploys. Do not add
+env vars for business rules. The env names that exist for these keys (e.g. `PAID_API_COST_*_CENTS`,
+`COST_ALERT_WARNING_THRESHOLD_PERCENT`, `ECONOMIZAAI_AI_MODEL_PRICES`, `RATE_LIMIT_*_PER_HOUR`,
+`RECEIPTS_BULK_MAX_RECEIPTS`, `INGEST_PORTAL_RECOVERY_WINDOW_HOURS`, `SEFAZ_EXPERIMENTAL_MIN_EVIDENCE_*`,
+`AUTO_PROMOTE_MIN_*`, `CANONICALIZATION_FUZZY_MATCH_THRESHOLD`, `AI_SUBCAT_*`) are optional overrides
+of that starting value and are not set on Render. `AI_SUBCAT_*` used to be ignored (the code read
+another key); they take effect now if ever set. A malformed `ECONOMIZAAI_AI_MODEL_PRICES` stops startup.

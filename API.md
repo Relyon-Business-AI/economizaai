@@ -2628,6 +2628,17 @@ options[], optionLabels{value: label}, appKey?, changedAt?, changedBy? }`. `valu
 value configured for the environment is in effect. A refused value is **400** with a ready-to-show `message`;
 an unknown key is **404**. Settings with an `appKey` are also published in `GET /app-config` → `settings`.
 
+`GET /app-config` → `settings` also carries **read-only facts** the apps state in texts (not editable, they come
+from the code that enforces them): `emailVerificationCodeHours`, `passwordResetCodeMinutes`,
+`emailChangeCodeMinutes`, `phoneCodeMinutes`, `sensitiveMinHouseholds`. The apps must take every number, date
+and period they show from `settings` — never retype one. `INTEGER_LIST` settings arrive as a JSON array of
+numbers (`launchPromoWarningDays: [15,7,3,1]`). A `TEXT` setting may enforce a format (the AI price table:
+`model=input/output` entries separated by `;` plus a `default=` entry) — a bad one is a 400 like any other.
+
+Notes from 2026-11-20: `days` is optional on both leaderboard endpoints (falls back to the admin setting);
+an oversized receipt batch is a 400 whose text is the top-level `message` (it names the configured maximum);
+`rewardedMonths` in `GET /referrals/me` is the sum of months really granted.
+
 All require a JWT for a user with `Role.ADMIN`. Regular users hit 403.
 
 ### Visit beacon (public, no auth)
