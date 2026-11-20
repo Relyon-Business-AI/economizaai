@@ -2635,6 +2635,10 @@ and period they show from `settings` — never retype one. `INTEGER_LIST` settin
 numbers (`launchPromoWarningDays: [15,7,3,1]`). A `TEXT` setting may enforce a format (the AI price table:
 `model=input/output` entries separated by `;` plus a `default=` entry) — a bad one is a 400 like any other.
 
+Each setting also carries `group` — `null`, or `{ key, title, explanation, position }` when it is one field of a
+rule spread over several settings. Draw the settings sharing a `group.key` as one block under `title` and
+`explanation`, ordered by `position`.
+
 Notes from 2026-11-20: `days` is optional on both leaderboard endpoints (falls back to the admin setting);
 an oversized receipt batch is a 400 whose text is the top-level `message` (it names the configured maximum);
 `rewardedMonths` in `GET /referrals/me` is the sum of months really granted.
