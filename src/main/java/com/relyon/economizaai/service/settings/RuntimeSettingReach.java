@@ -59,6 +59,8 @@ public final class RuntimeSettingReach {
                 "Detecção de promoções da comunidade: separa preço recente de preço típico.");
         REFLECTS_ON.put(RuntimeSetting.COMMUNITY_PROMO_MIN_BASELINE,
                 "Detecção de promoções da comunidade: produtos com pouco histórico ficam de fora.");
+        REFLECTS_ON.put(RuntimeSetting.COMMUNITY_PROMO_MIN_OLD,
+                "Detecção de promoções da comunidade: sem preços antigos suficientes não há preço típico para comparar.");
         REFLECTS_ON.put(RuntimeSetting.COMMUNITY_PROMO_MIN_RECENT,
                 "Detecção de promoções da comunidade: evita promoção criada por uma única nota.");
         REFLECTS_ON.put(RuntimeSetting.MIN_OBSERVATIONS_PER_PRODUCT_MARKET,

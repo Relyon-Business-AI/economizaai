@@ -230,6 +230,11 @@ public class CollaborativeProperties {
          * group is skipped regardless of how low the single value is.
          */
         private int communityPromoMinRecentObservations = 3;
+        /**
+         * Minimum older (pre-recent-window, non-promo, non-outlier) prices that form the typical
+         * price a promo is measured against.
+         */
+        private int communityPromoMinBaselineObservations = 3;
         private int communityPromoThresholdPct = 15;
         /**
          * One window for every community price read: reference and promo baselines, the
@@ -301,6 +306,8 @@ public class CollaborativeProperties {
         public void setSensitiveCategoryGroups(List<String> v) { this.sensitiveCategoryGroups = v; }
         public int getMinObservationsForCommunityPromo() { return minObservationsForCommunityPromo; }
         public void setMinObservationsForCommunityPromo(int v) { this.minObservationsForCommunityPromo = v; }
+        public int getCommunityPromoMinBaselineObservations() { return communityPromoMinBaselineObservations; }
+        public void setCommunityPromoMinBaselineObservations(int v) { this.communityPromoMinBaselineObservations = v; }
         public int getCommunityPromoMinRecentObservations() { return communityPromoMinRecentObservations; }
         public void setCommunityPromoMinRecentObservations(int v) { this.communityPromoMinRecentObservations = v; }
         public int getCommunityPromoThresholdPct() { return communityPromoThresholdPct; }

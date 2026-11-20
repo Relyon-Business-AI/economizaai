@@ -570,6 +570,7 @@ economizaai:
     market-prices-default-days: 30             # period the "prices of one market" screen opens with (never above lookback-days)
     best-markets-nearby-radius-km: 20          # "perto de você": best markets, deals, promos and product search
     community-promo-min-recent-observations: 3 # a lone low price is not a promo — it has to repeat
+    community-promo-min-baseline-observations: 3 # older prices needed to know the typical price
     savings-region-window-days: 30             # savings: compare with other households' prices this many days around the purchase
     savings-min-region-samples: 3
     savings-own-lookback-days: 90              # savings fallback: the household's own earlier purchases
