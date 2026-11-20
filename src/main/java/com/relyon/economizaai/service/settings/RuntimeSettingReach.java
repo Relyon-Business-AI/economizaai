@@ -68,7 +68,9 @@ public final class RuntimeSettingReach {
         REFLECTS_ON.put(RuntimeSetting.COMMUNITY_PROMO_MIN_RECENT,
                 "Detecção de promoções da comunidade: evita promoção criada por uma única nota.");
         REFLECTS_ON.put(RuntimeSetting.MIN_OBSERVATIONS_PER_PRODUCT_MARKET,
-                "Preços de referência em produtos e lojas sensíveis (saúde, farmácia) e nas listagens do admin e do lojista.");
+                "Preços de produtos de saúde e de farmácias em todas as telas; preços da comunidade usados no plano "
+                        + "de compras; números do painel do lojista. Conta os preços dentro da validade dos preços "
+                        + "da comunidade e vale junto com o mínimo de 3 casas diferentes.");
         REFLECTS_ON.put(RuntimeSetting.PERSONAL_PROMO_THRESHOLD_PCT,
                 "Selo de promoção pessoal na revisão da nota e nas ofertas.");
         REFLECTS_ON.put(RuntimeSetting.PERSONAL_PROMO_MIN_PURCHASES,
