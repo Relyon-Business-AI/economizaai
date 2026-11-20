@@ -4,6 +4,7 @@ import com.relyon.economizaai.model.Subscription;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.SubscriptionStatus;
 import com.relyon.economizaai.service.ContactService;
+import com.relyon.economizaai.service.auth.SignupAlertService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -25,6 +26,7 @@ class SubscriptionDeletionAlertServiceTest {
 
     private final ContactService contactService = mock(ContactService.class);
     private final Executor sameThread = Runnable::run;
+    private final SignupAlertService signupAlertService = new SignupAlertService(contactService, sameThread, true);
 
     private final User user = User.builder().id(UUID.randomUUID()).name("Maria").email("test31877@economizaai.app").build();
     private final Subscription subscription = Subscription.builder().user(user).status(SubscriptionStatus.ACTIVE)
@@ -33,7 +35,7 @@ class SubscriptionDeletionAlertServiceTest {
 
     @Test
     void emailsTheAdminWithProviderAndPaidUntil() {
-        var service = new SubscriptionDeletionAlertService(contactService, sameThread, true);
+        var service = new SubscriptionDeletionAlertService(contactService, sameThread, signupAlertService);
 
         service.notifyPaidSubscriberDeleted(user, subscription);
 
@@ -46,12 +48,16 @@ class SubscriptionDeletionAlertServiceTest {
     }
 
     @Test
-    void killSwitchSilencesTheAlert() {
-        var service = new SubscriptionDeletionAlertService(contactService, sameThread, false);
+    void theOwnerAlertSwitchSilencesTheAlert_andTurningItBackOnSendsAgain() {
+        var service = new SubscriptionDeletionAlertService(contactService, sameThread, signupAlertService);
+        signupAlertService.setEnabled(false);
 
         service.notifyPaidSubscriberDeleted(user, subscription);
-
         verifyNoInteractions(contactService);
+
+        signupAlertService.setEnabled(true);
+        service.notifyPaidSubscriberDeleted(user, subscription);
+        verify(contactService).notifyAdmin(anyString(), anyString());
     }
 
     @Test
@@ -59,7 +65,7 @@ class SubscriptionDeletionAlertServiceTest {
         Executor rejecting = task -> {
             throw new RejectedExecutionException("pool full");
         };
-        var service = new SubscriptionDeletionAlertService(contactService, rejecting, true);
+        var service = new SubscriptionDeletionAlertService(contactService, rejecting, signupAlertService);
 
         assertDoesNotThrow(() -> service.notifyPaidSubscriberDeleted(user, subscription));
         verify(contactService, never()).notifyAdmin(anyString(), anyString());

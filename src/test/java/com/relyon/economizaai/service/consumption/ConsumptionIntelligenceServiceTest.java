@@ -178,6 +178,26 @@ class ConsumptionIntelligenceServiceTest {
     }
 
     @Test
+    void predict_confidenceLabelsFollowThePurchaseCountsSetInTheAdmin() {
+        var product = product("Pao");
+        var now = LocalDateTime.now();
+        var sixPurchases = new ArrayList<ReceiptItem>();
+        for (int i = 5; i >= 0; i--) {
+            sixPurchases.add(purchase(product, now.minusDays(i * 3L), BigDecimal.ONE));
+        }
+        when(receiptItemRepository.findConfirmedHistoryForHousehold(any())).thenAnswer(history -> new ArrayList<>(sixPurchases));
+
+        assertEquals(ConsumptionPredictionResponse.Confidence.MEDIUM, service.predict(user).get(0).confidence());
+
+        properties.getConsumption().setHighConfidenceMinSamples(6);
+        assertEquals(ConsumptionPredictionResponse.Confidence.HIGH, service.predict(user).get(0).confidence());
+
+        properties.getConsumption().setHighConfidenceMinSamples(20);
+        properties.getConsumption().setMediumConfidenceMinSamples(7);
+        assertEquals(ConsumptionPredictionResponse.Confidence.LOW, service.predict(user).get(0).confidence());
+    }
+
+    @Test
     void suggestedList_includesOnlyRanOutAndRunningLow() {
         var lowProduct = product("Leite");
         var okProduct = product("Detergente");

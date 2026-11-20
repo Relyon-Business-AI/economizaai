@@ -14,8 +14,11 @@ import com.relyon.economizaai.repository.NotificationRuleRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.service.HouseholdProductAliasService;
 import com.relyon.economizaai.service.privacy.LogMasker;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,7 +38,10 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class NotificationRuleService {
 
-    private static final int DEFAULT_LEAD_TIME_DAYS = 3;
+    /** Lead time a "running out" rule gets when the app sends none. */
+    @Getter @Setter
+    @Value("${economizaai.notifications.rules.default-lead-time-days:3}")
+    private volatile int defaultLeadTimeDays = 3;
 
     private final NotificationRuleRepository ruleRepository;
     private final ProductRepository productRepository;
@@ -68,7 +74,7 @@ public class NotificationRuleService {
         rule.setChannel(request.channel());
         rule.setActive(request.active() == null || request.active());
         if (rule.getType() == NotificationType.STOCKOUT) {
-            rule.setLeadTimeDays(request.leadTimeDays() != null ? request.leadTimeDays() : DEFAULT_LEAD_TIME_DAYS);
+            rule.setLeadTimeDays(request.leadTimeDays() != null ? request.leadTimeDays() : defaultLeadTimeDays);
         }
         return rule;
     }

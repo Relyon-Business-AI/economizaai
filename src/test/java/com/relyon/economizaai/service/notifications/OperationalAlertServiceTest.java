@@ -66,6 +66,21 @@ class OperationalAlertServiceTest {
     }
 
     @Test
+    void alertAdmin_theWhatsAppSwitchInTheAdminTakesEffectWithoutARestart() {
+        when(twilioClient.isConfigured(true)).thenReturn(true);
+        var alerts = service("+5551999999999", "HX123", true);
+
+        alerts.setWhatsAppEnabled(false);
+        alerts.alertAdmin("algo", "corpo");
+        verify(twilioClient, never()).sendWhatsAppTemplate(anyString(), anyString(), anyString());
+
+        alerts.setWhatsAppEnabled(true);
+        alerts.alertAdmin("algo", "corpo");
+        verify(twilioClient).sendWhatsAppTemplate(anyString(), anyString(), anyString());
+        verify(contactService, times(2)).notifyAdmin("algo", "corpo");
+    }
+
+    @Test
     void alertAdmin_emailOnlyWhenNoAdminNumbers() {
         when(twilioClient.isConfigured(true)).thenReturn(true);
         var alerts = service("", "HX123", true);

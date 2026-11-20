@@ -4,6 +4,7 @@ import com.relyon.economizaai.model.enums.RelevanceMode;
 import com.relyon.economizaai.service.subscription.Feature;
 import lombok.Getter;
 
+import java.time.DayOfWeek;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -175,6 +176,10 @@ public enum RuntimeSetting {
             integer(1, 365).unit("dias").app("savingsFollowUpDays"),
             "Economia creditada ao app: compras seguintes",
             "Por quantos dias as próximas compras do produto naquele mercado continuam contando."),
+    SAVINGS_RECENT_DAYS("economizaai.attribution.recent-savings-days", SAVINGS,
+            integer(1, 365).unit("dias").app("savingsRecentDays"),
+            "Economia creditada ao app: período recente",
+            "Quantos dias para trás entram no valor de economia recente, mostrado ao lado do total."),
     CONSUMPTION_MIN_PURCHASES("economizaai.consumption.min-purchases-for-prediction", SAVINGS, integer(2, 50).unit("compras"),
             "Previsão: compras mínimas",
             "Dias de compra diferentes necessários para prever quando um produto acaba."),
@@ -192,6 +197,15 @@ public enum RuntimeSetting {
     CONSUMPTION_RAN_OUT_GRACE_DAYS("economizaai.consumption.ran-out-grace-days", SAVINGS, integer(0, 30).unit("dias"),
             "Previsão: tolerância para acabou",
             "Dias de folga depois da data prevista antes de marcar como acabou."),
+    CONSUMPTION_HIGH_CONFIDENCE_SAMPLES("economizaai.consumption.high-confidence-min-samples", SAVINGS,
+            integer(1, 100).unit("compras"),
+            "Previsão: compras para confiança alta",
+            "A partir de quantas compras do produto a previsão aparece com confiança alta."),
+    CONSUMPTION_MEDIUM_CONFIDENCE_SAMPLES("economizaai.consumption.medium-confidence-min-samples", SAVINGS,
+            integer(1, 100).unit("compras"),
+            "Previsão: compras para confiança média",
+            "A partir de quantas compras a previsão aparece com confiança média; abaixo disso, baixa. "
+                    + "Deve ser menor que o número da confiança alta."),
     PREFERENCES_MIN_PURCHASES("economizaai.preferences.min-purchases-per-generic", SAVINGS, integer(1, 100).unit("compras"),
             "Preferência de marca: compras mínimas",
             "Compras de um tipo de produto necessárias para concluir uma preferência."),
@@ -201,6 +215,15 @@ public enum RuntimeSetting {
     PREFERENCES_PREFERRED_SHARE("economizaai.preferences.preferred-brand-share", SAVINGS, decimal("0.3", "1"),
             "Preferência de marca: prefere essa",
             "Fração das compras numa marca para tratá-la como preferida."),
+    PREFERENCES_HIGH_CONFIDENCE_PURCHASES("economizaai.preferences.high-confidence-min-purchases", SAVINGS,
+            integer(1, 500).unit("compras"),
+            "Preferência de marca: compras para confiança alta",
+            "A partir de quantas compras de um tipo de produto a preferência aparece com confiança alta."),
+    PREFERENCES_MEDIUM_CONFIDENCE_PURCHASES("economizaai.preferences.medium-confidence-min-purchases", SAVINGS,
+            integer(1, 500).unit("compras"),
+            "Preferência de marca: compras para confiança média",
+            "A partir de quantas compras a preferência aparece com confiança média; abaixo disso, baixa. "
+                    + "Deve ser menor que o número da confiança alta."),
 
     // ---- Notificações ----
     QUIET_HOURS_ENABLED("economizaai.notifications.quiet-hours.enabled", NOTIFICATIONS, toggle(),
@@ -236,6 +259,19 @@ public enum RuntimeSetting {
             integer(1, 60).unit("dias"),
             "Reposição: intervalo entre lembretes",
             "Dias entre um lembrete e o próximo do mesmo produto."),
+    REPLENISHMENT_SEND_HOUR("economizaai.notifications.replenishment.send-hour", NOTIFICATIONS,
+            integer(0, 23).unit("h"),
+            "Reposição: hora do envio",
+            "Hora de Brasília em que os lembretes de produto acabando são enviados, uma vez por dia."),
+    STOCKOUT_DEFAULT_LEAD_DAYS("economizaai.notifications.rules.default-lead-time-days", NOTIFICATIONS,
+            integer(0, 60).unit("dias"),
+            "Reposição: antecedência padrão",
+            "Antecedência gravada num aviso de produto acabando quando a pessoa não escolhe uma."),
+    BUDGET_CHECK_HOURS("economizaai.notifications.budget.check-hours", NOTIFICATIONS,
+            integerList(0, 23).unit("h"),
+            "Orçamento: horas da conferência",
+            "Horas de Brasília em que o gasto do mês é comparado com o orçamento da casa. "
+                    + "Separe por vírgula, por exemplo 9,18."),
     PRICE_ALERT_COOLDOWN_HOURS("economizaai.notifications.price-alert-cooldown-hours", NOTIFICATIONS,
             integer(1, 720).unit("horas"),
             "Alerta de preço: intervalo mínimo",
@@ -247,9 +283,66 @@ public enum RuntimeSetting {
     SPENDING_REPORTS_ENABLED("economizaai.notifications.whatsapp.weekly-report.enabled", NOTIFICATIONS, toggle(),
             "Enviar relatório de gastos",
             "Liga o envio semanal e mensal do relatório de gastos a quem pediu."),
+    SPENDING_REPORT_WEEKLY_DAY("economizaai.notifications.whatsapp.weekly-report.weekday", NOTIFICATIONS,
+            option(weekdays()).app("spendingReportWeeklyDay"),
+            "Relatório semanal: dia da semana",
+            "Dia em que o relatório semanal de gastos é enviado. Ele cobre os sete dias anteriores."),
+    SPENDING_REPORT_WEEKLY_HOUR("economizaai.notifications.whatsapp.weekly-report.send-hour", NOTIFICATIONS,
+            integer(0, 23).unit("h").app("spendingReportWeeklyHour"),
+            "Relatório semanal: hora do envio",
+            "Hora de Brasília em que o relatório semanal é enviado."),
+    SPENDING_REPORT_MONTHLY_DAY("economizaai.notifications.whatsapp.monthly-report.day-of-month", NOTIFICATIONS,
+            integer(1, 28).unit("dia do mês").app("spendingReportMonthlyDay"),
+            "Relatório mensal: dia do mês",
+            "Dia em que o relatório mensal de gastos é enviado. Ele cobre o mês anterior inteiro."),
+    SPENDING_REPORT_MONTHLY_HOUR("economizaai.notifications.whatsapp.monthly-report.send-hour", NOTIFICATIONS,
+            integer(0, 23).unit("h").app("spendingReportMonthlyHour"),
+            "Relatório mensal: hora do envio",
+            "Hora de Brasília em que o relatório mensal é enviado."),
     WHATSAPP_AUDIENCE("economizaai.notifications.whatsapp.audience", NOTIFICATIONS, option(List.of("ADMINS", "EVERYONE")),
             "WhatsApp: quem pode usar",
             "O canal pode existir só para administradores ou para todos os usuários."),
+    DEALS_DIGEST_WEEKLY_DAY("economizaai.notifications.deals-digest.weekly-day", NOTIFICATIONS,
+            option(weekdays()).app("dealsDigestWeeklyDay"),
+            "Resumo de ofertas semanal: dia da semana",
+            "Dia em que recebe o resumo de ofertas quem escolheu a frequência semanal."),
+    DEALS_DIGEST_IMPROVEMENT_POINTS("economizaai.notifications.deals-digest.improvement-points", NOTIFICATIONS,
+            integer(1, 90).unit("pontos percentuais"),
+            "Resumo de ofertas: melhora para avisar de novo",
+            "Uma oferta já avisada só volta ao resumo se o desconto aumentar pelo menos isso "
+                    + "(de 10% para 15% são 5 pontos)."),
+    DEALS_DIGEST_DEFAULT_HOUR_FROM("economizaai.notifications.deals-digest.default-hour-from", NOTIFICATIONS,
+            integer(0, 23).unit("h"),
+            "Resumo de ofertas: hora padrão, de",
+            "Quem ainda não tem um horário de compras conhecido recebe o resumo numa hora fixa "
+                    + "sorteada a partir desta (hora de Brasília)."),
+    DEALS_DIGEST_DEFAULT_HOUR_TO("economizaai.notifications.deals-digest.default-hour-to", NOTIFICATIONS,
+            integer(0, 23).unit("h"),
+            "Resumo de ofertas: hora padrão, até",
+            "Última hora do sorteio do horário padrão. Menor que a hora inicial, a faixa atravessa a meia-noite."),
+    DEALS_DIGEST_MIN_RECEIPTS_FOR_HABIT("economizaai.notifications.deals-digest.min-receipts-for-inference", NOTIFICATIONS,
+            integer(1, 200).unit("notas"),
+            "Resumo de ofertas: notas para aprender o horário",
+            "Com pelo menos essa quantidade de notas, o resumo passa a sair uma hora antes do horário "
+                    + "em que a casa costuma comprar."),
+    PUSH_OPTIN_NUDGE_WEEKDAY("economizaai.notifications.push-optin-nudge.weekday", NOTIFICATIONS, option(weekdays()),
+            "Convite para ativar avisos: dia da semana",
+            "Dia em que o convite para ativar as notificações aparece na caixa de entrada de quem nunca ativou."),
+    PUSH_OPTIN_NUDGE_HOUR("economizaai.notifications.push-optin-nudge.send-hour", NOTIFICATIONS,
+            integer(0, 23).unit("h"),
+            "Convite para ativar avisos: hora",
+            "Hora de Brasília em que o convite é colocado na caixa de entrada."),
+    PUSH_OPTIN_RENUDGE_DAYS("economizaai.notifications.push-optin-nudge.renudge-days", NOTIFICATIONS,
+            integer(1, 365).unit("dias"),
+            "Convite para ativar avisos: repetir depois de",
+            "Dias de espera antes de convidar de novo a mesma pessoa."),
+    SIGNUP_ALERT_ENABLED("economizaai.signup-alert.enabled", NOTIFICATIONS, toggle(),
+            "Avisar o dono a cada conta nova",
+            "Envia um e-mail à caixa de contato a cada conta criada. O mesmo interruptor vale para o e-mail "
+                    + "de conta excluída com assinatura paga ainda ativa."),
+    ADMIN_WHATSAPP_ENABLED("economizaai.notifications.admin-whatsapp-enabled", NOTIFICATIONS, toggle(),
+            "Alertas de operação por WhatsApp",
+            "Além do e-mail, os alertas urgentes de operação chegam por WhatsApp aos números dos administradores."),
 
     // ---- Custos e limites de uso ----
     PAID_API_GUARD_ENABLED("economizaai.paid-api.enabled", COSTS, toggle(),
@@ -394,6 +487,10 @@ public enum RuntimeSetting {
 
     private static List<String> featureNames() {
         return Arrays.stream(Feature.values()).map(Feature::name).toList();
+    }
+
+    private static List<String> weekdays() {
+        return Arrays.stream(DayOfWeek.values()).map(DayOfWeek::name).toList();
     }
 
     private static List<String> relevanceModes() {

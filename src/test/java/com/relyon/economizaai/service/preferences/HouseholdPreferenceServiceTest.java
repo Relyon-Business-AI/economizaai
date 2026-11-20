@@ -97,6 +97,22 @@ class HouseholdPreferenceServiceTest {
     }
 
     @Test
+    void confidenceLabelsFollowThePurchaseCountsSetInTheAdmin() {
+        var leite = product("Leite", "Italac", new BigDecimal("1"), "L");
+        var tenPurchases = repeat(purchase(leite), 10);
+        when(receiptItemRepository.findConfirmedHistoryForHousehold(any())).thenReturn(tenPurchases);
+
+        assertEquals(Confidence.MEDIUM, service.derivePreferences(user).get(0).confidence());
+
+        properties.getPreferences().setHighConfidenceMinPurchases(10);
+        assertEquals(Confidence.HIGH, service.derivePreferences(user).get(0).confidence());
+
+        properties.getPreferences().setHighConfidenceMinPurchases(30);
+        properties.getPreferences().setMediumConfidenceMinPurchases(11);
+        assertEquals(Confidence.LOW, service.derivePreferences(user).get(0).confidence());
+    }
+
+    @Test
     void detectsPreferredBrandWhenSharedAroundSeventyPercent() {
         var italac = product("Leite", "Italac", new BigDecimal("1"), "L");
         var elege = product("Leite", "Elegê", new BigDecimal("1"), "L");

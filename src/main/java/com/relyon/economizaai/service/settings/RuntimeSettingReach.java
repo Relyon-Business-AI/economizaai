@@ -91,6 +91,8 @@ public final class RuntimeSettingReach {
                 "Total \"você economizou com as dicas\" e a métrica de economia gerada no admin.");
         REFLECTS_ON.put(RuntimeSetting.ATTRIBUTION_FOLLOW_UP_DAYS,
                 "Total \"você economizou com as dicas\" e o texto explicativo da tela Economia.");
+        REFLECTS_ON.put(RuntimeSetting.SAVINGS_RECENT_DAYS,
+                "Valor de economia recente do resumo \"você economizou com as dicas\", no app, e o período citado ao lado dele.");
         REFLECTS_ON.put(RuntimeSetting.CONSUMPTION_MIN_PURCHASES,
                 "Tela Previsão de consumo e lembretes de reposição: quais produtos têm previsão.");
         REFLECTS_ON.put(RuntimeSetting.CONSUMPTION_FALLBACK_MIN_PURCHASES,
@@ -101,12 +103,20 @@ public final class RuntimeSettingReach {
                 "Status \"acabando\" na Previsão de consumo e o disparo do lembrete de reposição.");
         REFLECTS_ON.put(RuntimeSetting.CONSUMPTION_RAN_OUT_GRACE_DAYS,
                 "Status \"acabou\" na Previsão de consumo.");
+        REFLECTS_ON.put(RuntimeSetting.CONSUMPTION_HIGH_CONFIDENCE_SAMPLES,
+                "Selo de confiança alta de cada produto na tela Previsão de consumo.");
+        REFLECTS_ON.put(RuntimeSetting.CONSUMPTION_MEDIUM_CONFIDENCE_SAMPLES,
+                "Selo de confiança média ou baixa de cada produto na tela Previsão de consumo.");
         REFLECTS_ON.put(RuntimeSetting.PREFERENCES_MIN_PURCHASES,
                 "Preferências de marca calculadas para a casa: quais tipos de produto entram.");
         REFLECTS_ON.put(RuntimeSetting.PREFERENCES_MUST_HAVE_SHARE,
                 "Preferências de marca da casa: quando uma marca é marcada como indispensável.");
         REFLECTS_ON.put(RuntimeSetting.PREFERENCES_PREFERRED_SHARE,
                 "Preferências de marca da casa: quando uma marca é marcada como preferida.");
+        REFLECTS_ON.put(RuntimeSetting.PREFERENCES_HIGH_CONFIDENCE_PURCHASES,
+                "Confiança alta mostrada em cada preferência de marca e de tamanho da casa.");
+        REFLECTS_ON.put(RuntimeSetting.PREFERENCES_MEDIUM_CONFIDENCE_PURCHASES,
+                "Confiança média ou baixa mostrada em cada preferência de marca e de tamanho da casa.");
         REFLECTS_ON.put(RuntimeSetting.QUIET_HOURS_ENABLED,
                 "Todos os pushes e e-mails, menos os avisos sobre a nota enviada.");
         REFLECTS_ON.put(RuntimeSetting.QUIET_HOURS_START,
@@ -125,14 +135,48 @@ public final class RuntimeSettingReach {
                 "Notificação \"está acabando\": quantas vezes insiste por compra.");
         REFLECTS_ON.put(RuntimeSetting.REPLENISHMENT_SPACING_DAYS,
                 "Notificação \"está acabando\": espaço entre um lembrete e outro.");
+        REFLECTS_ON.put(RuntimeSetting.REPLENISHMENT_SEND_HOUR,
+                "Notificação \"está acabando\": a hora em que chega. Vale a partir da próxima hora cheia, sem reiniciar nada.");
+        REFLECTS_ON.put(RuntimeSetting.STOCKOUT_DEFAULT_LEAD_DAYS,
+                "Avisos de produto acabando criados dali em diante sem antecedência escolhida; os já criados não mudam.");
+        REFLECTS_ON.put(RuntimeSetting.BUDGET_CHECK_HOURS,
+                "Aviso de orçamento do mês atingido: as horas do dia em que pode chegar. Vale a partir da próxima hora cheia.");
         REFLECTS_ON.put(RuntimeSetting.PRICE_ALERT_COOLDOWN_HOURS,
                 "Alertas de preço e regras de notificação criadas pelo usuário.");
         REFLECTS_ON.put(RuntimeSetting.RECEIPT_READY_THRESHOLD_MINUTES,
                 "Push \"sua nota ficou pronta\" depois do envio de uma nota.");
         REFLECTS_ON.put(RuntimeSetting.SPENDING_REPORTS_ENABLED,
                 "Relatório de gastos semanal e mensal, por e-mail e WhatsApp.");
+        REFLECTS_ON.put(RuntimeSetting.SPENDING_REPORT_WEEKLY_DAY,
+                "Relatório de gastos semanal, por e-mail e WhatsApp: o dia em que chega.");
+        REFLECTS_ON.put(RuntimeSetting.SPENDING_REPORT_WEEKLY_HOUR,
+                "Relatório de gastos semanal, por e-mail e WhatsApp: a hora em que chega.");
+        REFLECTS_ON.put(RuntimeSetting.SPENDING_REPORT_MONTHLY_DAY,
+                "Relatório de gastos mensal, por e-mail e WhatsApp: o dia em que chega.");
+        REFLECTS_ON.put(RuntimeSetting.SPENDING_REPORT_MONTHLY_HOUR,
+                "Relatório de gastos mensal, por e-mail e WhatsApp: a hora em que chega.");
         REFLECTS_ON.put(RuntimeSetting.WHATSAPP_AUDIENCE,
                 "Opção de WhatsApp nas preferências de notificação e o envio por esse canal (tem custo por mensagem).");
+        REFLECTS_ON.put(RuntimeSetting.DEALS_DIGEST_WEEKLY_DAY,
+                "Resumo de ofertas por push de quem escolheu recebê-lo uma vez por semana.");
+        REFLECTS_ON.put(RuntimeSetting.DEALS_DIGEST_IMPROVEMENT_POINTS,
+                "Resumo de ofertas por push: quando uma oferta já avisada volta a ser avisada.");
+        REFLECTS_ON.put(RuntimeSetting.DEALS_DIGEST_DEFAULT_HOUR_FROM,
+                "Hora do resumo de ofertas de contas novas, dali em diante; quem já tem hora definida não muda.");
+        REFLECTS_ON.put(RuntimeSetting.DEALS_DIGEST_DEFAULT_HOUR_TO,
+                "Hora do resumo de ofertas de contas novas, dali em diante; quem já tem hora definida não muda.");
+        REFLECTS_ON.put(RuntimeSetting.DEALS_DIGEST_MIN_RECEIPTS_FOR_HABIT,
+                "Hora do resumo de ofertas de quem não escolheu um horário: quando passa a seguir o hábito de compras da casa.");
+        REFLECTS_ON.put(RuntimeSetting.PUSH_OPTIN_NUDGE_WEEKDAY,
+                "Convite \"ative as notificações\" na caixa de entrada do app: o dia em que aparece.");
+        REFLECTS_ON.put(RuntimeSetting.PUSH_OPTIN_NUDGE_HOUR,
+                "Convite \"ative as notificações\" na caixa de entrada do app: a hora em que aparece.");
+        REFLECTS_ON.put(RuntimeSetting.PUSH_OPTIN_RENUDGE_DAYS,
+                "Convite \"ative as notificações\" na caixa de entrada do app: de quanto em quanto tempo se repete.");
+        REFLECTS_ON.put(RuntimeSetting.SIGNUP_ALERT_ENABLED,
+                "E-mails para a caixa de contato: conta nova criada e conta excluída com assinatura paga ativa.");
+        REFLECTS_ON.put(RuntimeSetting.ADMIN_WHATSAPP_ENABLED,
+                "Alertas de operação e de custo enviados aos administradores por WhatsApp; o e-mail continua sempre.");
         REFLECTS_ON.put(RuntimeSetting.PAID_API_GUARD_ENABLED,
                 "Todas as consultas pagas: Infosimples, captcha, IA e SMS/WhatsApp.");
         REFLECTS_ON.put(RuntimeSetting.INFOSIMPLES_DAILY_CAP_PER_USER,

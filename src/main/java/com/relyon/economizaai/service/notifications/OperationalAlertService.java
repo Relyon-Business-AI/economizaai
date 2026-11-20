@@ -6,6 +6,8 @@ import com.relyon.economizaai.model.enums.PaidApiService;
 import com.relyon.economizaai.service.ContactService;
 import com.relyon.economizaai.service.notifications.twilio.TwilioMessageClient;
 import com.relyon.economizaai.service.paidapi.PaidApiGuardService;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -38,7 +40,8 @@ public class OperationalAlertService {
 
     private final List<String> adminPhoneNumbers;
     private final String whatsAppTemplateSid;
-    private final boolean whatsAppEnabled;
+    @Getter @Setter
+    private volatile boolean whatsAppEnabled;
 
     public OperationalAlertService(
             ContactService contactService,

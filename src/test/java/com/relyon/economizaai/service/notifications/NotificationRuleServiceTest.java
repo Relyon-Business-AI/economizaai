@@ -76,6 +76,23 @@ class NotificationRuleServiceTest {
     }
 
     @Test
+    void create_stockoutRuleWithoutLeadTimeGetsTheOneSetInTheAdmin() {
+        var owner = user();
+        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(product()));
+        when(ruleRepository.findByUserIdAndTypeAndProductId(owner.getId(), NotificationType.STOCKOUT, PRODUCT_ID))
+                .thenReturn(Optional.empty());
+        when(ruleRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        var withoutLeadTime = new CreateNotificationRuleRequest(
+                NotificationType.STOCKOUT, PRODUCT_ID, null, null, null, null, null);
+
+        assertEquals(3, service.create(owner, withoutLeadTime).leadTimeDays());
+
+        service.setDefaultLeadTimeDays(5);
+
+        assertEquals(5, service.create(owner, withoutLeadTime).leadTimeDays());
+    }
+
+    @Test
     void create_rejectsDefaultScopeType() {
         var owner = user();
 

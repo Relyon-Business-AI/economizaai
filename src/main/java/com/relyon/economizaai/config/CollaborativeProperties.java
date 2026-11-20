@@ -349,6 +349,9 @@ public class CollaborativeProperties {
         private int historyLookbackDays = 365;
         private int runningLowThresholdDays = 7;
         private int ranOutGraceDays = 0;
+        /** Purchases from which a forecast is shown with high / medium confidence. */
+        private int highConfidenceMinSamples = 8;
+        private int mediumConfidenceMinSamples = 5;
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean v) { this.enabled = v; }
@@ -362,6 +365,10 @@ public class CollaborativeProperties {
         public void setRunningLowThresholdDays(int v) { this.runningLowThresholdDays = v; }
         public int getRanOutGraceDays() { return ranOutGraceDays; }
         public void setRanOutGraceDays(int v) { this.ranOutGraceDays = v; }
+        public int getHighConfidenceMinSamples() { return highConfidenceMinSamples; }
+        public void setHighConfidenceMinSamples(int samples) { this.highConfidenceMinSamples = samples; }
+        public int getMediumConfidenceMinSamples() { return mediumConfidenceMinSamples; }
+        public void setMediumConfidenceMinSamples(int samples) { this.mediumConfidenceMinSamples = samples; }
     }
 
     /**
@@ -375,9 +382,16 @@ public class CollaborativeProperties {
         private int minPurchasesPerGeneric = 5;
         private double mustHaveBrandShare = 0.85;
         private double preferredBrandShare = 0.60;
+        /** Purchases from which a preference is shown with high / medium confidence. */
+        private int highConfidenceMinPurchases = 15;
+        private int mediumConfidenceMinPurchases = 8;
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean v) { this.enabled = v; }
+        public int getHighConfidenceMinPurchases() { return highConfidenceMinPurchases; }
+        public void setHighConfidenceMinPurchases(int purchases) { this.highConfidenceMinPurchases = purchases; }
+        public int getMediumConfidenceMinPurchases() { return mediumConfidenceMinPurchases; }
+        public void setMediumConfidenceMinPurchases(int purchases) { this.mediumConfidenceMinPurchases = purchases; }
         public int getMinPurchasesPerGeneric() { return minPurchasesPerGeneric; }
         public void setMinPurchasesPerGeneric(int v) { this.minPurchasesPerGeneric = v; }
         public double getMustHaveBrandShare() { return mustHaveBrandShare; }
