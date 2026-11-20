@@ -16,11 +16,11 @@ public final class RuntimeSettingReach {
         REFLECTS_ON.put(RuntimeSetting.SUBSCRIPTION_ENFORCE,
                 "Todo o app: com ele ligado, quem não é Premium passa a esbarrar nos limites e vê o convite para assinar.");
         REFLECTS_ON.put(RuntimeSetting.FREE_MONTHLY_RECEIPTS,
-                "Envio de notas (scanner, chave e foto) de quem está no plano grátis e o contador de uso da tela Premium.");
+                "Envio de notas (scanner, chave e foto) de quem está no plano grátis, o contador de uso da tela Premium e a landing.");
         REFLECTS_ON.put(RuntimeSetting.FREE_HISTORY_DAYS,
-                "Gastos, histórico e gráficos da Home de quem está no plano grátis.");
+                "Gastos, histórico e gráficos da Home de quem está no plano grátis, e a landing.");
         REFLECTS_ON.put(RuntimeSetting.FREE_WATCHED_MARKETS,
-                "Tela de mercados: quantos mercados o plano grátis consegue acompanhar.");
+                "Tela de mercados: quantos mercados o plano grátis consegue acompanhar, e a landing.");
         REFLECTS_ON.put(RuntimeSetting.FREE_HOUSEHOLD_MEMBERS,
                 "Tela Casa: convites e entrada de novas pessoas quando ninguém é Premium.");
         REFLECTS_ON.put(RuntimeSetting.FREE_CUSTOM_CATEGORIES,
@@ -32,9 +32,9 @@ public final class RuntimeSettingReach {
         REFLECTS_ON.put(RuntimeSetting.PAID_GRACE_DAYS,
                 "Rotina que rebaixa assinaturas vencidas: quanto tempo o Premium continua após o vencimento.");
         REFLECTS_ON.put(RuntimeSetting.PREMIUM_MONTHLY_PRICE,
-                "Checkout web do Mercado Pago (novas assinaturas) e projeções de receita do painel de aquisição.");
+                "Checkout web do Mercado Pago (novas assinaturas), projeções de receita do painel e o preço mostrado na landing.");
         REFLECTS_ON.put(RuntimeSetting.PREMIUM_YEARLY_PRICE,
-                "Projeções de receita do painel de aquisição. Não altera cobrança.");
+                "Projeções de receita do painel e o preço anual mostrado na landing. Não altera cobrança.");
         REFLECTS_ON.put(RuntimeSetting.LAUNCH_PROMO_ENABLED,
                 "Confirmação da primeira nota: se o usuário novo ganha ou não o Premium de lançamento.");
         REFLECTS_ON.put(RuntimeSetting.LAUNCH_PROMO_UNTIL,
@@ -114,11 +114,11 @@ public final class RuntimeSettingReach {
         REFLECTS_ON.put(RuntimeSetting.QUIET_HOURS_MAX_DEFERRED,
                 "Pushes enviados logo após o silêncio e o número citado na FAQ do app.");
         REFLECTS_ON.put(RuntimeSetting.RELEVANCE_MODE,
-                "Tela \"Ofertas pra você\" e resumo de ofertas; em SHADOW só alimenta o relatório de relevância do admin.");
+                "Tela \"Ofertas pra você\" e resumo de ofertas; em \"Só medir\" só alimenta o relatório de relevância do admin.");
         REFLECTS_ON.put(RuntimeSetting.RELEVANCE_DISMISSED_DAYS,
-                "Ofertas dispensadas pelo usuário, quando o filtro está em ON.");
+                "Ofertas dispensadas pelo usuário, quando o filtro está ligado.");
         REFLECTS_ON.put(RuntimeSetting.RELEVANCE_MUTED_DAYS,
-                "Produtos silenciados pelo usuário, quando o filtro está em ON.");
+                "Produtos silenciados pelo usuário, quando o filtro está ligado.");
         REFLECTS_ON.put(RuntimeSetting.REPLENISHMENT_MAX_REMINDERS,
                 "Notificação \"está acabando\": quantas vezes insiste por compra.");
         REFLECTS_ON.put(RuntimeSetting.REPLENISHMENT_SPACING_DAYS,

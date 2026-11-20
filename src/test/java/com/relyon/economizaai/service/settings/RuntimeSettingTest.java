@@ -29,6 +29,13 @@ class RuntimeSettingTest {
     }
 
     @Test
+    void everyOptionReadsInPortugueseInTheAdmin() {
+        assertThat(RuntimeSetting.values()).allSatisfy(setting ->
+                assertThat(setting.getSpec().options()).allSatisfy(option ->
+                        assertThat(SettingOptionLabels.of(option)).as("label of %s", option).isNotBlank()));
+    }
+
+    @Test
     void byKey_findsASettingByItsConfigurationProperty() {
         assertThat(RuntimeSetting.byKey("economizaai.collaborative.lookback-days"))
                 .contains(RuntimeSetting.PRICE_WINDOW_DAYS);

@@ -97,7 +97,8 @@ GET /api/v1/app-config   → 200 (public, no auth)
 published name — `priceWindowDays` (how old a community price may be), `marketPricesDefaultDays`,
 `nearbyRadiusKm`, `maxItemPhotos`, `contingencyWindowHours`, `householdInviteHours`, `launchPromoUntil`
 (ISO date or absent), `savingsFollowUpDays`, `runningLowDays`, `quietHoursStart`, `quietHoursEnd`,
-`quietHoursMaxDeferred`. Numbers are JSON numbers. They change from the admin (section 10d, "Business
+`quietHoursMaxDeferred`, plus the plan values the landing page shows: `freeMonthlyReceipts`, `freeHistoryDays`,
+`freeWatchedMarkets`, `premiumMonthlyPrice`, `premiumYearlyPrice`. Numbers are JSON numbers. They change from the admin (section 10d, "Business
 settings") with no deploy, so the apps must read them here instead of repeating the number in code or copy,
 and keep a fallback for when the request fails.
 
@@ -2610,7 +2611,7 @@ DELETE /api/v1/admin/settings/{key}    → AdminSettingResponse   (back to the v
 ```
 
 `AdminSettingResponse`: `{ key, label, description, reflectsOn, type, unit?, value, configuredValue, changed, min?, max?,
-options[], appKey?, changedAt?, changedBy? }`. `value` and `configuredValue` are always **text**:
+options[], optionLabels{value: label}, appKey?, changedAt?, changedBy? }`. `value` and `configuredValue` are always **text**:
 
 | `type` | `value` | Notes |
 |---|---|---|

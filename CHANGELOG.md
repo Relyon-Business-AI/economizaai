@@ -1,5 +1,10 @@
 # economizai — what's new
 
+## 2026-11-19 — `/app-config` publica os valores de plano
+
+- `GET /app-config` → `settings` ganha `freeMonthlyReceipts`, `freeHistoryDays`, `freeWatchedMarkets`,
+  `premiumMonthlyPrice` e `premiumYearlyPrice`. A landing lê daqui a seção de planos; o app não precisa mudar.
+
 ## 2026-11-19 — Configurações de negócio no admin (sem deploy)
 
 - **Novo: `GET /admin/settings`** devolve as regras de negócio agrupadas por seção (planos, preços e ofertas,

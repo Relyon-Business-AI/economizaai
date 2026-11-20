@@ -123,6 +123,8 @@ class RuntimeSettingsTest {
         assertThat(published).containsEntry("priceWindowDays", 90L);
         assertThat(published).containsEntry("launchPromoUntil", "2026-12-31");
         assertThat(published).containsKeys("nearbyRadiusKm", "maxItemPhotos", "contingencyWindowHours");
+        assertThat(published).containsKeys("freeMonthlyReceipts", "freeHistoryDays", "freeWatchedMarkets",
+                "premiumMonthlyPrice", "premiumYearlyPrice");
         assertThat(published).doesNotContainKey(RuntimeSetting.SUBSCRIPTION_ENFORCE.getKey());
         assertThat(published).hasSize((int) Arrays.stream(RuntimeSetting.values())
                 .filter(setting -> setting.getSpec().appKey() != null).count());
