@@ -9,10 +9,15 @@ import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.time.BrazilClock;
 import com.relyon.economizaai.service.LocalizedMessageService;
 
+import java.time.DayOfWeek;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.UUID;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -24,7 +29,7 @@ import org.springframework.stereotype.Service;
  *
  * <p>Inbox-only de propósito (grava direto via repository, sem dispatch): o
  * destinatário por definição não tem push, e e-mail pra isso seria spam.
- * Re-convida no máximo 1x a cada {@value #RENUDGE_DAYS} dias; quem ativa some
+ * Re-convida no máximo 1x a cada {@link #renudgeDays} dias; quem ativa some
  * do público na rodada seguinte (filtro é token nulo).
  *
  * <p>Roda em páginas: os candidatos já saem do banco sem quem foi convidado há
@@ -37,7 +42,6 @@ public class PushOptInNudgeScheduler {
 
     /** Marcador no payload — também é o `destination` que o app usa pro CTA "Ativar". */
     static final String DESTINATION = "ENABLE_PUSH";
-    static final int RENUDGE_DAYS = 30;
     private static final int PAGE_SIZE = 500;
     /** Sorts before every real id — the starting point of the keyset pagination. */
     private static final UUID BEFORE_FIRST_ID = new UUID(0L, 0L);
@@ -46,10 +50,30 @@ public class PushOptInNudgeScheduler {
     private final NotificationRepository notificationRepository;
     private final LocalizedMessageService messageService;
 
-    @Scheduled(cron = "${economizaai.notifications.push-optin-nudge-cron:0 0 12 * * TUE}",
-            zone = "America/Sao_Paulo")
+    /** Dia da semana e hora (Brasília) em que o convite é plantado. */
+    @Getter @Setter
+    @Value("${economizaai.notifications.push-optin-nudge.weekday:TUESDAY}")
+    private volatile DayOfWeek weekday = DayOfWeek.TUESDAY;
+    @Getter @Setter
+    @Value("${economizaai.notifications.push-optin-nudge.send-hour:12}")
+    private volatile int sendHour = 12;
+    @Getter @Setter
+    @Value("${economizaai.notifications.push-optin-nudge.renudge-days:30}")
+    private volatile int renudgeDays = 30;
+
+    private final HourlySendGate sendGate = new HourlySendGate();
+
+    @Scheduled(cron = HourlySendGate.EVERY_FULL_HOUR, zone = HourlySendGate.ZONE)
+    public void nudgeAtSendTime() {
+        nudgeIfSendTime(BrazilClock.now());
+    }
+
+    void nudgeIfSendTime(ZonedDateTime now) {
+        if (sendGate.claimWeekly(now, weekday, sendHour)) nudgeUsersWithoutPushToken();
+    }
+
     public void nudgeUsersWithoutPushToken() {
-        var nudgedAfter = BrazilClock.nowDateTime().minusDays(RENUDGE_DAYS);
+        var nudgedAfter = BrazilClock.nowDateTime().minusDays(renudgeDays);
         var created = 0;
         var afterId = BEFORE_FIRST_ID;
         while (true) {

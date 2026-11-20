@@ -23,7 +23,14 @@ public final class SettingOptionLabels {
             Map.entry("SHADOW", "Só medir"),
             Map.entry("ON", "Ligado"),
             Map.entry("ADMINS", "Só administradores"),
-            Map.entry("EVERYONE", "Todos os usuários"));
+            Map.entry("EVERYONE", "Todos os usuários"),
+            Map.entry("MONDAY", "Segunda-feira"),
+            Map.entry("TUESDAY", "Terça-feira"),
+            Map.entry("WEDNESDAY", "Quarta-feira"),
+            Map.entry("THURSDAY", "Quinta-feira"),
+            Map.entry("FRIDAY", "Sexta-feira"),
+            Map.entry("SATURDAY", "Sábado"),
+            Map.entry("SUNDAY", "Domingo"));
 
     private SettingOptionLabels() {}
 

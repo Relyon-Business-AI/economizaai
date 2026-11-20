@@ -6,6 +6,8 @@ import com.relyon.economizaai.security.ratelimit.ClientIpResolver;
 import com.relyon.economizaai.service.ContactService;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,7 +26,7 @@ import java.util.concurrent.RejectedExecutionException;
  * only: it never blocks or fails a registration — the SMTP send runs on the
  * async pool, and a full pool just drops the alert with a warn.
  *
- * <p>Kill switch: {@code SIGNUP_ALERT_ENABLED=false} (no deploy needed).
+ * <p>Switch: the "new account alert" setting in the admin (starts at {@code SIGNUP_ALERT_ENABLED}).
  */
 @Slf4j
 @Service
@@ -32,7 +34,8 @@ public class SignupAlertService {
 
     private final ContactService contactService;
     private final Executor executor;
-    private final boolean enabled;
+    @Getter @Setter
+    private volatile boolean enabled;
 
     public SignupAlertService(ContactService contactService,
                               @Qualifier(AsyncConfig.RECEIPT_INGEST_EXECUTOR) Executor executor,

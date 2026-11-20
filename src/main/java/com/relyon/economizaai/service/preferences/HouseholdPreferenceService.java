@@ -216,8 +216,9 @@ public class HouseholdPreferenceService {
     }
 
     private Confidence confidenceFor(int sampleSize) {
-        if (sampleSize >= 15) return Confidence.HIGH;
-        if (sampleSize >= 8) return Confidence.MEDIUM;
+        var preferences = properties.getPreferences();
+        if (sampleSize >= preferences.getHighConfidenceMinPurchases()) return Confidence.HIGH;
+        if (sampleSize >= preferences.getMediumConfidenceMinPurchases()) return Confidence.MEDIUM;
         return Confidence.LOW;
     }
 

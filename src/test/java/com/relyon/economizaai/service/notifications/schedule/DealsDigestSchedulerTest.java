@@ -29,6 +29,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -248,6 +249,53 @@ class DealsDigestSchedulerTest {
         scheduler.run();
 
         verify(notificationService, times(1)).notify(any());
+    }
+
+    @Test
+    void improvementNeededToReAirADealFollowsTheSetting() {
+        var user = dueUser(DigestFrequency.DAILY, null);
+        when(userRepository.findDigestDuePage(anyInt(), anyBoolean(), any(), any(), any()))
+                .thenReturn(List.of(user)).thenReturn(List.of())
+                .thenReturn(List.of(user)).thenReturn(List.of());
+        // Same price as last time (no stricter bar crossed), discount up 3 points.
+        when(dealsService.findDeals(eq(user), anyBoolean(), isNull(), eq(50)))
+                .thenReturn(List.of(deal(productId, 0.23, new BigDecimal("8.00"))));
+        when(surfaceStateRepository.findByUserIdAndProductIdAndMarketCnpj(any(), eq(productId), any()))
+                .thenReturn(Optional.of(DealSurfaceState.builder()
+                        .lastDiscountFraction(new BigDecimal("0.2000"))
+                        .lastUnitPrice(new BigDecimal("8.00"))
+                        .lastSurfacedAt(OffsetDateTime.now())
+                        .build()));
+        lenient().when(notificationService.notify(any(NotificationPayload.class)))
+                .thenReturn(Notification.builder().id(UUID.randomUUID()).build());
+
+        scheduler.run();
+        verify(notificationService, never()).notify(any());
+
+        scheduler.setImprovementPoints(3);
+        scheduler.run();
+        verify(notificationService, times(1)).notify(any());
+    }
+
+    @Test
+    void weeklyDigestDayFollowsTheSetting() {
+        when(userRepository.findDigestDuePage(anyInt(), anyBoolean(), any(), any(), any())).thenReturn(List.of());
+        var today = ZonedDateTime.now(ZoneId.of("America/Sao_Paulo")).getDayOfWeek();
+        var isWeeklyDay = ArgumentCaptor.forClass(Boolean.class);
+
+        scheduler.setWeeklyDay(today.plus(3));
+        scheduler.run();
+        scheduler.setWeeklyDay(today);
+        scheduler.run();
+
+        verify(userRepository, times(2)).findDigestDuePage(anyInt(), isWeeklyDay.capture(), any(), any(), any());
+        assertEquals(List.of(false, true), isWeeklyDay.getAllValues());
+    }
+
+    @Test
+    void weeklyDigestGoesOutOnThursdayUnlessChanged() {
+        assertEquals(DayOfWeek.THURSDAY, scheduler.getWeeklyDay());
+        assertEquals(5, scheduler.getImprovementPoints());
     }
 
     @Test
