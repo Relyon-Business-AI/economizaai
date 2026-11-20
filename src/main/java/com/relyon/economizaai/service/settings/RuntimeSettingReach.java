@@ -16,11 +16,11 @@ public final class RuntimeSettingReach {
         REFLECTS_ON.put(RuntimeSetting.SUBSCRIPTION_ENFORCE,
                 "Todo o app: com ele ligado, quem não é Premium passa a esbarrar nos limites e vê o convite para assinar.");
         REFLECTS_ON.put(RuntimeSetting.FREE_MONTHLY_RECEIPTS,
-                "Envio de notas (scanner, chave e foto) de quem está no plano grátis e o contador de uso da tela Premium.");
+                "Envio de notas (scanner, chave e foto) de quem está no plano grátis, o contador de uso da tela Premium e a landing.");
         REFLECTS_ON.put(RuntimeSetting.FREE_HISTORY_DAYS,
-                "Gastos, histórico e gráficos da Home de quem está no plano grátis.");
+                "Gastos, histórico e gráficos da Home de quem está no plano grátis, e a landing.");
         REFLECTS_ON.put(RuntimeSetting.FREE_WATCHED_MARKETS,
-                "Tela de mercados: quantos mercados o plano grátis consegue acompanhar.");
+                "Tela de mercados: quantos mercados o plano grátis consegue acompanhar, e a landing.");
         REFLECTS_ON.put(RuntimeSetting.FREE_HOUSEHOLD_MEMBERS,
                 "Tela Casa: convites e entrada de novas pessoas quando ninguém é Premium.");
         REFLECTS_ON.put(RuntimeSetting.FREE_CUSTOM_CATEGORIES,
@@ -32,9 +32,13 @@ public final class RuntimeSettingReach {
         REFLECTS_ON.put(RuntimeSetting.PAID_GRACE_DAYS,
                 "Rotina que rebaixa assinaturas vencidas: quanto tempo o Premium continua após o vencimento.");
         REFLECTS_ON.put(RuntimeSetting.PREMIUM_MONTHLY_PRICE,
-                "Checkout web do Mercado Pago (novas assinaturas) e projeções de receita do painel de aquisição.");
+                "Checkout web do Mercado Pago (novas assinaturas), projeções de receita do painel e o preço mostrado na landing.");
         REFLECTS_ON.put(RuntimeSetting.PREMIUM_YEARLY_PRICE,
-                "Projeções de receita do painel de aquisição. Não altera cobrança.");
+                "Projeções de receita do painel e o preço anual mostrado na landing. Não altera cobrança.");
+        REFLECTS_ON.put(RuntimeSetting.PREMIUM_ASSUMED_LIFETIME_MONTHS,
+                "Painel de aquisição do admin: o valor estimado de cada assinante e o retorno das campanhas. Não altera cobrança.");
+        REFLECTS_ON.put(RuntimeSetting.REFERRAL_REWARD_MONTHS,
+                "Recompensas de indicação concedidas daqui em diante, o aviso de recompensa (push e caixa de entrada) e os textos de indicação do app.");
         REFLECTS_ON.put(RuntimeSetting.LAUNCH_PROMO_ENABLED,
                 "Confirmação da primeira nota: se o usuário novo ganha ou não o Premium de lançamento.");
         REFLECTS_ON.put(RuntimeSetting.LAUNCH_PROMO_UNTIL,
@@ -44,7 +48,7 @@ public final class RuntimeSettingReach {
         REFLECTS_ON.put(RuntimeSetting.LAUNCH_PROMO_WARNINGS_ENABLED,
                 "Push e caixa de entrada de quem tem o Premium de lançamento sem assinatura paga.");
         REFLECTS_ON.put(RuntimeSetting.LAUNCH_PROMO_WARNING_DAYS,
-                "Datas em que os avisos de fim da promoção são enviados.");
+                "Datas em que os avisos de fim da promoção são enviados e o texto do app que explica esses avisos.");
         REFLECTS_ON.put(RuntimeSetting.PRICE_WINDOW_DAYS,
                 "Plano de compras, melhores mercados, preço típico, mapa de preços, promoções e a tela de preços de um mercado (período máximo).");
         REFLECTS_ON.put(RuntimeSetting.MARKET_PRICES_DEFAULT_DAYS,
@@ -59,6 +63,8 @@ public final class RuntimeSettingReach {
                 "Detecção de promoções da comunidade: separa preço recente de preço típico.");
         REFLECTS_ON.put(RuntimeSetting.COMMUNITY_PROMO_MIN_BASELINE,
                 "Detecção de promoções da comunidade: produtos com pouco histórico ficam de fora.");
+        REFLECTS_ON.put(RuntimeSetting.COMMUNITY_PROMO_MIN_OLD,
+                "Detecção de promoções da comunidade: sem preços antigos suficientes não há preço típico para comparar.");
         REFLECTS_ON.put(RuntimeSetting.COMMUNITY_PROMO_MIN_RECENT,
                 "Detecção de promoções da comunidade: evita promoção criada por uma única nota.");
         REFLECTS_ON.put(RuntimeSetting.MIN_OBSERVATIONS_PER_PRODUCT_MARKET,
@@ -75,6 +81,30 @@ public final class RuntimeSettingReach {
                 "Mesma regra de oferta relevante: define o que conta como item barato.");
         REFLECTS_ON.put(RuntimeSetting.DEAL_HIGH_PRICE_ANCHOR,
                 "Mesma regra de oferta relevante: define o que conta como item caro.");
+        REFLECTS_ON.put(RuntimeSetting.ONLINE_OFFERS_ENABLED,
+                "Oferta online mostrada no item da nota e a busca do Garimpo no admin, que dependem da loja online conectada.");
+        REFLECTS_ON.put(RuntimeSetting.ONLINE_OFFER_MIN_SAVINGS,
+                "Selo \"vale a pena\" da oferta online mostrada no item da nota.");
+        REFLECTS_ON.put(RuntimeSetting.COMPARISON_MIN_MATCHED_PCT,
+                "\"Esta compra em outros mercados\" na tela da nota e as alternativas guardadas em cada ida às compras.");
+        REFLECTS_ON.put(RuntimeSetting.RECEIPT_COMPARISON_MAX_AGE_DAYS,
+                "\"Esta compra em outros mercados\" na tela da nota: notas mais antigas não mostram comparação.");
+        REFLECTS_ON.put(RuntimeSetting.COMPARISON_ALTERNATIVE_MARKETS,
+                "\"Esta compra em outros mercados\" na tela da nota (comparações novas) e o registro de cada ida às compras.");
+        REFLECTS_ON.put(RuntimeSetting.ROUTE_DEFAULT_MAX_DISTANCE_KM,
+                "Plano de compras, no app: distância máxima de quem ainda não escolheu a sua.");
+        REFLECTS_ON.put(RuntimeSetting.ROUTE_DEFAULT_MAX_STOPS,
+                "Plano de compras, no app: número de paradas de quem ainda não escolheu o seu.");
+        REFLECTS_ON.put(RuntimeSetting.ROUTE_DEFAULT_MIN_SAVING_PER_STOP,
+                "Plano de compras, no app: economia mínima por parada de quem ainda não escolheu a sua.");
+        REFLECTS_ON.put(RuntimeSetting.SAVINGS_DEFAULT_PERIOD_DAYS,
+                "Economia da casa, no app, quando nenhum período é escolhido.");
+        REFLECTS_ON.put(RuntimeSetting.HOME_SAVINGS_MIN,
+                "Tela inicial do app: o destaque de economia só aparece a partir desse valor.");
+        REFLECTS_ON.put(RuntimeSetting.LEADERBOARD_TOP_N,
+                "Ranking de caçadores de desconto, no app e no admin, e os textos do app que citam o tamanho do ranking.");
+        REFLECTS_ON.put(RuntimeSetting.LEADERBOARD_DEFAULT_DAYS,
+                "Ranking de caçadores de desconto, no app e no admin, quando nenhum período é escolhido.");
         REFLECTS_ON.put(RuntimeSetting.SAVINGS_REGION_WINDOW_DAYS,
                 "Tela Economia: seção \"Comparado à sua região\".");
         REFLECTS_ON.put(RuntimeSetting.SAVINGS_MIN_REGION_SAMPLES,
@@ -89,6 +119,8 @@ public final class RuntimeSettingReach {
                 "Total \"você economizou com as dicas\" e a métrica de economia gerada no admin.");
         REFLECTS_ON.put(RuntimeSetting.ATTRIBUTION_FOLLOW_UP_DAYS,
                 "Total \"você economizou com as dicas\" e o texto explicativo da tela Economia.");
+        REFLECTS_ON.put(RuntimeSetting.SAVINGS_RECENT_DAYS,
+                "Valor de economia recente do resumo \"você economizou com as dicas\", no app, e o período citado ao lado dele.");
         REFLECTS_ON.put(RuntimeSetting.CONSUMPTION_MIN_PURCHASES,
                 "Tela Previsão de consumo e lembretes de reposição: quais produtos têm previsão.");
         REFLECTS_ON.put(RuntimeSetting.CONSUMPTION_FALLBACK_MIN_PURCHASES,
@@ -99,12 +131,20 @@ public final class RuntimeSettingReach {
                 "Status \"acabando\" na Previsão de consumo e o disparo do lembrete de reposição.");
         REFLECTS_ON.put(RuntimeSetting.CONSUMPTION_RAN_OUT_GRACE_DAYS,
                 "Status \"acabou\" na Previsão de consumo.");
+        REFLECTS_ON.put(RuntimeSetting.CONSUMPTION_HIGH_CONFIDENCE_SAMPLES,
+                "Selo de confiança alta de cada produto na tela Previsão de consumo.");
+        REFLECTS_ON.put(RuntimeSetting.CONSUMPTION_MEDIUM_CONFIDENCE_SAMPLES,
+                "Selo de confiança média ou baixa de cada produto na tela Previsão de consumo.");
         REFLECTS_ON.put(RuntimeSetting.PREFERENCES_MIN_PURCHASES,
                 "Preferências de marca calculadas para a casa: quais tipos de produto entram.");
         REFLECTS_ON.put(RuntimeSetting.PREFERENCES_MUST_HAVE_SHARE,
                 "Preferências de marca da casa: quando uma marca é marcada como indispensável.");
         REFLECTS_ON.put(RuntimeSetting.PREFERENCES_PREFERRED_SHARE,
                 "Preferências de marca da casa: quando uma marca é marcada como preferida.");
+        REFLECTS_ON.put(RuntimeSetting.PREFERENCES_HIGH_CONFIDENCE_PURCHASES,
+                "Confiança alta mostrada em cada preferência de marca e de tamanho da casa.");
+        REFLECTS_ON.put(RuntimeSetting.PREFERENCES_MEDIUM_CONFIDENCE_PURCHASES,
+                "Confiança média ou baixa mostrada em cada preferência de marca e de tamanho da casa.");
         REFLECTS_ON.put(RuntimeSetting.QUIET_HOURS_ENABLED,
                 "Todos os pushes e e-mails, menos os avisos sobre a nota enviada.");
         REFLECTS_ON.put(RuntimeSetting.QUIET_HOURS_START,
@@ -114,23 +154,57 @@ public final class RuntimeSettingReach {
         REFLECTS_ON.put(RuntimeSetting.QUIET_HOURS_MAX_DEFERRED,
                 "Pushes enviados logo após o silêncio e o número citado na FAQ do app.");
         REFLECTS_ON.put(RuntimeSetting.RELEVANCE_MODE,
-                "Tela \"Ofertas pra você\" e resumo de ofertas; em SHADOW só alimenta o relatório de relevância do admin.");
+                "Tela \"Ofertas pra você\" e resumo de ofertas; em \"Só medir\" só alimenta o relatório de relevância do admin.");
         REFLECTS_ON.put(RuntimeSetting.RELEVANCE_DISMISSED_DAYS,
-                "Ofertas dispensadas pelo usuário, quando o filtro está em ON.");
+                "Ofertas dispensadas pelo usuário, quando o filtro está ligado.");
         REFLECTS_ON.put(RuntimeSetting.RELEVANCE_MUTED_DAYS,
-                "Produtos silenciados pelo usuário, quando o filtro está em ON.");
+                "Produtos silenciados pelo usuário, quando o filtro está ligado.");
         REFLECTS_ON.put(RuntimeSetting.REPLENISHMENT_MAX_REMINDERS,
                 "Notificação \"está acabando\": quantas vezes insiste por compra.");
         REFLECTS_ON.put(RuntimeSetting.REPLENISHMENT_SPACING_DAYS,
                 "Notificação \"está acabando\": espaço entre um lembrete e outro.");
+        REFLECTS_ON.put(RuntimeSetting.REPLENISHMENT_SEND_HOUR,
+                "Notificação \"está acabando\": a hora em que chega. Vale a partir da próxima hora cheia, sem reiniciar nada.");
+        REFLECTS_ON.put(RuntimeSetting.STOCKOUT_DEFAULT_LEAD_DAYS,
+                "Avisos de produto acabando criados dali em diante sem antecedência escolhida; os já criados não mudam.");
+        REFLECTS_ON.put(RuntimeSetting.BUDGET_CHECK_HOURS,
+                "Aviso de orçamento do mês atingido: as horas do dia em que pode chegar. Vale a partir da próxima hora cheia.");
         REFLECTS_ON.put(RuntimeSetting.PRICE_ALERT_COOLDOWN_HOURS,
                 "Alertas de preço e regras de notificação criadas pelo usuário.");
         REFLECTS_ON.put(RuntimeSetting.RECEIPT_READY_THRESHOLD_MINUTES,
                 "Push \"sua nota ficou pronta\" depois do envio de uma nota.");
         REFLECTS_ON.put(RuntimeSetting.SPENDING_REPORTS_ENABLED,
                 "Relatório de gastos semanal e mensal, por e-mail e WhatsApp.");
+        REFLECTS_ON.put(RuntimeSetting.SPENDING_REPORT_WEEKLY_DAY,
+                "Relatório de gastos semanal, por e-mail e WhatsApp: o dia em que chega.");
+        REFLECTS_ON.put(RuntimeSetting.SPENDING_REPORT_WEEKLY_HOUR,
+                "Relatório de gastos semanal, por e-mail e WhatsApp: a hora em que chega.");
+        REFLECTS_ON.put(RuntimeSetting.SPENDING_REPORT_MONTHLY_DAY,
+                "Relatório de gastos mensal, por e-mail e WhatsApp: o dia em que chega.");
+        REFLECTS_ON.put(RuntimeSetting.SPENDING_REPORT_MONTHLY_HOUR,
+                "Relatório de gastos mensal, por e-mail e WhatsApp: a hora em que chega.");
         REFLECTS_ON.put(RuntimeSetting.WHATSAPP_AUDIENCE,
                 "Opção de WhatsApp nas preferências de notificação e o envio por esse canal (tem custo por mensagem).");
+        REFLECTS_ON.put(RuntimeSetting.DEALS_DIGEST_WEEKLY_DAY,
+                "Resumo de ofertas por push de quem escolheu recebê-lo uma vez por semana.");
+        REFLECTS_ON.put(RuntimeSetting.DEALS_DIGEST_IMPROVEMENT_POINTS,
+                "Resumo de ofertas por push: quando uma oferta já avisada volta a ser avisada.");
+        REFLECTS_ON.put(RuntimeSetting.DEALS_DIGEST_DEFAULT_HOUR_FROM,
+                "Hora do resumo de ofertas de contas novas, dali em diante; quem já tem hora definida não muda.");
+        REFLECTS_ON.put(RuntimeSetting.DEALS_DIGEST_DEFAULT_HOUR_TO,
+                "Hora do resumo de ofertas de contas novas, dali em diante; quem já tem hora definida não muda.");
+        REFLECTS_ON.put(RuntimeSetting.DEALS_DIGEST_MIN_RECEIPTS_FOR_HABIT,
+                "Hora do resumo de ofertas de quem não escolheu um horário: quando passa a seguir o hábito de compras da casa.");
+        REFLECTS_ON.put(RuntimeSetting.PUSH_OPTIN_NUDGE_WEEKDAY,
+                "Convite \"ative as notificações\" na caixa de entrada do app: o dia em que aparece.");
+        REFLECTS_ON.put(RuntimeSetting.PUSH_OPTIN_NUDGE_HOUR,
+                "Convite \"ative as notificações\" na caixa de entrada do app: a hora em que aparece.");
+        REFLECTS_ON.put(RuntimeSetting.PUSH_OPTIN_RENUDGE_DAYS,
+                "Convite \"ative as notificações\" na caixa de entrada do app: de quanto em quanto tempo se repete.");
+        REFLECTS_ON.put(RuntimeSetting.SIGNUP_ALERT_ENABLED,
+                "E-mails para a caixa de contato: conta nova criada e conta excluída com assinatura paga ativa.");
+        REFLECTS_ON.put(RuntimeSetting.ADMIN_WHATSAPP_ENABLED,
+                "Alertas de operação e de custo enviados aos administradores por WhatsApp; o e-mail continua sempre.");
         REFLECTS_ON.put(RuntimeSetting.PAID_API_GUARD_ENABLED,
                 "Todas as consultas pagas: Infosimples, captcha, IA e SMS/WhatsApp.");
         REFLECTS_ON.put(RuntimeSetting.INFOSIMPLES_DAILY_CAP_PER_USER,
@@ -146,17 +220,17 @@ public final class RuntimeSettingReach {
         REFLECTS_ON.put(RuntimeSetting.LLM_ENRICH_DAILY_CAP_PER_USER,
                 "Sugestão de categoria por IA na nota e em \"corrigir item\".");
         REFLECTS_ON.put(RuntimeSetting.INFOSIMPLES_DAILY_BUDGET_CENTS,
-                "Caminho pago de busca de nota para todos os usuários; alerta no WhatsApp em 80% e 100%.");
+                "Caminho pago de busca de nota para todos os usuários; alerta no WhatsApp no percentual de aviso e em 100%.");
         REFLECTS_ON.put(RuntimeSetting.CAPTCHA_DAILY_BUDGET_CENTS,
-                "Notas de estados com captcha para todos os usuários; alerta em 80% e 100%.");
+                "Notas de estados com captcha para todos os usuários; alerta no percentual de aviso e em 100%.");
         REFLECTS_ON.put(RuntimeSetting.LLM_VISION_DAILY_BUDGET_CENTS,
-                "Nota por foto para todos os usuários; alerta em 80% e 100%.");
+                "Nota por foto para todos os usuários; alerta no percentual de aviso e em 100%.");
         REFLECTS_ON.put(RuntimeSetting.LLM_HTML_RESCUE_DAILY_BUDGET_CENTS,
-                "Recuperação de notas por IA para todos os usuários; alerta em 80% e 100%.");
+                "Recuperação de notas por IA para todos os usuários; alerta no percentual de aviso e em 100%.");
         REFLECTS_ON.put(RuntimeSetting.LLM_ENRICH_DAILY_BUDGET_CENTS,
-                "Categorização por IA para todos os usuários; alerta em 80% e 100%.");
+                "Categorização por IA para todos os usuários; alerta no percentual de aviso e em 100%.");
         REFLECTS_ON.put(RuntimeSetting.TWILIO_DAILY_BUDGET_CENTS,
-                "SMS e WhatsApp para todos os usuários; alerta em 80% e 100%.");
+                "SMS e WhatsApp para todos os usuários; alerta no percentual de aviso e em 100%.");
         REFLECTS_ON.put(RuntimeSetting.DAILY_GLOBAL_BUDGET_CENTS,
                 "Todos os serviços pagos de uma vez quando a soma do dia estoura.");
         REFLECTS_ON.put(RuntimeSetting.AI_DAILY_REQUEST_CAP,
@@ -165,6 +239,24 @@ public final class RuntimeSettingReach {
                 "Admin → Operações → Custos: valores de IA em reais. Não altera cobrança.");
         REFLECTS_ON.put(RuntimeSetting.INFOSIMPLES_LOW_BALANCE,
                 "Alerta de saldo baixo por e-mail e WhatsApp aos administradores.");
+        REFLECTS_ON.put(RuntimeSetting.INFOSIMPLES_CALL_COST_CENTS,
+                "Gasto do dia contra o teto do Infosimples, Admin → Operações → Custos, custo por usuário e o ponto em que o saldo do Infosimples conta como esgotado.");
+        REFLECTS_ON.put(RuntimeSetting.CAPTCHA_CALL_COST_CENTS,
+                "Gasto do dia contra o teto de captcha, Admin → Operações → Custos, custo por usuário e o ponto em que o saldo do CapSolver conta como esgotado.");
+        REFLECTS_ON.put(RuntimeSetting.TWILIO_CALL_COST_CENTS,
+                "Gasto do dia contra o teto de SMS/WhatsApp, Admin → Operações → Custos, custo por usuário e o ponto em que o saldo da Twilio conta como esgotado.");
+        REFLECTS_ON.put(RuntimeSetting.LLM_VISION_CALL_COST_CENTS,
+                "Gasto do dia contra o teto de nota por foto, Admin → Operações → Custos e custo por usuário.");
+        REFLECTS_ON.put(RuntimeSetting.LLM_HTML_RESCUE_CALL_COST_CENTS,
+                "Gasto do dia contra o teto de resgate de nota por IA, Admin → Operações → Custos e custo por usuário.");
+        REFLECTS_ON.put(RuntimeSetting.LLM_ENRICH_CALL_COST_CENTS,
+                "Gasto do dia contra o teto de categorização por IA, Admin → Operações → Custos e custo por usuário.");
+        REFLECTS_ON.put(RuntimeSetting.COST_ALERT_WARNING_PERCENT,
+                "Avisos de custo no WhatsApp e e-mail do admin: teto diário de cada serviço e saldo dos fornecedores (o texto do aviso mostra esse percentual).");
+        REFLECTS_ON.put(RuntimeSetting.AI_CREDIT_USD,
+                "Admin → IA: crédito e saldo estimado; e o aviso de saldo da IA (Anthropic) acabando.");
+        REFLECTS_ON.put(RuntimeSetting.AI_MODEL_PRICES,
+                "Admin → IA e Admin → Operações → Custos: gasto estimado das próximas chamadas de IA, e o saldo estimado da IA. Não altera cobrança.");
         REFLECTS_ON.put(RuntimeSetting.PAUSED_STATES,
                 "FAQ \"situação dos estados\" no app, sonda de retorno do portal e alertas do Infosimples.");
         REFLECTS_ON.put(RuntimeSetting.DEVICE_FETCH_TRUSTED_STATES,
@@ -179,6 +271,50 @@ public final class RuntimeSettingReach {
                 "Notas emitidas sem internet: por quanto tempo seguem sendo buscadas, e o prazo citado no app.");
         REFLECTS_ON.put(RuntimeSetting.MAX_ITEM_PHOTOS,
                 "Envio de nota por foto no scanner e o texto \"até N fotos\" do app.");
+        REFLECTS_ON.put(RuntimeSetting.RECEIPT_SUBMITS_PER_HOUR,
+                "Envio de nota por QR, foto, chave digitada, arquivo e \"tentar de novo\": acima do limite o app mostra \"muitas tentativas\".");
+        REFLECTS_ON.put(RuntimeSetting.RECEIPT_IMPORTS_PER_HOUR,
+                "Tela de importação de notas: botão de importar a lista ou o arquivo.");
+        REFLECTS_ON.put(RuntimeSetting.IMPORT_PREVIEWS_PER_HOUR,
+                "Tela de importação de notas: leitura do arquivo escolhido antes de importar.");
+        REFLECTS_ON.put(RuntimeSetting.HISTORY_EXPORTS_PER_HOUR,
+                "Exportação do histórico de compras (planilha ou PDF) e dos dados da conta.");
+        REFLECTS_ON.put(RuntimeSetting.BULK_MAX_RECEIPTS,
+                "Tela de importação de notas: importar, tentar de novo, confirmar e apagar em lote, e o limite citado no app e na mensagem de erro.");
+        REFLECTS_ON.put(RuntimeSetting.PORTAL_RETRY_HOURS,
+                "Notas guardadas com o portal do estado fora do ar: por quanto tempo seguem sendo buscadas, e o prazo citado no app.");
+        REFLECTS_ON.put(RuntimeSetting.STATE_UNSTABLE_WINDOW_HOURS,
+                "FAQ \"situação dos estados\" no app: quais estados aparecem como instáveis.");
+        REFLECTS_ON.put(RuntimeSetting.STATE_UNSTABLE_MIN_FAILURES,
+                "FAQ \"situação dos estados\" no app: quais estados aparecem como instáveis.");
+        REFLECTS_ON.put(RuntimeSetting.PORTAL_REGRESSION_MIN_FAILURES,
+                "Alerta por e-mail aos administradores quando um portal muda de formato e FAQ \"situação dos estados\".");
+        REFLECTS_ON.put(RuntimeSetting.PORTAL_REGRESSION_WINDOW_HOURS,
+                "Alerta por e-mail aos administradores quando um portal muda de formato.");
+        REFLECTS_ON.put(RuntimeSetting.STATE_EVIDENCE_USER_DAYS,
+                "Notas de estados em validação: quando o sistema para de tentar (e de pagar) por um estado que não funciona.");
+        REFLECTS_ON.put(RuntimeSetting.STATE_EVIDENCE_USERS,
+                "Notas de estados em validação: quando o sistema para de tentar por um estado que não funciona.");
+        REFLECTS_ON.put(RuntimeSetting.STATE_EVIDENCE_DAYS,
+                "Notas de estados em validação: quando o sistema para de tentar por um estado que não funciona.");
+        REFLECTS_ON.put(RuntimeSetting.AI_SET_MIN_CONFIDENCE,
+                "Sugestões de subcategoria da IA: na revisão do admin e nos itens de cada nota que chega.");
+        REFLECTS_ON.put(RuntimeSetting.AI_CHANGE_SUBCATEGORY_MIN_CONFIDENCE,
+                "Admin → sugestões de subcategoria da IA: trocas de subcategoria propostas.");
+        REFLECTS_ON.put(RuntimeSetting.AI_CHANGE_CATEGORY_MIN_CONFIDENCE,
+                "Admin → sugestões de subcategoria da IA: trocas de categoria propostas.");
+        REFLECTS_ON.put(RuntimeSetting.AUTO_PROMOTE_MIN_SAMPLES,
+                "Rotina diária que ensina palavras novas ao dicionário de categorias, usado em todas as notas.");
+        REFLECTS_ON.put(RuntimeSetting.AUTO_PROMOTE_MIN_AGREEMENT,
+                "Rotina diária que ensina palavras novas ao dicionário de categorias, usado em todas as notas.");
+        REFLECTS_ON.put(RuntimeSetting.CONSENSUS_MIN_HOUSEHOLDS,
+                "Correções de categoria feitas pelos usuários: quando passam a valer para todas as casas.");
+        REFLECTS_ON.put(RuntimeSetting.CONSENSUS_MIN_TOKEN_PRODUCTS,
+                "Correções de categoria feitas pelos usuários: quando ensinam uma palavra ao dicionário.");
+        REFLECTS_ON.put(RuntimeSetting.CANONICAL_MATCH_SIMILARITY,
+                "Leitura de cada nota: reconhecimento de um item como produto já conhecido, que alimenta histórico e comparação de preços.");
+        REFLECTS_ON.put(RuntimeSetting.DATA_SHARE_CONSENT_DAYS,
+                "Pedidos de cópia de dados feitos daqui em diante ao sair de uma casa, e o prazo mostrado no app.");
         REFLECTS_ON.put(RuntimeSetting.HOUSEHOLD_INVITE_HOURS,
                 "Códigos de convite gerados a partir de agora e o prazo citado na tela Casa e na FAQ.");
         REFLECTS_ON.put(RuntimeSetting.APP_MIN_VERSION,
@@ -207,6 +343,8 @@ public final class RuntimeSettingReach {
                 "Portal do comerciante: fluxo \"sou este mercado\".");
         REFLECTS_ON.put(RuntimeSetting.MERCHANT_CLAIM_COOLDOWN_HOURS,
                 "Portal do comerciante: nova tentativa de reivindicar a mesma rede.");
+        REFLECTS_ON.put(RuntimeSetting.MERCHANT_VERIFIED_BADGE_TOLERANCE_PCT,
+                "Selo \"confirmado por notas\" nas promoções de comerciantes (app, painel do comerciante e admin) e o desempenho da promoção.");
         REFLECTS_ON.put(RuntimeSetting.MERCHANT_IMPORT_MAX_ROWS,
                 "Portal do comerciante: importação de promoções por arquivo.");
     }

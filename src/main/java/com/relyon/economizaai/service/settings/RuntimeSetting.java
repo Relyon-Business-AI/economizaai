@@ -1,9 +1,11 @@
 package com.relyon.economizaai.service.settings;
 
 import com.relyon.economizaai.model.enums.RelevanceMode;
+import com.relyon.economizaai.service.ai.AiModelPrices;
 import com.relyon.economizaai.service.subscription.Feature;
 import lombok.Getter;
 
+import java.time.DayOfWeek;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -12,6 +14,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.relyon.economizaai.service.settings.SettingSection.APP;
+import static com.relyon.economizaai.service.settings.SettingSection.CATEGORIZATION;
 import static com.relyon.economizaai.service.settings.SettingSection.COSTS;
 import static com.relyon.economizaai.service.settings.SettingSection.MERCHANT;
 import static com.relyon.economizaai.service.settings.SettingSection.NOTIFICATIONS;
@@ -21,6 +24,7 @@ import static com.relyon.economizaai.service.settings.SettingSection.RECEIPTS;
 import static com.relyon.economizaai.service.settings.SettingSection.SAVINGS;
 import static com.relyon.economizaai.service.settings.SettingSpec.date;
 import static com.relyon.economizaai.service.settings.SettingSpec.decimal;
+import static com.relyon.economizaai.service.settings.SettingSpec.formattedText;
 import static com.relyon.economizaai.service.settings.SettingSpec.integer;
 import static com.relyon.economizaai.service.settings.SettingSpec.integerList;
 import static com.relyon.economizaai.service.settings.SettingSpec.option;
@@ -41,13 +45,13 @@ public enum RuntimeSetting {
     SUBSCRIPTION_ENFORCE("economizaai.subscription.enforce", PLANS, toggle(),
             "Cobrar pelo Premium (paywall)",
             "Desligado, todo mundo usa tudo. Ligado, valem os limites do plano grátis abaixo."),
-    FREE_MONTHLY_RECEIPTS("economizaai.subscription.free.monthly-receipts", PLANS, integer(0, 1000).unit("notas/mês"),
+    FREE_MONTHLY_RECEIPTS("economizaai.subscription.free.monthly-receipts", PLANS, integer(0, 1000).unit("notas/mês").app("freeMonthlyReceipts"),
             "Plano grátis: notas por mês",
             "Quantas notas quem está no plano grátis pode enviar em cada mês."),
-    FREE_HISTORY_DAYS("economizaai.subscription.free.history-days", PLANS, integer(7, 3650).unit("dias"),
+    FREE_HISTORY_DAYS("economizaai.subscription.free.history-days", PLANS, integer(7, 3650).unit("dias").app("freeHistoryDays"),
             "Plano grátis: histórico",
             "Quantos dias para trás o plano grátis enxerga nos gastos e no histórico."),
-    FREE_WATCHED_MARKETS("economizaai.subscription.free.watched-markets", PLANS, integer(0, 100).unit("mercados"),
+    FREE_WATCHED_MARKETS("economizaai.subscription.free.watched-markets", PLANS, integer(0, 100).unit("mercados").app("freeWatchedMarkets"),
             "Plano grátis: mercados acompanhados",
             "Quantos mercados o plano grátis pode acompanhar."),
     FREE_HOUSEHOLD_MEMBERS("economizaai.subscription.free.household-members", PLANS, integer(1, 20).unit("pessoas"),
@@ -65,13 +69,21 @@ public enum RuntimeSetting {
     PAID_GRACE_DAYS("economizaai.subscription.paid-grace-days", PLANS, integer(0, 30).unit("dias"),
             "Tolerância após o vencimento",
             "Dias de espera pela renovação antes de rebaixar uma assinatura paga."),
-    PREMIUM_MONTHLY_PRICE("economizaai.monetization.monthly-price", PLANS, decimal("0.50", "999.00").unit("R$"),
+    PREMIUM_MONTHLY_PRICE("economizaai.monetization.monthly-price", PLANS, decimal("0.50", "999.00").unit("R$").app("premiumMonthlyPrice"),
             "Preço mensal do Premium",
             "Valor cobrado na assinatura pela web (Mercado Pago) e usado nas projeções de receita. "
                     + "O preço dentro do app vem da App Store e do Google Play."),
-    PREMIUM_YEARLY_PRICE("economizaai.monetization.yearly-price", PLANS, decimal("0.50", "9999.00").unit("R$"),
+    PREMIUM_YEARLY_PRICE("economizaai.monetization.yearly-price", PLANS, decimal("0.50", "9999.00").unit("R$").app("premiumYearlyPrice"),
             "Preço anual do Premium",
             "Usado nas projeções de receita do painel."),
+    PREMIUM_ASSUMED_LIFETIME_MONTHS("economizaai.monetization.assumed-lifetime-months", PLANS, integer(1, 120).unit("meses"),
+            "Tempo médio de assinatura estimado",
+            "Por quantos meses se supõe que um assinante fica no Premium. Serve só para estimar quanto cada "
+                    + "assinante rende nas projeções do painel."),
+    REFERRAL_REWARD_MONTHS("economizaai.referral.reward-months", PLANS, integer(1, 12).unit("meses").app("referralRewardMonths"),
+            "Indicação: meses de Premium por recompensa",
+            "Quantos meses de Premium quem indica ganha em cada recompensa. Vale para as próximas; "
+                    + "quem já ganhou mantém o que recebeu."),
     LAUNCH_PROMO_ENABLED("economizaai.subscription.promo.enabled", PLANS, toggle(),
             "Promoção de lançamento ativa",
             "Dá Premium de graça a quem confirma a primeira nota."),
@@ -85,7 +97,8 @@ public enum RuntimeSetting {
     LAUNCH_PROMO_WARNINGS_ENABLED("economizaai.subscription.promo.warnings-enabled", PLANS, toggle(),
             "Avisar que a promoção está acabando",
             "Envia os avisos de fim do Premium grátis."),
-    LAUNCH_PROMO_WARNING_DAYS("economizaai.subscription.promo.warning-days", PLANS, integerList(1, 90).unit("dias antes"),
+    LAUNCH_PROMO_WARNING_DAYS("economizaai.subscription.promo.warning-days", PLANS,
+            integerList(1, 90).unit("dias antes").app("launchPromoWarningDays"),
             "Avisos de fim da promoção",
             "Quantos dias antes do fim cada aviso é enviado."),
 
@@ -114,8 +127,13 @@ public enum RuntimeSetting {
             "Preços dos últimos dias contam como recentes; os mais antigos formam o preço típico."),
     COMMUNITY_PROMO_MIN_BASELINE("economizaai.collaborative.min-observations-for-community-promo", PRICES,
             integer(1, 1000).unit("preços"),
-            "Promoção da comunidade: histórico mínimo",
-            "Quantos preços antigos são necessários para conhecer o preço típico."),
+            "Promoção da comunidade: total mínimo de preços",
+            "Quantos preços o produto precisa ter no mercado, somando recentes e antigos, dentro da validade dos preços."),
+    COMMUNITY_PROMO_MIN_OLD("economizaai.collaborative.community-promo-min-baseline-observations", PRICES,
+            integer(1, 100).unit("preços"),
+            "Promoção da comunidade: preços antigos mínimos",
+            "Quantos preços anteriores ao período recente são necessários para formar o preço típico. "
+                    + "Não precisam ser de dias diferentes."),
     COMMUNITY_PROMO_MIN_RECENT("economizaai.collaborative.community-promo-min-recent-observations", PRICES,
             integer(1, 100).unit("preços"),
             "Promoção da comunidade: preços recentes mínimos",
@@ -146,6 +164,36 @@ public enum RuntimeSetting {
             decimal("1", "100000").unit("R$"),
             "Oferta relevante: preço alto de referência",
             "A partir desse preço vale a queda exigida de itens caros; no meio, a exigência cai aos poucos."),
+    ONLINE_OFFERS_ENABLED("economizaai.ecommerce.enabled", PRICES, toggle(),
+            "Ofertas online: buscar nas lojas online",
+            "Ligado, o app consulta as lojas online conectadas (hoje o Mercado Livre) para comparar com o preço pago. "
+                    + "Desligado, só aparecem as ofertas online cadastradas à mão. Só tem efeito com a loja já conectada."),
+    ONLINE_OFFER_MIN_SAVINGS("economizaai.ecommerce.worth-it-min-savings", PRICES, decimal("0", "10000").unit("R$"),
+            "Ofertas online: economia mínima para \"vale a pena\"",
+            "Quanto a compra online (preço mais frete) precisa sair mais barata que o valor pago para ganhar o selo "
+                    + "\"vale a pena\". Com 0, qualquer economia já vale."),
+    COMPARISON_MIN_MATCHED_PCT("economizaai.comparison.min-matched-pct", PRICES, integer(1, 100).unit("%"),
+            "Compra em outros mercados: parte mínima dos itens",
+            "Um mercado só entra na comparação se tiver preço para pelo menos essa parte dos itens da compra."),
+    RECEIPT_COMPARISON_MAX_AGE_DAYS("economizaai.comparison.receipt-max-age-days", PRICES,
+            integer(1, 90).unit("dias").app("receiptComparisonMaxAgeDays"),
+            "Compra em outros mercados: idade máxima da nota",
+            "Uma compra feita há mais tempo que isso não é comparada: os preços de hoje já não dizem nada sobre ela."),
+    COMPARISON_ALTERNATIVE_MARKETS("economizaai.comparison.alternative-markets", PRICES, integer(1, 10).unit("mercados"),
+            "Compra em outros mercados: quantos mercados mostrar",
+            "Quantos mercados aparecem ao comparar uma nota e quantos são guardados em cada ida às compras."),
+    ROUTE_DEFAULT_MAX_DISTANCE_KM("economizaai.app-defaults.route-max-distance-km", PRICES,
+            decimal("0.1", "200").unit("km").app("routeDefaultMaxDistanceKm"),
+            "Plano de compras: distância máxima inicial",
+            "Distância com que o plano de compras começa, até a pessoa escolher a dela."),
+    ROUTE_DEFAULT_MAX_STOPS("economizaai.app-defaults.route-max-stops", PRICES,
+            integer(1, 10).unit("mercados").app("routeDefaultMaxStops"),
+            "Plano de compras: paradas iniciais",
+            "Em quantos mercados o plano de compras divide a lista, até a pessoa escolher."),
+    ROUTE_DEFAULT_MIN_SAVING_PER_STOP("economizaai.app-defaults.route-min-saving-per-stop", PRICES,
+            decimal("0", "1000").unit("R$").app("routeDefaultMinSavingPerStop"),
+            "Plano de compras: economia mínima por parada",
+            "Quanto uma parada a mais precisa economizar para valer a viagem, até a pessoa escolher."),
 
     // ---- Economia e previsão de consumo ----
     SAVINGS_REGION_WINDOW_DAYS("economizaai.collaborative.savings-region-window-days", SAVINGS, integer(1, 180).unit("dias"),
@@ -163,6 +211,21 @@ public enum RuntimeSetting {
     SAVINGS_MAX_PRICE_RATIO("economizaai.collaborative.savings-max-price-ratio", SAVINGS, decimal("1.1", "20").unit("vezes"),
             "Economia: diferença máxima aceita",
             "Um preço tantas vezes acima ou abaixo da referência é produto ou unidade trocada e fica de fora."),
+    SAVINGS_DEFAULT_PERIOD_DAYS("economizaai.savings.default-period-days", SAVINGS,
+            integer(7, 730).unit("dias").app("savingsDefaultPeriodDays"),
+            "Economia: período inicial",
+            "Período da economia da casa quando o app não pede outro."),
+    HOME_SAVINGS_MIN("economizaai.app-defaults.home-savings-min", SAVINGS,
+            decimal("0", "1000").unit("R$").app("homeSavingsMin"),
+            "Economia: valor mínimo para destacar na Home",
+            "Uma economia menor que isso não ganha destaque na tela inicial."),
+    LEADERBOARD_TOP_N("economizaai.leaderboard.top-n", SAVINGS, integer(3, 100).unit("casas").app("leaderboardTopN"),
+            "Ranking de caçadores de desconto: tamanho",
+            "Quantas casas aparecem no ranking."),
+    LEADERBOARD_DEFAULT_DAYS("economizaai.leaderboard.default-days", SAVINGS,
+            integer(1, 365).unit("dias").app("leaderboardDefaultDays"),
+            "Ranking de caçadores de desconto: período",
+            "Quantos dias para trás o ranking conta quando o app não pede outro período."),
     ATTRIBUTION_WINDOW_DAYS("economizaai.attribution.window-days", SAVINGS, integer(1, 90).unit("dias"),
             "Economia creditada ao app: janela",
             "A compra precisa acontecer até tantos dias depois de a oferta ser mostrada."),
@@ -170,6 +233,10 @@ public enum RuntimeSetting {
             integer(1, 365).unit("dias").app("savingsFollowUpDays"),
             "Economia creditada ao app: compras seguintes",
             "Por quantos dias as próximas compras do produto naquele mercado continuam contando."),
+    SAVINGS_RECENT_DAYS("economizaai.attribution.recent-savings-days", SAVINGS,
+            integer(1, 365).unit("dias").app("savingsRecentDays"),
+            "Economia creditada ao app: período recente",
+            "Quantos dias para trás entram no valor de economia recente, mostrado ao lado do total."),
     CONSUMPTION_MIN_PURCHASES("economizaai.consumption.min-purchases-for-prediction", SAVINGS, integer(2, 50).unit("compras"),
             "Previsão: compras mínimas",
             "Dias de compra diferentes necessários para prever quando um produto acaba."),
@@ -187,6 +254,15 @@ public enum RuntimeSetting {
     CONSUMPTION_RAN_OUT_GRACE_DAYS("economizaai.consumption.ran-out-grace-days", SAVINGS, integer(0, 30).unit("dias"),
             "Previsão: tolerância para acabou",
             "Dias de folga depois da data prevista antes de marcar como acabou."),
+    CONSUMPTION_HIGH_CONFIDENCE_SAMPLES("economizaai.consumption.high-confidence-min-samples", SAVINGS,
+            integer(1, 100).unit("compras"),
+            "Previsão: compras para confiança alta",
+            "A partir de quantas compras do produto a previsão aparece com confiança alta."),
+    CONSUMPTION_MEDIUM_CONFIDENCE_SAMPLES("economizaai.consumption.medium-confidence-min-samples", SAVINGS,
+            integer(1, 100).unit("compras"),
+            "Previsão: compras para confiança média",
+            "A partir de quantas compras a previsão aparece com confiança média; abaixo disso, baixa. "
+                    + "Deve ser menor que o número da confiança alta."),
     PREFERENCES_MIN_PURCHASES("economizaai.preferences.min-purchases-per-generic", SAVINGS, integer(1, 100).unit("compras"),
             "Preferência de marca: compras mínimas",
             "Compras de um tipo de produto necessárias para concluir uma preferência."),
@@ -196,6 +272,15 @@ public enum RuntimeSetting {
     PREFERENCES_PREFERRED_SHARE("economizaai.preferences.preferred-brand-share", SAVINGS, decimal("0.3", "1"),
             "Preferência de marca: prefere essa",
             "Fração das compras numa marca para tratá-la como preferida."),
+    PREFERENCES_HIGH_CONFIDENCE_PURCHASES("economizaai.preferences.high-confidence-min-purchases", SAVINGS,
+            integer(1, 500).unit("compras"),
+            "Preferência de marca: compras para confiança alta",
+            "A partir de quantas compras de um tipo de produto a preferência aparece com confiança alta."),
+    PREFERENCES_MEDIUM_CONFIDENCE_PURCHASES("economizaai.preferences.medium-confidence-min-purchases", SAVINGS,
+            integer(1, 500).unit("compras"),
+            "Preferência de marca: compras para confiança média",
+            "A partir de quantas compras a preferência aparece com confiança média; abaixo disso, baixa. "
+                    + "Deve ser menor que o número da confiança alta."),
 
     // ---- Notificações ----
     QUIET_HOURS_ENABLED("economizaai.notifications.quiet-hours.enabled", NOTIFICATIONS, toggle(),
@@ -215,7 +300,8 @@ public enum RuntimeSetting {
             "Quantos avisos guardados cada pessoa recebe quando o silêncio termina; o resto fica só na caixa de entrada."),
     RELEVANCE_MODE("economizaai.notifications.relevance.mode", NOTIFICATIONS, option(relevanceModes()),
             "Filtro por feedback das ofertas",
-            "OFF não filtra. SHADOW só mede. ON esconde de fato as ofertas que a pessoa dispensou ou silenciou."),
+            "Desligado não filtra. Só medir calcula sem esconder nada. Ligado esconde de fato as ofertas que a "
+                    + "pessoa dispensou ou silenciou."),
     RELEVANCE_DISMISSED_DAYS("economizaai.notifications.relevance.dismissed-days", NOTIFICATIONS, integer(1, 365).unit("dias"),
             "Oferta dispensada some por",
             "Por quantos dias uma oferta dispensada deixa de aparecer."),
@@ -230,6 +316,19 @@ public enum RuntimeSetting {
             integer(1, 60).unit("dias"),
             "Reposição: intervalo entre lembretes",
             "Dias entre um lembrete e o próximo do mesmo produto."),
+    REPLENISHMENT_SEND_HOUR("economizaai.notifications.replenishment.send-hour", NOTIFICATIONS,
+            integer(0, 23).unit("h"),
+            "Reposição: hora do envio",
+            "Hora de Brasília em que os lembretes de produto acabando são enviados, uma vez por dia."),
+    STOCKOUT_DEFAULT_LEAD_DAYS("economizaai.notifications.rules.default-lead-time-days", NOTIFICATIONS,
+            integer(0, 60).unit("dias"),
+            "Reposição: antecedência padrão",
+            "Antecedência gravada num aviso de produto acabando quando a pessoa não escolhe uma."),
+    BUDGET_CHECK_HOURS("economizaai.notifications.budget.check-hours", NOTIFICATIONS,
+            integerList(0, 23).unit("h"),
+            "Orçamento: horas da conferência",
+            "Horas de Brasília em que o gasto do mês é comparado com o orçamento da casa. "
+                    + "Separe por vírgula, por exemplo 9,18."),
     PRICE_ALERT_COOLDOWN_HOURS("economizaai.notifications.price-alert-cooldown-hours", NOTIFICATIONS,
             integer(1, 720).unit("horas"),
             "Alerta de preço: intervalo mínimo",
@@ -241,9 +340,66 @@ public enum RuntimeSetting {
     SPENDING_REPORTS_ENABLED("economizaai.notifications.whatsapp.weekly-report.enabled", NOTIFICATIONS, toggle(),
             "Enviar relatório de gastos",
             "Liga o envio semanal e mensal do relatório de gastos a quem pediu."),
+    SPENDING_REPORT_WEEKLY_DAY("economizaai.notifications.whatsapp.weekly-report.weekday", NOTIFICATIONS,
+            option(weekdays()).app("spendingReportWeeklyDay"),
+            "Relatório semanal: dia da semana",
+            "Dia em que o relatório semanal de gastos é enviado. Ele cobre os sete dias anteriores."),
+    SPENDING_REPORT_WEEKLY_HOUR("economizaai.notifications.whatsapp.weekly-report.send-hour", NOTIFICATIONS,
+            integer(0, 23).unit("h").app("spendingReportWeeklyHour"),
+            "Relatório semanal: hora do envio",
+            "Hora de Brasília em que o relatório semanal é enviado."),
+    SPENDING_REPORT_MONTHLY_DAY("economizaai.notifications.whatsapp.monthly-report.day-of-month", NOTIFICATIONS,
+            integer(1, 28).unit("dia do mês").app("spendingReportMonthlyDay"),
+            "Relatório mensal: dia do mês",
+            "Dia em que o relatório mensal de gastos é enviado. Ele cobre o mês anterior inteiro."),
+    SPENDING_REPORT_MONTHLY_HOUR("economizaai.notifications.whatsapp.monthly-report.send-hour", NOTIFICATIONS,
+            integer(0, 23).unit("h").app("spendingReportMonthlyHour"),
+            "Relatório mensal: hora do envio",
+            "Hora de Brasília em que o relatório mensal é enviado."),
     WHATSAPP_AUDIENCE("economizaai.notifications.whatsapp.audience", NOTIFICATIONS, option(List.of("ADMINS", "EVERYONE")),
             "WhatsApp: quem pode usar",
-            "ADMINS mantém o canal só para administradores. EVERYONE libera para todos os usuários."),
+            "O canal pode existir só para administradores ou para todos os usuários."),
+    DEALS_DIGEST_WEEKLY_DAY("economizaai.notifications.deals-digest.weekly-day", NOTIFICATIONS,
+            option(weekdays()).app("dealsDigestWeeklyDay"),
+            "Resumo de ofertas semanal: dia da semana",
+            "Dia em que recebe o resumo de ofertas quem escolheu a frequência semanal."),
+    DEALS_DIGEST_IMPROVEMENT_POINTS("economizaai.notifications.deals-digest.improvement-points", NOTIFICATIONS,
+            integer(1, 90).unit("pontos percentuais"),
+            "Resumo de ofertas: melhora para avisar de novo",
+            "Uma oferta já avisada só volta ao resumo se o desconto aumentar pelo menos isso "
+                    + "(de 10% para 15% são 5 pontos)."),
+    DEALS_DIGEST_DEFAULT_HOUR_FROM("economizaai.notifications.deals-digest.default-hour-from", NOTIFICATIONS,
+            integer(0, 23).unit("h"),
+            "Resumo de ofertas: hora padrão, de",
+            "Quem ainda não tem um horário de compras conhecido recebe o resumo numa hora fixa "
+                    + "sorteada a partir desta (hora de Brasília)."),
+    DEALS_DIGEST_DEFAULT_HOUR_TO("economizaai.notifications.deals-digest.default-hour-to", NOTIFICATIONS,
+            integer(0, 23).unit("h"),
+            "Resumo de ofertas: hora padrão, até",
+            "Última hora do sorteio do horário padrão. Menor que a hora inicial, a faixa atravessa a meia-noite."),
+    DEALS_DIGEST_MIN_RECEIPTS_FOR_HABIT("economizaai.notifications.deals-digest.min-receipts-for-inference", NOTIFICATIONS,
+            integer(1, 200).unit("notas"),
+            "Resumo de ofertas: notas para aprender o horário",
+            "Com pelo menos essa quantidade de notas, o resumo passa a sair uma hora antes do horário "
+                    + "em que a casa costuma comprar."),
+    PUSH_OPTIN_NUDGE_WEEKDAY("economizaai.notifications.push-optin-nudge.weekday", NOTIFICATIONS, option(weekdays()),
+            "Convite para ativar avisos: dia da semana",
+            "Dia em que o convite para ativar as notificações aparece na caixa de entrada de quem nunca ativou."),
+    PUSH_OPTIN_NUDGE_HOUR("economizaai.notifications.push-optin-nudge.send-hour", NOTIFICATIONS,
+            integer(0, 23).unit("h"),
+            "Convite para ativar avisos: hora",
+            "Hora de Brasília em que o convite é colocado na caixa de entrada."),
+    PUSH_OPTIN_RENUDGE_DAYS("economizaai.notifications.push-optin-nudge.renudge-days", NOTIFICATIONS,
+            integer(1, 365).unit("dias"),
+            "Convite para ativar avisos: repetir depois de",
+            "Dias de espera antes de convidar de novo a mesma pessoa."),
+    SIGNUP_ALERT_ENABLED("economizaai.signup-alert.enabled", NOTIFICATIONS, toggle(),
+            "Avisar o dono a cada conta nova",
+            "Envia um e-mail à caixa de contato a cada conta criada. O mesmo interruptor vale para o e-mail "
+                    + "de conta excluída com assinatura paga ainda ativa."),
+    ADMIN_WHATSAPP_ENABLED("economizaai.notifications.admin-whatsapp-enabled", NOTIFICATIONS, toggle(),
+            "Alertas de operação por WhatsApp",
+            "Além do e-mail, os alertas urgentes de operação chegam por WhatsApp aos números dos administradores."),
 
     // ---- Custos e limites de uso ----
     PAID_API_GUARD_ENABLED("economizaai.paid-api.enabled", COSTS, toggle(),
@@ -292,6 +448,46 @@ public enum RuntimeSetting {
     INFOSIMPLES_LOW_BALANCE("economizaai.infosimples.low-balance-threshold", COSTS, decimal("0", "10000").unit("R$"),
             "Infosimples: avisar saldo abaixo de",
             "Abaixo desse saldo os administradores são avisados."),
+    INFOSIMPLES_CALL_COST_CENTS("economizaai.paid-api.call-cost-cents.infosimples", COSTS,
+            integer(0, 100000).unit("centavos por consulta"),
+            "Infosimples: custo de cada consulta",
+            "Quanto cada consulta custa. É com esse valor que o gasto do dia é somado e comparado ao teto. "
+                    + "Vale para as próximas consultas; as já registradas não mudam."),
+    CAPTCHA_CALL_COST_CENTS("economizaai.paid-api.call-cost-cents.captcha", COSTS,
+            integer(0, 100000).unit("centavos por resolução"),
+            "Captcha: custo de cada resolução",
+            "Quanto cada captcha resolvido custa. Vale para os próximos; os já registrados não mudam."),
+    TWILIO_CALL_COST_CENTS("economizaai.paid-api.call-cost-cents.twilio", COSTS,
+            integer(0, 100000).unit("centavos por mensagem"),
+            "SMS/WhatsApp: custo de cada mensagem",
+            "Quanto cada SMS ou WhatsApp enviado custa. Vale para as próximas mensagens; as já registradas não mudam."),
+    LLM_VISION_CALL_COST_CENTS("economizaai.paid-api.call-cost-cents.llm-vision", COSTS,
+            integer(0, 100000).unit("centavos por foto"),
+            "IA de leitura de foto: custo de cada foto",
+            "Quanto cada foto de nota lida pela IA custa. Vale para as próximas; as já registradas não mudam."),
+    LLM_HTML_RESCUE_CALL_COST_CENTS("economizaai.paid-api.call-cost-cents.llm-html-rescue", COSTS,
+            integer(0, 100000).unit("centavos por uso"),
+            "IA de resgate de nota: custo de cada uso",
+            "Quanto cada resgate de nota pela IA custa. Vale para os próximos; os já registrados não mudam."),
+    LLM_ENRICH_CALL_COST_CENTS("economizaai.paid-api.call-cost-cents.llm-enrich", COSTS,
+            integer(0, 100000).unit("centavos por uso"),
+            "IA de categorização: custo de cada uso",
+            "Quanto cada uso da IA de categorização custa. Vale para os próximos; os já registrados não mudam."),
+    COST_ALERT_WARNING_PERCENT("economizaai.cost-alerts.warning-threshold-percent", COSTS, integer(1, 99).unit("%"),
+            "Aviso de custo: avisar ao atingir",
+            "Em que parte do teto diário (ou do saldo de um fornecedor) sai o primeiro aviso. "
+                    + "O segundo aviso sai sempre quando o teto é atingido (100%)."),
+    AI_CREDIT_USD("economizaai.ai.budget-usd", COSTS, decimal("0", "1000000").unit("US$"),
+            "IA: crédito comprado",
+            "Total de crédito de IA já comprado, em dólares. O painel mostra quanto resta descontando o que foi gasto. "
+                    + "Depois de uma recarga, some o valor aqui. Com 0, o saldo não é mostrado."),
+    AI_MODEL_PRICES("economizaai.ai.model-prices-usd-per-mtok", COSTS, formattedText(2000, AiModelPrices::canonicalText),
+            "IA: preço de cada modelo",
+            "Preço em dólares de cada modelo por milhão de tokens (a unidade de texto que a IA cobra), usado só para "
+                    + "estimar o gasto de IA. "
+                    + "Escreva modelo=entrada/saída e separe os modelos com ponto e vírgula; o item \"default\" é "
+                    + "obrigatório e vale para qualquer modelo fora da lista. "
+                    + "Exemplo: claude-haiku-4-5=1/5;gpt-5-mini=0.25/2;default=3/15"),
 
     // ---- Notas e estados ----
     PAUSED_STATES("economizaai.ingestion.paused-state-probe.ufs", RECEIPTS, ufList(),
@@ -317,10 +513,108 @@ public enum RuntimeSetting {
     MAX_ITEM_PHOTOS("economizaai.llm.photo-extraction.max-photos", RECEIPTS, integer(1, 6).unit("fotos").app("maxItemPhotos"),
             "Fotos por nota",
             "Quantas fotos uma nota fotografada pode ter. Cada foto é uma leitura paga."),
+    RECEIPT_SUBMITS_PER_HOUR("economizaai.rate-limit.receipt-submits-per-hour", RECEIPTS,
+            integer(1, 1000).unit("notas por hora"),
+            "Envio de notas: máximo por hora",
+            "Quantas notas cada pessoa pode enviar por hora, somando QR, foto, chave digitada e nova tentativa."),
+    RECEIPT_IMPORTS_PER_HOUR("economizaai.rate-limit.receipt-imports-per-hour", RECEIPTS,
+            integer(1, 100).unit("importações por hora"),
+            "Importação em lote: máximo por hora",
+            "Quantas importações de várias notas de uma vez cada pessoa pode fazer por hora."),
+    IMPORT_PREVIEWS_PER_HOUR("economizaai.rate-limit.import-previews-per-hour", RECEIPTS,
+            integer(1, 1000).unit("arquivos por hora"),
+            "Importação em lote: arquivos lidos por hora",
+            "Quantos arquivos cada pessoa pode mandar por hora só para o app mostrar as notas encontradas neles."),
+    HISTORY_EXPORTS_PER_HOUR("economizaai.rate-limit.history-exports-per-hour", RECEIPTS,
+            integer(1, 100).unit("exportações por hora"),
+            "Exportar histórico: máximo por hora",
+            "Quantas vezes por hora cada pessoa pode exportar o histórico de compras ou os próprios dados."),
+    BULK_MAX_RECEIPTS("economizaai.receipts.bulk-max-receipts", RECEIPTS,
+            integer(1, 5000).unit("notas").app("bulkMaxReceipts"),
+            "Importação em lote: notas por vez",
+            "Quantas notas cabem em uma única importação, nova tentativa, confirmação ou exclusão em lote."),
+    PORTAL_RETRY_HOURS("economizaai.ingestion.portal-recovery-window-hours", RECEIPTS,
+            integer(1, 2160).unit("horas").app("portalRetryHours"),
+            "Portal do estado fora do ar: prazo",
+            "Por quanto tempo uma nota guardada espera o portal do estado voltar antes de ser dada como perdida "
+                    + "(336 horas = 14 dias)."),
+    STATE_UNSTABLE_WINDOW_HOURS("economizaai.ingestion.state-status.window-hours", RECEIPTS,
+            integer(1, 720).unit("horas"),
+            "Estado instável: período observado",
+            "Quantas horas para trás são olhadas para decidir se um estado está instável."),
+    STATE_UNSTABLE_MIN_FAILURES("economizaai.ingestion.state-status.min-failures", RECEIPTS,
+            integer(1, 1000).unit("notas"),
+            "Estado instável: falhas mínimas",
+            "Um estado aparece como instável quando, no período observado, pelo menos tantas notas falharam por "
+                    + "culpa do portal e as falhas superam as notas que entraram."),
+    PORTAL_REGRESSION_MIN_FAILURES("economizaai.ingestion.sefaz.regression.min-failures", RECEIPTS,
+            integer(1, 1000).unit("notas"),
+            "Portal mudou de formato: falhas para avisar",
+            "Quantas notas de um estado já atendido precisam falhar na leitura para os administradores serem "
+                    + "avisados e o estado aparecer como instável."),
+    PORTAL_REGRESSION_WINDOW_HOURS("economizaai.ingestion.sefaz.regression.window-hours", RECEIPTS,
+            integer(1, 168).unit("horas"),
+            "Portal mudou de formato: período das falhas",
+            "As falhas de leitura precisam acontecer dentro desse tempo para gerar o aviso."),
+    STATE_EVIDENCE_USER_DAYS("economizaai.ingestion.sefaz.experimental.min-evidence-user-days", RECEIPTS,
+            integer(1, 1000).unit("tentativas"),
+            "Estado novo: falhas para parar de tentar",
+            "Em um estado ainda em validação, quantas falhas (uma por pessoa por dia) provam que ele não funciona "
+                    + "e fazem o sistema parar de gastar com ele."),
+    STATE_EVIDENCE_USERS("economizaai.ingestion.sefaz.experimental.min-evidence-users", RECEIPTS,
+            integer(1, 100).unit("pessoas"),
+            "Estado novo: pessoas diferentes",
+            "Essas falhas precisam vir de pelo menos tantas pessoas diferentes."),
+    STATE_EVIDENCE_DAYS("economizaai.ingestion.sefaz.experimental.min-evidence-days", RECEIPTS,
+            integer(1, 60).unit("dias"),
+            "Estado novo: dias diferentes",
+            "Essas falhas precisam acontecer em pelo menos tantos dias diferentes, para uma queda de um dia só "
+                    + "não travar o estado."),
+
+    // ---- Categorização de produtos ----
+    AI_SET_MIN_CONFIDENCE("economizaai.ai.subcategory-suggestion.set-min-confidence", CATEGORIZATION,
+            decimal("0", "1"),
+            "IA: certeza para preencher subcategoria vazia",
+            "Certeza mínima da IA para sugerir a subcategoria de um produto que ainda não tem (0,55 = 55%)."),
+    AI_CHANGE_SUBCATEGORY_MIN_CONFIDENCE("economizaai.ai.subcategory-suggestion.change-subcategory-min-confidence",
+            CATEGORIZATION, decimal("0", "1"),
+            "IA: certeza para trocar a subcategoria",
+            "Certeza mínima da IA para sugerir a troca de uma subcategoria que o produto já tem (0,80 = 80%)."),
+    AI_CHANGE_CATEGORY_MIN_CONFIDENCE("economizaai.ai.subcategory-suggestion.change-category-min-confidence",
+            CATEGORIZATION, decimal("0", "1"),
+            "IA: certeza para trocar a categoria",
+            "Certeza mínima da IA para sugerir que o produto mude de categoria (0,90 = 90%)."),
+    AUTO_PROMOTE_MIN_SAMPLES("economizaai.categorizer.auto-promote.min-samples", CATEGORIZATION,
+            integer(1, 1000).unit("produtos"),
+            "Aprender palavra sozinho: produtos mínimos",
+            "Quantos produtos classificados pela IA precisam conter a mesma palavra para ela entrar no dicionário."),
+    AUTO_PROMOTE_MIN_AGREEMENT("economizaai.categorizer.auto-promote.min-agreement", CATEGORIZATION,
+            decimal("0.5", "1"),
+            "Aprender palavra sozinho: concordância",
+            "Fração desses produtos que precisa estar na mesma categoria (0,90 = 90%)."),
+    CONSENSUS_MIN_HOUSEHOLDS("economizaai.categorizer.consensus.min-households", CATEGORIZATION,
+            integer(2, 100).unit("casas"),
+            "Correção vira regra: casas que concordam",
+            "Quantas casas diferentes precisam corrigir o mesmo produto para a mesma categoria para a correção "
+                    + "valer para todo mundo."),
+    CONSENSUS_MIN_TOKEN_PRODUCTS("economizaai.categorizer.consensus.min-token-products", CATEGORIZATION,
+            integer(1, 100).unit("produtos"),
+            "Correção vira regra: produtos com a mesma palavra",
+            "Em quantos produtos já corrigidos por consenso uma palavra precisa aparecer para entrar no dicionário."),
+    CANONICAL_MATCH_SIMILARITY("economizaai.canonicalization.fuzzy-match-threshold", CATEGORIZATION,
+            decimal("0.5", "1"),
+            "Mesmo produto: semelhança da descrição",
+            "Quão parecida a descrição de um item precisa ser com a de um produto conhecido para ser tratada como "
+                    + "o mesmo produto (0,85 = 85%). Mais alto junta menos; mais baixo arrisca juntar produtos diferentes."),
     HOUSEHOLD_INVITE_HOURS("economizaai.households.invite-ttl-hours", APP,
             integer(1, 720).unit("horas").app("householdInviteHours"),
             "Convite da casa: validade",
             "Por quanto tempo um código de convite funciona."),
+    DATA_SHARE_CONSENT_DAYS("economizaai.data-share.consent-days", APP,
+            integer(1, 90).unit("dias").app("dataShareConsentDays"),
+            "Saída da casa: prazo para responder o pedido de dados",
+            "Quem sai da casa pode pedir uma cópia dos dados de quem fica. O pedido vale por esse prazo; "
+                    + "sem resposta, nada é copiado."),
 
     // ---- Aplicativo ----
     APP_MIN_VERSION("economizaai.app-config.min-version", APP, text(20),
@@ -363,7 +657,11 @@ public enum RuntimeSetting {
             "Tempo até a mesma pessoa poder reivindicar a mesma rede depois de uma recusa."),
     MERCHANT_IMPORT_MAX_ROWS("economizaai.merchant.import-max-rows", MERCHANT, integer(1, 10000).unit("linhas"),
             "Importação de promoções: linhas por arquivo",
-            "Máximo de linhas aceitas em cada arquivo de promoções.");
+            "Máximo de linhas aceitas em cada arquivo de promoções."),
+    MERCHANT_VERIFIED_BADGE_TOLERANCE_PCT("economizaai.merchant.verified-badge-tolerance-pct", MERCHANT,
+            decimal("0", "20").unit("%"),
+            "Selo \"confirmado por notas\": tolerância de preço",
+            "Uma nota confirma a promoção quando o preço pago é até esse percentual acima do preço anunciado.");
 
     private static final Map<String, RuntimeSetting> BY_KEY =
             Arrays.stream(values()).collect(Collectors.toMap(RuntimeSetting::getKey, Function.identity()));
@@ -388,6 +686,10 @@ public enum RuntimeSetting {
 
     private static List<String> featureNames() {
         return Arrays.stream(Feature.values()).map(Feature::name).toList();
+    }
+
+    private static List<String> weekdays() {
+        return Arrays.stream(DayOfWeek.values()).map(DayOfWeek::name).toList();
     }
 
     private static List<String> relevanceModes() {

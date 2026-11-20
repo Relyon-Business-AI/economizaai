@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
 
 /**
  * Date arithmetic for Premium entitlements. Period ends are stored as host wall-clock
@@ -35,16 +36,24 @@ public final class EntitlementClock {
     }
 
     /**
-     * One calendar month of Premium queued after the user's current entitlement. It starts when
-     * that entitlement ends (or now, when the user has none left), and an entitlement that runs to
-     * the end of a Brasília day hands over at the next midnight — so a month earned during a promo
-     * that ends 31/12 runs 01/01 → 01/02, and a second one stacks 01/02 → 01/03.
+     * Calendar months of Premium queued after the user's current entitlement. The window starts
+     * when that entitlement ends (or now, when the user has none left), and an entitlement that
+     * runs to the end of a Brasília day hands over at the next midnight — so one month earned
+     * during a promo that ends 31/12 runs 01/01 → 01/02, and a second one stacks 01/02 → 01/03.
      */
-    public static Window monthAfter(LocalDateTime now, LocalDateTime currentEntitlementEnd) {
+    public static Window monthsAfter(LocalDateTime now, LocalDateTime currentEntitlementEnd, int months) {
         var handover = currentEntitlementEnd == null || currentEntitlementEnd.isBefore(now)
                 ? toBrazil(now)
                 : startOfNextDayWhenDayIsOver(toBrazil(currentEntitlementEnd));
-        return new Window(toHost(handover), toHost(handover.plusMonths(1)));
+        return new Window(toHost(handover), toHost(handover.plusMonths(months)));
+    }
+
+    /** How many calendar months a window made by {@link #monthsAfter} spans. */
+    public static int monthsOf(LocalDateTime startsAt, LocalDateTime endsAt) {
+        var start = toBrazil(startsAt);
+        var end = toBrazil(endsAt);
+        var completeMonths = (int) ChronoUnit.MONTHS.between(start, end);
+        return start.plusMonths(completeMonths).isBefore(end) ? completeMonths + 1 : completeMonths;
     }
 
     private static ZonedDateTime startOfNextDayWhenDayIsOver(ZonedDateTime brazilDateTime) {

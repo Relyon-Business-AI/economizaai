@@ -16,7 +16,10 @@ import com.relyon.economizaai.service.HouseholdProductAliasService;
 import com.relyon.economizaai.service.extraction.EanCatalogService;
 import com.relyon.economizaai.service.extraction.ProductExtraction;
 import com.relyon.economizaai.service.extraction.ProductExtractor;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
+import org.springframework.beans.factory.annotation.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
@@ -35,12 +38,14 @@ public class CanonicalizationService {
 
     /**
      * Minimum Jaro-Winkler score for a candidate alias to be accepted as
-     * the same product. Tuned conservatively — at 0.85 a typo or
+     * the same product (admin setting). Tuned conservatively — at 0.85 a typo or
      * abbreviation passes ("ARROZ TIO J 5KG" vs "ARROZ TIO JOAO 5KG"), but
      * unrelated products with shared prefixes ("ARROZ" vs "ARROZ DOCE")
      * stay separate.
      */
-    private static final double FUZZY_MATCH_THRESHOLD = 0.85;
+    @Getter @Setter
+    @Value("${economizaai.canonicalization.fuzzy-match-threshold:0.85}")
+    private volatile double fuzzyMatchThreshold = 0.85;
 
     private final ProductRepository productRepository;
     private final ProductAliasRepository aliasRepository;
@@ -195,7 +200,7 @@ public class CanonicalizationService {
         // "SAL REFINADO" share (Sal, Cisne, 1KG) but are different products. Only
         // accept the dedup when the DESCRIPTIONS also look like the same item.
         if (dedup != null && score(normalized,
-                DescriptionNormalizer.normalize(dedup.getNormalizedName())) < FUZZY_MATCH_THRESHOLD) {
+                DescriptionNormalizer.normalize(dedup.getNormalizedName())) < fuzzyMatchThreshold) {
             log.info("item.metadata_dedup_rejected_by_name product={} description='{}'",
                     abbrev(dedup.getId()), item.getRawDescription());
             dedup = null;
@@ -475,7 +480,7 @@ public class CanonicalizationService {
      * exact-alias match was found. Restricts the candidate pool to aliases
      * of products with the same extracted (genericName, packSize, packUnit)
      * profile, then picks the candidate with the highest Jaro-Winkler score
-     * if it clears {@link #FUZZY_MATCH_THRESHOLD}. Returns null when:
+     * if it clears {@link #fuzzyMatchThreshold}. Returns null when:
      *
      * <ul>
      *   <li>any of the three metadata dimensions is missing — without them
@@ -499,7 +504,7 @@ public class CanonicalizationService {
                 best = candidate;
             }
         }
-        if (best == null || bestScore < FUZZY_MATCH_THRESHOLD) {
+        if (best == null || bestScore < fuzzyMatchThreshold) {
             return null;
         }
         log.info("item.matched_by_fuzzy product={} normalized='{}' candidate='{}' score={}",

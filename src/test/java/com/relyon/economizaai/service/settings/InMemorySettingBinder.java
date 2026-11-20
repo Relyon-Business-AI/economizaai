@@ -15,6 +15,7 @@ class InMemorySettingBinder implements SettingBinder {
         valuesInUse.put(RuntimeSetting.LAUNCH_PROMO_UNTIL, "2026-12-31");
         valuesInUse.put(RuntimeSetting.PAUSED_STATES, "SE,TO");
         valuesInUse.put(RuntimeSetting.LAUNCH_PROMO_WARNING_DAYS, "15,7,3,1");
+        valuesInUse.put(RuntimeSetting.AI_MODEL_PRICES, "default=3/15");
     }
 
     @Override

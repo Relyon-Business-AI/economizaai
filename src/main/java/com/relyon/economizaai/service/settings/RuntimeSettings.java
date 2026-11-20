@@ -85,6 +85,11 @@ public class RuntimeSettings {
                 : new SettingState(setting, saved.value(), configured, true, saved.savedAt(), saved.savedBy());
     }
 
+    /** The value the running code is reading right now, straight from where it is used. */
+    public String valueInUse(RuntimeSetting setting) {
+        return bindings.of(setting).currentValue().get();
+    }
+
     /** Saves a value typed in the admin and puts it in effect at once. */
     public SettingState change(String settingKey, String typedValue, String adminEmail) {
         var setting = settingByKey(settingKey);

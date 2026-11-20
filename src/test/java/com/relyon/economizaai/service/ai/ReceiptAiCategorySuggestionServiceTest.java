@@ -26,6 +26,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
@@ -56,6 +57,8 @@ class ReceiptAiCategorySuggestionServiceTest {
     @Mock private AiFineCategoryClassifier classifier;
     @Mock private CategoryResolver categoryResolver;
     @Mock private PaidApiGuardService paidApiGuard;
+
+    @Spy private AiCategoryConfidence confidence = new AiCategoryConfidence();
 
     @InjectMocks private ReceiptAiCategorySuggestionService service;
 
@@ -308,5 +311,23 @@ class ReceiptAiCategorySuggestionServiceTest {
         service.suggestForReceipt(receiptId);
 
         verify(classifier, never()).suggest(anyList(), any());
+    }
+
+    @Test
+    void theSuggestionKept_followsTheConfiguredConfidence() {
+        var leaf = UUID.randomUUID();
+        var unresolved = item("PRODUTO XPTO", null);
+        when(receiptItemRepository.findByReceiptId(receiptId)).thenReturn(List.of(unresolved));
+        when(productExtractor.extract(any())).thenReturn(NO_SIGNAL);
+        when(classifier.suggest(anyList(), any()))
+                .thenReturn(List.of(new FineSuggestion(unresolved.getId(), leaf, "doces", 0.40)));
+
+        service.suggestForReceipt(receiptId);
+        assertNull(unresolved.getAiCategoryId(), "40% is below the 55% asked");
+
+        confidence.setSetMinConfidence(0.35);
+        service.suggestForReceipt(receiptId);
+
+        assertEquals(leaf, unresolved.getAiCategoryId());
     }
 }

@@ -29,6 +29,7 @@ import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.ai.AiItemCorrectionService;
 import com.relyon.economizaai.service.ai.AiItemFallbackService;
+import com.relyon.economizaai.service.ReceiptBatchLimit;
 import com.relyon.economizaai.service.ReceiptExportService;
 import com.relyon.economizaai.service.ImportFileTextExtractor;
 import com.relyon.economizaai.service.ReceiptImportService;
@@ -79,13 +80,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(ReceiptController.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, ReceiptBatchLimit.class})
 class ReceiptControllerTest {
 
     private static final String CHAVE_RS = "43260412345678000190650010000123451123456780";
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private ReceiptBatchLimit receiptBatchLimit;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -168,6 +172,60 @@ class ReceiptControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"chaves\":[\"" + CHAVE_RS + "\"]}"))
                 .andExpect(status().isAccepted());
+    }
+
+    @Test
+    void importChaves_acceptsAsManyChavesAsTheConfiguredBatchSize() throws Exception {
+        when(receiptImportService.importChaves(any(), any()))
+                .thenReturn(new ReceiptImportResponse(3, 3, List.of(), 0, List.of()));
+        var threeChaves = "{\"chaves\":[\"1\",\"2\",\"3\"]}";
+        try {
+            receiptBatchLimit.setMaxReceipts(2);
+            mockMvc.perform(post("/api/v1/receipts/import")
+                            .with(SecurityMockMvcRequestPostProcessors.user(adminUser()))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(threeChaves))
+                    .andExpect(status().isBadRequest());
+            verify(receiptImportService, never()).importChaves(any(), any());
+
+            receiptBatchLimit.setMaxReceipts(3);
+            mockMvc.perform(post("/api/v1/receipts/import")
+                            .with(SecurityMockMvcRequestPostProcessors.user(adminUser()))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(threeChaves))
+                    .andExpect(status().isAccepted());
+        } finally {
+            receiptBatchLimit.setMaxReceipts(500);
+        }
+    }
+
+    @Test
+    void batchRetryConfirmAndDelete_refuseMoreReceiptsThanTheConfiguredBatchSize() throws Exception {
+        var twoIds = "{\"ids\":[\"" + UUID.randomUUID() + "\",\"" + UUID.randomUUID() + "\"]}";
+        try {
+            receiptBatchLimit.setMaxReceipts(1);
+            for (var path : List.of("/api/v1/receipts/retry", "/api/v1/receipts/confirm-batch",
+                    "/api/v1/receipts/delete-batch")) {
+                mockMvc.perform(post(path)
+                                .with(SecurityMockMvcRequestPostProcessors.user(adminUser()))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(twoIds))
+                        .andExpect(status().isBadRequest());
+            }
+            verify(receiptImportService, never()).retry(any(), any());
+            verify(receiptService, never()).confirmBatch(any(), any());
+            verify(receiptService, never()).deleteBatch(any(), any());
+
+            receiptBatchLimit.setMaxReceipts(2);
+            mockMvc.perform(post("/api/v1/receipts/confirm-batch")
+                            .with(SecurityMockMvcRequestPostProcessors.user(adminUser()))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(twoIds))
+                    .andExpect(status().isOk());
+            verify(receiptService).confirmBatch(any(), any());
+        } finally {
+            receiptBatchLimit.setMaxReceipts(500);
+        }
     }
 
     private ReceiptResponse sampleReceipt(ReceiptStatus status) {

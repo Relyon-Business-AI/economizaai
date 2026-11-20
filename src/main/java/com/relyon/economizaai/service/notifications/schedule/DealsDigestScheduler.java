@@ -19,9 +19,12 @@ import com.relyon.economizaai.service.notifications.RelevanceThreshold;
 import com.relyon.economizaai.service.priceindex.DealsService;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import com.relyon.economizaai.time.BrazilClock;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -64,12 +67,17 @@ public class DealsDigestScheduler {
     private static final int PAGE_SIZE = 200;
     /** Sorts before every real id — the starting point of the keyset pagination. */
     private static final UUID BEFORE_FIRST_ID = new UUID(0L, 0L);
-    /** WEEKLY digests only go out on this weekday (see DEV_NOTES). */
-    private static final DayOfWeek WEEKLY_DAY = DayOfWeek.THURSDAY;
-    /** Minimum discount-fraction improvement (5 p.p.) that re-qualifies a standing deal. */
-    private static final BigDecimal IMPROVEMENT_STEP = new BigDecimal("0.05");
     /** How many deals we ask DealsService for per user. */
     private static final int DEAL_LIMIT = 50;
+
+    /** WEEKLY digests only go out on this weekday (see DEV_NOTES). */
+    @Getter @Setter
+    @Value("${economizaai.notifications.deals-digest.weekly-day:THURSDAY}")
+    private volatile DayOfWeek weeklyDay = DayOfWeek.THURSDAY;
+    /** Minimum discount improvement, in percentage points, that re-qualifies a standing deal. */
+    @Getter @Setter
+    @Value("${economizaai.notifications.deals-digest.improvement-points:5}")
+    private volatile int improvementPoints = 5;
 
     private final UserRepository userRepository;
     private final LocalizedMessageService messageService;
@@ -93,7 +101,7 @@ public class DealsDigestScheduler {
         if (!settingsService.isEnabled(NotificationJob.DEALS_DIGEST)) return;
         scheduleService.assignMissingSendHours();
         var now = BrazilClock.now();
-        var weeklyDay = WEEKLY_DAY.equals(now.getDayOfWeek());
+        var isWeeklyDay = weeklyDay.equals(now.getDayOfWeek());
         var startOfToday = startOfDay(now.toOffsetDateTime());
 
         var sent = 0;
@@ -101,7 +109,7 @@ public class DealsDigestScheduler {
         var afterId = BEFORE_FIRST_ID;
         while (true) {
             var dueUsers = userRepository.findDigestDuePage(
-                    now.getHour(), weeklyDay, startOfToday, afterId, PageRequest.of(0, PAGE_SIZE));
+                    now.getHour(), isWeeklyDay, startOfToday, afterId, PageRequest.of(0, PAGE_SIZE));
             if (dueUsers.isEmpty()) break;
             for (var user : dueUsers) {
                 processed++;
@@ -196,7 +204,7 @@ public class DealsDigestScheduler {
 
     /**
      * Newsworthy when: (a) no prior state row (brand-new deal), OR (b) the discount
-     * improved by >= {@link #IMPROVEMENT_STEP} (5 p.p.) or crossed a higher
+     * improved by at least {@link #improvementPoints} percentage points or crossed a higher
      * relevance-threshold step vs what we last surfaced, OR (c) the last surface is
      * older than the collaborative lookback window (a lapsed deal worth re-airing).
      */
@@ -214,8 +222,13 @@ public class DealsDigestScheduler {
         var previousFraction = stored.getLastDiscountFraction();
         if (previousFraction == null) return true;
         var current = deal.discountFraction();
-        if (current.subtract(previousFraction).compareTo(IMPROVEMENT_STEP) >= 0) return true;
+        if (current.subtract(previousFraction).compareTo(improvementStep()) >= 0) return true;
         return crossedHigherThresholdStep(stored.getLastUnitPrice(), deal);
+    }
+
+    /** The improvement step as a discount fraction (5 points = 0.05). */
+    private BigDecimal improvementStep() {
+        return BigDecimal.valueOf(improvementPoints).movePointLeft(2);
     }
 
     /** True when the deal now clears a stricter relevance bar than the price we last surfaced did. */

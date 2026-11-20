@@ -12,7 +12,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.Map;
 import java.util.UUID;
@@ -34,24 +33,7 @@ import java.util.UUID;
 @Service
 public class AiGateway {
 
-    /** USD per 1M tokens (input, output) — estimativa local pro painel de gastos. */
-    private static final Map<String, double[]> PRICES_PER_MTOK = new java.util.HashMap<>();
-    static {
-        // Anthropic
-        PRICES_PER_MTOK.put("claude-haiku-4-5", new double[]{1.0, 5.0});
-        PRICES_PER_MTOK.put("claude-sonnet-4-6", new double[]{3.0, 15.0});
-        PRICES_PER_MTOK.put("claude-opus-4-8", new double[]{5.0, 25.0});
-        // OpenAI (estimativa; só afeta o painel, não a cobrança real)
-        PRICES_PER_MTOK.put("gpt-5", new double[]{1.25, 10.0});
-        PRICES_PER_MTOK.put("gpt-5-mini", new double[]{0.25, 2.0});
-        PRICES_PER_MTOK.put("gpt-5-nano", new double[]{0.05, 0.40});
-        PRICES_PER_MTOK.put("gpt-4.1", new double[]{2.0, 8.0});
-        PRICES_PER_MTOK.put("gpt-4.1-mini", new double[]{0.40, 1.60});
-        PRICES_PER_MTOK.put("gpt-4o", new double[]{2.5, 10.0});
-        PRICES_PER_MTOK.put("gpt-4o-mini", new double[]{0.15, 0.60});
-        PRICES_PER_MTOK.put("o4-mini", new double[]{1.10, 4.40});
-    }
-    private static final double[] DEFAULT_PRICE = {3.0, 15.0};
+    private static final String MODEL_PRICES_PROPERTY = "economizaai.ai.model-prices-usd-per-mtok";
 
     private final Map<AiProvider, AiChatPort> adapters;
     private final AiProviderSettingsService providerSettings;
@@ -61,8 +43,13 @@ public class AiGateway {
     @Value("${economizaai.ai.daily-request-cap:3000}")
     private volatile int dailyRequestCap;
 
+    /** Prepaid AI credit in US$; 0 = not informed (the estimated balance is hidden). */
+    @Getter @Setter
     @Value("${economizaai.ai.budget-usd:0}")
-    private double budgetUsd;
+    private volatile BigDecimal creditUsd;
+
+    /** US$ per million tokens of each model — an estimate for the spend panel, not what is billed. */
+    private volatile AiModelPrices modelPrices;
 
     // Modelo de visão DEDICADO à extração de foto de nota — isolado do tier EXTRACTOR
     // (compartilhado por rescue/categorização). Foto exige OCR forte; o Haiku confunde
@@ -141,7 +128,16 @@ public class AiGateway {
     }
 
     public double budgetUsd() {
-        return budgetUsd;
+        return creditUsd.doubleValue();
+    }
+
+    public String getModelPricesText() {
+        return modelPrices.asText();
+    }
+
+    @Value("${" + MODEL_PRICES_PROPERTY + "}")
+    public void setModelPricesText(String modelPricesText) {
+        this.modelPrices = AiModelPrices.parse(MODEL_PRICES_PROPERTY, modelPricesText);
     }
 
     /**
@@ -257,10 +253,8 @@ public class AiGateway {
         }
     }
 
-    static BigDecimal estimateCostUsd(String model, long inputTokens, long outputTokens) {
-        var price = PRICES_PER_MTOK.getOrDefault(model, DEFAULT_PRICE);
-        var cost = (inputTokens * price[0] + outputTokens * price[1]) / 1_000_000.0;
-        return BigDecimal.valueOf(cost).setScale(6, RoundingMode.HALF_UP);
+    BigDecimal estimateCostUsd(String model, long inputTokens, long outputTokens) {
+        return modelPrices.estimateCostUsd(model, inputTokens, outputTokens);
     }
 
     public static class AiUnavailableException extends RuntimeException {

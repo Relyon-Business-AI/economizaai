@@ -1,5 +1,44 @@
 # economizai — what's new
 
+## 2026-11-20 — Nenhuma regra de negócio fixa no código: 69 configurações novas no admin
+
+- **`GET /admin/settings`** passa de 98 para 167 itens e ganha a seção **Categorização de produtos**.
+  Entraram: comparação de compras (cobertura mínima da cesta, idade da nota, mercados alternativos),
+  padrões do plano de compras, ranking, recompensa de indicação, selo "verificado por notas", prazos
+  (portal do estado, compartilhamento de dados), limites por hora e por lote de notas, critérios de
+  situação dos estados, limiares da categorização (IA, promoção automática, consenso, similaridade),
+  custo por chamada de cada serviço pago, tabela de preços dos modelos de IA, percentual de aviso de
+  custo, dia e hora de cada envio (ofertas, reposição, orçamento, relatórios, convite de push) e os
+  interruptores de aviso de cadastro, alertas por WhatsApp e ofertas online.
+- **`GET /app-config` → `settings` ganhou** `referralRewardMonths`, `routeDefaultMaxDistanceKm`,
+  `routeDefaultMaxStops`, `routeDefaultMinSavingPerStop`, `homeSavingsMin`, `leaderboardTopN`,
+  `leaderboardDefaultDays`, `savingsDefaultPeriodDays`, `savingsRecentDays`, `receiptComparisonMaxAgeDays`,
+  `dataShareConsentDays`, `portalRetryHours`, `bulkMaxReceipts`, `launchPromoWarningDays` (array de números),
+  `dealsDigestWeeklyDay`, `spendingReportWeeklyDay`/`Hour`, `spendingReportMonthlyDay`/`Hour`. Também traz
+  fatos **somente leitura** que o app mostra em texto: `emailVerificationCodeHours`, `passwordResetCodeMinutes`,
+  `emailChangeCodeMinutes`, `phoneCodeMinutes`, `sensitiveMinHouseholds`. **O app não deve escrever
+  nenhum desses números à mão.**
+- **Horários de envio** deixaram de ser cron em variável de ambiente (`NOTIFICATIONS_REPLENISHMENT_CRON`,
+  `NOTIFICATIONS_BUDGET_CRON`, `WHATSAPP_WEEKLY_REPORT_CRON`, `WHATSAPP_MONTHLY_REPORT_CRON` removidas):
+  são dia/hora no admin e valem a partir da próxima hora cheia.
+- **Lote grande demais** (`POST /receipts/import`, retry, confirm-batch, delete-batch): continua **400**,
+  mas o texto vem em `message` com o número configurado (antes em `errors.chaves` / `errors.ids`).
+- **Ranking** (`GET /leaderboard` e o do admin): `days` agora é opcional; sem ele vale a configuração.
+- **Indicação:** `rewardedMonths` em `GET /referrals/me` soma os meses de verdade de cada recompensa; a
+  notificação de recompensa informa os meses concedidos e leva `months` no payload.
+- `last30DaysSavings` mantém o nome, mas a janela é a configuração (`savingsRecentDays`).
+- **Corrigido:** os limiares de confiança da IA na categorização eram lidos de uma chave diferente da
+  do arquivo de configuração (valores do arquivo e de ambiente eram ignorados).
+- Promoção da comunidade: o mínimo de preços antigos (3) virou configuração; "histórico mínimo" passou
+  a se chamar "total mínimo de preços", que é o que ele mede.
+- Teste novo `EverySettingTakesEffectTest`: sobe a aplicação e, para cada configuração, salva outro
+  valor e confere que o código em uso e o `/app-config` passaram a devolver o valor novo.
+
+## 2026-11-19 — `/app-config` publica os valores de plano
+
+- `GET /app-config` → `settings` ganha `freeMonthlyReceipts`, `freeHistoryDays`, `freeWatchedMarkets`,
+  `premiumMonthlyPrice` e `premiumYearlyPrice`. A landing lê daqui a seção de planos; o app não precisa mudar.
+
 ## 2026-11-19 — Configurações de negócio no admin (sem deploy)
 
 - **Novo: `GET /admin/settings`** devolve as regras de negócio agrupadas por seção (planos, preços e ofertas,

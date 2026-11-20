@@ -81,7 +81,7 @@ public class InsightsController {
 
     /**
      * How much the household saved in the period: each line bought against its reference price.
-     * Without {@code from}, the last 90 days. {@code reference=REGION} keeps only the lines that
+     * Without {@code from}, the default savings period (an admin setting). {@code reference=REGION} keeps only the lines that
      * could be compared with what other households paid. See {@link HouseholdSavingsResponse}.
      */
     @GetMapping("/savings")

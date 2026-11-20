@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.shopping;
 
+import com.relyon.economizaai.config.ComparisonProperties;
 import com.relyon.economizaai.dto.request.RecordShoppingTripRequest;
 import com.relyon.economizaai.dto.response.ShoppingPlanResponse.PlanItem.PriceSource;
 import com.relyon.economizaai.model.Household;
@@ -67,10 +68,12 @@ class ShoppingTripRecorderTest {
     private UUID milkId;
     private UUID bananaId;
 
+    private final ComparisonProperties comparisonProperties = new ComparisonProperties();
+
     @BeforeEach
     void setUp() {
         recorder = new ShoppingTripRecorder(tripRepository, receiptRepository, productRepository,
-                basketComparisonService, viewerLocationService);
+                basketComparisonService, viewerLocationService, comparisonProperties);
         household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
         user = User.builder().id(UUID.randomUUID()).email("buyer@economizai").household(household).build();
         milkId = UUID.randomUUID();
@@ -185,6 +188,15 @@ class ShoppingTripRecorderTest {
         assertEquals(new BigDecimal("31.74"), alternative.getBasketTotal());
         assertEquals(new BigDecimal("28.74"), alternative.getAlternativeTotal());
         assertEquals(new BigDecimal("1.200"), alternative.getDistanceKm());
+    }
+
+    @Test
+    void record_asksForAsManyAlternativeMarketsAsSetInTheAdmin() {
+        comparisonProperties.setAlternativeMarkets(5);
+
+        recorder.record(user, request(null, item(milkId, "6", "5.29", ShoppingTripItemStatus.IN_CART, false, null)));
+
+        verify(basketComparisonService).compare(any(), any(), any(), eq(5));
     }
 
     @Test

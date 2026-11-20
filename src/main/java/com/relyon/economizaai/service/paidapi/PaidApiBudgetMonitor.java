@@ -4,6 +4,7 @@ import com.relyon.economizaai.config.PaidApiGuardProperties;
 import com.relyon.economizaai.model.enums.PaidApiService;
 import com.relyon.economizaai.repository.PaidApiCallRepository;
 import com.relyon.economizaai.repository.PaidApiCallRepository.ServiceSpend;
+import com.relyon.economizaai.time.BrazilClock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -18,7 +19,7 @@ import java.util.EnumMap;
 import java.util.Map;
 
 /**
- * Warns the admin when a service's daily budget reaches 80% and 100%.
+ * Warns the admin when a service's daily budget reaches the warning percentage and 100%.
  *
  * <p>Design choice: a short scheduled check (every minute, ONE grouped query over today's
  * ledger) instead of evaluating on each ledger write — the hot ingestion path gets no
@@ -82,18 +83,28 @@ public class PaidApiBudgetMonitor {
                                             String serviceLabel, String whatStops) {
         var spent = reais(spentCents);
         var budget = reais(budgetCents);
-        var threshold = CostAlertService.thresholdReached(spent, budget);
+        var warningPercent = costAlertService.getWarningThresholdPercent();
+        var threshold = CostAlertService.thresholdReached(spent, budget, warningPercent);
         if (threshold == 0) return false;
+        var resetHour = resetHourInBrasilia(today);
         var headline = threshold == CostAlertService.LIMIT_THRESHOLD
-                ? "Economiza AI: teto diário de %s ATINGIDO (%s de %s). Parado até a virada do dia (21h de Brasília): %s."
+                ? "Economiza AI: teto diário de %s ATINGIDO (%s de %s). Parado até a virada do dia (%s de Brasília): %s."
                         .formatted(serviceLabel, CostAlertService.money(REAIS, spent),
-                                CostAlertService.money(REAIS, budget), whatStops)
-                : "Economiza AI: teto diário de %s em 80%% (%s de %s). Se chegar a 100%%: %s."
-                        .formatted(serviceLabel, CostAlertService.money(REAIS, spent),
+                                CostAlertService.money(REAIS, budget), resetHour, whatStops)
+                : "Economiza AI: teto diário de %s em %d%% (%s de %s). Se chegar a 100%%: %s."
+                        .formatted(serviceLabel, warningPercent, CostAlertService.money(REAIS, spent),
                                 CostAlertService.money(REAIS, budget), whatStops);
-        var detail = headline + "\n\nO teto zera à meia-noite UTC (21h de Brasília). "
+        var detail = headline + "\n\nO teto zera à meia-noite UTC (" + resetHour + " de Brasília). "
                 + "Para mudar o valor, abra Admin → Configurações → Custos e limites de uso (0 = sem teto).";
         return costAlertService.raise(alertKey, threshold, today.toString(), headline, detail);
+    }
+
+    /** The budgets reset when the UTC day turns; this is that instant on a clock in Brasília ("21h"). */
+    static String resetHourInBrasilia(LocalDate today) {
+        var nextReset = today.plusDays(1).atStartOfDay(ZoneOffset.UTC).withZoneSameInstant(BrazilClock.ZONE);
+        return nextReset.getMinute() == 0
+                ? nextReset.getHour() + "h"
+                : "%dh%02d".formatted(nextReset.getHour(), nextReset.getMinute());
     }
 
     private static BigDecimal reais(long cents) {

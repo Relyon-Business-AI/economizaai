@@ -69,6 +69,18 @@ class DataShareConsentServiceTest {
     }
 
     @Test
+    void request_expiresAfterTheDaysSetInTheAdmin() {
+        when(consentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        var inFourteenDays = consentService.request(user("ana"), user("bob"), household(), household(), LeaveScope.BOTH);
+        assertEquals(LocalDateTime.now().plusDays(14).toLocalDate(), inFourteenDays.getExpiresAt().toLocalDate());
+
+        consentService.setConsentDays(5);
+
+        var inFiveDays = consentService.request(user("ana"), user("bob"), household(), household(), LeaveScope.BOTH);
+        assertEquals(LocalDateTime.now().plusDays(5).toLocalDate(), inFiveDays.getExpiresAt().toLocalDate());
+    }
+
+    @Test
     void request_localizesNotificationInGrantorLocale() {
         var requester = user("ana");
         var grantor = user("bob");

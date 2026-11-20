@@ -19,8 +19,11 @@ import com.relyon.economizaai.service.savings.ReferencePriceBook.RegionPrice;
 import com.relyon.economizaai.service.savings.ReferencePriceBook.Source;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import com.relyon.economizaai.time.BrazilClock;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,7 +51,10 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class HouseholdSavingsService {
 
-    private static final int DEFAULT_PERIOD_DAYS = 90;
+    /** The period shown when the caller asks for no start date. */
+    @Getter @Setter
+    @Value("${economizaai.savings.default-period-days:90}")
+    private volatile int defaultPeriodDays = 90;
 
     private final ReceiptItemRepository receiptItemRepository;
     private final PriceObservationAuditRepository auditRepository;
@@ -93,10 +99,10 @@ public class HouseholdSavingsService {
         return ownLines.stream().collect(Collectors.groupingBy(line -> line.product().getId()));
     }
 
-    /** FREE history window first; with no start asked for, the last {@value #DEFAULT_PERIOD_DAYS} days. */
+    /** FREE history window first; with no start asked for, the default period. */
     private LocalDateTime periodStart(User user, LocalDateTime requestedFrom, LocalDateTime to) {
         var clampedFrom = subscriptionGate.clampFrom(user, requestedFrom);
-        return clampedFrom != null ? clampedFrom : to.minusDays(DEFAULT_PERIOD_DAYS);
+        return clampedFrom != null ? clampedFrom : to.minusDays(defaultPeriodDays);
     }
 
     private ReferencePriceBook.Settings settings() {

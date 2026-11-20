@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.priceindex;
 
+import com.relyon.economizaai.config.ComparisonProperties;
 import com.relyon.economizaai.service.geo.ViewerLocationService.Source;
 import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import com.relyon.economizaai.service.priceindex.BasketComparisonService.BasketLine;
@@ -37,6 +38,7 @@ class BasketComparisonServiceTest {
 
     @Mock private PriceIndexService priceIndexService;
 
+    private final ComparisonProperties comparisonProperties = new ComparisonProperties();
     private BasketComparisonService service;
     private UUID milk;
     private UUID coffee;
@@ -45,7 +47,7 @@ class BasketComparisonServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new BasketComparisonService(priceIndexService);
+        service = new BasketComparisonService(priceIndexService, comparisonProperties);
         milk = UUID.randomUUID();
         coffee = UUID.randomUUID();
         rice = UUID.randomUUID();
@@ -92,13 +94,29 @@ class BasketComparisonServiceTest {
     }
 
     @Test
+    void compare_followsTheMinimumShareSetInTheAdmin() {
+        var basket = new ArrayList<BasketLine>();
+        for (var index = 0; index < 10; index++) {
+            var productId = UUID.randomUUID();
+            basket.add(line(productId, "1", "10.00"));
+            if (index < 3) pricedAt(productId, row(HIPER, "8.00", 2.1));
+        }
+        assertEquals(List.of(), service.compare(HOME, basket, Set.of(), 3));
+
+        comparisonProperties.setMinMatchedPct(30);
+
+        assertEquals(List.of(HIPER),
+                service.compare(HOME, basket, Set.of(), 3).stream().map(alternative -> alternative.cnpjRoot()).toList());
+    }
+
+    @Test
     void minMatchedItems_isFortyPercentRoundedUpAndAtLeastOne() {
-        assertEquals(1, BasketComparisonService.minMatchedItems(1));
-        assertEquals(1, BasketComparisonService.minMatchedItems(2));
-        assertEquals(2, BasketComparisonService.minMatchedItems(3));
-        assertEquals(2, BasketComparisonService.minMatchedItems(5));
-        assertEquals(4, BasketComparisonService.minMatchedItems(10));
-        assertEquals(8, BasketComparisonService.minMatchedItems(18));
+        assertEquals(1, comparisonProperties.minMatchedItems(1));
+        assertEquals(1, comparisonProperties.minMatchedItems(2));
+        assertEquals(2, comparisonProperties.minMatchedItems(3));
+        assertEquals(2, comparisonProperties.minMatchedItems(5));
+        assertEquals(4, comparisonProperties.minMatchedItems(10));
+        assertEquals(8, comparisonProperties.minMatchedItems(18));
     }
 
     @Test

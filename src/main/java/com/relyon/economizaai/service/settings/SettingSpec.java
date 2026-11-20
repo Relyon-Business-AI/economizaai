@@ -6,10 +6,15 @@ import java.util.List;
 /**
  * What a setting accepts: its type, the allowed range or options, the unit shown next to the
  * field and, when the mobile/web app also needs the value, the name it is published under in
- * {@code GET /app-config}.
+ * {@code GET /app-config}. A text setting may also carry the {@link TextFormat} it must follow.
  */
 public record SettingSpec(SettingType type, BigDecimal min, BigDecimal max, String unit,
-                          List<String> options, String appKey) {
+                          List<String> options, String appKey, TextFormat format) {
+
+    public SettingSpec(SettingType type, BigDecimal min, BigDecimal max, String unit,
+                       List<String> options, String appKey) {
+        this(type, min, max, unit, options, appKey, null);
+    }
 
     public static SettingSpec integer(long min, long max) {
         return new SettingSpec(SettingType.INTEGER, BigDecimal.valueOf(min), BigDecimal.valueOf(max), null, List.of(), null);
@@ -48,13 +53,18 @@ public record SettingSpec(SettingType type, BigDecimal min, BigDecimal max, Stri
         return new SettingSpec(SettingType.OPTION_LIST, null, null, null, List.copyOf(options), null);
     }
 
+    /** A text of at most {@code maxLength} characters that must also follow a format. */
+    public static SettingSpec formattedText(int maxLength, TextFormat format) {
+        return new SettingSpec(SettingType.TEXT, null, BigDecimal.valueOf(maxLength), null, List.of(), null, format);
+    }
+
     public SettingSpec unit(String unitLabel) {
-        return new SettingSpec(type, min, max, unitLabel, options, appKey);
+        return new SettingSpec(type, min, max, unitLabel, options, appKey, format);
     }
 
     /** Publishes the value to the apps under this name. */
     public SettingSpec app(String publishedName) {
-        return new SettingSpec(type, min, max, unit, options, publishedName);
+        return new SettingSpec(type, min, max, unit, options, publishedName, format);
     }
 
     private static SettingSpec of(SettingType type) {

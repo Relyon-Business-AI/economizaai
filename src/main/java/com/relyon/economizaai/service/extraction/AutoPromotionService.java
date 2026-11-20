@@ -9,7 +9,9 @@ import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.service.CategoryResolver;
 import com.relyon.economizaai.service.canonicalization.DescriptionNormalizer;
 import jakarta.annotation.PostConstruct;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -63,11 +65,13 @@ public class AutoPromotionService {
     // 7 amostras + 90% de concordância = na prática exige unanimidade em 7 ocorrências
     // (6/7 = 85% reprova). Baixo o bastante pra ter efeito no volume atual, seguro o
     // bastante pra não promover padrão instável. Suba conforme o volume crescer.
+    @Getter @Setter
     @Value("${economizaai.categorizer.auto-promote.min-samples:7}")
-    private int minSamples;
+    private volatile int minSamples;
 
+    @Getter @Setter
     @Value("${economizaai.categorizer.auto-promote.min-agreement:0.90}")
-    private double minAgreement;
+    private volatile double minAgreement;
 
     @PostConstruct
     void loadOnStartup() {

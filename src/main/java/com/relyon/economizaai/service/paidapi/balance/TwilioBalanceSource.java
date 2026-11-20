@@ -1,5 +1,8 @@
 package com.relyon.economizaai.service.paidapi.balance;
 
+import com.relyon.economizaai.model.enums.PaidApiService;
+import com.relyon.economizaai.service.paidapi.CostReportService;
+import com.relyon.economizaai.service.paidapi.PaidApiCallCosts;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,20 +32,26 @@ public class TwilioBalanceSource implements ProviderBalanceSource {
     private final RestClient restClient;
     private final String accountSid;
     private final String authToken;
+    private final PaidApiCallCosts callCosts;
+    private final CostReportService costReport;
     private volatile String currencySymbol = "US$";
 
     @Autowired
     public TwilioBalanceSource(RestClient.Builder builder,
                                @Value("${economizaai.notifications.twilio.account-sid:}") String accountSid,
-                               @Value("${economizaai.notifications.twilio.auth-token:}") String authToken) {
-        this(builder.requestFactory(timeoutFactory()).build(), accountSid, authToken);
+                               @Value("${economizaai.notifications.twilio.auth-token:}") String authToken,
+                               PaidApiCallCosts callCosts, CostReportService costReport) {
+        this(builder.requestFactory(timeoutFactory()).build(), accountSid, authToken, callCosts, costReport);
     }
 
     /** Test seam: inject a pre-built (mock-bound) RestClient. */
-    TwilioBalanceSource(RestClient restClient, String accountSid, String authToken) {
+    TwilioBalanceSource(RestClient restClient, String accountSid, String authToken,
+                        PaidApiCallCosts callCosts, CostReportService costReport) {
         this.restClient = restClient;
         this.accountSid = accountSid;
         this.authToken = authToken;
+        this.callCosts = callCosts;
+        this.costReport = costReport;
     }
 
     private static SimpleClientHttpRequestFactory timeoutFactory() {
@@ -96,7 +105,7 @@ public class TwilioBalanceSource implements ProviderBalanceSource {
 
     @Override
     public BigDecimal exhaustedAtOrBelow() {
-        return new BigDecimal("0.06");
+        return callCosts.dollars(PaidApiService.TWILIO_MESSAGE, costReport.getUsdBrlRate());
     }
 
     @Override

@@ -53,9 +53,9 @@ public class StateStatusService {
     private final ReceiptRepository receiptRepository;
     private final StateIngestionAttemptRepository attemptRepository;
     private volatile Set<UnidadeFederativa> pausedStates;
-    private final int windowHours;
-    private final int minFailures;
-    private final int regressionMinFailures;
+    private volatile int windowHours;
+    private volatile int minFailures;
+    private volatile int regressionMinFailures;
     private final long cacheSeconds;
     private Clock clock = Clock.systemUTC();
     private volatile CachedStatus cached;
@@ -86,6 +86,32 @@ public class StateStatusService {
     /** The states shown as paused (comma-separated UF codes); the cached answer is dropped. */
     public void changePausedStates(String pausedStatesCsv) {
         this.pausedStates = parseStates(pausedStatesCsv);
+        this.cached = null;
+    }
+
+    public int getWindowHours() {
+        return windowHours;
+    }
+
+    /** Hours looked back to decide a state is unstable; the cached answer is dropped. */
+    public void setWindowHours(int windowHours) {
+        this.windowHours = Math.max(1, windowHours);
+        this.cached = null;
+    }
+
+    public int getMinFailures() {
+        return minFailures;
+    }
+
+    /** Portal failures in the window that make a state unstable; the cached answer is dropped. */
+    public void setMinFailures(int minFailures) {
+        this.minFailures = Math.max(1, minFailures);
+        this.cached = null;
+    }
+
+    /** Parser failures that count as a portal regression — the same number that alerts the admin. */
+    public void setRegressionMinFailures(int regressionMinFailures) {
+        this.regressionMinFailures = Math.max(1, regressionMinFailures);
         this.cached = null;
     }
 

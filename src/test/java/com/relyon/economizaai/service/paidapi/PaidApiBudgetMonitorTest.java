@@ -48,6 +48,7 @@ class PaidApiBudgetMonitorTest {
         monitor = new PaidApiBudgetMonitor(properties, repository, costAlertService);
         monitor.useClock(Clock.fixed(NOW, ZoneOffset.UTC));
         lenient().when(costAlertService.isEnabled()).thenReturn(true);
+        lenient().when(costAlertService.getWarningThresholdPercent()).thenReturn(80);
     }
 
     private static ServiceSpend spend(PaidApiService service, long costCents) {
@@ -161,5 +162,32 @@ class PaidApiBudgetMonitorTest {
     @Test
     void alertKey_isStablePerService() {
         assertEquals("BUDGET:TWILIO_MESSAGE", PaidApiBudgetMonitor.alertKey(PaidApiService.TWILIO_MESSAGE));
+    }
+
+    @Test
+    void warningFollowsTheConfiguredPercentage_inTheThresholdAndInTheText() {
+        spentToday(spend(PaidApiService.INFOSIMPLES, 7_200)); // 60% de R$120
+        monitor.checkDailyBudgets();
+        verify(costAlertService, never()).raise(anyString(), anyInt(), anyString(), anyString(), anyString());
+
+        when(costAlertService.getWarningThresholdPercent()).thenReturn(60);
+        monitor.checkDailyBudgets();
+
+        var headline = ArgumentCaptor.forClass(String.class);
+        verify(costAlertService).raise(eq("BUDGET:INFOSIMPLES"), eq(60), eq(TODAY), headline.capture(), anyString());
+        assertTrue(headline.getValue().contains("em 60%"));
+    }
+
+    @Test
+    void limitAlert_saysTheBrasiliaHourAtWhichTheUtcDayTurns() {
+        spentToday(spend(PaidApiService.CAPTCHA_SOLVE, 3_000));
+
+        monitor.checkDailyBudgets();
+
+        var headline = ArgumentCaptor.forClass(String.class);
+        var detail = ArgumentCaptor.forClass(String.class);
+        verify(costAlertService).raise(eq("BUDGET:CAPTCHA_SOLVE"), eq(100), eq(TODAY), headline.capture(), detail.capture());
+        assertTrue(headline.getValue().contains("(21h de Brasília)"));
+        assertTrue(detail.getValue().contains("meia-noite UTC (21h de Brasília)"));
     }
 }

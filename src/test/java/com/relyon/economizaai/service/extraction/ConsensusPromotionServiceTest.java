@@ -159,4 +159,38 @@ class ConsensusPromotionServiceTest {
                 .filter(e -> "milho".equals(e.getNormalizedToken())).findFirst().orElseThrow();
         assertEquals(groceriesNode, milhoEntry.getCategoryId());
     }
+
+    @Test
+    void theHouseholdsNeeded_followTheConfiguredMinimum() {
+        var milho = product("MILHO ODERICH 200G");
+        when(overrideRepository.findAll()).thenReturn(List.of(
+                override(UUID.randomUUID(), milho, ProductCategory.GROCERIES),
+                override(UUID.randomUUID(), milho, ProductCategory.GROCERIES)));
+        lenient().when(productRepository.findAllById(Set.of(milho.getId()))).thenReturn(List.of(milho));
+
+        service.setMinHouseholds(3);
+        assertEquals(0, service.promote().productsGraduated(), "two households are not enough when three are asked");
+
+        service.setMinHouseholds(2);
+        assertEquals(1, service.promote().productsGraduated());
+    }
+
+    @Test
+    void theProductsNeededToLearnAWord_followTheConfiguredMinimum() {
+        var milhoA = product("MILHO ODERICH 200G");
+        var milhoB = product("MILHO VERDE PREDILECTA 170G");
+        when(overrideRepository.findAll()).thenReturn(List.of(
+                override(UUID.randomUUID(), milhoA, ProductCategory.GROCERIES),
+                override(UUID.randomUUID(), milhoA, ProductCategory.GROCERIES),
+                override(UUID.randomUUID(), milhoB, ProductCategory.GROCERIES),
+                override(UUID.randomUUID(), milhoB, ProductCategory.GROCERIES)));
+        when(productRepository.findAllById(Set.of(milhoA.getId(), milhoB.getId())))
+                .thenReturn(List.of(milhoA, milhoB));
+
+        service.setMinTokenProducts(3);
+        assertEquals(0, service.promote().tokensLearned(), "\"milho\" recurs in two products, three are asked");
+
+        service.setMinTokenProducts(2);
+        assertTrue(service.promote().tokensLearned() > 0);
+    }
 }

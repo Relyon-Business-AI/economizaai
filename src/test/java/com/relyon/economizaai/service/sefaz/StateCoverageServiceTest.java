@@ -19,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -34,6 +35,7 @@ import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -332,5 +334,67 @@ class StateCoverageServiceTest {
             @Override public UnidadeFederativa getUf() { return uf; }
             @Override public long getUsers() { return users; }
         };
+    }
+
+    @Test
+    void theEvidenceThatStopsAnUnprovenState_followsTheConfiguredUserDays() {
+        when(repository.findExhaustedEvidence(UnidadeFederativa.BA)).thenReturn(List.of(
+                sample(USER_A, 0), sample(USER_A, 1), sample(USER_B, 0), sample(USER_B, 1)));
+        assertFalse(service.hasEnoughEvidence(UnidadeFederativa.BA));
+
+        service.setMinEvidenceUserDays(4);
+
+        assertTrue(service.hasEnoughEvidence(UnidadeFederativa.BA));
+    }
+
+    @Test
+    void theEvidenceThatStopsAnUnprovenState_followsTheConfiguredUsers() {
+        when(repository.findExhaustedEvidence(UnidadeFederativa.BA)).thenReturn(List.of(
+                sample(USER_A, 0), sample(USER_A, 1), sample(USER_A, 2),
+                sample(USER_A, 3), sample(USER_A, 4)));
+        assertFalse(service.hasEnoughEvidence(UnidadeFederativa.BA));
+
+        service.setMinEvidenceUsers(1);
+
+        assertTrue(service.hasEnoughEvidence(UnidadeFederativa.BA));
+    }
+
+    @Test
+    void theEvidenceThatStopsAnUnprovenState_followsTheConfiguredDays() {
+        when(repository.findExhaustedEvidence(UnidadeFederativa.BA)).thenReturn(List.of(
+                sample(UUID.randomUUID(), 0), sample(UUID.randomUUID(), 0), sample(UUID.randomUUID(), 0),
+                sample(UUID.randomUUID(), 0), sample(UUID.randomUUID(), 0)));
+        assertFalse(service.hasEnoughEvidence(UnidadeFederativa.BA));
+
+        service.setMinEvidenceDays(1);
+
+        assertTrue(service.hasEnoughEvidence(UnidadeFederativa.BA));
+    }
+
+    @Test
+    void thePortalChangeAlert_followsTheConfiguredFailuresAndPeriod() {
+        when(repository.countByUfAndStrategyAndOutcomeAndCreatedAtGreaterThanEqual(
+                eq(UnidadeFederativa.RS), eq(StateIngestionStrategy.VERIFIED_ADAPTER),
+                eq(StateIngestionOutcome.PARSE_FAILED), any())).thenReturn(3L);
+        when(repository.existsByUfAndAdminNotifiedTrueAndCreatedAtGreaterThanEqual(eq(UnidadeFederativa.RS), any()))
+                .thenReturn(false);
+
+        service.recordVerifiedParseFailure(UnidadeFederativa.RS, "43sample", null, "no-items-found", "<html/>");
+        verify(contactService, never()).notifyAdmin(anyString(), anyString());
+
+        service.setRegressionMinFailures(3);
+        service.setRegressionWindowHours(12);
+        service.recordVerifiedParseFailure(UnidadeFederativa.RS, "43sample", null, "no-items-found", "<html/>");
+
+        var body = ArgumentCaptor.forClass(String.class);
+        verify(contactService).notifyAdmin(contains("RS"), body.capture());
+        assertTrue(body.getValue().contains("3+ notas nas últimas 12h"));
+        var windowStart = ArgumentCaptor.forClass(OffsetDateTime.class);
+        verify(repository, times(2)).countByUfAndStrategyAndOutcomeAndCreatedAtGreaterThanEqual(
+                eq(UnidadeFederativa.RS), eq(StateIngestionStrategy.VERIFIED_ADAPTER),
+                eq(StateIngestionOutcome.PARSE_FAILED), windowStart.capture());
+        var sixHourStart = windowStart.getAllValues().get(0);
+        var twelveHourStart = windowStart.getAllValues().get(1);
+        assertTrue(Duration.between(twelveHourStart, sixHourStart).toMinutes() >= 359);
     }
 }

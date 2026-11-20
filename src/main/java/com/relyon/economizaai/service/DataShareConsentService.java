@@ -12,8 +12,11 @@ import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.notifications.NotificationPayload;
 import com.relyon.economizaai.service.notifications.NotificationService;
 import com.relyon.economizaai.service.privacy.LogMasker;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,7 +44,10 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class DataShareConsentService {
 
-    private static final int CONSENT_TTL_DAYS = 14;
+    /** How long the grantor has to answer before the request expires. */
+    @Getter @Setter
+    @Value("${economizaai.data-share.consent-days:14}")
+    private volatile int consentDays = 14;
 
     private final DataShareConsentRepository consentRepository;
     private final UserRepository userRepository;
@@ -67,7 +73,7 @@ public class DataShareConsentService {
                 .destinationHousehold(destination)
                 .scope(scope)
                 .status(ConsentStatus.PENDING)
-                .expiresAt(LocalDateTime.now().plusDays(CONSENT_TTL_DAYS))
+                .expiresAt(LocalDateTime.now().plusDays(consentDays))
                 .build());
         var grantorLocale = LocalizedMessageService.toLocale(grantor.getLocale());
         notificationService.notifyAfterCommit(new NotificationPayload(grantor, NotificationType.SYSTEM,

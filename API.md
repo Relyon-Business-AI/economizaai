@@ -97,7 +97,8 @@ GET /api/v1/app-config   → 200 (public, no auth)
 published name — `priceWindowDays` (how old a community price may be), `marketPricesDefaultDays`,
 `nearbyRadiusKm`, `maxItemPhotos`, `contingencyWindowHours`, `householdInviteHours`, `launchPromoUntil`
 (ISO date or absent), `savingsFollowUpDays`, `runningLowDays`, `quietHoursStart`, `quietHoursEnd`,
-`quietHoursMaxDeferred`. Numbers are JSON numbers. They change from the admin (section 10d, "Business
+`quietHoursMaxDeferred`, plus the plan values the landing page shows: `freeMonthlyReceipts`, `freeHistoryDays`,
+`freeWatchedMarkets`, `premiumMonthlyPrice`, `premiumYearlyPrice`. Numbers are JSON numbers. They change from the admin (section 10d, "Business
 settings") with no deploy, so the apps must read them here instead of repeating the number in code or copy,
 and keep a fallback for when the request fails.
 
@@ -2610,7 +2611,7 @@ DELETE /api/v1/admin/settings/{key}    → AdminSettingResponse   (back to the v
 ```
 
 `AdminSettingResponse`: `{ key, label, description, reflectsOn, type, unit?, value, configuredValue, changed, min?, max?,
-options[], appKey?, changedAt?, changedBy? }`. `value` and `configuredValue` are always **text**:
+options[], optionLabels{value: label}, appKey?, changedAt?, changedBy? }`. `value` and `configuredValue` are always **text**:
 
 | `type` | `value` | Notes |
 |---|---|---|
@@ -2626,6 +2627,17 @@ options[], appKey?, changedAt?, changedBy? }`. `value` and `configuredValue` are
 `key` is the configuration property (it contains dots — send it as is in the path). `changed=false` means the
 value configured for the environment is in effect. A refused value is **400** with a ready-to-show `message`;
 an unknown key is **404**. Settings with an `appKey` are also published in `GET /app-config` → `settings`.
+
+`GET /app-config` → `settings` also carries **read-only facts** the apps state in texts (not editable, they come
+from the code that enforces them): `emailVerificationCodeHours`, `passwordResetCodeMinutes`,
+`emailChangeCodeMinutes`, `phoneCodeMinutes`, `sensitiveMinHouseholds`. The apps must take every number, date
+and period they show from `settings` — never retype one. `INTEGER_LIST` settings arrive as a JSON array of
+numbers (`launchPromoWarningDays: [15,7,3,1]`). A `TEXT` setting may enforce a format (the AI price table:
+`model=input/output` entries separated by `;` plus a `default=` entry) — a bad one is a 400 like any other.
+
+Notes from 2026-11-20: `days` is optional on both leaderboard endpoints (falls back to the admin setting);
+an oversized receipt batch is a 400 whose text is the top-level `message` (it names the configured maximum);
+`rewardedMonths` in `GET /referrals/me` is the sum of months really granted.
 
 All require a JWT for a user with `Role.ADMIN`. Regular users hit 403.
 

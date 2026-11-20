@@ -230,6 +230,11 @@ public class CollaborativeProperties {
          * group is skipped regardless of how low the single value is.
          */
         private int communityPromoMinRecentObservations = 3;
+        /**
+         * Minimum older (pre-recent-window, non-promo, non-outlier) prices that form the typical
+         * price a promo is measured against.
+         */
+        private int communityPromoMinBaselineObservations = 3;
         private int communityPromoThresholdPct = 15;
         /**
          * One window for every community price read: reference and promo baselines, the
@@ -301,6 +306,8 @@ public class CollaborativeProperties {
         public void setSensitiveCategoryGroups(List<String> v) { this.sensitiveCategoryGroups = v; }
         public int getMinObservationsForCommunityPromo() { return minObservationsForCommunityPromo; }
         public void setMinObservationsForCommunityPromo(int v) { this.minObservationsForCommunityPromo = v; }
+        public int getCommunityPromoMinBaselineObservations() { return communityPromoMinBaselineObservations; }
+        public void setCommunityPromoMinBaselineObservations(int v) { this.communityPromoMinBaselineObservations = v; }
         public int getCommunityPromoMinRecentObservations() { return communityPromoMinRecentObservations; }
         public void setCommunityPromoMinRecentObservations(int v) { this.communityPromoMinRecentObservations = v; }
         public int getCommunityPromoThresholdPct() { return communityPromoThresholdPct; }
@@ -342,6 +349,9 @@ public class CollaborativeProperties {
         private int historyLookbackDays = 365;
         private int runningLowThresholdDays = 7;
         private int ranOutGraceDays = 0;
+        /** Purchases from which a forecast is shown with high / medium confidence. */
+        private int highConfidenceMinSamples = 8;
+        private int mediumConfidenceMinSamples = 5;
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean v) { this.enabled = v; }
@@ -355,6 +365,10 @@ public class CollaborativeProperties {
         public void setRunningLowThresholdDays(int v) { this.runningLowThresholdDays = v; }
         public int getRanOutGraceDays() { return ranOutGraceDays; }
         public void setRanOutGraceDays(int v) { this.ranOutGraceDays = v; }
+        public int getHighConfidenceMinSamples() { return highConfidenceMinSamples; }
+        public void setHighConfidenceMinSamples(int samples) { this.highConfidenceMinSamples = samples; }
+        public int getMediumConfidenceMinSamples() { return mediumConfidenceMinSamples; }
+        public void setMediumConfidenceMinSamples(int samples) { this.mediumConfidenceMinSamples = samples; }
     }
 
     /**
@@ -368,9 +382,16 @@ public class CollaborativeProperties {
         private int minPurchasesPerGeneric = 5;
         private double mustHaveBrandShare = 0.85;
         private double preferredBrandShare = 0.60;
+        /** Purchases from which a preference is shown with high / medium confidence. */
+        private int highConfidenceMinPurchases = 15;
+        private int mediumConfidenceMinPurchases = 8;
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean v) { this.enabled = v; }
+        public int getHighConfidenceMinPurchases() { return highConfidenceMinPurchases; }
+        public void setHighConfidenceMinPurchases(int purchases) { this.highConfidenceMinPurchases = purchases; }
+        public int getMediumConfidenceMinPurchases() { return mediumConfidenceMinPurchases; }
+        public void setMediumConfidenceMinPurchases(int purchases) { this.mediumConfidenceMinPurchases = purchases; }
         public int getMinPurchasesPerGeneric() { return minPurchasesPerGeneric; }
         public void setMinPurchasesPerGeneric(int v) { this.minPurchasesPerGeneric = v; }
         public double getMustHaveBrandShare() { return mustHaveBrandShare; }

@@ -4,8 +4,11 @@ import com.relyon.economizaai.dto.response.SavingsSummaryResponse;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.repository.NotificationEventRepository;
 import com.relyon.economizaai.repository.UserRepository;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +26,11 @@ import java.time.OffsetDateTime;
 @RequiredArgsConstructor
 public class SavingsService {
 
+    /** How many days back count as "recent" savings. */
+    @Getter @Setter
+    @Value("${economizaai.attribution.recent-savings-days:30}")
+    private volatile int recentSavingsDays = 30;
+
     private final NotificationEventRepository eventRepository;
     private final UserRepository userRepository;
 
@@ -36,11 +44,11 @@ public class SavingsService {
         }
 
         var lifetime = eventRepository.sumConvertedSavings(householdUserIds, null);
-        var last30 = eventRepository.sumConvertedSavings(
-                householdUserIds, OffsetDateTime.now().minusDays(30));
+        var recentPeriod = eventRepository.sumConvertedSavings(
+                householdUserIds, OffsetDateTime.now().minusDays(recentSavingsDays));
 
         var total = zeroIfNull(lifetime.getTotalSavings());
-        var recent = zeroIfNull(last30.getTotalSavings());
+        var recent = zeroIfNull(recentPeriod.getTotalSavings());
         var conversions = lifetime.getConversions();
         log.info("savings.summary household={} total=R${} conversions={}",
                 user.getHousehold().getId(), total, conversions);

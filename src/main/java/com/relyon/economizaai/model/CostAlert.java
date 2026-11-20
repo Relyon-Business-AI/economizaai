@@ -23,7 +23,7 @@ import java.util.UUID;
 
 /**
  * One cost alert owed to the admin (daily budget of a service, or a provider's prepaid
- * balance, at the 80% or 100% threshold). It is both the dedup record — at most one row
+ * balance, at the warning or the 100% threshold). It is both the dedup record — at most one row
  * per (alert, threshold, period) — and the delivery outbox: it stays {@code PENDING}
  * until a provider accepted the message.
  */
