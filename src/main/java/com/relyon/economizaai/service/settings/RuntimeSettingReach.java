@@ -35,6 +35,10 @@ public final class RuntimeSettingReach {
                 "Checkout web do Mercado Pago (novas assinaturas), projeções de receita do painel e o preço mostrado na landing.");
         REFLECTS_ON.put(RuntimeSetting.PREMIUM_YEARLY_PRICE,
                 "Projeções de receita do painel e o preço anual mostrado na landing. Não altera cobrança.");
+        REFLECTS_ON.put(RuntimeSetting.PREMIUM_ASSUMED_LIFETIME_MONTHS,
+                "Painel de aquisição do admin: o valor estimado de cada assinante e o retorno das campanhas. Não altera cobrança.");
+        REFLECTS_ON.put(RuntimeSetting.REFERRAL_REWARD_MONTHS,
+                "Recompensas de indicação concedidas daqui em diante, o aviso de recompensa (push e caixa de entrada) e os textos de indicação do app.");
         REFLECTS_ON.put(RuntimeSetting.LAUNCH_PROMO_ENABLED,
                 "Confirmação da primeira nota: se o usuário novo ganha ou não o Premium de lançamento.");
         REFLECTS_ON.put(RuntimeSetting.LAUNCH_PROMO_UNTIL,
@@ -44,7 +48,7 @@ public final class RuntimeSettingReach {
         REFLECTS_ON.put(RuntimeSetting.LAUNCH_PROMO_WARNINGS_ENABLED,
                 "Push e caixa de entrada de quem tem o Premium de lançamento sem assinatura paga.");
         REFLECTS_ON.put(RuntimeSetting.LAUNCH_PROMO_WARNING_DAYS,
-                "Datas em que os avisos de fim da promoção são enviados.");
+                "Datas em que os avisos de fim da promoção são enviados e o texto do app que explica esses avisos.");
         REFLECTS_ON.put(RuntimeSetting.PRICE_WINDOW_DAYS,
                 "Plano de compras, melhores mercados, preço típico, mapa de preços, promoções e a tela de preços de um mercado (período máximo).");
         REFLECTS_ON.put(RuntimeSetting.MARKET_PRICES_DEFAULT_DAYS,
@@ -77,6 +81,26 @@ public final class RuntimeSettingReach {
                 "Mesma regra de oferta relevante: define o que conta como item barato.");
         REFLECTS_ON.put(RuntimeSetting.DEAL_HIGH_PRICE_ANCHOR,
                 "Mesma regra de oferta relevante: define o que conta como item caro.");
+        REFLECTS_ON.put(RuntimeSetting.COMPARISON_MIN_MATCHED_PCT,
+                "\"Esta compra em outros mercados\" na tela da nota e as alternativas guardadas em cada ida às compras.");
+        REFLECTS_ON.put(RuntimeSetting.RECEIPT_COMPARISON_MAX_AGE_DAYS,
+                "\"Esta compra em outros mercados\" na tela da nota: notas mais antigas não mostram comparação.");
+        REFLECTS_ON.put(RuntimeSetting.COMPARISON_ALTERNATIVE_MARKETS,
+                "\"Esta compra em outros mercados\" na tela da nota (comparações novas) e o registro de cada ida às compras.");
+        REFLECTS_ON.put(RuntimeSetting.ROUTE_DEFAULT_MAX_DISTANCE_KM,
+                "Plano de compras, no app: distância máxima de quem ainda não escolheu a sua.");
+        REFLECTS_ON.put(RuntimeSetting.ROUTE_DEFAULT_MAX_STOPS,
+                "Plano de compras, no app: número de paradas de quem ainda não escolheu o seu.");
+        REFLECTS_ON.put(RuntimeSetting.ROUTE_DEFAULT_MIN_SAVING_PER_STOP,
+                "Plano de compras, no app: economia mínima por parada de quem ainda não escolheu a sua.");
+        REFLECTS_ON.put(RuntimeSetting.SAVINGS_DEFAULT_PERIOD_DAYS,
+                "Economia da casa, no app, quando nenhum período é escolhido.");
+        REFLECTS_ON.put(RuntimeSetting.HOME_SAVINGS_MIN,
+                "Tela inicial do app: o destaque de economia só aparece a partir desse valor.");
+        REFLECTS_ON.put(RuntimeSetting.LEADERBOARD_TOP_N,
+                "Ranking de caçadores de desconto, no app e no admin, e os textos do app que citam o tamanho do ranking.");
+        REFLECTS_ON.put(RuntimeSetting.LEADERBOARD_DEFAULT_DAYS,
+                "Ranking de caçadores de desconto, no app e no admin, quando nenhum período é escolhido.");
         REFLECTS_ON.put(RuntimeSetting.SAVINGS_REGION_WINDOW_DAYS,
                 "Tela Economia: seção \"Comparado à sua região\".");
         REFLECTS_ON.put(RuntimeSetting.SAVINGS_MIN_REGION_SAMPLES,
@@ -181,6 +205,8 @@ public final class RuntimeSettingReach {
                 "Notas emitidas sem internet: por quanto tempo seguem sendo buscadas, e o prazo citado no app.");
         REFLECTS_ON.put(RuntimeSetting.MAX_ITEM_PHOTOS,
                 "Envio de nota por foto no scanner e o texto \"até N fotos\" do app.");
+        REFLECTS_ON.put(RuntimeSetting.DATA_SHARE_CONSENT_DAYS,
+                "Pedidos de cópia de dados feitos daqui em diante ao sair de uma casa, e o prazo mostrado no app.");
         REFLECTS_ON.put(RuntimeSetting.HOUSEHOLD_INVITE_HOURS,
                 "Códigos de convite gerados a partir de agora e o prazo citado na tela Casa e na FAQ.");
         REFLECTS_ON.put(RuntimeSetting.APP_MIN_VERSION,
@@ -209,6 +235,8 @@ public final class RuntimeSettingReach {
                 "Portal do comerciante: fluxo \"sou este mercado\".");
         REFLECTS_ON.put(RuntimeSetting.MERCHANT_CLAIM_COOLDOWN_HOURS,
                 "Portal do comerciante: nova tentativa de reivindicar a mesma rede.");
+        REFLECTS_ON.put(RuntimeSetting.MERCHANT_VERIFIED_BADGE_TOLERANCE_PCT,
+                "Selo \"confirmado por notas\" nas promoções de comerciantes (app, painel do comerciante e admin) e o desempenho da promoção.");
         REFLECTS_ON.put(RuntimeSetting.MERCHANT_IMPORT_MAX_ROWS,
                 "Portal do comerciante: importação de promoções por arquivo.");
     }

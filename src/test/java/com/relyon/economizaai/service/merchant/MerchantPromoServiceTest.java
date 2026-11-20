@@ -33,6 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -196,6 +197,37 @@ class MerchantPromoServiceTest {
         assertThat(response.confirmingHouseholds()).isEqualTo(4);
         assertThat(response.exposureTracked()).isFalse();
         assertThat(response.productId()).isEqualTo(product.getId());
+    }
+
+    @Test
+    void theBadgeAcceptsPaidPricesUpToTheToleranceSetInTheAdmin() {
+        var promo = ownPromo(Product.builder().id(UUID.randomUUID()).normalizedName("Leite Integral 1L").build());
+        threeHouseholdsPaid("5.10");
+        assertThat(service.isVerifiedByReceipts(promo)).isFalse();
+        assertThat(service.performance(merchantUser, promo.getId()).verified()).isFalse();
+
+        service.setVerifiedBadgeTolerancePct(new BigDecimal("5"));
+
+        assertThat(service.isVerifiedByReceipts(promo)).isTrue();
+        assertThat(service.performance(merchantUser, promo.getId()).verified()).isTrue();
+    }
+
+    @Test
+    void theBadgeToleranceStartsAtOnePercentAboveTheAnnouncedPrice() {
+        var promo = ownPromo(Product.builder().id(UUID.randomUUID()).normalizedName("Leite Integral 1L").build());
+        threeHouseholdsPaid("5.0399");
+        assertThat(service.performance(merchantUser, promo.getId()).verified()).isTrue();
+
+        threeHouseholdsPaid("5.04");
+        assertThat(service.performance(merchantUser, promo.getId()).verified()).isFalse();
+    }
+
+    /** Three households bought at this price: they confirm the promo only when the accepted ceiling reaches it. */
+    private void threeHouseholdsPaid(String paidPrice) {
+        doAnswer(invocation -> {
+            BigDecimal highestAcceptedPrice = invocation.getArgument(4);
+            return highestAcceptedPrice.compareTo(new BigDecimal(paidPrice)) >= 0 ? 3L : 0L;
+        }).when(auditRepository).countDistinctHouseholdsConfirmingPromo(any(), any(), any(), any(), any());
     }
 
     @Test

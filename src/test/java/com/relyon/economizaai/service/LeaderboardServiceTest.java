@@ -65,6 +65,30 @@ class LeaderboardServiceTest {
     }
 
     @Test
+    void theRankingListsAsManyHouseholdsAsSetInTheAdmin() {
+        when(receiptItemRepository.discountHuntersSince(any(), eq(3))).thenReturn(List.<Object[]>of(
+                new Object[]{householdA, 10L, new BigDecimal("50.00")},
+                new Object[]{householdB, 8L, new BigDecimal("40.00")}));
+        assertThat(service.discountHuntersAdmin(30).entries()).hasSize(2);
+
+        service.setTopN(1);
+
+        assertThat(service.discountHuntersAdmin(30).entries()).hasSize(1);
+    }
+
+    @Test
+    void withoutAPeriod_theRankingCoversTheDaysSetInTheAdmin() {
+        when(receiptItemRepository.discountHuntersSince(any(), eq(3))).thenReturn(List.of());
+        assertThat(service.discountHuntersAdmin(null).windowDays()).isEqualTo(30);
+
+        service.setDefaultDays(7);
+
+        assertThat(service.discountHuntersAdmin(null).windowDays()).isEqualTo(7);
+        assertThat(service.discountHunters(null, householdA).windowDays()).isEqualTo(7);
+        assertThat(service.discountHuntersAdmin(15).windowDays()).isEqualTo(15);
+    }
+
+    @Test
     void adminViewRanksEveryoneWithEmailsAndNoMe() {
         when(receiptItemRepository.discountHuntersSince(any(), eq(3))).thenReturn(List.<Object[]>of(
                 new Object[]{householdA, 10L, new BigDecimal("50.00")},

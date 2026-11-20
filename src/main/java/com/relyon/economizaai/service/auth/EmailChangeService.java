@@ -37,7 +37,7 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class EmailChangeService {
 
-    private static final int CODE_TTL_MINUTES = 30;
+    public static final int CODE_TTL_MINUTES = 30;
     private static final int CODE_BOUND = 1_000_000;
     private static final int MAX_VERIFY_ATTEMPTS = 5;
 

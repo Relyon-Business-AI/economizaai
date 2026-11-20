@@ -1,6 +1,7 @@
 package com.relyon.economizaai.controller;
 
 import com.relyon.economizaai.config.AppConfigProperties;
+import com.relyon.economizaai.config.CollaborativeProperties;
 import com.relyon.economizaai.service.settings.RuntimeSettings;
 import com.relyon.economizaai.config.SecurityConfig;
 import com.relyon.economizaai.security.JwtService;
@@ -20,7 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AppConfigController.class)
-@Import({SecurityConfig.class, AppConfigService.class, AppConfigProperties.class})
+@Import({SecurityConfig.class, AppConfigService.class, AppConfigProperties.class, CollaborativeProperties.class})
 class AppConfigControllerTest {
 
     @Autowired private MockMvc mockMvc;

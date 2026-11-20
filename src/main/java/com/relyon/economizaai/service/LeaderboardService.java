@@ -9,8 +9,11 @@ import com.relyon.economizaai.dto.response.LeaderboardResponse.Entry;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
 import com.relyon.economizaai.repository.UserRepository;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,9 +40,17 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class LeaderboardService {
 
-    private static final int TOP_N = 20;
     private static final Duration RANKING_TTL = Duration.ofMinutes(5);
     private static final int MAX_CACHED_WINDOWS = 32;
+
+    /** How many households each ranking lists. */
+    @Getter @Setter
+    @Value("${economizaai.leaderboard.top-n:20}")
+    private volatile int topN = 20;
+    /** The period ranked when the caller asks for none. */
+    @Getter @Setter
+    @Value("${economizaai.leaderboard.default-days:30}")
+    private volatile int defaultDays = 30;
 
     private final ReceiptItemRepository receiptItemRepository;
     private final UserRepository userRepository;
@@ -54,8 +65,8 @@ public class LeaderboardService {
 
     /** Public leaderboard: opted-in households only, plus the caller's own standing. */
     @Transactional(readOnly = true)
-    public LeaderboardResponse discountHunters(int days, UUID viewerHouseholdId) {
-        var window = Math.max(1, days);
+    public LeaderboardResponse discountHunters(Integer days, UUID viewerHouseholdId) {
+        var window = windowDays(days);
         var ranked = ranked(window);
         var optedInUsers = userRepository.findByShareInLeaderboardTrue();
         var optedInHouseholds = optedInUsers.stream()
@@ -65,7 +76,7 @@ public class LeaderboardService {
 
         var publicRows = ranked.stream()
                 .filter(row -> optedInHouseholds.contains(row.householdId()))
-                .limit(TOP_N).toList();
+                .limit(topN).toList();
         var entries = new ArrayList<Entry>();
         var rank = 0;
         for (var row : publicRows) {
@@ -78,9 +89,9 @@ public class LeaderboardService {
 
     /** Admin leaderboard: all households (opted in or not), handles are emails. */
     @Transactional(readOnly = true)
-    public LeaderboardResponse discountHuntersAdmin(int days) {
-        var window = Math.max(1, days);
-        var top = ranked(window).stream().limit(TOP_N).toList();
+    public LeaderboardResponse discountHuntersAdmin(Integer days) {
+        var window = windowDays(days);
+        var top = ranked(window).stream().limit(topN).toList();
         var emailByHousehold = emailByHousehold(top.stream().map(Row::householdId).toList());
         var entries = new ArrayList<Entry>();
         var rank = 0;
@@ -90,6 +101,11 @@ public class LeaderboardService {
                     row.finds(), row.savings(), false));
         }
         return new LeaderboardResponse(window, entries, null);
+    }
+
+    /** The period asked for, or the default one when none was. */
+    private int windowDays(Integer requestedDays) {
+        return Math.max(1, requestedDays != null ? requestedDays : defaultDays);
     }
 
     /** Toggle the caller's opt-in to the public leaderboard. */

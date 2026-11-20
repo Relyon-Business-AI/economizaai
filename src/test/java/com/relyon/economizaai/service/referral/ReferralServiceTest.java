@@ -30,6 +30,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
@@ -81,6 +82,10 @@ class ReferralServiceTest {
         lenient().when(localizedMessageService.translate(anyString(), any(Locale.class), any(), any()))
                 .thenAnswer(invocation -> invocation.getArgument(0) + "|" + invocation.getArgument(2)
                         + "|" + invocation.getArgument(3));
+        lenient().when(localizedMessageService.translate(anyString(), any(Locale.class), any(), any(), any(), any()))
+                .thenAnswer(invocation -> invocation.getArgument(0) + "|" + invocation.getArgument(2)
+                        + "|" + invocation.getArgument(3) + "|" + invocation.getArgument(4)
+                        + "|" + invocation.getArgument(5));
     }
 
     private static User userInOwnHousehold(String email) {
@@ -100,10 +105,14 @@ class ReferralServiceTest {
     }
 
     private PremiumGrant januaryGrant(PremiumGrantKind kind) {
+        return grantFromJanuary(kind, 1);
+    }
+
+    private PremiumGrant grantFromJanuary(PremiumGrantKind kind, int months) {
         var startsAt = EntitlementClock.endOfBrazilDay(LocalDate.of(2026, 12, 31)).plusSeconds(1);
         return PremiumGrant.builder().user(inviter).kind(kind).sourceUserId(invited.getId())
                 .startsAt(startsAt)
-                .endsAt(EntitlementClock.monthAfter(startsAt.minusDays(1), startsAt).endsAt())
+                .endsAt(EntitlementClock.monthsAfter(startsAt.minusDays(1), startsAt, months).endsAt())
                 .build();
     }
 
@@ -129,7 +138,8 @@ class ReferralServiceTest {
                 ReferralCode.builder().userId(inviter.getId()).code("ABC2345").build()));
         when(referralRepository.countByInviterId(inviter.getId())).thenReturn(4L);
         when(referralRepository.countByInviterIdAndQualifiedAtIsNotNull(inviter.getId())).thenReturn(2L);
-        when(premiumGrantRepository.countByUserId(inviter.getId())).thenReturn(3L);
+        when(premiumGrantRepository.findByUserId(inviter.getId())).thenReturn(List.of(
+                januaryGrant(PremiumGrantKind.REFERRAL_FIRST), grantFromJanuary(PremiumGrantKind.REFERRAL_SUBSCRIPTION, 2)));
         when(premiumGrantRepository.existsByUserIdAndKind(inviter.getId(), PremiumGrantKind.REFERRAL_FIRST)).thenReturn(true);
         when(referralRepository.existsByInvitedId(inviter.getId())).thenReturn(false);
         when(receiptRepository.countByUserIdAndStatus(inviter.getId(), ReceiptStatus.CONFIRMED)).thenReturn(0L);
@@ -264,6 +274,25 @@ class ReferralServiceTest {
         verify(referralRepository, never()).save(any());
     }
 
+    @Test
+    void qualify_theRewardNoticeStatesTheMonthsThatWereGranted() {
+        openReferral();
+        when(priceObservationAuditRepository.existsByReceiptId(receiptId)).thenReturn(true);
+        when(premiumGrantRepository.existsByUserIdAndKind(inviter.getId(), PremiumGrantKind.REFERRAL_FIRST)).thenReturn(false);
+        when(premiumGrantService.grantReferralReward(inviter, PremiumGrantKind.REFERRAL_FIRST, invited.getId()))
+                .thenReturn(Optional.of(grantFromJanuary(PremiumGrantKind.REFERRAL_FIRST, 3)));
+
+        service.qualifyAfterCommit(invited.getId(), receiptId);
+
+        var captor = ArgumentCaptor.forClass(NotificationPayload.class);
+        verify(notificationService).notify(captor.capture());
+        assertEquals("notification.referral_first_reward.title|3|notification.referral_reward.month.many",
+                captor.getValue().title());
+        assertEquals("notification.referral_first_reward.body|3|notification.referral_reward.month.many|01/01/2027|31/03/2027",
+                captor.getValue().body());
+        assertEquals("3", captor.getValue().extras().get("months"));
+    }
+
     // ---------- qualification matrix ----------
 
     @Test
@@ -271,7 +300,7 @@ class ReferralServiceTest {
         var referral = openReferral();
         when(priceObservationAuditRepository.existsByReceiptId(receiptId)).thenReturn(true);
         when(premiumGrantRepository.existsByUserIdAndKind(inviter.getId(), PremiumGrantKind.REFERRAL_FIRST)).thenReturn(false);
-        when(premiumGrantService.grantMonth(inviter, PremiumGrantKind.REFERRAL_FIRST, invited.getId()))
+        when(premiumGrantService.grantReferralReward(inviter, PremiumGrantKind.REFERRAL_FIRST, invited.getId()))
                 .thenReturn(Optional.of(januaryGrant(PremiumGrantKind.REFERRAL_FIRST)));
 
         service.qualifyAfterCommit(invited.getId(), receiptId);
@@ -284,8 +313,10 @@ class ReferralServiceTest {
         var payload = captor.getValue();
         assertEquals(inviter, payload.user());
         assertEquals(NotificationType.SYSTEM, payload.type());
-        assertEquals("notification.referral_first_reward.title", payload.title());
-        assertEquals("notification.referral_first_reward.body|01/01/2027|31/01/2027", payload.body());
+        assertEquals("notification.referral_first_reward.title|1|notification.referral_reward.month.one", payload.title());
+        assertEquals("notification.referral_first_reward.body|1|notification.referral_reward.month.one|01/01/2027|31/01/2027",
+                payload.body());
+        assertEquals("1", payload.extras().get("months"));
         assertEquals("REFERRAL_REWARD", payload.extras().get("kind"));
         assertEquals("2027-01-01", payload.extras().get("startsOn"));
         assertEquals("2027-01-31", payload.extras().get("endsOn"));
@@ -362,7 +393,7 @@ class ReferralServiceTest {
     @Test
     void subscription_invitedFriendSubscribingGrantsOneMonthAndNotifies() {
         var referral = openReferral();
-        when(premiumGrantService.grantMonth(inviter, PremiumGrantKind.REFERRAL_SUBSCRIPTION, invited.getId()))
+        when(premiumGrantService.grantReferralReward(inviter, PremiumGrantKind.REFERRAL_SUBSCRIPTION, invited.getId()))
                 .thenReturn(Optional.of(januaryGrant(PremiumGrantKind.REFERRAL_SUBSCRIPTION)));
 
         service.rewardInviterForSubscription(invited);
@@ -371,7 +402,8 @@ class ReferralServiceTest {
         var captor = ArgumentCaptor.forClass(NotificationPayload.class);
         verify(notificationService).notify(captor.capture());
         assertEquals(inviter, captor.getValue().user());
-        assertEquals("notification.referral_subscription_reward.title", captor.getValue().title());
+        assertEquals("notification.referral_subscription_reward.title|1|notification.referral_reward.month.one",
+                captor.getValue().title());
         assertEquals("REFERRAL_SUBSCRIPTION", captor.getValue().extras().get("rewardKind"));
     }
 
@@ -389,7 +421,7 @@ class ReferralServiceTest {
     void subscription_invitedWhoAlreadyYieldedTheFirstRewardYieldsNothingMore() {
         openReferral();
         // PremiumGrantService refuses a second reward from the same invited person.
-        when(premiumGrantService.grantMonth(inviter, PremiumGrantKind.REFERRAL_SUBSCRIPTION, invited.getId()))
+        when(premiumGrantService.grantReferralReward(inviter, PremiumGrantKind.REFERRAL_SUBSCRIPTION, invited.getId()))
                 .thenReturn(Optional.empty());
 
         service.rewardInviterForSubscription(invited);

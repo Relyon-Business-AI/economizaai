@@ -1,6 +1,7 @@
 package com.relyon.economizaai.service.priceindex;
 
 import com.relyon.economizaai.config.AsyncConfig;
+import com.relyon.economizaai.config.ComparisonProperties;
 import com.relyon.economizaai.dto.response.ReceiptMarketComparisonResponse;
 import com.relyon.economizaai.dto.response.ReceiptMarketComparisonResponse.Item;
 import com.relyon.economizaai.dto.response.ReceiptMarketComparisonResponse.Market;
@@ -54,17 +55,13 @@ import java.util.stream.Collectors;
  *
  * <p>What the household paid always comes from the nota's CURRENT items joined with the stored
  * prices: removing an item or fixing what was paid for it changes the comparison without
- * touching the stored prices. A nota bought more than {@link #MAX_PURCHASE_AGE_DAYS} days ago
- * gets no comparison — today's prices say nothing about a purchase that old.
+ * touching the stored prices. A nota bought too long ago
+ * ({@link ComparisonProperties#getReceiptMaxAgeDays}) gets no comparison — today's prices say
+ * nothing about a purchase that old.
  */
 @Slf4j
 @Service
 public class ReceiptMarketComparisonService {
-
-    /** Markets offered per nota. */
-    static final int MAX_MARKETS = 3;
-    /** A nota older than this (purchase date) is not compared: prices have moved on. */
-    static final int MAX_PURCHASE_AGE_DAYS = 7;
 
     private final ReceiptRepository receiptRepository;
     private final ReceiptMarketComparisonRepository comparisonRepository;
@@ -72,6 +69,7 @@ public class ReceiptMarketComparisonService {
     private final ViewerLocationService viewerLocationService;
     private final MarketNameService marketNameService;
     private final MarketLocationService marketLocationService;
+    private final ComparisonProperties comparisonProperties;
     private final Executor comparisonExecutor;
     private final TransactionTemplate readTransaction;
 
@@ -81,6 +79,7 @@ public class ReceiptMarketComparisonService {
                                           ViewerLocationService viewerLocationService,
                                           MarketNameService marketNameService,
                                           MarketLocationService marketLocationService,
+                                          ComparisonProperties comparisonProperties,
                                           @Qualifier(AsyncConfig.RECEIPT_COMPARISON_EXECUTOR) Executor comparisonExecutor,
                                           PlatformTransactionManager transactionManager) {
         this.receiptRepository = receiptRepository;
@@ -89,6 +88,7 @@ public class ReceiptMarketComparisonService {
         this.viewerLocationService = viewerLocationService;
         this.marketNameService = marketNameService;
         this.marketLocationService = marketLocationService;
+        this.comparisonProperties = comparisonProperties;
         this.comparisonExecutor = comparisonExecutor;
         this.readTransaction = new TransactionTemplate(transactionManager);
         this.readTransaction.setReadOnly(true);
@@ -178,7 +178,7 @@ public class ReceiptMarketComparisonService {
         }
         var boughtAt = PriceIndexService.cnpjRoot(receipt.getCnpjEmitente());
         var alternatives = basketComparisonService.compare(location, comparableBasket(receipt),
-                boughtAt == null ? Set.of() : Set.of(boughtAt), MAX_MARKETS);
+                boughtAt == null ? Set.of() : Set.of(boughtAt), comparisonProperties.getAlternativeMarkets());
         var comparison = ReceiptMarketComparison.builder()
                 .receiptId(receipt.getId())
                 .computedAt(OffsetDateTime.now())
@@ -211,9 +211,10 @@ public class ReceiptMarketComparisonService {
     }
 
     /** Bought within the last few days, by purchase date (or by when it entered the app, without one). */
-    private static boolean isRecentPurchase(Receipt receipt) {
+    private boolean isRecentPurchase(Receipt receipt) {
         var purchasedAt = receipt.getIssuedAt() != null ? receipt.getIssuedAt() : receipt.getCreatedAt();
-        return purchasedAt == null || !purchasedAt.isBefore(BrazilClock.nowDateTime().minusDays(MAX_PURCHASE_AGE_DAYS));
+        var oldestCompared = BrazilClock.nowDateTime().minusDays(comparisonProperties.getReceiptMaxAgeDays());
+        return purchasedAt == null || !purchasedAt.isBefore(oldestCompared);
     }
 
     /** The nota's current items that can be compared, one line per product. */
@@ -250,7 +251,7 @@ public class ReceiptMarketComparisonService {
      */
     private ReceiptMarketComparisonResponse toResponse(User user, Receipt receipt, List<BasketLine> basket,
                                                        ReceiptMarketComparison comparison) {
-        var minMatchedItems = BasketComparisonService.minMatchedItems(basket.size());
+        var minMatchedItems = comparisonProperties.minMatchedItems(basket.size());
         var pricesByMarket = comparison.getPrices().stream()
                 .collect(Collectors.groupingBy(ReceiptMarketComparisonPrice::getMarketPosition));
         var marketPrices = pricesByMarket.entrySet().stream()

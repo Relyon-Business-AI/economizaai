@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.shopping;
 
+import com.relyon.economizaai.config.ComparisonProperties;
 import com.relyon.economizaai.dto.request.RecordShoppingTripRequest;
 import com.relyon.economizaai.model.Product;
 import com.relyon.economizaai.model.Receipt;
@@ -39,8 +40,8 @@ import java.util.stream.Collectors;
  * be trusted on are checked here: a nota is linked only when it belongs to the household, and
  * items of products that no longer exist are left out.
  *
- * <p>Along with the trip it stores what the items BOUGHT (checked off) would have cost at up to
- * three single nearby markets — the baseline for "was the route worth it". A market the trip
+ * <p>Along with the trip it stores what the items BOUGHT (checked off) would have cost at a few
+ * single nearby markets — the baseline for "was the route worth it". A market the trip
  * stopped at counts as an alternative too (buying everything there), unless it was the only stop.
  */
 @Slf4j
@@ -49,12 +50,11 @@ import java.util.stream.Collectors;
 public class ShoppingTripRecorder {
 
     private final ShoppingTripRepository tripRepository;
-    private static final int MAX_ALTERNATIVE_MARKETS = 3;
-
     private final ReceiptRepository receiptRepository;
     private final ProductRepository productRepository;
     private final BasketComparisonService basketComparisonService;
     private final ViewerLocationService viewerLocationService;
+    private final ComparisonProperties comparisonProperties;
 
     /**
      * Saves the trip and returns its id; a trip this household already sent returns the stored id.
@@ -87,7 +87,7 @@ public class ShoppingTripRecorder {
     }
 
     /**
-     * What the bought items would have cost at each of up to three single nearby markets. Empty
+     * What the bought items would have cost at each of a few single nearby markets. Empty
      * when nothing was bought, the shopper has no known position, or the comparison fails — the
      * trip is recorded either way.
      */
@@ -104,7 +104,7 @@ public class ShoppingTripRecorder {
         try {
             return basketComparisonService
                     .compare(viewerLocationService.resolve(user), boughtLines, onlyStopChain(trip),
-                            MAX_ALTERNATIVE_MARKETS)
+                            comparisonProperties.getAlternativeMarkets())
                     .stream()
                     .map(alternative -> toAlternative(alternative, boughtItemCount))
                     .toList();
