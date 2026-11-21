@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.sefaz;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import com.relyon.economizaai.exception.PrefetchedUnsupportedException;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import org.junit.jupiter.api.Test;
@@ -76,5 +77,21 @@ class PrefetchPolicyTest {
     void genericOn_reportsGenericEnabled() {
         assertTrue(new PrefetchPolicy("PE", true).isGenericEnabled());
         assertFalse(new PrefetchPolicy("PE", false).isGenericEnabled());
+    }
+
+    @Test
+    void trustedStatesAndTheGenericSwitchCanChangeWhileRunning() {
+        var policy = new PrefetchPolicy("PE", false);
+
+        policy.changeTrustedUfs("BA,PE");
+        assertEquals("PE,BA", policy.trustedUfsCsv());
+        assertTrue(policy.isTrustedForIndex(UnidadeFederativa.BA));
+
+        policy.changeTrustedUfs("");
+        assertFalse(policy.isDeviceFetchEligible(UnidadeFederativa.PE));
+
+        policy.setGenericEnabled(true);
+        assertTrue(policy.isDeviceFetchEligible(UnidadeFederativa.RS));
+        assertFalse(policy.isTrustedForIndex(UnidadeFederativa.RS));
     }
 }

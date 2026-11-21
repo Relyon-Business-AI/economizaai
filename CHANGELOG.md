@@ -1,5 +1,146 @@
 # economizai — what's new
 
+## 2026-11-20 — Preços e inflação: inflação oficial de alimentos x preços pagos nos mercados
+
+- **Novo: `GET /insights/price-inflation?scope=BR|STATE&state=RS&months=12`** — a inflação oficial de alimentos
+  (IBGE, IPCA "Alimentação no domicílio") ao lado da variação dos preços pagos nos mercados (notas do app), nos
+  mesmos meses, com série para gráfico (base 100), "Sua cesta" (`basket`), `categories`, `foods` e
+  `officialGroups`. `state` é opcional (vale a UF de quem pede; sem UF conhecida responde como `BR`).
+  A resposta sempre traz `viewerState` / `viewerStateName` (ou `null`). Se faltam meses com dados da
+  comunidade, `from`/`to` dizem o trecho comparado e `shortened=true`; sem nenhum mês válido,
+  `community.status = "INSUFFICIENT"` e a série oficial vem sozinha no período inteiro.
+- **Novo: `GET /insights/price-inflation/states?months=12`** — as 27 UFs em ordem alfabética da sigla, cada uma
+  com o número oficial (da área do IBGE do estado, ou o nacional com `nationalFallback=true`), a variação da
+  comunidade, a diferença e o seu próprio `from`/`to`.
+- **Oculto por enquanto:** com `priceInflationAudience = "ADMINS"` (padrão), quem não é admin recebe **404** com
+  `message` pronta. O app decide se mostra a entrada pela chave `priceInflationAudience` de `GET /app-config` →
+  `settings`; os períodos oferecidos vêm de `priceInflationPeriods` (array; o maior é o inicial).
+- **Aviso mensal na caixa de entrada** quando o IBGE divulga um mês novo: `type = "PRICE_INFLATION"`,
+  `destination = "PRICE_INFLATION"`, `payload = {"destination":"PRICE_INFLATION","month":"2026-10"}`. Só caixa de
+  entrada: nunca sai push, e-mail ou WhatsApp. Só admins recebem enquanto a tela é só deles.
+- **Admin:** nove configurações novas em `GET /admin/settings`, no bloco "Preços e inflação" (seção Preços e ofertas), e
+  `POST /admin/price-inflation/recompute?months=24`, que carrega o IBGE e recalcula a tabela da comunidade na
+  hora, sem enviar aviso.
+- Dependência nova de saída: IBGE SIDRA (pública, sem chave), lida uma vez por dia.
+## 2026-11-20 — Promoção da comunidade: "total mínimo de preços" aposentado
+
+- A configuração "Promoção da comunidade: total mínimo de preços" (padrão 10) deixou de existir:
+  `GET /admin/settings` passa de 167 para 166 itens. Valem só os mínimos de preços recentes e de
+  preços antigos (3 cada por padrão). **Efeito:** produtos com 6 a 9 preços no mercado, que antes
+  ficavam de fora, agora podem aparecer como promoção da comunidade.
+- A propriedade `economizaai.collaborative.min-observations-for-community-promo` foi removida; um valor
+  salvo no admin para ela é apagado pela `V191`.
+
+## 2026-11-20 — Admin: campos que funcionam em conjunto vêm agrupados
+
+- Cada item de `GET /admin/settings` (e a resposta de `PUT`/`DELETE`) ganha `group`: `null` ou
+  `{ key, title, explanation, position }`. Itens com o mesmo `group.key` formam uma regra só; o painel
+  desenha como um bloco, com o título e a explicação de como os campos se combinam, na ordem de `position`.
+
+## 2026-11-20 — Nenhuma regra de negócio fixa no código: 69 configurações novas no admin
+
+- **`GET /admin/settings`** passa de 98 para 167 itens e ganha a seção **Categorização de produtos**.
+  Entraram: comparação de compras (cobertura mínima da cesta, idade da nota, mercados alternativos),
+  padrões do plano de compras, ranking, recompensa de indicação, selo "verificado por notas", prazos
+  (portal do estado, compartilhamento de dados), limites por hora e por lote de notas, critérios de
+  situação dos estados, limiares da categorização (IA, promoção automática, consenso, similaridade),
+  custo por chamada de cada serviço pago, tabela de preços dos modelos de IA, percentual de aviso de
+  custo, dia e hora de cada envio (ofertas, reposição, orçamento, relatórios, convite de push) e os
+  interruptores de aviso de cadastro, alertas por WhatsApp e ofertas online.
+- **`GET /app-config` → `settings` ganhou** `referralRewardMonths`, `routeDefaultMaxDistanceKm`,
+  `routeDefaultMaxStops`, `routeDefaultMinSavingPerStop`, `homeSavingsMin`, `leaderboardTopN`,
+  `leaderboardDefaultDays`, `savingsDefaultPeriodDays`, `savingsRecentDays`, `receiptComparisonMaxAgeDays`,
+  `dataShareConsentDays`, `portalRetryHours`, `bulkMaxReceipts`, `launchPromoWarningDays` (array de números),
+  `dealsDigestWeeklyDay`, `spendingReportWeeklyDay`/`Hour`, `spendingReportMonthlyDay`/`Hour`. Também traz
+  fatos **somente leitura** que o app mostra em texto: `emailVerificationCodeHours`, `passwordResetCodeMinutes`,
+  `emailChangeCodeMinutes`, `phoneCodeMinutes`, `sensitiveMinHouseholds`. **O app não deve escrever
+  nenhum desses números à mão.**
+- **Horários de envio** deixaram de ser cron em variável de ambiente (`NOTIFICATIONS_REPLENISHMENT_CRON`,
+  `NOTIFICATIONS_BUDGET_CRON`, `WHATSAPP_WEEKLY_REPORT_CRON`, `WHATSAPP_MONTHLY_REPORT_CRON` removidas):
+  são dia/hora no admin e valem a partir da próxima hora cheia.
+- **Lote grande demais** (`POST /receipts/import`, retry, confirm-batch, delete-batch): continua **400**,
+  mas o texto vem em `message` com o número configurado (antes em `errors.chaves` / `errors.ids`).
+- **Ranking** (`GET /leaderboard` e o do admin): `days` agora é opcional; sem ele vale a configuração.
+- **Indicação:** `rewardedMonths` em `GET /referrals/me` soma os meses de verdade de cada recompensa; a
+  notificação de recompensa informa os meses concedidos e leva `months` no payload.
+- `last30DaysSavings` mantém o nome, mas a janela é a configuração (`savingsRecentDays`).
+- **Corrigido:** os limiares de confiança da IA na categorização eram lidos de uma chave diferente da
+  do arquivo de configuração (valores do arquivo e de ambiente eram ignorados).
+- Promoção da comunidade: o mínimo de preços antigos (3) virou configuração; "histórico mínimo" passou
+  a se chamar "total mínimo de preços", que é o que ele mede.
+- Teste novo `EverySettingTakesEffectTest`: sobe a aplicação e, para cada configuração, salva outro
+  valor e confere que o código em uso e o `/app-config` passaram a devolver o valor novo.
+
+## 2026-11-19 — `/app-config` publica os valores de plano
+
+- `GET /app-config` → `settings` ganha `freeMonthlyReceipts`, `freeHistoryDays`, `freeWatchedMarkets`,
+  `premiumMonthlyPrice` e `premiumYearlyPrice`. A landing lê daqui a seção de planos; o app não precisa mudar.
+
+## 2026-11-19 — Configurações de negócio no admin (sem deploy)
+
+- **Novo: `GET /admin/settings`** devolve as regras de negócio agrupadas por seção (planos, preços e ofertas,
+  economia e previsão, notificações, custos, notas e estados, aplicativo, comerciantes). Cada item traz
+  `key`, `label`, `description`, `reflectsOn` (onde a mudança aparece), `type`, `unit`, `value` (em vigor), `configuredValue` (o do ambiente),
+  `changed`, `min`/`max`, `options`, `appKey`, `changedAt`, `changedBy`.
+- **`PUT /admin/settings/{key}`** com `{ "value": "..." }` salva e passa a valer na hora, sem reiniciar.
+  **`DELETE /admin/settings/{key}`** volta ao valor configurado para o ambiente. Valor fora do tipo, da faixa
+  ou das opções devolve **400** com a mensagem pronta para mostrar; chave desconhecida, **404**.
+- **`GET /app-config` ganhou `settings`**: os valores que os apps mostram ou aplicam, pelo nome publicado
+  (`priceWindowDays`, `marketPricesDefaultDays`, `nearbyRadiusKm`, `maxItemPhotos`, `contingencyWindowHours`,
+  `householdInviteHours`, `launchPromoUntil`, `savingsFollowUpDays`, `runningLowDays`, `quietHoursStart`,
+  `quietHoursEnd`, `quietHoursMaxDeferred`). Os campos antigos (`minVersion`, `androidUrl`, `iosUrl`,
+  `message`) não mudam. O app deve ler daqui em vez de repetir o número no código ou no texto.
+- **Um valor só onde antes havia cópias:** o raio de "perto de você" (melhores mercados e busca de
+  produtos), o preço mensal do Premium (cobrança web e projeções), a lista de estados pausados (sonda,
+  situação dos estados e alertas do Infosimples) e o teto do período em `GET /markets/{cnpj}/prices`, que
+  agora acompanha a validade dos preços da comunidade.
+- **Corrigido:** `SEFAZ_PREFETCH_ALLOWED_UFS` não tinha efeito (o código lia outra chave); a receita por canal
+  de aquisição não excluía as contas de teste do Google Play como as outras métricas.
+- O canal WhatsApp deixa de ser fixo em "só admin": a configuração "WhatsApp: quem pode usar" decide.
+- Postman: pasta Admin ganhou `Settings — list / change / restore`; o "E2E Flow" ganhou `SETTINGS 01` a `06`.
+
+## 2026-11-19 — "Comparado à sua região" só com preços da região
+
+- `GET /insights/savings` ganhou `reference=REGION`: entram só os itens comparados com o que outras casas
+  pagaram perto. Antes a seção "Comparado à sua região" somava também itens comparados com o histórico da
+  própria casa. Sem o parâmetro, a resposta é a mesma de antes.
+
+## 2026-11-19 — Rota de compra: número que não cabe vira 400
+
+- `POST /shopping-trips`, `POST /shopping-lists` e `POST /shopping-lists/{id}/items`: um número maior do que o
+  banco guarda passa a devolver **400**, com o campo em `errors`. Antes dava 500. No registro da compra isso
+  importa: o app reenvia quando recebe 500 e descarta quando recebe 400, então um registro assim ficava preso
+  na fila do aparelho.
+- Limites: quantidade até `999999999.999`; valores em R$ até `9999999999.99`; `maxDistanceKm` até `99999.9`;
+  `distanceKm` da parada até `99999.999`. `receiptPaidTotal` e `receiptPredictedTotal` não aceitam negativo.
+- No registro da compra, a soma dos itens (preço × quantidade) também precisa caber em `9999999999.99`; quando
+  não cabe, o erro vem em `errors.itemsTotalStorable`.
+- Nada muda para valores normais; o app não precisa de alteração.
+- Postman: o "E2E Flow" ganhou o bloco `ROUTE 01` a `ROUTE 103`, que percorre a rota de compra inteira (lista,
+  plano com as regras da rota, consultas do modo de compra, registro da compra, comparação da nota e
+  isolamento entre casas), com os casos de borda de cada endpoint.
+
+## 2026-11-19 — Número de compras do mapa segue a janela de 90 dias
+
+- `GET /markets`: `communityPurchaseCount` passa a contar só as notas compradas nos **últimos 90 dias**, a
+  mesma janela de `GET /markets/{cnpj}/prices`. Antes contava desde sempre, e o pino anunciava "5 compras"
+  num mercado cuja tela de preços vinha vazia.
+- O mínimo de 3 casas vale dentro da janela: mercado sem compra recente de 3 casas volta `null`.
+- `householdPurchaseCount` e `householdSpend` não mudam (continuam sendo o histórico inteiro da casa).
+
+## 2026-11-18 — Uma janela só de preços: 90 dias
+
+- Todo preço da comunidade passa a valer por **90 dias** em qualquer tela. Antes, "Melhores preços", o preço
+  típico em loja e a comparação genérica olhavam 180 dias, enquanto o plano de compras olhava 90: um produto
+  podia ter preço numa tela e aparecer "sem preço" no plano.
+- Sai a configuração `best-markets-lookback-days`; fica só `lookback-days` (90).
+- Muda junto, porque usam a mesma busca: "Esta compra em outros mercados" (`/receipts/{id}/market-comparison`)
+  e os mercados alternativos guardados no registro da compra (`/shopping-trips`).
+- `GET /markets/{cnpj}/prices`: `days` passa a ser limitado a `1..90` (era `1..180`). Um app antigo que pedir
+  180 recebe 90, sem erro.
+- Efeito esperado: menos mercados em "Melhores preços" e menos itens comparáveis na nota, já que preços entre
+  91 e 180 dias deixam de aparecer.
+
 ## 2026-11-18 — Comparação da nota calculada na confirmação
 
 - "Esta compra em outros mercados" (`GET /receipts/{id}/market-comparison`) deixa de ser calculada a cada

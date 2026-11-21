@@ -1,5 +1,7 @@
 package com.relyon.economizaai.service.profile;
 
+import lombok.Setter;
+import lombok.Getter;
 import com.relyon.economizaai.dto.response.StoreReviewPromptResponse;
 import com.relyon.economizaai.exception.UserNotFoundException;
 import com.relyon.economizaai.model.User;
@@ -37,10 +39,14 @@ public class StoreReviewPromptService {
 
     private final ReceiptRepository receiptRepository;
     private final UserRepository userRepository;
-    private final int minConfirmedReceipts;
-    private final int failureLookbackDays;
-    private final int maxPrompts;
-    private final int cooldownDays;
+    @Getter @Setter
+    private volatile int minConfirmedReceipts;
+    @Getter @Setter
+    private volatile int failureLookbackDays;
+    @Getter @Setter
+    private volatile int maxPrompts;
+    @Getter @Setter
+    private volatile int cooldownDays;
 
     public StoreReviewPromptService(ReceiptRepository receiptRepository,
                                     UserRepository userRepository,

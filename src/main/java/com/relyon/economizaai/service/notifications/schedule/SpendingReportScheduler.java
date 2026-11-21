@@ -1,5 +1,7 @@
 package com.relyon.economizaai.service.notifications.schedule;
 
+import lombok.Setter;
+import lombok.Getter;
 import com.relyon.economizaai.model.SpendingReportDelivery;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.NotificationType;
@@ -18,7 +20,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -46,7 +50,25 @@ public class SpendingReportScheduler {
     private final WhatsAppReportService reportService;
     private final NotificationService notificationService;
     private final SpendingReportDeliveryLedger deliveryLedger;
-    private final boolean enabled;
+    @Getter @Setter
+    private volatile boolean enabled;
+    /** When the weekly report goes out (Brasília). */
+    @Getter @Setter
+    @Value("${economizaai.notifications.whatsapp.weekly-report.weekday:MONDAY}")
+    private volatile DayOfWeek weeklyDay = DayOfWeek.MONDAY;
+    @Getter @Setter
+    @Value("${economizaai.notifications.whatsapp.weekly-report.send-hour:10}")
+    private volatile int weeklyHour = 10;
+    /** When the monthly report goes out (Brasília). */
+    @Getter @Setter
+    @Value("${economizaai.notifications.whatsapp.monthly-report.day-of-month:1}")
+    private volatile int monthlyDay = 1;
+    @Getter @Setter
+    @Value("${economizaai.notifications.whatsapp.monthly-report.send-hour:10}")
+    private volatile int monthlyHour = 10;
+
+    private final HourlySendGate weeklyGate = new HourlySendGate();
+    private final HourlySendGate monthlyGate = new HourlySendGate();
 
     public SpendingReportScheduler(
             UserRepository userRepository,
@@ -61,7 +83,16 @@ public class SpendingReportScheduler {
         this.enabled = enabled;
     }
 
-    @Scheduled(cron = "${economizaai.notifications.whatsapp.weekly-report.cron:0 0 10 ? * MON}", zone = "America/Sao_Paulo")
+    @Scheduled(cron = HourlySendGate.EVERY_FULL_HOUR, zone = HourlySendGate.ZONE)
+    public void sendReportsAtTheirTime() {
+        sendReportsIfTheirTime(BrazilClock.now());
+    }
+
+    void sendReportsIfTheirTime(ZonedDateTime now) {
+        if (weeklyGate.claimWeekly(now, weeklyDay, weeklyHour)) sendWeeklyReports();
+        if (monthlyGate.claimMonthly(now, monthlyDay, monthlyHour)) sendMonthlyReports();
+    }
+
     public void sendWeeklyReports() {
         if (!enabled) return;
         var candidates = userRepository.findWeeklyReportCandidates();
@@ -69,7 +100,6 @@ public class SpendingReportScheduler {
         log.info("weekly_report.done candidates={} sent={}", candidates.size(), sent);
     }
 
-    @Scheduled(cron = "${economizaai.notifications.whatsapp.monthly-report.cron:0 0 10 1 * ?}", zone = "America/Sao_Paulo")
     public void sendMonthlyReports() {
         if (!enabled) return;
         var candidates = userRepository.findMonthlyReportCandidates();

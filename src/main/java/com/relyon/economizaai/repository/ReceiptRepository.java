@@ -237,15 +237,15 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
     String RECEIPT_INTERNAL_FILTER =
             " AND (:includeInternal = TRUE OR (receiptUser.role <> 'ADMIN' "
             + "AND receiptUser.excludedFromMetrics = FALSE "
-            + "AND lower(receiptUser.email) NOT LIKE '%@economizaai.app' "
-            + "AND lower(receiptUser.email) NOT LIKE '%@cloudtestlabaccounts.com'))";
+            + "AND lower(receiptUser.email) NOT LIKE '" + InternalAccounts.OWN_DOMAIN_LIKE + "' "
+            + "AND lower(receiptUser.email) NOT LIKE '" + InternalAccounts.PLAY_TEST_LAB_DOMAIN_LIKE + "'))";
 
     // Native-SQL twin of the above (joins `users u ON u.id = receipts.user_id`).
     String NATIVE_RECEIPT_INTERNAL_FILTER =
             " AND (:includeInternal = TRUE OR (u.role <> 'ADMIN' "
             + "AND u.excluded_from_metrics = FALSE "
-            + "AND lower(u.email) NOT LIKE '%@economizaai.app' "
-            + "AND lower(u.email) NOT LIKE '%@cloudtestlabaccounts.com'))";
+            + "AND lower(u.email) NOT LIKE '" + InternalAccounts.OWN_DOMAIN_LIKE + "' "
+            + "AND lower(u.email) NOT LIKE '" + InternalAccounts.PLAY_TEST_LAB_DOMAIN_LIKE + "'))";
 
     // --- Admin dashboard (same KPIs as the overview, bounded to a [from, to) window on createdAt) ---
 
@@ -322,7 +322,8 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
     long countActiveHouseholdsSince(@Param("since") LocalDateTime since, boolean includeInternal);
 
     /**
-     * Confirmed notas per store for the markets map: (cnpj, receipts, distinct households).
+     * Confirmed notas per store for the markets map, bought since {@code since}: (cnpj, receipts,
+     * distinct households). A nota with no purchase date counts by when it entered the app.
      * The household count is the k-anonymity input — callers must not expose the receipt count
      * of a store below the public threshold.
      */
@@ -330,8 +331,10 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID>, JpaSpec
             + "count(distinct receipt.household.id) AS householdCount "
             + "FROM Receipt receipt "
             + "WHERE receipt.status = 'CONFIRMED' AND receipt.cnpjEmitente IN :cnpjs "
+            + "AND coalesce(receipt.issuedAt, receipt.createdAt) >= :since "
             + "GROUP BY receipt.cnpjEmitente")
-    List<MarketPurchaseCount> countConfirmedPurchasesByCnpjIn(@Param("cnpjs") Collection<String> cnpjs);
+    List<MarketPurchaseCount> countConfirmedPurchasesByCnpjInSince(@Param("cnpjs") Collection<String> cnpjs,
+                                                                   @Param("since") LocalDateTime since);
 
     interface MarketPurchaseCount {
         String getCnpj();

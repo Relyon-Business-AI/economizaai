@@ -9,6 +9,8 @@ import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import com.relyon.economizaai.service.shopping.ShoppingTripRecorder;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -102,6 +104,75 @@ class ShoppingTripControllerTest {
                 .andExpect(status().isBadRequest());
 
         verify(shoppingTripRecorder, never()).record(any(), any());
+    }
+
+    private static final String ONE_STOP = """
+            [{
+              "marketCnpj": "11111111000111", "distanceKm": 0.4, "concluded": true,
+              "items": [{ "productId": "8a1f5c0e-3a0b-4d57-9b0c-0c6a2f3f6b11", "quantity": 6,
+                          "plannedUnitPrice": 5.29, "status": "IN_CART" }]
+            }]
+            """;
+
+    @ParameterizedTest(name = "{0} -> {1}")
+    @CsvSource(delimiter = '|', value = {
+            "\"maxDistanceKm\": 10      | \"maxDistanceKm\": 100000",
+            "\"minSavingPerStop\": 10   | \"minSavingPerStop\": 10000000000",
+            "\"plannedTotal\": 115.42   | \"plannedTotal\": 10000000000",
+            "\"skippedSavingTotal\": 1.20 | \"skippedSavingTotal\": 10000000000",
+            "\"distanceKm\": 0.4        | \"distanceKm\": 100000",
+            "\"concluded\": true        | \"concluded\": true, \"receiptPaidTotal\": 10000000000",
+            "\"concluded\": true        | \"concluded\": true, \"receiptPredictedTotal\": -1",
+            "\"quantity\": 6            | \"quantity\": 1000000000",
+            "\"plannedUnitPrice\": 5.29 | \"plannedUnitPrice\": 10000000000",
+            "\"status\": \"IN_CART\"    | \"status\": \"IN_CART\", \"paidUnitPrice\": 10000000000",
+    })
+    void record_withANumberTheTablesCannotHold_returns400AndDoesNotCallService(String valid, String tooLarge)
+            throws Exception {
+        when(localizedMessageService.translate(anyString())).thenReturn("validation failed");
+
+        mockMvc.perform(post("/api/v1/shopping-trips")
+                        .with(SecurityMockMvcRequestPostProcessors.user(buildUser()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(tripJson(ONE_STOP).replace(valid, tooLarge)))
+                .andExpect(status().isBadRequest());
+
+        verify(shoppingTripRecorder, never()).record(any(), any());
+    }
+
+    @Test
+    void record_whenTheItemLinesAddUpBeyondAMoneyColumn_returns400() throws Exception {
+        when(localizedMessageService.translate(anyString())).thenReturn("validation failed");
+        var eachLineFitsButNotTheSum = tripJson(ONE_STOP)
+                .replace("\"quantity\": 6", "\"quantity\": 999999999")
+                .replace("\"plannedUnitPrice\": 5.29", "\"plannedUnitPrice\": 9999999999");
+
+        mockMvc.perform(post("/api/v1/shopping-trips")
+                        .with(SecurityMockMvcRequestPostProcessors.user(buildUser()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(eachLineFitsButNotTheSum))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.itemsTotalStorable").exists());
+
+        verify(shoppingTripRecorder, never()).record(any(), any());
+    }
+
+    @Test
+    void record_atTheLargestValuesTheTablesHold_returns201() throws Exception {
+        when(shoppingTripRecorder.record(any(User.class), any(RecordShoppingTripRequest.class)))
+                .thenReturn(UUID.randomUUID());
+        var atTheLimits = tripJson(ONE_STOP)
+                .replace("\"maxDistanceKm\": 10", "\"maxDistanceKm\": 99999.9")
+                .replace("\"plannedTotal\": 115.42", "\"plannedTotal\": 9999999999.99")
+                .replace("\"distanceKm\": 0.4", "\"distanceKm\": 99999.999")
+                .replace("\"quantity\": 6", "\"quantity\": 0.001")
+                .replace("\"plannedUnitPrice\": 5.29", "\"plannedUnitPrice\": 9999999999.99");
+
+        mockMvc.perform(post("/api/v1/shopping-trips")
+                        .with(SecurityMockMvcRequestPostProcessors.user(buildUser()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(atTheLimits))
+                .andExpect(status().isCreated());
     }
 
     @Test

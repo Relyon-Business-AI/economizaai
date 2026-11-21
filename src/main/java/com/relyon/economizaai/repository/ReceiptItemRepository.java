@@ -89,8 +89,8 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
     String ITEM_INTERNAL_FILTER =
             " AND (:includeInternal = TRUE OR (receiptUser.role <> 'ADMIN' "
             + "AND receiptUser.excludedFromMetrics = FALSE "
-            + "AND lower(receiptUser.email) NOT LIKE '%@economizaai.app' "
-            + "AND lower(receiptUser.email) NOT LIKE '%@cloudtestlabaccounts.com'))";
+            + "AND lower(receiptUser.email) NOT LIKE '" + InternalAccounts.OWN_DOMAIN_LIKE + "' "
+            + "AND lower(receiptUser.email) NOT LIKE '" + InternalAccounts.PLAY_TEST_LAB_DOMAIN_LIKE + "'))";
 
     /** Most-scanned products across all households (confirmed, non-excluded items). */
     @Query("SELECT item.product.id, COALESCE(item.product.genericName, item.product.normalizedName), count(item) "

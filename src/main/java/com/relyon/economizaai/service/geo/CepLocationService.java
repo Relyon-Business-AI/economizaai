@@ -33,7 +33,7 @@ public class CepLocationService {
                               NominatimGeocoder geocoder,
                               @Value("${economizaai.geo.cep.base-url:https://brasilapi.com.br/api/cep/v2}") String baseUrl,
                               @Value("${economizaai.geo.cep.timeout-ms:6000}") int timeoutMs,
-                              @Value("${economizaai.geo.user-agent:economizai/0.1 (xandivieira@gmail.com)}") String userAgent) {
+                              @Value("${economizaai.geo.user-agent:economizai/0.1 (contato@economizaai.app)}") String userAgent) {
         var requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Math.min(timeoutMs, 5000));
         requestFactory.setReadTimeout(timeoutMs);

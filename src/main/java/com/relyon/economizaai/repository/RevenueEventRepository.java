@@ -17,15 +17,17 @@ public interface RevenueEventRepository extends JpaRepository<RevenueEvent, UUID
     @Query("SELECT COALESCE(sum(event.amount), 0) FROM RevenueEvent event JOIN event.user user "
             + "WHERE event.occurredAt >= :since "
             + "AND (:includeInternal = TRUE OR (user.role <> 'ADMIN' AND user.excludedFromMetrics = FALSE "
-            + "AND lower(user.email) NOT LIKE '%@economizaai.app' "
-            + "AND lower(user.email) NOT LIKE '%@cloudtestlabaccounts.com'))")
+            + "AND lower(user.email) NOT LIKE '" + InternalAccounts.OWN_DOMAIN_LIKE + "' "
+            + "AND lower(user.email) NOT LIKE '" + InternalAccounts.PLAY_TEST_LAB_DOMAIN_LIKE + "'))")
     BigDecimal totalRealizedSince(LocalDateTime since, boolean includeInternal);
 
     /** (acquisitionChannel, realizedRevenue) since the window start. */
     @Query("SELECT user.acquisitionChannel, COALESCE(sum(event.amount), 0) "
             + "FROM RevenueEvent event JOIN event.user user "
             + "WHERE event.occurredAt >= :since "
-            + "AND (:includeInternal = TRUE OR (user.role <> 'ADMIN' AND lower(user.email) NOT LIKE '%@economizaai.app')) "
+            + "AND (:includeInternal = TRUE OR (user.role <> 'ADMIN' "
+            + "AND lower(user.email) NOT LIKE '" + InternalAccounts.OWN_DOMAIN_LIKE + "' "
+            + "AND lower(user.email) NOT LIKE '" + InternalAccounts.PLAY_TEST_LAB_DOMAIN_LIKE + "')) "
             + "GROUP BY user.acquisitionChannel")
     List<Object[]> realizedRevenueByChannelSince(LocalDateTime since, boolean includeInternal);
 }

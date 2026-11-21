@@ -28,6 +28,7 @@ import com.relyon.economizaai.model.enums.ProductCategory;
 import com.relyon.economizaai.model.enums.MarketScope;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.service.ImportFileTextExtractor;
+import com.relyon.economizaai.service.ReceiptBatchLimit;
 import com.relyon.economizaai.service.ReceiptExportService;
 import com.relyon.economizaai.service.ReceiptImportService;
 import com.relyon.economizaai.service.ReceiptService;
@@ -88,6 +89,7 @@ public class ReceiptController {
     private final PhotoReceiptExtractionService photoReceiptExtractionService;
     private final QrCodePhotoDecoder qrCodePhotoDecoder;
     private final ChaveAcessoOcrService chaveAcessoOcrService;
+    private final ReceiptBatchLimit receiptBatchLimit;
 
     @PostMapping
     public ResponseEntity<ReceiptResponse> submit(@AuthenticationPrincipal User user,
@@ -133,6 +135,7 @@ public class ReceiptController {
     @PostMapping("/import")
     public ResponseEntity<ReceiptImportResponse> importChaves(@AuthenticationPrincipal User user,
                                                               @Valid @RequestBody ImportChavesRequest request) {
+        receiptBatchLimit.requireWithinLimit(request.chaves());
         return ResponseEntity.accepted().body(receiptImportService.importChaves(user, request.chaves()));
     }
 
@@ -208,6 +211,7 @@ public class ReceiptController {
     @PostMapping("/retry")
     public ResponseEntity<BatchResultResponse> retryBatch(@AuthenticationPrincipal User user,
                                                           @Valid @RequestBody ReceiptIdsRequest request) {
+        receiptBatchLimit.requireWithinLimit(request.ids());
         return ResponseEntity.accepted().body(new BatchResultResponse(receiptImportService.retry(user, request.ids())));
     }
 
@@ -215,6 +219,7 @@ public class ReceiptController {
     @PostMapping("/delete-batch")
     public ResponseEntity<BatchResultResponse> deleteBatch(@AuthenticationPrincipal User user,
                                                            @Valid @RequestBody ReceiptIdsRequest request) {
+        receiptBatchLimit.requireWithinLimit(request.ids());
         return ResponseEntity.ok(new BatchResultResponse(receiptService.deleteBatch(user, request.ids())));
     }
 
@@ -232,6 +237,7 @@ public class ReceiptController {
     @PostMapping("/confirm-batch")
     public ResponseEntity<BatchResultResponse> confirmBatch(@AuthenticationPrincipal User user,
                                                             @Valid @RequestBody ReceiptIdsRequest request) {
+        receiptBatchLimit.requireWithinLimit(request.ids());
         return ResponseEntity.ok(new BatchResultResponse(receiptService.confirmBatch(user, request.ids())));
     }
 

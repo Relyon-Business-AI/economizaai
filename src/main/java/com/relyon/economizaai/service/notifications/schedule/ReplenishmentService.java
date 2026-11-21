@@ -1,5 +1,8 @@
 package com.relyon.economizaai.service.notifications.schedule;
 
+import org.springframework.beans.factory.annotation.Value;
+import lombok.Setter;
+import lombok.Getter;
 import com.relyon.economizaai.dto.response.ConsumptionPredictionResponse;
 import com.relyon.economizaai.model.NotificationRule;
 import com.relyon.economizaai.model.enums.NotificationJob;
@@ -12,6 +15,7 @@ import com.relyon.economizaai.service.notifications.NotificationService;
 import com.relyon.economizaai.service.notifications.NotificationSettingsService;
 import com.relyon.economizaai.service.notifications.NotificationTextFormatter;
 import com.relyon.economizaai.service.privacy.LogMasker;
+import com.relyon.economizaai.time.BrazilClock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +28,7 @@ import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,8 +44,8 @@ import java.util.stream.Collectors;
  * ran out — the same prediction, so "Já comprei" (manual purchase) and "Adiar"
  * (snooze) silence the reminder exactly as they clear the screen.
  *
- * <p>Reminders for one purchase are spaced by {@link #COOLDOWN} and stop after
- * {@link #MAX_REMINDERS_PER_PURCHASE}: someone who never answers is not nagged
+ * <p>Reminders for one purchase are spaced by {@code reminderSpacingDays} and stop after
+ * {@code maxRemindersPerPurchase}: someone who never answers is not nagged
  * forever. A new purchase (scanned or logged) starts the count again.
  */
 @Slf4j
@@ -49,7 +54,20 @@ import java.util.stream.Collectors;
 public class ReplenishmentService {
 
     static final int MAX_REMINDERS_PER_PURCHASE = 3;
-    private static final Duration COOLDOWN = Duration.ofDays(7);
+    static final int REMINDER_SPACING_DAYS = 7;
+
+    @Getter @Setter
+    @Value("${economizaai.notifications.replenishment.max-reminders:3}")
+    private volatile int maxRemindersPerPurchase = MAX_REMINDERS_PER_PURCHASE;
+    @Getter @Setter
+    @Value("${economizaai.notifications.replenishment.reminder-spacing-days:7}")
+    private volatile int reminderSpacingDays = REMINDER_SPACING_DAYS;
+    /** Hour of the day (Brasília) the reminders go out. */
+    @Getter @Setter
+    @Value("${economizaai.notifications.replenishment.send-hour:10}")
+    private volatile int sendHour = 10;
+
+    private final HourlySendGate sendGate = new HourlySendGate();
 
     private final NotificationRuleRepository ruleRepository;
     private final ConsumptionIntelligenceService consumptionService;
@@ -64,14 +82,21 @@ public class ReplenishmentService {
     @Autowired
     private ReplenishmentService self = this;
 
+    @Scheduled(cron = HourlySendGate.EVERY_FULL_HOUR, zone = HourlySendGate.ZONE)
+    public void runAtSendHour() {
+        runIfSendHour(BrazilClock.now());
+    }
+
+    void runIfSendHour(ZonedDateTime now) {
+        if (sendGate.claimDaily(now, sendHour)) run();
+    }
+
     /**
      * Never holds a DB transaction across {@code notificationService.notify(...)} — that dispatch is an
      * outbound HTTP/SMTP call and a transaction spanning the loop would pin a Hikari connection for the
      * whole round-trip, starving the pool under load. Predictions and the send run untransacted; only
      * the reminder bookkeeping is persisted afterwards, in a short transaction.
      */
-    @Scheduled(cron = "${economizaai.notifications.replenishment.cron:0 0 10 * * *}",
-            zone = "America/Sao_Paulo")
     public void run() {
         if (!settingsService.isEnabled(NotificationJob.REPLENISHMENT)) return;
         var rules = ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.STOCKOUT);
@@ -118,7 +143,7 @@ public class ReplenishmentService {
     }
 
     private boolean mayRemind(NotificationRule rule, ConsumptionPredictionResponse prediction, LocalDateTime now) {
-        if (remindersSince(rule, prediction.lastPurchaseDate()) >= MAX_REMINDERS_PER_PURCHASE) {
+        if (remindersSince(rule, prediction.lastPurchaseDate()) >= maxRemindersPerPurchase) {
             log.debug("replenishment.silenced rule={} reason=max_reminders", rule.getId());
             return false;
         }
@@ -160,6 +185,6 @@ public class ReplenishmentService {
     }
 
     private boolean inCooldown(NotificationRule rule, LocalDateTime now) {
-        return rule.getLastFiredAt() != null && rule.getLastFiredAt().isAfter(now.minus(COOLDOWN));
+        return rule.getLastFiredAt() != null && rule.getLastFiredAt().isAfter(now.minusDays(reminderSpacingDays));
     }
 }

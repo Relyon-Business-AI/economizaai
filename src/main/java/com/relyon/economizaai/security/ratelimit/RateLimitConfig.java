@@ -32,10 +32,11 @@ public class RateLimitConfig {
      */
     @Bean
     public RateLimitFilter rateLimitFilter(RateLimitRegistry registry,
-                                           LocalizedMessageService messageService) {
+                                           LocalizedMessageService messageService,
+                                           ReceiptQuotas receiptQuotas) {
         var mapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        return new RateLimitFilter(registry, messageService, mapper);
+        return new RateLimitFilter(registry, messageService, mapper, receiptQuotas);
     }
 }

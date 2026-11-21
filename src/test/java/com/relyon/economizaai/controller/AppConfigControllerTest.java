@@ -1,5 +1,8 @@
 package com.relyon.economizaai.controller;
 
+import com.relyon.economizaai.config.AppConfigProperties;
+import com.relyon.economizaai.config.CollaborativeProperties;
+import com.relyon.economizaai.service.settings.RuntimeSettings;
 import com.relyon.economizaai.config.SecurityConfig;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.AppConfigService;
@@ -18,7 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AppConfigController.class)
-@Import({SecurityConfig.class, AppConfigService.class})
+@Import({SecurityConfig.class, AppConfigService.class, AppConfigProperties.class, CollaborativeProperties.class})
 class AppConfigControllerTest {
 
     @Autowired private MockMvc mockMvc;
@@ -26,6 +29,7 @@ class AppConfigControllerTest {
     @MockitoBean private JwtService jwtService;
     @MockitoBean private UserDetailsService userDetailsService;
     @MockitoBean private LocalizedMessageService localizedMessageService;
+    @MockitoBean private RuntimeSettings runtimeSettings;
 
     @Test
     void appConfig_isPubliclyAccessible_withNoOpDefaultsAndShortCache() throws Exception {

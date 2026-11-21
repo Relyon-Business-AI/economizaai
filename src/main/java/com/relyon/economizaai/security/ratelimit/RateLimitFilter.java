@@ -25,6 +25,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * Per-request token-bucket throttle. Matches each request against an
@@ -83,13 +84,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
             new RateLimitPolicy("auth-refresh", 60, Duration.ofMinutes(1));
 
     /**
-     * 30 receipt submissions per hour per authenticated user. A normal
+     * Receipt submissions per hour per authenticated user (admin setting). A normal
      * grocery run is 1–3 receipts; this caps an attacker who has
      * exfiltrated a user's token from DoSing the SEFAZ adapter (which
      * does outbound HTTP per submit).
      */
-    private static final RateLimitPolicy SUBMIT_POLICY =
-            new RateLimitPolicy("submit", 30, Duration.ofHours(1));
+    private RateLimitPolicy submitPolicy() {
+        return new RateLimitPolicy("submit", quotas.getReceiptSubmitsPerHour(), Duration.ofHours(1));
+    }
 
     /**
      * 5 submissions per hour per IP for the public email-sending forms (contact +
@@ -131,23 +133,25 @@ public class RateLimitFilter extends OncePerRequestFilter {
             new RateLimitPolicy("phone-otp", 10, Duration.ofHours(1));
 
     /**
-     * 5 bulk imports per hour per user. Each request can carry up to 500
-     * chaves, every eligible one a server-side SEFAZ fetch — an unthrottled
+     * Bulk imports per hour per user (admin setting). Each request can carry a whole
+     * batch of chaves, every eligible one a server-side SEFAZ fetch — an unthrottled
      * loop saturates the ingest pool and hammers the RS portal from our
      * datacenter IP (the exact behavior that got PE to block us). One
-     * onboarding is 1-2 requests; 5/h is generous.
+     * onboarding is 1-2 requests.
      */
-    private static final RateLimitPolicy IMPORT_POLICY =
-            new RateLimitPolicy("import", 5, Duration.ofHours(1));
+    private RateLimitPolicy importPolicy() {
+        return new RateLimitPolicy("import", quotas.getReceiptImportsPerHour(), Duration.ofHours(1));
+    }
 
     /**
-     * 30 extraction previews per hour per user. Extraction is side-effect-free
+     * Extraction previews per hour per user (admin setting). Extraction is side-effect-free
      * local parsing (no SEFAZ fetch), and the client sends ONE request per
-     * Excel/PDF picked — sharing the 5/h import budget would let a handful of
-     * files starve the actual import. The expensive work stays on IMPORT_POLICY.
+     * Excel/PDF picked — sharing the import budget would let a handful of
+     * files starve the actual import. The expensive work stays on the import policy.
      */
-    private static final RateLimitPolicy EXTRACT_POLICY =
-            new RateLimitPolicy("import-extract", 30, Duration.ofHours(1));
+    private RateLimitPolicy extractPolicy() {
+        return new RateLimitPolicy("import-extract", quotas.getImportPreviewsPerHour(), Duration.ofHours(1));
+    }
 
     /**
      * 10 household-join attempts per hour per user. The invite code is only
@@ -201,13 +205,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
             new RateLimitPolicy("profile-picture", 10, Duration.ofHours(1));
 
     /**
-     * 10 exports per hour per user. Each export builds the full purchase
+     * Exports per hour per user (admin setting). Each export builds the full purchase
      * history in memory (XLSX/PDF) and delivery=email adds an SMTP send —
      * CPU/heap heavy on a single instance, so it can't stay unmetered just
      * because it's a GET.
      */
-    private static final RateLimitPolicy EXPORT_POLICY =
-            new RateLimitPolicy("export", 10, Duration.ofHours(1));
+    private RateLimitPolicy exportPolicy() {
+        return new RateLimitPolicy("export", quotas.getHistoryExportsPerHour(), Duration.ofHours(1));
+    }
 
     /**
      * 10 referral-code redemptions per hour per user. The code is short, so unthrottled
@@ -219,6 +224,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final RateLimitRegistry registry;
     private final LocalizedMessageService messageService;
     private final ObjectMapper objectMapper;
+    private final ReceiptQuotas quotas;
 
     /**
      * Every ingestion entry point shares ONE bucket: plain submit, QR-photo
@@ -252,100 +258,100 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final List<Rule> rules = List.of(
             // Login and refresh match BEFORE the catch-all /auth/* rule (first match wins).
             new Rule(
-                    LOGIN_POLICY,
+                    fixed(LOGIN_POLICY),
                     req -> "POST".equals(req.getMethod()) && "/api/v1/auth/login".equals(req.getRequestURI()),
                     KeyStrategy.IP),
             new Rule(
-                    REFRESH_POLICY,
+                    fixed(REFRESH_POLICY),
                     req -> "POST".equals(req.getMethod()) && "/api/v1/auth/refresh".equals(req.getRequestURI()),
                     KeyStrategy.IP),
             new Rule(
-                    SIGNUP_POLICY,
+                    fixed(SIGNUP_POLICY),
                     req -> "POST".equals(req.getMethod()) && SIGNUP_PATHS.contains(req.getRequestURI()),
                     KeyStrategy.IP),
             new Rule(
-                    AUTH_POLICY,
+                    fixed(AUTH_POLICY),
                     req -> "POST".equals(req.getMethod()) && req.getRequestURI().startsWith("/api/v1/auth/"),
                     KeyStrategy.IP),
             new Rule(
-                    SUBMIT_POLICY,
+                    this::submitPolicy,
                     req -> "POST".equals(req.getMethod())
                             && (SUBMIT_PATHS.contains(req.getRequestURI())
                             || isDeviceContentPath(req.getRequestURI()) || isRetryPath(req.getRequestURI())),
                     KeyStrategy.USER_OR_IP),
             new Rule(
-                    IMPORT_POLICY,
+                    this::importPolicy,
                     req -> "POST".equals(req.getMethod()) && IMPORT_PATHS.contains(req.getRequestURI()),
                     KeyStrategy.USER_OR_IP),
             new Rule(
-                    EXTRACT_POLICY,
+                    this::extractPolicy,
                     req -> "POST".equals(req.getMethod()) && EXTRACT_PATH.equals(req.getRequestURI()),
                     KeyStrategy.USER_OR_IP),
             // Join AND preview share the budget: both answer "is this code valid?", so a
             // guesser can't use the preview endpoint to probe codes for free.
             new Rule(
-                    HOUSEHOLD_JOIN_POLICY,
+                    fixed(HOUSEHOLD_JOIN_POLICY),
                     req -> ("POST".equals(req.getMethod())
                             && "/api/v1/households/join".equals(req.getRequestURI()))
                             || ("GET".equals(req.getMethod())
                             && req.getRequestURI().startsWith("/api/v1/households/invites/")),
                     KeyStrategy.USER_OR_IP),
             new Rule(
-                    RESEND_POLICY,
+                    fixed(RESEND_POLICY),
                     req -> "POST".equals(req.getMethod())
                             && "/api/v1/users/me/email-verification/resend".equals(req.getRequestURI()),
                     KeyStrategy.USER_OR_IP),
             new Rule(
-                    MERCHANT_CLAIM_SUBMIT_POLICY,
+                    fixed(MERCHANT_CLAIM_SUBMIT_POLICY),
                     req -> "POST".equals(req.getMethod()) && MERCHANT_CLAIMS_PATH.equals(req.getRequestURI()),
                     List.of(KeyStrategy.USER_OR_IP, KeyStrategy.IP)),
             new Rule(
-                    MERCHANT_CLAIM_VERIFY_POLICY,
+                    fixed(MERCHANT_CLAIM_VERIFY_POLICY),
                     req -> "POST".equals(req.getMethod()) && isMerchantClaimVerifyPath(req.getRequestURI()),
                     List.of(KeyStrategy.USER_OR_IP, KeyStrategy.IP)),
             new Rule(
-                    PROFILE_PICTURE_POLICY,
+                    fixed(PROFILE_PICTURE_POLICY),
                     req -> "POST".equals(req.getMethod())
                             && "/api/v1/users/me/profile-picture".equals(req.getRequestURI()),
                     KeyStrategy.USER_OR_IP),
             new Rule(
-                    EMAIL_CHANGE_POLICY,
+                    fixed(EMAIL_CHANGE_POLICY),
                     req -> "POST".equals(req.getMethod())
                             && "/api/v1/users/me/email-change".equals(req.getRequestURI()),
                     KeyStrategy.USER_OR_IP),
             new Rule(
-                    EMAIL_CHANGE_CONFIRM_POLICY,
+                    fixed(EMAIL_CHANGE_CONFIRM_POLICY),
                     req -> "POST".equals(req.getMethod())
                             && "/api/v1/users/me/email-change/confirm".equals(req.getRequestURI()),
                     KeyStrategy.USER_OR_IP),
             new Rule(
-                    EXPORT_POLICY,
+                    this::exportPolicy,
                     req -> "GET".equals(req.getMethod()) && EXPORT_PATHS.contains(req.getRequestURI()),
                     KeyStrategy.USER_OR_IP),
             new Rule(
-                    CONTACT_POLICY,
+                    fixed(CONTACT_POLICY),
                     req -> "POST".equals(req.getMethod()) && "/api/v1/contact".equals(req.getRequestURI()),
                     KeyStrategy.IP),
             new Rule(
-                    BETA_POLICY,
+                    fixed(BETA_POLICY),
                     req -> "POST".equals(req.getMethod()) && "/api/v1/beta-signup".equals(req.getRequestURI()),
                     KeyStrategy.IP),
             new Rule(
-                    VISIT_POLICY,
+                    fixed(VISIT_POLICY),
                     req -> "POST".equals(req.getMethod()) && "/api/v1/visits".equals(req.getRequestURI()),
                     KeyStrategy.IP),
             new Rule(
-                    APP_CONFIG_POLICY,
+                    fixed(APP_CONFIG_POLICY),
                     req -> "GET".equals(req.getMethod()) && "/api/v1/app-config".equals(req.getRequestURI()),
                     KeyStrategy.IP),
             new Rule(
-                    PHONE_OTP_POLICY,
+                    fixed(PHONE_OTP_POLICY),
                     req -> ("POST".equals(req.getMethod()) || "PATCH".equals(req.getMethod()))
                             && req.getRequestURI().startsWith("/api/v1/users/me/phone"),
                     KeyStrategy.USER_OR_IP),
             // --- Referral program (kept as the LAST rule) ---
             new Rule(
-                    REFERRAL_REDEEM_POLICY,
+                    fixed(REFERRAL_REDEEM_POLICY),
                     req -> "POST".equals(req.getMethod()) && "/api/v1/referrals/redeem".equals(req.getRequestURI()),
                     KeyStrategy.USER_OR_IP)
     );
@@ -366,13 +372,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
         // A rule may charge several keys (e.g. user AND IP): the request passes only when
         // every bucket still has a token.
         var keys = rule.keyStrategies.stream().map(strategy -> strategy.keyFor(request)).distinct().toList();
+        var policy = rule.policy.get();
         var remainingTokens = Long.MAX_VALUE;
         for (var key : keys) {
-            var probe = registry.bucketFor(rule.policy, key).tryConsumeAndReturnRemaining(1);
+            var probe = registry.bucketFor(policy, key).tryConsumeAndReturnRemaining(1);
             if (!probe.isConsumed()) {
                 var retryAfterSeconds = Math.max(1, probe.getNanosToWaitForRefill() / 1_000_000_000L);
                 log.warn("rate_limit.blocked policy={} key={} path={} retry_after_s={}",
-                        rule.policy.name(), LogMasker.rateLimitKey(key), request.getRequestURI(), retryAfterSeconds);
+                        policy.name(), LogMasker.rateLimitKey(key), request.getRequestURI(), retryAfterSeconds);
                 writeTooManyRequestsResponse(response, retryAfterSeconds);
                 return;
             }
@@ -407,11 +414,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
         response.getWriter().write(objectMapper.writeValueAsString(body));
     }
 
-    private record Rule(RateLimitPolicy policy, Predicate<HttpServletRequest> matcher,
+    /** The policy is asked for on every request, so a limit changed in the admin applies to the next one. */
+    private record Rule(Supplier<RateLimitPolicy> policy, Predicate<HttpServletRequest> matcher,
                         List<KeyStrategy> keyStrategies) {
-        private Rule(RateLimitPolicy policy, Predicate<HttpServletRequest> matcher, KeyStrategy keyStrategy) {
+        private Rule(Supplier<RateLimitPolicy> policy, Predicate<HttpServletRequest> matcher, KeyStrategy keyStrategy) {
             this(policy, matcher, List.of(keyStrategy));
         }
+    }
+
+    private static Supplier<RateLimitPolicy> fixed(RateLimitPolicy policy) {
+        return () -> policy;
     }
 
     private enum KeyStrategy {

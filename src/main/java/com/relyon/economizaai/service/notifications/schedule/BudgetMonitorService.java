@@ -14,9 +14,12 @@ import com.relyon.economizaai.service.notifications.NotificationService;
 import com.relyon.economizaai.service.notifications.NotificationSettingsService;
 import com.relyon.economizaai.service.notifications.NotificationTextFormatter;
 import com.relyon.economizaai.service.privacy.LogMasker;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -25,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.time.ZonedDateTime;
 import java.time.format.TextStyle;
 import java.util.Comparator;
 import java.util.List;
@@ -51,12 +55,28 @@ public class BudgetMonitorService {
     private final NotificationSettingsService settingsService;
     private final UserRepository userRepository;
 
+    /** Hours of the day (Brasília) the household budgets are checked. */
+    @Getter @Setter
+    @Value("${economizaai.notifications.budget.check-hours:9,18}")
+    private volatile List<Integer> checkHours = List.of(9, 18);
+
+    private final HourlySendGate sendGate = new HourlySendGate();
+
     // Self-reference so the per-rule @Transactional persist goes through the Spring
     // proxy (a direct call would bypass it). Defaults to `this` for plain unit tests;
     // Spring replaces it with the lazy proxy at runtime.
     @Lazy
     @Autowired
     private BudgetMonitorService self = this;
+
+    @Scheduled(cron = HourlySendGate.EVERY_FULL_HOUR, zone = HourlySendGate.ZONE)
+    public void runAtCheckHours() {
+        runIfCheckHour(BrazilClock.now());
+    }
+
+    void runIfCheckHour(ZonedDateTime now) {
+        if (sendGate.claimDailyAtAnyOf(now, checkHours)) run();
+    }
 
     /**
      * Never holds a DB transaction across {@code notificationService.notify(...)} — that dispatch is
@@ -65,8 +85,6 @@ public class BudgetMonitorService {
      * only the fired-timestamp is persisted afterwards, in a short transaction (same split as
      * {@code MarketLocationService.geocodeOne}/{@code persistGeocodeResult}).
      */
-    @Scheduled(cron = "${economizaai.notifications.budget.cron:0 0 9,18 * * *}",
-            zone = "America/Sao_Paulo")
     public void run() {
         if (!settingsService.isEnabled(NotificationJob.BUDGET_ALERT)) return;
         var rules = ruleRepository.findActiveByTypeFetchUserAndProduct(NotificationType.BUDGET);

@@ -12,6 +12,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -73,7 +74,7 @@ class DigestScheduleServiceTest {
         when(receiptRepository.findConfirmedIssuedHourHistogram(HOUSEHOLD_ID))
                 .thenReturn(List.of(hourCount(18, 4)));
 
-        assertEquals(DigestScheduleService.spreadDefaultHour(user.getId()), service.effectiveSendHour(user));
+        assertEquals(service.spreadDefaultHour(user.getId()), service.effectiveSendHour(user));
     }
 
     @Test
@@ -82,7 +83,7 @@ class DigestScheduleServiceTest {
         when(receiptRepository.findConfirmedIssuedHourHistogram(HOUSEHOLD_ID))
                 .thenReturn(List.of());
 
-        assertEquals(DigestScheduleService.spreadDefaultHour(user.getId()), service.effectiveSendHour(user));
+        assertEquals(service.spreadDefaultHour(user.getId()), service.effectiveSendHour(user));
     }
 
     @Test
@@ -90,13 +91,53 @@ class DigestScheduleServiceTest {
         var hoursSeen = new HashSet<Integer>();
         for (var sample = 0; sample < 500; sample++) {
             var userId = UUID.randomUUID();
-            var hour = DigestScheduleService.spreadDefaultHour(userId);
+            var hour = service.spreadDefaultHour(userId);
             assertTrue(hour >= 11 && hour <= 19, "hour " + hour);
-            assertEquals(hour, DigestScheduleService.spreadDefaultHour(userId), "same user, same hour");
+            assertEquals(hour, service.spreadDefaultHour(userId), "same user, same hour");
             hoursSeen.add(hour);
         }
         // Not everyone at the same hour: the whole window is used.
         assertEquals(9, hoursSeen.size());
+    }
+
+    @Test
+    void defaultHourFollowsTheSpreadWindowSetInTheAdmin() {
+        var userId = UUID.randomUUID();
+        var hourWithDefaults = service.spreadDefaultHour(userId);
+        assertTrue(hourWithDefaults >= 11 && hourWithDefaults <= 19, "hour " + hourWithDefaults);
+
+        service.setSpreadStartHour(6);
+        service.setSpreadEndHour(7);
+
+        var hoursSeen = new HashSet<Integer>();
+        for (var sample = 0; sample < 200; sample++) {
+            hoursSeen.add(service.spreadDefaultHour(UUID.randomUUID()));
+        }
+        assertEquals(Set.of(6, 7), hoursSeen);
+    }
+
+    @Test
+    void aSpreadWindowThatEndsBeforeItStartsCrossesMidnight() {
+        service.setSpreadStartHour(22);
+        service.setSpreadEndHour(1);
+
+        var hoursSeen = new HashSet<Integer>();
+        for (var sample = 0; sample < 400; sample++) {
+            hoursSeen.add(service.spreadDefaultHour(UUID.randomUUID()));
+        }
+        assertEquals(Set.of(22, 23, 0, 1), hoursSeen);
+    }
+
+    @Test
+    void receiptsNeededToInferTheShoppingHourFollowTheSetting() {
+        var user = user(null);
+        when(receiptRepository.findConfirmedIssuedHourHistogram(HOUSEHOLD_ID))
+                .thenReturn(List.of(hourCount(18, 4)));
+        assertEquals(service.spreadDefaultHour(user.getId()), service.effectiveSendHour(user));
+
+        service.setMinReceiptsForInference(4);
+
+        assertEquals(17, service.effectiveSendHour(user));
     }
 
     @Test
@@ -111,7 +152,7 @@ class DigestScheduleServiceTest {
 
         assertEquals(2, assigned);
         verify(userRepository).updateDigestEffectiveSendHour(newUser.getId(),
-                DigestScheduleService.spreadDefaultHour(newUser.getId()));
+                service.spreadDefaultHour(newUser.getId()));
         verify(userRepository).updateDigestEffectiveSendHour(withOverride.getId(), 9);
         verify(userRepository, never()).save(any());
     }

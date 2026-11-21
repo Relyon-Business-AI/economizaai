@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.priceindex;
 
+import com.relyon.economizaai.config.ComparisonProperties;
 import com.relyon.economizaai.service.geo.ViewerLocationService.ViewerLocation;
 import com.relyon.economizaai.service.priceindex.PriceIndexService.MarketPriceRow;
 import lombok.RequiredArgsConstructor;
@@ -25,8 +26,9 @@ import java.util.UUID;
  *
  * <p>Only items the other market has a price for are compared, and each alternative carries the
  * basket's own total for those SAME items, so the two numbers are always like for like. A market
- * must price at least {@link #MIN_MATCHED_SHARE} of the basket's items to be offered: a
- * comparison over a small slice says nothing about the whole purchase.
+ * must price a minimum share of the basket's items to be offered
+ * ({@link ComparisonProperties#minMatchedItems}): a comparison over a small slice says nothing
+ * about the whole purchase.
  *
  * <p>Prices come from {@link PriceIndexService#nearbyChainPricesForProducts} — the whole basket
  * in a fixed handful of queries — so the "perto de você" radius and the k-anonymity gates are
@@ -38,10 +40,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class BasketComparisonService {
 
-    /** Share of the basket's items a market must price to be offered (40%, rounded up). */
-    static final double MIN_MATCHED_SHARE = 0.40;
-
     private final PriceIndexService priceIndexService;
+    private final ComparisonProperties comparisonProperties;
 
     /** One bought product: how much of it and what the whole line cost. */
     public record BasketLine(UUID productId, String productName, BigDecimal quantity, BigDecimal lineTotal) {}
@@ -87,7 +87,7 @@ public class BasketComparisonService {
                     .filter(row -> !excludedCnpjRoots.contains(row.cnpjRoot()))
                     .forEach(row -> chains.computeIfAbsent(row.cnpjRoot(), ChainBasket::new).add(line, row));
         }
-        var minMatchedItems = minMatchedItems(basket.size());
+        var minMatchedItems = comparisonProperties.minMatchedItems(basket.size());
         var alternatives = chains.values().stream()
                 .filter(chain -> chain.lines.size() >= minMatchedItems)
                 .map(ChainBasket::toAlternative)
@@ -99,11 +99,6 @@ public class BasketComparisonService {
         log.debug("basket_comparison products={} chains_seen={} offered={}", basket.size(), chains.size(),
                 alternatives.size());
         return alternatives;
-    }
-
-    /** 40% of the basket, rounded up, and never less than one item. */
-    static int minMatchedItems(int basketSize) {
-        return Math.max(1, (int) Math.ceil(basketSize * MIN_MATCHED_SHARE));
     }
 
     /** One line per product: the same product on two lines of a nota is one item to compare. */

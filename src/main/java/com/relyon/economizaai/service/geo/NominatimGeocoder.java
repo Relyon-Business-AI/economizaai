@@ -48,7 +48,7 @@ public class NominatimGeocoder {
     private volatile Instant rateLimitedAt;
 
     public NominatimGeocoder(RestClient.Builder builder,
-                             @Value("${economizaai.geo.user-agent:economizai/0.1 (xandivieira@gmail.com)}") String userAgent,
+                             @Value("${economizaai.geo.user-agent:economizai/0.1 (contato@economizaai.app)}") String userAgent,
                              @Value("${economizaai.geo.timeout-ms:8000}") int timeoutMs) {
         var requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(timeoutMs);

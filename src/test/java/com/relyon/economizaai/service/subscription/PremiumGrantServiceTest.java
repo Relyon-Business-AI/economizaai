@@ -55,13 +55,13 @@ class PremiumGrantServiceTest {
     }
 
     @Test
-    void grantMonth_promoHolder_queuesAfterThePromoAndLeavesTheSubscriptionAlone() {
+    void grantReferralReward_promoHolder_queuesAfterThePromoAndLeavesTheSubscriptionAlone() {
         var inviter = user(SubscriptionTier.PRO);
         var promoEnd = EntitlementClock.endOfBrazilDay(LocalDate.now().plusDays(50));
         subscriptionIs(inviter, SubscriptionStatus.ACTIVE, "manual", promoEnd);
         grantsAreEchoed();
 
-        var grant = service.grantMonth(inviter, PremiumGrantKind.REFERRAL_FIRST, invitedId).orElseThrow();
+        var grant = service.grantReferralReward(inviter, PremiumGrantKind.REFERRAL_FIRST, invitedId).orElseThrow();
 
         assertEquals(promoEnd.plusSeconds(1), grant.getStartsAt(), "starts the day after the promo ends");
         assertEquals(LocalDate.now().plusDays(51), EntitlementClock.brazilDayOf(grant.getStartsAt()));
@@ -72,13 +72,13 @@ class PremiumGrantServiceTest {
     }
 
     @Test
-    void grantMonth_paidSubscriber_startsWhenThePaidPeriodEnds() {
+    void grantReferralReward_paidSubscriber_startsWhenThePaidPeriodEnds() {
         var inviter = user(SubscriptionTier.PRO);
         var paidUntil = LocalDateTime.now().plusDays(12).withHour(15).withMinute(0).withSecond(0).withNano(0);
         subscriptionIs(inviter, SubscriptionStatus.ACTIVE, "revenuecat", paidUntil);
         grantsAreEchoed();
 
-        var grant = service.grantMonth(inviter, PremiumGrantKind.REFERRAL_SUBSCRIPTION, invitedId).orElseThrow();
+        var grant = service.grantReferralReward(inviter, PremiumGrantKind.REFERRAL_SUBSCRIPTION, invitedId).orElseThrow();
 
         assertFalse(grant.getStartsAt().isBefore(paidUntil), "a reward never overlaps the paid period");
         verify(subscriptionRepository, never()).save(any());
@@ -86,28 +86,28 @@ class PremiumGrantServiceTest {
     }
 
     @Test
-    void grantMonth_secondReward_stacksAfterTheFirst() {
+    void grantReferralReward_secondReward_stacksAfterTheFirst() {
         var inviter = user(SubscriptionTier.PRO);
         var promoEnd = EntitlementClock.endOfBrazilDay(LocalDate.now().plusDays(50));
-        var firstRewardEnd = EntitlementClock.monthAfter(LocalDateTime.now(), promoEnd).endsAt();
+        var firstRewardEnd = EntitlementClock.monthsAfter(LocalDateTime.now(), promoEnd, 1).endsAt();
         subscriptionIs(inviter, SubscriptionStatus.ACTIVE, "manual", promoEnd);
         when(premiumGrantRepository.findLatestEndByUserId(inviter.getId())).thenReturn(firstRewardEnd);
         grantsAreEchoed();
 
-        var second = service.grantMonth(inviter, PremiumGrantKind.REFERRAL_SUBSCRIPTION, invitedId).orElseThrow();
+        var second = service.grantReferralReward(inviter, PremiumGrantKind.REFERRAL_SUBSCRIPTION, invitedId).orElseThrow();
 
         assertEquals(firstRewardEnd, second.getStartsAt());
-        assertEquals(EntitlementClock.monthAfter(LocalDateTime.now(), firstRewardEnd).endsAt(), second.getEndsAt());
+        assertEquals(EntitlementClock.monthsAfter(LocalDateTime.now(), firstRewardEnd, 1).endsAt(), second.getEndsAt());
     }
 
     @Test
-    void grantMonth_freeUser_startsNowAndBecomesPro() {
+    void grantReferralReward_freeUser_startsNowAndBecomesPro() {
         var inviter = user(SubscriptionTier.FREE);
         subscriptionIs(inviter, SubscriptionStatus.EXPIRED, "manual", LocalDateTime.now().minusDays(40));
         grantsAreEchoed();
         var before = LocalDateTime.now();
 
-        var grant = service.grantMonth(inviter, PremiumGrantKind.REFERRAL_FIRST, invitedId).orElseThrow();
+        var grant = service.grantReferralReward(inviter, PremiumGrantKind.REFERRAL_FIRST, invitedId).orElseThrow();
 
         assertFalse(grant.getStartsAt().isBefore(before.minusSeconds(1)));
         assertFalse(grant.getStartsAt().isAfter(LocalDateTime.now()));
@@ -116,11 +116,26 @@ class PremiumGrantServiceTest {
     }
 
     @Test
-    void grantMonth_isIdempotentPerInvitedPerson() {
+    void grantReferralReward_isWorthTheMonthsSetInTheAdmin() {
+        var inviter = user(SubscriptionTier.FREE);
+        when(subscriptionRepository.findByUserId(inviter.getId())).thenReturn(Optional.empty());
+        grantsAreEchoed();
+        var oneMonth = service.grantReferralReward(inviter, PremiumGrantKind.REFERRAL_FIRST, invitedId).orElseThrow();
+        assertEquals(1, EntitlementClock.monthsOf(oneMonth.getStartsAt(), oneMonth.getEndsAt()));
+
+        service.setReferralRewardMonths(3);
+
+        var threeMonths = service.grantReferralReward(inviter, PremiumGrantKind.REFERRAL_SUBSCRIPTION, invitedId)
+                .orElseThrow();
+        assertEquals(3, EntitlementClock.monthsOf(threeMonths.getStartsAt(), threeMonths.getEndsAt()));
+    }
+
+    @Test
+    void grantReferralReward_isIdempotentPerInvitedPerson() {
         var inviter = user(SubscriptionTier.PRO);
         when(premiumGrantRepository.existsByUserIdAndSourceUserId(inviter.getId(), invitedId)).thenReturn(true);
 
-        var grant = service.grantMonth(inviter, PremiumGrantKind.REFERRAL_SUBSCRIPTION, invitedId);
+        var grant = service.grantReferralReward(inviter, PremiumGrantKind.REFERRAL_SUBSCRIPTION, invitedId);
 
         assertTrue(grant.isEmpty());
         verify(premiumGrantRepository, never()).save(any());

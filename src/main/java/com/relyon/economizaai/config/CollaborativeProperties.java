@@ -205,6 +205,8 @@ public class CollaborativeProperties {
         // Not a privacy control — k-anon (minHouseholdsForPublic=3) fully guards re-identification.
         // This is only a noise floor for the median; set to 3 so K (which implies >=3 observations)
         // is the sole gate: the minimum that still respects LGPD, physical and online alike.
+        // NOTE: application.yaml sets 5, which is what runs — see the "Preço de referência:
+        // observações mínimas" setting in the admin.
         private int minObservationsPerProductMarket = 3;
         /**
          * Relaxed thresholds for GROCERY aggregates (best-markets ranking, reference prices):
@@ -220,7 +222,6 @@ public class CollaborativeProperties {
         private int minObservationsForGrocery = 1;
         /** Category GROUP slugs whose products keep the full K regardless of the store. */
         private List<String> sensitiveCategoryGroups = List.of("saude");
-        private int minObservationsForCommunityPromo = 10;
         /**
          * Minimum NON-outlier recent observations needed for a promo. A lone (or
          * paired) bogus low scan can't fabricate a drop — a real promo is a
@@ -228,21 +229,27 @@ public class CollaborativeProperties {
          * group is skipped regardless of how low the single value is.
          */
         private int communityPromoMinRecentObservations = 3;
-        private int communityPromoThresholdPct = 15;
-        private int lookbackDays = 90;
         /**
-         * Window for the "onde está mais barato" reads (best-markets ranking + in-store
-         * typical price). Wider than {@code lookbackDays} on purpose: those screens show a
-         * dated real price (the shopper judges staleness), and a 90-day window left every
-         * (product, chain) pair below K with the current community size. Promo detection and
-         * the deals digest keep the tighter {@code lookbackDays} baseline.
+         * Minimum older (pre-recent-window, non-promo, non-outlier) prices that form the typical
+         * price a promo is measured against.
          */
-        private int bestMarketsLookbackDays = 180;
+        private int communityPromoMinBaselineObservations = 3;
+        private int communityPromoThresholdPct = 15;
+        /**
+         * One window for every community price read: reference and promo baselines, the
+         * shopping plan, the best-markets ranking, the in-store typical price and the "same
+         * purchase elsewhere" comparisons. A price older than this is not shown anywhere, so a
+         * product never has a price on one screen and none on another (owner decision 2026-11-18;
+         * until then best-markets used a wider 180-day window).
+         */
+        private int lookbackDays = 90;
         /**
          * "Perto de você" radius for the best-markets ranking when the viewer has a location
          * (explicit or inferred). Same 20 km the app uses for the promos feed cascade.
          */
         private double bestMarketsNearbyRadiusKm = 20;
+        /** The period the "prices of one market" screen opens with; never wider than {@link #lookbackDays}. */
+        private int marketPricesDefaultDays = 30;
         private int communityPromoRecentWindowDays = 7;
         /**
          * "Ofertas pra você": a chain's price only becomes a deal when its most recent
@@ -296,18 +303,18 @@ public class CollaborativeProperties {
         public void setMinObservationsForGrocery(int v) { this.minObservationsForGrocery = v; }
         public List<String> getSensitiveCategoryGroups() { return sensitiveCategoryGroups; }
         public void setSensitiveCategoryGroups(List<String> v) { this.sensitiveCategoryGroups = v; }
-        public int getMinObservationsForCommunityPromo() { return minObservationsForCommunityPromo; }
-        public void setMinObservationsForCommunityPromo(int v) { this.minObservationsForCommunityPromo = v; }
+        public int getCommunityPromoMinBaselineObservations() { return communityPromoMinBaselineObservations; }
+        public void setCommunityPromoMinBaselineObservations(int v) { this.communityPromoMinBaselineObservations = v; }
         public int getCommunityPromoMinRecentObservations() { return communityPromoMinRecentObservations; }
         public void setCommunityPromoMinRecentObservations(int v) { this.communityPromoMinRecentObservations = v; }
         public int getCommunityPromoThresholdPct() { return communityPromoThresholdPct; }
         public void setCommunityPromoThresholdPct(int v) { this.communityPromoThresholdPct = v; }
         public int getLookbackDays() { return lookbackDays; }
         public void setLookbackDays(int v) { this.lookbackDays = v; }
-        public int getBestMarketsLookbackDays() { return bestMarketsLookbackDays; }
-        public void setBestMarketsLookbackDays(int v) { this.bestMarketsLookbackDays = v; }
         public double getBestMarketsNearbyRadiusKm() { return bestMarketsNearbyRadiusKm; }
         public void setBestMarketsNearbyRadiusKm(double v) { this.bestMarketsNearbyRadiusKm = v; }
+        public int getMarketPricesDefaultDays() { return marketPricesDefaultDays; }
+        public void setMarketPricesDefaultDays(int v) { this.marketPricesDefaultDays = v; }
         public int getCommunityPromoRecentWindowDays() { return communityPromoRecentWindowDays; }
         public void setCommunityPromoRecentWindowDays(int v) { this.communityPromoRecentWindowDays = v; }
         public int getDealsMaxPriceAgeDays() { return dealsMaxPriceAgeDays; }
@@ -339,6 +346,9 @@ public class CollaborativeProperties {
         private int historyLookbackDays = 365;
         private int runningLowThresholdDays = 7;
         private int ranOutGraceDays = 0;
+        /** Purchases from which a forecast is shown with high / medium confidence. */
+        private int highConfidenceMinSamples = 8;
+        private int mediumConfidenceMinSamples = 5;
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean v) { this.enabled = v; }
@@ -352,6 +362,10 @@ public class CollaborativeProperties {
         public void setRunningLowThresholdDays(int v) { this.runningLowThresholdDays = v; }
         public int getRanOutGraceDays() { return ranOutGraceDays; }
         public void setRanOutGraceDays(int v) { this.ranOutGraceDays = v; }
+        public int getHighConfidenceMinSamples() { return highConfidenceMinSamples; }
+        public void setHighConfidenceMinSamples(int samples) { this.highConfidenceMinSamples = samples; }
+        public int getMediumConfidenceMinSamples() { return mediumConfidenceMinSamples; }
+        public void setMediumConfidenceMinSamples(int samples) { this.mediumConfidenceMinSamples = samples; }
     }
 
     /**
@@ -365,9 +379,16 @@ public class CollaborativeProperties {
         private int minPurchasesPerGeneric = 5;
         private double mustHaveBrandShare = 0.85;
         private double preferredBrandShare = 0.60;
+        /** Purchases from which a preference is shown with high / medium confidence. */
+        private int highConfidenceMinPurchases = 15;
+        private int mediumConfidenceMinPurchases = 8;
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean v) { this.enabled = v; }
+        public int getHighConfidenceMinPurchases() { return highConfidenceMinPurchases; }
+        public void setHighConfidenceMinPurchases(int purchases) { this.highConfidenceMinPurchases = purchases; }
+        public int getMediumConfidenceMinPurchases() { return mediumConfidenceMinPurchases; }
+        public void setMediumConfidenceMinPurchases(int purchases) { this.mediumConfidenceMinPurchases = purchases; }
         public int getMinPurchasesPerGeneric() { return minPurchasesPerGeneric; }
         public void setMinPurchasesPerGeneric(int v) { this.minPurchasesPerGeneric = v; }
         public double getMustHaveBrandShare() { return mustHaveBrandShare; }

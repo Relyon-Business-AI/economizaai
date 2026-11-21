@@ -22,7 +22,6 @@ import com.relyon.economizaai.service.extraction.ProductNameSubcategoryClassifie
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Async;
@@ -77,17 +76,11 @@ public class AiSubcategorySuggestionService {
     private final CategoryResolver categoryResolver;
     private final ReceiptItemRepository receiptItemRepository;
     private final AiGateway aiGateway;
+    // Limiares assimétricos: preencher subcategoria vazia é baixo risco; trocar uma existente pede
+    // mais; mudar a CATEGORIA (azeite→Hortifrúti) pede o máximo.
+    private final AiCategoryConfidence confidence;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-
-    // Limiares assimétricos: preencher subcategoria vazia é baixo risco; trocar uma existente pede
-    // mais; mudar a CATEGORIA (azeite→Hortifrúti) pede o máximo. Inline default = valor de teste.
-    @Value("${economizaai.ai.subcategory-suggestion.set-min-confidence:0.55}")
-    private double setMinConfidence = 0.55;
-    @Value("${economizaai.ai.subcategory-suggestion.change-subcategory-min-confidence:0.80}")
-    private double changeSubcategoryMinConfidence = 0.80;
-    @Value("${economizaai.ai.subcategory-suggestion.change-category-min-confidence:0.90}")
-    private double changeCategoryMinConfidence = 0.90;
 
     // Self-reference so the @Async call goes through the Spring proxy (same pattern as
     // AiSweepService). Defaults to `this` for unit tests.
@@ -220,9 +213,9 @@ public class AiSubcategorySuggestionService {
         if (suggestion.categoryId().equals(product.getCategoryId())) return Optional.empty(); // já está nessa folha
         var action = classifyAction(product, suggestion.categoryId());
         var threshold = switch (action) {
-            case SET -> setMinConfidence;
-            case CHANGE_SUBCATEGORY -> changeSubcategoryMinConfidence;
-            case CHANGE_CATEGORY -> changeCategoryMinConfidence;
+            case SET -> confidence.getSetMinConfidence();
+            case CHANGE_SUBCATEGORY -> confidence.getChangeSubcategoryMinConfidence();
+            case CHANGE_CATEGORY -> confidence.getChangeCategoryMinConfidence();
         };
         if (suggestion.confidence() < threshold) return Optional.empty();
         return Optional.of(buildFinding(product, suggestion, action, receiptName));

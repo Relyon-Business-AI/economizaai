@@ -120,6 +120,11 @@ public class ViewerLocationService {
         return new Centroid(latitude, longitude);
     }
 
+    /** The state where the user's household has most of its confirmed notas, or null when it has none. */
+    public String majorityState(User user) {
+        return majorityUf(user.getHousehold().getId());
+    }
+
     private String majorityUf(UUID householdId) {
         var ufs = receiptRepository.findConfirmedUfsForHousehold(householdId);
         return ufs.isEmpty() ? null : ufs.get(0).name();

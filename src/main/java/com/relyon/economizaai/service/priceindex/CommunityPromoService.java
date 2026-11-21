@@ -204,7 +204,6 @@ public class CommunityPromoService {
     private CommunityPromo detectPromoForMarket(UUID productId, String marketCnpj, List<PriceObservation> rows,
                                                 Map<ProductMarket, Long> householdsByGroup,
                                                 LocalDateTime recentCutoff) {
-        if (rows.size() < properties.getCollaborative().getMinObservationsForCommunityPromo()) return null;
         var distinctHouseholds = householdsByGroup.get(new ProductMarket(productId, marketCnpj));
         if (distinctHouseholds == null) return null; // failed the K-gate (HAVING) in the database
 
@@ -267,7 +266,7 @@ public class CommunityPromoService {
 
     /** Recent/baseline medians + drop percentage; null when the group has no qualifying price drop. */
     // False positive: median() returns null only for an empty list, and the guard
-    // below (recentPrices non-empty, baselinePrices.size() >= 3) guarantees both
+    // below (recentPrices non-empty, baselinePrices at least the configured minimum) guarantees both
     // medians are non-null before they are dereferenced.
     @SuppressWarnings("java:S2259")
     private PriceDrop computePriceDrop(List<PriceObservation> rows, LocalDateTime recentCutoff) {
@@ -301,13 +300,14 @@ public class CommunityPromoService {
         // observations so one bogus low scan (e.g. a lone R$2,98 when the typical is
         // ~R$5,49) can't manufacture a "42% mais barato".
         var minRecent = properties.getCollaborative().getCommunityPromoMinRecentObservations();
-        if (recentPrices.size() < minRecent || baselinePrices.size() < 3) return null;
+        var minBaseline = properties.getCollaborative().getCommunityPromoMinBaselineObservations();
+        if (recentPrices.size() < minRecent || baselinePrices.size() < minBaseline) return null;
 
         // Robust-trim BOTH samples before the median so a stray scan inside an
         // otherwise-consistent window doesn't skew the comparison.
         var recentTrimmed = RobustStats.withoutOutliers(recentPrices);
         var baselineTrimmed = RobustStats.withoutOutliers(baselinePrices);
-        if (recentTrimmed.isEmpty() || baselineTrimmed.size() < 3) return null;
+        if (recentTrimmed.isEmpty() || baselineTrimmed.size() < minBaseline) return null;
 
         var recentMedian = PriceIndexService.median(recentTrimmed);
         var baselineMedian = PriceIndexService.median(baselineTrimmed);

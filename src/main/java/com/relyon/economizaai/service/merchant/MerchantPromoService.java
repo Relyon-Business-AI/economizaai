@@ -17,8 +17,11 @@ import com.relyon.economizaai.repository.MerchantPromoRepository;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
 import com.relyon.economizaai.repository.ProductRepository;
 import com.relyon.economizaai.time.BrazilClock;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -39,6 +42,13 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class MerchantPromoService {
+
+    private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
+
+    /** How far (%) above the announced price a scanned price may be and still confirm the promo. */
+    @Getter @Setter
+    @Value("${economizaai.merchant.verified-badge-tolerance-pct:1}")
+    private volatile BigDecimal verifiedBadgeTolerancePct = BigDecimal.ONE;
 
     private final MerchantPromoRepository promoRepository;
     private final MerchantAccessRepository merchantAccessRepository;
@@ -168,12 +178,18 @@ public class MerchantPromoService {
                 promo.getCnpjRoot(),
                 promo.getStartsAt().atStartOfDay(),
                 promo.getEndsAt().plusDays(1).atStartOfDay(),
-                promo.getPromoPrice().multiply(new BigDecimal("1.01")));
+                highestConfirmingPrice(promo));
         var verified = confirming >= minHouseholds;
         var disclosedHouseholds = verified ? (int) confirming : null;
         log.info("merchant.promo.performance promo={} cnpjRoot={} verified={}", promoId, promo.getCnpjRoot(), verified);
         return MerchantPromoPerformanceResponse.of(promo, promo.isLiveOn(BrazilClock.today()), verified,
                 disclosedHouseholds);
+    }
+
+    /** The announced price plus the tolerance: a scanned price up to this confirms the promo. */
+    private BigDecimal highestConfirmingPrice(MerchantPromo promo) {
+        var toleranceFactor = BigDecimal.ONE.add(verifiedBadgeTolerancePct.divide(ONE_HUNDRED));
+        return promo.getPromoPrice().multiply(toleranceFactor);
     }
 
     private MerchantPromo requireOwnPromo(User merchantUser, UUID promoId) {
@@ -198,13 +214,12 @@ public class MerchantPromoService {
         if (promo.getProduct() == null) {
             return false;
         }
-        var tolerance = promo.getPromoPrice().multiply(new BigDecimal("1.01"));
         var confirmingHouseholds = auditRepository.countDistinctHouseholdsConfirmingPromo(
                 promo.getProduct().getId(),
                 promo.getCnpjRoot(),
                 promo.getStartsAt().atStartOfDay(),
                 promo.getEndsAt().plusDays(1).atStartOfDay(),
-                tolerance);
+                highestConfirmingPrice(promo));
         return confirmingHouseholds >= properties.getCollaborative().getMinHouseholdsForPublic();
     }
 }

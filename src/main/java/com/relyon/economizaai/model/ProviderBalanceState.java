@@ -14,7 +14,7 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 /**
- * Last prepaid-balance reading of one paid provider plus the reference the "80% consumed"
+ * Last prepaid-balance reading of one paid provider plus the reference the "warning share consumed"
  * alert is measured against: the balance right after the last detected top-up.
  */
 @Entity

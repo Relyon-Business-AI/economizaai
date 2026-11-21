@@ -21,6 +21,7 @@ import com.relyon.economizaai.repository.ReceiptRepository.MarketPurchaseCount;
 import com.relyon.economizaai.repository.UserWatchedMarketRepository;
 import com.relyon.economizaai.service.subscription.Feature;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
+import com.relyon.economizaai.time.BrazilClock;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -465,7 +466,7 @@ class WatchedMarketServiceTest {
         ));
         when(marketRepository.findAllByCnpjIn(any())).thenReturn(List.of(
                 market("11111111000111", "Popular"), market("22222222000111", "Pouco Visitado")));
-        when(receiptRepository.countConfirmedPurchasesByCnpjIn(any())).thenReturn(List.of(
+        when(receiptRepository.countConfirmedPurchasesByCnpjInSince(any(), any())).thenReturn(List.of(
                 purchaseCount("11111111000111", 148, 3),
                 purchaseCount("22222222000111", 40, 2)));
 
@@ -476,6 +477,23 @@ class WatchedMarketServiceTest {
         assertEquals(Optional.of(148L), countByCnpj.get("11111111000111"));
         // Two households only: below K=3, so the count stays undisclosed.
         assertEquals(Optional.empty(), countByCnpj.get("22222222000111"));
+    }
+
+    @Test
+    void listMarkets_communityPurchaseCountLooksOnlyAtTheCommunityPriceWindow() {
+        when(receiptRepository.findDistinctCnpjsByHousehold(user.getHousehold().getId())).thenReturn(List.of());
+        when(watchedRepository.findAllByUserHouseholdId(user.getHousehold().getId())).thenReturn(List.of(
+                UserWatchedMarket.builder().marketCnpj("11111111000111").build()));
+        when(marketRepository.findAllByCnpjIn(any())).thenReturn(List.of(market("11111111000111", "Popular")));
+        when(receiptRepository.countConfirmedPurchasesByCnpjInSince(any(), any())).thenReturn(List.of());
+
+        var rows = service.listMarkets(user, MarketScope.MINE, null, null);
+
+        // Same 90-day window the store's price screen shows, from the start of that day.
+        verify(receiptRepository).countConfirmedPurchasesByCnpjInSince(List.of("11111111000111"),
+                BrazilClock.today().minusDays(90).atStartOfDay());
+        // No purchase inside the window: the pin shows no count.
+        assertNull(rows.get(0).communityPurchaseCount());
     }
 
     @Test

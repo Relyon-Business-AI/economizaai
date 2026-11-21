@@ -1,5 +1,7 @@
 package com.relyon.economizaai.service.sefaz;
 
+import java.util.stream.Collectors;
+import lombok.Setter;
 import com.relyon.economizaai.exception.PrefetchedUnsupportedException;
 import com.relyon.economizaai.model.enums.UnidadeFederativa;
 import lombok.extern.slf4j.Slf4j;
@@ -38,21 +40,36 @@ import java.util.Set;
 public class PrefetchPolicy {
 
     /** UFs whose on-device fetch is TRUSTED for the collaborative index (validated, IP-blocked by design). */
-    private final Set<UnidadeFederativa> trustedUfs;
+    private volatile Set<UnidadeFederativa> trustedUfs;
     /** When true, any UF may device-fetch (eligibility generalized); trust still gates the index. */
-    private final boolean genericEnabled;
+    @Setter
+    private volatile boolean genericEnabled;
 
-    public PrefetchPolicy(@Value("${economizaai.sefaz.prefetch-allowed-ufs:PE}") String allowedUfsCsv,
+    public PrefetchPolicy(@Value("${economizaai.ingestion.sefaz.prefetch-allowed-ufs:PE}") String allowedUfsCsv,
                           @Value("${economizaai.ingestion.device-fetch.generic-enabled:false}") boolean genericEnabled) {
+        this.trustedUfs = parseUfs(allowedUfsCsv);
+        this.genericEnabled = genericEnabled;
+        log.info("prefetch.policy trusted_ufs={} generic_enabled={}", this.trustedUfs, this.genericEnabled);
+    }
+
+    /** The UFs whose on-device fetch is trusted for the collaborative index (comma-separated codes). */
+    public void changeTrustedUfs(String allowedUfsCsv) {
+        this.trustedUfs = parseUfs(allowedUfsCsv);
+        log.info("prefetch.policy trusted_ufs={}", this.trustedUfs);
+    }
+
+    public String trustedUfsCsv() {
+        return trustedUfs.stream().sorted().map(UnidadeFederativa::name).collect(Collectors.joining(","));
+    }
+
+    private static Set<UnidadeFederativa> parseUfs(String allowedUfsCsv) {
         var parsed = EnumSet.noneOf(UnidadeFederativa.class);
         Arrays.stream(allowedUfsCsv == null ? new String[0] : allowedUfsCsv.split(","))
                 .map(String::trim)
                 .filter(entry -> !entry.isEmpty())
                 .map(UnidadeFederativa::valueOf)
                 .forEach(parsed::add);
-        this.trustedUfs = Set.copyOf(parsed);
-        this.genericEnabled = genericEnabled;
-        log.info("prefetch.policy trusted_ufs={} generic_enabled={}", this.trustedUfs, this.genericEnabled);
+        return Set.copyOf(parsed);
     }
 
     /**

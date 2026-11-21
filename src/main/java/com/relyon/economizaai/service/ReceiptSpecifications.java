@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service;
 
+import com.relyon.economizaai.repository.InternalAccounts;
 import com.relyon.economizaai.model.HouseholdProductAlias;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.enums.ProductCategory;
@@ -185,8 +186,8 @@ public final class ReceiptSpecifications {
             return cb.and(
                     cb.notEqual(submitter.get("role"), Role.ADMIN),
                     cb.isFalse(submitter.get("excludedFromMetrics")),
-                    cb.notLike(cb.lower(submitter.get("email")), "%@economizaai.app"),
-                    cb.notLike(cb.lower(submitter.get("email")), "%@cloudtestlabaccounts.com"));
+                    cb.notLike(cb.lower(submitter.get("email")), InternalAccounts.OWN_DOMAIN_LIKE),
+                    cb.notLike(cb.lower(submitter.get("email")), InternalAccounts.PLAY_TEST_LAB_DOMAIN_LIKE));
         };
     }
 }

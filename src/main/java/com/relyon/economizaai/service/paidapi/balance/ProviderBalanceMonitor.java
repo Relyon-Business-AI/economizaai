@@ -14,12 +14,12 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
- * Hourly watch over the PREPAID balance of each paid provider, with the same 80% / 100%
+ * Hourly watch over the PREPAID balance of each paid provider, with the same warning / 100%
  * rule as the daily budgets:
  * <ul>
  *   <li>the reference is the balance right after the last detected top-up (the balance
  *       went UP), or the configured credit for a provider with no balance API;</li>
- *   <li>80% of that reference consumed → warning; balance exhausted (at or below about
+ *   <li>the warning percentage of that reference consumed → warning; balance exhausted (at or below about
  *       one unit of the service's cost) → the 100% alert.</li>
  * </ul>
  * Each alert goes out once per top-up cycle; dedup and guaranteed delivery live in
@@ -109,17 +109,18 @@ public class ProviderBalanceMonitor {
                                             BigDecimal balance) {
         var reference = state.getReferenceBalance();
         var exhausted = balance.compareTo(source.exhaustedAtOrBelow()) <= 0;
+        var warningPercent = costAlertService.getWarningThresholdPercent();
         var threshold = exhausted
                 ? CostAlertService.LIMIT_THRESHOLD
-                : Math.min(CostAlertService.WARNING_THRESHOLD,
-                        CostAlertService.thresholdReached(reference.subtract(balance), reference));
+                : Math.min(warningPercent,
+                        CostAlertService.thresholdReached(reference.subtract(balance), reference, warningPercent));
         if (threshold == 0) return false;
         var symbol = source.currencySymbol();
         var headline = exhausted
                 ? "Economiza AI: saldo da %s ESGOTADO (%s). Parado até recarregar: %s."
                         .formatted(source.displayName(), CostAlertService.money(symbol, balance), source.whatStops())
-                : "Economiza AI: saldo da %s com 80%% consumido (restam %s de %s). Ao zerar: %s."
-                        .formatted(source.displayName(), CostAlertService.money(symbol, balance),
+                : "Economiza AI: saldo da %s com %d%% consumido (restam %s de %s). Ao zerar: %s."
+                        .formatted(source.displayName(), warningPercent, CostAlertService.money(symbol, balance),
                                 CostAlertService.money(symbol, reference), source.whatStops());
         var detail = headline + "\n\nReferência: saldo após a última recarga detectada ("
                 + CostAlertService.money(symbol, reference) + " em " + state.getReferenceAt() + ").";

@@ -4,8 +4,11 @@ import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.privacy.LogMasker;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,11 +25,12 @@ import java.util.UUID;
  * <ol>
  *   <li>the user's explicit {@code digestSendHour} override, if set;</li>
  *   <li>else the household's modal confirmed-receipt shopping hour minus 1h,
- *       but only with {@link #MIN_RECEIPTS_FOR_INFERENCE}+ receipts that carry a
+ *       but only with {@link #minReceiptsForInference}+ receipts that carry a
  *       non-null issued_at (so we catch them just before they usually shop);</li>
- *   <li>else a per-user default spread over {@link #SPREAD_START_HOUR}:00 to
- *       {@link #SPREAD_END_HOUR}:00, derived from the user id — stable for the
- *       user, and new accounts do not all land on the same hour.</li>
+ *   <li>else a per-user default spread over {@link #spreadStartHour}:00 to
+ *       {@link #spreadEndHour}:00, derived from the user id — stable for the
+ *       user, and new accounts do not all land on the same hour. A window that
+ *       ends before it starts crosses midnight.</li>
  * </ol>
  *
  * <p>The result is stored in {@code User.digestEffectiveSendHour}, so the digest
@@ -38,14 +42,22 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class DigestScheduleService {
 
-    /** First and last hour (inclusive) of the default-hour spread. */
-    static final int SPREAD_START_HOUR = 11;
-    static final int SPREAD_END_HOUR = 19;
-    /** Below this many issued-at receipts, the modal-hour inference is too noisy. */
-    static final int MIN_RECEIPTS_FOR_INFERENCE = 5;
+    private static final int HOURS_IN_DAY = 24;
     private static final int PAGE_SIZE = 200;
     /** Sorts before every real id — the starting point of the keyset pagination. */
     private static final UUID BEFORE_FIRST_ID = new UUID(0L, 0L);
+
+    /** First and last hour (inclusive) of the default-hour spread. */
+    @Getter @Setter
+    @Value("${economizaai.notifications.deals-digest.default-hour-from:11}")
+    private volatile int spreadStartHour = 11;
+    @Getter @Setter
+    @Value("${economizaai.notifications.deals-digest.default-hour-to:19}")
+    private volatile int spreadEndHour = 19;
+    /** Below this many issued-at receipts, the modal-hour inference is too noisy. */
+    @Getter @Setter
+    @Value("${economizaai.notifications.deals-digest.min-receipts-for-inference:5}")
+    private volatile int minReceiptsForInference = 5;
 
     private final ReceiptRepository receiptRepository;
     private final UserRepository userRepository;
@@ -63,7 +75,7 @@ public class DigestScheduleService {
         if (householdId == null) return Optional.empty();
         var histogram = receiptRepository.findConfirmedIssuedHourHistogram(householdId);
         var totalReceipts = histogram.stream().mapToLong(ReceiptRepository.HourCount::getReceiptCount).sum();
-        if (totalReceipts < MIN_RECEIPTS_FOR_INFERENCE) return Optional.empty();
+        if (totalReceipts < minReceiptsForInference) return Optional.empty();
         return histogram.stream()
                 .max(Comparator.comparingLong(ReceiptRepository.HourCount::getReceiptCount)
                         .thenComparing(ReceiptRepository.HourCount::getHourOfDay))
@@ -71,9 +83,10 @@ public class DigestScheduleService {
     }
 
     /** Deterministic per-user default inside the spread window. */
-    static int spreadDefaultHour(UUID userId) {
-        var hoursInWindow = SPREAD_END_HOUR - SPREAD_START_HOUR + 1;
-        return SPREAD_START_HOUR + Math.floorMod(userId.hashCode(), hoursInWindow);
+    int spreadDefaultHour(UUID userId) {
+        var firstHour = spreadStartHour;
+        var hoursInWindow = Math.floorMod(spreadEndHour - firstHour, HOURS_IN_DAY) + 1;
+        return wrap(firstHour + Math.floorMod(userId.hashCode(), hoursInWindow));
     }
 
     /**
@@ -122,6 +135,6 @@ public class DigestScheduleService {
 
     /** Keep an hour within 0-23, wrapping (-1 -> 23). */
     private int wrap(int hour) {
-        return ((hour % 24) + 24) % 24;
+        return Math.floorMod(hour, HOURS_IN_DAY);
     }
 }

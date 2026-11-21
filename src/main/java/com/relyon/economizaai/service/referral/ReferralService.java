@@ -50,10 +50,11 @@ import java.util.function.Supplier;
  *   <li>A referral QUALIFIES when the invited person confirms a receipt that contributed to the
  *       collaborative index (at least one price observation) while living in a different
  *       household than the inviter.</li>
- *   <li>The inviter's FIRST qualified referral earns one month of Premium — once per inviter.
- *       After that, a month is earned for each invited person who SUBSCRIBES to paid Premium.
- *       An invited person yields at most one month; the invited person earns nothing.</li>
- *   <li>Months accumulate: each one queues after the inviter's current entitlement
+ *   <li>The inviter's FIRST qualified referral earns one reward of Premium — once per inviter.
+ *       After that, a reward is earned for each invited person who SUBSCRIBES to paid Premium.
+ *       An invited person yields at most one reward; the invited person earns nothing. How
+ *       many months a reward is worth is an admin setting.</li>
+ *   <li>Rewards accumulate: each one queues after the inviter's current entitlement
  *       ({@link PremiumGrantService}).</li>
  * </ul>
  * The reward paths run in their OWN transaction and never propagate a failure: a referral
@@ -118,10 +119,17 @@ public class ReferralService {
                 shareBaseUrl + code,
                 referralRepository.countByInviterId(user.getId()),
                 referralRepository.countByInviterIdAndQualifiedAtIsNotNull(user.getId()),
-                premiumGrantRepository.countByUserId(user.getId()),
+                rewardedMonths(user),
                 premiumGrantRepository.existsByUserIdAndKind(user.getId(), PremiumGrantKind.REFERRAL_FIRST),
                 referred,
                 !referred && !hasConfirmedReceipt(user));
+    }
+
+    /** Months of Premium the user earned by inviting, each reward at what it was worth when granted. */
+    private long rewardedMonths(User user) {
+        return premiumGrantRepository.findByUserId(user.getId()).stream()
+                .mapToLong(grant -> EntitlementClock.monthsOf(grant.getStartsAt(), grant.getEndsAt()))
+                .sum();
     }
 
     /** The user's stable code, generated (and saved) the first time it is asked for. */
@@ -306,7 +314,7 @@ public class ReferralService {
         if (firstRewardUsed) {
             return Optional.empty();
         }
-        return premiumGrantService.grantMonth(inviter, PremiumGrantKind.REFERRAL_FIRST, invitedUserId)
+        return premiumGrantService.grantReferralReward(inviter, PremiumGrantKind.REFERRAL_FIRST, invitedUserId)
                 .map(grant -> rewardNotification(inviter, grant, "notification.referral_first_reward"));
     }
 
@@ -324,7 +332,7 @@ public class ReferralService {
         }
         var inviter = referral.getInviter();
         log.info("referral.invited_subscribed inviter={}", LogMasker.email(inviter.getEmail()));
-        return premiumGrantService.grantMonth(inviter, PremiumGrantKind.REFERRAL_SUBSCRIPTION, invitedUserId)
+        return premiumGrantService.grantReferralReward(inviter, PremiumGrantKind.REFERRAL_SUBSCRIPTION, invitedUserId)
                 .map(grant -> rewardNotification(inviter, grant, "notification.referral_subscription_reward"));
     }
 
@@ -337,12 +345,17 @@ public class ReferralService {
         var locale = LocalizedMessageService.toLocale(inviter.getLocale());
         var firstDay = EntitlementClock.brazilDayOf(grant.getStartsAt());
         var lastDay = EntitlementClock.brazilDayOf(grant.getEndsAt().minusSeconds(1));
-        var title = localizedMessageService.translate(messageKeyPrefix + ".title", locale);
+        var months = EntitlementClock.monthsOf(grant.getStartsAt(), grant.getEndsAt());
+        var monthWord = localizedMessageService.translate(
+                months == 1 ? "notification.referral_reward.month.one" : "notification.referral_reward.month.many", locale);
+        var title = localizedMessageService.translate(messageKeyPrefix + ".title", locale,
+                String.valueOf(months), monthWord);
         var body = localizedMessageService.translate(messageKeyPrefix + ".body", locale,
-                firstDay.format(DISPLAY_DATE), lastDay.format(DISPLAY_DATE));
+                String.valueOf(months), monthWord, firstDay.format(DISPLAY_DATE), lastDay.format(DISPLAY_DATE));
         return new NotificationPayload(inviter, NotificationType.SYSTEM, title, body,
                 Map.of("kind", EXTRA_KIND,
                         "rewardKind", grant.getKind().name(),
+                        "months", String.valueOf(months),
                         "startsOn", firstDay.toString(),
                         "endsOn", lastDay.toString()));
     }

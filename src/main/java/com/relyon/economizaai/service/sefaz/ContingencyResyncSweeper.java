@@ -1,5 +1,7 @@
 package com.relyon.economizaai.service.sefaz;
 
+import lombok.Setter;
+import lombok.Getter;
 import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.enums.ReceiptOrigin;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
@@ -37,7 +39,8 @@ public class ContingencyResyncSweeper {
     private static final int BATCH = 200;
 
     private final ReceiptRepository receiptRepository;
-    private final int windowHours;
+    @Getter @Setter
+    private volatile int windowHours;
     private final Duration lastAttemptMargin;
 
     public ContingencyResyncSweeper(

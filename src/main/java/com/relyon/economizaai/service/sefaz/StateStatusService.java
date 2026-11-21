@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.sefaz;
 
+import java.util.stream.Collectors;
 import com.relyon.economizaai.dto.response.StateStatusResponse;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.model.enums.StateHealthStatus;
@@ -51,10 +52,10 @@ public class StateStatusService {
     private final SefazIngestionService sefazIngestionService;
     private final ReceiptRepository receiptRepository;
     private final StateIngestionAttemptRepository attemptRepository;
-    private final Set<UnidadeFederativa> pausedStates;
-    private final int windowHours;
-    private final int minFailures;
-    private final int regressionMinFailures;
+    private volatile Set<UnidadeFederativa> pausedStates;
+    private volatile int windowHours;
+    private volatile int minFailures;
+    private volatile int regressionMinFailures;
     private final long cacheSeconds;
     private Clock clock = Clock.systemUTC();
     private volatile CachedStatus cached;
@@ -63,7 +64,7 @@ public class StateStatusService {
             SefazIngestionService sefazIngestionService,
             ReceiptRepository receiptRepository,
             StateIngestionAttemptRepository attemptRepository,
-            @Value("${economizaai.ingestion.paused-state-probe.ufs:SE}") String pausedStatesCsv,
+            @Value("${economizaai.ingestion.paused-state-probe.ufs:SE,TO}") String pausedStatesCsv,
             @Value("${economizaai.ingestion.state-status.window-hours:24}") int windowHours,
             @Value("${economizaai.ingestion.state-status.min-failures:3}") int minFailures,
             @Value("${economizaai.ingestion.sefaz.regression.min-failures:5}") int regressionMinFailures,
@@ -76,6 +77,42 @@ public class StateStatusService {
         this.minFailures = Math.max(1, minFailures);
         this.regressionMinFailures = Math.max(1, regressionMinFailures);
         this.cacheSeconds = Math.max(0, cacheSeconds);
+    }
+
+    public String pausedStatesCsv() {
+        return pausedStates.stream().sorted().map(UnidadeFederativa::name).collect(Collectors.joining(","));
+    }
+
+    /** The states shown as paused (comma-separated UF codes); the cached answer is dropped. */
+    public void changePausedStates(String pausedStatesCsv) {
+        this.pausedStates = parseStates(pausedStatesCsv);
+        this.cached = null;
+    }
+
+    public int getWindowHours() {
+        return windowHours;
+    }
+
+    /** Hours looked back to decide a state is unstable; the cached answer is dropped. */
+    public void setWindowHours(int windowHours) {
+        this.windowHours = Math.max(1, windowHours);
+        this.cached = null;
+    }
+
+    public int getMinFailures() {
+        return minFailures;
+    }
+
+    /** Portal failures in the window that make a state unstable; the cached answer is dropped. */
+    public void setMinFailures(int minFailures) {
+        this.minFailures = Math.max(1, minFailures);
+        this.cached = null;
+    }
+
+    /** Parser failures that count as a portal regression — the same number that alerts the admin. */
+    public void setRegressionMinFailures(int regressionMinFailures) {
+        this.regressionMinFailures = Math.max(1, regressionMinFailures);
+        this.cached = null;
     }
 
     /** Test seam — drives the cache expiry deterministically. */
@@ -190,6 +227,11 @@ public class StateStatusService {
                     }
                 });
         return states;
+    }
+
+    /** The state's name as written in Brazil ("Rio Grande do Sul"). */
+    public static String stateName(UnidadeFederativa state) {
+        return STATE_NAMES.get(state);
     }
 
     private static Map<UnidadeFederativa, String> stateNames() {

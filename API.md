@@ -93,6 +93,15 @@ with no body on success.
 GET /api/v1/app-config   → 200 (public, no auth)
 ```
 
+**Since 2026-11-19 the response also carries `settings`**: the business values the apps show or apply, by
+published name — `priceWindowDays` (how old a community price may be), `marketPricesDefaultDays`,
+`nearbyRadiusKm`, `maxItemPhotos`, `contingencyWindowHours`, `householdInviteHours`, `launchPromoUntil`
+(ISO date or absent), `savingsFollowUpDays`, `runningLowDays`, `quietHoursStart`, `quietHoursEnd`,
+`quietHoursMaxDeferred`, plus the plan values the landing page shows: `freeMonthlyReceipts`, `freeHistoryDays`,
+`freeWatchedMarkets`, `premiumMonthlyPrice`, `premiumYearlyPrice`. Numbers are JSON numbers. They change from the admin (section 10d, "Business
+settings") with no deploy, so the apps must read them here instead of repeating the number in code or copy,
+and keep a fallback for when the request fails.
+
 Remote config for the mobile **ForceUpdateGate** (replaces the legacy GitHub
 gist — same JSON shape, just swap the URL). Returns
 `{ "minVersion", "androidUrl"?, "iosUrl"?, "message"? }` — `minVersion` always
@@ -1256,6 +1265,10 @@ menos, `couldHaveSaved` = pagou a mais, `savedLineCount` e `paidAboveLineCount` 
 lado, `comparedLineCount` de `purchasedLineCount` = quanto pôde ser comparado. Por mercado, o saldo
 é `couldHaveSaved - saved` (negativo = pagou a menos).
 
+**Só a região (2026-11-19):** `reference=REGION` deixa de fora os itens que só teriam o histórico da
+própria casa como comparação. É o que a seção "Comparado à sua região" pede. Sem o parâmetro
+(`ALL`), nada muda: região e, na falta dela, o histórico da casa.
+
 ```json
 {
   "from": "2026-08-18T10:00:00", "to": "2026-11-16T10:00:00",
@@ -1597,7 +1610,7 @@ window). All params optional:
 |---|---|
 | `query` | product name contains (case-insensitive) |
 | `category` | `ProductCategory` enum (`GROCERIES`, `BEVERAGES`, `PRODUCE`, `MEAT_DAIRY`, `BAKERY`, `CLEANING`, `PERSONAL_CARE`, `HEALTH`, `PET_SUPPLIES`, `OTHER`) |
-| `days` | lookback window, default `30`, clamped to `1..180` |
+| `days` | lookback window, default `30`, clamped to `1..90` (the community price window, `lookback-days`) |
 | `sort` | `RECENT` (default, newest observation first) · `CHEAPEST` (price asc) · `NAME` (product name asc) |
 | `page` / `size` | zero-based page, `size` default `30`, max `100` |
 
@@ -1627,8 +1640,9 @@ The old `radiusKm` param is gone (radius is fixed at 20 km).
 Each row: `{ cnpj, cnpjRoot, name, friendlyName, address, city, state, latitude,
 longitude, distanceKm, visited, watching, chainName, chainLogoUrl, communityPurchaseCount,
 householdPurchaseCount, householdSpend }`.
-`communityPurchaseCount` (2026-11-18) is how many confirmed notas the community scanned at
-that store, for the map pin; **null when fewer than 3 households contributed** (k-anon).
+`communityPurchaseCount` (2026-11-18) is how many confirmed notas the community bought at
+that store **in the last 90 days** (same window as `/markets/{cnpj}/prices`, since 2026-11-19),
+for the map pin; **null when fewer than 3 households contributed in that window** (k-anon).
 `householdPurchaseCount`/`householdSpend` are the viewer household's own confirmed notas there
 and their total; null when it never bought at that store. `name` is the full
 legal razão social; **`friendlyName` is the cleaned display name** (2026-11-10 — household
@@ -1689,8 +1703,8 @@ first over the states the household has confirmed receipts in (`scope: STATE`,
 `states` lists them); when that slice is below K / min-sample it falls back to the
 national in-store series (`scope: NATIONAL`, `states: []`). Same hybrid disclosure
 as the other references: `reference.medianPrice` is `null` with `kAnonBlocked: true`
-and the counts visible when even the national slice is sparse. Uses the wider
-best-markets window (180 days).
+and the counts visible when even the national slice is sparse. Uses the same
+90-day community price window as every other price read (`lookback-days`).
 
 ```
 GET /api/v1/price-index/products/{productId}/best-markets?limit=10&radiusKm=5[&lat=&lng=&sort=CHEAPEST|NEAREST]
@@ -1749,8 +1763,8 @@ contributing households are pooled, and k-anonymity (≥3 households) is checked
 chain level. Each row is shown as one concrete store of the chain — `cnpj`,
 `marketName`, `distanceKm` describe that store, picked as: a watched store if any,
 else the closest to the viewer, else the most recently seen. The `cnpj` is therefore
-always a real store the FE can watch/unwatch or route to. Window: 180 days
-(`best-markets-lookback-days`), wider than the 90-day promo baseline.
+always a real store the FE can watch/unwatch or route to. Window: 90 days
+(`lookback-days`), the same one the shopping plan and the promo baseline use.
 
 **Default scope (no `lat`/`lng`/`radiusKm`) = the "perto de você" cascade (2026-11-05)**,
 same as `/promos/feed`, resolved server-side:
@@ -2075,6 +2089,85 @@ the paywall state and a "manage subscription" screen.
 
 ---
 
+### Preços e inflação — official food inflation next to the prices paid in the markets (2026-11-20)
+
+```
+GET /api/v1/insights/price-inflation?scope=BR|STATE&state=RS&months=12
+GET /api/v1/insights/price-inflation/states?months=12
+```
+
+Authenticated. **Hidden for now:** while the setting `priceInflationAudience` (`GET /app-config` → `settings`) is
+`"ADMINS"`, a non-admin gets **404** with a ready-to-show `message`; `"EVERYONE"` opens it to all. The periods
+the screen offers come from `settings.priceInflationPeriods` (array of months; the largest is the initial one).
+Wording: the official side is "inflação oficial de alimentos (IBGE)"; the app side is "preços pagos nos
+mercados (notas do app)" — never "inflação real".
+
+- `scope` defaults to `BR`. With `scope=STATE`, `state` is optional: without it the viewer's state is used and,
+  when that is unknown, the answer comes as Brasil (`scope: "BR"`).
+- `months` must be one of the offered periods; anything else (or nothing) uses the initial one — see
+  `requestedMonths`.
+
+```json
+{
+  "scope": "STATE", "state": "RS", "stateName": "Rio Grande do Sul",
+  "viewerState": "RS", "viewerStateName": "Rio Grande do Sul",
+  "requestedMonths": 12, "from": "2026-06", "to": "2026-08", "shortened": true,
+  "official": { "areaName": "Porto Alegre - RS", "nationalFallback": false, "changePercent": 1.2,
+                "series": [{ "month": "2026-05", "index": 100.00 }, { "month": "2026-06", "index": 100.40 }] },
+  "community": { "status": "OK", "changePercent": -0.4, "pairCount": 74, "storeCount": 6, "series": [] },
+  "basket": { "status": "INSUFFICIENT", "changePercent": null, "productCount": 2, "series": [] },
+  "differencePoints": -1.6,
+  "categories": [{ "slug": "carnes", "name": "Carnes", "changePercent": 7.4, "pairCount": 16 }],
+  "foods": [{ "name": "Café", "changePercent": 18.2, "pairCount": 5 }],
+  "officialGroups": [{ "code": "7172", "name": "Cereais, leguminosas e oleaginosas", "changePercent": -3.1 }]
+}
+```
+
+- **Window and span.** `to` is the newest month IBGE has published; the window is the `requestedMonths` ending
+  there. The community side only counts months with enough data (admin settings: matched price pairs and
+  stores per month). The months compared are the longest run of such months inside the window (the most recent
+  one between equals); when that is shorter than the window, **both** series cover that same span — `from`/`to`
+  say which — and `shortened` is `true`. With no valid month, `community.status` is `INSUFFICIENT` (no change, empty
+  series), `differencePoints` is `null`, `categories`/`foods` are empty and the official series covers the whole window.
+- **Series.** One point per month plus the base point (`index` 100 at the month before `from`), two decimals;
+  the same months in `official`, `community` and `basket` whenever each has a series.
+- `official` is `null` (and `officialGroups` empty) only while IBGE was never loaded. `nationalFallback: true` +
+  `areaName: "Brasil"` = the state has no IBGE area (IBGE surveys 16 metropolitan areas/cities), so the national
+  number is shown.
+- `community.pairCount` = price comparisons over the span (same product, same store, two consecutive months);
+  `storeCount` = the most stores any month of the span had. Both are also filled when `INSUFFICIENT` (what exists
+  in the window).
+- `basket` ("Sua cesta"): the products the household bought in the requested period, weighted by its spend,
+  moved by the community's prices in the household's state (the country's in a month the state lacks data). `OK`
+  only when every month of the span has the minimum of products with a known change; `productCount` is the
+  smallest monthly count of such products.
+- `viewerState` / `viewerStateName`: the state of the person asking (from the household's notas), `null` when
+  unknown — always present, whatever `scope` was asked for.
+- `differencePoints` = community − official. `categories` and `foods` are sorted by `changePercent` descending;
+  `officialGroups` are IBGE's food groups over the same span and area, in IBGE's order. Percentages have one decimal.
+
+`/states` answers all 27 states, alphabetical by code, each over its own span:
+
+```json
+[{ "state": "RS", "stateName": "Rio Grande do Sul", "officialAreaName": "Porto Alegre - RS",
+   "nationalFallback": false, "officialChangePercent": 1.2, "communityStatus": "OK",
+   "communityChangePercent": -0.4, "differencePoints": -1.6, "from": "2026-06", "to": "2026-08" }]
+```
+
+**Monthly notice.** When IBGE publishes a new month, each person the screen exists for gets one inbox item:
+`type: "PRICE_INFLATION"`, `destination: "PRICE_INFLATION"`, `payload: {"destination":"PRICE_INFLATION","month":"2026-10"}`,
+title "Preços e inflação", body like "Alimentos subiram 0,4% no Brasil em outubro. Nos mercados do RS, os preços
+caíram 0,2%." (the second sentence only when the person's state has enough data that month). Inbox only — no
+push, no e-mail, no WhatsApp. Route it to this screen.
+
+**Admin.** `POST /api/v1/admin/price-inflation/recompute?months=24` (ADMIN) loads the last `months` months from
+IBGE and recomputes the community table for the last `months` closed months, without sending the notice:
+
+```json
+{ "months": 24, "officialReadingsFetched": 6936, "officialRowsStored": 6936, "newestOfficialMonth": "2026-10",
+  "communityMonthsRecomputed": 24, "communityProductRows": 310, "communityPairs": 1250 }
+```
+
 ## 8. Consumption intelligence
 
 Per-product purchase prediction + suggested shopping list, derived from
@@ -2225,6 +2318,9 @@ parada. **Só grava** — nenhum endpoint devolve esses dados e nada aparece par
 para medir depois previsto x pago, "não achei" por mercado e uso das regras da rota.
 
 - Idempotente por (`household`, `clientTripId`): o app reenvia até dar certo.
+- Número que não cabe no banco devolve **400** (o app descarta o registro em vez de reenviar): quantidade
+  acima de `999999999.999`, valor em R$ acima de `9999999999.99`, `maxDistanceKm` acima de `99999.9`,
+  `distanceKm` acima de `99999.999`, ou itens cuja soma (preço × quantidade) passa de `9999999999.99`.
 - `receiptId` só é guardado quando a nota é da própria casa; senão a parada fica sem nota e os
   campos de pago são descartados. Apagar a nota depois só desfaz o vínculo.
 - Item de produto que não existe mais é deixado de fora. O total previsto da parada é recalculado
@@ -2326,7 +2422,7 @@ POST /api/v1/notifications/{id}/read         → mark single as read
 POST /api/v1/notifications/mark-all-read     → { "marked": N }
 ```
 
-Each `NotificationResponse` carries `payload` — the JSON we attached when we generated the notification (`receiptId`, `productId`, `savingsPct`, etc) so cards can deep-link. `type` is one of `PROMO_PERSONAL`, `DEALS_DIGEST`, `DIGEST`, `PRICE_DROP`, `STOCKOUT`, `BUDGET`, `SYSTEM`, `RECEIPT_READY`, `RECEIPT_FAILED`, `RECEIPT_RECOVERED`, `PUSH_OPTIN`, `HOUSEHOLD_MEMBER_JOINED`, `HOUSEHOLD_MEMBER_LEFT` (old inbox rows may still carry the retired `PROMO_COMMUNITY` / `CHEAPER_MARKET`) — what triggers each and how to toggle it is in §10f.
+Each `NotificationResponse` carries `payload` — the JSON we attached when we generated the notification (`receiptId`, `productId`, `savingsPct`, etc) so cards can deep-link. `type` is one of `PROMO_PERSONAL`, `DEALS_DIGEST`, `DIGEST`, `PRICE_DROP`, `STOCKOUT`, `BUDGET`, `SYSTEM`, `RECEIPT_READY`, `RECEIPT_FAILED`, `RECEIPT_RECOVERED`, `PUSH_OPTIN`, `HOUSEHOLD_MEMBER_JOINED`, `HOUSEHOLD_MEMBER_LEFT`, `PRICE_INFLATION` (old inbox rows may still carry the retired `PROMO_COMMUNITY` / `CHEAPER_MARKET`) — what triggers each and how to toggle it is in §10f.
 
 Each response also carries `destination` — a routing hint derived from `type` so the FE knows which screen to open when the card is tapped (the concrete id it needs is already in `payload`). Values:
 
@@ -2337,6 +2433,7 @@ Each response also carries `destination` — a routing hint derived from `type` 
 | `PRODUCT`       | product detail         | `PRICE_DROP` (use `payload.productId`)                        |
 | `BUDGET`        | budget screen          | `BUDGET`                                                      |
 | `INBOX`         | generic inbox          | `SYSTEM` (and any future/unmapped type)                      |
+| `PRICE_INFLATION` | "Preços e inflação"  | `PRICE_INFLATION` (monthly notice, inbox only; `payload.month`) |
 
 > **Real-time vs digest:** the only notifications pushed in **real time** (on receipt confirm) are the user's explicit alerts — `PRICE_DROP` and `BUDGET`. The **discovery** content (personal promos, community promos, cheaper market) is delivered **only via the daily deals digest** (§ "How the daily deals digest works"), not in real time. `PROMO_COMMUNITY` and `CHEAPER_MARKET` no longer exist as toggles (2026-11-11) — the digest frequency is the control.
 
@@ -2584,6 +2681,49 @@ POST   /api/v1/admin/dev/seed-discounted-receipt?targetEmail= → ReceiptRespons
 - **`visits` (acquisition response)** — first-party top of funnel: `{ totalVisits, uniqueVisitors, signups, visitToSignupRate, byCampaign:[{ channel, source, medium, campaign, uniqueVisitors, signups, conversionRate }], note }`. Fed by the public visit beacon (below), so click→signup conversion is OUR number, independent of Meta. `note` set when no visits recorded yet.
 - **`byHour` (acquisition response)** — signups by hour of day in **Brasília** time, always 24 entries: `[{ hour (0–23), total, byChannel:{CHANNEL:count} }]`, summed over every day of the window. The daily `timeline` is now also bucketed by Brasília day (before, signups after 21h landed on the next day).
 - **`retention` (acquisition response)** — per channel cohort quality: `[{ channel, cohort, activated, activationRate, cohort7, retainedD7, retentionD7, cohort30, retainedD30, retentionD30 }]`. "Retention" = activation (first receipt) within 7/30 days of signup; D7/D30 denominators only count signups old enough to have had the full window.
+
+### Business settings (admin screen "Configurações")
+
+```
+GET    /api/v1/admin/settings          → [ { key, label, description, settings: [AdminSettingResponse] } ]   (one entry per section, in display order)
+PUT    /api/v1/admin/settings/{key}    body { "value": "<text>" }  → AdminSettingResponse   (takes effect at once)
+DELETE /api/v1/admin/settings/{key}    → AdminSettingResponse   (back to the value configured for the environment)
+```
+
+`AdminSettingResponse`: `{ key, label, description, reflectsOn, type, unit?, value, configuredValue, changed, min?, max?,
+options[], optionLabels{value: label}, appKey?, changedAt?, changedBy? }`. `value` and `configuredValue` are always **text**:
+
+| `type` | `value` | Notes |
+|---|---|---|
+| `INTEGER` / `DECIMAL` | `"90"` / `"9.90"` | within `min`..`max`; decimal accepts a comma on input |
+| `BOOLEAN` | `"true"` / `"false"` | |
+| `TEXT` | free text | `max` is the maximum length; may be empty |
+| `DATE` | `"2026-12-31"` or `""` | empty = no date |
+| `INTEGER_LIST` | `"15,7,3,1"` | each number within `min`..`max`; at least one |
+| `UF_LIST` | `"SE,TO"` or `""` | state codes |
+| `OPTION` | one of `options` | |
+| `OPTION_LIST` | `"A,B"` or `""` | subset of `options` |
+
+`key` is the configuration property (it contains dots — send it as is in the path). `changed=false` means the
+value configured for the environment is in effect. A refused value is **400** with a ready-to-show `message`;
+an unknown key is **404**. Settings with an `appKey` are also published in `GET /app-config` → `settings`.
+"Preços e inflação" publishes two: `priceInflationAudience` (`"ADMINS"` or `"EVERYONE"` — who the screen exists
+for) and `priceInflationPeriods` (array of months, e.g. `[3,6,12]`; the largest is the initial period).
+
+`GET /app-config` → `settings` also carries **read-only facts** the apps state in texts (not editable, they come
+from the code that enforces them): `emailVerificationCodeHours`, `passwordResetCodeMinutes`,
+`emailChangeCodeMinutes`, `phoneCodeMinutes`, `sensitiveMinHouseholds`. The apps must take every number, date
+and period they show from `settings` — never retype one. `INTEGER_LIST` settings arrive as a JSON array of
+numbers (`launchPromoWarningDays: [15,7,3,1]`). A `TEXT` setting may enforce a format (the AI price table:
+`model=input/output` entries separated by `;` plus a `default=` entry) — a bad one is a 400 like any other.
+
+Each setting also carries `group` — `null`, or `{ key, title, explanation, position }` when it is one field of a
+rule spread over several settings. Draw the settings sharing a `group.key` as one block under `title` and
+`explanation`, ordered by `position`.
+
+Notes from 2026-11-20: `days` is optional on both leaderboard endpoints (falls back to the admin setting);
+an oversized receipt batch is a 400 whose text is the top-level `message` (it names the configured maximum);
+`rewardedMonths` in `GET /referrals/me` is the sum of months really granted.
 
 All require a JWT for a user with `Role.ADMIN`. Regular users hit 403.
 

@@ -1,4 +1,7 @@
 package com.relyon.economizaai.service.notifications;
+import org.springframework.beans.factory.annotation.Value;
+import lombok.Setter;
+import lombok.Getter;
 import com.relyon.economizaai.model.enums.PriceExposureSurface;
 import com.relyon.economizaai.service.exposure.PriceExposureService;
 import com.relyon.economizaai.service.exposure.ShownPrice;
@@ -59,8 +62,10 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class NotificationRuleEngine {
 
-    /** Don't fire the same rule more than once within this window. */
-    private static final Duration COOLDOWN = Duration.ofHours(24);
+    /** Don't fire the same rule more than once within this many hours. */
+    @Getter @Setter
+    @Value("${economizaai.notifications.price-alert-cooldown-hours:24}")
+    private volatile int cooldownHours = 24;
 
     private final NotificationRuleRepository ruleRepository;
     private final LocalizedMessageService messageService;
@@ -199,7 +204,7 @@ public class NotificationRuleEngine {
     }
 
     private boolean inCooldown(NotificationRule rule, LocalDateTime now) {
-        return rule.getLastFiredAt() != null && rule.getLastFiredAt().isAfter(now.minus(COOLDOWN));
+        return rule.getLastFiredAt() != null && rule.getLastFiredAt().isAfter(now.minusHours(cooldownHours));
     }
 
     private boolean inViewerScope(NearbyScope scope, PriceObservation observation,

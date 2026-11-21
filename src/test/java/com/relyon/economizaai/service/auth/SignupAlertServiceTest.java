@@ -80,6 +80,19 @@ class SignupAlertServiceTest {
     }
 
     @Test
+    void theSwitchInTheAdminTurnsTheAlertOffAndOnWithoutARestart() {
+        var service = new SignupAlertService(contactService, INLINE_EXECUTOR, true);
+
+        service.setEnabled(false);
+        service.notifyNewAccount(newUser(), "e-mail/senha");
+        verify(contactService, never()).notifyAdmin(anyString(), anyString());
+
+        service.setEnabled(true);
+        service.notifyNewAccount(newUser(), "e-mail/senha");
+        verify(contactService).notifyAdmin(anyString(), anyString());
+    }
+
+    @Test
     void survivesMissingRequestContext() {
         var service = new SignupAlertService(contactService, INLINE_EXECUTOR, true);
 

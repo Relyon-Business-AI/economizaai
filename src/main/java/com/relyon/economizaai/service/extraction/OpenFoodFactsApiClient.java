@@ -47,10 +47,10 @@ public class OpenFoodFactsApiClient {
 
     public OpenFoodFactsApiClient(
             RestClient.Builder builder,
-            @Value("${economizaai.ingestion.ean-catalog.live-fallback-enabled:false}") boolean enabled,
+            @Value("${economizaai.ingestion.ean-catalog.live-fallback-enabled:true}") boolean enabled,
             @Value("${economizaai.ingestion.ean-catalog.live-fallback-timeout-ms:2500}") int timeoutMs,
             @Value("${economizaai.ingestion.ean-catalog.live-fallback-hosts:https://world.openfoodfacts.org,https://world.openbeautyfacts.org,https://world.openproductsfacts.org}") String hostsCsv,
-            @Value("${economizaai.ingestion.ean-catalog.live-fallback-user-agent:economizai/1.0 (+https://github.com/XandiVieira/economiz.AI)}") String userAgent) {
+            @Value("${economizaai.ingestion.ean-catalog.live-fallback-user-agent:economizai/1.0 (+https://economizaai.app)}") String userAgent) {
         var requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Math.min(timeoutMs, 3000));
         requestFactory.setReadTimeout(timeoutMs);

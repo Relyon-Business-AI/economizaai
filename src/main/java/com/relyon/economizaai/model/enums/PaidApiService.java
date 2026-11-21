@@ -3,35 +3,25 @@ package com.relyon.economizaai.model.enums;
 /**
  * A metered external service that costs money per call. Used as the ledger key
  * in {@code paid_api_call} and the dimension for per-user daily caps and the
- * Infosimples circuit breaker.
+ * Infosimples circuit breaker. What one call costs lives in {@code PaidApiCallCosts}.
  */
 public enum PaidApiService {
 
-    /** Infosimples SEFAZ-by-chave query (~R$0.24). CE every note + fallback everywhere. */
-    INFOSIMPLES(24),
+    /** Infosimples SEFAZ-by-chave query. CE every note + fallback everywhere. */
+    INFOSIMPLES,
 
-    /** A single captcha solve via CapSolver/2Captcha (~R$0.03). Every scrape solves at least one. */
-    CAPTCHA_SOLVE(3),
+    /** A single captcha solve via CapSolver/2Captcha. Every scrape solves at least one. */
+    CAPTCHA_SOLVE,
 
-    /** One Twilio SMS/WhatsApp message to Brazil (~R$0.30). OTPs and SMS/WhatsApp notifications. */
-    TWILIO_MESSAGE(30),
+    /** One Twilio SMS/WhatsApp message to Brazil. OTPs and SMS/WhatsApp notifications. */
+    TWILIO_MESSAGE,
 
-    /** One batched LLM enrichment call (category/brand/pack for ~25 products, ~R$0.02). */
-    LLM_ENRICH(2),
+    /** One batched LLM enrichment call (category/brand/pack for ~25 products). */
+    LLM_ENRICH,
 
-    /** One LLM vision extraction of a photographed receipt (~R$0.10). */
-    LLM_VISION(10),
+    /** One LLM vision extraction of a photographed receipt. */
+    LLM_VISION,
 
-    /** One LLM extraction of an already-fetched DANFE HTML the parser failed on (~R$0.05). */
-    LLM_HTML_RESCUE(5);
-
-    private final int defaultCostCents;
-
-    PaidApiService(int defaultCostCents) {
-        this.defaultCostCents = defaultCostCents;
-    }
-
-    public int defaultCostCents() {
-        return defaultCostCents;
-    }
+    /** One LLM extraction of an already-fetched DANFE HTML the parser failed on. */
+    LLM_HTML_RESCUE
 }

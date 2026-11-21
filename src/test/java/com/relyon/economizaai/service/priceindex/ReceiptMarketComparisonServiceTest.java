@@ -1,5 +1,6 @@
 package com.relyon.economizaai.service.priceindex;
 
+import com.relyon.economizaai.config.ComparisonProperties;
 import com.relyon.economizaai.exception.ReceiptNotFoundException;
 import com.relyon.economizaai.model.Household;
 import com.relyon.economizaai.model.Product;
@@ -75,6 +76,7 @@ class ReceiptMarketComparisonServiceTest {
     @Captor private ArgumentCaptor<ReceiptMarketComparison> comparisonCaptor;
 
     private final List<Runnable> queuedWork = new ArrayList<>();
+    private final ComparisonProperties comparisonProperties = new ComparisonProperties();
     private ReceiptMarketComparisonService service;
     private Household household;
     private User user;
@@ -86,7 +88,7 @@ class ReceiptMarketComparisonServiceTest {
         Executor queue = queuedWork::add;
         service = new ReceiptMarketComparisonService(receiptRepository, comparisonRepository,
                 basketComparisonService, viewerLocationService, marketNameService, marketLocationService,
-                queue, transactionManager);
+                comparisonProperties, queue, transactionManager);
         household = Household.builder().id(UUID.randomUUID()).inviteCode("ABC123").build();
         user = User.builder().id(UUID.randomUUID()).email("buyer@economizai").household(household).build();
         milk = product("Leite");
@@ -199,6 +201,43 @@ class ReceiptMarketComparisonServiceTest {
     }
 
     @Test
+    void compare_followsTheMaximumNotaAgeSetInTheAdmin() {
+        var boughtEightDaysAgo = confirmedReceipt(item(milk, "6", "31.74", null, false));
+        boughtEightDaysAgo.setIssuedAt(LocalDateTime.now().minusDays(8));
+        assertFalse(service.compare(user, boughtEightDaysAgo.getId()).available());
+
+        comparisonProperties.setReceiptMaxAgeDays(10);
+
+        assertTrue(service.compare(user, boughtEightDaysAgo.getId()).available());
+    }
+
+    @Test
+    void compare_asksForAsManyMarketsAsSetInTheAdmin() {
+        var receipt = confirmedReceipt(item(milk, "6", "31.74", null, false));
+        comparisonProperties.setAlternativeMarkets(5);
+
+        service.compare(user, receipt.getId());
+
+        verify(basketComparisonService).compare(any(), any(), any(), eq(5));
+    }
+
+    @Test
+    void compare_followsTheMinimumShareSetInTheAdminWhenReadingStoredPrices() {
+        var others = List.of(product("A"), product("B"), product("C"), product("D"));
+        var receipt = confirmedReceipt(
+                item(milk, "1", "5.00", null, false), item(others.get(0), "1", "5.00", null, false),
+                item(others.get(1), "1", "5.00", null, false), item(others.get(2), "1", "5.00", null, false),
+                item(others.get(3), "1", "5.00", null, false));
+        when(comparisonRepository.findByReceiptIdWithPrices(receipt.getId()))
+                .thenReturn(Optional.of(stored(receipt, price(0, milk, "4.79"))));
+        assertTrue(service.compare(user, receipt.getId()).markets().isEmpty());
+
+        comparisonProperties.setMinMatchedPct(20);
+
+        assertEquals(1, service.compare(user, receipt.getId()).markets().size());
+    }
+
+    @Test
     void compare_storesNothingWithoutAPositionSoALaterReadCanCapture() {
         var receipt = confirmedReceipt(item(milk, "6", "31.74", null, false));
         when(viewerLocationService.resolve(user)).thenReturn(new ViewerLocation(null, null, Source.NONE, null));
@@ -266,7 +305,7 @@ class ReceiptMarketComparisonServiceTest {
         };
         var rejecting = new ReceiptMarketComparisonService(receiptRepository, comparisonRepository,
                 basketComparisonService, viewerLocationService, marketNameService, marketLocationService,
-                fullQueue, transactionManager);
+                comparisonProperties, fullQueue, transactionManager);
         rejecting.captureAfterCommit(UUID.randomUUID());
 
         var receipt = confirmedReceipt(item(milk, "6", "31.74", null, false));

@@ -1,5 +1,7 @@
 package com.relyon.economizaai.service;
 
+import lombok.Setter;
+import lombok.Getter;
 import com.relyon.economizaai.model.enums.ReceiptStatus;
 import com.relyon.economizaai.repository.ReceiptRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -28,8 +30,10 @@ public class PendingReceiptAutoConfirmer {
 
     private final ReceiptRepository receiptRepository;
     private final ReceiptService receiptService;
-    private final boolean enabled;
-    private final int afterHours;
+    @Getter @Setter
+    private volatile boolean enabled;
+    @Getter @Setter
+    private volatile int afterHours;
     private final int maxPerRun;
 
     public PendingReceiptAutoConfirmer(

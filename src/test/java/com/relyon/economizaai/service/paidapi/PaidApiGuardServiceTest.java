@@ -41,6 +41,7 @@ class PaidApiGuardServiceTest {
     @Mock private PaidApiCallRepository repository;
 
     private PaidApiGuardProperties properties;
+    private PaidApiCallCosts callCosts;
     private PaidApiGuardService service;
 
     @BeforeEach
@@ -53,7 +54,8 @@ class PaidApiGuardServiceTest {
         properties.setBreakerWindowSeconds(600);
         properties.setBreakerCooldownSeconds(300);
         properties.setInfosimplesDailyBudgetCents(500);
-        service = new PaidApiGuardService(properties, repository);
+        callCosts = new PaidApiCallCosts();
+        service = new PaidApiGuardService(properties, repository, callCosts);
         service.useClock(Clock.fixed(T0, ZoneOffset.UTC));
     }
 
@@ -181,7 +183,19 @@ class PaidApiGuardServiceTest {
         assertEquals(PaidApiService.INFOSIMPLES, saved.getService());
         assertEquals("CE", saved.getUf());
         assertTrue(saved.isSuccess());
-        assertEquals(PaidApiService.INFOSIMPLES.defaultCostCents(), saved.getEstimatedCostCents());
+        assertEquals(24, saved.getEstimatedCostCents());
+    }
+
+    @Test
+    void ledgerRow_carriesTheCostInEffectWhenTheCallIsRecorded() {
+        service.recordSuccess(USER, PaidApiService.INFOSIMPLES, "CE", "infosimples");
+        callCosts.setInfosimples(31);
+        service.recordSuccess(USER, PaidApiService.INFOSIMPLES, "CE", "infosimples");
+
+        var captor = ArgumentCaptor.forClass(PaidApiCall.class);
+        verify(repository, times(2)).save(captor.capture());
+        assertEquals(24, captor.getAllValues().get(0).getEstimatedCostCents());
+        assertEquals(31, captor.getAllValues().get(1).getEstimatedCostCents());
     }
 
     @Test

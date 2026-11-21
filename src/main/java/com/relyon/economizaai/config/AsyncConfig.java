@@ -30,14 +30,16 @@ public class AsyncConfig {
     @Bean(RECEIPT_INGEST_EXECUTOR)
     @Profile("!test")
     public Executor receiptIngestExecutor(
-            @Value("${economizaai.ingestion.shutdown-await-seconds:60}") int shutdownAwaitSeconds) {
+            @Value("${economizaai.ingestion.shutdown-await-seconds:60}") int shutdownAwaitSeconds,
+            @Value("${economizaai.async.receipt-ingest.threads:8}") int threads,
+            @Value("${economizaai.async.receipt-ingest.queue-capacity:200}") int queueCapacity) {
         var executor = new ThreadPoolTaskExecutor();
         // core == max: a ThreadPoolExecutor only grows past core once the queue is FULL,
         // so core 4 / max 8 ran 4 threads until 50 scans were already waiting.
-        executor.setCorePoolSize(8);
-        executor.setMaxPoolSize(8);
+        executor.setCorePoolSize(Math.max(1, threads));
+        executor.setMaxPoolSize(Math.max(1, threads));
         executor.setAllowCoreThreadTimeOut(true);
-        executor.setQueueCapacity(200);
+        executor.setQueueCapacity(Math.max(1, queueCapacity));
         executor.setThreadNamePrefix("receipt-ingest-");
         // Graceful shutdown: a deploy must not drop notas mid-ingest. On context close the
         // pool stops taking work and waits (bounded) for the running and queued ingests.

@@ -565,7 +565,8 @@ case. Combines with `radiusKm` filter as `radius OR watched`.
 | `economizaai.collaborative.enabled` | `true` | Master switch — turn off to disable all reads/writes |
 | `economizaai.collaborative.min-households-for-public` | `3` | K-anon: queries return empty until N distinct households contributed |
 | `economizaai.collaborative.min-observations-per-product-market` | `5` | Reference price hidden until enough samples |
-| `economizaai.collaborative.min-observations-for-community-promo` | `10` | Community promo not flagged until baseline is solid |
+| `economizaai.collaborative.community-promo-min-recent-observations` | `3` | Recent prices needed before a community promo is flagged |
+| `economizaai.collaborative.community-promo-min-baseline-observations` | `3` | Older prices needed to know the typical price |
 | `economizaai.collaborative.community-promo-threshold-pct` | `15` | Recent median must be X% below baseline |
 | `economizaai.collaborative.lookback-days` | `90` | Window for "recent" data |
 | `economizaai.personal-promo.threshold-pct` | `10` | Personal promo if price < median - X% |

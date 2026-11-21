@@ -13,6 +13,7 @@ import com.relyon.economizaai.repository.StateIngestionAttemptRepository;
 import com.relyon.economizaai.repository.StateIngestionAttemptRepository.StateAttemptSummary;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -20,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.EnumSet;
 import java.util.List;
@@ -183,5 +185,54 @@ class StateStatusServiceTest {
         assertThat(byUf.get("RS").status()).isEqualTo(StateHealthStatus.WORKING);
         assertThat(byUf.get("TO").status()).isEqualTo(StateHealthStatus.UNSTABLE);
         assertThat(byUf.get("PA").status()).isEqualTo(StateHealthStatus.VALIDATING);
+    }
+
+    @Test
+    void pausedStatesCanChangeWhileRunning_andTheCachedAnswerIsDropped() {
+        assertThat(statusByUf().get("TO").status()).isEqualTo(StateHealthStatus.UNSTABLE);
+
+        service.changePausedStates("SC");
+
+        assertThat(service.pausedStatesCsv()).isEqualTo("SC");
+        assertThat(statusByUf().get("TO").status()).isNotEqualTo(StateHealthStatus.UNSTABLE);
+        assertThat(statusByUf().get("SC").status()).isEqualTo(StateHealthStatus.UNSTABLE);
+    }
+
+    @Test
+    void theFailuresThatMakeAStateUnstable_followTheConfiguredMinimum() {
+        var failures = List.of(failure(UnidadeFederativa.SC, "receipt.sefaz.fetch.failed:SC", 3));
+        when(receiptRepository.summarizeFailureReasonsSince(any())).thenReturn(failures);
+
+        assertThat(statusByUf().get("SC").status()).isEqualTo(StateHealthStatus.UNSTABLE);
+
+        service.setMinFailures(4);
+
+        assertThat(statusByUf().get("SC").status()).as("the new minimum applies without waiting for the cache")
+                .isEqualTo(StateHealthStatus.WORKING);
+    }
+
+    @Test
+    void thePeriodObserved_followsTheConfiguredHours() {
+        var since = ArgumentCaptor.forClass(LocalDateTime.class);
+
+        service.currentStatus();
+        service.setWindowHours(72);
+        service.currentStatus();
+
+        verify(receiptRepository, times(2)).summarizeByUfAndStatusSince(since.capture());
+        assertThat(Duration.between(since.getAllValues().get(1), since.getAllValues().get(0)))
+                .isEqualTo(Duration.ofHours(72 - 24));
+    }
+
+    @Test
+    void theParserFailuresThatCountAsABurst_followTheConfiguredMinimum() {
+        var parseFailures = List.of(verifiedParseFailures(UnidadeFederativa.RS, 4));
+        when(attemptRepository.summarizeSince(any())).thenReturn(parseFailures);
+
+        assertThat(statusByUf().get("RS").status()).isEqualTo(StateHealthStatus.WORKING);
+
+        service.setRegressionMinFailures(4);
+
+        assertThat(statusByUf().get("RS").status()).isEqualTo(StateHealthStatus.UNSTABLE);
     }
 }

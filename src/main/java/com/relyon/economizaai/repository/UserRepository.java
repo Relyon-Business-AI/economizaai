@@ -132,6 +132,21 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     """)
     List<User> findDigestUsersWithoutSendHour(@Param("afterId") UUID afterId, Pageable pageable);
 
+    /**
+     * One page of the people the monthly "Preços e inflação" notice goes to: active users, only
+     * the admins while the feature is kept to them. Keyset-paged by id.
+     */
+    @Query("""
+        SELECT user FROM User user
+        JOIN FETCH user.household
+        WHERE user.active = true
+          AND (:adminsOnly = FALSE OR user.role = 'ADMIN')
+          AND user.id > :afterId
+        ORDER BY user.id ASC
+    """)
+    List<User> findPriceInflationNoticePage(@Param("adminsOnly") boolean adminsOnly,
+                                            @Param("afterId") UUID afterId, Pageable pageable);
+
     /** Targeted write — never rewrites the rest of the user row from a stale copy. */
     @Modifying
     @Transactional
@@ -191,8 +206,8 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     String INTERNAL_FILTER =
             " AND (:includeInternal = TRUE OR (user.role <> 'ADMIN' "
             + "AND user.excludedFromMetrics = FALSE "
-            + "AND lower(user.email) NOT LIKE '%@economizaai.app' "
-            + "AND lower(user.email) NOT LIKE '%@cloudtestlabaccounts.com'))";
+            + "AND lower(user.email) NOT LIKE '" + InternalAccounts.OWN_DOMAIN_LIKE + "' "
+            + "AND lower(user.email) NOT LIKE '" + InternalAccounts.PLAY_TEST_LAB_DOMAIN_LIKE + "'))";
 
     /** (createdAt, acquisitionChannel) for every signup since the window start; bucketed into a daily series in the service. */
     @Query("SELECT user.createdAt, user.acquisitionChannel FROM User user "
@@ -225,8 +240,8 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     @Query("SELECT user.subscriptionTier, count(user) FROM User user "
             + "WHERE (:includeInternal = TRUE OR (user.role <> 'ADMIN' "
             + "AND user.excludedFromMetrics = FALSE "
-            + "AND lower(user.email) NOT LIKE '%@economizaai.app' "
-            + "AND lower(user.email) NOT LIKE '%@cloudtestlabaccounts.com')) GROUP BY user.subscriptionTier")
+            + "AND lower(user.email) NOT LIKE '" + InternalAccounts.OWN_DOMAIN_LIKE + "' "
+            + "AND lower(user.email) NOT LIKE '" + InternalAccounts.PLAY_TEST_LAB_DOMAIN_LIKE + "')) GROUP BY user.subscriptionTier")
     List<Object[]> tierDistribution(boolean includeInternal);
 
     @Query("SELECT count(user) FROM User user WHERE user.createdAt >= :since" + INTERNAL_FILTER)
@@ -287,8 +302,8 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     /** Total users, excluding admins/test accounts when includeInternal=false (matches the funnel counts). */
     @Query("SELECT count(user) FROM User user WHERE (:includeInternal = TRUE OR (user.role <> 'ADMIN' "
             + "AND user.excludedFromMetrics = FALSE "
-            + "AND lower(user.email) NOT LIKE '%@economizaai.app' "
-            + "AND lower(user.email) NOT LIKE '%@cloudtestlabaccounts.com'))")
+            + "AND lower(user.email) NOT LIKE '" + InternalAccounts.OWN_DOMAIN_LIKE + "' "
+            + "AND lower(user.email) NOT LIKE '" + InternalAccounts.PLAY_TEST_LAB_DOMAIN_LIKE + "'))")
     long countUsers(boolean includeInternal);
 
     /**
@@ -305,8 +320,8 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     String NATIVE_INTERNAL_FILTER =
             " AND (:includeInternal = TRUE OR (u.role <> 'ADMIN' "
             + "AND u.excluded_from_metrics = FALSE "
-            + "AND lower(u.email) NOT LIKE '%@economizaai.app' "
-            + "AND lower(u.email) NOT LIKE '%@cloudtestlabaccounts.com'))";
+            + "AND lower(u.email) NOT LIKE '" + InternalAccounts.OWN_DOMAIN_LIKE + "' "
+            + "AND lower(u.email) NOT LIKE '" + InternalAccounts.PLAY_TEST_LAB_DOMAIN_LIKE + "'))";
 
     /**
      * Weekly cohort sizes: (cohortWeekStart, acquisitionChannel, size) — signups bucketed

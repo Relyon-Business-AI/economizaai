@@ -1,5 +1,7 @@
 package com.relyon.economizaai.service.llm;
 
+import lombok.Setter;
+import lombok.Getter;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.relyon.economizaai.model.enums.AiActivity;
@@ -76,7 +78,8 @@ public class PhotoReceiptExtractionService {
     private final PhotoRetentionService photoRetentionService;
     private final boolean enabled;
     private final int maxItems;
-    private final int maxPhotos;
+    @Getter @Setter
+    private volatile int maxPhotos;
 
     // Self-ref pra o @Async valer (chamada de método no MESMO bean roda inline, sem proxy).
     @Lazy

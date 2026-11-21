@@ -1,8 +1,19 @@
 package com.relyon.economizaai.controller;
 
+import java.util.Map;
+import static org.mockito.Mockito.when;
+import com.relyon.economizaai.config.AppConfigProperties;
+import com.relyon.economizaai.config.CollaborativeProperties;
+import com.relyon.economizaai.service.settings.RuntimeSettings;
 import com.relyon.economizaai.config.SecurityConfig;
 import com.relyon.economizaai.security.JwtService;
 import com.relyon.economizaai.service.AppConfigService;
+import com.relyon.economizaai.service.auth.EmailChangeService;
+import com.relyon.economizaai.service.auth.EmailVerificationService;
+import com.relyon.economizaai.service.auth.PasswordResetService;
+import com.relyon.economizaai.service.auth.PhoneVerificationService;
+import com.relyon.economizaai.service.settings.RuntimeSetting;
+import com.relyon.economizaai.service.settings.SettingValueCodec;
 import com.relyon.economizaai.service.LocalizedMessageService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +25,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -23,12 +35,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * iosUrl, message.
  */
 @WebMvcTest(AppConfigController.class)
-@Import({SecurityConfig.class, AppConfigService.class})
+@Import({SecurityConfig.class, AppConfigService.class, AppConfigProperties.class, CollaborativeProperties.class})
 @TestPropertySource(properties = {
         "economizaai.app-config.min-version=1.4.0",
         "economizaai.app-config.android-url=market://details?id=economiza.ai",
         "economizaai.app-config.ios-url=itms-apps://apps.apple.com/app/id0000000000",
-        "economizaai.app-config.message=Atualize o app para continuar."
+        "economizaai.app-config.message=Atualize o app para continuar.",
+        "economizaai.collaborative.min-households-for-public=4"
 })
 class AppConfigControllerConfiguredTest {
 
@@ -37,6 +50,7 @@ class AppConfigControllerConfiguredTest {
     @MockitoBean private JwtService jwtService;
     @MockitoBean private UserDetailsService userDetailsService;
     @MockitoBean private LocalizedMessageService localizedMessageService;
+    @MockitoBean private RuntimeSettings runtimeSettings;
 
     @Test
     void appConfig_exposesConfiguredValuesWithTheGistFieldNames() throws Exception {
@@ -46,5 +60,36 @@ class AppConfigControllerConfiguredTest {
                 .andExpect(jsonPath("$.androidUrl").value("market://details?id=economiza.ai"))
                 .andExpect(jsonPath("$.iosUrl").value("itms-apps://apps.apple.com/app/id0000000000"))
                 .andExpect(jsonPath("$.message").value("Atualize o app para continuar."));
+    }
+
+    @Test
+    void appConfig_carriesTheBusinessSettingsTheAppsUse() throws Exception {
+        when(runtimeSettings.publishedToApps()).thenReturn(Map.of("priceWindowDays", 90L, "nearbyRadiusKm", 20));
+
+        mockMvc.perform(get("/api/v1/app-config"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.settings.priceWindowDays").value(90))
+                .andExpect(jsonPath("$.settings.nearbyRadiusKm").value(20));
+    }
+
+    @Test
+    void appConfig_sendsAListSettingAsAJsonArrayOfNumbers() throws Exception {
+        var warningDays = SettingValueCodec.toJsonValue(RuntimeSetting.LAUNCH_PROMO_WARNING_DAYS, "15,7,3,1");
+        when(runtimeSettings.publishedToApps()).thenReturn(Map.of("launchPromoWarningDays", warningDays));
+
+        mockMvc.perform(get("/api/v1/app-config"))
+                .andExpect(status().isOk())
+                .andExpect(content().json("{\"settings\":{\"launchPromoWarningDays\":[15,7,3,1]}}"));
+    }
+
+    @Test
+    void appConfig_carriesTheFixedFactsTheAppsState_atTheValuesTheRulesApply() throws Exception {
+        mockMvc.perform(get("/api/v1/app-config"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.settings.emailVerificationCodeHours").value(EmailVerificationService.CODE_TTL_HOURS))
+                .andExpect(jsonPath("$.settings.passwordResetCodeMinutes").value(PasswordResetService.CODE_TTL_MINUTES))
+                .andExpect(jsonPath("$.settings.emailChangeCodeMinutes").value(EmailChangeService.CODE_TTL_MINUTES))
+                .andExpect(jsonPath("$.settings.phoneCodeMinutes").value(PhoneVerificationService.OTP_TTL_MINUTES))
+                .andExpect(jsonPath("$.settings.sensitiveMinHouseholds").value(4));
     }
 }

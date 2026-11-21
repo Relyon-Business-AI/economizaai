@@ -4,10 +4,10 @@ import com.relyon.economizaai.config.AsyncConfig;
 import com.relyon.economizaai.model.Subscription;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.service.ContactService;
+import com.relyon.economizaai.service.auth.SignupAlertService;
 import com.relyon.economizaai.service.privacy.LogMasker;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.concurrent.Executor;
@@ -25,18 +25,18 @@ public class SubscriptionDeletionAlertService {
 
     private final ContactService contactService;
     private final Executor executor;
-    private final boolean enabled;
+    private final SignupAlertService signupAlertService;
 
     public SubscriptionDeletionAlertService(ContactService contactService,
                                             @Qualifier(AsyncConfig.RECEIPT_INGEST_EXECUTOR) Executor executor,
-                                            @Value("${economizaai.signup-alert.enabled:true}") boolean enabled) {
+                                            SignupAlertService signupAlertService) {
         this.contactService = contactService;
         this.executor = executor;
-        this.enabled = enabled;
+        this.signupAlertService = signupAlertService;
     }
 
     public void notifyPaidSubscriberDeleted(User user, Subscription subscription) {
-        if (!enabled) {
+        if (!signupAlertService.isEnabled()) {
             return;
         }
         var subject = "Conta excluída com assinatura paga ativa: " + user.getEmail();

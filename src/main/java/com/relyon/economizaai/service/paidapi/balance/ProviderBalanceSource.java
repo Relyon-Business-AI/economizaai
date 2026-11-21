@@ -6,7 +6,7 @@ import java.util.Optional;
 /**
  * One paid provider whose PREPAID balance is watched by {@link ProviderBalanceMonitor}.
  * Implementations do the (untransacted, timeout-bounded) HTTP read; the monitor owns the
- * top-up tracking and the 80% / exhausted alerts.
+ * top-up tracking and the warning / exhausted alerts.
  */
 public interface ProviderBalanceSource {
 

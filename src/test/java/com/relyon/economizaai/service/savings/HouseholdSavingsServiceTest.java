@@ -8,6 +8,7 @@ import com.relyon.economizaai.model.Receipt;
 import com.relyon.economizaai.model.ReceiptItem;
 import com.relyon.economizaai.model.User;
 import com.relyon.economizaai.model.enums.MerchantSegment;
+import com.relyon.economizaai.model.enums.SavingsReference;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository.ContributedPrice;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
@@ -252,6 +253,30 @@ class HouseholdSavingsServiceTest {
     }
 
     @Test
+    void regionReferenceOnly_leavesOutLinesThatOnlyHaveTheHouseholdsOwnHistory() {
+        buy(rice, "1", "10.00", PURCHASED_AT.minusDays(40));
+        buy(rice, "1", "12.00", PURCHASED_AT.minusDays(20));
+        buy(rice, "1", "9.00", PURCHASED_AT);
+
+        var savings = service.savings(user, FROM, TO, SavingsReference.REGION);
+
+        assertThat(savings.purchasedLineCount()).isEqualTo(1);
+        assertThat(savings.comparedLineCount()).isZero();
+        assertThat(savings.saved()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void regionReferenceOnly_keepsLinesComparedWithOtherHouseholds() {
+        buy(rice, "1", "8.00", PURCHASED_AT);
+        othersPaid(rice, NEARBY_SUPERMARKET, "10.00", "10.00", "10.00");
+
+        var savings = service.savings(user, FROM, TO, SavingsReference.REGION);
+
+        assertThat(savings.regionComparedLineCount()).isEqualTo(1);
+        assertThat(savings.saved()).isEqualByComparingTo("2.00");
+    }
+
+    @Test
     void aSingleEarlierPurchase_isNotAUsualPrice() {
         buy(rice, "1", "12.00", PURCHASED_AT.minusDays(20));
         buy(rice, "1", "9.00", PURCHASED_AT);
@@ -312,6 +337,17 @@ class HouseholdSavingsServiceTest {
 
         verify(receiptItemRepository).findConfirmedInStoreLinesForHousehold(
                 eq(user.getHousehold().getId()), eq(TO.minusDays(180)), eq(TO));
+    }
+
+    @Test
+    void withoutAStart_thePeriodFollowsTheDaysSetInTheAdmin() {
+        service.setDefaultPeriodDays(30);
+
+        var savings = service.savings(user, null, TO);
+
+        assertThat(savings.from()).isEqualTo(TO.minusDays(30));
+        verify(receiptItemRepository).findConfirmedInStoreLinesForHousehold(
+                eq(user.getHousehold().getId()), eq(TO.minusDays(120)), eq(TO));
     }
 
     private void buy(Product product, String quantity, String totalPrice, LocalDateTime purchasedAt) {

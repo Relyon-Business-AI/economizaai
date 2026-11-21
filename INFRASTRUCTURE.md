@@ -106,6 +106,31 @@ migration). One repo artifact it references:
 
 ---
 
+## Business settings changed in the admin (2026-11-19)
+
+Plan limits, price windows, promo thresholds, notification rules, paid-API caps and ceilings, paused
+states, the force-update lever and the merchant rules are edited in **Admin → Configurações** and stored in
+`runtime_setting_overrides`. A value saved there wins over `application.yaml` / the env var and takes effect
+at once (other instances pick it up within `SETTINGS_REFRESH_MS`, 60 s); removing it restores the configured
+value. So for those settings the env vars below are only the **starting value** of an environment — check the
+admin screen before concluding what is in effect. The list lives in `RuntimeSetting.java`.
+
+Env vars added on 2026-11-19 (all optional unless noted):
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `APPLE_ASC_APP_ID` / `APPLE_ASC_ISSUER_ID` / `APPLE_ASC_KEY_ID` | *(none)* | App Store Connect account identifiers. **Required when `APPLE_ASC_ENABLED=true`** (they used to be defaults in the code). Set on dev and prod. |
+| `GEO_USER_AGENT` | `economizai/0.1 (contato@economizaai.app)` | User-Agent sent to Nominatim / the CEP lookup (their policy asks for a contact). |
+| `OUTBOUND_USER_AGENT` | `economizai/0.1 (+https://economizaai.app)` | User-Agent sent to the SEFAZ portals and BrasilAPI. |
+| `ASYNC_RECEIPT_INGEST_THREADS` / `ASYNC_RECEIPT_INGEST_QUEUE` | `8` / `200` | Size of the receipt-ingestion pool (was fixed in code). |
+| `CAPSOLVER_BASE_URL` | `https://api.capsolver.com` | CapSolver API (was fixed in code). |
+| `WHATSAPP_AUDIENCE` | `ADMINS` | Starting value of "WhatsApp: quem pode usar" (`ADMINS` / `EVERYONE`). |
+| `USD_BRL_RATE` | `5.50` | Starting value of the USD→BRL rate of the cost panel. |
+| `SETTINGS_REFRESH_MS` | `60000` | How often an instance re-reads the settings saved in the admin. |
+
+`SEFAZ_PREFETCH_ALLOWED_UFS` now takes effect (the code used to read a different key, so only its default,
+`PE`, ever applied).
+
 ## Environment variables — added in the 2026-11-11 release
 
 Everything below has a default baked into `application.yaml`, so the app boots without any
@@ -157,8 +182,7 @@ are offered to `ADMIN` accounts only for now, and need `TWILIO_FROM_WHATSAPP` se
 | `TWILIO_WHATSAPP_DEALS_DIGEST_TEMPLATE_SID` | _(blank)_ | Template of the `DEALS_DIGEST` notice. |
 | `TWILIO_WHATSAPP_REPORT_TEMPLATE_SID` | _(blank)_ | Template of the `WEEKLY_REPORT` notice — used by the weekly AND the monthly report (already existed; `{{1}}` = one-line summary of the period). |
 | `WHATSAPP_REPORTS_ENABLED` | `false` | Turns the spending report job on — BOTH the weekly and the monthly run. Each sends the report by e-mail and/or WhatsApp, per the user's `WEEKLY_REPORT` options, to whoever chose that frequency (`reportFrequencies`). |
-| `WHATSAPP_WEEKLY_REPORT_CRON` | `0 0 10 ? * MON` | When the weekly report runs (America/Sao_Paulo): Monday 10:00, covering the last 7 days. |
-| `WHATSAPP_MONTHLY_REPORT_CRON` | `0 0 10 1 * ?` | When the monthly report runs (America/Sao_Paulo): day 1 at 10:00, covering the previous calendar month. |
+| _(admin)_ | Monday 10:00 / day 1 at 10:00 | The weekly and monthly report send times are no longer env vars (`WHATSAPP_WEEKLY_REPORT_CRON` / `WHATSAPP_MONTHLY_REPORT_CRON` were removed): set them in Admin → Configurações → Notificações. |
 
 **Ingestion**
 
@@ -200,8 +224,7 @@ are offered to `ADMIN` accounts only for now, and need `TWILIO_FROM_WHATSAPP` se
 | `NOTIFICATIONS_QUIET_HOURS_START` / `NOTIFICATIONS_QUIET_HOURS_END` | `21` / `8` | Window (Brasília hours) in which nothing is pushed or e-mailed. |
 | `NOTIFICATIONS_QUIET_HOURS_MAX_DEFERRED` | `3` | Held-back pushes sent per user when the window ends. |
 | `NOTIFICATIONS_QUIET_HOURS_DRAIN_CRON` | `0 0 * * * *` | Job that sends the held-back pushes (hourly). |
-| `NOTIFICATIONS_REPLENISHMENT_CRON` | `0 0 10 * * *` | "Running low" reminders (replaces `NOTIFICATIONS_REPLENISHMENT_INTERVAL_MS`). |
-| `NOTIFICATIONS_BUDGET_CRON` | `0 0 9,18 * * *` | Monthly budget check (replaces `NOTIFICATIONS_BUDGET_INTERVAL_MS`). |
+| _(admin)_ | 10:00 / 9:00 and 18:00 | The "running low" reminder hour and the budget check hours are no longer env vars (`NOTIFICATIONS_REPLENISHMENT_CRON` / `NOTIFICATIONS_BUDGET_CRON` were removed): set them in Admin → Configurações → Notificações. |
 | `SIGNUP_ALERT_ENABLED` | `true` | Admin alert on every signup (existing variable). **Set to `false` on prod.** |
 
 **Subscription, referral, deals, merchants**
@@ -268,3 +291,40 @@ hook to catch duplicate Flyway version numbers.
 ---
 
 _Last updated: 2026-11-11. Keep this in sync when infra changes._
+
+
+## Business rules live in the admin, not in env vars (2026-11-20)
+
+Every business rule (limits, periods, thresholds, send times, provider prices) is a setting in
+Admin → Configurações (`RuntimeSetting`). Its property key in `application.yaml` only supplies the
+starting value of an environment; a value saved in the admin wins and survives deploys. Do not add
+env vars for business rules. The env names that exist for these keys (e.g. `PAID_API_COST_*_CENTS`,
+`COST_ALERT_WARNING_THRESHOLD_PERCENT`, `ECONOMIZAAI_AI_MODEL_PRICES`, `RATE_LIMIT_*_PER_HOUR`,
+`RECEIPTS_BULK_MAX_RECEIPTS`, `INGEST_PORTAL_RECOVERY_WINDOW_HOURS`, `SEFAZ_EXPERIMENTAL_MIN_EVIDENCE_*`,
+`AUTO_PROMOTE_MIN_*`, `CANONICALIZATION_FUZZY_MATCH_THRESHOLD`, `AI_SUBCAT_*`) are optional overrides
+of that starting value and are not set on Render. `AI_SUBCAT_*` used to be ignored (the code read
+another key); they take effect now if ever set. A malformed `ECONOMIZAAI_AI_MODEL_PRICES` stops startup.
+
+## Preços e inflação — IBGE SIDRA and the daily job (2026-11-20)
+
+- **New outbound dependency: IBGE SIDRA** (`https://apisidra.ibge.gov.br`, public, no key, free). One GET a day
+  reads table 7060 (IPCA), variable 63 (monthly % change), for Brasil + 10 metropolitan regions + 6
+  municipalities and 17 items ("Alimentação no domicílio" and the 16 food groups under it). Best-effort: 3
+  attempts, 30 s timeout; if IBGE is down the job keeps what it has and tries again the next day. Nothing
+  user-facing depends on the call succeeding at request time — the endpoints read the database.
+- **Daily job** `PriceInflationRefreshJob` at 05:20 America/Sao_Paulo: loads the official months (36 when the
+  table is empty, then the last 3), recomputes the community table for the last 3 closed months (24 when
+  empty) and, when a new official month shows up (never on the first load), creates the monthly inbox notice.
+  The IBGE call runs outside any transaction; each month is stored in its own short one. On demand:
+  `POST /api/v1/admin/price-inflation/recompute?months=24` (ADMIN, no notice).
+- **Tables** (Flyway `V192__price_inflation.sql`): `official_inflation_months`, `community_price_changes`,
+  `community_price_coverage`. The last two are derived from `price_observations` (no user or household) and can
+  be rebuilt at any time with the recompute endpoint.
+- **Config** (`economizaai.price-inflation.*` in `application.yaml`). Business rules — in the admin, do not set
+  env vars for them: `audience`, `periods`, `food-categories`, `min-pairs-per-month`, `min-stores-per-month`,
+  `min-pairs-per-item`, `max-monthly-change-percent`, `basket-min-products`, `monthly-notice`. Technical:
+  `job-cron` (env `PRICE_INFLATION_JOB_CRON`, default `0 20 5 * * *`; `-` disables the job),
+  `official-backfill-months` (36), `official-refresh-months` (3), `community-backfill-months` (24),
+  `community-refresh-months` (3), `sidra.base-url` (env `IBGE_SIDRA_URL`), `sidra.user-agent`
+  (env `OUTBOUND_USER_AGENT`), `sidra.timeout-ms` (30000), `sidra.max-attempts` (3), `sidra.food-at-home-item`
+  (7171), `sidra.group-items` (the 16 group codes). No new env var is required on Render.

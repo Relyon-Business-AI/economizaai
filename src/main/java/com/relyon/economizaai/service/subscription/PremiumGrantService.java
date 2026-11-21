@@ -9,8 +9,11 @@ import com.relyon.economizaai.repository.PremiumGrantRepository;
 import com.relyon.economizaai.repository.SubscriptionRepository;
 import com.relyon.economizaai.repository.UserRepository;
 import com.relyon.economizaai.service.privacy.LogMasker;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,9 +22,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Premium time earned outside billing (referral rewards). A reward is one calendar month that
- * queues AFTER whatever the user already has — the running subscription period (promo or paid)
- * and any earlier reward — so months accumulate and a reward never replaces or shortens a
+ * Premium time earned outside billing (referral rewards). A reward is a number of calendar
+ * months ({@link #getReferralRewardMonths}) that queues AFTER whatever the user already has — the running subscription period (promo or paid)
+ * and any earlier reward — so rewards accumulate and a reward never replaces or shortens a
  * subscription. The tier is PRO while a subscription is ACTIVE or a grant window is running;
  * {@link #reconcileTiers} flips the tier when a window starts or ends.
  */
@@ -30,23 +33,28 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class PremiumGrantService {
 
+    /** Months of Premium each referral reward is worth. */
+    @Getter @Setter
+    @Value("${economizaai.referral.reward-months:1}")
+    private volatile int referralRewardMonths = 1;
+
     private final PremiumGrantRepository premiumGrantRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
 
     /**
-     * Grants one month to {@code user} because of {@code sourceUserId} (the invited account).
+     * Grants one referral reward to {@code user} because of {@code sourceUserId} (the invited account).
      * Idempotent: an invited person yields at most one reward. Empty when it was already granted.
      */
     @Transactional
-    public Optional<PremiumGrant> grantMonth(User user, PremiumGrantKind kind, UUID sourceUserId) {
+    public Optional<PremiumGrant> grantReferralReward(User user, PremiumGrantKind kind, UUID sourceUserId) {
         if (premiumGrantRepository.existsByUserIdAndSourceUserId(user.getId(), sourceUserId)) {
             log.info("premium_grant.skipped reason=already_rewarded user={} kind={}",
                     LogMasker.email(user.getEmail()), kind);
             return Optional.empty();
         }
         var now = LocalDateTime.now();
-        var window = EntitlementClock.monthAfter(now, currentEntitlementEnd(user.getId(), now));
+        var window = EntitlementClock.monthsAfter(now, currentEntitlementEnd(user.getId(), now), referralRewardMonths);
         var grant = premiumGrantRepository.save(PremiumGrant.builder()
                 .user(user)
                 .kind(kind)

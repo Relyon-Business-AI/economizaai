@@ -5,6 +5,7 @@ import com.relyon.economizaai.dto.response.HouseholdSavingsResponse;
 import com.relyon.economizaai.dto.response.HouseholdSavingsResponse.MarketSavings;
 import com.relyon.economizaai.model.MarketLocation;
 import com.relyon.economizaai.model.User;
+import com.relyon.economizaai.model.enums.SavingsReference;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository;
 import com.relyon.economizaai.repository.PriceObservationAuditRepository.ContributedPrice;
 import com.relyon.economizaai.repository.ReceiptItemRepository;
@@ -18,8 +19,11 @@ import com.relyon.economizaai.service.savings.ReferencePriceBook.RegionPrice;
 import com.relyon.economizaai.service.savings.ReferencePriceBook.Source;
 import com.relyon.economizaai.service.subscription.SubscriptionGateService;
 import com.relyon.economizaai.time.BrazilClock;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,7 +51,10 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class HouseholdSavingsService {
 
-    private static final int DEFAULT_PERIOD_DAYS = 90;
+    /** The period shown when the caller asks for no start date. */
+    @Getter @Setter
+    @Value("${economizaai.savings.default-period-days:90}")
+    private volatile int defaultPeriodDays = 90;
 
     private final ReceiptItemRepository receiptItemRepository;
     private final PriceObservationAuditRepository auditRepository;
@@ -60,6 +67,12 @@ public class HouseholdSavingsService {
 
     @Transactional(readOnly = true)
     public HouseholdSavingsResponse savings(User user, LocalDateTime requestedFrom, LocalDateTime requestedTo) {
+        return savings(user, requestedFrom, requestedTo, SavingsReference.ALL);
+    }
+
+    @Transactional(readOnly = true)
+    public HouseholdSavingsResponse savings(User user, LocalDateTime requestedFrom, LocalDateTime requestedTo,
+                                            SavingsReference reference) {
         var to = requestedTo != null ? requestedTo : BrazilClock.nowDateTime();
         var from = periodStart(user, requestedFrom, to);
         var householdId = user.getHousehold().getId();
@@ -69,7 +82,7 @@ public class HouseholdSavingsService {
         var linesInPeriod = ownLines.stream().filter(line -> !line.purchasedAt().isBefore(from)).toList();
         var referenceBook = new ReferencePriceBook(
                 regionPricesByProduct(user, linesInPeriod, from, to),
-                ownLines.stream().collect(Collectors.groupingBy(line -> line.product().getId())),
+                ownLinesByProduct(ownLines, reference),
                 privacyTierResolver, settings());
         var comparisons = linesInPeriod.stream()
                 .map(line -> compareWithReference(line, referenceBook))
@@ -80,10 +93,16 @@ public class HouseholdSavingsService {
         return toResponse(householdId, from, to, linesInPeriod.size(), comparisons);
     }
 
-    /** FREE history window first; with no start asked for, the last {@value #DEFAULT_PERIOD_DAYS} days. */
+    /** The household's own history is only a reference when the caller accepts it. */
+    private Map<UUID, List<PurchasedLine>> ownLinesByProduct(List<PurchasedLine> ownLines, SavingsReference reference) {
+        if (reference == SavingsReference.REGION) return Map.of();
+        return ownLines.stream().collect(Collectors.groupingBy(line -> line.product().getId()));
+    }
+
+    /** FREE history window first; with no start asked for, the default period. */
     private LocalDateTime periodStart(User user, LocalDateTime requestedFrom, LocalDateTime to) {
         var clampedFrom = subscriptionGate.clampFrom(user, requestedFrom);
-        return clampedFrom != null ? clampedFrom : to.minusDays(DEFAULT_PERIOD_DAYS);
+        return clampedFrom != null ? clampedFrom : to.minusDays(defaultPeriodDays);
     }
 
     private ReferencePriceBook.Settings settings() {

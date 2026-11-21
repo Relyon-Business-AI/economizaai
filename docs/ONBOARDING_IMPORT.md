@@ -15,7 +15,7 @@
 ## Implementado (2026-09-22)
 
 **Endpoints** (autenticado, household-scoped):
-- `POST /api/v1/receipts/import` — body `{ "chaves": ["...", ...] }` (máx. 500).
+- `POST /api/v1/receipts/import` — body `{ "chaves": ["...", ...] }` (o máximo por vez é a configuração "notas por lote" do admin, hoje 500; o app lê `bulkMaxReceipts` em `/app-config`).
 - `POST /api/v1/receipts/import/nfg-csv` — multipart `file` = CSV cru da NFG; as
   chaves são extraídas server-side (aceita o formato de dois blocos com espaço).
 - Ambos devolvem `202` com `ReceiptImportResponse` = `{ received, queued,

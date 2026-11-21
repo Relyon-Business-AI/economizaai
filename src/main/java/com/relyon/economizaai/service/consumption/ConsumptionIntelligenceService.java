@@ -66,9 +66,6 @@ public class ConsumptionIntelligenceService {
     private static final double MIN_QUANTITY_MULTIPLIER = 1.0;
     private static final double MAX_QUANTITY_MULTIPLIER = 5.0;
 
-    /** Purchase-count thresholds at which a prediction earns more confidence. */
-    private static final int HIGH_CONFIDENCE_MIN_SAMPLES = 8;
-    private static final int MEDIUM_CONFIDENCE_MIN_SAMPLES = 5;
 
     private static final int MAX_PAGE_SIZE = 100;
 
@@ -355,8 +352,9 @@ public class ConsumptionIntelligenceService {
     }
 
     private ConsumptionPredictionResponse.Confidence confidenceFor(int sampleSize) {
-        if (sampleSize >= HIGH_CONFIDENCE_MIN_SAMPLES) return ConsumptionPredictionResponse.Confidence.HIGH;
-        if (sampleSize >= MEDIUM_CONFIDENCE_MIN_SAMPLES) return ConsumptionPredictionResponse.Confidence.MEDIUM;
+        var consumption = properties.getConsumption();
+        if (sampleSize >= consumption.getHighConfidenceMinSamples()) return ConsumptionPredictionResponse.Confidence.HIGH;
+        if (sampleSize >= consumption.getMediumConfidenceMinSamples()) return ConsumptionPredictionResponse.Confidence.MEDIUM;
         return ConsumptionPredictionResponse.Confidence.LOW;
     }
 

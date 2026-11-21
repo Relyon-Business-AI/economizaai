@@ -45,6 +45,7 @@ class ProviderBalanceMonitorTest {
     @BeforeEach
     void setUp() {
         lenient().when(costAlertService.isEnabled()).thenReturn(true);
+        lenient().when(costAlertService.getWarningThresholdPercent()).thenReturn(80);
         lenient().when(stateRepository.findById(anyString()))
                 .thenAnswer(invocation -> Optional.ofNullable(storedStates.get(invocation.<String>getArgument(0))));
         lenient().when(stateRepository.save(any(ProviderBalanceState.class))).thenAnswer(invocation -> {
@@ -268,5 +269,23 @@ class ProviderBalanceMonitorTest {
         monitorAt(T0, source).checkBalances();
 
         verify(stateRepository, never()).findById(anyString());
+    }
+
+    @Test
+    void warningFollowsTheConfiguredPercentage_inTheThresholdAndInTheText() {
+        var source = new FakeSource("CAPSOLVER");
+        source.balance("10.00");
+        monitorAt(T0, source).checkBalances();
+        source.balance("4.00");
+        monitorAt(T0.plusSeconds(3600), source).checkBalances();
+        verify(costAlertService, never()).raise(anyString(), anyInt(), anyString(), anyString(), anyString());
+
+        when(costAlertService.getWarningThresholdPercent()).thenReturn(60);
+        monitorAt(T0.plusSeconds(7200), source).checkBalances();
+
+        var headline = ArgumentCaptor.forClass(String.class);
+        verify(costAlertService).raise(eq("BALANCE:CAPSOLVER"), eq(60), eq(String.valueOf(T0.getEpochSecond())),
+                headline.capture(), anyString());
+        assertTrue(headline.getValue().contains("60% consumido"));
     }
 }

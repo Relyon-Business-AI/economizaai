@@ -150,4 +150,37 @@ class AutoPromotionServiceTest {
 
         assertEquals(0, outcome.promoted());
     }
+
+    @Test
+    void theSampleFloor_followsTheConfiguredMinimum() {
+        var products = IntStream.range(0, 10)
+                .mapToObj(i -> llmProduct("BAR " + i, ProductCategory.OTHER, "Y"))
+                .toList();
+        when(productRepository.findByCategorizationSourceIn(any())).thenReturn(products);
+        when(learnedRepository.findByNormalizedTokenIn(any())).thenReturn(List.of());
+        when(learnedRepository.findAll()).thenReturn(List.of());
+
+        assertEquals(0, service.promote().promoted(), "10 samples are below the floor of 30");
+
+        service.setMinSamples(10);
+
+        assertEquals(1, service.promote().promoted(), "\"bar\" now reaches the floor");
+    }
+
+    @Test
+    void theAgreementRequired_followsTheConfiguredShare() {
+        var groceries = IntStream.range(0, 20)
+                .mapToObj(i -> llmProduct("FOO " + i, ProductCategory.GROCERIES, "X"));
+        var cleaning = IntStream.range(0, 15)
+                .mapToObj(i -> llmProduct("FOO " + i, ProductCategory.CLEANING, "X"));
+        when(productRepository.findByCategorizationSourceIn(any())).thenReturn(Stream.concat(groceries, cleaning).toList());
+        when(learnedRepository.findByNormalizedTokenIn(any())).thenReturn(List.of());
+        when(learnedRepository.findAll()).thenReturn(List.of());
+
+        assertEquals(0, service.promote().promoted(), "20 of 35 is below 90%");
+
+        service.setMinAgreement(0.55);
+
+        assertEquals(1, service.promote().promoted(), "20 of 35 clears 55%");
+    }
 }

@@ -18,7 +18,7 @@ public interface PremiumGrantRepository extends JpaRepository<PremiumGrant, UUID
     /** An invited person yields at most one reward for their inviter, whatever the kind. */
     boolean existsByUserIdAndSourceUserId(UUID userId, UUID sourceUserId);
 
-    long countByUserId(UUID userId);
+    List<PremiumGrant> findByUserId(UUID userId);
 
     /** True while one of the user's grant windows is running. */
     @Query("""
