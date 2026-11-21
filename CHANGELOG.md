@@ -1,5 +1,14 @@
 # economizai — what's new
 
+## 2026-11-21 — Lista de consultados: atualizar o preço não conta como consulta
+
+- `GET /price-index/products/{id}/best-markets`, `GET /price-index/products/{id}/generic-comparison` e
+  `GET /price-index/generic-comparison` aceitam `trackConsult` (padrão `true`). Com `false`, a leitura não
+  entra no histórico de consultados: não muda a data da consulta nem o preço guardado. **O app deve mandar
+  `trackConsult=false` quando só está atualizando o preço das linhas da lista de consultados**; antes, abrir
+  a lista marcava todos os itens como consultados agora (a ordem mudava a cada atualização) e regravava o
+  preço da consulta (a queda de preço nunca aparecia).
+
 ## 2026-11-20 — Preços e inflação: inflação oficial de alimentos x preços pagos nos mercados
 
 - **Novo: `GET /insights/price-inflation?scope=BR|STATE&state=RS&months=12`** — a inflação oficial de alimentos

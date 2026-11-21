@@ -32,6 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * Public-facing collaborative price intelligence. All endpoints respect
@@ -103,7 +104,8 @@ public class PriceIndexController {
             @RequestParam(required = false) Double radiusKm,
             @RequestParam(required = false) BigDecimal lat,
             @RequestParam(required = false) BigDecimal lng,
-            @RequestParam(defaultValue = "CHEAPEST") ComparisonSort sort) {
+            @RequestParam(defaultValue = "CHEAPEST") ComparisonSort sort,
+            @RequestParam(defaultValue = "true") boolean trackConsult) {
         // lat/lng are an all-or-nothing pair — using one with the home value of the
         // other would be a garbage coordinate that skews distance/radius filtering.
         var useCurrentPosition = lat != null && lng != null;
@@ -120,7 +122,7 @@ public class PriceIndexController {
             rows = priceIndexService.bestMarketsForViewer(productId, limit,
                     viewerLocationService.resolve(user, lat, lng), watched, sort);
         }
-        recordBestMarketsConsult(user, productId, rows);
+        if (trackConsult) recordBestMarketsConsult(user, productId, rows);
         priceExposureService.recordShown(user, PriceExposureSurface.BEST_MARKETS,
                 ShownPrice.ofBestMarkets(productId, rows));
         return ResponseEntity.ok(rows);
@@ -146,8 +148,10 @@ public class PriceIndexController {
     public ResponseEntity<GenericComparisonResponse> genericComparison(
             @AuthenticationPrincipal User user,
             @PathVariable UUID productId,
-            @RequestParam(defaultValue = "CHEAPEST") ComparisonSort sort) {
-        return ResponseEntity.ok(genericComparisonService.forProduct(productId, user, sort));
+            @RequestParam(defaultValue = "CHEAPEST") ComparisonSort sort,
+            @RequestParam(defaultValue = "true") boolean trackConsult) {
+        Supplier<GenericComparisonResponse> comparison = () -> genericComparisonService.forProduct(productId, user, sort);
+        return ResponseEntity.ok(trackConsult ? comparison.get() : scanHistoryService.withoutRecording(comparison));
     }
 
     /**
@@ -164,11 +168,12 @@ public class PriceIndexController {
             @AuthenticationPrincipal User user,
             @RequestParam String type,
             @RequestParam(required = false) String ean,
-            @RequestParam(defaultValue = "CHEAPEST") ComparisonSort sort) {
-        var response = ean == null || ean.isBlank()
+            @RequestParam(defaultValue = "CHEAPEST") ComparisonSort sort,
+            @RequestParam(defaultValue = "true") boolean trackConsult) {
+        Supplier<GenericComparisonResponse> comparison = () -> ean == null || ean.isBlank()
                 ? genericComparisonService.forType(type, user, sort)
                 : genericComparisonService.forCatalog(ean, type, user, sort);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(trackConsult ? comparison.get() : scanHistoryService.withoutRecording(comparison));
     }
 
     /**
