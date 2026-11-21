@@ -296,4 +296,17 @@ class NotificationChannelResolverTest {
         assertEquals(Set.of(NotificationChannel.EMAIL),
                 resolver.resolve(user, NotificationType.HOUSEHOLD_MEMBER_LEFT).outbound());
     }
+
+    // ---- inbox-only types never go out ----
+
+    @Test
+    void anInboxOnlyTypeIsNeverMutedAndNeverGoesOut_withOrWithoutAPushToken() {
+        var withToken = resolver.resolve(userWithPushToken().build(), NotificationType.PRICE_INFLATION);
+        var withoutToken = resolver.resolve(userWithoutPushToken().build(), NotificationType.PRICE_INFLATION);
+
+        assertFalse(withToken.muted());
+        assertTrue(withToken.outbound().isEmpty());
+        assertFalse(withoutToken.muted());
+        assertTrue(withoutToken.outbound().isEmpty());
+    }
 }

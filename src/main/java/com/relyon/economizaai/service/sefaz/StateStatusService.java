@@ -229,6 +229,11 @@ public class StateStatusService {
         return states;
     }
 
+    /** The state's name as written in Brazil ("Rio Grande do Sul"). */
+    public static String stateName(UnidadeFederativa state) {
+        return STATE_NAMES.get(state);
+    }
+
     private static Map<UnidadeFederativa, String> stateNames() {
         var names = new EnumMap<UnidadeFederativa, String>(UnidadeFederativa.class);
         names.put(UnidadeFederativa.AC, "Acre");

@@ -24,5 +24,7 @@ public enum NotificationDestination {
     /** CTA pra ativar push: o app dispara o pedido de permissão, não navega. */
     ENABLE_PUSH,
     /** The household screen (members, invite code) — someone joined or left. */
-    HOUSEHOLD
+    HOUSEHOLD,
+    /** The "Preços e inflação" screen (official food inflation next to the prices paid in the markets). */
+    PRICE_INFLATION
 }

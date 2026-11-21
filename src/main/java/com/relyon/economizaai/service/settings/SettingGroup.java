@@ -61,6 +61,18 @@ public enum SettingGroup {
             "Valores com que o plano de compras começa, até a pessoa escolher os dela. A distância nunca passa do "
                     + "raio de \"perto de você\".",
             ROUTE_DEFAULT_MAX_DISTANCE_KM, ROUTE_DEFAULT_MAX_STOPS, ROUTE_DEFAULT_MIN_SAVING_PER_STOP),
+    PRICE_INFLATION("Preços e inflação",
+            "A tela compara a inflação oficial de alimentos (IBGE) com a variação dos preços pagos nos mercados, "
+                    + "segundo as notas do app. Do lado do app, só entram produtos das categorias de alimento, e cada "
+                    + "comparação é o mesmo produto no mesmo mercado em dois meses seguidos; variações acima do limite "
+                    + "são descartadas. Um mês só vale com o mínimo de comparações e de mercados; se faltarem meses, a "
+                    + "tela mostra o trecho mais recente que tem dados e compara os dois lados nesse mesmo trecho. "
+                    + "Categorias, alimentos e \"Sua cesta\" têm seus próprios mínimos. Quem vê a tela é quem recebe o "
+                    + "aviso mensal, se ele estiver ligado.",
+            PRICE_INFLATION_AUDIENCE, PRICE_INFLATION_PERIODS, PRICE_INFLATION_FOOD_CATEGORIES,
+            PRICE_INFLATION_MIN_PAIRS_PER_MONTH, PRICE_INFLATION_MIN_STORES_PER_MONTH,
+            PRICE_INFLATION_MIN_PAIRS_PER_ITEM, PRICE_INFLATION_MAX_MONTHLY_CHANGE_PERCENT,
+            PRICE_INFLATION_BASKET_MIN_PRODUCTS, PRICE_INFLATION_MONTHLY_NOTICE),
     SAVINGS_REFERENCE("Quanto a casa economizou: com o que cada compra é comparada",
             "Primeiro tenta o preço típico da região: preços de outras casas perto, na janela de dias antes e depois "
                     + "da compra, desde que haja o mínimo de preços. Sem isso, usa o histórico da própria casa, dentro "

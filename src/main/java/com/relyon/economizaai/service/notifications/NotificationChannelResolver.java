@@ -16,6 +16,7 @@ import java.util.Set;
  * {@link NotificationNotice} leaves through every channel of the notice the user has on;
  * with none on it is muted (no inbox row, no dispatch). The few types outside the notice
  * model keep the per-type channel rows ({@code notification_preferences}) they always had.
+ * An inbox-only type never goes out, whatever is stored: it is only ever the inbox row.
  *
  * <p>One rule from before the notice model is kept as it was: a user who never configured
  * the notice and has no push token gets it by e-mail instead of the push that cannot reach
@@ -45,6 +46,7 @@ public class NotificationChannelResolver {
     }
 
     public Resolution resolve(User user, NotificationType type) {
+        if (type.isInboxOnly()) return Resolution.goingOutOn(EnumSet.noneOf(NotificationChannel.class));
         return NotificationNotice.of(type)
                 .map(notice -> resolveNotice(user, notice))
                 .orElseGet(() -> resolveTypeOutsideTheNoticeModel(user, type));

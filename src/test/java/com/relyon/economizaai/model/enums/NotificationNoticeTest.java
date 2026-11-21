@@ -73,7 +73,8 @@ class NotificationNoticeTest {
     void typesOutsideTheNoticeModelHaveNoNotice() {
         var outside = List.of(NotificationType.PROMO_COMMUNITY, NotificationType.CHEAPER_MARKET,
                 NotificationType.DIGEST, NotificationType.PUSH_OPTIN,
-                NotificationType.HOUSEHOLD_MEMBER_JOINED, NotificationType.HOUSEHOLD_MEMBER_LEFT);
+                NotificationType.HOUSEHOLD_MEMBER_JOINED, NotificationType.HOUSEHOLD_MEMBER_LEFT,
+                NotificationType.PRICE_INFLATION);
 
         outside.forEach(type -> assertTrue(NotificationNotice.of(type).isEmpty(), type.name()));
     }

@@ -195,6 +195,45 @@ public enum RuntimeSetting {
             decimal("0", "1000").unit("R$").app("routeDefaultMinSavingPerStop"),
             "Plano de compras: economia mínima por parada",
             "Quanto uma parada a mais precisa economizar para valer a viagem, até a pessoa escolher."),
+    PRICE_INFLATION_AUDIENCE("economizaai.price-inflation.audience", PRICES,
+            option(List.of("ADMINS", "EVERYONE")).app("priceInflationAudience"),
+            "Preços e inflação: quem vê",
+            "Quem enxerga a tela que compara a inflação oficial de alimentos (IBGE) com os preços pagos nos "
+                    + "mercados. Em \"Só administradores\", ninguém mais vê a tela nem recebe o aviso mensal."),
+    PRICE_INFLATION_PERIODS("economizaai.price-inflation.periods", PRICES,
+            integerList(1, 24).unit("meses").app("priceInflationPeriods"),
+            "Preços e inflação: períodos oferecidos",
+            "Períodos, em meses, que a pessoa pode escolher na tela. A tela abre no maior deles."),
+    PRICE_INFLATION_FOOD_CATEGORIES("economizaai.price-inflation.food-categories", PRICES, optionList(rootCategorySlugs()),
+            "Preços e inflação: categorias que contam como alimento",
+            "Só os produtos dessas categorias entram na conta dos preços pagos nos mercados."),
+    PRICE_INFLATION_MIN_PAIRS_PER_MONTH("economizaai.price-inflation.min-pairs-per-month", PRICES,
+            integer(1, 100000).unit("comparações"),
+            "Preços e inflação: comparações mínimas por mês",
+            "Uma comparação é o mesmo produto, no mesmo mercado, com preço neste mês e no anterior. Um mês só "
+                    + "vale para o Brasil ou para um estado com pelo menos esse número de comparações."),
+    PRICE_INFLATION_MIN_STORES_PER_MONTH("economizaai.price-inflation.min-stores-per-month", PRICES,
+            integer(1, 10000).unit("mercados"),
+            "Preços e inflação: mercados mínimos por mês",
+            "As comparações do mês precisam vir de pelo menos esse número de mercados diferentes."),
+    PRICE_INFLATION_MIN_PAIRS_PER_ITEM("economizaai.price-inflation.min-pairs-per-item", PRICES,
+            integer(1, 10000).unit("comparações"),
+            "Preços e inflação: comparações mínimas por categoria ou alimento",
+            "Uma categoria ou um alimento só aparece na tela com pelo menos esse número de comparações no período."),
+    PRICE_INFLATION_MAX_MONTHLY_CHANGE_PERCENT("economizaai.price-inflation.max-monthly-change-percent", PRICES,
+            integer(1, 1000).unit("%"),
+            "Preços e inflação: maior variação aceita em um mês",
+            "Um preço que muda mais do que isso de um mês para o outro é tratado como erro de cadastro ou de "
+                    + "unidade e fica fora da conta."),
+    PRICE_INFLATION_BASKET_MIN_PRODUCTS("economizaai.price-inflation.basket-min-products", PRICES,
+            integer(1, 1000).unit("produtos"),
+            "Preços e inflação: produtos mínimos em \"Sua cesta\"",
+            "\"Sua cesta\" só aparece quando, em cada mês, pelo menos esse número de produtos comprados pela casa "
+                    + "tem variação de preço conhecida."),
+    PRICE_INFLATION_MONTHLY_NOTICE("economizaai.price-inflation.monthly-notice", PRICES, toggle(),
+            "Preços e inflação: aviso mensal",
+            "Quando o IBGE divulga um mês novo, quem vê a tela recebe um aviso na caixa de entrada do app. "
+                    + "Não sai push, e-mail nem WhatsApp."),
 
     // ---- Economia e previsão de consumo ----
     SAVINGS_REGION_WINDOW_DAYS("economizaai.collaborative.savings-region-window-days", SAVINGS, integer(1, 180).unit("dias"),
@@ -687,6 +726,16 @@ public enum RuntimeSetting {
 
     private static List<String> featureNames() {
         return Arrays.stream(Feature.values()).map(Feature::name).toList();
+    }
+
+    /**
+     * The top-level categories of the taxonomy (the {@code categories} table), by slug. Health is
+     * left out on purpose: its prices are sensitive and never feed an aggregate shown to users.
+     */
+    private static List<String> rootCategorySlugs() {
+        return List.of("hortifruti", "carnes", "laticinios-ovos", "padaria", "mercearia", "doces-snacks", "congelados",
+                "bebidas", "bebidas-alcoolicas", "limpeza", "higiene", "casa-descartaveis", "pet",
+                "combustivel", "outros");
     }
 
     private static List<String> weekdays() {

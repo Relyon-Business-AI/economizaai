@@ -125,7 +125,8 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler({HouseholdNotFoundException.class, ReceiptNotFoundException.class, ReceiptItemNotFoundException.class, ProductNotFoundException.class, MarketNotFoundException.class, NotInHouseholdException.class, NotificationNotFoundException.class, ShoppingListNotFoundException.class, PriceAlertNotFoundException.class, NotificationRuleNotFoundException.class, CustomCategoryNotFoundException.class, EcommerceOfferNotFoundException.class, GarimpoMarketplaceNotFoundException.class, GarimpoWatchNotFoundException.class, NotificationAudienceNotFoundException.class, NotificationCampaignNotFoundException.class,
-            CepNotResolvableException.class, AnnouncementNotFoundException.class, SettingNotFoundException.class})
+            CepNotResolvableException.class, AnnouncementNotFoundException.class, SettingNotFoundException.class,
+            PriceInflationUnavailableException.class})
     public ResponseEntity<ErrorResponse> handleNotFound(DomainException ex) {
         return respond(ex, HttpStatus.NOT_FOUND, "Entity not found");
     }

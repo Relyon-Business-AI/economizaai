@@ -97,6 +97,28 @@ public final class RuntimeSettingReach {
                 "Plano de compras, no app: distância máxima de quem ainda não escolheu a sua.");
         REFLECTS_ON.put(RuntimeSetting.ROUTE_DEFAULT_MAX_STOPS,
                 "Plano de compras, no app: número de paradas de quem ainda não escolheu o seu.");
+        REFLECTS_ON.put(RuntimeSetting.PRICE_INFLATION_AUDIENCE,
+                "Tela \"Preços e inflação\" do app (some para quem não pode ver) e quem recebe o aviso mensal.");
+        REFLECTS_ON.put(RuntimeSetting.PRICE_INFLATION_PERIODS,
+                "Tela \"Preços e inflação\": os botões de período e o período com que a tela abre.");
+        REFLECTS_ON.put(RuntimeSetting.PRICE_INFLATION_FOOD_CATEGORIES,
+                "Números de \"preços pagos nos mercados\" da tela \"Preços e inflação\" e do aviso mensal. Vale a partir "
+                        + "do próximo recálculo (diário, de madrugada, ou pelo recálculo manual do admin).");
+        REFLECTS_ON.put(RuntimeSetting.PRICE_INFLATION_MIN_PAIRS_PER_MONTH,
+                "Tela \"Preços e inflação\" (Brasil, estados e lista de estados): quais meses têm dados suficientes, "
+                        + "e a frase sobre o estado no aviso mensal.");
+        REFLECTS_ON.put(RuntimeSetting.PRICE_INFLATION_MIN_STORES_PER_MONTH,
+                "Tela \"Preços e inflação\" (Brasil, estados e lista de estados): quais meses têm dados suficientes, "
+                        + "e a frase sobre o estado no aviso mensal.");
+        REFLECTS_ON.put(RuntimeSetting.PRICE_INFLATION_MIN_PAIRS_PER_ITEM,
+                "Tela \"Preços e inflação\": quais categorias e alimentos aparecem nas listas.");
+        REFLECTS_ON.put(RuntimeSetting.PRICE_INFLATION_MAX_MONTHLY_CHANGE_PERCENT,
+                "Números de \"preços pagos nos mercados\" da tela \"Preços e inflação\" e do aviso mensal. Vale a partir "
+                        + "do próximo recálculo (diário, de madrugada, ou pelo recálculo manual do admin).");
+        REFLECTS_ON.put(RuntimeSetting.PRICE_INFLATION_BASKET_MIN_PRODUCTS,
+                "Tela \"Preços e inflação\": o bloco \"Sua cesta\" de cada casa.");
+        REFLECTS_ON.put(RuntimeSetting.PRICE_INFLATION_MONTHLY_NOTICE,
+                "Caixa de entrada do app: o aviso enviado quando o IBGE divulga um mês novo.");
         REFLECTS_ON.put(RuntimeSetting.ROUTE_DEFAULT_MIN_SAVING_PER_STOP,
                 "Plano de compras, no app: economia mínima por parada de quem ainda não escolheu a sua.");
         REFLECTS_ON.put(RuntimeSetting.SAVINGS_DEFAULT_PERIOD_DAYS,
