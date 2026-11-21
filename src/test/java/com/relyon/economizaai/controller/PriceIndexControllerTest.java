@@ -39,6 +39,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -138,6 +139,32 @@ class PriceIndexControllerTest {
                 .andExpect(jsonPath("$[0].cnpj").value("93015006005182"))
                 .andExpect(jsonPath("$[0].cnpjRoot").value("93015006"))
                 .andExpect(jsonPath("$[0].watching").value(false));
+    }
+
+    @Test
+    void bestMarkets_countsAsConsultUnlessTheCallerOptsOut() throws Exception {
+        var pid = UUID.randomUUID();
+        when(watchedMarketService.watchedCnpjs(any())).thenReturn(Set.of());
+        when(priceIndexService.bestMarketsForViewer(any(), anyInt(), any(), any(), any())).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/price-index/products/" + pid + "/best-markets").param("trackConsult", "false")
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+                .andExpect(status().isOk());
+        verify(scanHistoryService, never()).recordConsult(any(), any(), any(), any(), any());
+
+        mockMvc.perform(get("/api/v1/price-index/products/" + pid + "/best-markets")
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+                .andExpect(status().isOk());
+        verify(scanHistoryService).recordConsult(any(), eq(pid), any(), any(), any());
+    }
+
+    @Test
+    void genericComparisonByType_readsWithoutRecordingWhenTheCallerOptsOut() throws Exception {
+        mockMvc.perform(get("/api/v1/price-index/generic-comparison").param("type", "arroz").param("trackConsult", "false")
+                        .with(SecurityMockMvcRequestPostProcessors.user(principal())))
+                .andExpect(status().isOk());
+
+        verify(scanHistoryService).withoutRecording(any());
     }
 
     @Test

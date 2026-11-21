@@ -69,6 +69,24 @@ class ScanHistoryServiceTest {
     }
 
     @Test
+    void withoutRecording_skipsTheConsultAndRecordingResumesAfterwards() {
+        var productId = UUID.randomUUID();
+        when(snapshotRepository.findByHouseholdIdAndSnapshotKey(householdId, productId.toString()))
+                .thenReturn(Optional.empty());
+
+        var result = service.withoutRecording(() -> {
+            service.recordConsult(householdId, productId, null, new BigDecimal("3.49"), "NEARBY");
+            return "price read";
+        });
+
+        assertThat(result).isEqualTo("price read");
+        verify(snapshotRepository, never()).save(any());
+
+        service.recordConsult(householdId, productId, null, new BigDecimal("3.49"), "NEARBY");
+        verify(snapshotRepository).save(any());
+    }
+
+    @Test
     void recordConsult_keyedByTypeWhenNoProduct() {
         when(snapshotRepository.findByHouseholdIdAndSnapshotKey(householdId, "type:arroz"))
                 .thenReturn(Optional.empty());

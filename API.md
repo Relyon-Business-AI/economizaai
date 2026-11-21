@@ -1715,6 +1715,11 @@ GET /api/v1/price-index/promos?radiusKm=5
 GET /api/v1/price-index/promos/feed[?lat=&lng=]   (lat/lng = GPS do aparelho, os dois ou nenhum; lidera a cascata)
 ```
 
+**`trackConsult` (2026-11-21):** `best-markets` and both `generic-comparison` endpoints take
+`trackConsult=true|false` (default `true`). With `false` the read does not enter the "consultados" history
+(`scanned-products`): the consult date and the price captured at consult time stay as they were. The app
+sends `false` when it is only refreshing the current price of the rows of that list.
+
 **Map position (2026-11-18):** each best-markets row carries `latitude`/`longitude` of the
 store it is shown as (null until that store is geocoded), so the app can put the price on a map.
 

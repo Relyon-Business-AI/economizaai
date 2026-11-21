@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -36,6 +37,8 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 public class ScanHistoryService {
+
+    private static final ThreadLocal<Boolean> RECORDING_PAUSED = new ThreadLocal<>();
 
     /** Teto de itens no histórico (dedupado por produto/tipo, consulta mais recente primeiro). */
     private static final int HISTORY_LIMIT = 100;
@@ -63,6 +66,7 @@ public class ScanHistoryService {
      */
     public void recordConsult(UUID householdId, UUID productId, String genericNameNorm,
                               BigDecimal bestUnitPrice, String bestScope) {
+        if (Boolean.TRUE.equals(RECORDING_PAUSED.get())) return;
         var snapshotKey = HouseholdProductSnapshot.keyFor(productId, genericNameNorm);
         if (householdId == null || snapshotKey == null) return;
         try {
@@ -73,6 +77,20 @@ public class ScanHistoryService {
         } catch (Exception snapshotFailure) {
             log.warn("scan_history.record_failed household={} key={} reason={}",
                     householdId, snapshotKey, snapshotFailure.toString());
+        }
+    }
+
+    /**
+     * Runs a price read that must NOT count as a consult: the "consultados" list refreshing the
+     * current price of each row. Without this, opening the list re-stamps every row as consulted
+     * now and overwrites the price captured when the person actually looked the product up.
+     */
+    public <T> T withoutRecording(Supplier<T> priceRead) {
+        RECORDING_PAUSED.set(Boolean.TRUE);
+        try {
+            return priceRead.get();
+        } finally {
+            RECORDING_PAUSED.remove();
         }
     }
 
