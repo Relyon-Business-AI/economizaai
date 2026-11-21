@@ -64,7 +64,12 @@ public enum NotificationType {
     /** Someone joined your household (sent to every OTHER member). */
     HOUSEHOLD_MEMBER_JOINED(Scope.SYSTEM, false, false),
     /** Someone left (or was removed from) your household (sent to every remaining member). */
-    HOUSEHOLD_MEMBER_LEFT(Scope.SYSTEM, false, false);
+    HOUSEHOLD_MEMBER_LEFT(Scope.SYSTEM, false, false),
+    /**
+     * Monthly note that the official food inflation of the month is out, next to how the prices
+     * paid in the markets moved. A curiosity: it only ever sits in the inbox — see {@link #isInboxOnly()}.
+     */
+    PRICE_INFLATION(Scope.SYSTEM, false, false);
 
     public enum Scope { DEFAULT, USER, SYSTEM, RETIRED }
 
@@ -103,6 +108,11 @@ public enum NotificationType {
         return scope == Scope.USER;
     }
 
+    /** Never leaves the app: no push, no e-mail, no WhatsApp — only the inbox row. */
+    public boolean isInboxOnly() {
+        return this == PRICE_INFLATION;
+    }
+
     /** Default types auto-seeded for every user (one toggleable rule each). */
     public static List<NotificationType> defaults() {
         return Arrays.stream(values()).filter(NotificationType::isDefault).toList();
@@ -124,6 +134,7 @@ public enum NotificationType {
             case SYSTEM -> NotificationDestination.INBOX;
             case PUSH_OPTIN -> NotificationDestination.ENABLE_PUSH;
             case HOUSEHOLD_MEMBER_JOINED, HOUSEHOLD_MEMBER_LEFT -> NotificationDestination.HOUSEHOLD;
+            case PRICE_INFLATION -> NotificationDestination.PRICE_INFLATION;
         };
     }
 }

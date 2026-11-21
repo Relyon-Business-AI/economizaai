@@ -132,6 +132,21 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     """)
     List<User> findDigestUsersWithoutSendHour(@Param("afterId") UUID afterId, Pageable pageable);
 
+    /**
+     * One page of the people the monthly "Preços e inflação" notice goes to: active users, only
+     * the admins while the feature is kept to them. Keyset-paged by id.
+     */
+    @Query("""
+        SELECT user FROM User user
+        JOIN FETCH user.household
+        WHERE user.active = true
+          AND (:adminsOnly = FALSE OR user.role = 'ADMIN')
+          AND user.id > :afterId
+        ORDER BY user.id ASC
+    """)
+    List<User> findPriceInflationNoticePage(@Param("adminsOnly") boolean adminsOnly,
+                                            @Param("afterId") UUID afterId, Pageable pageable);
+
     /** Targeted write — never rewrites the rest of the user row from a stale copy. */
     @Modifying
     @Transactional

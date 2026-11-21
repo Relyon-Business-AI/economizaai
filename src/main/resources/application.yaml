@@ -610,6 +610,35 @@ economizaai:
     min-matched-pct: 40                        # share of the basket's items a market must price to be offered
     receipt-max-age-days: 7                    # a nota bought longer ago than this is not compared
     alternative-markets: 3                     # markets offered per nota and per shopping trip
+  price-inflation:
+    # "Preços e inflação": official food inflation (IBGE) next to how the prices paid in the markets moved.
+    # The first nine keys are business rules, editable in the admin.
+    audience: ADMINS                           # who sees the screen and gets the monthly notice: ADMINS or EVERYONE
+    periods: 3,6,12                            # periods (months) offered; the screen opens with the largest
+    food-categories: hortifruti,carnes,laticinios-ovos,padaria,mercearia,doces-snacks,congelados,bebidas,bebidas-alcoolicas   # root category slugs that count as food
+    min-pairs-per-month: 20                    # a month counts (Brasil or a state) only with this many matched price pairs...
+    min-stores-per-month: 3                    # ...from this many stores
+    min-pairs-per-item: 3                      # a category / food is listed only with this many pairs in the period
+    max-monthly-change-percent: 100            # a price that moved more than this in one month is dropped as an error
+    basket-min-products: 5                     # "Sua cesta": household products with a known price change, per month
+    monthly-notice: true                       # inbox item when IBGE publishes a new month
+    # Technical (not in the admin):
+    job-cron: ${PRICE_INFLATION_JOB_CRON:0 20 5 * * *}   # daily load + recompute (America/Sao_Paulo); "-" disables
+    official-backfill-months: 36               # IBGE months loaded when the table is empty
+    official-refresh-months: 3                 # IBGE months re-read every day (IBGE may revise)
+    community-backfill-months: 24              # community months computed when the table is empty
+    community-refresh-months: 3                # closed months recomputed every day (late notas)
+    sidra:
+      base-url: ${IBGE_SIDRA_URL:https://apisidra.ibge.gov.br}
+      user-agent: ${OUTBOUND_USER_AGENT:economizai/0.1 (+https://economizaai.app)}
+      timeout-ms: 30000
+      max-attempts: 3
+      food-at-home-item: 7171                  # table 7060, classification 315: "11.Alimentação no domicílio"
+      # The food groups directly under 7171 (from https://servicodados.ibge.gov.br/api/v3/agregados/7060/metadados):
+      # cereais, farinhas/massas, tubérculos/legumes, açúcares, hortaliças, frutas, carnes, pescados, carnes e peixes
+      # industrializados, aves e ovos, leites e derivados, panificados, óleos e gorduras, bebidas e infusões,
+      # enlatados e conservas, sal e condimentos.
+      group-items: 7172,7184,7200,7219,7241,7254,7283,7303,7335,7349,7356,7372,7384,7389,7401,7415
   savings:
     default-period-days: 90                    # household savings: period shown when the app asks for no start date
   leaderboard:

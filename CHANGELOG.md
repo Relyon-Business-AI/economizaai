@@ -1,5 +1,27 @@
 # economizai — what's new
 
+## 2026-11-20 — Preços e inflação: inflação oficial de alimentos x preços pagos nos mercados
+
+- **Novo: `GET /insights/price-inflation?scope=BR|STATE&state=RS&months=12`** — a inflação oficial de alimentos
+  (IBGE, IPCA "Alimentação no domicílio") ao lado da variação dos preços pagos nos mercados (notas do app), nos
+  mesmos meses, com série para gráfico (base 100), "Sua cesta" (`basket`), `categories`, `foods` e
+  `officialGroups`. `state` é opcional (vale a UF de quem pede; sem UF conhecida responde como `BR`).
+  A resposta sempre traz `viewerState` / `viewerStateName` (ou `null`). Se faltam meses com dados da
+  comunidade, `from`/`to` dizem o trecho comparado e `shortened=true`; sem nenhum mês válido,
+  `community.status = "INSUFFICIENT"` e a série oficial vem sozinha no período inteiro.
+- **Novo: `GET /insights/price-inflation/states?months=12`** — as 27 UFs em ordem alfabética da sigla, cada uma
+  com o número oficial (da área do IBGE do estado, ou o nacional com `nationalFallback=true`), a variação da
+  comunidade, a diferença e o seu próprio `from`/`to`.
+- **Oculto por enquanto:** com `priceInflationAudience = "ADMINS"` (padrão), quem não é admin recebe **404** com
+  `message` pronta. O app decide se mostra a entrada pela chave `priceInflationAudience` de `GET /app-config` →
+  `settings`; os períodos oferecidos vêm de `priceInflationPeriods` (array; o maior é o inicial).
+- **Aviso mensal na caixa de entrada** quando o IBGE divulga um mês novo: `type = "PRICE_INFLATION"`,
+  `destination = "PRICE_INFLATION"`, `payload = {"destination":"PRICE_INFLATION","month":"2026-10"}`. Só caixa de
+  entrada: nunca sai push, e-mail ou WhatsApp. Só admins recebem enquanto a tela é só deles.
+- **Admin:** nove configurações novas em `GET /admin/settings`, no bloco "Preços e inflação" (seção Preços e ofertas), e
+  `POST /admin/price-inflation/recompute?months=24`, que carrega o IBGE e recalcula a tabela da comunidade na
+  hora, sem enviar aviso.
+- Dependência nova de saída: IBGE SIDRA (pública, sem chave), lida uma vez por dia.
 ## 2026-11-20 — Promoção da comunidade: "total mínimo de preços" aposentado
 
 - A configuração "Promoção da comunidade: total mínimo de preços" (padrão 10) deixou de existir:

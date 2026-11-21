@@ -4178,6 +4178,109 @@
 					"response": []
 				},
 				{
+					"name": "Price inflation — Brasil",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/insights/price-inflation",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"insights",
+								"price-inflation"
+							]
+						},
+						"description": "Inflacao oficial de alimentos (IBGE) ao lado da variacao dos precos pagos nos mercados (notas do app), no mesmo periodo, mais a cesta da casa, categorias, alimentos e grupos do IBGE. Enquanto a configuracao priceInflationAudience for ADMINS, quem nao e admin recebe 404."
+					},
+					"response": []
+				},
+				{
+					"name": "Price inflation — one state",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/insights/price-inflation?scope=STATE&state=RS&months=12",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"insights",
+								"price-inflation"
+							],
+							"query": [
+								{
+									"key": "scope",
+									"value": "STATE",
+									"description": "BR (padrao) ou STATE."
+								},
+								{
+									"key": "state",
+									"value": "RS",
+									"description": "Opcional com scope=STATE; sem ele vale a UF de quem pede (sem UF conhecida, responde como BR)."
+								},
+								{
+									"key": "months",
+									"value": "12",
+									"description": "Um dos periodos de priceInflationPeriods; outro valor (ou nenhum) usa o maior."
+								}
+							]
+						},
+						"description": "Inflacao oficial de alimentos (IBGE) ao lado da variacao dos precos pagos nos mercados (notas do app), no mesmo periodo, mais a cesta da casa, categorias, alimentos e grupos do IBGE. Enquanto a configuracao priceInflationAudience for ADMINS, quem nao e admin recebe 404."
+					},
+					"response": []
+				},
+				{
+					"name": "Price inflation — the 27 states",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/insights/price-inflation/states?months=12",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"insights",
+								"price-inflation",
+								"states"
+							],
+							"query": [
+								{
+									"key": "months",
+									"value": "12",
+									"description": "Mesmo criterio do endpoint principal."
+								}
+							]
+						},
+						"description": "Uma linha por UF, em ordem alfabetica da sigla: numero oficial (da area do IBGE do estado, ou o nacional com nationalFallback=true), variacao da comunidade e a diferenca, cada estado no seu proprio trecho de meses."
+					},
+					"response": []
+				},
+				{
 					"name": "Flexible query \u2014 big trips only (R$200+) by month",
 					"request": {
 						"method": "GET",
@@ -22327,6 +22430,197 @@
 					]
 				},
 				{
+					"name": "INFLATION 01: price inflation is hidden from non-admins while the audience is ADMINS",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/insights/price-inflation",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"insights",
+								"price-inflation"
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('200 for who may see it, localized 404 otherwise', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+									"});",
+									"if (pm.response.code === 404) {",
+									"    pm.test('404 carries a message ready to show', function () {",
+									"        pm.expect(pm.response.json().message).to.be.a('string').and.not.empty;",
+									"    });",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "INFLATION 02: admin reads price inflation for Brasil",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/insights/price-inflation?scope=BR&months=12",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"insights",
+								"price-inflation"
+							],
+							"query": [
+								{
+									"key": "scope",
+									"value": "BR",
+									"description": ""
+								},
+								{
+									"key": "months",
+									"value": "12",
+									"description": ""
+								}
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var isAdmin = !!pm.collectionVariables.get('adminToken');",
+									"pm.test('price inflation: 200 for an admin, 401/403/404 otherwise', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf(isAdmin ? [200] : [401, 403, 404]);",
+									"});",
+									"if (isAdmin && pm.response.code === 200) {",
+									"    var body = pm.response.json();",
+									"    pm.test('answers for Brasil over a span of months', function () {",
+									"        pm.expect(body.scope).to.eql('BR');",
+									"        pm.expect(body.state).to.eql(null);",
+									"        pm.expect(body.requestedMonths).to.be.a('number');",
+									"        pm.expect(body.from).to.match(/^\\d{4}-\\d{2}$/);",
+									"        pm.expect(body.to).to.match(/^\\d{4}-\\d{2}$/);",
+									"        pm.expect(body.shortened).to.be.a('boolean');",
+									"        pm.expect(body).to.have.property('viewerState');",
+									"        pm.expect(body).to.have.property('viewerStateName');",
+									"    });",
+									"    pm.test('community and basket say whether there is enough data', function () {",
+									"        pm.expect(body.community.status).to.be.oneOf(['OK', 'INSUFFICIENT']);",
+									"        pm.expect(body.basket.status).to.be.oneOf(['OK', 'INSUFFICIENT']);",
+									"        pm.expect(body.categories).to.be.an('array');",
+									"        pm.expect(body.foods).to.be.an('array');",
+									"        pm.expect(body.officialGroups).to.be.an('array');",
+									"        if (body.community.status !== 'OK') { pm.expect(body.differencePoints).to.eql(null); }",
+									"    });",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "INFLATION 03: admin lists price inflation for the 27 states",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/insights/price-inflation/states",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"insights",
+								"price-inflation",
+								"states"
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"var isAdmin = !!pm.collectionVariables.get('adminToken');",
+									"pm.test('states: 200 for an admin, 401/403/404 otherwise', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf(isAdmin ? [200] : [401, 403, 404]);",
+									"});",
+									"if (isAdmin && pm.response.code === 200) {",
+									"    var states = pm.response.json();",
+									"    pm.test('one line per state, in alphabetical order of the code', function () {",
+									"        pm.expect(states.length).to.eql(27);",
+									"        var codes = states.map(function (line) { return line.state; });",
+									"        pm.expect(codes).to.eql(codes.slice().sort());",
+									"    });",
+									"    pm.test('each line names its official area and its community status', function () {",
+									"        states.forEach(function (line) {",
+									"            pm.expect(line.stateName).to.be.a('string');",
+									"            pm.expect(line.officialAreaName).to.be.a('string');",
+									"            pm.expect(line.nationalFallback).to.be.a('boolean');",
+									"            pm.expect(line.communityStatus).to.be.oneOf(['OK', 'INSUFFICIENT']);",
+									"        });",
+									"    });",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
 					"name": "COV admin: orphaned observations count (dev-hygiene gauge)",
 					"request": {
 						"method": "GET",
@@ -28128,6 +28422,50 @@
 							]
 						},
 						"description": "204. As dispensas do aviso vão junto. 404 se não existir. ADMIN only."
+					},
+					"response": []
+				},
+				{
+					"name": "Price inflation — load IBGE + recompute (on demand)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept-Language",
+								"value": "pt"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/price-inflation/recompute?months=24",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"price-inflation",
+								"recompute"
+							],
+							"query": [
+								{
+									"key": "months",
+									"value": "24",
+									"description": "Meses a carregar do IBGE e a recalcular na tabela da comunidade (padrao 24)."
+								}
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"description": "Roda agora o que a rotina diaria faz (carrega os meses oficiais do IBGE/SIDRA e recalcula a variacao dos precos da comunidade), sem enviar o aviso mensal. Devolve as contagens."
 					},
 					"response": []
 				},

@@ -70,7 +70,7 @@ public enum NotificationNotice {
             case WEEKLY_REPORT, MONTHLY_REPORT -> Optional.of(WEEKLY_REPORT);
             case SYSTEM -> Optional.of(ACCOUNT);
             case PROMO_COMMUNITY, CHEAPER_MARKET, DIGEST, PUSH_OPTIN,
-                 HOUSEHOLD_MEMBER_JOINED, HOUSEHOLD_MEMBER_LEFT -> Optional.empty();
+                 HOUSEHOLD_MEMBER_JOINED, HOUSEHOLD_MEMBER_LEFT, PRICE_INFLATION -> Optional.empty();
         };
     }
 
