@@ -2089,6 +2089,85 @@ the paywall state and a "manage subscription" screen.
 
 ---
 
+### Preços e inflação — official food inflation next to the prices paid in the markets (2026-11-20)
+
+```
+GET /api/v1/insights/price-inflation?scope=BR|STATE&state=RS&months=12
+GET /api/v1/insights/price-inflation/states?months=12
+```
+
+Authenticated. **Hidden for now:** while the setting `priceInflationAudience` (`GET /app-config` → `settings`) is
+`"ADMINS"`, a non-admin gets **404** with a ready-to-show `message`; `"EVERYONE"` opens it to all. The periods
+the screen offers come from `settings.priceInflationPeriods` (array of months; the largest is the initial one).
+Wording: the official side is "inflação oficial de alimentos (IBGE)"; the app side is "preços pagos nos
+mercados (notas do app)" — never "inflação real".
+
+- `scope` defaults to `BR`. With `scope=STATE`, `state` is optional: without it the viewer's state is used and,
+  when that is unknown, the answer comes as Brasil (`scope: "BR"`).
+- `months` must be one of the offered periods; anything else (or nothing) uses the initial one — see
+  `requestedMonths`.
+
+```json
+{
+  "scope": "STATE", "state": "RS", "stateName": "Rio Grande do Sul",
+  "viewerState": "RS", "viewerStateName": "Rio Grande do Sul",
+  "requestedMonths": 12, "from": "2026-06", "to": "2026-08", "shortened": true,
+  "official": { "areaName": "Porto Alegre - RS", "nationalFallback": false, "changePercent": 1.2,
+                "series": [{ "month": "2026-05", "index": 100.00 }, { "month": "2026-06", "index": 100.40 }] },
+  "community": { "status": "OK", "changePercent": -0.4, "pairCount": 74, "storeCount": 6, "series": [] },
+  "basket": { "status": "INSUFFICIENT", "changePercent": null, "productCount": 2, "series": [] },
+  "differencePoints": -1.6,
+  "categories": [{ "slug": "carnes", "name": "Carnes", "changePercent": 7.4, "pairCount": 16 }],
+  "foods": [{ "name": "Café", "changePercent": 18.2, "pairCount": 5 }],
+  "officialGroups": [{ "code": "7172", "name": "Cereais, leguminosas e oleaginosas", "changePercent": -3.1 }]
+}
+```
+
+- **Window and span.** `to` is the newest month IBGE has published; the window is the `requestedMonths` ending
+  there. The community side only counts months with enough data (admin settings: matched price pairs and
+  stores per month). The months compared are the longest run of such months inside the window (the most recent
+  one between equals); when that is shorter than the window, **both** series cover that same span — `from`/`to`
+  say which — and `shortened` is `true`. With no valid month, `community.status` is `INSUFFICIENT` (no change, empty
+  series), `differencePoints` is `null`, `categories`/`foods` are empty and the official series covers the whole window.
+- **Series.** One point per month plus the base point (`index` 100 at the month before `from`), two decimals;
+  the same months in `official`, `community` and `basket` whenever each has a series.
+- `official` is `null` (and `officialGroups` empty) only while IBGE was never loaded. `nationalFallback: true` +
+  `areaName: "Brasil"` = the state has no IBGE area (IBGE surveys 16 metropolitan areas/cities), so the national
+  number is shown.
+- `community.pairCount` = price comparisons over the span (same product, same store, two consecutive months);
+  `storeCount` = the most stores any month of the span had. Both are also filled when `INSUFFICIENT` (what exists
+  in the window).
+- `basket` ("Sua cesta"): the products the household bought in the requested period, weighted by its spend,
+  moved by the community's prices in the household's state (the country's in a month the state lacks data). `OK`
+  only when every month of the span has the minimum of products with a known change; `productCount` is the
+  smallest monthly count of such products.
+- `viewerState` / `viewerStateName`: the state of the person asking (from the household's notas), `null` when
+  unknown — always present, whatever `scope` was asked for.
+- `differencePoints` = community − official. `categories` and `foods` are sorted by `changePercent` descending;
+  `officialGroups` are IBGE's food groups over the same span and area, in IBGE's order. Percentages have one decimal.
+
+`/states` answers all 27 states, alphabetical by code, each over its own span:
+
+```json
+[{ "state": "RS", "stateName": "Rio Grande do Sul", "officialAreaName": "Porto Alegre - RS",
+   "nationalFallback": false, "officialChangePercent": 1.2, "communityStatus": "OK",
+   "communityChangePercent": -0.4, "differencePoints": -1.6, "from": "2026-06", "to": "2026-08" }]
+```
+
+**Monthly notice.** When IBGE publishes a new month, each person the screen exists for gets one inbox item:
+`type: "PRICE_INFLATION"`, `destination: "PRICE_INFLATION"`, `payload: {"destination":"PRICE_INFLATION","month":"2026-10"}`,
+title "Preços e inflação", body like "Alimentos subiram 0,4% no Brasil em outubro. Nos mercados do RS, os preços
+caíram 0,2%." (the second sentence only when the person's state has enough data that month). Inbox only — no
+push, no e-mail, no WhatsApp. Route it to this screen.
+
+**Admin.** `POST /api/v1/admin/price-inflation/recompute?months=24` (ADMIN) loads the last `months` months from
+IBGE and recomputes the community table for the last `months` closed months, without sending the notice:
+
+```json
+{ "months": 24, "officialReadingsFetched": 6936, "officialRowsStored": 6936, "newestOfficialMonth": "2026-10",
+  "communityMonthsRecomputed": 24, "communityProductRows": 310, "communityPairs": 1250 }
+```
+
 ## 8. Consumption intelligence
 
 Per-product purchase prediction + suggested shopping list, derived from
@@ -2343,7 +2422,7 @@ POST /api/v1/notifications/{id}/read         → mark single as read
 POST /api/v1/notifications/mark-all-read     → { "marked": N }
 ```
 
-Each `NotificationResponse` carries `payload` — the JSON we attached when we generated the notification (`receiptId`, `productId`, `savingsPct`, etc) so cards can deep-link. `type` is one of `PROMO_PERSONAL`, `DEALS_DIGEST`, `DIGEST`, `PRICE_DROP`, `STOCKOUT`, `BUDGET`, `SYSTEM`, `RECEIPT_READY`, `RECEIPT_FAILED`, `RECEIPT_RECOVERED`, `PUSH_OPTIN`, `HOUSEHOLD_MEMBER_JOINED`, `HOUSEHOLD_MEMBER_LEFT` (old inbox rows may still carry the retired `PROMO_COMMUNITY` / `CHEAPER_MARKET`) — what triggers each and how to toggle it is in §10f.
+Each `NotificationResponse` carries `payload` — the JSON we attached when we generated the notification (`receiptId`, `productId`, `savingsPct`, etc) so cards can deep-link. `type` is one of `PROMO_PERSONAL`, `DEALS_DIGEST`, `DIGEST`, `PRICE_DROP`, `STOCKOUT`, `BUDGET`, `SYSTEM`, `RECEIPT_READY`, `RECEIPT_FAILED`, `RECEIPT_RECOVERED`, `PUSH_OPTIN`, `HOUSEHOLD_MEMBER_JOINED`, `HOUSEHOLD_MEMBER_LEFT`, `PRICE_INFLATION` (old inbox rows may still carry the retired `PROMO_COMMUNITY` / `CHEAPER_MARKET`) — what triggers each and how to toggle it is in §10f.
 
 Each response also carries `destination` — a routing hint derived from `type` so the FE knows which screen to open when the card is tapped (the concrete id it needs is already in `payload`). Values:
 
@@ -2354,6 +2433,7 @@ Each response also carries `destination` — a routing hint derived from `type` 
 | `PRODUCT`       | product detail         | `PRICE_DROP` (use `payload.productId`)                        |
 | `BUDGET`        | budget screen          | `BUDGET`                                                      |
 | `INBOX`         | generic inbox          | `SYSTEM` (and any future/unmapped type)                      |
+| `PRICE_INFLATION` | "Preços e inflação"  | `PRICE_INFLATION` (monthly notice, inbox only; `payload.month`) |
 
 > **Real-time vs digest:** the only notifications pushed in **real time** (on receipt confirm) are the user's explicit alerts — `PRICE_DROP` and `BUDGET`. The **discovery** content (personal promos, community promos, cheaper market) is delivered **only via the daily deals digest** (§ "How the daily deals digest works"), not in real time. `PROMO_COMMUNITY` and `CHEAPER_MARKET` no longer exist as toggles (2026-11-11) — the digest frequency is the control.
 
@@ -2627,6 +2707,8 @@ options[], optionLabels{value: label}, appKey?, changedAt?, changedBy? }`. `valu
 `key` is the configuration property (it contains dots — send it as is in the path). `changed=false` means the
 value configured for the environment is in effect. A refused value is **400** with a ready-to-show `message`;
 an unknown key is **404**. Settings with an `appKey` are also published in `GET /app-config` → `settings`.
+"Preços e inflação" publishes two: `priceInflationAudience` (`"ADMINS"` or `"EVERYONE"` — who the screen exists
+for) and `priceInflationPeriods` (array of months, e.g. `[3,6,12]`; the largest is the initial period).
 
 `GET /app-config` → `settings` also carries **read-only facts** the apps state in texts (not editable, they come
 from the code that enforces them): `emailVerificationCodeHours`, `passwordResetCodeMinutes`,

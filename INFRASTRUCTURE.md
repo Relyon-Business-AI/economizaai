@@ -304,3 +304,27 @@ env vars for business rules. The env names that exist for these keys (e.g. `PAID
 `AUTO_PROMOTE_MIN_*`, `CANONICALIZATION_FUZZY_MATCH_THRESHOLD`, `AI_SUBCAT_*`) are optional overrides
 of that starting value and are not set on Render. `AI_SUBCAT_*` used to be ignored (the code read
 another key); they take effect now if ever set. A malformed `ECONOMIZAAI_AI_MODEL_PRICES` stops startup.
+
+## Preços e inflação — IBGE SIDRA and the daily job (2026-11-20)
+
+- **New outbound dependency: IBGE SIDRA** (`https://apisidra.ibge.gov.br`, public, no key, free). One GET a day
+  reads table 7060 (IPCA), variable 63 (monthly % change), for Brasil + 10 metropolitan regions + 6
+  municipalities and 17 items ("Alimentação no domicílio" and the 16 food groups under it). Best-effort: 3
+  attempts, 30 s timeout; if IBGE is down the job keeps what it has and tries again the next day. Nothing
+  user-facing depends on the call succeeding at request time — the endpoints read the database.
+- **Daily job** `PriceInflationRefreshJob` at 05:20 America/Sao_Paulo: loads the official months (36 when the
+  table is empty, then the last 3), recomputes the community table for the last 3 closed months (24 when
+  empty) and, when a new official month shows up (never on the first load), creates the monthly inbox notice.
+  The IBGE call runs outside any transaction; each month is stored in its own short one. On demand:
+  `POST /api/v1/admin/price-inflation/recompute?months=24` (ADMIN, no notice).
+- **Tables** (Flyway `V192__price_inflation.sql`): `official_inflation_months`, `community_price_changes`,
+  `community_price_coverage`. The last two are derived from `price_observations` (no user or household) and can
+  be rebuilt at any time with the recompute endpoint.
+- **Config** (`economizaai.price-inflation.*` in `application.yaml`). Business rules — in the admin, do not set
+  env vars for them: `audience`, `periods`, `food-categories`, `min-pairs-per-month`, `min-stores-per-month`,
+  `min-pairs-per-item`, `max-monthly-change-percent`, `basket-min-products`, `monthly-notice`. Technical:
+  `job-cron` (env `PRICE_INFLATION_JOB_CRON`, default `0 20 5 * * *`; `-` disables the job),
+  `official-backfill-months` (36), `official-refresh-months` (3), `community-backfill-months` (24),
+  `community-refresh-months` (3), `sidra.base-url` (env `IBGE_SIDRA_URL`), `sidra.user-agent`
+  (env `OUTBOUND_USER_AGENT`), `sidra.timeout-ms` (30000), `sidra.max-attempts` (3), `sidra.food-at-home-item`
+  (7171), `sidra.group-items` (the 16 group codes). No new env var is required on Render.
