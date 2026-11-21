@@ -65,8 +65,6 @@ class CommunityPromoServiceCoverageTest {
     @BeforeEach
     void setUp() {
         properties = new CollaborativeProperties();
-        // make the volume gate easy to satisfy so we focus on the new branches
-        properties.getCollaborative().setMinObservationsForCommunityPromo(5);
         service = new CommunityPromoService(observationRepository, auditRepository, properties, marketLocationService,
                 new PrivacyTierResolver(productRepository, categoryResolver, properties));
     }
@@ -127,11 +125,17 @@ class CommunityPromoServiceCoverageTest {
     }
 
     @Test
-    void belowMinObservationsVolumeGate_skipsGroup() {
-        properties.getCollaborative().setMinObservationsForCommunityPromo(100);
-        when(observationRepository.findRecent(any())).thenReturn(promoShapedRaw());
+    void threeOlderAndThreeRecentPrices_areEnoughForAPromo() {
+        var now = LocalDateTime.now();
+        var observations = new ArrayList<PriceObservation>();
+        for (var index = 0; index < 3; index++) observations.add(rawObservation(new BigDecimal("28"), now.minusDays(30)));
+        for (var index = 0; index < 3; index++) observations.add(rawObservation(new BigDecimal("22"), now.minusDays(2)));
 
-        assertTrue(service.detectAll().isEmpty());
+        when(observationRepository.findRecent(any())).thenReturn(observations);
+        when(auditRepository.countDistinctHouseholdsPerProductMarket(any(), eq(1L)))
+                .thenReturn(List.of(groupCount(productId, marketCnpj, 5L)));
+
+        assertEquals(1, service.detectAll().size());
     }
 
     @Test

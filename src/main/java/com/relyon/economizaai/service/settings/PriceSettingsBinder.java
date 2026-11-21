@@ -47,8 +47,6 @@ public class PriceSettingsBinder implements SettingBinder {
                 collaborative::getCommunityPromoThresholdPct, collaborative::setCommunityPromoThresholdPct);
         bindings.integer(RuntimeSetting.COMMUNITY_PROMO_RECENT_WINDOW_DAYS,
                 collaborative::getCommunityPromoRecentWindowDays, collaborative::setCommunityPromoRecentWindowDays);
-        bindings.integer(RuntimeSetting.COMMUNITY_PROMO_MIN_BASELINE,
-                collaborative::getMinObservationsForCommunityPromo, collaborative::setMinObservationsForCommunityPromo);
         bindings.integer(RuntimeSetting.COMMUNITY_PROMO_MIN_OLD,
                 collaborative::getCommunityPromoMinBaselineObservations, collaborative::setCommunityPromoMinBaselineObservations);
         bindings.integer(RuntimeSetting.COMMUNITY_PROMO_MIN_RECENT,

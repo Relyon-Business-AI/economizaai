@@ -592,7 +592,6 @@ economizaai:
     min-households-for-grocery: 1
     min-observations-for-grocery: 1
     sensitive-category-groups: saude           # category GROUP slugs that always keep the full K
-    min-observations-for-community-promo: 10   # don't flag a community promo unless this much baseline exists
     community-promo-threshold-pct: 15          # current price < (median - X%) → community promo
     community-promo-recent-window-days: 7      # last N days = "recent" sample; older rows are baseline
     market-prices-default-days: 30             # period the "prices of one market" screen opens with (never above lookback-days)

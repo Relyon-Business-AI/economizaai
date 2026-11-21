@@ -61,8 +61,6 @@ public final class RuntimeSettingReach {
                 "Lista de promoções da comunidade e os selos de promoção nos preços.");
         REFLECTS_ON.put(RuntimeSetting.COMMUNITY_PROMO_RECENT_WINDOW_DAYS,
                 "Detecção de promoções da comunidade: separa preço recente de preço típico.");
-        REFLECTS_ON.put(RuntimeSetting.COMMUNITY_PROMO_MIN_BASELINE,
-                "Detecção de promoções da comunidade: produtos com pouco histórico ficam de fora.");
         REFLECTS_ON.put(RuntimeSetting.COMMUNITY_PROMO_MIN_OLD,
                 "Detecção de promoções da comunidade: sem preços antigos suficientes não há preço típico para comparar.");
         REFLECTS_ON.put(RuntimeSetting.COMMUNITY_PROMO_MIN_RECENT,
