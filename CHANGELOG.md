@@ -22,6 +22,14 @@
   `POST /admin/price-inflation/recompute?months=24`, que carrega o IBGE e recalcula a tabela da comunidade na
   hora, sem enviar aviso.
 - Dependência nova de saída: IBGE SIDRA (pública, sem chave), lida uma vez por dia.
+## 2026-11-20 — Promoção da comunidade: "total mínimo de preços" aposentado
+
+- A configuração "Promoção da comunidade: total mínimo de preços" (padrão 10) deixou de existir:
+  `GET /admin/settings` passa de 167 para 166 itens. Valem só os mínimos de preços recentes e de
+  preços antigos (3 cada por padrão). **Efeito:** produtos com 6 a 9 preços no mercado, que antes
+  ficavam de fora, agora podem aparecer como promoção da comunidade.
+- A propriedade `economizaai.collaborative.min-observations-for-community-promo` foi removida; um valor
+  salvo no admin para ela é apagado pela `V191`.
 
 ## 2026-11-20 — Admin: campos que funcionam em conjunto vêm agrupados
 

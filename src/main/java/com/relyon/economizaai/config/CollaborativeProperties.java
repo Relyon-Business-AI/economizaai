@@ -222,7 +222,6 @@ public class CollaborativeProperties {
         private int minObservationsForGrocery = 1;
         /** Category GROUP slugs whose products keep the full K regardless of the store. */
         private List<String> sensitiveCategoryGroups = List.of("saude");
-        private int minObservationsForCommunityPromo = 10;
         /**
          * Minimum NON-outlier recent observations needed for a promo. A lone (or
          * paired) bogus low scan can't fabricate a drop — a real promo is a
@@ -304,8 +303,6 @@ public class CollaborativeProperties {
         public void setMinObservationsForGrocery(int v) { this.minObservationsForGrocery = v; }
         public List<String> getSensitiveCategoryGroups() { return sensitiveCategoryGroups; }
         public void setSensitiveCategoryGroups(List<String> v) { this.sensitiveCategoryGroups = v; }
-        public int getMinObservationsForCommunityPromo() { return minObservationsForCommunityPromo; }
-        public void setMinObservationsForCommunityPromo(int v) { this.minObservationsForCommunityPromo = v; }
         public int getCommunityPromoMinBaselineObservations() { return communityPromoMinBaselineObservations; }
         public void setCommunityPromoMinBaselineObservations(int v) { this.communityPromoMinBaselineObservations = v; }
         public int getCommunityPromoMinRecentObservations() { return communityPromoMinRecentObservations; }

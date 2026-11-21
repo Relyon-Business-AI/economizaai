@@ -204,7 +204,6 @@ public class CommunityPromoService {
     private CommunityPromo detectPromoForMarket(UUID productId, String marketCnpj, List<PriceObservation> rows,
                                                 Map<ProductMarket, Long> householdsByGroup,
                                                 LocalDateTime recentCutoff) {
-        if (rows.size() < properties.getCollaborative().getMinObservationsForCommunityPromo()) return null;
         var distinctHouseholds = householdsByGroup.get(new ProductMarket(productId, marketCnpj));
         if (distinctHouseholds == null) return null; // failed the K-gate (HAVING) in the database
 
