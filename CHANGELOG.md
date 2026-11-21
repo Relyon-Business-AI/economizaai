@@ -1,5 +1,14 @@
 # economizai — what's new
 
+## 2026-11-20 — Promoção da comunidade: "total mínimo de preços" aposentado
+
+- A configuração "Promoção da comunidade: total mínimo de preços" (padrão 10) deixou de existir:
+  `GET /admin/settings` passa de 167 para 166 itens. Valem só os mínimos de preços recentes e de
+  preços antigos (3 cada por padrão). **Efeito:** produtos com 6 a 9 preços no mercado, que antes
+  ficavam de fora, agora podem aparecer como promoção da comunidade.
+- A propriedade `economizaai.collaborative.min-observations-for-community-promo` foi removida; um valor
+  salvo no admin para ela é apagado pela `V191`.
+
 ## 2026-11-20 — Admin: campos que funcionam em conjunto vêm agrupados
 
 - Cada item de `GET /admin/settings` (e a resposta de `PUT`/`DELETE`) ganha `group`: `null` ou

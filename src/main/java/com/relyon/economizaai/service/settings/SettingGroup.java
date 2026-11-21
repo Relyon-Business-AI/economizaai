@@ -35,11 +35,10 @@ public enum SettingGroup {
             "Para cada produto em cada mercado, os preços dentro da \"Validade dos preços da comunidade\" são divididos "
                     + "em dois grupos: os recentes (últimos dias) e os antigos (o resto), que formam o preço típico. "
                     + "Vira promoção quando há preços suficientes nos dois grupos e o preço recente está abaixo do "
-                    + "típico pela queda mínima. Cuidados: o período recente precisa ser bem menor que a validade, "
-                    + "senão não sobra preço antigo; e o total mínimo só faz diferença quando é maior que a soma dos "
-                    + "mínimos de recentes e de antigos.",
+                    + "típico pela queda mínima. Cuidado: o período recente precisa ser bem menor que a validade, "
+                    + "senão não sobra preço antigo.",
             COMMUNITY_PROMO_RECENT_WINDOW_DAYS, COMMUNITY_PROMO_MIN_RECENT, COMMUNITY_PROMO_MIN_OLD,
-            COMMUNITY_PROMO_MIN_BASELINE, COMMUNITY_PROMO_THRESHOLD_PCT),
+            COMMUNITY_PROMO_THRESHOLD_PCT),
     PERSONAL_PROMO("Como uma promoção pessoal é detectada",
             "Compara o preço pago com o que a própria casa costuma pagar pelo produto. Só existe comparação depois "
                     + "do número mínimo de compras anteriores.",
